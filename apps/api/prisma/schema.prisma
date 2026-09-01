@@ -673,6 +673,7 @@ model Company {
   pricesIncludeTax        Boolean        @default(false) @map("prices_include_tax")
   ncfEnabled              Boolean        @default(false) @map("ncf_enabled")
   measurementUnitsEnabled Boolean        @default(false) @map("measurement_units_enabled")
+  multiWarehouseEnabled   Boolean        @default(false) @map("multi_warehouse_enabled")
   productSource           ProductSource? @map("product_source")
   fullposCompanyId        String?        @map("fullpos_company_id")
   createdAt               DateTime       @default(now()) @map("created_at")

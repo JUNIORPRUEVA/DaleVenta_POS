@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
+import 'package:daleventa_pos/core/company/company_settings_model.dart';
+import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
 import 'package:daleventa_pos/core/realtime/operations_data_refresh_service.dart';
@@ -219,6 +221,9 @@ ProviderContainer _buildContainer(
         ),
       ),
       cashRepositoryProvider.overrideWithValue(repo),
+      companySettingsProvider.overrideWith(
+        (ref) async => CompanySettings.empty(),
+      ),
       cashCloseTicketPrinterProvider.overrideWithValue(
         _FakeCashCloseTicketPrinter(),
       ),

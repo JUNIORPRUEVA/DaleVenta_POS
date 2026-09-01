@@ -10,6 +10,7 @@ import '../../../core/printing/models/models.dart';
 import '../../../core/printing/printing_platform_resolver.dart';
 import '../../../core/printing/simplified_ticket_preview_widget.dart';
 import '../../../core/printing/unified_ticket_printer.dart';
+import '../../../modules/cash/cash_dialogs.dart';
 import '../data/mobile_printer_settings_model.dart';
 import '../data/mobile_printer_settings_repository.dart';
 import '../data/printer_settings_model.dart';
@@ -119,9 +120,7 @@ class _WindowsPrinterSettingsViewState
     final result = await ticketPrinter.printTestTicket();
     if (!mounted) return;
     setState(() => _testing = false);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showCashToast(context, result.message, isError: !result.success);
   }
 
   Future<void> _ruler() async {
@@ -130,9 +129,7 @@ class _WindowsPrinterSettingsViewState
     final result = await ticketPrinter.printWidthRulerTest();
     if (!mounted) return;
     setState(() => _testing = false);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showCashToast(context, result.message, isError: !result.success);
   }
 
   Widget _switch({
@@ -381,6 +378,31 @@ class _WindowsPrinterSettingsViewState
                 selected: {settings.logoSize},
                 onSelectionChanged: (value) =>
                     _save(settings.copyWith(logoSize: value.first)),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Modo de impresion Windows',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<WindowsPrinterMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: WindowsPrinterMode.automatic,
+                    label: Text('Automatico'),
+                  ),
+                  ButtonSegment(
+                    value: WindowsPrinterMode.driver,
+                    label: Text('Windows driver'),
+                  ),
+                  ButtonSegment(
+                    value: WindowsPrinterMode.escPosRaw,
+                    label: Text('ESC/POS'),
+                  ),
+                ],
+                selected: {settings.windowsPrinterMode},
+                onSelectionChanged: (value) =>
+                    _save(settings.copyWith(windowsPrinterMode: value.first)),
               ),
               _switch(
                 title: 'Mostrar cliente',

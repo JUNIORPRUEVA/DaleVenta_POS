@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/app_permissions.dart';
+import '../company/company_settings_repository.dart';
 import '../design_system/icons/app_icons.dart';
 import '../models/user_model.dart';
 import '../routing/routes.dart';
@@ -38,13 +39,17 @@ class AppNavigationSection {
 }
 
 List<AppNavigationSection> buildAppNavigationSections(
-  WidgetRef _,
+  WidgetRef ref,
   UserModel? currentUser,
 ) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
     return true;
   }
+
+  final multiWarehouseEnabled =
+      ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
+      true;
 
   final sections = <AppNavigationSection>[
     AppNavigationSection(
@@ -127,14 +132,16 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Recuento',
             route: Routes.catalogoConteo,
           ),
-        if (canOrAuthorize(AppPermission.viewInventoryHistory))
+        if (multiWarehouseEnabled &&
+            canOrAuthorize(AppPermission.viewInventoryHistory))
           const AppNavigationItem(
             icon: Icons.history_rounded,
             appIcon: AppIcons.inventory,
             title: 'Kardex',
             route: Routes.catalogoKardex,
           ),
-        if (canOrAuthorize(AppPermission.manageWarehouses))
+        if (multiWarehouseEnabled &&
+            canOrAuthorize(AppPermission.manageWarehouses))
           const AppNavigationItem(
             icon: Icons.warehouse_outlined,
             appIcon: AppIcons.inventory,

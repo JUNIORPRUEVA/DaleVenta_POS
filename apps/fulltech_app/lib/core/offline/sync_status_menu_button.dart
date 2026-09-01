@@ -251,6 +251,16 @@ class _SyncStatusPopover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lastError = (state.lastError ?? '').trim();
+    final hasWork =
+        state.pendingCount > 0 ||
+        state.syncingCount > 0 ||
+        state.errorCount > 0;
+    final effectiveOnSyncNow = hasWork ? onSyncNow : null;
+    final syncButtonLabel = onSyncNow == null
+        ? 'Sincronizando...'
+        : hasWork
+        ? 'Sincronizar ahora'
+        : 'Todo sincronizado';
 
     return SizedBox(
       width: width,
@@ -317,6 +327,11 @@ class _SyncStatusPopover extends StatelessWidget {
               label: 'Última vez',
               value: formatSyncLastSeen(state.lastSyncedAt),
             ),
+            if (state.lastAttemptAt != null)
+              _SyncMetricRow(
+                label: 'Último intento',
+                value: formatSyncLastSeen(state.lastAttemptAt),
+              ),
             if (lastError.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
@@ -359,7 +374,7 @@ class _SyncStatusPopover extends StatelessWidget {
               width: double.infinity,
               height: 34,
               child: FilledButton.icon(
-                onPressed: onSyncNow,
+                onPressed: effectiveOnSyncNow,
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF1957E6),
                   foregroundColor: Colors.white,
@@ -372,7 +387,7 @@ class _SyncStatusPopover extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.sync_rounded, size: 17),
                 label: Text(
-                  onSyncNow == null ? 'Sincronizando...' : 'Sincronizar ahora',
+                  syncButtonLabel,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w900,

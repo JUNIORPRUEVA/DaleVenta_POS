@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/models/product_model.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
@@ -29,16 +30,14 @@ import '../../core/widgets/sync_status_banner.dart';
 import 'application/catalog_controller.dart';
 import 'data/catalog_repository.dart';
 
-String _formatStock(double? stock) {
-  if (stock == null) return '—';
-  final isWhole = stock % 1 == 0;
-  return isWhole ? stock.toStringAsFixed(0) : stock.toStringAsFixed(2);
-}
-
-String _formatProductStock(ProductModel product) {
-  return formatQuantityWithUnit(
+String _formatProductStock(
+  ProductModel product, {
+  required bool showMeasurementUnit,
+}) {
+  return formatQuantityForFeature(
     product.stock,
     unit: product.unitOfMeasure,
+    showMeasurementUnit: showMeasurementUnit,
     includeUnitForUnit: true,
   );
 }
@@ -361,6 +360,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     final canManage = isAdmin;
 
     final isModal = widget.modal;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
 
     final catalog = ref.watch(catalogControllerProvider);
 
@@ -547,12 +552,14 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                           ? () => _openCatalogSearch(
                               products: catalog.items,
                               showCost: isAdmin,
+                              showMeasurementUnit: measurementUnitsEnabled,
                               canManage: canManage,
                               categories: categoryOptions,
                             )
                           : () => _openMobileCatalogSearch(
                               products: catalog.items,
                               showCost: isAdmin,
+                              showMeasurementUnit: measurementUnitsEnabled,
                               canManage: canManage,
                               categories: categoryOptions,
                             ),
@@ -787,6 +794,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                           query: _searchCtrl.text.trim(),
                           isAdmin: isAdmin,
                           canManage: canManage,
+                          showMeasurementUnit: measurementUnitsEnabled,
                           onSelectCategory: (value) {
                             if (_category == value) return;
                             setState(() => _category = value);
@@ -803,6 +811,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                           onViewProduct: (product) => _showProductDetails(
                             product: product,
                             showCost: isAdmin,
+                            showMeasurementUnit: measurementUnitsEnabled,
                             canManage: canManage,
                             onEdit: () => _openProductForm(
                               product: product,
@@ -834,10 +843,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                               return _MobileProductListTile(
                                 product: p,
                                 showCost: isAdmin,
+                                showMeasurementUnit: measurementUnitsEnabled,
                                 canManage: canManage,
                                 onView: () => _showProductDetails(
                                   product: p,
                                   showCost: isAdmin,
+                                  showMeasurementUnit: measurementUnitsEnabled,
                                   canManage: canManage,
                                   onEdit: () => _openProductForm(
                                     product: p,
@@ -888,10 +899,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                             return _ProductCard(
                               product: p,
                               showCost: isAdmin,
+                              showMeasurementUnit: measurementUnitsEnabled,
                               canManage: canManage,
                               onView: () => _showProductDetails(
                                 product: p,
                                 showCost: isAdmin,
+                                showMeasurementUnit: measurementUnitsEnabled,
                                 canManage: canManage,
                                 onEdit: () => _openProductForm(
                                   product: p,
@@ -1210,6 +1223,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   Future<void> _openCatalogSearch({
     required List<ProductModel> products,
     required bool showCost,
+    required bool showMeasurementUnit,
     required bool canManage,
     required List<String> categories,
   }) async {
@@ -1235,6 +1249,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     await _showProductDetails(
       product: product,
       showCost: showCost,
+      showMeasurementUnit: showMeasurementUnit,
       canManage: canManage,
       onEdit: () => _openProductForm(product: product, categories: categories),
       onDelete: () => _confirmDelete(product),
@@ -1244,6 +1259,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   Future<void> _openMobileCatalogSearch({
     required List<ProductModel> products,
     required bool showCost,
+    required bool showMeasurementUnit,
     required bool canManage,
     required List<String> categories,
   }) async {
@@ -1286,6 +1302,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     await _showProductDetails(
       product: product,
       showCost: showCost,
+      showMeasurementUnit: showMeasurementUnit,
       canManage: canManage,
       onEdit: () => _openProductForm(product: product, categories: categories),
       onDelete: () => _confirmDelete(product),
@@ -1295,6 +1312,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   Future<void> _showProductDetails({
     required ProductModel product,
     required bool showCost,
+    required bool showMeasurementUnit,
     required bool canManage,
     required VoidCallback onEdit,
     required VoidCallback onDelete,
@@ -1308,6 +1326,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         child: _DesktopProductDetailContent(
           product: product,
           showCost: showCost,
+          showMeasurementUnit: showMeasurementUnit,
           canManage: canManage,
           onEdit: onEdit,
           onDelete: onDelete,
@@ -1389,7 +1408,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                 ),
                 _ProductDetailLine(
                   label: 'Disponible',
-                  value: _formatStock(product.stock),
+                  value: _formatProductStock(
+                    product,
+                    showMeasurementUnit: showMeasurementUnit,
+                  ),
                 ),
                 _ProductDetailLine(
                   label: 'Precio',
@@ -1789,6 +1811,7 @@ class _CatalogSearchDelegate extends SearchDelegate<_CatalogSearchResult?> {
 class _ProductCard extends StatelessWidget {
   final ProductModel product;
   final bool showCost;
+  final bool showMeasurementUnit;
   final bool canManage;
   final VoidCallback onView;
   final VoidCallback onEdit;
@@ -1797,6 +1820,7 @@ class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
     required this.showCost,
+    required this.showMeasurementUnit,
     required this.canManage,
     required this.onView,
     required this.onEdit,
@@ -1809,6 +1833,7 @@ class _ProductCard extends StatelessWidget {
       return _DesktopProductCard(
         product: product,
         showCost: showCost,
+        showMeasurementUnit: showMeasurementUnit,
         canManage: canManage,
         onView: onView,
         onEdit: onEdit,
@@ -1957,7 +1982,7 @@ class _ProductCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Disponible ${_formatStock(product.stock)}',
+                    'Disponible ${_formatProductStock(product, showMeasurementUnit: showMeasurementUnit)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1991,6 +2016,7 @@ class _MobileProductListTile extends StatelessWidget {
   const _MobileProductListTile({
     required this.product,
     required this.showCost,
+    required this.showMeasurementUnit,
     required this.canManage,
     required this.onView,
     required this.onEdit,
@@ -1999,6 +2025,7 @@ class _MobileProductListTile extends StatelessWidget {
 
   final ProductModel product;
   final bool showCost;
+  final bool showMeasurementUnit;
   final bool canManage;
   final VoidCallback onView;
   final VoidCallback onEdit;
@@ -2006,7 +2033,10 @@ class _MobileProductListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stock = _formatStock(product.stock);
+    final stock = _formatProductStock(
+      product,
+      showMeasurementUnit: showMeasurementUnit,
+    );
     final imageUrl = product.displayFotoUrl;
     return Material(
       color: Colors.white,
@@ -2149,6 +2179,7 @@ class _DesktopCatalogLayout extends StatelessWidget {
     required this.query,
     required this.isAdmin,
     required this.canManage,
+    required this.showMeasurementUnit,
     required this.onSelectCategory,
     required this.onClearFilters,
     required this.onRefresh,
@@ -2165,6 +2196,7 @@ class _DesktopCatalogLayout extends StatelessWidget {
   final String query;
   final bool isAdmin;
   final bool canManage;
+  final bool showMeasurementUnit;
   final ValueChanged<String> onSelectCategory;
   final VoidCallback onClearFilters;
   final Future<void> Function() onRefresh;
@@ -2246,7 +2278,10 @@ class _DesktopCatalogLayout extends StatelessWidget {
                             DataCell(
                               Align(
                                 alignment: Alignment.centerRight,
-                                child: _CatalogStockBadge(product: product),
+                                child: _CatalogStockBadge(
+                                  product: product,
+                                  showMeasurementUnit: showMeasurementUnit,
+                                ),
                               ),
                             ),
                             DataCell(
@@ -2356,9 +2391,13 @@ class _CatalogProductCell extends StatelessWidget {
 }
 
 class _CatalogStockBadge extends StatelessWidget {
-  const _CatalogStockBadge({required this.product});
+  const _CatalogStockBadge({
+    required this.product,
+    required this.showMeasurementUnit,
+  });
 
   final ProductModel product;
+  final bool showMeasurementUnit;
 
   @override
   Widget build(BuildContext context) {
@@ -2371,7 +2410,7 @@ class _CatalogStockBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        _formatProductStock(product),
+        _formatProductStock(product, showMeasurementUnit: showMeasurementUnit),
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
           color: color,
           fontWeight: FontWeight.w900,
@@ -2450,9 +2489,13 @@ class _CatalogRowActions extends StatelessWidget {
 }
 
 class _CatalogReadOnlyStockPanel extends StatelessWidget {
-  const _CatalogReadOnlyStockPanel({required this.product});
+  const _CatalogReadOnlyStockPanel({
+    required this.product,
+    required this.showMeasurementUnit,
+  });
 
   final ProductModel product;
+  final bool showMeasurementUnit;
 
   @override
   Widget build(BuildContext context) {
@@ -2479,19 +2522,24 @@ class _CatalogReadOnlyStockPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _formatProductStock(product),
+                  _formatProductStock(
+                    product,
+                    showMeasurementUnit: showMeasurementUnit,
+                  ),
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: const Color(0xFF132033),
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol})',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF6B7C93),
+                if (showMeasurementUnit) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol})',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF6B7C93),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -2604,6 +2652,7 @@ class _DesktopProductCard extends StatelessWidget {
   const _DesktopProductCard({
     required this.product,
     required this.showCost,
+    required this.showMeasurementUnit,
     required this.canManage,
     required this.onView,
     required this.onEdit,
@@ -2612,6 +2661,7 @@ class _DesktopProductCard extends StatelessWidget {
 
   final ProductModel product;
   final bool showCost;
+  final bool showMeasurementUnit;
   final bool canManage;
   final VoidCallback onView;
   final VoidCallback onEdit;
@@ -2841,7 +2891,11 @@ class _DesktopProductCard extends StatelessWidget {
                                           ),
                                     ),
                                     Text(
-                                      _formatStock(product.stock),
+                                      _formatProductStock(
+                                        product,
+                                        showMeasurementUnit:
+                                            showMeasurementUnit,
+                                      ),
                                       style: theme.textTheme.labelMedium
                                           ?.copyWith(
                                             color: Colors.white,
@@ -2918,6 +2972,7 @@ class _DesktopProductDetailContent extends StatelessWidget {
   const _DesktopProductDetailContent({
     required this.product,
     required this.showCost,
+    required this.showMeasurementUnit,
     required this.canManage,
     required this.onEdit,
     required this.onDelete,
@@ -2925,6 +2980,7 @@ class _DesktopProductDetailContent extends StatelessWidget {
 
   final ProductModel product;
   final bool showCost;
+  final bool showMeasurementUnit;
   final bool canManage;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -3005,7 +3061,10 @@ class _DesktopProductDetailContent extends StatelessWidget {
                     _DesktopInfoChip(
                       icon: Icons.inventory_2_outlined,
                       label: 'Stock',
-                      value: _formatStock(product.stock),
+                      value: _formatProductStock(
+                        product,
+                        showMeasurementUnit: showMeasurementUnit,
+                      ),
                     ),
                   ],
                 ),
@@ -3021,7 +3080,10 @@ class _DesktopProductDetailContent extends StatelessWidget {
                   ),
                 _ProductDetailLine(
                   label: 'Disponible',
-                  value: _formatStock(product.stock),
+                  value: _formatProductStock(
+                    product,
+                    showMeasurementUnit: showMeasurementUnit,
+                  ),
                 ),
                 _ProductDetailLine(
                   label: 'Fecha',
@@ -3164,6 +3226,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   List<UnitOfMeasureModel> _unitOptions = const [UnitOfMeasureModel.unit];
   UnitOfMeasureModel _selectedUnit = UnitOfMeasureModel.unit;
   bool _loadingUnits = false;
+  bool _unitOptionsLoaded = false;
   bool _saving = false;
   bool _isPickingImage = false;
 
@@ -3190,7 +3253,6 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         ? const [UnitOfMeasureModel.unit]
         : [_selectedUnit, UnitOfMeasureModel.unit];
     _maybeRecoverLostImage();
-    _loadUnitOptions();
   }
 
   Future<void> _loadUnitOptions() async {
@@ -3204,6 +3266,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       if (!_unitOptions.any((unit) => unit.id == _selectedUnit.id)) {
         _selectedUnit = _unitOptions.first;
       }
+      _unitOptionsLoaded = true;
       _loadingUnits = false;
     });
   }
@@ -3311,6 +3374,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     final parsedStock = _parseCatalogNumber(_stockCtrl.text);
     final stock = isEdit ? (widget.product?.stock ?? 0) : parsedStock;
     final category = _categoryCtrl.text.trim();
+    final measurementUnitsEnabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final unitForSave = measurementUnitsEnabled
+        ? _selectedUnit
+        : widget.product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
 
     if (name.isEmpty || price == null || cost == null || stock == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3354,8 +3426,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           imageFilePath: _pickedImagePath,
           filename: _imageName ?? 'producto.jpg',
           categoria: category,
-          unitOfMeasureId: _selectedUnit.id,
-          unitOfMeasure: _selectedUnit,
+          unitOfMeasureId: unitForSave.id,
+          unitOfMeasure: unitForSave,
         );
         if (!mounted) return;
         ScaffoldMessenger.of(
@@ -3373,8 +3445,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           newImageFilePath: _pickedImagePath,
           newFilename: _imageName,
           categoria: category,
-          unitOfMeasureId: _selectedUnit.id,
-          unitOfMeasure: _selectedUnit,
+          unitOfMeasureId: unitForSave.id,
+          unitOfMeasure: unitForSave,
         );
         if (!mounted) return;
         ScaffoldMessenger.of(
@@ -3398,6 +3470,19 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   Widget build(BuildContext context) {
     final isEdit = widget.product != null;
     final theme = Theme.of(context);
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    if (measurementUnitsEnabled && !_loadingUnits && !_unitOptionsLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_loadingUnits && !_unitOptionsLoaded) {
+          unawaited(_loadUnitOptions());
+        }
+      });
+    }
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3446,40 +3531,47 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             TextField(
               controller: _stockCtrl,
               keyboardType: TextInputType.numberWithOptions(
-                decimal: _selectedUnit.allowDecimals,
+                decimal: measurementUnitsEnabled && _selectedUnit.allowDecimals,
               ),
               decoration: _catalogProductInputDecoration(
                 'Stock disponible',
-                hintText: 'Cantidad en ${_selectedUnit.symbol}',
+                hintText: measurementUnitsEnabled
+                    ? 'Cantidad en ${_selectedUnit.symbol}'
+                    : 'Cantidad',
               ),
             )
           else
-            _CatalogReadOnlyStockPanel(product: widget.product!),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedUnit.id,
-            isExpanded: true,
-            decoration: _catalogProductInputDecoration(
-              _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
+            _CatalogReadOnlyStockPanel(
+              product: widget.product!,
+              showMeasurementUnit: measurementUnitsEnabled,
             ),
-            items: [
-              for (final unit in _unitOptions)
-                DropdownMenuItem<String>(
-                  value: unit.id,
-                  child: Text('${unit.name} (${unit.symbol})'),
-                ),
-            ],
-            onChanged: _saving || _loadingUnits
-                ? null
-                : (value) {
-                    final next = _unitOptions.firstWhere(
-                      (unit) => unit.id == value,
-                      orElse: () => UnitOfMeasureModel.unit,
-                    );
-                    setState(() => _selectedUnit = next);
-                  },
-          ),
           const SizedBox(height: 12),
+          if (measurementUnitsEnabled) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _selectedUnit.id,
+              isExpanded: true,
+              decoration: _catalogProductInputDecoration(
+                _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
+              ),
+              items: [
+                for (final unit in _unitOptions)
+                  DropdownMenuItem<String>(
+                    value: unit.id,
+                    child: Text('${unit.name} (${unit.symbol})'),
+                  ),
+              ],
+              onChanged: _saving || _loadingUnits
+                  ? null
+                  : (value) {
+                      final next = _unitOptions.firstWhere(
+                        (unit) => unit.id == value,
+                        orElse: () => UnitOfMeasureModel.unit,
+                      );
+                      setState(() => _selectedUnit = next);
+                    },
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             controller: _categoryCtrl,
             decoration: _catalogProductInputDecoration(

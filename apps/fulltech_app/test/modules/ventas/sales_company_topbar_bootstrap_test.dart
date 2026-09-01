@@ -13,6 +13,7 @@ void main() {
       expect(source, isNot(contains("orElse: () => 'Empresa'")));
       expect(source, contains('const _SalesCompanyButtonPlaceholder()'));
       expect(source, contains("if (normalized.isEmpty) return '';"));
+      expect(source, isNot(contains("value: 'warehouse_settings'")));
     },
   );
 

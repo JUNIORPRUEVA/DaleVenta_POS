@@ -143,13 +143,13 @@ class CompanySettingsRepository {
     throw ApiException(fallbackMessage);
   }
 
-  CompanySettings _settingsFromData(dynamic data) {
-    return CompanySettings.fromMap(
-      _normalizeMap(
-        data,
-        'La API devolvió una configuración inválida. Inténtalo de nuevo.',
-      ),
+  CompanySettings _settingsFromData(dynamic data, {CompanySettings? fallback}) {
+    final map = _normalizeMap(
+      data,
+      'La API devolvió una configuración inválida. Inténtalo de nuevo.',
     );
+    if (fallback == null) return CompanySettings.fromMap(map);
+    return CompanySettings.fromMap({...fallback.toMap(), ...map});
   }
 
   void _traceProtectedError(
@@ -191,13 +191,14 @@ class CompanySettingsRepository {
 
   Future<CompanySettings> getSettingsRemoteAndCache() async {
     try {
+      final cached = await getCachedSettings();
       final res = await _dio
           .get(
             ApiRoutes.settings,
             options: Options(extra: const {'skipLoader': true}),
           )
           .timeout(_settingsTimeout);
-      final settings = _settingsFromData(res.data);
+      final settings = _settingsFromData(res.data, fallback: cached);
       await _cache.writeMap(_scopedCacheKey, settings.toMap());
       return settings;
     } on TimeoutException {
@@ -235,7 +236,7 @@ class CompanySettingsRepository {
     }
   }
 
-  Future<void> _saveSettingsRemote(CompanySettings settings) async {
+  Future<CompanySettings> _saveSettingsRemote(CompanySettings settings) async {
     try {
       // NOTA: `companyName` es dato maestro. No se envía por esta vía genérica;
       // solo el endpoint dedicado /settings/company-name lo actualiza.
@@ -270,6 +271,7 @@ class CompanySettingsRepository {
         'pricesIncludeTax': settings.pricesIncludeTax,
         'ncfEnabled': settings.ncfEnabled,
         'measurementUnitsEnabled': settings.measurementUnitsEnabled,
+        'multiWarehouseEnabled': settings.multiWarehouseEnabled,
       };
       if (settings.openAiApiKey.trim().isNotEmpty) {
         payload['openAiApiKey'] = settings.openAiApiKey.trim();
@@ -278,13 +280,17 @@ class CompanySettingsRepository {
         payload['evolutionApiApiKey'] = settings.evolutionApiApiKey.trim();
       }
 
-      await _dio
+      final response = await _dio
           .patch(
             ApiRoutes.settings,
             options: Options(extra: const {'skipLoader': true}),
             data: payload,
           )
           .timeout(_settingsTimeout);
+      if (response.data == null || response.statusCode == 204) {
+        return settings;
+      }
+      return _settingsFromData(response.data, fallback: settings);
     } on TimeoutException {
       throw ApiException(
         'Guardar la configuración tardó demasiado. El backend no respondió a tiempo.',
@@ -339,7 +345,8 @@ class CompanySettingsRepository {
     }
     await _cache.writeMap(_scopedCacheKey, settings.toMap());
     try {
-      await _saveSettingsRemote(settings);
+      final saved = await _saveSettingsRemote(settings);
+      await _cache.writeMap(_scopedCacheKey, saved.toMap());
       return false;
     } on ApiException catch (e) {
       if (!_shouldQueueSync(e)) rethrow;

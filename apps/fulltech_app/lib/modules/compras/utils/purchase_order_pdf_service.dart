@@ -54,7 +54,12 @@ Future<Uint8List> buildPurchaseOrderPdf({
       ),
       footer: (context) => pdfFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
-        ..._detailSection(order, money, qtyFmt),
+        ..._detailSection(
+          order,
+          money,
+          qtyFmt,
+          showMeasurementUnit: company?.measurementUnitsEnabled == true,
+        ),
         pw.SizedBox(height: 14),
         _bottomSection(order, money),
         pw.SizedBox(height: 16),
@@ -214,8 +219,9 @@ pw.Widget _deliveryPanel(PurchaseOrderModel order, DateFormat dateFmt) {
 List<pw.Widget> _detailSection(
   PurchaseOrderModel order,
   NumberFormat money,
-  NumberFormat qtyFmt,
-) {
+  NumberFormat qtyFmt, {
+  required bool showMeasurementUnit,
+}) {
   final rows = <pw.TableRow>[
     pw.TableRow(
       repeat: true,
@@ -258,7 +264,12 @@ List<pw.Widget> _detailSection(
             ),
             pdfDescriptionCell(item.productName),
             pdfBodyCell(
-              formatQuantityWithUnit(item.quantity, unit: item.unitSnapshot),
+              formatQuantityForFeature(
+                item.quantity,
+                unit: item.unitSnapshot,
+                showMeasurementUnit: showMeasurementUnit,
+                includeUnitForUnit: true,
+              ),
               align: pw.TextAlign.center,
             ),
             pdfBodyCell(money.format(item.unitCost), align: pw.TextAlign.right),

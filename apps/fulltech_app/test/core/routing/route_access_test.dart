@@ -52,6 +52,23 @@ void main() {
       );
     });
 
+    test('marks warehouse routes as requiring the company feature flag', () {
+      expect(
+        RouteAccess.requiresMultiWarehouseFeature(
+          Routes.configuracionAlmacenes,
+        ),
+        isTrue,
+      );
+      expect(
+        RouteAccess.requiresMultiWarehouseFeature(Routes.catalogoKardex),
+        isTrue,
+      );
+      expect(
+        RouteAccess.requiresMultiWarehouseFeature(Routes.catalogo),
+        isFalse,
+      );
+    });
+
     test('default home uses effective user permission overrides', () {
       final cashierWithoutQuotes = UserModel(
         id: 'employee-a',

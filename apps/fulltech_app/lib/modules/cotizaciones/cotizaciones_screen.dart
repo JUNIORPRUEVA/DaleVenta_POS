@@ -5282,8 +5282,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return '${id.substring(0, 8)}...';
   }
 
-  String _formatSaleItemQty(SaleItemModel item) =>
-      formatQuantityWithUnit(item.qty, unit: item.unitSnapshot);
+  String _formatSaleItemQty(SaleItemModel item) => formatQuantityForFeature(
+    item.qty,
+    unit: item.unitSnapshot,
+    showMeasurementUnit:
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true,
+    includeUnitForUnit: true,
+  );
 
   Future<void> _openRecentSalesPanel() async {
     final repo = ref.read(ventasRepositoryProvider);
@@ -8388,23 +8397,6 @@ class _CompanyAccountMenu extends ConsumerWidget {
               ),
               helpText:
                   'Configura el nombre comercial, RNC, teléfonos, dirección, logo y datos principales usados por la empresa.',
-            ),
-          ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.warehouse_outlined,
-              label: 'Almacenes',
-              onTap: () => _activateProtectedRoute(
-                context,
-                ref,
-                menuContext,
-                route: Routes.configuracionAlmacenes,
-                label: 'Almacenes',
-              ),
-              helpText:
-                  'Administra almacenes activos, predeterminado y terminales.',
             ),
           ),
           if (!kIsWeb)
@@ -16271,7 +16263,7 @@ class _LineEditIconButton extends StatelessWidget {
   }
 }
 
-class _DesktopTicketItem extends StatefulWidget {
+class _DesktopTicketItem extends ConsumerStatefulWidget {
   const _DesktopTicketItem({
     required this.item,
     required this.money,
@@ -16297,10 +16289,10 @@ class _DesktopTicketItem extends StatefulWidget {
   final VoidCallback onRemove;
 
   @override
-  State<_DesktopTicketItem> createState() => _DesktopTicketItemState();
+  ConsumerState<_DesktopTicketItem> createState() => _DesktopTicketItemState();
 }
 
-class _DesktopTicketItemState extends State<_DesktopTicketItem> {
+class _DesktopTicketItemState extends ConsumerState<_DesktopTicketItem> {
   Future<void> _showFullProductName() async {
     final name = widget.item.nombre.trim();
     if (name.isEmpty) return;
@@ -16344,7 +16336,18 @@ class _DesktopTicketItemState extends State<_DesktopTicketItem> {
     final hasDiscount = item.hasDiscount;
     final outOfStock = widget.outOfStock;
     final discountText = widget.money(item.discountAmount);
-    final qtyText = formatQuantityWithUnit(item.qty, unit: item.unitSnapshot);
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final qtyText = formatQuantityForFeature(
+      item.qty,
+      unit: item.unitSnapshot,
+      showMeasurementUnit: measurementUnitsEnabled,
+      includeUnitForUnit: true,
+    );
 
     return Material(
       color: Colors.transparent,
@@ -17339,7 +17342,7 @@ class _DesktopTicketDraft {
 
 enum _DiscountType { percent, fixed }
 
-class _TicketCompactItem extends StatefulWidget {
+class _TicketCompactItem extends ConsumerStatefulWidget {
   const _TicketCompactItem({
     required this.item,
     required this.money,
@@ -17363,14 +17366,26 @@ class _TicketCompactItem extends StatefulWidget {
   final VoidCallback onRemove;
 
   @override
-  State<_TicketCompactItem> createState() => _TicketCompactItemState();
+  ConsumerState<_TicketCompactItem> createState() => _TicketCompactItemState();
 }
 
-class _TicketCompactItemState extends State<_TicketCompactItem> {
+class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
     final editAction = widget.onEdit ?? widget.onEditLine;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final qtyText = formatQuantityForFeature(
+      item.qty,
+      unit: item.unitSnapshot,
+      showMeasurementUnit: measurementUnitsEnabled,
+      includeUnitForUnit: true,
+    );
 
     return Material(
       color: Colors.white,
@@ -17486,7 +17501,7 @@ class _TicketCompactItemState extends State<_TicketCompactItem> {
                         ],
                         Flexible(
                           child: Text(
-                            '${formatQuantityWithUnit(item.qty, unit: item.unitSnapshot)} x ${widget.money(item.unitPrice)}',
+                            '$qtyText x ${widget.money(item.unitPrice)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

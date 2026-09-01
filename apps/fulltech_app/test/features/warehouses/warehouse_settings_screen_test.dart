@@ -86,7 +86,7 @@ void main() {
 
     expect(find.text('Operación simple: un almacén activo'), findsOneWidget);
     expect(find.text('Automático'), findsOneWidget);
-    expect(find.text('Main Warehouse'), findsOneWidget);
+    expect(find.text('Almacén Principal'), findsOneWidget);
     expect(find.text('Predeterminado'), findsOneWidget);
     expect(find.text('Transferencias automáticas'), findsOneWidget);
   });
@@ -161,11 +161,15 @@ void main() {
     expect(find.text('Transferencias'), findsOneWidget);
     expect(find.text('Origen'), findsOneWidget);
     expect(find.text('Destino'), findsOneWidget);
-    expect(find.text('Producto'), findsOneWidget);
+    expect(
+      find.text('Buscar producto por nombre, código o categoría'),
+      findsOneWidget,
+    );
+    expect(find.text('Producto para transferir'), findsOneWidget);
+    expect(find.text('Categoría'), findsOneWidget);
+    expect(find.text('Stock'), findsOneWidget);
 
-    await tester.tap(find.text('Producto'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tela Azul W10').last);
+    await tester.tap(find.text('Tela Azul W10'));
     await tester.pumpAndSettle();
 
     expect(find.text('Disponible en origen: 20.5 yd'), findsOneWidget);
@@ -198,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Terminales'), findsOneWidget);
-    expect(find.text('Caja Principal → Main Warehouse'), findsOneWidget);
+    expect(find.text('Caja Principal → Almacén Principal'), findsOneWidget);
     expect(find.textContaining('Bávaro'), findsWidgets);
   });
 }

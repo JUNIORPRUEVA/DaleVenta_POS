@@ -153,6 +153,95 @@ describe("ProductsService fiscal validation", () => {
     });
   });
 
+  it("forces UNIT on create when company measurement units are disabled", async () => {
+    const createdProduct = {
+      id: "product-1",
+      nombre: "Tela legacy",
+      codigo: null,
+      precio: 100,
+      costo: 50,
+      stock: 1,
+      categoria: "General",
+      imagen: null,
+      taxTreatment: "INHERIT",
+      taxRate: null,
+      taxPriceMode: null,
+    };
+    const transactionClient = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          measurementUnitsEnabled: false,
+        }),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue(createdProduct),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue(createdProduct),
+      },
+      unitOfMeasure: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "UNIT",
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          allowDecimals: false,
+          precision: 0,
+        }),
+      },
+      tax: {
+        findFirst: jest.fn(),
+      },
+      warehouse: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: "warehouse-1",
+            name: "Main Warehouse",
+            code: "MAIN",
+            isDefault: true,
+          },
+        ]),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "warehouse-1",
+          name: "Main Warehouse",
+          code: "MAIN",
+        }),
+      },
+      warehouseStock: {
+        upsert: jest.fn().mockResolvedValue({}),
+      },
+      saleItem: { count: jest.fn().mockResolvedValue(0) },
+      cotizacionItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      websiteProductOverride: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const { service } = buildService(transactionClient);
+
+    await service.create(
+      {
+        id: "user-1",
+        role: "ADMIN",
+        companyId: "11111111-1111-1111-1111-111111111111",
+      } as never,
+      {
+        nombre: "Tela legacy",
+        precio: 100,
+        costo: 50,
+        stock: 1,
+        categoria: "General",
+        unitOfMeasureId: "YARD",
+      } as never,
+    );
+
+    expect(transactionClient.unitOfMeasure.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "UNIT" }),
+      }),
+    );
+    expect(transactionClient.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ unitOfMeasureId: "UNIT" }),
+    });
+  });
+
   it("normalizes EXEMPT products with null tax fields", async () => {
     const createdProduct = {
       id: "product-1",

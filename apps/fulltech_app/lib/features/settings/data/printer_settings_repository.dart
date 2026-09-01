@@ -37,6 +37,7 @@ class PrinterSettingsRepository {
       CREATE TABLE IF NOT EXISTS $_table (
         id INTEGER PRIMARY KEY,
         selectedPrinterName TEXT,
+        windowsPrinterMode TEXT NOT NULL DEFAULT 'automatic',
         paperWidthMm INTEGER NOT NULL DEFAULT 80,
         charsPerLine INTEGER NOT NULL DEFAULT 48,
         autoPrintOnPayment INTEGER NOT NULL DEFAULT 1,
@@ -94,6 +95,8 @@ class PrinterSettingsRepository {
 
   static const Map<String, String> _columnDefinitions = {
     'selectedPrinterName': 'selectedPrinterName TEXT',
+    'windowsPrinterMode':
+        "windowsPrinterMode TEXT NOT NULL DEFAULT 'automatic'",
     'paperWidthMm': 'paperWidthMm INTEGER NOT NULL DEFAULT 80',
     'charsPerLine': 'charsPerLine INTEGER NOT NULL DEFAULT 48',
     'autoPrintOnPayment': 'autoPrintOnPayment INTEGER NOT NULL DEFAULT 1',

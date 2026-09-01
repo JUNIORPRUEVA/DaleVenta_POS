@@ -838,7 +838,17 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               strong: true,
             ),
             _tableCell(
-              formatQuantityWithUnit(item.qty, unit: item.unitSnapshot),
+              formatQuantityForFeature(
+                item.qty,
+                unit: item.unitSnapshot,
+                showMeasurementUnit:
+                    ref
+                        .read(companySettingsProvider)
+                        .valueOrNull
+                        ?.measurementUnitsEnabled ==
+                    true,
+                includeUnitForUnit: true,
+              ),
             ),
             _tableCell(
               formatRdCurrencyAccounting(item.priceSoldUnit),
@@ -2230,16 +2240,27 @@ class _PanelAmount extends StatelessWidget {
   }
 }
 
-class _ItemLine extends StatelessWidget {
+class _ItemLine extends ConsumerWidget {
   const _ItemLine({required this.item});
 
   final SaleItemModel item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final qty = formatQuantityWithUnit(item.qty, unit: item.unitSnapshot);
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final qty = formatQuantityForFeature(
+      item.qty,
+      unit: item.unitSnapshot,
+      showMeasurementUnit: measurementUnitsEnabled,
+      includeUnitForUnit: true,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(

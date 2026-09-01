@@ -127,6 +127,42 @@ void main() {
       expect(thermal.printDocumentCalls, 1);
     },
   );
+
+  test(
+    'Windows ESC/POS mode sends sale ticket through RAW transport',
+    () async {
+      final raw = _FakeRawTransport();
+      final thermal = _FakeThermalPrinterService();
+      final html = _FakeHtmlConverter();
+      final container = _container(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'POS-80',
+          copies: 1,
+          autoCut: true,
+          windowsPrinterMode: WindowsPrinterMode.escPosRaw,
+        ),
+      );
+      addTearDown(container.dispose);
+      final printer = container.read(
+        _printerProvider(
+          raw: raw,
+          thermal: thermal,
+          useEscPosReceiptRenderer: false,
+          html: html,
+        ),
+      );
+
+      final result = await printer.printTicket(_saleTicket());
+
+      expect(result.success, isTrue);
+      expect(html.calls, 0);
+      expect(thermal.printDocumentCalls, 0);
+      expect(raw.calls, hasLength(1));
+      expect(raw.calls.single.printerName, 'POS-80');
+      expect(raw.calls.single.documentName, 'Ticket 81472316');
+      expect(raw.calls.single.bytes, isNotEmpty);
+    },
+  );
 }
 
 Provider<UnifiedTicketPrinter> _printerProvider({
@@ -146,14 +182,14 @@ Provider<UnifiedTicketPrinter> _printerProvider({
   );
 }
 
-ProviderContainer _container() {
+ProviderContainer _container({PrinterSettingsModel? settings}) {
   return ProviderContainer(
     overrides: [
       companyInfoRepositoryProvider.overrideWith(
         _FakeCompanyInfoRepository.new,
       ),
       printerSettingsRepositoryProvider.overrideWith(
-        (_) => _FakePrinterSettingsRepository(),
+        (_) => _FakePrinterSettingsRepository(settings: settings),
       ),
       printingPlatformResolverProvider.overrideWithValue(
         const _WindowsPrintingPlatformResolver(),
@@ -187,14 +223,21 @@ class _FakeCompanyInfoRepository extends CompanyInfoRepository {
 }
 
 class _FakePrinterSettingsRepository extends PrinterSettingsRepository {
+  _FakePrinterSettingsRepository({PrinterSettingsModel? settings})
+    : _settings =
+          settings ??
+          const PrinterSettingsModel(
+            selectedPrinterName: 'POS-80',
+            copies: 1,
+            autoCut: true,
+            warrantyPolicy: 'Garantía según política.',
+          );
+
+  final PrinterSettingsModel _settings;
+
   @override
   Future<PrinterSettingsModel> getOrCreate() async {
-    return const PrinterSettingsModel(
-      selectedPrinterName: 'POS-80',
-      copies: 1,
-      autoCut: true,
-      warrantyPolicy: 'Garantía según política.',
-    );
+    return _settings;
   }
 }
 

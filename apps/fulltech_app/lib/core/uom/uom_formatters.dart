@@ -42,6 +42,20 @@ String formatQuantityWithUnit(
   return '$quantity ${unit.symbol}';
 }
 
+String formatQuantityForFeature(
+  num? value, {
+  required UnitOfMeasureModel unit,
+  required bool showMeasurementUnit,
+  bool includeUnitForUnit = false,
+}) {
+  if (!showMeasurementUnit) return formatQuantityValue(value, unit: unit);
+  return formatQuantityWithUnit(
+    value,
+    unit: unit,
+    includeUnitForUnit: includeUnitForUnit,
+  );
+}
+
 String formatStockLabel(ProductModel product, {bool compact = false}) {
   final stock = product.stock;
   if (stock == null) return compact ? '--' : 'Disp. --';

@@ -5,11 +5,16 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'raw_printer_transport.dart';
+import 'windows_printer_queue_inspector.dart';
 
 class WindowsRawPrinterTransport implements RawPrinterTransport {
-  WindowsRawPrinterTransport({WindowsRawSpooler? spooler})
-    : _spooler = spooler ?? _defaultSpooler(),
-      _requiresWindowsPlatform = spooler == null;
+  WindowsRawPrinterTransport({
+    WindowsRawSpooler? spooler,
+    WindowsPrinterQueueInspector? queueInspector,
+  }) : _spooler = spooler ?? _defaultSpooler(),
+       _queueInspector = queueInspector ?? WindowsPrinterQueueInspector(),
+       _requiresWindowsPlatform = spooler == null,
+       _checksWindowsQueue = spooler == null || queueInspector != null;
 
   static const String datatype = 'RAW';
 
@@ -22,7 +27,9 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
   }
 
   final WindowsRawSpooler _spooler;
+  final WindowsPrinterQueueInspector _queueInspector;
   final bool _requiresWindowsPlatform;
+  final bool _checksWindowsQueue;
 
   @override
   Future<RawPrintResult> printRaw({
@@ -43,6 +50,12 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
         'Windows RAW solo esta disponible en Windows.',
       );
     }
+    if (_checksWindowsQueue) {
+      final queueStatus = await _queueInspector.inspect(normalizedPrinter);
+      if (queueStatus != null && !queueStatus.isUsable) {
+        throw RawPrinterException(queueStatus.message);
+      }
+    }
 
     final normalizedCopies = copies.clamp(1, 5);
     var totalWritten = 0;
@@ -58,7 +71,7 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
     }
     return RawPrintResult(
       success: true,
-      message: 'Impresion RAW enviada.',
+      message: 'Trabajo RAW enviado a la cola de Windows.',
       printerName: normalizedPrinter,
       bytesWritten: totalWritten,
       datatype: datatype,

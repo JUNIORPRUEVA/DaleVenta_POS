@@ -226,6 +226,9 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final multiWarehouseEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
+        true;
     if (MediaQuery.sizeOf(context).width >= 900) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go(Routes.cotizaciones);
@@ -250,13 +253,14 @@ class AccountSettingsScreen extends ConsumerWidget {
           accent: const Color(0xFF0F766E),
           onTap: () => context.go(Routes.configuracionEmpresa),
         ),
-        _SettingsActionCard(
-          icon: Icons.warehouse_outlined,
-          title: 'Almacenes',
-          description: 'Administra locales, estado y almacén predeterminado.',
-          accent: const Color(0xFF0F6170),
-          onTap: () => context.go(Routes.configuracionAlmacenes),
-        ),
+        if (multiWarehouseEnabled)
+          _SettingsActionCard(
+            icon: Icons.warehouse_outlined,
+            title: 'Almacenes',
+            description: 'Administra locales, estado y almacén predeterminado.',
+            accent: const Color(0xFF0F6170),
+            onTap: () => context.go(Routes.configuracionAlmacenes),
+          ),
         _SettingsActionCard(
           icon: Icons.cloud_sync_outlined,
           title: 'Backup',
@@ -687,21 +691,6 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                   _activate(menuContext, context, Routes.configuracionEmpresa),
               helpText:
                   'Configura datos fiscales, dirección, representante, logo y datos comerciales.',
-            ),
-          ),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _SettingsCompanyMenuRow(
-              icon: Icons.warehouse_outlined,
-              label: 'Almacenes',
-              onTap: () => _activate(
-                menuContext,
-                context,
-                Routes.configuracionAlmacenes,
-              ),
-              helpText:
-                  'Administra almacenes activos, predeterminado y terminales.',
             ),
           ),
           if (!kIsWeb)
@@ -1764,6 +1753,7 @@ class _CompanySettingsEditorState
   bool _pricesIncludeTax = false;
   bool _ncfEnabled = false;
   bool _measurementUnitsEnabled = false;
+  bool _multiWarehouseEnabled = false;
 
   @override
   void initState() {
@@ -1829,6 +1819,7 @@ class _CompanySettingsEditorState
     _pricesIncludeTax = settings.pricesIncludeTax;
     _ncfEnabled = settings.ncfEnabled;
     _measurementUnitsEnabled = settings.measurementUnitsEnabled;
+    _multiWarehouseEnabled = settings.multiWarehouseEnabled;
   }
 
   String? _normalizeLogoBase64(String? value) {
@@ -2006,6 +1997,7 @@ class _CompanySettingsEditorState
       pricesIncludeTax: _pricesIncludeTax,
       ncfEnabled: _ncfEnabled,
       measurementUnitsEnabled: _measurementUnitsEnabled,
+      multiWarehouseEnabled: _multiWarehouseEnabled,
       bankAccounts: [
         if (_bankAlias.text.trim().isNotEmpty ||
             _bankType.text.trim().isNotEmpty ||
@@ -2138,8 +2130,11 @@ class _CompanySettingsEditorState
         const SizedBox(height: 10),
         _InventorySettingsPanel(
           measurementUnitsEnabled: _measurementUnitsEnabled,
+          multiWarehouseEnabled: _multiWarehouseEnabled,
           onMeasurementUnitsEnabledChanged: (value) =>
               setState(() => _measurementUnitsEnabled = value),
+          onMultiWarehouseEnabledChanged: (value) =>
+              setState(() => _multiWarehouseEnabled = value),
         ),
         const SizedBox(height: 10),
         Align(
@@ -2336,11 +2331,15 @@ class _FiscalSettingsPanel extends StatelessWidget {
 class _InventorySettingsPanel extends StatelessWidget {
   const _InventorySettingsPanel({
     required this.measurementUnitsEnabled,
+    required this.multiWarehouseEnabled,
     required this.onMeasurementUnitsEnabledChanged,
+    required this.onMultiWarehouseEnabledChanged,
   });
 
   final bool measurementUnitsEnabled;
+  final bool multiWarehouseEnabled;
   final ValueChanged<bool> onMeasurementUnitsEnabledChanged;
+  final ValueChanged<bool> onMultiWarehouseEnabledChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2360,12 +2359,22 @@ class _InventorySettingsPanel extends StatelessWidget {
             const SizedBox(height: 6),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Utilizar unidades de medida'),
+              title: const Text('Activar unidades de medida'),
               subtitle: const Text(
-                'Muestra unidad de medida en productos, ventas y compras nuevas.',
+                'Permite vender y manejar productos por unidad, yarda, libra, metro, kilogramo y otras medidas, incluyendo cantidades decimales.',
               ),
               value: measurementUnitsEnabled,
               onChanged: onMeasurementUnitsEnabledChanged,
+            ),
+            const Divider(height: 16),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Activar múltiples almacenes'),
+              subtitle: const Text(
+                'Activa la gestión de inventario por varios almacenes, transferencias, terminales y Kardex por almacén.',
+              ),
+              value: multiWarehouseEnabled,
+              onChanged: onMultiWarehouseEnabledChanged,
             ),
           ],
         ),

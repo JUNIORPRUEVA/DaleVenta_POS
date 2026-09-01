@@ -94,6 +94,17 @@ void main() {
     },
   );
 
+  testWidgets('Cuenta y empresa no muestra acceso directo a Almacenes', (
+    tester,
+  ) async {
+    await _pumpCompanyMenu(tester);
+
+    await tester.tap(find.byTooltip('Cuenta y empresa'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Almacenes'), findsNothing);
+  });
+
   testWidgets(
     'Cuenta y empresa > Empresa soporta desmontaje rapido sin StateError',
     (tester) async {

@@ -8,6 +8,14 @@ import 'routes.dart';
 /// This is enforced at the router level (deep-link safe) and reused
 /// by navigation (drawer/tabs) to avoid duplicating logic.
 class RouteAccess {
+  static bool requiresMultiWarehouseFeature(String location) {
+    final path = location.split('?').first;
+    return path == Routes.configuracionAlmacenes ||
+        path == Routes.catalogoKardex ||
+        path.startsWith('${Routes.configuracionAlmacenes}/') ||
+        path.startsWith('${Routes.catalogoKardex}/');
+  }
+
   static AppPermission? permissionForLocation(String location) {
     final path = location.split('?').first;
 

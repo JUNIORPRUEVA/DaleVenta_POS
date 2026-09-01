@@ -189,7 +189,13 @@ class _FakeCatalogRepository extends CatalogRepository {
   }
 }
 
-List<Override> _singleWarehouseOverrides({ProductModel? product}) => [
+List<Override> _singleWarehouseOverrides({
+  ProductModel? product,
+  CompanySettings? companySettings,
+}) => [
+  companySettingsProvider.overrideWith(
+    (ref) async => companySettings ?? CompanySettings.empty(),
+  ),
   warehouseInventoryOverviewProvider.overrideWith(
     (ref) async => const WarehouseInventoryOverview(
       warehouses: [
@@ -231,7 +237,13 @@ List<Override> _singleWarehouseOverrides({ProductModel? product}) => [
 
 List<Override> _multiWarehouseOverrides({
   required Map<String, Map<String, double>> stockByProductAndWarehouse,
+  CompanySettings? companySettings,
 }) => [
+  companySettingsProvider.overrideWith(
+    (ref) async =>
+        companySettings ??
+        CompanySettings.empty().copyWith(multiWarehouseEnabled: true),
+  ),
   warehouseInventoryOverviewProvider.overrideWith(
     (ref) async => const WarehouseInventoryOverview(
       warehouses: [
@@ -315,6 +327,28 @@ class _FakeFilePicker extends FilePicker {
   }
 }
 
+class _HangingFilePicker extends FilePicker {
+  final Completer<FilePickerResult?> _pending = Completer<FilePickerResult?>();
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = true,
+    int compressionQuality = 30,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) {
+    return _pending.future;
+  }
+}
+
 ProductModel _product({
   required String id,
   required String name,
@@ -356,10 +390,10 @@ Future<ProductFormResult?> _pumpEditor(
                 activeTaxes: const [],
               ),
         ),
-        companySettingsProvider.overrideWith(
-          (ref) async => companySettings ?? CompanySettings.empty(),
+        ..._singleWarehouseOverrides(
+          product: product,
+          companySettings: companySettings,
         ),
-        ..._singleWarehouseOverrides(product: product),
       ],
       child: MaterialApp(
         home: Builder(
@@ -413,10 +447,7 @@ Future<void> _pumpMobileInventory(
             activeTaxes: const [],
           ),
         ),
-        companySettingsProvider.overrideWith(
-          (ref) async => companySettings ?? CompanySettings.empty(),
-        ),
-        ..._singleWarehouseOverrides(),
+        ..._singleWarehouseOverrides(companySettings: companySettings),
       ],
       child: MaterialApp(
         home: InventoryModulePages(initialMobileTab: initialMobileTab),
@@ -479,6 +510,27 @@ void main() {
     expect(repo.lastUnitOfMeasureId, 'YARD');
     expect(repo.lastUnitOfMeasure?.symbol, 'yd');
   });
+
+  testWidgets(
+    'formulario oculta unidad de medida cuando el flag esta apagado',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      await _pumpEditor(tester, repo: repo);
+
+      expect(find.text('Unidad de medida'), findsNothing);
+      await tester.enterText(find.byType(TextField).at(0), 'Caja simple');
+      await tester.enterText(find.byType(TextField).at(2), '150');
+      await tester.enterText(find.byType(TextField).at(3), '90');
+      await tester.enterText(find.byType(TextField).at(4), '20');
+      await tester.tap(find.text('General'));
+      await tester.tap(find.text('Crear producto'));
+      await tester.pumpAndSettle();
+
+      expect(repo.creates, 1);
+      expect(repo.lastUnitOfMeasureId, UnitOfMeasureModel.unit.id);
+      expect(repo.lastUnitOfMeasure, UnitOfMeasureModel.unit);
+    },
+  );
 
   testWidgets('formulario rechaza stock decimal para Unidad', (tester) async {
     final repo = _FakeCatalogRepository();
@@ -681,7 +733,12 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: _singleWarehouseOverrides(product: product),
+          overrides: _singleWarehouseOverrides(
+            product: product,
+            companySettings: CompanySettings.empty().copyWith(
+              multiWarehouseEnabled: true,
+            ),
+          ),
           child: MaterialApp(
             home: Scaffold(
               body: SizedBox(
@@ -715,7 +772,7 @@ void main() {
       expect(find.text('Almacén: Principal'), findsOneWidget);
       expect(find.text('Todos los almacenes'), findsNothing);
       expect(find.text('Almacén por defecto'), findsNothing);
-      expect(find.text('5 u'), findsOneWidget);
+      expect(find.text('5'), findsOneWidget);
     },
   );
 
@@ -857,6 +914,89 @@ void main() {
     expect(find.text('Sin ref.'), findsNothing);
   });
 
+  testWidgets('catálogo permite selección múltiple y muestra acciones', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final products = [
+      _product(
+        id: 'unit-1',
+        name: 'Producto seleccionable A',
+        category: 'Unidad',
+        stock: 5,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+      _product(
+        id: 'unit-2',
+        name: 'Producto seleccionable B',
+        category: 'Unidad',
+        stock: 6,
+        unitOfMeasure: UnitOfMeasureModel.unit,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _singleWarehouseOverrides(
+          product: products.first,
+          companySettings: CompanySettings.empty().copyWith(
+            multiWarehouseEnabled: true,
+          ),
+        ),
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1100,
+              child: CatalogTab(
+                products: products,
+                loading: false,
+                error: null,
+                onRefresh: () async {},
+                onCreate: () {},
+                onImport: () async {},
+                onExport: () async {},
+                onExportSelection: (_) async {},
+                onPdfSelection: (_) async {},
+                onBulkDelete: (_) async {},
+                onBulkChangeCategory: (_, _) async {},
+                onEdit: (_) {},
+                onSetStock:
+                    (_, _, {warehouseId, currentWarehouseStock}) async {},
+                canEditProducts: true,
+                canAddStock: true,
+                onDelete: (_) async {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Acciones (2)'), findsNothing);
+
+    await tester.tap(find.byType(Checkbox).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('Acciones (2)'), findsNothing);
+
+    await tester.tap(find.byType(Checkbox).at(2));
+    await tester.pumpAndSettle();
+    expect(find.text('Acciones (2)'), findsOneWidget);
+
+    await tester.tap(find.text('Acciones (2)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Exportar selección'), findsOneWidget);
+    expect(find.text('PDF selección'), findsOneWidget);
+    expect(find.text('Cambiar categoría'), findsOneWidget);
+    expect(find.text('Eliminar productos'), findsOneWidget);
+    expect(find.text('Transferir a otro almacén'), findsOneWidget);
+  });
+
   testWidgets('catálogo filtra stock por almacén sin escrituras', (
     tester,
   ) async {
@@ -889,6 +1029,10 @@ void main() {
           stockByProductAndWarehouse: {
             'yd-1': {'w-default': 12.25, 'w-secondary': 2.25},
           },
+          companySettings: CompanySettings.empty().copyWith(
+            multiWarehouseEnabled: true,
+            measurementUnitsEnabled: true,
+          ),
         ),
         child: MaterialApp(
           home: Scaffold(
@@ -996,8 +1140,8 @@ void main() {
     expect(find.text('Agregar stock'), findsOneWidget);
     expect(find.text('Disminuir stock'), findsOneWidget);
     expect(find.text('Cantidad'), findsOneWidget);
-    expect(find.textContaining('Stock actual: 5 u'), findsOneWidget);
-    expect(find.textContaining('Nuevo stock: 6 u'), findsOneWidget);
+    expect(find.textContaining('Stock actual: 5'), findsOneWidget);
+    expect(find.textContaining('Nuevo stock: 6'), findsOneWidget);
   });
 
   testWidgets('ajuste de stock muestra unidad y bloquea decimal para Unidad', (
@@ -1552,9 +1696,6 @@ void main() {
         overrides: [
           catalogRepositoryProvider.overrideWithValue(repo),
           productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
-          companySettingsProvider.overrideWith(
-            (ref) async => CompanySettings.empty(),
-          ),
           ..._singleWarehouseOverrides(product: product),
         ],
         child: MaterialApp(
@@ -1631,9 +1772,6 @@ void main() {
         overrides: [
           catalogRepositoryProvider.overrideWithValue(repo),
           productTaxUiConfigProvider.overrideWith((ref) async => taxConfig),
-          companySettingsProvider.overrideWith(
-            (ref) async => CompanySettings.empty(),
-          ),
           ..._singleWarehouseOverrides(product: product),
         ],
         child: MaterialApp(
@@ -2022,6 +2160,44 @@ void main() {
       expect(repo.lastTaxRate, isNull);
       expect(repo.lastTaxPriceMode, isNull);
       expect(result?.product?.taxTreatment, 'EXEMPT');
+    },
+  );
+
+  testWidgets(
+    'selector de imagen de escritorio con timeout libera el formulario',
+    (tester) async {
+      FilePicker? previousPicker;
+      try {
+        previousPicker = FilePicker.platform;
+      } catch (_) {
+        previousPicker = null;
+      }
+      FilePicker.platform = _HangingFilePicker();
+      if (previousPicker != null) {
+        addTearDown(() => FilePicker.platform = previousPicker!);
+      }
+
+      final repo = _FakeCatalogRepository();
+      await _pumpEditor(tester, repo: repo);
+
+      await tester.ensureVisible(find.text('Subir imagen desde el ordenador'));
+      await tester.tap(find.text('Subir imagen desde el ordenador'));
+      await tester.pump();
+
+      expect(find.text('Seleccionando imagen...'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pump();
+
+      expect(find.text('Seleccionando imagen...'), findsNothing);
+      expect(find.text('Subir imagen desde el ordenador'), findsOneWidget);
+      expect(
+        find.textContaining('El selector de imagen no respondió'),
+        findsOneWidget,
+      );
+      expect(find.text('Crear producto'), findsOneWidget);
+      expect(repo.creates, 0);
+      expect(repo.updates, 0);
     },
   );
 

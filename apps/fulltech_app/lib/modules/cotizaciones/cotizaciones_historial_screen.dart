@@ -1309,8 +1309,17 @@ class _CotizacionesHistorialScreenState
         final quoteCode = item.id.length >= 8
             ? item.id.substring(0, 8).toUpperCase()
             : (item.id.isEmpty ? 'S/N' : item.id.toUpperCase());
-        String qty(CotizacionItem line) =>
-            formatQuantityWithUnit(line.qty, unit: line.unitSnapshot);
+        String qty(CotizacionItem line) => formatQuantityForFeature(
+          line.qty,
+          unit: line.unitSnapshot,
+          showMeasurementUnit:
+              ref
+                  .read(companySettingsProvider)
+                  .valueOrNull
+                  ?.measurementUnitsEnabled ==
+              true,
+          includeUnitForUnit: true,
+        );
         final itbisPct = (item.itbisRate * 100).toStringAsFixed(
           item.itbisRate % 1 == 0 ? 0 : 1,
         );
@@ -2426,7 +2435,7 @@ class _HistorialFilterSectionLabel extends StatelessWidget {
 // Desktop quotation detail
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _QuotationDetailSidePanel extends StatelessWidget {
+class _QuotationDetailSidePanel extends ConsumerWidget {
   const _QuotationDetailSidePanel({
     required this.item,
     required this.money,
@@ -2445,12 +2454,23 @@ class _QuotationDetailSidePanel extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onSalesTicket;
 
-  String _qty(CotizacionItem line) =>
-      formatQuantityWithUnit(line.qty, unit: line.unitSnapshot);
+  String _qty(CotizacionItem line, bool showMeasurementUnit) =>
+      formatQuantityForFeature(
+        line.qty,
+        unit: line.unitSnapshot,
+        showMeasurementUnit: showMeasurementUnit,
+        includeUnitForUnit: true,
+      );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     final customerPhone = (item.customerPhone ?? '').trim();
     final createdBy = (item.createdByUserName ?? '').trim();
     final note = item.note.trim();
@@ -2489,7 +2509,7 @@ class _QuotationDetailSidePanel extends StatelessWidget {
                   for (final line in item.items)
                     _QuoteTableRow(
                       title: line.nombre,
-                      qty: _qty(line),
+                      qty: _qty(line, measurementUnitsEnabled),
                       unitPrice: money(line.unitPrice),
                       total: money(line.total),
                     ),

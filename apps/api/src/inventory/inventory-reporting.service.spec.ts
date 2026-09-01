@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { InventoryMovementType, Prisma, ProductSource } from "@prisma/client";
 import { InventoryReportingService } from "./inventory-reporting.service";
 
@@ -61,12 +61,20 @@ function movement(overrides: Partial<any> = {}) {
   };
 }
 
-function buildService(source: ProductSource = ProductSource.LOCAL) {
+function buildService(
+  source: ProductSource = ProductSource.LOCAL,
+  multiWarehouseEnabled = true,
+) {
   const prisma: any = {
     $transaction: jest.fn(async (arg) => {
       if (Array.isArray(arg)) return Promise.all(arg);
       return arg(prisma);
     }),
+    company: {
+      findUnique: jest.fn(async ({ where }) =>
+        where.id === companyId ? { multiWarehouseEnabled } : null,
+      ),
+    },
     inventoryMovement: {
       count: jest.fn(async () => 1),
       findMany: jest.fn(async () => [movement()]),
@@ -150,6 +158,15 @@ function buildService(source: ProductSource = ProductSource.LOCAL) {
 
 describe("InventoryReportingService", () => {
   const user = { id: userId, role: "ADMIN", companyId };
+
+  it("blocks warehouse inventory reports when company flag is off", async () => {
+    const { service, prisma } = buildService(ProductSource.LOCAL, false);
+
+    await expect(service.stockReport(user)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
 
   it("lists movements scoped to tenant with deterministic pagination", async () => {
     const { service, prisma } = buildService();

@@ -235,7 +235,7 @@ void main() {
     await _pumpSettingsRouter(
       tester,
       initialLocation: Routes.configuracionEmpresa,
-      viewport: const Size(1366, 1200),
+      viewport: const Size(1366, 1600),
       companyRepository: _FakeCompanySettingsRepository(
         saveCompleter: saveCompleter,
         saveCalled: saveCalled,
@@ -271,7 +271,7 @@ void main() {
     await _pumpSettingsRouter(
       tester,
       initialLocation: Routes.configuracionEmpresa,
-      viewport: const Size(1366, 1200),
+      viewport: const Size(1366, 1600),
       userRole: 'CAJERO',
       companyRepository: _FakeCompanySettingsRepository(
         pinCompleter: pinCompleter,

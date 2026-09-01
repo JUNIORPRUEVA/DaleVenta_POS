@@ -3609,14 +3609,24 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   String _money(double value) => formatRdCurrencyAccounting(value);
   String _qty(num value) =>
       value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
+  bool get _measurementUnitsEnabled =>
+      ref.read(companySettingsProvider).valueOrNull?.measurementUnitsEnabled ==
+      true;
+
+  String _formatPurchaseQuantity(
+    num? value, {
+    required UnitOfMeasureModel unit,
+  }) {
+    return formatQuantityForFeature(
+      value,
+      unit: unit,
+      showMeasurementUnit: _measurementUnitsEnabled,
+      includeUnitForUnit: true,
+    );
+  }
+
   UnitOfMeasureModel _unitForPurchaseProduct(ProductModel? product) {
-    final enabled =
-        ref
-            .read(companySettingsProvider)
-            .valueOrNull
-            ?.measurementUnitsEnabled ==
-        true;
-    if (!enabled) return UnitOfMeasureModel.unit;
+    if (!_measurementUnitsEnabled) return UnitOfMeasureModel.unit;
     return product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
   }
 
@@ -3624,10 +3634,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _unitForPurchaseProduct(item.product);
 
   String _recommendationQty(num value, PurchaseRecommendationModel row) {
-    return formatQuantityWithUnit(
+    return _formatPurchaseQuantity(
       value,
       unit: _unitForPurchaseProduct(row.product),
-      includeUnitForUnit: true,
     );
   }
 
@@ -3641,11 +3650,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     }
     return buckets.values
         .map(
-          (bucket) => formatQuantityWithUnit(
-            bucket.quantity,
-            unit: bucket.unit,
-            includeUnitForUnit: true,
-          ),
+          (bucket) =>
+              _formatPurchaseQuantity(bucket.quantity, unit: bucket.unit),
         )
         .join(' · ');
   }
@@ -3660,11 +3666,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     }
     return buckets.values
         .map(
-          (bucket) => formatQuantityWithUnit(
-            bucket.quantity,
-            unit: bucket.unit,
-            includeUnitForUnit: true,
-          ),
+          (bucket) =>
+              _formatPurchaseQuantity(bucket.quantity, unit: bucket.unit),
         )
         .join(' · ');
   }
@@ -4222,7 +4225,7 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _OrderDetailPanel extends StatelessWidget {
+class _OrderDetailPanel extends ConsumerWidget {
   const _OrderDetailPanel({
     required this.order,
     required this.money,
@@ -4246,9 +4249,22 @@ class _OrderDetailPanel extends StatelessWidget {
   final VoidCallback? onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final selected = order;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    String formatOrderQuantity(num? value, UnitOfMeasureModel unit) =>
+        formatQuantityForFeature(
+          value,
+          unit: unit,
+          showMeasurementUnit: measurementUnitsEnabled,
+          includeUnitForUnit: true,
+        );
     return Container(
       height: double.infinity,
       decoration: BoxDecoration(
@@ -4365,7 +4381,7 @@ class _OrderDetailPanel extends StatelessWidget {
                                         ),
                                       ),
                                       Text(
-                                        '${formatQuantityWithUnit(item.quantity, unit: item.unitSnapshot)} x ${money(item.unitCost)}',
+                                        '${formatOrderQuantity(item.quantity, item.unitSnapshot)} x ${money(item.unitCost)}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall,
@@ -4377,23 +4393,23 @@ class _OrderDetailPanel extends StatelessWidget {
                                         children: [
                                           _PurchaseQtyChip(
                                             label: 'Ordenado',
-                                            value: formatQuantityWithUnit(
+                                            value: formatOrderQuantity(
                                               item.quantity,
-                                              unit: item.unitSnapshot,
+                                              item.unitSnapshot,
                                             ),
                                           ),
                                           _PurchaseQtyChip(
                                             label: 'Recibido',
-                                            value: formatQuantityWithUnit(
+                                            value: formatOrderQuantity(
                                               item.receivedQuantity,
-                                              unit: item.unitSnapshot,
+                                              item.unitSnapshot,
                                             ),
                                           ),
                                           _PurchaseQtyChip(
                                             label: 'Pendiente',
-                                            value: formatQuantityWithUnit(
+                                            value: formatOrderQuantity(
                                               item.pendingQuantity,
-                                              unit: item.unitSnapshot,
+                                              item.unitSnapshot,
                                             ),
                                           ),
                                         ],
@@ -5280,7 +5296,7 @@ class _PriceBadge extends StatelessWidget {
   }
 }
 
-class _CartItemTile extends StatelessWidget {
+class _CartItemTile extends ConsumerWidget {
   const _CartItemTile({
     required this.item,
     required this.money,
@@ -5298,8 +5314,23 @@ class _CartItemTile extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final unit = measurementUnitsEnabled
+        ? item.product?.unitOfMeasure ?? UnitOfMeasureModel.unit
+        : UnitOfMeasureModel.unit;
+    final itemQuantity = formatQuantityForFeature(
+      item.quantity,
+      unit: unit,
+      showMeasurementUnit: measurementUnitsEnabled,
+      includeUnitForUnit: true,
+    );
     return Material(
       color: compact
           ? theme.colorScheme.surface
@@ -5346,7 +5377,7 @@ class _CartItemTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${formatQuantityWithUnit(item.quantity, unit: item.product?.unitOfMeasure ?? UnitOfMeasureModel.unit)} x ${money(item.unitCost)}',
+                      '$itemQuantity x ${money(item.unitCost)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(

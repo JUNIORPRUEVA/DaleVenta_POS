@@ -1,7 +1,37 @@
+enum WindowsPrinterMode {
+  automatic,
+  driver,
+  escPosRaw;
+
+  static WindowsPrinterMode fromValue(String? value) {
+    switch ((value ?? '').trim()) {
+      case 'driver':
+        return WindowsPrinterMode.driver;
+      case 'escPosRaw':
+        return WindowsPrinterMode.escPosRaw;
+      case 'automatic':
+      default:
+        return WindowsPrinterMode.automatic;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case WindowsPrinterMode.automatic:
+        return 'Automatico';
+      case WindowsPrinterMode.driver:
+        return 'Windows driver';
+      case WindowsPrinterMode.escPosRaw:
+        return 'ESC/POS RAW';
+    }
+  }
+}
+
 class PrinterSettingsModel {
   const PrinterSettingsModel({
     this.id,
     this.selectedPrinterName,
+    this.windowsPrinterMode = WindowsPrinterMode.automatic,
     this.paperWidthMm = 80,
     this.charsPerLine = 48,
     this.autoPrintOnPayment = true,
@@ -48,6 +78,7 @@ class PrinterSettingsModel {
 
   final int? id;
   final String? selectedPrinterName;
+  final WindowsPrinterMode windowsPrinterMode;
   final int paperWidthMm;
   final int charsPerLine;
   final bool autoPrintOnPayment;
@@ -95,6 +126,7 @@ class PrinterSettingsModel {
     int? id,
     String? selectedPrinterName,
     bool clearPrinter = false,
+    WindowsPrinterMode? windowsPrinterMode,
     int? paperWidthMm,
     int? charsPerLine,
     bool? autoPrintOnPayment,
@@ -143,6 +175,7 @@ class PrinterSettingsModel {
       selectedPrinterName: clearPrinter
           ? null
           : (selectedPrinterName ?? this.selectedPrinterName),
+      windowsPrinterMode: windowsPrinterMode ?? this.windowsPrinterMode,
       paperWidthMm: paperWidthMm ?? this.paperWidthMm,
       charsPerLine: charsPerLine ?? this.charsPerLine,
       autoPrintOnPayment: autoPrintOnPayment ?? this.autoPrintOnPayment,
@@ -196,6 +229,7 @@ class PrinterSettingsModel {
   Map<String, dynamic> toMap() => {
     'id': id,
     'selectedPrinterName': selectedPrinterName,
+    'windowsPrinterMode': windowsPrinterMode.name,
     'paperWidthMm': paperWidthMm,
     'charsPerLine': charsPerLine,
     'autoPrintOnPayment': autoPrintOnPayment,
@@ -269,6 +303,9 @@ class PrinterSettingsModel {
     return PrinterSettingsModel(
       id: map['id'] is num ? (map['id'] as num).toInt() : null,
       selectedPrinterName: map['selectedPrinterName']?.toString(),
+      windowsPrinterMode: WindowsPrinterMode.fromValue(
+        map['windowsPrinterMode']?.toString(),
+      ),
       paperWidthMm: i('paperWidthMm', 80),
       charsPerLine: i('charsPerLine', 48),
       autoPrintOnPayment: b('autoPrintOnPayment', true),

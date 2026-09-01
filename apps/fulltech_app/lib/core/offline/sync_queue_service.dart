@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/token_storage.dart';
 import '../debug/app_error_reporter.dart';
@@ -39,6 +40,8 @@ class SyncQueueState {
   final int errorCount;
   final bool isProcessing;
   final DateTime? lastSyncedAt;
+  final DateTime? lastAttemptAt;
+  final DateTime? lastErrorAt;
   final String? lastError;
 
   const SyncQueueState({
@@ -47,6 +50,8 @@ class SyncQueueState {
     this.errorCount = 0,
     this.isProcessing = false,
     this.lastSyncedAt,
+    this.lastAttemptAt,
+    this.lastErrorAt,
     this.lastError,
   });
 
@@ -56,6 +61,8 @@ class SyncQueueState {
     int? errorCount,
     bool? isProcessing,
     DateTime? lastSyncedAt,
+    DateTime? lastAttemptAt,
+    DateTime? lastErrorAt,
     String? lastError,
     bool clearError = false,
   }) {
@@ -65,6 +72,8 @@ class SyncQueueState {
       errorCount: errorCount ?? this.errorCount,
       isProcessing: isProcessing ?? this.isProcessing,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      lastErrorAt: clearError ? null : (lastErrorAt ?? this.lastErrorAt),
       lastError: clearError ? null : (lastError ?? this.lastError),
     );
   }
@@ -102,6 +111,10 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   final SyncScopeResolver? _scopeResolver;
   final Map<String, SyncQueueHandler> _handlers = {};
   static const Duration staleSyncingAge = Duration(minutes: 2);
+  static const String _lastSyncedAtKey = 'sync_queue.last_synced_at';
+  static const String _lastAttemptAtKey = 'sync_queue.last_attempt_at';
+  static const String _lastErrorAtKey = 'sync_queue.last_error_at';
+  static const String _lastErrorKey = 'sync_queue.last_error';
 
   Timer? _timer;
   bool _started = false;
@@ -120,6 +133,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       const Duration(seconds: 20),
       (_) => unawaited(processPending()),
     );
+    unawaited(_restoreSyncMeta());
     unawaited(refreshStats());
     unawaited(processPending());
   }
@@ -262,18 +276,18 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
           clearNextAttemptAt: true,
         );
         await _store.updatePendingAction(syncing);
+        await _recordAttempt(now);
         await refreshStats();
 
         try {
           await handler(action.payload);
           await _store.removePendingAction(action.id);
+          final syncedAt = DateTime.now().toUtc();
           TraceLog.log(
             'sync_queue',
             'sync success type=${action.type} id=${action.id}',
           );
-          _patchState(
-            (current) => current.copyWith(lastSyncedAt: DateTime.now().toUtc()),
-          );
+          await _recordSuccess(syncedAt);
         } catch (error, stackTrace) {
           final permanent = _isPermanentFailure(error);
           final status = _failureStatus(error, permanent: permanent);
@@ -295,6 +309,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
               updatedAt: DateTime.now().toUtc(),
             ),
           );
+          await _recordError('$error', DateTime.now().toUtc());
           _patchState((current) => current.copyWith(lastError: '$error'));
         }
       }
@@ -339,6 +354,73 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       );
       return null;
     }
+  }
+
+  Future<void> _restoreSyncMeta() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSyncedAt = _parseIso(prefs.getString(_lastSyncedAtKey));
+      final lastAttemptAt = _parseIso(prefs.getString(_lastAttemptAtKey));
+      final lastErrorAt = _parseIso(prefs.getString(_lastErrorAtKey));
+      final lastError = prefs.getString(_lastErrorKey);
+      _patchState(
+        (current) => current.copyWith(
+          lastSyncedAt: lastSyncedAt,
+          lastAttemptAt: lastAttemptAt,
+          lastErrorAt: lastErrorAt,
+          lastError: (lastError ?? '').trim().isEmpty ? null : lastError,
+        ),
+      );
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'sync_queue',
+        'restore sync metadata failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  Future<void> _recordAttempt(DateTime at) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastAttemptAtKey, at.toUtc().toIso8601String());
+    } catch (_) {}
+    _patchState((current) => current.copyWith(lastAttemptAt: at.toUtc()));
+  }
+
+  Future<void> _recordSuccess(DateTime at) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastSyncedAtKey, at.toUtc().toIso8601String());
+      await prefs.remove(_lastErrorAtKey);
+      await prefs.remove(_lastErrorKey);
+    } catch (_) {}
+    _patchState(
+      (current) => current.copyWith(
+        lastSyncedAt: at.toUtc(),
+        lastErrorAt: null,
+        clearError: true,
+      ),
+    );
+  }
+
+  Future<void> _recordError(String message, DateTime at) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastErrorAtKey, at.toUtc().toIso8601String());
+      await prefs.setString(_lastErrorKey, message);
+    } catch (_) {}
+    _patchState(
+      (current) =>
+          current.copyWith(lastErrorAt: at.toUtc(), lastError: message),
+    );
+  }
+
+  DateTime? _parseIso(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return null;
+    return DateTime.tryParse(text)?.toUtc();
   }
 
   Duration _backoffFor(int attempts) {

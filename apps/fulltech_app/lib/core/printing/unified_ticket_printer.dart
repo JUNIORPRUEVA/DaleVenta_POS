@@ -150,6 +150,31 @@ class UnifiedTicketPrinter {
       debugPrint('[PRINT] ESC_POS eligible = $escPosEligible');
       final htmlEligible = _supportsHtmlReceipt(data);
       debugPrint('[PRINT] HTML receipt eligible = $htmlEligible');
+      debugPrint(
+        '[PRINT] windowsPrinterMode = ${settings.windowsPrinterMode.name}',
+      );
+      final forceWindowsRaw =
+          settings.windowsPrinterMode == WindowsPrinterMode.escPosRaw;
+      if (platform.platform == PrintingPlatform.windows &&
+          forceWindowsRaw &&
+          escPosEligible) {
+        final receipt = ThermalReceiptViewModel.fromTicketData(
+          data: data,
+          company: company,
+        );
+        final renderer = FullPosEscPosReceiptRenderer(
+          cutPaper: settings.autoCut,
+          warrantyPolicy: settings.warrantyPolicy,
+        );
+        final bytes = await renderer.render(receipt);
+        return await _printWindowsRawEscPos(
+          bytes: bytes,
+          printerName: settings.selectedPrinterName,
+          documentName: 'Ticket ${data.ticketNumber}',
+          copies: overrideCopies ?? settings.copies,
+          ticketNumber: data.ticketNumber,
+        );
+      }
       if (platform.platform == PrintingPlatform.windows && htmlEligible) {
         return await _printWindowsHtmlReceipt(
           data: data,
@@ -158,7 +183,8 @@ class UnifiedTicketPrinter {
           overrideCopies: overrideCopies,
         );
       }
-      final useEscPosForData = _useEscPosReceiptRenderer && escPosEligible;
+      final useEscPosForData =
+          (_useEscPosReceiptRenderer || forceWindowsRaw) && escPosEligible;
       if (platform.platform == PrintingPlatform.windows && useEscPosForData) {
         final receipt = ThermalReceiptViewModel.fromTicketData(
           data: data,

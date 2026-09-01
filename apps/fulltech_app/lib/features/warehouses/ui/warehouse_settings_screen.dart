@@ -514,7 +514,10 @@ class _WarehouseNameBlock extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                warehouse.name,
+                _warehouseNameText(
+                  warehouse.name,
+                  isDefault: warehouse.isDefault,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -578,7 +581,7 @@ class _TerminalAssignments extends StatelessWidget {
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 560;
                     final label = Text(
-                      '${terminal.name} → ${terminal.defaultWarehouseName}',
+                      '${terminal.name} → ${_warehouseNameText(terminal.defaultWarehouseName)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: _cellStyle(),
@@ -598,7 +601,7 @@ class _TerminalAssignments extends StatelessWidget {
                           DropdownMenuItem(
                             value: warehouse.id,
                             child: Text(
-                              '${warehouse.name} (${warehouse.code})',
+                              _warehouseLabel(warehouse),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -657,12 +660,17 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   String? _sourceId;
   String? _destinationId;
   String? _productId;
+  String _productQuery = '';
+  String? _categoryFilter;
+  String _stockFilter = 'all';
+  final _productSearchCtrl = TextEditingController();
   final _quantityCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   bool _saving = false;
 
   @override
   void dispose() {
+    _productSearchCtrl.dispose();
     _quantityCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
@@ -787,7 +795,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                   for (final warehouse in activeWarehouses)
                     DropdownMenuItem(
                       value: warehouse.id,
-                      child: Text('${warehouse.name} (${warehouse.code})'),
+                      child: Text(_warehouseLabel(warehouse)),
                     ),
                 ],
                 onChanged: (value) => setState(() => _sourceId = value),
@@ -809,7 +817,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                   for (final warehouse in activeWarehouses)
                     DropdownMenuItem(
                       value: warehouse.id,
-                      child: Text('${warehouse.name} (${warehouse.code})'),
+                      child: Text(_warehouseLabel(warehouse)),
                     ),
                 ],
                 onChanged: (value) => setState(() => _destinationId = value),
@@ -818,15 +826,19 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
           ],
         ),
         const SizedBox(height: 10),
-        DropdownButtonFormField<String>(
-          initialValue: _productId,
-          isExpanded: true,
-          decoration: _inputDecoration('Producto'),
-          items: [
-            for (final product in widget.products)
-              DropdownMenuItem(value: product.id, child: Text(product.nombre)),
-          ],
-          onChanged: (value) => setState(() => _productId = value),
+        _TransferProductPicker(
+          products: widget.products,
+          selectedProductId: _productId,
+          sourceWarehouseId: sourceId,
+          queryController: _productSearchCtrl,
+          query: _productQuery,
+          categoryFilter: _categoryFilter,
+          stockFilter: _stockFilter,
+          availableQuantity: _availableQuantity,
+          onQueryChanged: (value) => setState(() => _productQuery = value),
+          onCategoryChanged: (value) => setState(() => _categoryFilter = value),
+          onStockFilterChanged: (value) => setState(() => _stockFilter = value),
+          onSelected: (value) => setState(() => _productId = value),
         ),
         const SizedBox(height: 8),
         Text(
@@ -898,7 +910,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
               child: ListTile(
                 dense: true,
                 title: Text(
-                  '${transfer.sourceWarehouseName} → ${transfer.destinationWarehouseName}',
+                  '${_warehouseNameText(transfer.sourceWarehouseName)} → ${_warehouseNameText(transfer.destinationWarehouseName)}',
                   overflow: TextOverflow.ellipsis,
                   style: _cellStyle(weight: FontWeight.w900),
                 ),
@@ -1005,7 +1017,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${transfer.sourceWarehouseName} → ${transfer.destinationWarehouseName}',
+                '${_warehouseNameText(transfer.sourceWarehouseName)} → ${_warehouseNameText(transfer.destinationWarehouseName)}',
                 style: _cellStyle(weight: FontWeight.w900),
               ),
               const SizedBox(height: 10),
@@ -1033,7 +1045,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   String _warehouseName(String? id) {
     return widget.warehouses
             .where((warehouse) => warehouse.id == id)
-            .map((warehouse) => warehouse.name)
+            .map(_warehouseLabel)
             .firstOrNull ??
         'Almacén';
   }
@@ -1045,9 +1057,267 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   }
 }
 
+class _TransferProductPicker extends StatelessWidget {
+  const _TransferProductPicker({
+    required this.products,
+    required this.selectedProductId,
+    required this.sourceWarehouseId,
+    required this.queryController,
+    required this.query,
+    required this.categoryFilter,
+    required this.stockFilter,
+    required this.availableQuantity,
+    required this.onQueryChanged,
+    required this.onCategoryChanged,
+    required this.onStockFilterChanged,
+    required this.onSelected,
+  });
+
+  final List<ProductModel> products;
+  final String? selectedProductId;
+  final String? sourceWarehouseId;
+  final TextEditingController queryController;
+  final String query;
+  final String? categoryFilter;
+  final String stockFilter;
+  final double Function(ProductModel? product, String? warehouseId)
+  availableQuantity;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String?> onCategoryChanged;
+  final ValueChanged<String> onStockFilterChanged;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final categories =
+        products
+            .map((product) => product.categoriaLabel.trim())
+            .where((category) => category.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final normalizedQuery = query.trim().toLowerCase();
+    final filtered = products.where((product) {
+      if (categoryFilter != null && product.categoriaLabel != categoryFilter) {
+        return false;
+      }
+      final available = availableQuantity(product, sourceWarehouseId);
+      switch (stockFilter) {
+        case 'low':
+          if (available <= 0 || available > 5) return false;
+          break;
+        case 'high':
+          if (available <= 5) return false;
+          break;
+        case 'out':
+          if (available > 0) return false;
+          break;
+      }
+      if (normalizedQuery.isEmpty) return true;
+      return product.nombre.toLowerCase().contains(normalizedQuery) ||
+          (product.codigo ?? '').toLowerCase().contains(normalizedQuery) ||
+          product.categoriaLabel.toLowerCase().contains(normalizedQuery);
+    }).toList();
+    final visibleProducts = filtered.take(8).toList();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: TextField(
+                    controller: queryController,
+                    onChanged: onQueryChanged,
+                    decoration:
+                        _inputDecoration(
+                          'Buscar producto por nombre, código o categoría',
+                        ).copyWith(
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                          ),
+                        ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: categoryFilter ?? '',
+                    isExpanded: true,
+                    decoration: _inputDecoration('Categoría'),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('Todas')),
+                      for (final category in categories)
+                        DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        onCategoryChanged((value ?? '').isEmpty ? null : value),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: stockFilter,
+                    isExpanded: true,
+                    decoration: _inputDecoration('Stock'),
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('Todos')),
+                      DropdownMenuItem(value: 'low', child: Text('Bajo')),
+                      DropdownMenuItem(value: 'high', child: Text('Alto')),
+                      DropdownMenuItem(value: 'out', child: Text('Agotado')),
+                    ],
+                    onChanged: (value) => onStockFilterChanged(value ?? 'all'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              filtered.isEmpty
+                  ? 'No hay productos con esos filtros'
+                  : 'Producto para transferir',
+              style: const TextStyle(
+                color: Color(0xFF52667C),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 252),
+              child: filtered.isEmpty
+                  ? const SizedBox.shrink()
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: visibleProducts.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final product = visibleProducts[index];
+                        final selected = product.id == selectedProductId;
+                        final available = availableQuantity(
+                          product,
+                          sourceWarehouseId,
+                        );
+                        return InkWell(
+                          onTap: () => onSelected(product.id),
+                          child: Container(
+                            color: selected
+                                ? AppColors.secondary.withValues(alpha: 0.08)
+                                : Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  selected
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_unchecked_rounded,
+                                  size: 18,
+                                  color: selected
+                                      ? AppColors.secondary
+                                      : const Color(0xFF7A8DA3),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        product.nombre,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: _cellStyle(
+                                          weight: FontWeight.w900,
+                                        ),
+                                      ),
+                                      Text(
+                                        product.categoriaLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Color(0xFF52667C),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${_formatQuantity(available)} ${product.unitOfMeasure.symbol}',
+                                  style: const TextStyle(
+                                    color: AppColors.secondary,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            if (filtered.length > visibleProducts.length) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Mostrando ${visibleProducts.length} de ${filtered.length}; usa búsqueda para precisar.',
+                style: const TextStyle(
+                  color: Color(0xFF52667C),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 String _formatQuantity(double value) {
   final text = value.toStringAsFixed(6).replaceFirst(RegExp(r'\.?0+$'), '');
   return text.isEmpty ? '0' : text;
+}
+
+String _warehouseLabel(WarehouseModel warehouse) {
+  final code = warehouse.code.trim();
+  final name = _warehouseNameText(
+    warehouse.name,
+    isDefault: warehouse.isDefault,
+  );
+  return code.isEmpty ? name : '$name ($code)';
+}
+
+String _warehouseNameText(String value, {bool isDefault = false}) {
+  final name = value.trim();
+  final normalized = name.toLowerCase();
+  if (isDefault ||
+      normalized == 'main warehouse' ||
+      normalized == 'default warehouse' ||
+      normalized == 'warehouse') {
+    return 'Almacén Principal';
+  }
+  return name.isEmpty ? 'Almacén' : name;
 }
 
 Future<void> _openWarehouseForm(
@@ -1060,6 +1330,7 @@ Future<void> _openWarehouseForm(
   final saved = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       title: Text(warehouse == null ? 'Crear almacén' : 'Editar almacén'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -1242,7 +1513,7 @@ InputDecoration _inputDecoration(String label) {
     isDense: true,
     filled: true,
     fillColor: Colors.white,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
   );
 }
 
@@ -1258,6 +1529,6 @@ ButtonStyle _filledButtonStyle() {
   return FilledButton.styleFrom(
     backgroundColor: AppColors.secondary,
     foregroundColor: Colors.white,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
   );
 }

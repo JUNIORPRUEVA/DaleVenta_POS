@@ -78,6 +78,7 @@ class CompanySettings {
   final bool pricesIncludeTax;
   final bool ncfEnabled;
   final bool measurementUnitsEnabled;
+  final bool multiWarehouseEnabled;
 
   const CompanySettings({
     required this.companyName,
@@ -115,6 +116,7 @@ class CompanySettings {
     this.pricesIncludeTax = false,
     this.ncfEnabled = false,
     this.measurementUnitsEnabled = false,
+    this.multiWarehouseEnabled = false,
   });
 
   factory CompanySettings.empty() {
@@ -154,6 +156,7 @@ class CompanySettings {
       pricesIncludeTax: false,
       ncfEnabled: false,
       measurementUnitsEnabled: false,
+      multiWarehouseEnabled: false,
     );
   }
 
@@ -193,6 +196,7 @@ class CompanySettings {
     bool? pricesIncludeTax,
     bool? ncfEnabled,
     bool? measurementUnitsEnabled,
+    bool? multiWarehouseEnabled,
     bool clearLogo = false,
   }) {
     return CompanySettings(
@@ -241,6 +245,8 @@ class CompanySettings {
       ncfEnabled: ncfEnabled ?? this.ncfEnabled,
       measurementUnitsEnabled:
           measurementUnitsEnabled ?? this.measurementUnitsEnabled,
+      multiWarehouseEnabled:
+          multiWarehouseEnabled ?? this.multiWarehouseEnabled,
     );
   }
 
@@ -280,6 +286,7 @@ class CompanySettings {
     'pricesIncludeTax': pricesIncludeTax,
     'ncfEnabled': ncfEnabled,
     'measurementUnitsEnabled': measurementUnitsEnabled,
+    'multiWarehouseEnabled': multiWarehouseEnabled,
   };
 
   factory CompanySettings.fromMap(Map<String, dynamic> map) {
@@ -317,26 +324,40 @@ class CompanySettings {
       logoBase64: map['logoBase64']?.toString(),
       openAiApiKey: (map['openAiApiKey'] ?? '').toString(),
       openAiModel: (map['openAiModel'] ?? 'gpt-4o-mini').toString(),
-      hasOpenAiApiKey: map['hasOpenAiApiKey'] == true,
+      hasOpenAiApiKey: _bool(map['hasOpenAiApiKey']),
       evolutionApiBaseUrl: (map['evolutionApiBaseUrl'] ?? '').toString(),
       evolutionApiInstanceName: (map['evolutionApiInstanceName'] ?? '')
           .toString(),
       evolutionApiApiKey: (map['evolutionApiApiKey'] ?? '').toString(),
-      hasEvolutionApiApiKey: map['hasEvolutionApiApiKey'] == true,
-      whatsappWebhookEnabled: map['whatsappWebhookEnabled'] == true,
+      hasEvolutionApiApiKey: _bool(map['hasEvolutionApiApiKey']),
+      whatsappWebhookEnabled: _bool(map['whatsappWebhookEnabled']),
       productsSource: (map['productsSource'] ?? 'LOCAL').toString(),
-      productsReadOnly: map['productsReadOnly'] == true,
-      hasAdminAuthorizationPin: map['hasAdminAuthorizationPin'] == true,
-      taxEnabled: map['taxEnabled'] == true,
+      productsReadOnly: _bool(map['productsReadOnly']),
+      hasAdminAuthorizationPin: _bool(map['hasAdminAuthorizationPin']),
+      taxEnabled: _bool(map['taxEnabled']),
       defaultTaxId: map['defaultTaxId']?.toString(),
       defaultTaxRate: _double(map['defaultTaxRate']),
-      pricesIncludeTax: map['pricesIncludeTax'] == true,
-      ncfEnabled: map['ncfEnabled'] == true,
-      measurementUnitsEnabled:
-          map['measurementUnitsEnabled'] == true ||
-          map['measurement_units_enabled'] == true,
+      pricesIncludeTax: _bool(map['pricesIncludeTax']),
+      ncfEnabled: _bool(map['ncfEnabled']),
+      measurementUnitsEnabled: _bool(
+        map.containsKey('measurementUnitsEnabled')
+            ? map['measurementUnitsEnabled']
+            : map['measurement_units_enabled'],
+      ),
+      multiWarehouseEnabled: _bool(
+        map.containsKey('multiWarehouseEnabled')
+            ? map['multiWarehouseEnabled']
+            : map['multi_warehouse_enabled'],
+      ),
     );
   }
+}
+
+bool _bool(dynamic value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  final text = value?.toString().trim().toLowerCase();
+  return text == 'true' || text == '1' || text == 'yes' || text == 'si';
 }
 
 double _double(dynamic value) {

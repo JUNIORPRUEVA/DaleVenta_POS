@@ -41,6 +41,7 @@ import '../auth/app_bootstrap_status.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
 import '../auth/business_registration_policy.dart';
+import '../company/company_settings_repository.dart';
 import 'app_route_observer.dart';
 import 'route_access.dart';
 import 'routes.dart';
@@ -413,6 +414,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isAuth && isAuthRoute) {
         return defaultAuthedRoute();
+      }
+
+      final multiWarehouseEnabled =
+          ref
+              .read(companySettingsProvider)
+              .valueOrNull
+              ?.multiWarehouseEnabled ==
+          true;
+      if (RouteAccess.requiresMultiWarehouseFeature(loc) &&
+          !multiWarehouseEnabled) {
+        final fallback = RouteAccess.defaultHomeForUser(auth.user);
+        return path == fallback ? Routes.profile : fallback;
       }
 
       final required = RouteAccess.permissionForLocation(loc);

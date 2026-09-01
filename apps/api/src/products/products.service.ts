@@ -246,7 +246,15 @@ export class ProductsService {
     companyId: string,
     unitOfMeasureId?: string | null,
   ): Promise<UnitOfMeasureSnapshot & { id: string }> {
-    const id = (unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID).trim();
+    const measurementUnitsEnabled = await this.measurementUnitsEnabled(
+      tx,
+      companyId,
+    );
+    const id = (
+      measurementUnitsEnabled
+        ? (unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID)
+        : DEFAULT_UNIT_OF_MEASURE_ID
+    ).trim();
     if (!id) {
       throw new BadRequestException("Unidad de medida inválida.");
     }
@@ -288,6 +296,21 @@ export class ProductsService {
     return unit;
   }
 
+  private async measurementUnitsEnabled(
+    tx: Prisma.TransactionClient | PrismaService,
+    companyId: string,
+  ) {
+    const companyApi = (tx as any).company;
+    if (!companyApi?.findUnique) {
+      return true;
+    }
+    const company = await companyApi.findUnique({
+      where: { id: companyId },
+      select: { measurementUnitsEnabled: true },
+    });
+    return company?.measurementUnitsEnabled === true;
+  }
+
   private mapUnitOfMeasure(unit: any) {
     const source = unit ?? {
       id: DEFAULT_UNIT_OF_MEASURE_ID,
@@ -308,6 +331,9 @@ export class ProductsService {
 
   async listUnitOfMeasures(user: TenantUser) {
     const companyId = requireTenant(user);
+    if (!(await this.measurementUnitsEnabled(this.prisma, companyId))) {
+      return [this.mapUnitOfMeasure(null)];
+    }
     if (!(this.prisma as any).unitOfMeasure?.findMany) {
       return [this.mapUnitOfMeasure(null)];
     }
@@ -1009,12 +1035,23 @@ export class ProductsService {
           );
         }
       }
+      const measurementUnitsEnabled = await this.measurementUnitsEnabled(
+        tx,
+        companyId,
+      );
+      const requestedUnitOfMeasureId = measurementUnitsEnabled
+        ? dto.unitOfMeasureId
+        : undefined;
       const unitOfMeasure =
-        dto.unitOfMeasureId === undefined
+        requestedUnitOfMeasureId === undefined
           ? this.mapUnitOfMeasure(current.unitOfMeasure)
-          : await this.resolveUnitOfMeasure(tx, companyId, dto.unitOfMeasureId);
+          : await this.resolveUnitOfMeasure(
+              tx,
+              companyId,
+              requestedUnitOfMeasureId,
+            );
       if (
-        dto.unitOfMeasureId !== undefined &&
+        requestedUnitOfMeasureId !== undefined &&
         unitOfMeasure.id !== current.unitOfMeasureId
       ) {
         const hasStock = new Prisma.Decimal(current.stock ?? 0).abs().gt(0);
@@ -1036,7 +1073,7 @@ export class ProductsService {
         costo:
           dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
         unitOfMeasureId:
-          dto.unitOfMeasureId === undefined ? undefined : unitOfMeasure.id,
+          requestedUnitOfMeasureId === undefined ? undefined : unitOfMeasure.id,
         ...fiscalData,
         imagen: normalizedImagePath,
         imageStorageProvider:

@@ -35,6 +35,7 @@ export class WarehousesService {
 
   async list(user: TenantUser) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const rows = await this.prisma.warehouse.findMany({
       where: { companyId },
       orderBy: [{ isDefault: "desc" }, { isActive: "desc" }, { name: "asc" }],
@@ -63,6 +64,7 @@ export class WarehousesService {
 
   async listTerminals(user: TenantUser) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const rows = await this.prisma.terminal.findMany({
       where: { companyId },
       orderBy: [{ isDefault: "desc" }, { isActive: "desc" }, { name: "asc" }],
@@ -86,6 +88,7 @@ export class WarehousesService {
 
   async create(user: TenantUser, dto: CreateWarehouseDto) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const name = this.cleanName(dto.name);
     const code = this.cleanCode(dto.code);
     return this.prisma.warehouse.create({
@@ -101,6 +104,7 @@ export class WarehousesService {
 
   async update(user: TenantUser, id: string, dto: UpdateWarehouseDto) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const data: Prisma.WarehouseUpdateInput = {};
     if (dto.name !== undefined) data.name = this.cleanName(dto.name);
     if (dto.code !== undefined) data.code = this.cleanCode(dto.code);
@@ -125,6 +129,7 @@ export class WarehousesService {
 
   async setDefault(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     return this.prisma.$transaction(async (tx) => {
       const warehouse = await this.ensureWarehouse(companyId, id, tx);
       if (!warehouse.isActive) {
@@ -146,6 +151,7 @@ export class WarehousesService {
 
   async activate(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     await this.ensureWarehouse(companyId, id);
     return this.prisma.warehouse.update({
       where: { id },
@@ -155,6 +161,7 @@ export class WarehousesService {
 
   async deactivate(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     return this.prisma.$transaction(async (tx) => {
       const warehouse = await this.ensureWarehouse(companyId, id, tx);
       if (warehouse.isDefault) {
@@ -199,6 +206,7 @@ export class WarehousesService {
     dto: UpdateTerminalWarehouseDto,
   ) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     return this.prisma.$transaction(async (tx) => {
       const terminal = await tx.terminal.findFirst({
         where: { id: terminalId, companyId },
@@ -219,6 +227,7 @@ export class WarehousesService {
 
   async productStockBreakdown(user: TenantUser, productId: string) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const source =
       await this.productSourceResolver.resolveForCompany(companyId);
     if (source.source !== ProductSource.LOCAL) {
@@ -282,6 +291,7 @@ export class WarehousesService {
 
   async listTransfers(user: TenantUser) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const rows = await this.prisma.warehouseTransfer.findMany({
       where: { companyId },
       orderBy: { createdAt: "desc" },
@@ -293,6 +303,7 @@ export class WarehousesService {
 
   async getTransfer(user: TenantUser, id: string) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const transfer = await this.prisma.warehouseTransfer.findFirst({
       where: { id, companyId },
       include: this.transferInclude(),
@@ -303,6 +314,7 @@ export class WarehousesService {
 
   async createTransfer(user: TenantUser, dto: CreateWarehouseTransferDto) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const sourceWarehouseId = dto.sourceWarehouseId;
     const destinationWarehouseId = dto.destinationWarehouseId;
     if (sourceWarehouseId === destinationWarehouseId) {
@@ -313,200 +325,203 @@ export class WarehousesService {
     const clientRequestId = (dto.clientRequestId ?? "").trim() || null;
     const notes = (dto.notes ?? "").trim() || null;
 
-    return this.runTransferTransaction(
-      async (tx) => {
-        if (clientRequestId) {
-          const existing = await tx.warehouseTransfer.findFirst({
-            where: { companyId, clientRequestId },
-            include: this.transferInclude(),
-          });
-          if (existing) return this.mapTransfer(existing);
-        }
+    return this.runTransferTransaction(async (tx) => {
+      if (clientRequestId) {
+        const existing = await tx.warehouseTransfer.findFirst({
+          where: { companyId, clientRequestId },
+          include: this.transferInclude(),
+        });
+        if (existing) return this.mapTransfer(existing);
+      }
 
-        const source =
-          await this.ensureActiveWarehouse(companyId, sourceWarehouseId, tx);
-        const destination = await this.ensureActiveWarehouse(
-          companyId,
-          destinationWarehouseId,
-          tx,
-        );
-        const items = this.normalizeTransferItems(dto.items);
-        const productIds = items.map((item) => item.productId);
-        const products = await tx.product.findMany({
-          where: { companyId, id: { in: productIds } },
-          select: {
-            id: true,
-            nombre: true,
-            codigo: true,
-            stock: true,
-            company: { select: { productSource: true } },
-            unitOfMeasure: {
-              select: {
-                code: true,
-                name: true,
-                symbol: true,
-                precision: true,
-                allowDecimals: true,
-              },
+      const source = await this.ensureActiveWarehouse(
+        companyId,
+        sourceWarehouseId,
+        tx,
+      );
+      const destination = await this.ensureActiveWarehouse(
+        companyId,
+        destinationWarehouseId,
+        tx,
+      );
+      const items = this.normalizeTransferItems(dto.items);
+      const productIds = items.map((item) => item.productId);
+      const products = await tx.product.findMany({
+        where: { companyId, id: { in: productIds } },
+        select: {
+          id: true,
+          nombre: true,
+          codigo: true,
+          stock: true,
+          company: { select: { productSource: true } },
+          unitOfMeasure: {
+            select: {
+              code: true,
+              name: true,
+              symbol: true,
+              precision: true,
+              allowDecimals: true,
             },
           },
-        });
-        if (products.length !== productIds.length) {
-          throw new NotFoundException("Producto no encontrado.");
-        }
-        const productsById = new Map(products.map((product) => [product.id, product]));
+        },
+      });
+      if (products.length !== productIds.length) {
+        throw new NotFoundException("Producto no encontrado.");
+      }
+      const productsById = new Map(
+        products.map((product) => [product.id, product]),
+      );
 
-        for (const item of items) {
-          const product = productsById.get(item.productId)!;
-          if (
-            product.company.productSource &&
-            product.company.productSource !== ProductSource.LOCAL
-          ) {
-            throw new BadRequestException(
-              "Solo productos LOCAL pueden transferirse entre almacenes.",
-            );
-          }
-          this.validateQuantityForUnit(
-            item.quantity,
-            product.unitOfMeasure,
-            "cantidad",
+      for (const item of items) {
+        const product = productsById.get(item.productId)!;
+        if (
+          product.company.productSource &&
+          product.company.productSource !== ProductSource.LOCAL
+        ) {
+          throw new BadRequestException(
+            "Solo productos LOCAL pueden transferirse entre almacenes.",
           );
-          await this.assertProductStockReconciled(tx, companyId, item.productId);
         }
+        this.validateQuantityForUnit(
+          item.quantity,
+          product.unitOfMeasure,
+          "cantidad",
+        );
+        await this.assertProductStockReconciled(tx, companyId, item.productId);
+      }
 
-        const transfer = await tx.warehouseTransfer.create({
+      const transfer = await tx.warehouseTransfer.create({
+        data: {
+          companyId,
+          sourceWarehouseId,
+          destinationWarehouseId,
+          sourceWarehouseNameSnapshot: source.name,
+          sourceWarehouseCodeSnapshot: source.code,
+          destinationWarehouseNameSnapshot: destination.name,
+          destinationWarehouseCodeSnapshot: destination.code,
+          status: WarehouseTransferStatus.COMPLETED,
+          clientRequestId,
+          operationId: clientRequestId,
+          createdByUserId: user.id ?? null,
+          completedAt: new Date(),
+          notes,
+        },
+      });
+
+      for (const item of items) {
+        const product = productsById.get(item.productId)!;
+        const transferItem = await tx.warehouseTransferItem.create({
           data: {
             companyId,
-            sourceWarehouseId,
-            destinationWarehouseId,
-            sourceWarehouseNameSnapshot: source.name,
-            sourceWarehouseCodeSnapshot: source.code,
-            destinationWarehouseNameSnapshot: destination.name,
-            destinationWarehouseCodeSnapshot: destination.code,
-            status: WarehouseTransferStatus.COMPLETED,
-            clientRequestId,
-            operationId: clientRequestId,
-            createdByUserId: user.id ?? null,
-            completedAt: new Date(),
-            notes,
+            transferId: transfer.id,
+            productId: product.id,
+            productNameSnapshot: product.nombre,
+            productCodeSnapshot: product.codigo,
+            quantity: item.quantity,
+            unitCodeSnapshot: product.unitOfMeasure.code,
+            unitNameSnapshot: product.unitOfMeasure.name,
+            unitSymbolSnapshot: product.unitOfMeasure.symbol,
+            unitPrecisionSnapshot: product.unitOfMeasure.precision,
           },
         });
 
-        for (const item of items) {
-          const product = productsById.get(item.productId)!;
-          const transferItem = await tx.warehouseTransferItem.create({
-            data: {
+        await tx.warehouseStock.upsert({
+          where: {
+            companyId_warehouseId_productId: {
               companyId,
-              transferId: transfer.id,
+              warehouseId: destinationWarehouseId,
               productId: product.id,
-              productNameSnapshot: product.nombre,
-              productCodeSnapshot: product.codigo,
-              quantity: item.quantity,
+            },
+          },
+          update: {},
+          create: {
+            companyId,
+            warehouseId: destinationWarehouseId,
+            productId: product.id,
+            quantity: new Prisma.Decimal(0),
+          },
+        });
+
+        const out = await this.updateWarehouseStockByDelta(tx, {
+          companyId,
+          warehouseId: sourceWarehouseId,
+          productId: product.id,
+          quantityDelta: item.quantity.negated(),
+        });
+        const outRow = out[0];
+        if (!outRow) {
+          throw new ConflictException(
+            "Stock insuficiente en el almacen origen.",
+          );
+        }
+
+        const inRows = await this.updateWarehouseStockByDelta(tx, {
+          companyId,
+          warehouseId: destinationWarehouseId,
+          productId: product.id,
+          quantityDelta: item.quantity,
+        });
+        const inRow = inRows[0];
+        if (!inRow) {
+          throw new ConflictException(
+            "No se pudo actualizar el almacen destino.",
+          );
+        }
+
+        await tx.inventoryMovement.createMany({
+          data: [
+            {
+              companyId,
+              productId: product.id,
+              warehouseId: sourceWarehouseId,
+              type: InventoryMovementType.TRANSFER_OUT,
+              quantityDelta: item.quantity.negated(),
+              previousQuantity: this.decimal(outRow.previous_quantity),
+              resultingQuantity: this.decimal(outRow.resulting_quantity),
               unitCodeSnapshot: product.unitOfMeasure.code,
               unitNameSnapshot: product.unitOfMeasure.name,
               unitSymbolSnapshot: product.unitOfMeasure.symbol,
               unitPrecisionSnapshot: product.unitOfMeasure.precision,
+              sourceWarehouseId,
+              destinationWarehouseId,
+              sourceType: "WAREHOUSE_TRANSFER",
+              sourceId: transfer.id,
+              sourceItemId: transferItem.id,
+              reason: notes,
+              createdByUserId: user.id ?? null,
             },
-          });
-
-          await tx.warehouseStock.upsert({
-            where: {
-              companyId_warehouseId_productId: {
-                companyId,
-                warehouseId: destinationWarehouseId,
-                productId: product.id,
-              },
-            },
-            update: {},
-            create: {
+            {
               companyId,
-              warehouseId: destinationWarehouseId,
               productId: product.id,
-              quantity: new Prisma.Decimal(0),
+              warehouseId: destinationWarehouseId,
+              type: InventoryMovementType.TRANSFER_IN,
+              quantityDelta: item.quantity,
+              previousQuantity: this.decimal(inRow.previous_quantity),
+              resultingQuantity: this.decimal(inRow.resulting_quantity),
+              unitCodeSnapshot: product.unitOfMeasure.code,
+              unitNameSnapshot: product.unitOfMeasure.name,
+              unitSymbolSnapshot: product.unitOfMeasure.symbol,
+              unitPrecisionSnapshot: product.unitOfMeasure.precision,
+              sourceWarehouseId,
+              destinationWarehouseId,
+              sourceType: "WAREHOUSE_TRANSFER",
+              sourceId: transfer.id,
+              sourceItemId: transferItem.id,
+              reason: notes,
+              createdByUserId: user.id ?? null,
             },
-          });
-
-          const out = await this.updateWarehouseStockByDelta(tx, {
-            companyId,
-            warehouseId: sourceWarehouseId,
-            productId: product.id,
-            quantityDelta: item.quantity.negated(),
-          });
-          const outRow = out[0];
-          if (!outRow) {
-            throw new ConflictException(
-              "Stock insuficiente en el almacen origen.",
-            );
-          }
-
-          const inRows = await this.updateWarehouseStockByDelta(tx, {
-            companyId,
-            warehouseId: destinationWarehouseId,
-            productId: product.id,
-            quantityDelta: item.quantity,
-          });
-          const inRow = inRows[0];
-          if (!inRow) {
-            throw new ConflictException(
-              "No se pudo actualizar el almacen destino.",
-            );
-          }
-
-          await tx.inventoryMovement.createMany({
-            data: [
-              {
-                companyId,
-                productId: product.id,
-                warehouseId: sourceWarehouseId,
-                type: InventoryMovementType.TRANSFER_OUT,
-                quantityDelta: item.quantity.negated(),
-                previousQuantity: this.decimal(outRow.previous_quantity),
-                resultingQuantity: this.decimal(outRow.resulting_quantity),
-                unitCodeSnapshot: product.unitOfMeasure.code,
-                unitNameSnapshot: product.unitOfMeasure.name,
-                unitSymbolSnapshot: product.unitOfMeasure.symbol,
-                unitPrecisionSnapshot: product.unitOfMeasure.precision,
-                sourceWarehouseId,
-                destinationWarehouseId,
-                sourceType: "WAREHOUSE_TRANSFER",
-                sourceId: transfer.id,
-                sourceItemId: transferItem.id,
-                reason: notes,
-                createdByUserId: user.id ?? null,
-              },
-              {
-                companyId,
-                productId: product.id,
-                warehouseId: destinationWarehouseId,
-                type: InventoryMovementType.TRANSFER_IN,
-                quantityDelta: item.quantity,
-                previousQuantity: this.decimal(inRow.previous_quantity),
-                resultingQuantity: this.decimal(inRow.resulting_quantity),
-                unitCodeSnapshot: product.unitOfMeasure.code,
-                unitNameSnapshot: product.unitOfMeasure.name,
-                unitSymbolSnapshot: product.unitOfMeasure.symbol,
-                unitPrecisionSnapshot: product.unitOfMeasure.precision,
-                sourceWarehouseId,
-                destinationWarehouseId,
-                sourceType: "WAREHOUSE_TRANSFER",
-                sourceId: transfer.id,
-                sourceItemId: transferItem.id,
-                reason: notes,
-                createdByUserId: user.id ?? null,
-              },
-            ],
-          });
-
-          await this.assertProductStockReconciled(tx, companyId, product.id);
-        }
-
-        const completed = await tx.warehouseTransfer.findFirstOrThrow({
-          where: { id: transfer.id, companyId },
-          include: this.transferInclude(),
+          ],
         });
-        return this.mapTransfer(completed);
-      },
-    );
+
+        await this.assertProductStockReconciled(tx, companyId, product.id);
+      }
+
+      const completed = await tx.warehouseTransfer.findFirstOrThrow({
+        where: { id: transfer.id, companyId },
+        include: this.transferInclude(),
+      });
+      return this.mapTransfer(completed);
+    });
   }
 
   deleteTransfer() {
@@ -525,6 +540,18 @@ export class WarehousesService {
     });
     if (!warehouse) throw new NotFoundException("Almacen no encontrado.");
     return warehouse;
+  }
+
+  private async assertMultiWarehouseEnabled(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { multiWarehouseEnabled: true },
+    });
+    if (company?.multiWarehouseEnabled !== true) {
+      throw new BadRequestException(
+        "La gestion de multiples almacenes no esta activa para esta empresa.",
+      );
+    }
   }
 
   private async ensureActiveWarehouse(companyId: string, id: string, tx: Tx) {
@@ -648,7 +675,8 @@ export class WarehousesService {
           row.sourceWarehouseNameSnapshot ??
           row.sourceWarehouse?.name ??
           "Almacen origen",
-        code: row.sourceWarehouseCodeSnapshot ?? row.sourceWarehouse?.code ?? "",
+        code:
+          row.sourceWarehouseCodeSnapshot ?? row.sourceWarehouse?.code ?? "",
       },
       destinationWarehouse: {
         id: row.destinationWarehouse?.id ?? row.destinationWarehouseId,
@@ -688,7 +716,9 @@ export class WarehousesService {
     return new Prisma.Decimal(value);
   }
 
-  private async runTransferTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  private async runTransferTransaction<T>(
+    fn: (tx: Tx) => Promise<T>,
+  ): Promise<T> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {

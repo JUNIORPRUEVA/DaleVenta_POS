@@ -189,7 +189,12 @@ Future<Uint8List> buildSaleInvoicePdf({
       ),
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
-        _invoiceDetailSection(sale, money, qtyFmt),
+        _invoiceDetailSection(
+          sale,
+          money,
+          qtyFmt,
+          showMeasurementUnit: company?.measurementUnitsEnabled == true,
+        ),
         pw.SizedBox(height: 14),
         _invoiceBottomSection(sale, money, warrantyPolicy: warranty),
       ],
@@ -450,8 +455,9 @@ pw.Widget _plainCustomerName(String value) {
 pw.Widget _invoiceDetailSection(
   SaleModel sale,
   NumberFormat money,
-  NumberFormat qtyFmt,
-) {
+  NumberFormat qtyFmt, {
+  required bool showMeasurementUnit,
+}) {
   final fiscal = sale.fiscalTaxEnabled;
   final hasProductDiscount = sale.items.any(
     (item) => item.lineDiscountAmount > 0,
@@ -508,9 +514,10 @@ pw.Widget _invoiceDetailSection(
               isExempt && fiscal ? '$description  [EXENTO]' : description,
             ),
             _bodyCell(
-              formatQuantityWithUnit(
+              formatQuantityForFeature(
                 item.qty,
                 unit: item.unitSnapshot,
+                showMeasurementUnit: showMeasurementUnit,
                 includeUnitForUnit: true,
               ),
               align: pw.TextAlign.center,

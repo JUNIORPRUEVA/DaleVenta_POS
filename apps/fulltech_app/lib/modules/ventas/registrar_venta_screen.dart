@@ -1415,11 +1415,13 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         ),
                       ),
                       Text(
-                        formatQuantityWithUnit(
-                          _totalUnits,
-                          unit: UnitOfMeasureModel.unit,
-                          includeUnitForUnit: true,
-                        ),
+                        _measurementUnitsEnabled
+                            ? formatQuantityWithUnit(
+                                _totalUnits,
+                                unit: UnitOfMeasureModel.unit,
+                                includeUnitForUnit: true,
+                              )
+                            : formatQuantityValue(_totalUnits),
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w800,
@@ -4278,14 +4280,6 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
               label: 'Empresa',
             ),
             onTap: () => _goAfterMenu(context, Routes.configuracionEmpresa),
-          ),
-          PopupMenuItem(
-            value: 'warehouse_settings',
-            child: const _SalesCompanyMenuRow(
-              icon: Icons.warehouse_outlined,
-              label: 'Almacenes',
-            ),
-            onTap: () => _goAfterMenu(context, Routes.configuracionAlmacenes),
           ),
           if (!kIsWeb)
             PopupMenuItem(

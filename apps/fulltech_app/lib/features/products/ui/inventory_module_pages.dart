@@ -18,6 +18,7 @@ import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
+import '../../../core/company/company_settings_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
@@ -47,6 +48,7 @@ const _pageBackground = AppColors.background;
 const double _desktopSidePanelWidth = 500;
 const double _desktopWideSidePanelWidth = 550;
 const double _stockLowThreshold = 5;
+const Duration _desktopImagePickerTimeout = Duration(seconds: 30);
 const String _inventoryCategoriesCacheKey = 'inventory_categories_v1';
 const String _inventorySuppliersCacheKey = 'inventory_suppliers_v1';
 
@@ -75,7 +77,11 @@ String _stockText(double? value) {
   return formatQuantityValue(value);
 }
 
-String _productStockText(ProductModel product) {
+String _productStockText(
+  ProductModel product, {
+  bool showMeasurementUnit = false,
+}) {
+  if (!showMeasurementUnit) return formatQuantityValue(product.stock);
   return formatQuantityWithUnit(
     product.stock,
     unit: product.unitOfMeasure,
@@ -83,7 +89,12 @@ String _productStockText(ProductModel product) {
   );
 }
 
-String _productStockTextFor(ProductModel product, double? stock) {
+String _productStockTextFor(
+  ProductModel product,
+  double? stock, {
+  bool showMeasurementUnit = false,
+}) {
+  if (!showMeasurementUnit) return formatQuantityValue(stock);
   return formatQuantityWithUnit(
     stock,
     unit: product.unitOfMeasure,
@@ -981,6 +992,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onSetStock: _setProductStock,
         canAddStock: ref.read(authStateProvider).user != null,
         initialProductId: result!.product!.id,
+        showMeasurementUnits:
+            ref
+                .read(companySettingsProvider)
+                .valueOrNull
+                ?.measurementUnitsEnabled ==
+            true,
       );
       return;
     }
@@ -1152,6 +1169,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
 
   Future<Uint8List> _buildProductsPdf(List<ProductModel> products) async {
     final doc = pw.Document();
+    final showMeasurementUnit =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -1185,7 +1208,10 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       : 'Sin SKU',
                   product.nombre,
                   product.categoriaLabel,
-                  _productStockText(product),
+                  _productStockText(
+                    product,
+                    showMeasurementUnit: showMeasurementUnit,
+                  ),
                   formatRdCurrencyAccounting(product.precio),
                 ],
             ],
@@ -1590,6 +1616,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final canAddStock = user != null;
     final canViewCosts =
         user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     final isMobile = MediaQuery.sizeOf(context).width < 640;
     var tab = widget.initialMobileTab;
     if (tab == null) {
@@ -1664,6 +1696,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onRefresh: _refresh,
         onSetStock: _setProductStock,
         canAddStock: canAddStock,
+        showMeasurementUnits: measurementUnitsEnabled,
       ),
       CategoriesTab(
         key: _categoriesKey,
@@ -2704,7 +2737,10 @@ class _CatalogTabState extends State<CatalogTab> {
     }
   }
 
-  void _openProductDetail(ProductModel product) {
+  void _openProductDetail(
+    ProductModel product, {
+    required bool showMeasurementUnits,
+  }) {
     if (MediaQuery.sizeOf(context).width >= 640) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -2719,9 +2755,11 @@ class _CatalogTabState extends State<CatalogTab> {
                   onSetStock: widget.onSetStock,
                   canAddStock: widget.canAddStock,
                   initialProductId: product.id,
+                  showMeasurementUnits: showMeasurementUnits,
                 )
               : null,
           onDelete: () => _confirmDelete(product),
+          showMeasurementUnit: showMeasurementUnits,
         ),
       ),
     );
@@ -2755,9 +2793,37 @@ class _CatalogTabState extends State<CatalogTab> {
       });
     }
     final visible = _visibleFor(selectedCategory);
+    final visibleIds = visible.map((product) => product.id).toSet();
+    if (_selectedIds.any((id) => !visibleIds.contains(id))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(
+          () => _selectedIds.removeWhere((id) => !visibleIds.contains(id)),
+        );
+      });
+    }
     return Consumer(
       builder: (context, ref, _) {
-        final warehousesState = ref.watch(warehouseInventoryOverviewProvider);
+        final multiWarehouseEnabled =
+            ref
+                .watch(companySettingsProvider)
+                .valueOrNull
+                ?.multiWarehouseEnabled ==
+            true;
+        final measurementUnitsEnabled =
+            ref
+                .watch(companySettingsProvider)
+                .valueOrNull
+                ?.measurementUnitsEnabled ==
+            true;
+        final warehousesState = multiWarehouseEnabled
+            ? ref.watch(warehouseInventoryOverviewProvider)
+            : const AsyncData<WarehouseInventoryOverview>(
+                WarehouseInventoryOverview(
+                  warehouses: <WarehouseModel>[],
+                  terminals: <TerminalWarehouseModel>[],
+                ),
+              );
         final activeWarehouses =
             warehousesState.valueOrNull?.activeWarehouses ??
             const <WarehouseModel>[];
@@ -2781,84 +2847,121 @@ class _CatalogTabState extends State<CatalogTab> {
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 900;
             final mobile = constraints.maxWidth < 640;
-            return RefreshIndicator(
-              onRefresh: widget.onRefresh,
-              child: ListView(
-                padding: productsResponsivePagePadding(
-                  constraints,
-                  top: mobile ? 6 : 14,
-                  bottom: mobile ? 96 : 18,
+            final padding = productsResponsivePagePadding(
+              constraints,
+              top: mobile ? 6 : 14,
+              bottom: mobile ? 96 : 18,
+            );
+            final toolbar = _CatalogToolbar(
+              controller: _searchCtrl,
+              categories: categories,
+              selectedCategory: selectedCategory,
+              onlyLowStock: _onlyLowStock,
+              onlyOutStock: _onlyOutStock,
+              selectedCount: _selectedIds.length,
+              warehousesState: warehousesState,
+              showWarehouseControls: multiWarehouseEnabled,
+              selectedWarehouseId: selectedWarehouseId,
+              onWarehouseChanged: (value) =>
+                  setState(() => _selectedWarehouseId = value),
+              onSearchChanged: _onSearchChanged,
+              onCategoryChanged: (value) => setState(() => _category = value),
+              onToggleLowStock: (value) =>
+                  setState(() => _onlyLowStock = value),
+              onToggleOutStock: (value) =>
+                  setState(() => _onlyOutStock = value),
+              onClearFilters: () => setState(() {
+                _category = null;
+                _onlyLowStock = false;
+                _onlyOutStock = false;
+                _searchCtrl.clear();
+                _query = '';
+              }),
+              onOpenFilters: openMobileFilters,
+              onBulkAction: _handleBulkAction,
+              canEditProducts: widget.canEditProducts,
+              showWarehouseActions: multiWarehouseEnabled,
+            );
+            final catalogContent = compact
+                ? _CompactCatalogList(
+                    products: visible,
+                    selectedIds: _selectedIds,
+                    onToggle: (product, value) => setState(() {
+                      value
+                          ? _selectedIds.add(product.id)
+                          : _selectedIds.remove(product.id);
+                    }),
+                    onEdit: widget.onEdit,
+                    onSetStock: widget.onSetStock,
+                    onRefresh: widget.onRefresh,
+                    canEditProducts: widget.canEditProducts,
+                    canAddStock: widget.canAddStock,
+                    showMeasurementUnits: measurementUnitsEnabled,
+                    showTaxBadges: widget.showTaxBadges,
+                    taxConfig: widget.taxConfig,
+                    onDelete: _confirmDelete,
+                    onOpenDetail: (product) => _openProductDetail(
+                      product,
+                      showMeasurementUnits: measurementUnitsEnabled,
+                    ),
+                  )
+                : _CatalogTable(
+                    products: visible,
+                    selectedIds: _selectedIds,
+                    selectedWarehouseId: selectedWarehouseId,
+                    onToggle: (product, value) => setState(() {
+                      value
+                          ? _selectedIds.add(product.id)
+                          : _selectedIds.remove(product.id);
+                    }),
+                    onSelectAll: (selected) => setState(() {
+                      if (selected) {
+                        _selectedIds.addAll(
+                          visible.map((product) => product.id),
+                        );
+                      } else {
+                        _selectedIds.removeAll(
+                          visible.map((product) => product.id),
+                        );
+                      }
+                    }),
+                    onEdit: widget.onEdit,
+                    onSetStock: widget.onSetStock,
+                    onRefresh: widget.onRefresh,
+                    canEditProducts: widget.canEditProducts,
+                    canAddStock: widget.canAddStock,
+                    showMeasurementUnits: measurementUnitsEnabled,
+                    showTaxBadges: widget.showTaxBadges,
+                    taxConfig: widget.taxConfig,
+                    onDelete: _confirmDelete,
+                  );
+            final contentChildren = [
+              if (widget.error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _InlineWarning(message: widget.error!),
                 ),
+              catalogContent,
+            ];
+            if (mobile) {
+              return RefreshIndicator(
+                onRefresh: widget.onRefresh,
+                child: ListView(padding: padding, children: contentChildren),
+              );
+            }
+            return Padding(
+              padding: padding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!mobile) ...[
-                    _CatalogToolbar(
-                      controller: _searchCtrl,
-                      categories: categories,
-                      selectedCategory: selectedCategory,
-                      onlyLowStock: _onlyLowStock,
-                      onlyOutStock: _onlyOutStock,
-                      selectedCount: _selectedIds.length,
-                      warehousesState: warehousesState,
-                      selectedWarehouseId: selectedWarehouseId,
-                      onWarehouseChanged: (value) =>
-                          setState(() => _selectedWarehouseId = value),
-                      onSearchChanged: _onSearchChanged,
-                      onCategoryChanged: (value) =>
-                          setState(() => _category = value),
-                      onToggleLowStock: (value) =>
-                          setState(() => _onlyLowStock = value),
-                      onToggleOutStock: (value) =>
-                          setState(() => _onlyOutStock = value),
-                      onClearFilters: () => setState(() {
-                        _category = null;
-                        _onlyLowStock = false;
-                        _onlyOutStock = false;
-                        _searchCtrl.clear();
-                        _query = '';
-                      }),
-                      onOpenFilters: openMobileFilters,
-                      onBulkAction: _handleBulkAction,
-                      canEditProducts: widget.canEditProducts,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (widget.error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _InlineWarning(message: widget.error!),
-                    ),
-                  if (compact)
-                    _CompactCatalogList(
-                      products: visible,
-                      selectedIds: _selectedIds,
-                      onToggle: (product, value) => setState(() {
-                        value
-                            ? _selectedIds.add(product.id)
-                            : _selectedIds.remove(product.id);
-                      }),
-                      onEdit: widget.onEdit,
-                      onSetStock: widget.onSetStock,
+                  toolbar,
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: RefreshIndicator(
                       onRefresh: widget.onRefresh,
-                      canEditProducts: widget.canEditProducts,
-                      canAddStock: widget.canAddStock,
-                      showTaxBadges: widget.showTaxBadges,
-                      taxConfig: widget.taxConfig,
-                      onDelete: _confirmDelete,
-                      onOpenDetail: _openProductDetail,
-                    )
-                  else
-                    _CatalogTable(
-                      products: visible,
-                      selectedWarehouseId: selectedWarehouseId,
-                      onEdit: widget.onEdit,
-                      onSetStock: widget.onSetStock,
-                      onRefresh: widget.onRefresh,
-                      canEditProducts: widget.canEditProducts,
-                      canAddStock: widget.canAddStock,
-                      showTaxBadges: widget.showTaxBadges,
-                      taxConfig: widget.taxConfig,
-                      onDelete: _confirmDelete,
+                      child: ListView(children: contentChildren),
                     ),
+                  ),
                 ],
               ),
             );
@@ -2878,6 +2981,7 @@ class _CatalogToolbar extends StatelessWidget {
     required this.onlyOutStock,
     required this.selectedCount,
     required this.warehousesState,
+    required this.showWarehouseControls,
     required this.selectedWarehouseId,
     required this.onWarehouseChanged,
     required this.onSearchChanged,
@@ -2888,6 +2992,7 @@ class _CatalogToolbar extends StatelessWidget {
     required this.onOpenFilters,
     required this.onBulkAction,
     required this.canEditProducts,
+    required this.showWarehouseActions,
   });
 
   final TextEditingController controller;
@@ -2897,6 +3002,7 @@ class _CatalogToolbar extends StatelessWidget {
   final bool onlyOutStock;
   final int selectedCount;
   final AsyncValue<WarehouseInventoryOverview> warehousesState;
+  final bool showWarehouseControls;
   final String? selectedWarehouseId;
   final ValueChanged<String?> onWarehouseChanged;
   final ValueChanged<String> onSearchChanged;
@@ -2907,6 +3013,7 @@ class _CatalogToolbar extends StatelessWidget {
   final VoidCallback onOpenFilters;
   final ValueChanged<_CatalogBulkAction> onBulkAction;
   final bool canEditProducts;
+  final bool showWarehouseActions;
 
   @override
   Widget build(BuildContext context) {
@@ -2964,15 +3071,17 @@ class _CatalogToolbar extends StatelessWidget {
             ),
             label: 'Filtro',
           ),
-          _WarehouseFilterControl(
-            warehousesState: warehousesState,
-            selectedWarehouseId: selectedWarehouseId,
-            onChanged: onWarehouseChanged,
-          ),
+          if (showWarehouseControls)
+            _WarehouseFilterControl(
+              warehousesState: warehousesState,
+              selectedWarehouseId: selectedWarehouseId,
+              onChanged: onWarehouseChanged,
+            ),
           if (selectedCount > 1)
             _CatalogBulkActionsButton(
               selectedCount: selectedCount,
               canEditProducts: canEditProducts,
+              showWarehouseActions: showWarehouseActions,
               onSelected: onBulkAction,
             ),
         ],
@@ -3160,11 +3269,13 @@ class _CatalogBulkActionsButton extends StatelessWidget {
   const _CatalogBulkActionsButton({
     required this.selectedCount,
     required this.canEditProducts,
+    required this.showWarehouseActions,
     required this.onSelected,
   });
 
   final int selectedCount;
   final bool canEditProducts;
+  final bool showWarehouseActions;
   final ValueChanged<_CatalogBulkAction> onSelected;
 
   @override
@@ -3191,6 +3302,15 @@ class _CatalogBulkActionsButton extends StatelessWidget {
             label: 'PDF selección',
           ),
         ),
+        if (showWarehouseActions)
+          const PopupMenuItem(
+            enabled: false,
+            child: _CatalogActionMenuRow(
+              icon: Icons.swap_horiz_rounded,
+              label: 'Transferir a otro almacén',
+              subtitle: 'Pendiente: requiere cantidades por producto',
+            ),
+          ),
         if (canEditProducts)
           const PopupMenuItem(
             value: _CatalogBulkAction.category,
@@ -3252,11 +3372,13 @@ class _CatalogActionMenuRow extends StatelessWidget {
     required this.icon,
     required this.label,
     this.danger = false,
+    this.subtitle,
   });
 
   final IconData icon;
   final String label;
   final bool danger;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -3265,6 +3387,9 @@ class _CatalogActionMenuRow extends StatelessWidget {
       dense: true,
       leading: Icon(icon, color: color),
       title: Text(label, style: TextStyle(color: color)),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle!, style: const TextStyle(fontSize: 11)),
       contentPadding: EdgeInsets.zero,
     );
   }
@@ -3350,24 +3475,32 @@ Future<String?> _showBulkCategoryPicker(
 class _CatalogTable extends StatelessWidget {
   const _CatalogTable({
     required this.products,
+    required this.selectedIds,
     required this.selectedWarehouseId,
+    required this.onToggle,
+    required this.onSelectAll,
     required this.onEdit,
     required this.onSetStock,
     required this.onRefresh,
     required this.canEditProducts,
     required this.canAddStock,
+    required this.showMeasurementUnits,
     required this.showTaxBadges,
     required this.taxConfig,
     required this.onDelete,
   });
 
   final List<ProductModel> products;
+  final Set<String> selectedIds;
   final String? selectedWarehouseId;
+  final void Function(ProductModel product, bool selected) onToggle;
+  final ValueChanged<bool> onSelectAll;
   final ValueChanged<ProductModel> onEdit;
   final SetProductStockCallback onSetStock;
   final Future<void> Function() onRefresh;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool showMeasurementUnits;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
   final ValueChanged<ProductModel> onDelete;
@@ -3387,9 +3520,13 @@ class _CatalogTable extends StatelessWidget {
             child: SizedBox(
               width: constraints.maxWidth,
               child: DataTable(
+                showCheckboxColumn: true,
                 columnSpacing: 18,
                 horizontalMargin: 12,
                 checkboxHorizontalMargin: 8,
+                onSelectAll: products.isEmpty
+                    ? null
+                    : (value) => onSelectAll(value ?? false),
                 dataRowMinHeight: 46,
                 dataRowMaxHeight: 54,
                 headingRowHeight: 42,
@@ -3411,6 +3548,9 @@ class _CatalogTable extends StatelessWidget {
                 rows: [
                   for (final product in products)
                     DataRow(
+                      selected: selectedIds.contains(product.id),
+                      onSelectChanged: (value) =>
+                          onToggle(product, value ?? false),
                       cells: [
                         DataCell(_ProductNameCell(product: product)),
                         if (showReferenceColumn)
@@ -3427,6 +3567,7 @@ class _CatalogTable extends StatelessWidget {
                           _WarehouseAwareStockBadge(
                             product: product,
                             selectedWarehouseId: selectedWarehouseId,
+                            showMeasurementUnit: showMeasurementUnits,
                           ),
                         ),
                         DataCell(
@@ -3456,13 +3597,17 @@ class _CatalogTable extends StatelessWidget {
                                         onSetStock: onSetStock,
                                         canAddStock: canAddStock,
                                         initialProductId: product.id,
+                                        showMeasurementUnits:
+                                            showMeasurementUnits,
                                       )
                                     : null,
                                 icon: const Icon(Icons.tune_outlined),
                               ),
                               IconButton(
                                 tooltip: 'Eliminar',
-                                onPressed: () => onDelete(product),
+                                onPressed: canEditProducts
+                                    ? () => onDelete(product)
+                                    : null,
                                 icon: const Icon(Icons.delete_outline),
                               ),
                             ],
@@ -3505,6 +3650,7 @@ class _CompactCatalogList extends StatelessWidget {
     required this.onRefresh,
     required this.canEditProducts,
     required this.canAddStock,
+    required this.showMeasurementUnits,
     required this.showTaxBadges,
     required this.taxConfig,
     required this.onDelete,
@@ -3519,6 +3665,7 @@ class _CompactCatalogList extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool showMeasurementUnits;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
   final ValueChanged<ProductModel> onDelete;
@@ -3536,6 +3683,7 @@ class _CompactCatalogList extends StatelessWidget {
             CompactProductCard(
               product: product,
               selected: selectedIds.contains(product.id),
+              showMeasurementUnit: showMeasurementUnits,
               showTaxBadge: showTaxBadges,
               taxConfig: taxConfig,
               onSelected: (value) => onToggle(product, value),
@@ -3549,6 +3697,7 @@ class _CompactCatalogList extends StatelessWidget {
                       onSetStock: onSetStock,
                       canAddStock: canAddStock,
                       initialProductId: product.id,
+                      showMeasurementUnits: showMeasurementUnits,
                     )
                   : null,
               onDelete: () => onDelete(product),
@@ -4006,6 +4155,7 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
     required this.onSetStock,
     required this.canAddStock,
     this.initialProductId,
+    this.showMeasurementUnits = false,
     this.closeAfterSave = false,
     this.onClose,
   });
@@ -4015,6 +4165,7 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
   final SetProductStockCallback onSetStock;
   final bool canAddStock;
   final String? initialProductId;
+  final bool showMeasurementUnits;
   final bool closeAfterSave;
   final VoidCallback? onClose;
 
@@ -4088,6 +4239,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
   }
 
   String _quantityWithUnit(num? value, UnitOfMeasureModel unit) {
+    if (!widget.showMeasurementUnits) return formatQuantityValue(value);
     return formatQuantityWithUnit(value, unit: unit, includeUnitForUnit: true);
   }
 
@@ -4216,8 +4368,14 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
       );
       return;
     }
-    final overview = ref.read(warehouseInventoryOverviewProvider).valueOrNull;
-    final multipleWarehouses = overview?.hasMultipleActiveWarehouses == true;
+    final multiWarehouseEnabled =
+        ref.read(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
+        true;
+    final overview = multiWarehouseEnabled
+        ? ref.read(warehouseInventoryOverviewProvider).valueOrNull
+        : null;
+    final multipleWarehouses =
+        multiWarehouseEnabled && overview?.hasMultipleActiveWarehouses == true;
     final stockBreakdown = multipleWarehouses
         ? ref.read(productWarehouseStockProvider(selected.id)).valueOrNull
         : null;
@@ -4354,8 +4512,19 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
         _selected ?? (_products.isNotEmpty ? _products.first : null);
     final filtered = _filteredProductsFor(categoryFilter);
     final mobile = MediaQuery.sizeOf(context).width < 640;
-    final overview = ref.watch(warehouseInventoryOverviewProvider);
+    final multiWarehouseEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
+        true;
+    final overview = multiWarehouseEnabled
+        ? ref.watch(warehouseInventoryOverviewProvider)
+        : const AsyncData<WarehouseInventoryOverview>(
+            WarehouseInventoryOverview(
+              warehouses: <WarehouseModel>[],
+              terminals: <TerminalWarehouseModel>[],
+            ),
+          );
     final multipleWarehouses =
+        multiWarehouseEnabled &&
         overview.valueOrNull?.hasMultipleActiveWarehouses == true;
     final stockBreakdown = selected == null || !multipleWarehouses
         ? null
@@ -4462,7 +4631,10 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                         const SizedBox(height: 16),
                       ],
                       if (selected != null)
-                        _SelectedStockProduct(product: selected),
+                        _SelectedStockProduct(
+                          product: selected,
+                          showMeasurementUnit: widget.showMeasurementUnits,
+                        ),
                       if (selected != null) ...[
                         const SizedBox(height: 12),
                         if (multipleWarehouses) ...[
@@ -4515,7 +4687,9 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                             onChanged: (_) => setState(() {}),
                             decoration: _inventoryTextInputDecoration(
                               'Cantidad',
-                              suffixText: selected.unitOfMeasure.symbol,
+                              suffixText: widget.showMeasurementUnits
+                                  ? selected.unitOfMeasure.symbol
+                                  : null,
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -4536,7 +4710,9 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                                   onChanged: (_) => setState(() {}),
                                   decoration: _inventoryTextInputDecoration(
                                     'Cantidad',
-                                    suffixText: selected.unitOfMeasure.symbol,
+                                    suffixText: widget.showMeasurementUnits
+                                        ? selected.unitOfMeasure.symbol
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -4596,6 +4772,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                           _StockProductRow(
                             product: product,
                             selected: selected?.id == product.id,
+                            showMeasurementUnit: widget.showMeasurementUnits,
                             onSelected: () => _selectProduct(product),
                           ),
                     ],
@@ -4770,9 +4947,13 @@ class _TopNoticeToast extends StatelessWidget {
 }
 
 class _SelectedStockProduct extends StatelessWidget {
-  const _SelectedStockProduct({required this.product});
+  const _SelectedStockProduct({
+    required this.product,
+    required this.showMeasurementUnit,
+  });
 
   final ProductModel product;
+  final bool showMeasurementUnit;
 
   @override
   Widget build(BuildContext context) {
@@ -4822,7 +5003,10 @@ class _SelectedStockProduct extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                _productStockText(product),
+                _productStockText(
+                  product,
+                  showMeasurementUnit: showMeasurementUnit,
+                ),
                 style: TextStyle(
                   color: _stockLevelColor(level),
                   fontSize: 13,
@@ -4952,11 +5136,13 @@ class _StockProductRow extends StatelessWidget {
   const _StockProductRow({
     required this.product,
     required this.selected,
+    required this.showMeasurementUnit,
     required this.onSelected,
   });
 
   final ProductModel product;
   final bool selected;
+  final bool showMeasurementUnit;
   final VoidCallback onSelected;
 
   @override
@@ -5032,7 +5218,10 @@ class _StockProductRow extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _productStockText(product),
+                      _productStockText(
+                        product,
+                        showMeasurementUnit: showMeasurementUnit,
+                      ),
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.w600,
@@ -6092,6 +6281,7 @@ class CompactProductCard extends StatelessWidget {
     super.key,
     required this.product,
     this.selected = false,
+    this.showMeasurementUnit = false,
     this.showTaxBadge = false,
     this.taxConfig,
     required this.onSelected,
@@ -6103,6 +6293,7 @@ class CompactProductCard extends StatelessWidget {
 
   final ProductModel product;
   final bool selected;
+  final bool showMeasurementUnit;
   final bool showTaxBadge;
   final ProductTaxUiConfig? taxConfig;
   final ValueChanged<bool> onSelected;
@@ -6181,7 +6372,10 @@ class CompactProductCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       _CompactStockCostColumn(
-                        stockText: _productStockText(product),
+                        stockText: _productStockText(
+                          product,
+                          showMeasurementUnit: showMeasurementUnit,
+                        ),
                         stockColor: statusColor,
                         costText: _costText(product),
                       ),
@@ -6215,7 +6409,10 @@ class CompactProductCard extends StatelessWidget {
                         ),
                         _CompactMetric(
                           label: 'Stock',
-                          value: _productStockText(product),
+                          value: _productStockText(
+                            product,
+                            showMeasurementUnit: showMeasurementUnit,
+                          ),
                         ),
                         _CompactMetric(
                           label: 'Valor',
@@ -6444,12 +6641,14 @@ class _CompactProductInfo extends StatelessWidget {
 class _ProductDetailPage extends StatelessWidget {
   const _ProductDetailPage({
     required this.product,
+    required this.showMeasurementUnit,
     this.onEdit,
     this.onStock,
     this.onDelete,
   });
 
   final ProductModel product;
+  final bool showMeasurementUnit;
   final VoidCallback? onEdit;
   final VoidCallback? onStock;
   final VoidCallback? onDelete;
@@ -6519,7 +6718,13 @@ class _ProductDetailPage extends StatelessWidget {
                       ? product.codigo!.trim()
                       : 'Sin SKU',
                 ),
-                ('Stock', _productStockText(product)),
+                (
+                  'Stock',
+                  _productStockText(
+                    product,
+                    showMeasurementUnit: showMeasurementUnit,
+                  ),
+                ),
                 ('Estado', _stockLevelLabel(level)),
                 ('Costo', _costText(product)),
                 ('Precio', formatRdCurrencyAccounting(product.precio)),
@@ -6949,22 +7154,33 @@ class _WarehouseAwareStockBadge extends ConsumerWidget {
   const _WarehouseAwareStockBadge({
     required this.product,
     required this.selectedWarehouseId,
+    required this.showMeasurementUnit,
   });
 
   final ProductModel product;
   final String? selectedWarehouseId;
+  final bool showMeasurementUnit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final warehouseId = selectedWarehouseId;
-    if (warehouseId == null) return _StockBadge(product: product);
+    if (warehouseId == null) {
+      return _StockBadge(
+        product: product,
+        showMeasurementUnit: showMeasurementUnit,
+      );
+    }
     final breakdown = ref.watch(productWarehouseStockProvider(product.id));
     return breakdown.maybeWhen(
       data: (value) => _StockBadge(
         product: product,
         stockOverride: value.lineFor(warehouseId)?.quantity ?? 0,
+        showMeasurementUnit: showMeasurementUnit,
       ),
-      orElse: () => _StockBadge(product: product),
+      orElse: () => _StockBadge(
+        product: product,
+        showMeasurementUnit: showMeasurementUnit,
+      ),
     );
   }
 }
@@ -6994,9 +7210,14 @@ class _WarehouseAwareStatusBadge extends ConsumerWidget {
 }
 
 class _StockBadge extends StatelessWidget {
-  const _StockBadge({required this.product, this.stockOverride});
+  const _StockBadge({
+    required this.product,
+    required this.showMeasurementUnit,
+    this.stockOverride,
+  });
 
   final ProductModel product;
+  final bool showMeasurementUnit;
   final double? stockOverride;
 
   @override
@@ -7026,7 +7247,11 @@ class _StockBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        _productStockTextFor(product, stockOverride ?? product.stock),
+        _productStockTextFor(
+          product,
+          stockOverride ?? product.stock,
+          showMeasurementUnit: showMeasurementUnit,
+        ),
         style: TextStyle(
           color: foreground,
           fontSize: 12,
@@ -7224,7 +7449,7 @@ class _ReadOnlyStockPanel extends StatelessWidget {
   });
 
   final String stockText;
-  final String unitText;
+  final String? unitText;
   final VoidCallback? onAdjustStock;
 
   @override
@@ -7260,17 +7485,19 @@ class _ReadOnlyStockPanel extends StatelessWidget {
                       fontSize: 18,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    unitText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF6A7D8F),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                  if ((unitText ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      unitText!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF6A7D8F),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -7565,6 +7792,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
   required SetProductStockCallback onSetStock,
   required bool canAddStock,
   String? initialProductId,
+  bool showMeasurementUnits = false,
 }) {
   return showGeneralDialog<void>(
     context: context,
@@ -7595,6 +7823,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
                   onSetStock: onSetStock,
                   canAddStock: canAddStock,
                   initialProductId: initialProductId,
+                  showMeasurementUnits: showMeasurementUnits,
                   closeAfterSave: true,
                   onClose: () => Navigator.of(dialogContext).pop(),
                 ),
@@ -7693,6 +7922,7 @@ class _InventoryProductEditorPageState
   List<UnitOfMeasureModel> _unitOptions = const [UnitOfMeasureModel.unit];
   UnitOfMeasureModel _selectedUnit = UnitOfMeasureModel.unit;
   bool _loadingUnits = false;
+  bool _unitOptionsLoaded = false;
 
   ProductModel? get _product => widget.product;
 
@@ -7744,7 +7974,6 @@ class _InventoryProductEditorPageState
     _unitOptions = _selectedUnit.id == UnitOfMeasureModel.unit.id
         ? const [UnitOfMeasureModel.unit]
         : [_selectedUnit, UnitOfMeasureModel.unit];
-    unawaited(_loadUnitOptions());
     _maybeRecoverLostImage();
   }
 
@@ -7765,6 +7994,7 @@ class _InventoryProductEditorPageState
           : [selected, ...units];
       _selectedUnit = selected;
       _loadingUnits = false;
+      _unitOptionsLoaded = true;
     });
   }
 
@@ -7851,6 +8081,8 @@ class _InventoryProductEditorPageState
       _taxPriceMode = null;
       _formError = null;
       _selectedUnit = UnitOfMeasureModel.unit;
+      _unitOptions = const [UnitOfMeasureModel.unit];
+      _unitOptionsLoaded = false;
     });
     if (pending != null) {
       unawaited(deleteMobileProductImageTemp(pending));
@@ -7918,11 +8150,15 @@ class _InventoryProductEditorPageState
         return;
       }
       // Windows / escritorio: comportamiento actual intacto (bytes con data).
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-        withData: true,
-      );
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.image, allowMultiple: false, withData: true)
+          .timeout(
+            _desktopImagePickerTimeout,
+            onTimeout: () => throw TimeoutException(
+              'El selector de imagen tardó demasiado en responder',
+              _desktopImagePickerTimeout,
+            ),
+          );
       if (!mounted || result == null) return;
       final file = result.files.single;
       final bytes = file.bytes;
@@ -7935,6 +8171,12 @@ class _InventoryProductEditorPageState
         _uploadedImagePath = null;
       });
       _startSelectedImageUpload(bytes: bytes, filename: file.name);
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _formError =
+            'El selector de imagen no respondió. Intenta de nuevo o guarda el producto sin cambiar la imagen.';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _formError = 'No se pudo leer la imagen: $e');
@@ -8167,7 +8409,15 @@ class _InventoryProductEditorPageState
         : _parseInventoryNumber(_stockCtrl.text);
     final category = _categoryCtrl.text.trim();
     final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
-    final unitForSave = _selectedUnit;
+    final measurementUnitsEnabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    final unitForSave = measurementUnitsEnabled
+        ? _selectedUnit
+        : product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
     final taxEnabled = taxConfig?.settings.taxEnabled == true;
     final effectiveTaxRate = _effectiveTaxRate(taxConfig);
     if (name.isEmpty || price == null || cost == null || category.isEmpty) {
@@ -8394,6 +8644,17 @@ class _InventoryProductEditorPageState
     final taxConfigAsync = ref.watch(productTaxUiConfigProvider);
     final taxConfig = taxConfigAsync.valueOrNull;
     final showTaxSection = taxConfig?.settings.taxEnabled == true;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
+    if (measurementUnitsEnabled && !_loadingUnits && !_unitOptionsLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_loadUnitOptions());
+      });
+    }
     return _InventorySidePanelScaffold(
       title: product == null ? 'Nuevo producto' : 'Editar producto',
       icon: product == null ? Icons.add_box_outlined : Icons.edit_outlined,
@@ -8468,24 +8729,28 @@ class _InventoryProductEditorPageState
                   enabled: !_isSaving,
                   textInputAction: TextInputAction.next,
                   keyboardType: TextInputType.numberWithOptions(
-                    decimal: _selectedUnit.allowDecimals,
+                    decimal:
+                        measurementUnitsEnabled && _selectedUnit.allowDecimals,
                   ),
                   decoration: _inventoryTextInputDecoration(
                     'Stock disponible',
-                    suffixText: _selectedUnit.isUnit
+                    suffixText: !measurementUnitsEnabled || _selectedUnit.isUnit
                         ? null
                         : _selectedUnit.symbol,
                   ),
                 )
               else
                 _ReadOnlyStockPanel(
-                  stockText: formatQuantityWithUnit(
-                    product.stock,
-                    unit: product.unitOfMeasure,
-                    includeUnitForUnit: true,
-                  ),
-                  unitText:
-                      '${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol})',
+                  stockText: measurementUnitsEnabled
+                      ? formatQuantityWithUnit(
+                          product.stock,
+                          unit: product.unitOfMeasure,
+                          includeUnitForUnit: true,
+                        )
+                      : formatQuantityValue(product.stock),
+                  unitText: measurementUnitsEnabled
+                      ? '${product.unitOfMeasure.name} (${product.unitOfMeasure.symbol})'
+                      : null,
                   onAdjustStock: _isSaving
                       ? null
                       : () => _openStockAdjustmentFromEditor(product),
@@ -8494,6 +8759,15 @@ class _InventoryProductEditorPageState
                 const SizedBox(height: 10),
                 Consumer(
                   builder: (context, ref, _) {
+                    final multiWarehouseEnabled =
+                        ref
+                            .watch(companySettingsProvider)
+                            .valueOrNull
+                            ?.multiWarehouseEnabled ==
+                        true;
+                    if (!multiWarehouseEnabled) {
+                      return const SizedBox.shrink();
+                    }
                     final breakdownAsync = ref.watch(
                       productWarehouseStockProvider(product.id),
                     );
@@ -8517,30 +8791,32 @@ class _InventoryProductEditorPageState
                 ),
               ],
               const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedUnit.id,
-                isExpanded: true,
-                decoration: _inventoryTextInputDecoration(
-                  _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
+              if (measurementUnitsEnabled) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedUnit.id,
+                  isExpanded: true,
+                  decoration: _inventoryTextInputDecoration(
+                    _loadingUnits ? 'Cargando unidades...' : 'Unidad de medida',
+                  ),
+                  items: [
+                    for (final unit in _unitOptions)
+                      DropdownMenuItem<String>(
+                        value: unit.id,
+                        child: Text('${unit.name} (${unit.symbol})'),
+                      ),
+                  ],
+                  onChanged: _isSaving || _loadingUnits
+                      ? null
+                      : (value) {
+                          final next = _unitOptions.firstWhere(
+                            (unit) => unit.id == value,
+                            orElse: () => UnitOfMeasureModel.unit,
+                          );
+                          setState(() => _selectedUnit = next);
+                        },
                 ),
-                items: [
-                  for (final unit in _unitOptions)
-                    DropdownMenuItem<String>(
-                      value: unit.id,
-                      child: Text('${unit.name} (${unit.symbol})'),
-                    ),
-                ],
-                onChanged: _isSaving || _loadingUnits
-                    ? null
-                    : (value) {
-                        final next = _unitOptions.firstWhere(
-                          (unit) => unit.id == value,
-                          orElse: () => UnitOfMeasureModel.unit,
-                        );
-                        setState(() => _selectedUnit = next);
-                      },
-              ),
-              const SizedBox(height: 10),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: _categoryCtrl,
                 focusNode: _categoryFocus,

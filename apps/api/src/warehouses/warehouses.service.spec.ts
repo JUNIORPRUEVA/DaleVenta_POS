@@ -81,6 +81,14 @@ function buildService(source = "LOCAL") {
   };
 
   const api = {
+    company: {
+      findUnique: jest.fn(async (args: any) => {
+        const companyId = args.where.id;
+        if (companyId === "company-a") return { multiWarehouseEnabled: true };
+        if (companyId === "company-b") return { multiWarehouseEnabled: false };
+        return null;
+      }),
+    },
     warehouse: {
       findMany: jest.fn(async (args: any) =>
         db.warehouses
@@ -238,6 +246,15 @@ function buildService(source = "LOCAL") {
 }
 
 describe("WarehousesService", () => {
+  it("blocks warehouse endpoints when company flag is off", async () => {
+    const { service, api } = buildService();
+
+    await expect(service.list(userB as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(api.warehouse.findMany).not.toHaveBeenCalled();
+  });
+
   it("lists same-company warehouses only", async () => {
     const { service } = buildService();
     const result = await service.list(userA as any);

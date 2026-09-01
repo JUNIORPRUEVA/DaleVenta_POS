@@ -201,6 +201,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         if (next.isAuthenticated) {
           unawaited(ref.read(catalogRealtimeServiceProvider).connect(next));
           unawaited(ref.read(operationsRealtimeServiceProvider).connect(next));
+          unawaited(
+            _lifecycleCoordinator.runPendingSync(
+              () =>
+                  ref.read(syncQueueServiceProvider.notifier).processPending(),
+            ),
+          );
           _startLicensePolling();
         } else if (previous?.isAuthenticated == true && !next.isAuthenticated) {
           ref.read(catalogRealtimeServiceProvider).disconnect();

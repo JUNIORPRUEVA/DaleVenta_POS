@@ -220,7 +220,9 @@ class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
     final warehouses = ref.watch(warehousesProvider).valueOrNull ?? const [];
     final fields = [
       DropdownButtonFormField<String>(
-        initialValue: _draft.productId,
+        initialValue: products.any((product) => product.id == _draft.productId)
+            ? _draft.productId
+            : '',
         isExpanded: true,
         decoration: _inputDecoration('Producto'),
         items: [
@@ -236,7 +238,10 @@ class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
         ),
       ),
       DropdownButtonFormField<String>(
-        initialValue: _draft.warehouseId,
+        initialValue:
+            warehouses.any((warehouse) => warehouse.id == _draft.warehouseId)
+            ? _draft.warehouseId
+            : '',
         isExpanded: true,
         decoration: _inputDecoration('Almacén'),
         items: [
@@ -245,7 +250,7 @@ class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
             DropdownMenuItem(
               value: warehouse.id,
               child: Text(
-                '${warehouse.name}${warehouse.isActive ? '' : ' · Inactivo'}',
+                '${_warehouseNameText(warehouse.name, isDefault: warehouse.isDefault)}${warehouse.isActive ? '' : ' · Inactivo'}',
               ),
             ),
         ],
@@ -257,7 +262,7 @@ class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
         ),
       ),
       DropdownButtonFormField<String>(
-        initialValue: _draft.type,
+        initialValue: (_draft.type ?? '').isEmpty ? '' : _draft.type,
         isExpanded: true,
         decoration: _inputDecoration('Tipo'),
         items: const [
@@ -430,7 +435,7 @@ class _StockReportTab extends ConsumerWidget {
       loading: () => const _StatePanel(
         icon: Icons.table_chart_outlined,
         title: 'Cargando reporte',
-        message: 'Leyendo WarehouseStock.',
+        message: 'Leyendo stock por almacén.',
       ),
       error: (error, _) => _StatePanel(
         icon: Icons.warning_amber_rounded,
@@ -471,7 +476,7 @@ class _ReconciliationTab extends ConsumerWidget {
       loading: () => const _StatePanel(
         icon: Icons.fact_check_outlined,
         title: 'Conciliando',
-        message: 'Comparando Product.stock contra WarehouseStock.',
+        message: 'Comparando stock del producto contra stock por almacén.',
       ),
       error: (error, _) => _StatePanel(
         icon: Icons.warning_amber_rounded,
@@ -582,7 +587,7 @@ class _StockReportTable extends StatelessWidget {
             for (final warehouse in report.warehouses)
               DataColumn(
                 label: Text(
-                  '${warehouse.name}${warehouse.isActive ? '' : ' · Inactivo'}',
+                  '${_warehouseNameText(warehouse.name, isDefault: warehouse.isDefault)}${warehouse.isActive ? '' : ' · Inactivo'}',
                 ),
               ),
           ],
@@ -641,7 +646,7 @@ class _StockReportCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '${warehouse.warehouseName}${warehouse.isActive ? '' : ' · Inactivo'}',
+                        '${_warehouseNameText(warehouse.warehouseName)}${warehouse.isActive ? '' : ' · Inactivo'}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -802,7 +807,7 @@ InputDecoration _inputDecoration(String label) {
     labelText: label,
     filled: true,
     fillColor: Colors.white,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
     isDense: true,
   );
 }
@@ -857,9 +862,21 @@ String _warehouseLabel(InventoryMovementModel movement) {
   if (movement.isTransfer &&
       (movement.sourceWarehouseName ?? '').isNotEmpty &&
       (movement.destinationWarehouseName ?? '').isNotEmpty) {
-    return '${movement.sourceWarehouseName} -> ${movement.destinationWarehouseName}$inactive';
+    return '${_warehouseNameText(movement.sourceWarehouseName!)} → ${_warehouseNameText(movement.destinationWarehouseName!)}$inactive';
   }
-  return '${movement.warehouseName}$inactive';
+  return '${_warehouseNameText(movement.warehouseName)}$inactive';
+}
+
+String _warehouseNameText(String value, {bool isDefault = false}) {
+  final name = value.trim();
+  final normalized = name.toLowerCase();
+  if (isDefault ||
+      normalized == 'main warehouse' ||
+      normalized == 'default warehouse' ||
+      normalized == 'warehouse') {
+    return 'Almacén Principal';
+  }
+  return name.isEmpty ? 'Almacén' : name;
 }
 
 String _dateText(DateTime? value) {

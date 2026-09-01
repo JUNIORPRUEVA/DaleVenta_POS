@@ -61,7 +61,12 @@ Future<Uint8List> buildCotizacionPdf({
       ),
       footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
       build: (_) => [
-        ..._detailSection(viewData, money, qtyFmt),
+        ..._detailSection(
+          viewData,
+          money,
+          qtyFmt,
+          showMeasurementUnit: company?.measurementUnitsEnabled == true,
+        ),
         pw.SizedBox(height: 14),
         _bottomSection(viewData, money),
       ],
@@ -401,8 +406,9 @@ pw.Widget _pageFooter(int pageNumber, int totalPages) {
 List<pw.Widget> _detailSection(
   CotizacionPdfViewData data,
   NumberFormat money,
-  NumberFormat qtyFmt,
-) {
+  NumberFormat qtyFmt, {
+  required bool showMeasurementUnit,
+}) {
   final hasProductDiscount = data.lines.any(
     (item) => item.productDiscountAmount > 0,
   );
@@ -447,7 +453,12 @@ List<pw.Widget> _detailSection(
           children: [
             _descriptionCell(item.description),
             _bodyCell(
-              formatQuantityWithUnit(item.quantity, unit: item.unit),
+              formatQuantityForFeature(
+                item.quantity,
+                unit: item.unit,
+                showMeasurementUnit: showMeasurementUnit,
+                includeUnitForUnit: true,
+              ),
               align: pw.TextAlign.center,
             ),
             _bodyCell(money.format(item.unitPrice), align: pw.TextAlign.right),

@@ -51,6 +51,7 @@ export class InventoryReportingService {
 
   async listMovements(user: TenantUser, query: MovementQuery) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const source =
       await this.productSourceResolver.resolveForCompany(companyId);
     if (source.source !== ProductSource.LOCAL) {
@@ -102,6 +103,7 @@ export class InventoryReportingService {
 
   async stockReport(user: TenantUser) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const source =
       await this.productSourceResolver.resolveForCompany(companyId);
     if (source.source !== ProductSource.LOCAL) {
@@ -198,6 +200,7 @@ export class InventoryReportingService {
 
   async reconciliation(user: TenantUser) {
     const companyId = requireTenant(user);
+    await this.assertMultiWarehouseEnabled(companyId);
     const source =
       await this.productSourceResolver.resolveForCompany(companyId);
     if (source.source !== ProductSource.LOCAL) {
@@ -277,6 +280,18 @@ export class InventoryReportingService {
       if (this.looksUuid(search)) where.OR.push({ sourceId: search });
     }
     return where;
+  }
+
+  private async assertMultiWarehouseEnabled(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { multiWarehouseEnabled: true },
+    });
+    if (company?.multiWarehouseEnabled !== true) {
+      throw new BadRequestException(
+        "La gestion de multiples almacenes no esta activa para esta empresa.",
+      );
+    }
   }
 
   private async assertProduct(companyId: string, productId: string) {

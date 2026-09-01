@@ -21,6 +21,11 @@ import {
   type ProductSourceContext,
 } from "../products/product-source.resolver";
 import { TaxService } from "../tax/tax.service";
+import {
+  backfillZeroConfigInventoryForCompany,
+  ensureDefaultWarehouseAndTerminal,
+} from "../inventory/zero-config-inventory";
+import { DEFAULT_UNIT_OF_MEASURE_ID } from "../products/unit-of-measure.util";
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -57,25 +62,48 @@ export class SettingsService {
         select: {
           name: true,
           measurementUnitsEnabled: true,
+          multiWarehouseEnabled: true,
         },
       });
       const measurementUnitsEnabled =
         this.boolValue(dto, "measurementUnitsEnabled") ??
         company?.measurementUnitsEnabled ??
         false;
+      const multiWarehouseEnabled =
+        this.boolValue(dto, "multiWarehouseEnabled") ??
+        company?.multiWarehouseEnabled ??
+        false;
       const companyData = this.companyProductSourceData(dto);
+      const hasMultiWarehouseChange =
+        this.boolValue(dto, "multiWarehouseEnabled") !== undefined &&
+        multiWarehouseEnabled !== (company?.multiWarehouseEnabled === true);
+      const hasMeasurementUnitsChange =
+        this.boolValue(dto, "measurementUnitsEnabled") !== undefined &&
+        measurementUnitsEnabled !== (company?.measurementUnitsEnabled === true);
       if (
         this.boolValue(dto, "measurementUnitsEnabled") !== undefined ||
+        this.boolValue(dto, "multiWarehouseEnabled") !== undefined ||
         Object.keys(companyData).length > 0
       ) {
+        if (hasMultiWarehouseChange && !multiWarehouseEnabled) {
+          await this.assertSafeMultiWarehouseDisable(tx, companyId);
+        }
+        if (hasMeasurementUnitsChange && !measurementUnitsEnabled) {
+          await this.assertSafeMeasurementUnitsDisable(tx, companyId);
+        }
         await tx.company.update({
           where: { id: companyId },
           data: {
             measurementUnitsEnabled,
+            multiWarehouseEnabled,
             ...companyData,
           } as any,
           select: { id: true },
         });
+        if (hasMultiWarehouseChange && multiWarehouseEnabled) {
+          await ensureDefaultWarehouseAndTerminal(tx, companyId);
+          await backfillZeroConfigInventoryForCompany(tx, companyId);
+        }
       }
       const companyName = company?.name?.trim() ?? "";
       const updated = await tx.appConfig.upsert({
@@ -91,6 +119,7 @@ export class SettingsService {
       return {
         ...updated,
         measurementUnitsEnabled,
+        multiWarehouseEnabled,
       };
     });
     if (this.hasFiscalSettingsData(dto)) {
@@ -267,6 +296,7 @@ export class SettingsService {
       select: {
         name: true,
         measurementUnitsEnabled: true,
+        multiWarehouseEnabled: true,
       },
     });
     const companyName = company?.name?.trim() ?? "";
@@ -290,7 +320,58 @@ export class SettingsService {
       ...config,
       companyName,
       measurementUnitsEnabled: company?.measurementUnitsEnabled === true,
+      multiWarehouseEnabled: company?.multiWarehouseEnabled === true,
     };
+  }
+
+  private async assertSafeMultiWarehouseDisable(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    const distributedRows = await tx.warehouseStock.findMany({
+      where: {
+        companyId,
+        quantity: { not: new Prisma.Decimal(0) },
+        warehouse: { isActive: true },
+      },
+      select: {
+        productId: true,
+        warehouseId: true,
+      },
+    });
+    const warehousesByProduct = new Map<string, Set<string>>();
+    for (const row of distributedRows) {
+      const warehouses =
+        warehousesByProduct.get(row.productId) ?? new Set<string>();
+      warehouses.add(row.warehouseId);
+      warehousesByProduct.set(row.productId, warehouses);
+    }
+    const ambiguousProducts = [...warehousesByProduct.values()].filter(
+      (warehouses) => warehouses.size > 1,
+    ).length;
+    if (ambiguousProducts > 0) {
+      throw new BadRequestException(
+        "No se puede desactivar multiples almacenes mientras existan productos con stock distribuido en mas de un almacen activo.",
+      );
+    }
+  }
+
+  private async assertSafeMeasurementUnitsDisable(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    const measuredProduct = await tx.product.findFirst({
+      where: {
+        companyId,
+        unitOfMeasureId: { not: DEFAULT_UNIT_OF_MEASURE_ID },
+      },
+      select: { id: true },
+    });
+    if (measuredProduct) {
+      throw new BadRequestException(
+        "No se puede desactivar unidades de medida mientras existan productos con unidades distintas de Unidad.",
+      );
+    }
   }
 
   private async writeCompanySettingsAuditLog(
@@ -322,7 +403,17 @@ export class SettingsService {
 
   private boolValue(dto: SettingsPayload, key: string) {
     const value = dto[key];
-    return typeof value === "boolean" ? value : undefined;
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (value === 1) return true;
+      if (value === 0) return false;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "1", "yes", "si"].includes(normalized)) return true;
+      if (["false", "0", "no"].includes(normalized)) return false;
+    }
+    return undefined;
   }
 
   private productSourceValue(dto: SettingsPayload): ProductSource | undefined {
@@ -460,6 +551,7 @@ export class SettingsService {
       evolutionApiApiKey: string | null;
       whatsappWebhookEnabled: boolean;
       measurementUnitsEnabled?: boolean;
+      multiWarehouseEnabled?: boolean;
       adminAuthorizationPinHash: string | null;
     },
     fiscal: {
@@ -501,6 +593,7 @@ export class SettingsService {
       hasEvolutionApiApiKey: Boolean(config.evolutionApiApiKey),
       whatsappWebhookEnabled: config.whatsappWebhookEnabled,
       measurementUnitsEnabled: config.measurementUnitsEnabled === true,
+      multiWarehouseEnabled: config.multiWarehouseEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
       productsSource: productSource.source,
       productsReadOnly: productSource.readOnly,

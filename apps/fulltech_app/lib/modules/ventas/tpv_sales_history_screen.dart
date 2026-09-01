@@ -497,6 +497,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     final visibleSales = _visibleSales;
     final isMobile = MediaQuery.sizeOf(context).width < 760;
     final selected =
@@ -636,9 +642,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                                   sale: selected,
                                   dateFmt: _dateFmt,
                                   invoiceNumber: _invoiceNumber,
-                                  qty: (item) => formatQuantityWithUnit(
+                                  qty: (item) => formatQuantityForFeature(
                                     item.qty,
                                     unit: item.unitSnapshot,
+                                    showMeasurementUnit:
+                                        measurementUnitsEnabled,
+                                    includeUnitForUnit: true,
                                   ),
                                   onClose: () =>
                                       setState(() => _selected = null),
@@ -737,6 +746,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _openMobileDetail(SaleModel sale) async {
+    final measurementUnitsEnabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -752,8 +767,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                 sale: sale,
                 dateFmt: _dateFmt,
                 invoiceNumber: _invoiceNumber,
-                qty: (item) =>
-                    formatQuantityWithUnit(item.qty, unit: item.unitSnapshot),
+                qty: (item) => formatQuantityForFeature(
+                  item.qty,
+                  unit: item.unitSnapshot,
+                  showMeasurementUnit: measurementUnitsEnabled,
+                  includeUnitForUnit: true,
+                ),
                 onClose: () => Navigator.of(sheetContext).pop(),
                 onReturn: sale.isDeleted ? null : () => _returnSale(sale),
                 onPdf: () => _sharePdf(sale),

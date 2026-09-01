@@ -167,7 +167,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     final user = ref.watch(authStateProvider).user;
     final isAdmin = user?.appRole == AppRole.admin;
     final isDesktop = _isDesktop(context);
-
     return Scaffold(
       backgroundColor: isDesktop ? null : AppColors.background,
       appBar: CustomAppBar(
@@ -846,6 +845,12 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   }
 
   void _showDetailsDialog(BuildContext context, SaleModel sale) {
+    final measurementUnitsEnabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     showDialog<void>(
       context: context,
       builder: (context) {
@@ -916,7 +921,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '${item.productNameSnapshot} x${formatQuantityWithUnit(item.qty, unit: item.unitSnapshot)}',
+                              '${item.productNameSnapshot} x${formatQuantityForFeature(item.qty, unit: item.unitSnapshot, showMeasurementUnit: measurementUnitsEnabled, includeUnitForUnit: true)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
@@ -3334,13 +3339,19 @@ class _WeekdayPerformanceCard extends StatelessWidget {
   }
 }
 
-class _TopProductsCard extends StatelessWidget {
+class _TopProductsCard extends ConsumerWidget {
   const _TopProductsCard({required this.products});
 
   final List<_TopProductStat> products;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final measurementUnitsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.measurementUnitsEnabled ==
+        true;
     final maxListHeight = (MediaQuery.sizeOf(context).height * 0.32)
         .clamp(220.0, 360.0)
         .toDouble();
@@ -3471,7 +3482,7 @@ class _TopProductsCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              'x${formatQuantityWithUnit(product.quantity, unit: product.unit)}',
+                              'x${formatQuantityForFeature(product.quantity, unit: product.unit, showMeasurementUnit: measurementUnitsEnabled, includeUnitForUnit: true)}',
                               style: Theme.of(context).textTheme.labelMedium
                                   ?.copyWith(
                                     color: Theme.of(

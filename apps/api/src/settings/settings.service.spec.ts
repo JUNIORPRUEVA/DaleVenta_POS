@@ -45,6 +45,7 @@ describe("SettingsService company master data protection", () => {
         findUnique: jest.fn().mockResolvedValue({
           name: "Nombre Nuevo",
           measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
         }),
       },
       appConfig: {
@@ -89,7 +90,11 @@ describe("SettingsService company master data protection", () => {
     expect(settings.companyName).toBe("Nombre Nuevo");
     expect(prisma.company.findUnique).toHaveBeenCalledWith({
       where: { id: "company-a" },
-      select: { name: true, measurementUnitsEnabled: true },
+      select: {
+        name: true,
+        measurementUnitsEnabled: true,
+        multiWarehouseEnabled: true,
+      },
     });
     expect(prisma.appConfig.update).toHaveBeenCalledWith({
       where: { companyId: "company-a" },
@@ -233,7 +238,11 @@ describe("SettingsService company master data protection", () => {
     };
     const tx = {
       company: {
-        findUnique: jest.fn().mockResolvedValue({ name: "FullPOS Cloud" }),
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
         update: jest.fn().mockResolvedValue({}),
       },
       appConfig: {
@@ -329,6 +338,7 @@ describe("SettingsService company master data protection", () => {
         findUnique: jest.fn().mockResolvedValue({
           name: "FullPOS Cloud",
           measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
         }),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -373,11 +383,13 @@ describe("SettingsService company master data protection", () => {
       { measurementUnitsEnabled: true },
     );
 
-    expect(tx.company.update).toHaveBeenCalledWith({
-      where: { id: "company-a" },
-      data: { measurementUnitsEnabled: true },
-      select: { id: true },
-    });
+    expect(tx.company.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "company-a" },
+        data: expect.objectContaining({ measurementUnitsEnabled: true }),
+        select: { id: true },
+      }),
+    );
     expect(tx.company.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ name: "" }) }),
     );
@@ -391,6 +403,188 @@ describe("SettingsService company master data protection", () => {
       measurementUnitsEnabled: true,
     });
     expect(response.measurementUnitsEnabled).toBe(true);
+  });
+
+  it("persists inventory feature flags from tolerant boolean payloads", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue({
+          companyName: "FullPOS Cloud",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
+          bankAccounts: [],
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
+          logoBase64: null,
+          openAiApiKey: null,
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
+          evolutionApiApiKey: null,
+          whatsappWebhookEnabled: false,
+          adminAuthorizationPinHash: null,
+        }),
+      },
+      warehouse: {
+        findUnique: jest.fn().mockResolvedValue({ id: "warehouse-default" }),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      terminal: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "terminal-default",
+          defaultWarehouseId: "warehouse-default",
+          isDefault: true,
+          isActive: true,
+        }),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      product: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      warehouseStock: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      inventoryZeroConfigState: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { measurementUnitsEnabled: "true", multiWarehouseEnabled: 1 },
+    );
+
+    expect(tx.company.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "company-a" },
+        data: expect.objectContaining({
+          measurementUnitsEnabled: true,
+          multiWarehouseEnabled: true,
+        }),
+      }),
+    );
+    expect(response.measurementUnitsEnabled).toBe(true);
+    expect(response.multiWarehouseEnabled).toBe(true);
+  });
+
+  it("blocks disabling measurement units when measured products exist", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: true,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn(),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue({ id: "product-yard" }),
+      },
+      appConfig: {
+        upsert: jest.fn(),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = buildService(prisma);
+
+    await expect(
+      service.updateSettings(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        { measurementUnitsEnabled: false },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.product.findFirst).toHaveBeenCalledWith({
+      where: {
+        companyId: "company-a",
+        unitOfMeasureId: { not: "UNIT" },
+      },
+      select: { id: true },
+    });
+    expect(tx.company.update).not.toHaveBeenCalled();
+  });
+
+  it("defaults multiWarehouseEnabled to false when loading company settings", async () => {
+    const prisma = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue({
+          companyName: "FullPOS Cloud",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
+          bankAccounts: [],
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
+          logoBase64: null,
+          openAiApiKey: null,
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
+          evolutionApiApiKey: null,
+          whatsappWebhookEnabled: false,
+          adminAuthorizationPinHash: null,
+        }),
+        update: jest.fn(),
+      },
+    };
+    const service = buildService(prisma);
+
+    const response = await service.getSettings({
+      id: "admin-a",
+      role: Role.ADMIN,
+      companyId: "company-a",
+    });
+
+    expect(response.multiWarehouseEnabled).toBe(false);
   });
 
   it("issues tenant-bound admin PIN authorization for the requested scope only", async () => {
