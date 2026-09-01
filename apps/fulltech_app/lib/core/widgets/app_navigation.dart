@@ -113,6 +113,13 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Kardex',
             route: Routes.catalogoKardex,
           ),
+        if (canOrAuthorize(AppPermission.viewWarehouses))
+          const AppNavigationItem(
+            icon: Icons.warehouse_outlined,
+            appIcon: AppIcons.inventory,
+            title: 'Almacenes',
+            route: Routes.configuracionAlmacenes,
+          ),
         if (canOrAuthorize(AppPermission.viewPurchases))
           const AppNavigationItem(
             icon: Icons.shopping_cart_checkout_outlined,

@@ -823,6 +823,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
 
   final ventasItems = pickItems([Routes.cotizaciones, Routes.ventasLista]);
   final inventoryItems = pickItems([Routes.catalogo]);
+  final canViewWarehouses = hasPermission(role, AppPermission.viewWarehouses);
   final cashItems = pickItems([
     Routes.cajaRegistrarIngreso,
     Routes.cajaRegistrarSalida,
@@ -857,37 +858,43 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   final reportsItem = pick(Routes.ventas);
 
   void addInventoryGroup() {
-    if (inventoryItems.isEmpty) return;
+    if (inventoryItems.isEmpty && !canViewWarehouses) return;
     groups.add(
-      const _DrawerMenuGroup(
+      _DrawerMenuGroup(
         title: 'Inventario',
         icon: Icons.inventory_2_outlined,
         items: [
-          AppNavigationItem(
+          const AppNavigationItem(
             icon: Icons.table_rows_outlined,
             title: 'Catálogo',
             route: Routes.catalogo,
           ),
-          AppNavigationItem(
+          const AppNavigationItem(
             icon: Icons.tune_outlined,
             title: 'Ajuste stock',
             route: Routes.catalogoStock,
           ),
-          AppNavigationItem(
+          const AppNavigationItem(
             icon: Icons.category_outlined,
             title: 'Categorías',
             route: Routes.catalogoCategorias,
           ),
-          AppNavigationItem(
+          const AppNavigationItem(
             icon: Icons.fact_check_outlined,
             title: 'Recuento',
             route: Routes.catalogoConteo,
           ),
-          AppNavigationItem(
+          const AppNavigationItem(
             icon: Icons.history_rounded,
             title: 'Kardex',
             route: Routes.catalogoKardex,
           ),
+          if (canViewWarehouses)
+            const AppNavigationItem(
+              icon: Icons.warehouse_outlined,
+              title: 'Almacenes',
+              route: Routes.configuracionAlmacenes,
+            ),
         ],
         openOnHover: false,
       ),
@@ -1039,6 +1046,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       Routes.actualizaciones,
       Routes.configuracionEmpresa,
       Routes.configuracion,
+      Routes.configuracionAlmacenes,
+      Routes.catalogoKardex,
     ]);
 
     addInventoryGroup();
@@ -1143,6 +1152,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.manualInterno,
     Routes.amonestaciones,
     Routes.configuracion,
+    Routes.configuracionAlmacenes,
+    Routes.catalogoKardex,
   ]);
   addAccountingGroup();
   addGroup('Operaciones', Icons.work_outline_rounded, [
