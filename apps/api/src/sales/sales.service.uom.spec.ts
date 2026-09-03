@@ -173,6 +173,47 @@ describe("SalesService UoM decimal foundation", () => {
     expect(sale.items[0].warehouseCodeSnapshot).toBe("MAIN");
   });
 
+  it("keeps external quick sale unit snapshots and validates precision", () => {
+    const service = serviceWith({});
+
+    const normalized = (service as any).normalizeItem(
+      {
+        productName: "Corte de tela",
+        qty: 2.375,
+        priceSoldUnit: 120,
+        costUnitSnapshot: 40,
+        unitCodeSnapshot: "YARD",
+        unitNameSnapshot: "Yarda",
+        unitSymbolSnapshot: "yd",
+        unitPrecisionSnapshot: 3,
+      },
+      0,
+      new Map(),
+    );
+
+    expect(normalized.unitCodeSnapshot).toBe("YARD");
+    expect(normalized.unitNameSnapshot).toBe("Yarda");
+    expect(normalized.unitSymbolSnapshot).toBe("yd");
+    expect(normalized.unitPrecisionSnapshot).toBe(3);
+
+    expect(() =>
+      (service as any).normalizeItem(
+        {
+          productName: "Corte de tela",
+          qty: 2.3751,
+          priceSoldUnit: 120,
+          costUnitSnapshot: 40,
+          unitCodeSnapshot: "YARD",
+          unitNameSnapshot: "Yarda",
+          unitSymbolSnapshot: "yd",
+          unitPrecisionSnapshot: 3,
+        },
+        0,
+        new Map(),
+      ),
+    ).toThrow("precisión permitida");
+  });
+
   it("restores decimal inventory exactly on partial return using original snapshot", async () => {
     const refundCreate = jest.fn().mockImplementation((args) =>
       Promise.resolve({

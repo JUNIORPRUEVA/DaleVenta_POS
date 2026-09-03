@@ -311,6 +311,7 @@ class InventoryCategoriesController
     state = state.copyWith(loading: true, clearError: true);
     try {
       final map = await _cache.readMap(_inventoryCategoriesCacheKey);
+      if (!mounted) return;
       final rows = (map?['items'] as List?) ?? const [];
       final items =
           rows
@@ -323,6 +324,7 @@ class InventoryCategoriesController
             ..sort((a, b) => a.name.compareTo(b.name));
       state = state.copyWith(items: items, loading: false);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         loading: false,
         error: 'No se pudieron cargar las categorías: $e',
@@ -336,10 +338,11 @@ class InventoryCategoriesController
       'items': sorted.map((item) => item.toMap()).toList(),
       'updatedAt': DateTime.now().toIso8601String(),
     });
+    if (!mounted) return;
     state = state.copyWith(items: sorted, saving: false, clearError: true);
   }
 
-  Future<void> upsert({
+  Future<InventoryCategoryModel> upsert({
     String? id,
     required String name,
     String? imageBase64,
@@ -363,25 +366,27 @@ class InventoryCategoriesController
       }
 
       final next = [...state.items];
+      late final InventoryCategoryModel saved;
       if (existingIndex >= 0) {
-        next[existingIndex] = next[existingIndex].copyWith(
+        saved = next[existingIndex].copyWith(
           name: cleanName,
           imageBase64: imageBase64,
           clearImage: clearImage,
           updatedAt: now,
         );
+        next[existingIndex] = saved;
       } else {
-        next.add(
-          InventoryCategoryModel(
-            id: id ?? 'cat-${now.microsecondsSinceEpoch}',
-            name: cleanName,
-            imageBase64: imageBase64,
-            createdAt: now,
-            updatedAt: now,
-          ),
+        saved = InventoryCategoryModel(
+          id: id ?? 'cat-${now.microsecondsSinceEpoch}',
+          name: cleanName,
+          imageBase64: imageBase64,
+          createdAt: now,
+          updatedAt: now,
         );
+        next.add(saved);
       }
       await _persist(next);
+      return saved;
     } catch (e) {
       state = state.copyWith(saving: false, error: '$e');
       rethrow;
@@ -5378,26 +5383,18 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       reason: category == null ? 'Crear categoría' : 'Editar categoría',
     );
     if (!allowed || !mounted) return;
-    final result = await showDialog<_CategoryEditorResult>(
-      context: context,
-      barrierColor: FullTechDialogTokens.overlayColor,
-      builder: (dialogContext) => _CategoryEditorDialog(category: category),
+    final saved = await _runInventoryCategoryEditorFlow(
+      context,
+      ref,
+      category: category,
     );
-    if (result == null || !mounted) return;
+    if (saved == null || !mounted) return;
 
     final oldName = category?.name;
-    await ref
-        .read(inventoryCategoriesProvider.notifier)
-        .upsert(
-          id: category?.id.startsWith('derived-') == true ? null : category?.id,
-          name: result.name,
-          imageBase64: result.imageBase64,
-          clearImage: result.clearImage,
-        );
 
     if (oldName != null &&
-        oldName.trim().toLowerCase() != result.name.trim().toLowerCase()) {
-      await _renameProductsCategory(oldName: oldName, newName: result.name);
+        oldName.trim().toLowerCase() != saved.name.trim().toLowerCase()) {
+      await _renameProductsCategory(oldName: oldName, newName: saved.name);
     }
 
     if (!mounted) return;
@@ -5945,6 +5942,28 @@ class _CategoryEditorResult {
   final String name;
   final String? imageBase64;
   final bool clearImage;
+}
+
+Future<InventoryCategoryModel?> _runInventoryCategoryEditorFlow(
+  BuildContext context,
+  WidgetRef ref, {
+  InventoryCategoryModel? category,
+}) async {
+  final result = await showDialog<_CategoryEditorResult>(
+    context: context,
+    barrierColor: FullTechDialogTokens.overlayColor,
+    builder: (dialogContext) => _CategoryEditorDialog(category: category),
+  );
+  if (result == null) return null;
+
+  return ref
+      .read(inventoryCategoriesProvider.notifier)
+      .upsert(
+        id: category?.id.startsWith('derived-') == true ? null : category?.id,
+        name: result.name,
+        imageBase64: result.imageBase64,
+        clearImage: result.clearImage,
+      );
 }
 
 class _CategoryEditorDialog extends StatefulWidget {
@@ -7944,6 +7963,15 @@ class _InventoryProductEditorPageState
 
   ProductModel? get _product => widget.product;
 
+  List<String> _categoryOptions(List<InventoryCategoryModel> managed) {
+    final categories = <String>{
+      ...widget.categories.map(_normalizeCategoryName),
+      ...managed.map((category) => category.name),
+    }.where((category) => category.trim().isNotEmpty).toList();
+    categories.sort();
+    return categories;
+  }
+
   String _newSaveOperationId(ProductModel? product) {
     final now = DateTime.now().toUtc().microsecondsSinceEpoch;
     final action = product == null ? 'create' : 'update-${product.id}';
@@ -8622,6 +8650,18 @@ class _InventoryProductEditorPageState
     Navigator.of(context).pop(const ProductFormResult(saved: false));
   }
 
+  Future<void> _createCategoryFromProductForm() async {
+    if (_isSaving) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final created = await _runInventoryCategoryEditorFlow(context, ref);
+    if (!mounted || created == null) return;
+    _categoryCtrl.text = created.name;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Categoría creada: ${created.name}')),
+    );
+  }
+
   void _advanceFormOrSave() {
     if (_isSaving || _isPickingImage) return;
     if (_nameFocus.hasFocus) {
@@ -8668,6 +8708,8 @@ class _InventoryProductEditorPageState
             .valueOrNull
             ?.measurementUnitsEnabled ==
         true;
+    final categoryState = ref.watch(inventoryCategoriesProvider);
+    final categoryOptions = _categoryOptions(categoryState.items);
     if (measurementUnitsEnabled && !_loadingUnits && !_unitOptionsLoaded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_loadUnitOptions());
@@ -8835,20 +8877,43 @@ class _InventoryProductEditorPageState
                 ),
                 const SizedBox(height: 10),
               ],
-              TextField(
-                controller: _categoryCtrl,
-                focusNode: _categoryFocus,
-                enabled: !_isSaving,
-                textInputAction: TextInputAction.done,
-                decoration: _inventoryTextInputDecoration('Categoría'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _categoryCtrl,
+                      focusNode: _categoryFocus,
+                      enabled: !_isSaving,
+                      textInputAction: TextInputAction.done,
+                      decoration: _inventoryTextInputDecoration('Categoría'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: 'Crear categoría',
+                    child: OutlinedButton.icon(
+                      onPressed: _isSaving
+                          ? null
+                          : _createCategoryFromProductForm,
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                      label: const Text('Crear'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: const RoundedRectangleBorder(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              if (widget.categories.isNotEmpty) ...[
+              if (categoryOptions.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    for (final category in widget.categories)
+                    for (final category in categoryOptions)
                       _InventoryCategoryChoiceChip(
                         label: category,
                         selected: _categoryCtrl.text.trim() == category,

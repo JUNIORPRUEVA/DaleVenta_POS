@@ -2222,6 +2222,14 @@ export class SalesService {
     if (costUnitSnapshot.lt(0)) {
       throw new BadRequestException(`Costo inválido en item #${index + 1}`);
     }
+    const externalUnit = this.externalUnitSnapshot(item);
+    if (this.hasExternalUnitSnapshot(item)) {
+      validateQuantityForUnit({
+        quantity: qty,
+        unit: externalUnit,
+        label: `item #${index + 1}`,
+      });
+    }
 
     const subtotalSold = qty.mul(priceSoldUnit);
     const subtotalCost = qty.mul(costUnitSnapshot);
@@ -2234,7 +2242,7 @@ export class SalesService {
       productNameSnapshot: productName,
       productImageSnapshot: null,
       qty,
-      ...unitSnapshotFields(DEFAULT_UNIT_OF_MEASURE),
+      ...unitSnapshotFields(externalUnit),
       priceSoldUnit,
       originalUnitPriceSnapshot:
         item.originalUnitPriceSnapshot === undefined
@@ -2257,6 +2265,28 @@ export class SalesService {
     if (!external) return;
     throw new BadRequestException(
       "Ventas de productos FULLPOS requieren stock writable validado e idempotente antes de registrarse.",
+    );
+  }
+
+  private externalUnitSnapshot(item: CreateSaleItemDto): UnitOfMeasureSnapshot {
+    const code = item.unitCodeSnapshot?.trim() || DEFAULT_UNIT_OF_MEASURE.code;
+    const precision = Number(item.unitPrecisionSnapshot ?? 0);
+    return {
+      code,
+      name: item.unitNameSnapshot?.trim() || DEFAULT_UNIT_OF_MEASURE.name,
+      symbol:
+        item.unitSymbolSnapshot?.trim() || DEFAULT_UNIT_OF_MEASURE.symbol,
+      precision,
+      allowDecimals: precision > 0,
+    };
+  }
+
+  private hasExternalUnitSnapshot(item: CreateSaleItemDto): boolean {
+    return (
+      item.unitCodeSnapshot !== undefined ||
+      item.unitNameSnapshot !== undefined ||
+      item.unitSymbolSnapshot !== undefined ||
+      item.unitPrecisionSnapshot !== undefined
     );
   }
 

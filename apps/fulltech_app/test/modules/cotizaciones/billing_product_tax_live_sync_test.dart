@@ -90,6 +90,36 @@ void main() {
     },
   );
 
+  test(
+    'Facturacion envia snapshots UoM de venta rapida fuera de inventario',
+    () {
+      const item = SaleDraftItem(
+        name: 'Corte de tela',
+        imageUrl: null,
+        isExternal: true,
+        qty: 2.375,
+        priceSoldUnit: 120,
+        costUnitSnapshot: 40,
+        unitCodeSnapshot: 'YARD',
+        unitNameSnapshot: 'Yarda',
+        unitSymbolSnapshot: 'yd',
+        unitPrecisionSnapshot: 3,
+      );
+
+      final payload = item.toPayload();
+      final restored = SaleDraftItem.fromPayload(payload);
+
+      expect(payload['productName'], 'Corte de tela');
+      expect(payload['unitCodeSnapshot'], 'YARD');
+      expect(payload['unitNameSnapshot'], 'Yarda');
+      expect(payload['unitSymbolSnapshot'], 'yd');
+      expect(payload['unitPrecisionSnapshot'], 3);
+      expect(restored.unitSnapshot.code, 'YARD');
+      expect(restored.unitSnapshot.symbol, 'yd');
+      expect(restored.unitSnapshot.precision, 3);
+    },
+  );
+
   test('Facturacion INHERIT aplica ITBIS de empresa', () {
     final item = buildBillingItemFromProduct(_product(taxTreatment: 'INHERIT'));
     final preview = _previewFor(item);

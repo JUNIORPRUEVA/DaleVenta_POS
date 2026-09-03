@@ -62,7 +62,9 @@ Confirmed capabilities:
 
 - Tenant-scoped product/catalog, sale, purchase, cash, warehouse, and reporting operations.
 - Product creation/update with stock and warehouse stock support.
+- Product creation/editing can reuse the normal category creation dialog from the product form, preserving entered product data and selecting the newly created category.
 - Inventory movements and Kardex-style history.
+- When measurement units are enabled for the company, quick/manual sale items can carry a configured unit-of-measure snapshot such as Unidad, Yarda, or Libra through sale creation.
 - Multi-warehouse feature flag and terminal warehouse assignment.
 - Cash session/movement workflows and close ticket printing.
 - Sales fiscal payloads, tax calculation, NCF sequences and audit logs.

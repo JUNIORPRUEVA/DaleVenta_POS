@@ -258,6 +258,12 @@ bool shouldShowBillingItbis({
   return taxEnabled && taxAmount > 0;
 }
 
+@visibleForTesting
+void submitMobileExternalItemDialog(BuildContext context) {
+  FocusScope.of(context).unfocus();
+  Navigator.pop(context, true);
+}
+
 typedef _CatalogProductAddCallback =
     void Function(ProductModel product, Offset? globalStart);
 
@@ -322,6 +328,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   final List<CotizacionItem> _items = [];
   List<ProductModel> _productos = const [];
+  List<UnitOfMeasureModel> _quickSaleUnitOptions = const [
+    UnitOfMeasureModel.unit,
+  ];
+  bool _quickSaleUnitsLoaded = false;
+  bool _quickSaleUnitsLoading = false;
 
   bool _loadingProducts = false;
   String? _error;
@@ -1371,6 +1382,51 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   double _roundUnitPrice(double value) =>
       double.parse(value.toStringAsFixed(6));
 
+  bool get _measurementUnitsEnabled =>
+      ref.read(companySettingsProvider).valueOrNull?.measurementUnitsEnabled ==
+      true;
+
+  Future<List<UnitOfMeasureModel>> _loadQuickSaleUnitOptions() async {
+    if (!_measurementUnitsEnabled) return const [UnitOfMeasureModel.unit];
+    if (_quickSaleUnitsLoaded) return _quickSaleUnitOptions;
+    if (_quickSaleUnitsLoading) return _quickSaleUnitOptions;
+    _quickSaleUnitsLoading = true;
+    try {
+      final loaded = await ref
+          .read(catalogRepositoryProvider)
+          .fetchUnitOfMeasures();
+      final units = loaded.isEmpty ? const [UnitOfMeasureModel.unit] : loaded;
+      if (!mounted) return units;
+      final hasCanonicalUnit = units.any(
+        (unit) => unit.id == UnitOfMeasureModel.unit.id,
+      );
+      setState(() {
+        _quickSaleUnitOptions = hasCanonicalUnit
+            ? units
+            : [UnitOfMeasureModel.unit, ...units];
+        _quickSaleUnitsLoaded = true;
+        _quickSaleUnitsLoading = false;
+      });
+      return _quickSaleUnitOptions;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _quickSaleUnitOptions = const [UnitOfMeasureModel.unit];
+          _quickSaleUnitsLoaded = true;
+          _quickSaleUnitsLoading = false;
+        });
+      } else {
+        _quickSaleUnitsLoading = false;
+      }
+      return const [UnitOfMeasureModel.unit];
+    }
+  }
+
+  UnitOfMeasureModel _quickSaleInitialUnit(CotizacionItem? editingItem) {
+    if (!_measurementUnitsEnabled) return UnitOfMeasureModel.unit;
+    return editingItem?.unitSnapshot ?? UnitOfMeasureModel.unit;
+  }
+
   List<SaleDraftItem> _buildCheckoutSaleItems() {
     return [
       for (final item in _items)
@@ -1383,6 +1439,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           priceSoldUnit: _roundUnitPrice(item.unitPrice),
           originalUnitPrice: item.originalUnitPrice,
           costUnitSnapshot: item.tracedCostUnit ?? 0,
+          unitCodeSnapshot: item.unitSnapshot.code,
+          unitNameSnapshot: item.unitSnapshot.name,
+          unitSymbolSnapshot: item.unitSnapshot.symbol,
+          unitPrecisionSnapshot: item.unitSnapshot.precision,
           taxTreatment: item.taxTreatment,
           taxRate: item.taxRate > 0 ? item.taxRate : null,
           taxPriceMode: item.taxPriceMode,
@@ -3007,6 +3067,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openExternalItemDialog({int? editIndex}) async {
+    final editingItem =
+        editIndex != null &&
+            editIndex >= 0 &&
+            editIndex < _items.length &&
+            _items[editIndex].isExternal
+        ? _items[editIndex]
+        : null;
+    final measurementUnitsEnabled = _measurementUnitsEnabled;
+    final unitOptions = measurementUnitsEnabled
+        ? await _loadQuickSaleUnitOptions()
+        : const [UnitOfMeasureModel.unit];
+    if (!mounted) return;
+    var selectedUnit = _quickSaleInitialUnit(editingItem);
+    if (!unitOptions.any((unit) => unit.id == selectedUnit.id)) {
+      selectedUnit = UnitOfMeasureModel.unit;
+    }
+
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
     if (isDesktop) {
       setState(() {
@@ -3016,21 +3093,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       });
       return;
     }
-
-    final editingItem =
-        editIndex != null &&
-            editIndex >= 0 &&
-            editIndex < _items.length &&
-            _items[editIndex].isExternal
-        ? _items[editIndex]
-        : null;
     final nameCtrl = TextEditingController(text: editingItem?.nombre ?? '');
     final qtyCtrl = TextEditingController(
-      text: editingItem == null
-          ? '1'
-          : (editingItem.qty % 1 == 0
-                ? editingItem.qty.toStringAsFixed(0)
-                : editingItem.qty.toStringAsFixed(2)),
+      text: formatQuantityValue(editingItem?.qty ?? 1, unit: selectedUnit),
     );
     final costCtrl = TextEditingController(
       text: editingItem?.externalCostUnit == null
@@ -3185,6 +3250,29 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         ),
                       ],
                     ),
+                    if (measurementUnitsEnabled) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedUnit.id,
+                        isExpanded: true,
+                        decoration: decoration('Unidad de medida'),
+                        items: [
+                          for (final unit in unitOptions)
+                            DropdownMenuItem<String>(
+                              value: unit.id,
+                              child: Text('${unit.name} (${unit.symbol})'),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          final next = unitOptions.firstWhere(
+                            (unit) => unit.id == value,
+                            orElse: () => UnitOfMeasureModel.unit,
+                          );
+                          selectedUnit = next;
+                          setDialogState(() {});
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: priceCtrl,
@@ -3193,7 +3281,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       ),
                       textInputAction: TextInputAction.done,
                       onChanged: (_) => setDialogState(() {}),
-                      onSubmitted: (_) => Navigator.pop(dialogContext, true),
+                      onSubmitted: (_) =>
+                          submitMobileExternalItemDialog(dialogContext),
                       decoration: decoration('Precio unitario'),
                     ),
                     const SizedBox(height: 14),
@@ -3243,7 +3332,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed: () => Navigator.pop(dialogContext, true),
+                          onPressed: () =>
+                              submitMobileExternalItemDialog(dialogContext),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF1957E6),
                             foregroundColor: Colors.white,
@@ -3284,6 +3374,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!_validateExternalItemInput(
       name: name,
       qty: qty,
+      unit: selectedUnit,
       unitPrice: unitPrice,
       externalCost: externalCost,
     )) {
@@ -3295,6 +3386,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _commitExternalItem(
       name: name,
       qty: qty,
+      unit: selectedUnit,
       unitPrice: unitPrice,
       externalCost: externalCost,
       editIndex: editIndex,
@@ -3304,11 +3396,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _validateExternalItemInput({
     required String name,
     required double qty,
+    required UnitOfMeasureModel unit,
     required double unitPrice,
     required double? externalCost,
   }) {
     return name.isNotEmpty &&
-        qty > 0 &&
+        validateQuantityForUnit(qty, unit: unit) == null &&
         unitPrice >= 0 &&
         (externalCost ?? 0) >= 0;
   }
@@ -3326,6 +3419,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   void _commitExternalItem({
     required String name,
     required double qty,
+    required UnitOfMeasureModel unit,
     required double unitPrice,
     required double? externalCost,
     int? editIndex,
@@ -3347,6 +3441,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         unitPrice: unitPrice,
         qty: qty,
         externalCostUnit: externalCost,
+        unitCodeSnapshot: unit.code,
+        unitNameSnapshot: unit.name,
+        unitSymbolSnapshot: unit.symbol,
+        unitPrecisionSnapshot: unit.precision,
       );
       if (editingItem != null && editIndex != null) {
         _items[editIndex] = next;
@@ -7022,6 +7120,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                       parseAmount: _parseAccountingInput,
                                       formatAmount: _formatAccountingInput,
                                       isAdmin: isAdmin,
+                                      measurementUnitsEnabled:
+                                          _measurementUnitsEnabled,
+                                      unitOptions: _quickSaleUnitOptions,
                                       onCancel: () => setState(() {
                                         _showDesktopManualItemForm = false;
                                         _desktopManualEditIndex = null;
@@ -7030,12 +7131,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           ({
                                             required name,
                                             required qty,
+                                            required unit,
                                             required unitPrice,
                                             required externalCost,
                                           }) {
                                             if (!_validateExternalItemInput(
                                               name: name,
                                               qty: qty,
+                                              unit: unit,
                                               unitPrice: unitPrice,
                                               externalCost: externalCost,
                                             )) {
@@ -7045,6 +7148,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                             _commitExternalItem(
                                               name: name,
                                               qty: qty,
+                                              unit: unit,
                                               unitPrice: unitPrice,
                                               externalCost: externalCost,
                                               editIndex:
@@ -11886,6 +11990,7 @@ typedef _ManualItemSubmit =
     void Function({
       required String name,
       required double qty,
+      required UnitOfMeasureModel unit,
       required double unitPrice,
       required double? externalCost,
     });
@@ -11898,6 +12003,8 @@ class _DesktopManualItemPanel extends StatefulWidget {
     required this.parseAmount,
     required this.formatAmount,
     required this.isAdmin,
+    required this.measurementUnitsEnabled,
+    required this.unitOptions,
     required this.onCancel,
     required this.onSubmit,
   });
@@ -11907,6 +12014,8 @@ class _DesktopManualItemPanel extends StatefulWidget {
   final double? Function(String raw) parseAmount;
   final String Function(num value) formatAmount;
   final bool isAdmin;
+  final bool measurementUnitsEnabled;
+  final List<UnitOfMeasureModel> unitOptions;
   final VoidCallback onCancel;
   final _ManualItemSubmit onSubmit;
 
@@ -11925,18 +12034,21 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
   final FocusNode _costFocus = FocusNode();
   final FocusNode _priceFocus = FocusNode();
   String? _manualError;
+  UnitOfMeasureModel _selectedUnit = UnitOfMeasureModel.unit;
 
   @override
   void initState() {
     super.initState();
     final item = widget.item;
+    _selectedUnit = widget.measurementUnitsEnabled
+        ? item?.unitSnapshot ?? UnitOfMeasureModel.unit
+        : UnitOfMeasureModel.unit;
+    if (!widget.unitOptions.any((unit) => unit.id == _selectedUnit.id)) {
+      _selectedUnit = UnitOfMeasureModel.unit;
+    }
     _nameCtrl = TextEditingController(text: item?.nombre ?? '');
     _qtyCtrl = TextEditingController(
-      text: item == null
-          ? '1'
-          : (item.qty % 1 == 0
-                ? item.qty.toStringAsFixed(0)
-                : item.qty.toStringAsFixed(2)),
+      text: formatQuantityValue(item?.qty ?? 1, unit: _selectedUnit),
     );
     _costCtrl = TextEditingController(
       text: item?.externalCostUnit == null
@@ -11999,7 +12111,17 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
       return;
     }
     if (_qty <= 0) {
-      setState(() => _manualError = 'La cantidad debe ser mayor que cero.');
+      setState(
+        () => _manualError =
+            validateQuantityForUnit(_qty, unit: _selectedUnit) ??
+            'La cantidad debe ser mayor que cero.',
+      );
+      _qtyFocus.requestFocus();
+      return;
+    }
+    final qtyError = validateQuantityForUnit(_qty, unit: _selectedUnit);
+    if (qtyError != null) {
+      setState(() => _manualError = qtyError);
       _qtyFocus.requestFocus();
       return;
     }
@@ -12014,6 +12136,7 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
     widget.onSubmit(
       name: name,
       qty: _qty,
+      unit: _selectedUnit,
       unitPrice: _price,
       externalCost: _costCtrl.text.trim().isEmpty ? null : _cost,
     );
@@ -12178,6 +12301,28 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
                 ),
               ],
             ),
+            if (widget.measurementUnitsEnabled) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _selectedUnit.id,
+                isExpanded: true,
+                decoration: _decoration('Unidad de medida'),
+                items: [
+                  for (final unit in widget.unitOptions)
+                    DropdownMenuItem<String>(
+                      value: unit.id,
+                      child: Text('${unit.name} (${unit.symbol})'),
+                    ),
+                ],
+                onChanged: (value) {
+                  final next = widget.unitOptions.firstWhere(
+                    (unit) => unit.id == value,
+                    orElse: () => UnitOfMeasureModel.unit,
+                  );
+                  setState(() => _selectedUnit = next);
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             _keyboardField(
               focusNode: _priceFocus,

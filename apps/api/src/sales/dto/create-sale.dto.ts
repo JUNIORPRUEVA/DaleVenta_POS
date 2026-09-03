@@ -57,6 +57,24 @@ export class CreateSaleItemDto {
   @IsNumber()
   @Min(0)
   originalUnitPriceSnapshot?: number;
+
+  @IsOptional()
+  @IsString()
+  unitCodeSnapshot?: string;
+
+  @IsOptional()
+  @IsString()
+  unitNameSnapshot?: string;
+
+  @IsOptional()
+  @IsString()
+  unitSymbolSnapshot?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrecisionSnapshot?: number;
 }
 
 export class CreateSaleDto {

@@ -236,8 +236,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
   }
 
-  UnitOfMeasureModel _unitForItem(SaleDraftItem item) =>
-      _unitForProduct(item.product);
+  UnitOfMeasureModel _unitForItem(SaleDraftItem item) {
+    if (!_measurementUnitsEnabled) return UnitOfMeasureModel.unit;
+    return item.unitSnapshot;
+  }
 
   void _disposeTextControllersAfterFrame(
     Iterable<TextEditingController> controllers,

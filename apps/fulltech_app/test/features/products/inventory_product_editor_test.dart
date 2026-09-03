@@ -6,15 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
+import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/core/uom/uom_formatters.dart';
 import 'package:daleventa_pos/core/utils/money_formatters.dart';
+import 'package:daleventa_pos/core/widgets/fulltech_dialog.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _FakeCatalogRepository extends CatalogRepository {
   _FakeCatalogRepository() : super(Dio());
@@ -26,6 +30,7 @@ class _FakeCatalogRepository extends CatalogRepository {
   double? lastTaxRate;
   String? lastTaxPriceMode;
   String? lastFotoUrl;
+  String? lastCategory;
   String? lastUnitOfMeasureId;
   UnitOfMeasureModel? lastUnitOfMeasure;
   double? lastAdjustedStock;
@@ -92,6 +97,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
     lastFotoUrl = fotoUrl;
+    lastCategory = categoria;
     lastUnitOfMeasureId = unitOfMeasureId;
     lastUnitOfMeasure = unitOfMeasure;
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -135,6 +141,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
     lastFotoUrl = fotoUrl;
+    lastCategory = categoria;
     lastUnitOfMeasureId = unitOfMeasureId;
     lastUnitOfMeasure = unitOfMeasure;
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -458,6 +465,16 @@ Future<void> _pumpMobileInventory(
 }
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await OfflineStore.instance.clearAll();
+  });
+
   test('formatea cantidades UoM sin ceros sobrantes', () {
     const yard = UnitOfMeasureModel(
       id: 'YARD',
@@ -510,6 +527,65 @@ void main() {
     expect(repo.lastUnitOfMeasureId, 'YARD');
     expect(repo.lastUnitOfMeasure?.symbol, 'yd');
   });
+
+  testWidgets(
+    'formulario crea categoria con el dialogo existente y conserva datos',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      await _pumpEditor(tester, repo: repo);
+
+      await tester.enterText(find.byType(TextField).at(0), 'Teclado Slim');
+      await tester.enterText(find.byType(TextField).at(1), 'SKU-77');
+      await tester.enterText(find.byType(TextField).at(2), '1250');
+      await tester.enterText(find.byType(TextField).at(3), '700');
+      await tester.enterText(find.byType(TextField).at(4), '8');
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Crear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nueva categoría'), findsOneWidget);
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Nombre de la categoría',
+        ),
+        'Accesorios',
+      );
+      await tester.tap(find.widgetWithText(DialogPrimaryButton, 'Crear'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nueva categoría'), findsNothing);
+
+      String textFieldValue(int index) => tester
+          .widget<TextField>(find.byType(TextField).at(index))
+          .controller!
+          .text;
+      expect(textFieldValue(0), 'Teclado Slim');
+      expect(textFieldValue(1), 'SKU-77');
+      expect(textFieldValue(2), '1250');
+      expect(textFieldValue(3), '700');
+      expect(textFieldValue(4), '8');
+      final categoryField = tester.widget<TextField>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Categoría',
+        ),
+      );
+      expect(categoryField.controller!.text, 'Accesorios');
+
+      await tester.tap(find.text('Crear producto'));
+      await tester.pumpAndSettle();
+
+      expect(repo.creates, 1);
+      expect(repo.lastCategory, 'Accesorios');
+    },
+  );
 
   testWidgets(
     'formulario oculta unidad de medida cuando el flag esta apagado',

@@ -181,10 +181,10 @@ class SaleItemModel {
     return SaleItemModel(
       id: (json['id'] ?? '').toString(),
       productId: json['productId']?.toString(),
-      productSource:
-          (json['productSource'] ?? json['product_source'])?.toString(),
-      sourceProductId:
-          (json['sourceProductId'] ?? json['source_product_id'])?.toString(),
+      productSource: (json['productSource'] ?? json['product_source'])
+          ?.toString(),
+      sourceProductId: (json['sourceProductId'] ?? json['source_product_id'])
+          ?.toString(),
       productNameSnapshot: (json['productNameSnapshot'] ?? '').toString(),
       productImageSnapshot: json['productImageSnapshot']?.toString(),
       qty: _toDouble(json['qty']),
@@ -421,6 +421,10 @@ class SaleDraftItem {
   final double priceSoldUnit;
   final double? originalUnitPrice;
   final double costUnitSnapshot;
+  final String unitCodeSnapshot;
+  final String unitNameSnapshot;
+  final String unitSymbolSnapshot;
+  final int unitPrecisionSnapshot;
   final String? taxTreatment;
   final double? taxRate;
   final String? taxPriceMode;
@@ -437,6 +441,10 @@ class SaleDraftItem {
     required this.priceSoldUnit,
     this.originalUnitPrice,
     required this.costUnitSnapshot,
+    this.unitCodeSnapshot = 'UNIT',
+    this.unitNameSnapshot = 'Unidad',
+    this.unitSymbolSnapshot = 'u',
+    this.unitPrecisionSnapshot = 0,
     this.taxTreatment,
     this.taxRate,
     this.taxPriceMode,
@@ -449,6 +457,17 @@ class SaleDraftItem {
       product?.taxTreatment ?? taxTreatment ?? 'INHERIT';
   double? get effectiveTaxRate => product?.taxRate ?? taxRate;
   String? get effectiveTaxPriceMode => product?.taxPriceMode ?? taxPriceMode;
+  UnitOfMeasureModel get unitSnapshot =>
+      product?.unitOfMeasure ??
+      UnitOfMeasureModel(
+        id: unitCodeSnapshot,
+        code: unitCodeSnapshot,
+        name: unitNameSnapshot,
+        symbol: unitSymbolSnapshot,
+        category: unitCodeSnapshot == 'UNIT' ? 'COUNT' : 'MEASURE',
+        allowDecimals: unitPrecisionSnapshot > 0,
+        precision: unitPrecisionSnapshot,
+      );
 
   SaleDraftItem copyWith({
     ProductModel? product,
@@ -462,6 +481,10 @@ class SaleDraftItem {
     double? priceSoldUnit,
     double? originalUnitPrice,
     double? costUnitSnapshot,
+    String? unitCodeSnapshot,
+    String? unitNameSnapshot,
+    String? unitSymbolSnapshot,
+    int? unitPrecisionSnapshot,
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
@@ -478,6 +501,11 @@ class SaleDraftItem {
       priceSoldUnit: priceSoldUnit ?? this.priceSoldUnit,
       originalUnitPrice: originalUnitPrice ?? this.originalUnitPrice,
       costUnitSnapshot: costUnitSnapshot ?? this.costUnitSnapshot,
+      unitCodeSnapshot: unitCodeSnapshot ?? this.unitCodeSnapshot,
+      unitNameSnapshot: unitNameSnapshot ?? this.unitNameSnapshot,
+      unitSymbolSnapshot: unitSymbolSnapshot ?? this.unitSymbolSnapshot,
+      unitPrecisionSnapshot:
+          unitPrecisionSnapshot ?? this.unitPrecisionSnapshot,
       taxTreatment: taxTreatment ?? this.taxTreatment,
       taxRate: taxRate ?? this.taxRate,
       taxPriceMode: taxPriceMode ?? this.taxPriceMode,
@@ -495,6 +523,10 @@ class SaleDraftItem {
       if (originalUnitPrice != null && originalUnitPrice != priceSoldUnit)
         'originalUnitPriceSnapshot': originalUnitPrice,
       if (productId == null) 'costUnitSnapshot': costUnitSnapshot,
+      'unitCodeSnapshot': unitSnapshot.code,
+      'unitNameSnapshot': unitSnapshot.name,
+      'unitSymbolSnapshot': unitSnapshot.symbol,
+      'unitPrecisionSnapshot': unitSnapshot.precision,
     };
   }
 
@@ -504,10 +536,12 @@ class SaleDraftItem {
     final sourceProductId = json['sourceProductId']?.toString();
     return SaleDraftItem(
       productId: productId?.trim().isEmpty == true ? null : productId,
-      productSource:
-          productSource?.trim().isEmpty == true ? null : productSource,
-      sourceProductId:
-          sourceProductId?.trim().isEmpty == true ? null : sourceProductId,
+      productSource: productSource?.trim().isEmpty == true
+          ? null
+          : productSource,
+      sourceProductId: sourceProductId?.trim().isEmpty == true
+          ? null
+          : sourceProductId,
       name: (json['productName'] ?? json['productNameSnapshot'] ?? 'Producto')
           .toString(),
       imageUrl: json['productImageSnapshot']?.toString(),
@@ -518,6 +552,18 @@ class SaleDraftItem {
         json['originalUnitPriceSnapshot'] ?? json['originalUnitPrice'],
       ),
       costUnitSnapshot: _toDouble(json['costUnitSnapshot']),
+      unitCodeSnapshot:
+          (json['unitCodeSnapshot'] ?? json['unit_code_snapshot'] ?? 'UNIT')
+              .toString(),
+      unitNameSnapshot:
+          (json['unitNameSnapshot'] ?? json['unit_name_snapshot'] ?? 'Unidad')
+              .toString(),
+      unitSymbolSnapshot:
+          (json['unitSymbolSnapshot'] ?? json['unit_symbol_snapshot'] ?? 'u')
+              .toString(),
+      unitPrecisionSnapshot: _toInt(
+        json['unitPrecisionSnapshot'] ?? json['unit_precision_snapshot'],
+      ),
       taxTreatment: json['taxTreatment']?.toString(),
       taxRate: _nullableDouble(json['taxRate']),
       taxPriceMode: json['taxPriceMode']?.toString(),
