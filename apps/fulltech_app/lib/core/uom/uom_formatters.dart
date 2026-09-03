@@ -91,6 +91,20 @@ String? validateQuantityForUnit(
   return null;
 }
 
+/// Redondea un valor a la precisión permitida por la unidad de medida.
+///
+/// Devuelve un [double] cuya representación decimal más corta no excede la
+/// precisión de la unidad. Evita que artefactos de punto flotante
+/// (p. ej. `2.3500000000000005` al restar 5.5 - 3.15) lleguen al backend al
+/// ajustar stock de productos con unidades decimales (Libra, Yarda, Kilogramo,
+/// Metro...), respetando las reglas de precisión ya existentes.
+double quantizeQuantityToUnit(num value, UnitOfMeasureModel unit) {
+  if (!unit.allowDecimals || unit.precision <= 0) {
+    return value.toDouble().roundToDouble();
+  }
+  return double.parse(value.toDouble().toStringAsFixed(unit.precision));
+}
+
 bool quantityExceedsStock(num quantity, ProductModel product) {
   final stock = product.stock;
   if (stock == null) return false;

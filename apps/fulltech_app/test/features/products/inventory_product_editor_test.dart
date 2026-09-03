@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
+import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
@@ -464,6 +465,129 @@ Future<void> _pumpMobileInventory(
   await tester.pumpAndSettle();
 }
 
+/// Simula un producto con historial: el backend rechaza el cambio de unidad.
+class _UomProtectedCatalogRepository extends _FakeCatalogRepository {
+  @override
+  Future<ProductModel> updateProduct({
+    required String id,
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    String? categoria,
+    String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
+    bool skipLoader = false,
+  }) async {
+    updates += 1;
+    throw ApiException(
+      'No se puede cambiar la unidad de medida de un producto con stock o historial.',
+      400,
+    );
+  }
+}
+
+Future<void> _pumpStockAdjustments(
+  WidgetTester tester, {
+  required ProductModel product,
+  required void Function(ProductModel product, double stock) onApplied,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: _singleWarehouseOverrides(
+        product: product,
+        companySettings: CompanySettings.empty().copyWith(
+          measurementUnitsEnabled: true,
+        ),
+      ),
+      child: MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1100,
+            child: StockAdjustmentsPage(
+              products: [product],
+              onRefresh: () async {},
+              onSetStock:
+                  (
+                    selected,
+                    stock, {
+                    warehouseId,
+                    currentWarehouseStock,
+                  }) async {
+                    onApplied(selected, stock);
+                  },
+              canAddStock: true,
+              showMeasurementUnits: true,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pumpStockAdjustmentsHarness(
+  WidgetTester tester, {
+  required ProductModel product,
+  required SetProductStockCallback onSetStock,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: _singleWarehouseOverrides(
+        product: product,
+        companySettings: CompanySettings.empty().copyWith(
+          measurementUnitsEnabled: true,
+        ),
+      ),
+      child: MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1100,
+            child: StockAdjustmentsPage(
+              products: [product],
+              onRefresh: () async {},
+              onSetStock: onSetStock,
+              canAddStock: true,
+              showMeasurementUnits: true,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+const _poundUom = UnitOfMeasureModel(
+  id: 'POUND',
+  code: 'POUND',
+  name: 'Libra',
+  symbol: 'lb',
+  category: 'WEIGHT',
+  allowDecimals: true,
+  precision: 3,
+);
+
+ProductModel _poundProduct({double stock = 10}) {
+  return ProductModel(
+    id: 'lb-1',
+    nombre: 'Carne al peso',
+    precio: 200,
+    costo: 120,
+    stock: stock,
+    categoria: 'Carnes',
+    unitOfMeasureId: _poundUom.id,
+    unitOfMeasure: _poundUom,
+  );
+}
+
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -497,6 +621,223 @@ void main() {
       '25 u',
     );
   });
+
+  testWidgets('ajuste de stock POUND acepta decimal 10 + 2.375 = 12.375 lb', (
+    tester,
+  ) async {
+    ProductModel? appliedProduct;
+    double? appliedStock;
+    await _pumpStockAdjustments(
+      tester,
+      product: _poundProduct(stock: 10),
+      onApplied: (product, stock) {
+        appliedProduct = product;
+        appliedStock = stock;
+      },
+    );
+
+    expect(find.textContaining('Stock actual: 10 lb'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(1), '2.375');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Nuevo stock: 12.375 lb'), findsOneWidget);
+    final apply = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Aplicar ajuste'),
+    );
+    expect(apply.onPressed, isNotNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Aplicar ajuste'));
+    await tester.pumpAndSettle();
+
+    expect(appliedProduct?.id, 'lb-1');
+    expect(appliedStock, 12.375);
+  });
+
+  testWidgets(
+    'ajuste rechazado (409) muestra notificacion amigable y no filtra DioException',
+    (tester) async {
+      final product = _product(
+        id: 'p-reject',
+        name: 'Producto externo',
+        category: 'General',
+        stock: 4,
+      );
+      await _pumpStockAdjustmentsHarness(
+        tester,
+        product: product,
+        onSetStock: (selected, stock, {warehouseId, currentWarehouseStock}) {
+          throw DioException(
+            requestOptions: RequestOptions(path: '/products/x/adjust-stock'),
+            type: DioExceptionType.badResponse,
+            response: Response<Object>(
+              requestOptions:
+                  RequestOptions(path: '/products/x/adjust-stock'),
+              statusCode: 409,
+              data: {
+                'statusCode': 409,
+                'message':
+                    'La fuente de productos actual no permite ajustes de stock.',
+                'error': 'Conflict',
+              },
+            ),
+          );
+        },
+      );
+
+      await tester.enterText(find.byType(TextField).at(1), '2');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Aplicar ajuste'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se pudo ajustar el stock'), findsOneWidget);
+      expect(find.textContaining('no permite modificar el stock'), findsOneWidget);
+      expect(find.textContaining('DioException'), findsNothing);
+      expect(find.textContaining('409'), findsNothing);
+      expect(find.textContaining('RequestOptions'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('persistent_feedback_card')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Cerrar notificación'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // La X cierra la notificación.
+      await tester.tap(find.byTooltip('Cerrar notificación'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('persistent_feedback_card')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('ajuste con error desconocido usa respaldo amigable', (
+    tester,
+  ) async {
+    final product = _product(
+      id: 'p-unknown',
+      name: 'Producto falla',
+      category: 'General',
+      stock: 4,
+    );
+    await _pumpStockAdjustmentsHarness(
+      tester,
+      product: product,
+      onSetStock: (selected, stock, {warehouseId, currentWarehouseStock}) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/products/x/adjust-stock'),
+          type: DioExceptionType.badResponse,
+          response: Response<Object>(
+            requestOptions: RequestOptions(path: '/products/x/adjust-stock'),
+            statusCode: 500,
+            data: {'message': 'Internal server error details'},
+          ),
+        );
+      },
+    );
+
+    await tester.enterText(find.byType(TextField).at(1), '2');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Aplicar ajuste'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pudo ajustar el stock'), findsOneWidget);
+    expect(
+      find.text(
+        'Ocurrió un problema al actualizar el inventario. Inténtalo nuevamente.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('DioException'), findsNothing);
+    expect(find.textContaining('500'), findsNothing);
+    expect(find.textContaining('Internal server'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('persistent_feedback_card')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('editar producto con stock no permite cambiar la unidad', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository()
+      ..products = [
+        _product(
+          id: 'p-stock',
+          name: 'Carne',
+          category: 'Carnes',
+          stock: 5,
+          unitOfMeasure: UnitOfMeasureModel.unit,
+        ),
+      ];
+    await _pumpEditor(
+      tester,
+      repo: repo,
+      product: repo.products.single,
+      companySettings: CompanySettings.empty().copyWith(
+        measurementUnitsEnabled: true,
+      ),
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Yarda (yd)').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repo.updates, 0);
+    expect(repo.products.single.unitOfMeasure, UnitOfMeasureModel.unit);
+    expect(
+      find.text('No se puede cambiar la unidad de medida'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('ApiException'), findsNothing);
+    expect(find.textContaining('400'), findsNothing);
+  });
+
+  testWidgets(
+    'editar producto sin stock pero con historial muestra mensaje amigable',
+    (tester) async {
+      final repo = _UomProtectedCatalogRepository()
+        ..products = [
+          _product(
+            id: 'p-history',
+            name: 'Tela',
+            category: 'Textil',
+            stock: 0,
+            unitOfMeasure: UnitOfMeasureModel.unit,
+          ),
+        ];
+      await _pumpEditor(
+        tester,
+        repo: repo,
+        product: repo.products.single,
+        companySettings: CompanySettings.empty().copyWith(
+          measurementUnitsEnabled: true,
+        ),
+      );
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Yarda (yd)').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Guardar cambios'));
+      await tester.pumpAndSettle();
+
+      expect(repo.updates, 1);
+      expect(
+        find.text('No se puede cambiar la unidad de medida'),
+        findsOneWidget,
+      );
+      expect(find.text('Guardar cambios'), findsOneWidget);
+      expect(find.textContaining('ApiException'), findsNothing);
+      expect(find.textContaining('400'), findsNothing);
+    },
+  );
 
   testWidgets('formulario permite seleccionar unidad de medida decimal', (
     tester,

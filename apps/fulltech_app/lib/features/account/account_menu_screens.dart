@@ -14,6 +14,7 @@ import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/company/company_settings_feedback.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/license/license_repository.dart';
@@ -21,6 +22,7 @@ import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/tax/product_tax_options_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -1926,6 +1928,14 @@ class _CompanySettingsEditorState
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _showSettingsNotification(AppFeedbackNotification notification) {
+    AppFeedback.showPersistentNotification(
+      context,
+      notification,
+      scope: 'company_settings',
+    );
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -2011,6 +2021,11 @@ class _CompanySettingsEditorState
           ),
       ],
     );
+    final hasCoveredToggleChange =
+        CompanySettingsFeedback.hasCoveredToggleChange(
+          widget.settings,
+          settingsDraft,
+        );
 
     setState(() => _saving = true);
     try {
@@ -2028,20 +2043,47 @@ class _CompanySettingsEditorState
       ref.invalidate(companySettingsProvider);
       ref.invalidate(productTaxUiConfigProvider);
       ref.invalidate(licenseStatusProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            queued || queuedName
-                ? 'Empresa guardada localmente y pendiente de sincronizar.'
-                : 'Datos de empresa guardados.',
+      if (hasCoveredToggleChange) {
+        _showSettingsNotification(
+          CompanySettingsFeedback.success(
+            widget.settings,
+            settingsDraft,
+            queued: queued || queuedName,
           ),
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              queued || queuedName
+                  ? 'Empresa guardada localmente y pendiente de sincronizar.'
+                  : 'Datos de empresa guardados.',
+            ),
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $error')));
+      _syncControllers(widget.settings);
+      ref.invalidate(companySettingsProvider);
+      ref.invalidate(productTaxUiConfigProvider);
+      if (hasCoveredToggleChange) {
+        _showSettingsNotification(
+          CompanySettingsFeedback.failure(
+            widget.settings,
+            settingsDraft,
+            error,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo guardar. Revisa los datos e inténtalo nuevamente.',
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

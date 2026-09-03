@@ -69,6 +69,34 @@ describe("SettingsService company master data protection", () => {
     );
   }
 
+  function buildDisableGuardTx(
+    productFindFirstResult: unknown,
+    appConfigExtra: Record<string, unknown> = {},
+  ) {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: true,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn().mockResolvedValue({ id: "company-a" }),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue(productFindFirstResult),
+      },
+      appConfig: {
+        upsert: jest
+          .fn()
+          .mockResolvedValue({ ...baseConfig(), ...appConfigExtra }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    return { tx, prisma };
+  }
+
   it("serves companies.name as the canonical companyName when appConfig is stale", async () => {
     const prisma = {
       company: {
@@ -596,26 +624,8 @@ describe("SettingsService company master data protection", () => {
     expect(response.multiWarehouseEnabled).toBe(true);
   });
 
-  it("blocks disabling measurement units when measured products exist", async () => {
-    const tx = {
-      company: {
-        findUnique: jest.fn().mockResolvedValue({
-          name: "FullPOS Cloud",
-          measurementUnitsEnabled: true,
-          multiWarehouseEnabled: false,
-        }),
-        update: jest.fn(),
-      },
-      product: {
-        findFirst: jest.fn().mockResolvedValue({ id: "product-yard" }),
-      },
-      appConfig: {
-        upsert: jest.fn(),
-      },
-    };
-    const prisma = {
-      $transaction: jest.fn((callback) => callback(tx)),
-    };
+  it("blocks disabling measurement units when an ACTIVE measured product exists", async () => {
+    const { tx, prisma } = buildDisableGuardTx({ id: "product-yard-active" });
     const service = buildService(prisma);
 
     await expect(
@@ -627,11 +637,167 @@ describe("SettingsService company master data protection", () => {
     expect(tx.product.findFirst).toHaveBeenCalledWith({
       where: {
         companyId: "company-a",
+        archivedAt: null,
         unitOfMeasureId: { not: "UNIT" },
       },
       select: { id: true },
     });
     expect(tx.company.update).not.toHaveBeenCalled();
+  });
+
+  it("allows disabling when only ARCHIVED measured products exist (ARCHIVED POUND + ACTIVE UNIT)", async () => {
+    // El filtro a nivel de BD (archivedAt: null) excluye los productos
+    // archivados: aunque el tenant tenga un POUND archivado, findFirst no lo ve.
+    const { tx, prisma } = buildDisableGuardTx(null);
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { measurementUnitsEnabled: false },
+    );
+
+    expect(tx.product.findFirst).toHaveBeenCalledWith({
+      where: {
+        companyId: "company-a",
+        archivedAt: null,
+        unitOfMeasureId: { not: "UNIT" },
+      },
+      select: { id: true },
+    });
+    expect(tx.company.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "company-a" },
+        data: expect.objectContaining({ measurementUnitsEnabled: false }),
+      }),
+    );
+    expect(response.measurementUnitsEnabled).toBe(false);
+    // El producto archivado no se toca: conserva su UoM histórico.
+    expect(tx.product.update).toBeUndefined();
+    expect(tx.product.updateMany).toBeUndefined();
+  });
+
+  it("allows disabling with several ARCHIVED measured products and only ACTIVE UNIT products", async () => {
+    // Archived POUND + YARD + METER no bloquean; solo cuentan los ACTIVOS UNIT.
+    const { tx, prisma } = buildDisableGuardTx(null);
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { measurementUnitsEnabled: false },
+    );
+
+    expect(response.measurementUnitsEnabled).toBe(false);
+    expect(tx.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: "company-a",
+          archivedAt: null,
+        }),
+      }),
+    );
+    expect(tx.company.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks disabling when an ACTIVE YARD product exists even if an ARCHIVED POUND also exists", async () => {
+    const { tx, prisma } = buildDisableGuardTx({ id: "product-yard-active" });
+    const service = buildService(prisma);
+
+    await expect(
+      service.updateSettings(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        { measurementUnitsEnabled: false },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: "company-a",
+          archivedAt: null,
+          unitOfMeasureId: { not: "UNIT" },
+        }),
+      }),
+    );
+    expect(tx.company.update).not.toHaveBeenCalled();
+  });
+
+  it("allows disabling when there are no products at all", async () => {
+    const { tx, prisma } = buildDisableGuardTx(null);
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { measurementUnitsEnabled: false },
+    );
+
+    expect(response.measurementUnitsEnabled).toBe(false);
+    expect(tx.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: "company-a",
+          archivedAt: null,
+          unitOfMeasureId: { not: "UNIT" },
+        }),
+      }),
+    );
+  });
+
+  it("keeps the disable guard strictly company-scoped (tenant isolation)", async () => {
+    // Un producto medido de OTRA empresa nunca puede bloquear: la consulta se
+    // acota SIEMPRE al companyId de la sesión.
+    const { tx, prisma } = buildDisableGuardTx(null);
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { measurementUnitsEnabled: false },
+    );
+
+    expect(response.measurementUnitsEnabled).toBe(false);
+    expect(tx.product.findFirst).toHaveBeenCalledTimes(1);
+    expect(tx.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ companyId: "company-a" }),
+      }),
+    );
+  });
+
+  it("does not run the disable guard when enabling measurement units", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      product: {
+        findFirst: jest.fn(),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue({
+          ...baseConfig(),
+          measurementUnitsEnabled: true,
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { measurementUnitsEnabled: true },
+    );
+
+    expect(tx.product.findFirst).not.toHaveBeenCalled();
+    expect(tx.company.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ measurementUnitsEnabled: true }),
+      }),
+    );
+    expect(response.measurementUnitsEnabled).toBe(true);
   });
 
   it("defaults multiWarehouseEnabled to false when loading company settings", async () => {

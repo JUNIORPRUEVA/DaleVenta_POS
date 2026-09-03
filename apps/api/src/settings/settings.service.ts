@@ -361,9 +361,14 @@ export class SettingsService {
     tx: Prisma.TransactionClient,
     companyId: string,
   ) {
+    // Solo los productos ACTIVOS (archivedAt == null) bloquean la desactivación
+    // de unidades de medida. Un producto ARCHIVADO conserva su UoM histórico
+    // pero ya no se usa en flujos activos (catálogo/ventas/recibo), por lo que
+    // no debe impedir desactivar la función.
     const measuredProduct = await tx.product.findFirst({
       where: {
         companyId,
+        archivedAt: null,
         unitOfMeasureId: { not: DEFAULT_UNIT_OF_MEASURE_ID },
       },
       select: { id: true },

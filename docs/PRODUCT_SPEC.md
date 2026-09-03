@@ -86,6 +86,7 @@ Important invariant: tenant/company data must not mix across authenticated conte
 - Non-admin access is controlled by role defaults and optional `userPermissions` overrides.
 - UAT startup refuses protected production-like database names and remote hosts unless server UAT mode is explicitly configured.
 - Products can be protected from hard deletion when business history exists; archival/idempotent behavior is tested in product service tenant tests.
+- Measurement Units can be disabled only when no ACTIVE product uses a unit of measure other than the canonical `UNIT`. An active product is one whose `archivedAt` is null (state "activo"); an archived product (`archivedAt` set, state "archivado") never blocks disabling and keeps its historical UoM, sales/quotation/purchase snapshots, and inventory history unchanged. The disable validation is strictly company-scoped.
 - Product source can be `LOCAL` or an external FullPOS integration source.
 - Multi-warehouse access is gated in routing by company settings.
 - API Docker startup can run migrations; seeds are controlled by `RUN_SEED`.

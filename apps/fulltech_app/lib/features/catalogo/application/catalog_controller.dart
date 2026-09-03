@@ -7,6 +7,7 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/uom/uom_formatters.dart';
 import '../../../core/utils/local_file_bytes.dart';
 import '../../../core/utils/product_image_url.dart';
 import '../data/catalog_repository.dart';
@@ -790,12 +791,20 @@ class CatalogController extends StateNotifier<CatalogState> {
     state = state.copyWith(saving: true, actionError: null);
     try {
       final repo = ref.read(catalogRepositoryProvider);
+      // Cuantizar a la precisión de la unidad antes de serializar evita que
+      // artefactos de punto flotante (p. ej. 5.5 - 3.15 = 2.3500000000000005)
+      // rompan la validación de precisión decimal del backend para productos
+      // medidos (Libra, Yarda, Kilogramo, Metro...).
+      final unit = product.unitOfMeasure;
       final delta = currentWarehouseStock == null
           ? null
-          : stock - currentWarehouseStock;
+          : quantizeQuantityToUnit(stock - currentWarehouseStock, unit);
+      final counted = delta == null
+          ? quantizeQuantityToUnit(stock, unit)
+          : null;
       final updated = await repo.adjustProductStock(
         id: product.id,
-        stock: delta == null ? stock : null,
+        stock: counted,
         delta: delta,
         warehouseId: warehouseId,
         reason: 'Ajuste manual de stock',

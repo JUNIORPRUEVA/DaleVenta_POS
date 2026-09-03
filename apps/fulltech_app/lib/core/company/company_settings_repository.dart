@@ -343,13 +343,19 @@ class CompanySettingsRepository {
         403,
       );
     }
+    final previousCached = await getCachedSettings();
     await _cache.writeMap(_scopedCacheKey, settings.toMap());
     try {
       final saved = await _saveSettingsRemote(settings);
       await _cache.writeMap(_scopedCacheKey, saved.toMap());
       return false;
     } on ApiException catch (e) {
-      if (!_shouldQueueSync(e)) rethrow;
+      if (!_shouldQueueSync(e)) {
+        if (previousCached != null) {
+          await _cache.writeMap(_scopedCacheKey, previousCached.toMap());
+        }
+        rethrow;
+      }
       await _syncQueue.enqueue(
         id: '$_saveSyncType:$_scopedCacheKey',
         type: _saveSyncType,

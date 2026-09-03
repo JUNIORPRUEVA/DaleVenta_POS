@@ -20,11 +20,13 @@ import '../../../core/auth/auth_provider.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
+import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/uom/uom_formatters.dart';
+import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/media_file_actions.dart';
 import '../../../core/utils/mobile_product_image_picker.dart';
 import '../../../core/utils/money_formatters.dart';
@@ -37,6 +39,7 @@ import '../../../core/widgets/fulltech_dialog.dart';
 import '../../../core/widgets/fulltech_page_header.dart';
 import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
+import '../../catalogo/application/stock_adjustment_feedback.dart';
 import '../../catalogo/data/catalog_repository.dart';
 import '../../warehouses/data/warehouse_repository.dart';
 
@@ -51,6 +54,44 @@ const double _stockLowThreshold = 5;
 const Duration _desktopImagePickerTimeout = Duration(seconds: 30);
 const String _inventoryCategoriesCacheKey = 'inventory_categories_v1';
 const String _inventorySuppliersCacheKey = 'inventory_suppliers_v1';
+
+/// Marcador (normalizado) del mensaje de negocio que emite el backend cuando
+/// un producto con stock o historial no puede cambiar su unidad de medida:
+/// "No se puede cambiar la unidad de medida de un producto con stock o historial."
+const String _uomChangeProtectedMarker =
+    'cambiar la unidad de medida de un producto con stock o historial';
+
+String _normalizeUomMessage(String text) =>
+    text.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+bool _isUomChangeProtectedError(Object error) {
+  final raw = error is ApiException ? error.message : '$error';
+  return _normalizeUomMessage(raw).contains(_uomChangeProtectedMarker);
+}
+
+/// Notificación profesional (bottom-right) para cuando no se puede cambiar la
+/// unidad de medida de un producto protegido. Nunca expone errores técnicos.
+void _showUomChangeBlockedNotification(
+  BuildContext context, {
+  required bool hasInventory,
+}) {
+  AppFeedback.showPersistentNotification(
+    context,
+    AppFeedbackNotification(
+      title: 'No se puede cambiar la unidad de medida',
+      body: hasInventory
+          ? 'Este producto ya tiene inventario asociado. Para proteger las '
+                'cantidades y los movimientos registrados, su unidad de medida '
+                'no puede cambiarse en este momento. Si necesitas otra unidad, '
+                'crea un producto nuevo con la unidad deseada.'
+          : 'Este producto tiene historial de movimientos o documentos. Para '
+                'proteger la información registrada, su unidad de medida no '
+                'puede cambiarse. Si necesitas otra unidad, crea un producto '
+                'nuevo con la unidad deseada.',
+      kind: AppFeedbackKind.warning,
+    ),
+  );
+}
 
 enum _StockLevel { out, low, high }
 
@@ -1126,7 +1167,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo exportar el catálogo: $e')),
+        const SnackBar(
+          content: Text(
+            'No se pudo exportar el catálogo. Inténtalo nuevamente.',
+          ),
+        ),
       );
     }
   }
@@ -1408,7 +1453,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo importar el catálogo: $e')),
+        const SnackBar(
+          content: Text(
+            'No se pudo importar el catálogo. Revisa el archivo e inténtalo nuevamente.',
+          ),
+        ),
       );
     }
   }
@@ -4467,11 +4516,12 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      _showTopNotice(
-        title: 'No se pudo ajustar stock',
-        message: '$e',
-        icon: Icons.error_outline_rounded,
-        accent: const Color(0xFFB42318),
+      // Error de ajuste: se muestra a través del sistema de notificación
+      // profesional compartido con mensaje amigable (nunca texto técnico).
+      AppFeedback.showPersistentNotification(
+        context,
+        StockAdjustmentFeedback.failure(e),
+        scope: 'stock_adjustment',
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -8135,6 +8185,15 @@ class _InventoryProductEditorPageState
     }
   }
 
+  /// Confirma si se puede cambiar la unidad de medida al guardar.
+  ///
+  /// La regla de dominio (backend es la autoridad) prohíbe cambiar la unidad de
+  /// medida de un producto que tenga stock O historial:
+  ///   "No se puede cambiar la unidad de medida de un producto con stock o
+  ///    historial."
+  /// El editor conoce el stock localmente, pero no el historial: cuando hay
+  /// stock se bloquea aquí con un mensaje claro y profesional; cuando no hay
+  /// stock se deja pasar y el backend decide (puede rechazar por historial).
   Future<bool> _confirmUnitChangeIfNeeded({
     required ProductModel product,
     required UnitOfMeasureModel nextUnit,
@@ -8144,34 +8203,15 @@ class _InventoryProductEditorPageState
       return true;
     }
     final currentStock = product.stock ?? 0;
-    if (currentStock <= 0) return true;
-    if (product.unitOfMeasure.category != nextUnit.category) {
-      setState(() {
-        _formError =
-            'No se puede cambiar la unidad con stock existente si cambia la categoria de medida.';
-      });
+    if (currentStock > 0) {
+      _showUomChangeBlockedNotification(context, hasInventory: true);
+      // Revierte la selección visual para no dejar una unidad sin guardar.
+      if (mounted) {
+        setState(() => _selectedUnit = product.unitOfMeasure);
+      }
       return false;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cambiar unidad de medida'),
-        content: Text(
-          'Este producto tiene stock (${formatQuantityWithUnit(currentStock, unit: product.unitOfMeasure, includeUnitForUnit: true)}). El cambio solo afecta ventas y movimientos nuevos; los documentos anteriores conservan su unidad historica.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Continuar'),
-          ),
-        ],
-      ),
-    );
-    return confirmed == true;
+    return true;
   }
 
   double? _effectiveTaxRate(ProductTaxUiConfig? taxConfig) {
@@ -8637,6 +8677,17 @@ class _InventoryProductEditorPageState
       Navigator.of(context).pop(ProductFormResult(saved: true, product: saved));
     } catch (e) {
       if (!mounted) return;
+      if (_isUomChangeProtectedError(e)) {
+        // Producto sin stock pero con historial: el backend protege la unidad.
+        // Mostramos una notificación profesional, sin exponer el error técnico.
+        setState(() {
+          _isSaving = false;
+          _formError = null;
+          _selectedUnit = product?.unitOfMeasure ?? _selectedUnit;
+        });
+        _showUomChangeBlockedNotification(context, hasInventory: false);
+        return;
+      }
       setState(() {
         _isSaving = false;
         _formError = 'No se pudo guardar: $e';

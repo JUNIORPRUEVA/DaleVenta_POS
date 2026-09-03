@@ -226,6 +226,54 @@ void main() {
     },
   );
 
+  test('business-rule rejection restores previous cached settings', () async {
+    final previous = CompanySettings.empty().copyWith(
+      companyName: 'FullPOS Cloud',
+      measurementUnitsEnabled: true,
+    );
+    await LocalJsonCache().writeMap(
+      'company_settings_cache_v1:company-a',
+      previous.toMap(),
+    );
+    final dio = Dio()
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        if (options.method.toUpperCase() == 'PATCH') {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'message':
+                  'No se puede desactivar unidades de medida mientras existan productos con unidades distintas de Unidad.',
+            }),
+            400,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return ResponseBody.fromString(
+          jsonEncode(previous.toMap()),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+    final repository = CompanySettingsRepository(
+      dio,
+      SyncQueueService(OfflineStore.instance),
+      cacheScope: 'company-a',
+    );
+
+    await expectLater(
+      repository.saveSettingsOrQueue(
+        previous.copyWith(measurementUnitsEnabled: false),
+      ),
+      throwsA(isA<Exception>()),
+    );
+    final cached = await repository.getCachedSettings();
+
+    expect(cached?.measurementUnitsEnabled, isTrue);
+  });
+
   test(
     'feature flags survive partial settings responses after save and reload',
     () async {
