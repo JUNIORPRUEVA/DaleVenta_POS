@@ -439,15 +439,25 @@ body {
 
   String _payment(ThermalReceiptViewModel receipt) {
     final payment = _clean(receipt.paymentMethod ?? '');
-    if (payment.isEmpty) return '';
-    return '''
-    <section class="payment">
-      <div class="total-row">
-        <span class="label">PAGO: ${_escape(payment.toUpperCase())}</span>
-        <span class="amount">${_escape(_money(receipt.total))}</span>
-      </div>
-    </section>
-''';
+    final cashReceived = receipt.cashReceived ?? 0;
+    final showCash = cashReceived > 0;
+    if (payment.isEmpty && !showCash) return '';
+    final rows = <String>[];
+    if (payment.isNotEmpty) {
+      rows.add(
+        _totalRow(
+          'PAGO: ${_escape(payment.toUpperCase())}',
+          _escape(_money(receipt.total)),
+        ),
+      );
+    }
+    if (showCash) {
+      rows.add(_totalRow('EFECTIVO RECIBIDO', _escape(_money(cashReceived))));
+      rows.add(
+        _totalRow('DEVUELTA', _escape(_money(receipt.changeAmount ?? 0))),
+      );
+    }
+    return '<section class="payment">${rows.join()}</section>';
   }
 
   String _notes(ThermalReceiptViewModel receipt) {

@@ -150,6 +150,8 @@ class _FakeVentasRepository implements VentasRepository {
     String? paymentMethod,
     double? paymentCashAmount,
     double? paymentTransferAmount,
+    double? cashReceived,
+    double? changeAmount,
     double? creditAmount,
     double? expectedTotalSold,
     double? globalDiscountAmount,

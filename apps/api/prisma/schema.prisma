@@ -2585,6 +2585,8 @@ model Sale {
   paymentMethod           String       @default("cash")
   paymentCashAmount       Decimal      @default(0) @db.Decimal(12, 2)
   paymentTransferAmount   Decimal      @default(0) @db.Decimal(12, 2)
+  cashReceived            Decimal?     @map("cash_received") @db.Decimal(12, 2)
+  changeAmount            Decimal?     @map("change_amount") @db.Decimal(12, 2)
   creditAmount            Decimal      @default(0) @db.Decimal(12, 2)
   creditPaidAmount        Decimal      @default(0) @db.Decimal(12, 2)
   creditBalance           Decimal      @default(0) @db.Decimal(12, 2)

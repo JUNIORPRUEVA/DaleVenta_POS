@@ -21,6 +21,8 @@ class ThermalReceiptViewModel {
     this.client,
     this.cashierName,
     this.paymentMethod,
+    this.cashReceived,
+    this.changeAmount,
     this.ncf,
     this.fiscalVoucherType,
     this.ncfExpirationDate,
@@ -45,6 +47,8 @@ class ThermalReceiptViewModel {
   final ThermalReceiptClientViewModel? client;
   final String? cashierName;
   final String? paymentMethod;
+  final double? cashReceived;
+  final double? changeAmount;
   final String? ncf;
   final String? fiscalVoucherType;
   final DateTime? ncfExpirationDate;
@@ -86,6 +90,8 @@ class ThermalReceiptViewModel {
       client: ThermalReceiptClientViewModel.fromClientInfo(data.client),
       cashierName: _cleanOrNull(data.cashierName),
       paymentMethod: _cleanOrNull(data.paymentMethod),
+      cashReceived: data.cashReceived,
+      changeAmount: data.changeAmount,
       ncf: _cleanOrNull(data.ncf),
       fiscalVoucherType: _cleanOrNull(data.fiscalVoucherType),
       ncfExpirationDate: data.ncfExpirationDate,

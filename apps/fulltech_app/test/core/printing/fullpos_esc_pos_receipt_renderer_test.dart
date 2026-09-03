@@ -339,6 +339,76 @@ void main() {
         );
     expect(withoutCashier, contains(contains('Cajero: No disponible')));
   });
+
+  test('ESC/POS shows EFECTIVO RECIBIDO and DEVUELTA for cash over-tender', () {
+    final lines = _renderer.previewLines(
+      ThermalReceiptViewModel(
+        ticketNumber: '81472316',
+        dateTime: DateTime(2026, 8, 20, 19, 29),
+        documentTitle: 'FACTURA',
+        company: const CompanyInfo(
+          name: 'FULLTECH, SRL',
+          address: 'Centro Calle Beller 9 Local N2, Higüey',
+          phone: '809-555-0000',
+          rnc: '131000000',
+        ),
+        items: const [],
+        subtotal: 850,
+        productDiscount: 0,
+        generalDiscount: 0,
+        taxableBase: 0,
+        exemptAmount: 0,
+        taxAmount: 0,
+        total: 850,
+        fiscalTaxEnabled: false,
+        taxIncluded: false,
+        paymentMethod: 'EFECTIVO',
+        cashReceived: 1000,
+        changeAmount: 150,
+      ),
+    );
+    expect(
+      lines.any(
+        (l) => l.contains('EFECTIVO RECIBIDO') && l.contains('1,000.00'),
+      ),
+      isTrue,
+    );
+    expect(
+      lines.any((l) => l.contains('DEVUELTA') && l.contains('150.00')),
+      isTrue,
+    );
+  });
+
+  test('ESC/POS omits received/devuelta rows for non-cash tickets', () {
+    final lines = _renderer.previewLines(
+      ThermalReceiptViewModel(
+        ticketNumber: '81472316',
+        dateTime: DateTime(2026, 8, 20, 19, 29),
+        documentTitle: 'FACTURA',
+        company: const CompanyInfo(
+          name: 'FULLTECH, SRL',
+          address: 'Centro Calle Beller 9 Local N2, Higüey',
+          phone: '809-555-0000',
+          rnc: '131000000',
+        ),
+        items: const [],
+        subtotal: 850,
+        productDiscount: 0,
+        generalDiscount: 0,
+        taxableBase: 0,
+        exemptAmount: 0,
+        taxAmount: 0,
+        total: 850,
+        fiscalTaxEnabled: false,
+        taxIncluded: false,
+        paymentMethod: 'TRANSFERENCIA',
+        cashReceived: 0,
+        changeAmount: 0,
+      ),
+    );
+    expect(lines.any((l) => l.contains('EFECTIVO RECIBIDO')), isFalse);
+    expect(lines.any((l) => l.contains('DEVUELTA')), isFalse);
+  });
 }
 
 final _renderer = FullPosEscPosReceiptRenderer(cutPaper: false);

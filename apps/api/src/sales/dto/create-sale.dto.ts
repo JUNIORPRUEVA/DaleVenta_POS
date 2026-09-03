@@ -142,6 +142,28 @@ export class CreateSaleDto {
   @Min(0)
   paymentTransferAmount?: number;
 
+  /**
+   * Efectivo real entregado por el cliente (tender). Nulo/ausente en
+   * clientes/ventas legados que nunca almacenaron el tender. NO es el
+   * efectivo neto aplicado a la venta (paymentCashAmount lo conserva).
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  cashReceived?: number;
+
+  /**
+   * Devuelta entregada al cliente (change). Se deriva en backend como
+   * round2(max(0, cashReceived - paymentCashAmount)) cuando el tender está
+   * disponible; si el cliente lo envía se valida contra el valor derivado.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  changeAmount?: number;
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

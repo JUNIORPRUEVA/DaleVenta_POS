@@ -312,10 +312,25 @@ class HtmlThermalReceiptPdfRenderer {
         width: 50 * PdfPageFormat.mm,
         child: pw.Padding(
           padding: pw.EdgeInsets.only(top: 1.2 * PdfPageFormat.mm),
-          child: _totalRow(
-            'PAGO: ${payment.toUpperCase()}',
-            _money(receipt.total),
-            bold: true,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _totalRow(
+                'PAGO: ${payment.toUpperCase()}',
+                _money(receipt.total),
+                bold: true,
+              ),
+              if ((receipt.cashReceived ?? 0) > 0) ...[
+                _totalRow(
+                  'EFECTIVO RECIBIDO',
+                  _money(receipt.cashReceived ?? 0),
+                ),
+                _totalRow(
+                  'DEVUELTA',
+                  _money(receipt.changeAmount ?? 0),
+                ),
+              ],
+            ],
           ),
         ),
       ),

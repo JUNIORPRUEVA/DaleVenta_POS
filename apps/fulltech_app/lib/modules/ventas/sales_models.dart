@@ -246,6 +246,11 @@ class SaleModel {
   final String paymentMethod;
   final double paymentCashAmount;
   final double paymentTransferAmount;
+  /// Efectivo real entregado por el cliente (tender). NULL = tender histórico
+  /// no almacenado (ventas legadas); 0 = no hubo efectivo.
+  final double? cashReceived;
+  /// Devuelta entregada al cliente. NULL cuando el tender es desconocido.
+  final double? changeAmount;
   final double creditAmount;
   final double creditPaidAmount;
   final double creditBalance;
@@ -289,6 +294,8 @@ class SaleModel {
     required this.paymentMethod,
     required this.paymentCashAmount,
     required this.paymentTransferAmount,
+    this.cashReceived,
+    this.changeAmount,
     required this.creditAmount,
     required this.creditPaidAmount,
     required this.creditBalance,
@@ -370,6 +377,12 @@ class SaleModel {
       paymentMethod: (json['paymentMethod'] ?? '').toString(),
       paymentCashAmount: _toDouble(json['paymentCashAmount']),
       paymentTransferAmount: _toDouble(json['paymentTransferAmount']),
+      cashReceived: json['cashReceived'] != null
+          ? _toDouble(json['cashReceived'])
+          : null,
+      changeAmount: json['changeAmount'] != null
+          ? _toDouble(json['changeAmount'])
+          : null,
       creditAmount: _toDouble(json['creditAmount']),
       creditPaidAmount: _toDouble(json['creditPaidAmount']),
       creditBalance: _toDouble(json['creditBalance']),

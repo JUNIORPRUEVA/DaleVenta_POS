@@ -32,6 +32,7 @@ import {
   CreateSaleReturnDto,
 } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
+import { deriveCashTenderChange } from "./cash-change.util";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 import {
   TerminalResolutionService,
@@ -1099,6 +1100,8 @@ export class SalesService {
       paymentMethod,
       paymentCashAmount,
       paymentTransferAmount,
+      cashReceived,
+      changeAmount,
       paidAmount,
       creditAmount,
       creditBalance,
@@ -1142,6 +1145,8 @@ export class SalesService {
             paymentMethod,
             paymentCashAmount,
             paymentTransferAmount,
+            cashReceived,
+            changeAmount,
             creditAmount,
             creditPaidAmount: paidAmount,
             creditBalance,
@@ -2437,10 +2442,22 @@ export class SalesService {
       );
     }
 
+    // Tender (efectivo recibido) y devuelta. Son OPCIONALES: cuando el cliente
+    // (versión legada) no los envía se conservan NULL para no fabricar un
+    // tender histórico inexistente. paymentCashAmount permanece como el
+    // efectivo NETO retenido por la venta.
+    const tender = deriveCashTenderChange({
+      cashReceived: dto.cashReceived,
+      changeAmount: dto.changeAmount,
+      paymentCashAmount,
+    });
+
     return {
       paymentMethod,
       paymentCashAmount,
       paymentTransferAmount,
+      cashReceived: tender.cashReceived,
+      changeAmount: tender.changeAmount,
       paidAmount,
       creditAmount,
       creditBalance,

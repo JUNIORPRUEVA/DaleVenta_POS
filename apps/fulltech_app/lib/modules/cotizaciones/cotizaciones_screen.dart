@@ -125,12 +125,19 @@ class _CheckoutResult {
     required this.cashAmount,
     required this.transferAmount,
     required this.creditAmount,
+    this.cashReceived = 0,
+    this.changeAmount = 0,
   });
 
   final _CheckoutPaymentMethod method;
+  /// Efectivo NETO aplicado/retenido por la venta (paymentCashAmount).
   final double cashAmount;
   final double transferAmount;
   final double creditAmount;
+  /// Efectivo real entregado por el cliente (tender), p.ej. 1000 en un total de 850.
+  final double cashReceived;
+  /// Devuelta entregada al cliente, p.ej. 150 en un total de 850 con 1000 recibidos.
+  final double changeAmount;
 }
 
 class _ManualItemMetric extends StatelessWidget {
@@ -5926,6 +5933,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 },
           paymentCashAmount: checkout?.cashAmount,
           paymentTransferAmount: checkout?.transferAmount,
+          cashReceived: checkout?.cashReceived,
+          changeAmount: checkout?.changeAmount,
           creditAmount: checkout?.creditAmount,
           expectedTotalSold: _roundCurrency(_total),
           globalDiscountAmount: _effectiveGeneralDiscountAmount,
@@ -9976,6 +9985,8 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
     return (widget.total - _coveredAmount).clamp(0, double.infinity);
   }
 
+  double _roundMoney(double value) => double.parse(value.toStringAsFixed(2));
+
   List<double> get _quickCashAmounts {
     final total = widget.total;
     final suggestions = <double>[];
@@ -10044,6 +10055,21 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
       _CheckoutPaymentMethod.credit =>
         _transferAmount.clamp(0, widget.total).toDouble(),
     };
+    final cashReceived = switch (_method) {
+      // Efectivo: lo que el cliente realmente entrega (puede superar el total).
+      _CheckoutPaymentMethod.cash => _roundMoney(_cashAmount),
+      // Mixto/Crédito: el campo de efectivo es la parte aplicada (sin devuelta).
+      _CheckoutPaymentMethod.transfer => 0.0,
+      _CheckoutPaymentMethod.mixed => cashAmount,
+      _CheckoutPaymentMethod.credit => cashAmount,
+    };
+    final changeAmount = switch (_method) {
+      _CheckoutPaymentMethod.cash =>
+        _roundMoney((_cashAmount - widget.total).clamp(0, double.infinity)),
+      _CheckoutPaymentMethod.transfer => 0.0,
+      _CheckoutPaymentMethod.mixed => 0.0,
+      _CheckoutPaymentMethod.credit => 0.0,
+    };
     return _CheckoutResult(
       method: _method,
       cashAmount: cashAmount,
@@ -10053,6 +10079,8 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                 .clamp(0, widget.total)
                 .toDouble()
           : 0,
+      cashReceived: cashReceived,
+      changeAmount: changeAmount,
     );
   }
 

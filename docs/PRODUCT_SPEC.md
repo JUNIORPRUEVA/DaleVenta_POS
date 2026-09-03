@@ -92,6 +92,19 @@ Important invariant: tenant/company data must not mix across authenticated conte
 - Cash drawer automatic opening is OFF by default (`autoOpenCashDrawer` for Windows/desktop). On Windows it opens only after a successful print of a NEW sale that involves cash (cash amount > 0 or method `cash`/`mixed`) and never on reprints (`isCopy`). On mobile (Android/iOS) automatic opening is governed by the existing mobile "Abrir gaveta" toggle (`openCashDrawer`) embedded in the ESC/POS print. A drawer failure never rolls back or corrupts a completed sale; it only surfaces a professional, non-blocking hardware warning.
 - Multi-warehouse access is gated in routing by company settings.
 - API Docker startup can run migrations; seeds are controlled by `RUN_SEED`.
+- Receipt payment section (EFECTIVO RECIBIDO / DEVUELTA): every sale can
+  persist two distinct cash concepts alongside the net cash: `cashReceived`
+  (cash the customer actually tendered) and `changeAmount` (DEVUELTA returned).
+  `paymentCashAmount` ALWAYS keeps its accounting meaning of NET cash retained
+  by the sale (`cashReceived - changeAmount == paymentCashAmount`). Both fields
+  are nullable: legacy/historical sales whose tender was never stored keep
+  `NULL`, and tickets for those sales must NOT fabricate EFECTIVO RECIBIDO or
+  DEVUELTA rows. New cash sales (including exact tender) print
+  `EFECTIVO RECIBIDO` and `DEVUELTA` (RD$ 0.00 for exact) from the persisted
+  values; transfer/card-only and credit-without-cash transactions do not print
+  cash rows. Reprints use the persisted tender so the reprint matches the
+  original checkout. Cash sessions, shift closing, cash reports, and cash
+  drawer eligibility all continue to use the NET `paymentCashAmount`.
 
 ## Integrations
 

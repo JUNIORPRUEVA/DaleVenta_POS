@@ -244,6 +244,22 @@ void main() {
     expect(bytes, isNotEmpty);
     expect(bytes.length, greaterThan(1000));
   });
+
+  test('HTML shows EFECTIVO RECIBIDO/DEVUELTA for cash tender', () {
+    final html = const HtmlThermalReceiptRenderer().render(
+      _receipt(total: 850, cashReceived: 1000, changeAmount: 150),
+    );
+    expect(html, contains('EFECTIVO RECIBIDO'));
+    expect(html, contains('RD\$ 1,000.00'));
+    expect(html, contains('DEVUELTA'));
+    expect(html, contains('RD\$ 150.00'));
+  });
+
+  test('HTML omits received/devuelta rows when no cash tender', () {
+    final html = const HtmlThermalReceiptRenderer().render(_receipt());
+    expect(html, isNot(contains('EFECTIVO RECIBIDO')));
+    expect(html, isNot(contains('DEVUELTA')));
+  });
 }
 
 ThermalReceiptViewModel _receipt({
@@ -263,6 +279,8 @@ ThermalReceiptViewModel _receipt({
   String? note,
   String? ncf,
   String? fiscalVoucherType,
+  double? cashReceived,
+  double? changeAmount,
 }) {
   return ThermalReceiptViewModel(
     ticketNumber: '81472316',
@@ -300,6 +318,8 @@ ThermalReceiptViewModel _receipt({
     client: client,
     cashierName: 'Yunior Lopez',
     paymentMethod: 'Efectivo',
+    cashReceived: cashReceived,
+    changeAmount: changeAmount,
     note: note,
     ncf: ncf,
     fiscalVoucherType: fiscalVoucherType,

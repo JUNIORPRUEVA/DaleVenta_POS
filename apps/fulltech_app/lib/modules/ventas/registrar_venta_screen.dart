@@ -2842,6 +2842,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           paymentMethod: payment.method,
           paymentCashAmount: payment.cashAmount,
           paymentTransferAmount: payment.transferAmount,
+          cashReceived: payment.cashReceived,
+          changeAmount: payment.changeAmount,
           expectedTotalSold: _cartTaxSummary(
             ref.read(productTaxUiConfigProvider).valueOrNull,
           ).total,
@@ -3123,11 +3125,15 @@ class _SalePaymentDraft {
     required this.method,
     required this.cashAmount,
     required this.transferAmount,
+    this.cashReceived = 0,
+    this.changeAmount = 0,
   });
 
   final String method;
   final double cashAmount;
   final double transferAmount;
+  final double cashReceived;
+  final double changeAmount;
 }
 
 class _CartTaxSummary {
@@ -3327,11 +3333,17 @@ class _SalePaymentDialogState extends State<_SalePaymentDialog> {
     if (!_formKey.currentState!.validate()) return;
     final cash = parseDominicanAmount(_cashCtrl.text) ?? 0;
     final transfer = parseDominicanAmount(_transferCtrl.text) ?? 0;
+    final roundedCash = double.parse(cash.toStringAsFixed(2));
+    final roundedTransfer = double.parse(transfer.toStringAsFixed(2));
     Navigator.of(context).pop(
       _SalePaymentDraft(
         method: _method,
-        cashAmount: double.parse(cash.toStringAsFixed(2)),
-        transferAmount: double.parse(transfer.toStringAsFixed(2)),
+        cashAmount: roundedCash,
+        transferAmount: roundedTransfer,
+        // Este diálogo exige pago exacto (efectivo == total), por lo que no
+        // existe devuelta; el efectivo recibido es el efectivo aplicado.
+        cashReceived: roundedCash,
+        changeAmount: 0,
       ),
     );
   }

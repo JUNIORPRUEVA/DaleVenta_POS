@@ -279,6 +279,10 @@ class TicketRenderer {
         ReceiptTextUtils.leftRight('Pago', data.paymentMethod!.trim(), width),
       );
     }
+    if (layout.showPaymentMethod && data.hasCashTender) {
+      addMoneyLine('EFECTIVO RECIBIDO', data.cashReceived ?? 0);
+      addMoneyLine('DEVUELTA', data.changeAmount ?? 0);
+    }
     if ((data.note ?? '').trim().isNotEmpty) {
       if (!compact58) blank();
       for (final line in ReceiptTextUtils.wrap(data.note!, width)) {

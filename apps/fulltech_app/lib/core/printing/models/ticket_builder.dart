@@ -882,7 +882,13 @@ class TicketBuilder {
         if (layout.showPaymentMethod &&
             (data.paymentMethod ?? '').trim().isNotEmpty) ...[
           pw.SizedBox(height: 1),
-          _paymentPanel(data.paymentMethod!.trim(), fonts, metrics),
+          _paymentPanel(
+            data.paymentMethod!.trim(),
+            fonts: fonts,
+            metrics: metrics,
+            cashReceived: data.hasCashTender ? data.cashReceived : null,
+            changeAmount: data.hasCashTender ? (data.changeAmount ?? 0) : null,
+          ),
         ],
       ],
     );
@@ -929,22 +935,45 @@ class TicketBuilder {
   }
 
   pw.Widget _paymentPanel(
-    String payment,
-    ({pw.Font regular, pw.Font bold}) fonts,
-    _ThermalSalesMetrics metrics,
-  ) {
+    String payment, {
+    required ({pw.Font regular, pw.Font bold}) fonts,
+    required _ThermalSalesMetrics metrics,
+    double? cashReceived,
+    double? changeAmount,
+  }) {
     return pw.Padding(
       padding: pw.EdgeInsets.only(right: metrics.totalsRightInset),
       child: pw.Align(
         alignment: pw.Alignment.centerRight,
         child: pw.SizedBox(
           width: metrics.totalsColumnWidth,
-          child: _moneyRow(
-            'PAGO',
-            _upper(payment),
-            fonts,
-            metrics.subtotalFontSize,
-            valueWidth: metrics.totalsValueWidth,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _moneyRow(
+                'PAGO',
+                _upper(payment),
+                fonts,
+                metrics.subtotalFontSize,
+                valueWidth: metrics.totalsValueWidth,
+              ),
+              if (cashReceived != null) ...[
+                _moneyRow(
+                  'EFECTIVO RECIBIDO',
+                  ReceiptTextUtils.money(cashReceived),
+                  fonts,
+                  metrics.subtotalFontSize,
+                  valueWidth: metrics.totalsValueWidth,
+                ),
+                _moneyRow(
+                  'DEVUELTA',
+                  ReceiptTextUtils.money(changeAmount ?? 0),
+                  fonts,
+                  metrics.subtotalFontSize,
+                  valueWidth: metrics.totalsValueWidth,
+                ),
+              ],
+            ],
           ),
         ),
       ),

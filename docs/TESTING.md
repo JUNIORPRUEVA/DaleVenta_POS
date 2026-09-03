@@ -109,6 +109,11 @@ User-facing features require functional validation. UI/UX changes require visual
 - Inventory/warehouse changes: run products, inventory, warehouse, UOM, purchase/sale stock tests as applicable.
 - Fiscal/sales/tax changes: run sales fiscal, tax, NCF, PDF, and related Flutter tests.
 - Cash changes: run cash backend and Flutter cash tests.
+- Cash tender/change (EFECTIVO RECIBIDO / DEVUELTA) invariants: run backend
+  `cash-change.util.spec.ts` and `cash.net-summary.spec.ts` plus Flutter
+  `ticket_cash_change_test.dart` and the ESC/POS + HTML renderer tests to
+  verify NET cash accounting, reprint fidelity, exact/over-tender/legacy
+  behavior and the legacy `NULL` (no-fabrication) rule.
 - UI shell/navigation changes: run routing/navigation/account tests plus visual validation.
 - Release changes: run build verification and release checklist.
 

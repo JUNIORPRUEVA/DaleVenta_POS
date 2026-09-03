@@ -48,6 +48,8 @@ class TicketData {
     this.client,
     this.cashierName,
     this.paymentMethod,
+    this.cashReceived,
+    this.changeAmount,
     this.subtotal,
     this.discount = 0,
     this.productDiscount = 0,
@@ -77,6 +79,13 @@ class TicketData {
   final ClientInfo? client;
   final String? cashierName;
   final String? paymentMethod;
+
+  /// Efectivo REAL entregado por el cliente (tender). Nulo = tender
+  /// desconocido/no almacenado (ventas legadas). 0 = no hubo efectivo.
+  final double? cashReceived;
+  /// Devuelta entregada al cliente. Nulo cuando el tender es desconocido.
+  final double? changeAmount;
+
   final double? subtotal;
   final double discount;
   final double productDiscount;
@@ -168,6 +177,8 @@ class TicketData {
       type: sale.isDeleted ? TicketType.refund : TicketType.sale,
       isCopy: isCopy,
       paymentMethod: paymentMethod ?? _paymentDescription(sale),
+      cashReceived: sale.cashReceived,
+      changeAmount: sale.changeAmount,
     );
   }
 
@@ -209,8 +220,15 @@ class TicketData {
       subtotal: 300,
       total: 300,
       note: 'Ticket de prueba',
+      cashReceived: 300,
+      changeAmount: 0,
     );
   }
+
+  /// True cuando hay un tender de efectivo conocido y mayor que cero
+  /// (permite imprimir EFECTIVO RECIBIDO / DEVUELTA sin fabricar datos en
+  /// ventas legadas con tender desconocido).
+  bool get hasCashTender => (cashReceived ?? 0) > 0;
 
   static String _invoiceNumber(String id) {
     final digits = id.replaceAll(RegExp(r'[^0-9]'), '');

@@ -670,6 +670,26 @@ pw.Widget _invoiceBottomSection(
                       color: _textPrimary,
                     ),
                   ),
+                  if ((sale.cashReceived ?? 0) > 0) ...[
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      'EFECTIVO RECIBIDO: ${money.format(sale.cashReceived ?? 0)}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _textPrimary,
+                      ),
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      'DEVUELTA: ${money.format(sale.changeAmount ?? 0)}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _textPrimary,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

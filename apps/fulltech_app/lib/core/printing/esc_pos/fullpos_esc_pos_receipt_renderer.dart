@@ -379,6 +379,17 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
         styles: boldB,
       );
     }
+    final cashReceived = receipt.cashReceived ?? 0;
+    if (cashReceived > 0) {
+      addB(
+        _totalLine('EFECTIVO RECIBIDO', _money(cashReceived)),
+        styles: boldB,
+      );
+      addB(
+        _totalLine('DEVUELTA', _money(receipt.changeAmount ?? 0)),
+        styles: boldB,
+      );
+    }
 
     final note = _clean(receipt.note ?? '');
     if (note.isNotEmpty) {
