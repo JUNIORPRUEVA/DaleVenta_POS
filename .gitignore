@@ -10,6 +10,7 @@ dist/
 apps/api/.env
 apps/api/.env.docker
 apps/api/.env.uat.local
+apps/fulltech_app/.env
 .env.uat.local
 
 # local/generated artifacts
