@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../features/settings/data/mobile_printer_settings_model.dart';
 import '../../features/settings/data/mobile_printer_settings_repository.dart';
+import 'cash_drawer/cash_drawer_command.dart';
 import 'mobile_esc_pos_generator.dart';
 
 final mobilePrintServiceProvider = Provider<MobilePrintService>((ref) {
@@ -460,6 +461,64 @@ class MobilePrintService {
       return MobilePrintServiceResult(
         success: false,
         message: 'No se pudo imprimir en móvil: $e',
+      );
+    } finally {
+      _printing = false;
+    }
+  }
+
+  /// Envía SOLO el pulso de apertura de la caja registradora a la impresora
+  /// térmica configurada (Bluetooth o LAN). NO imprime ningún ticket.
+  Future<MobilePrintServiceResult> sendDrawerPulse() async {
+    if (_printing) {
+      return const MobilePrintServiceResult(
+        success: false,
+        message: 'Ya hay una impresión en proceso.',
+      );
+    }
+    _printing = true;
+    try {
+      final settings = await _settingsRepository.getOrCreate();
+      if (!settings.printingEnabled) {
+        return const MobilePrintServiceResult(
+          success: true,
+          message: 'Impresión desactivada.',
+        );
+      }
+      final bytes = CashDrawerCommand.pulseBytes();
+      final connection = settings.connectionType;
+      if (connection == MobilePrinterConnectionType.bluetooth) {
+        final result = await _printBluetooth(
+          lines: const <String>[],
+          settings: settings,
+          rawBytes: bytes,
+        );
+        if (result.success) {
+          return const MobilePrintServiceResult(
+            success: true,
+            message: 'Orden de apertura de caja enviada por Bluetooth.',
+          );
+        }
+        return result;
+      }
+      if (connection == MobilePrinterConnectionType.network) {
+        final result = await _printNetwork(
+          lines: const <String>[],
+          settings: settings,
+          rawBytes: bytes,
+        );
+        if (result.success) {
+          return const MobilePrintServiceResult(
+            success: true,
+            message: 'Orden de apertura de caja enviada por LAN.',
+          );
+        }
+        return result;
+      }
+      return const MobilePrintServiceResult(
+        success: false,
+        message:
+            'Para abrir la caja registradora usa una impresora térmica Bluetooth o LAN.',
       );
     } finally {
       _printing = false;

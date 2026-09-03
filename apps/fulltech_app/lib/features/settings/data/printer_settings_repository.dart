@@ -42,6 +42,7 @@ class PrinterSettingsRepository {
         charsPerLine INTEGER NOT NULL DEFAULT 48,
         autoPrintOnPayment INTEGER NOT NULL DEFAULT 1,
         autoOpenDrawerOnChargeWithoutTicket INTEGER NOT NULL DEFAULT 0,
+        autoOpenCashDrawer INTEGER NOT NULL DEFAULT 0,
         copies INTEGER NOT NULL DEFAULT 1,
         showItbis INTEGER NOT NULL DEFAULT 1,
         showElectronicInvoiceReference INTEGER NOT NULL DEFAULT 1,
@@ -102,6 +103,7 @@ class PrinterSettingsRepository {
     'autoPrintOnPayment': 'autoPrintOnPayment INTEGER NOT NULL DEFAULT 1',
     'autoOpenDrawerOnChargeWithoutTicket':
         'autoOpenDrawerOnChargeWithoutTicket INTEGER NOT NULL DEFAULT 0',
+    'autoOpenCashDrawer': 'autoOpenCashDrawer INTEGER NOT NULL DEFAULT 0',
     'copies': 'copies INTEGER NOT NULL DEFAULT 1',
     'showItbis': 'showItbis INTEGER NOT NULL DEFAULT 1',
     'showElectronicInvoiceReference':

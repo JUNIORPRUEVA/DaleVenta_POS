@@ -11,6 +11,7 @@ import '../../modules/ventas/sales_models.dart';
 import '../update/print_activity_tracker.dart';
 import 'esc_pos/fullpos_esc_pos_receipt_renderer.dart';
 import 'esc_pos/thermal_receipt_view_model.dart';
+import 'cash_drawer/cash_drawer_service.dart';
 import 'html/html_thermal_receipt_pdf_renderer.dart';
 import 'mobile_print_service.dart';
 import 'models/models.dart';
@@ -37,12 +38,19 @@ class PrintTicketResult {
     required this.message,
     this.ticketNumber,
     this.skipped = false,
+    this.warning,
   });
 
   final bool success;
   final String message;
   final String? ticketNumber;
   final bool skipped;
+
+  /// Advertencia NO bloqueante opcional (p. ej. la venta se completó pero no
+  /// fue posible abrir la caja registradora automáticamente). La impresión y
+  /// la venta siguen siendo exitosas; esto solo informa de un efecto de
+  /// hardware secundario.
+  final String? warning;
 }
 
 /// Transporte RAW de Windows NO disponible fuera de Windows (Android/iOS/web).
@@ -547,11 +555,36 @@ class UnifiedTicketPrinter {
     List<SaleItemModel>? items,
     int? copies,
     bool isCopy = false,
-  }) {
-    return printTicket(
+  }) async {
+    final result = await printTicket(
       TicketData.fromSale(sale, items: items, isCopy: isCopy),
       overrideCopies: copies,
     );
+    // Apertura automática de caja registradora SOLO después de que la
+    // impresión de una venta NUEVA (no copia/reimpresión) llegó a su punto de
+    // éxito. Un fallo del cajón jamás altera el resultado de la venta.
+    if (!isCopy && result.success) {
+      try {
+        final drawerResult = await _ref
+            .read(cashDrawerServiceProvider)
+            .openDrawerAfterEligibleSalePrint(sale: sale);
+        if (drawerResult.shouldWarn) {
+          return PrintTicketResult(
+            success: true,
+            message: result.message,
+            ticketNumber: result.ticketNumber,
+            warning: drawerResult.message,
+          );
+        }
+        debugPrint('[CASH DRAWER] ${drawerResult.message}');
+      } catch (error, stackTrace) {
+        // Aislamiento: un fallo inesperado del cajón no debe romper la
+        // impresión ni la venta ya completada.
+        debugPrint('[CASH DRAWER] error post-print: $error');
+        debugPrint(stackTrace.toString());
+      }
+    }
+    return result;
   }
 
   Future<PrintTicketResult> autoPrintSale({

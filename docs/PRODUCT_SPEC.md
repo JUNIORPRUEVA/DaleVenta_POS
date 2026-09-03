@@ -67,6 +67,7 @@ Confirmed capabilities:
 - When measurement units are enabled for the company, quick/manual sale items can carry a configured unit-of-measure snapshot such as Unidad, Yarda, or Libra through sale creation.
 - Multi-warehouse feature flag and terminal warehouse assignment.
 - Cash session/movement workflows and close ticket printing.
+- Cash drawer / money drawer support through a compatible thermal ESC/POS printer: a centralized cash-drawer service sends only the standard `ESC p` kick pulse through the configured receipt printer (Windows RAW spooler; mobile Bluetooth/LAN ESC/POS path). Includes a "Probar apertura de caja" action and optional automatic opening after eligible cash-sale prints (OFF by default).
 - Sales fiscal payloads, tax calculation, NCF sequences and audit logs.
 - Quotation and purchase document PDF generation.
 - Product image upload and storage through API uploads and/or external object storage.
@@ -88,6 +89,7 @@ Important invariant: tenant/company data must not mix across authenticated conte
 - Products can be protected from hard deletion when business history exists; archival/idempotent behavior is tested in product service tenant tests.
 - Measurement Units can be disabled only when no ACTIVE product uses a unit of measure other than the canonical `UNIT`. An active product is one whose `archivedAt` is null (state "activo"); an archived product (`archivedAt` set, state "archivado") never blocks disabling and keeps its historical UoM, sales/quotation/purchase snapshots, and inventory history unchanged. The disable validation is strictly company-scoped.
 - Product source can be `LOCAL` or an external FullPOS integration source.
+- Cash drawer automatic opening is OFF by default (`autoOpenCashDrawer` for Windows/desktop). On Windows it opens only after a successful print of a NEW sale that involves cash (cash amount > 0 or method `cash`/`mixed`) and never on reprints (`isCopy`). On mobile (Android/iOS) automatic opening is governed by the existing mobile "Abrir gaveta" toggle (`openCashDrawer`) embedded in the ESC/POS print. A drawer failure never rolls back or corrupts a completed sale; it only surfaces a professional, non-blocking hardware warning.
 - Multi-warehouse access is gated in routing by company settings.
 - API Docker startup can run migrations; seeds are controlled by `RUN_SEED`.
 
@@ -112,6 +114,7 @@ Confirmed or configured integrations:
 - Existing documentation is extensive but scattered across root audit reports, phase reports, and `docs/`.
 - Secret-bearing `.env` files exist in the local workspace and must not be exposed.
 - Some modules appear broad and may contain legacy behavior; owner validation is required before changing fiscal, inventory, license, tenant, or production workflows.
+- Cash drawer automatic opening is supported for POS/cash sale prints only. The web/PWA browser cannot issue low-level drawer commands; the drawer is a Windows or mobile Bluetooth/LAN hardware action. Manual drawer opening from other cash interfaces and drawer behavior on shift-close prints are pending owner decisions (see CASH-DRAWER-01 report).
 
 ## Unfinished or Experimental Areas
 

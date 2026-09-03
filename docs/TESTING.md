@@ -111,3 +111,23 @@ User-facing features require functional validation. UI/UX changes require visual
 - Cash changes: run cash backend and Flutter cash tests.
 - UI shell/navigation changes: run routing/navigation/account tests plus visual validation.
 - Release changes: run build verification and release checklist.
+
+## Physical Hardware QA (cash drawer / money drawer)
+
+Automated tests are NOT sufficient for a GO on cash-drawer capability. A real
+hardware test is required when compatible equipment is available:
+
+1. Connect a standard cash drawer to a compatible thermal receipt printer.
+2. Configure that printer in FullPOS (Impresora y tickets).
+3. Tap "Probar apertura de caja": the drawer physically opens without printing a
+   receipt.
+4. Enable "Abrir caja automáticamente" and print an eligible cash sale: the
+   receipt prints and the drawer opens exactly once.
+5. Disable automatic opening and print again: the receipt prints and the drawer
+   stays closed.
+6. Verify a non-cash or administrative print (or a reprint) does NOT open the
+   drawer unexpectedly.
+
+Without compatible hardware the implementation is CODE COMPLETE but remains
+`NO-GO — HARDWARE QA PENDING`; hardware results must never be faked.
+

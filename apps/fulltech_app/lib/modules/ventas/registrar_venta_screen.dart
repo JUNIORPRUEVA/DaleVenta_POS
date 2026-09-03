@@ -2772,6 +2772,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               ),
             ),
           );
+        } else if (printResult.warning != null && mounted) {
+          // La venta se completó; solo se informa que la caja no se abrió.
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor:
+                  Theme.of(context).colorScheme.tertiaryContainer,
+              content: Text(printResult.warning!),
+            ),
+          );
         }
       }
 

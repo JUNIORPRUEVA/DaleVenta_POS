@@ -36,6 +36,7 @@ class PrinterSettingsModel {
     this.charsPerLine = 48,
     this.autoPrintOnPayment = true,
     this.autoOpenDrawerOnChargeWithoutTicket = false,
+    this.autoOpenCashDrawer = false,
     this.copies = 1,
     this.showItbis = true,
     this.showElectronicInvoiceReference = true,
@@ -83,6 +84,11 @@ class PrinterSettingsModel {
   final int charsPerLine;
   final bool autoPrintOnPayment;
   final bool autoOpenDrawerOnChargeWithoutTicket;
+
+  /// Abre la caja registradora automáticamente tras imprimir una venta en
+  /// efectivo elegible (solo escritorio/Windows). Por defecto OFF para no
+  /// cambiar el comportamiento de instalaciones existentes.
+  final bool autoOpenCashDrawer;
   final int copies;
   final bool showItbis;
   final bool showElectronicInvoiceReference;
@@ -131,6 +137,7 @@ class PrinterSettingsModel {
     int? charsPerLine,
     bool? autoPrintOnPayment,
     bool? autoOpenDrawerOnChargeWithoutTicket,
+    bool? autoOpenCashDrawer,
     int? copies,
     bool? showItbis,
     bool? showElectronicInvoiceReference,
@@ -182,6 +189,7 @@ class PrinterSettingsModel {
       autoOpenDrawerOnChargeWithoutTicket:
           autoOpenDrawerOnChargeWithoutTicket ??
           this.autoOpenDrawerOnChargeWithoutTicket,
+      autoOpenCashDrawer: autoOpenCashDrawer ?? this.autoOpenCashDrawer,
       copies: copies ?? this.copies,
       showItbis: showItbis ?? this.showItbis,
       showElectronicInvoiceReference:
@@ -234,6 +242,7 @@ class PrinterSettingsModel {
     'charsPerLine': charsPerLine,
     'autoPrintOnPayment': autoPrintOnPayment,
     'autoOpenDrawerOnChargeWithoutTicket': autoOpenDrawerOnChargeWithoutTicket,
+    'autoOpenCashDrawer': autoOpenCashDrawer,
     'copies': copies,
     'showItbis': showItbis,
     'showElectronicInvoiceReference': showElectronicInvoiceReference,
@@ -313,6 +322,7 @@ class PrinterSettingsModel {
         'autoOpenDrawerOnChargeWithoutTicket',
         false,
       ),
+      autoOpenCashDrawer: b('autoOpenCashDrawer', false),
       copies: i('copies', 1).clamp(0, 5),
       showItbis: b('showItbis', true),
       showElectronicInvoiceReference: b('showElectronicInvoiceReference', true),

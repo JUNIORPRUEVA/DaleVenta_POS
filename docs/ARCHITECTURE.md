@@ -121,6 +121,42 @@ OWNER VALIDATION REQUIRED for the complete supported offline guarantee per modul
 - Flutter contains `core/pdf`, `core/printing`, PDF services in sales/cotizaciones/compras/contabilidad, and printer settings.
 - Receipt/ticket rendering and platform printer transports are covered by tests.
 
+## Cash Drawer (Hardware) Integration
+
+Cash-drawer control is a hardware side effect of the POS printing stack, kept
+logically separate from documents, sales, inventory, and fiscal records.
+
+Architecture (see `CASH-DRAWER-01` report):
+
+```text
+POS cash sale / test button
+  -> Printer settings (autoOpenCashDrawer, printer name)
+  -> UnifiedTicketPrinter (sale receipt; success point reached)
+  -> CashDrawerService (lib/core/printing/cash_drawer/cash_drawer_service.dart)
+  -> CashDrawerCommand.pulseBytes()  (standard ESC/POS `ESC p`, Pin 2 default)
+  -> WindowsRawPrinterTransport (WinSpool RAW) on Windows
+     |  MobilePrintService.sendDrawerPulse() on Android/iOS (Bluetooth/LAN)
+     -> thermal printer -> RJ11/RJ12 drawer pulse
+```
+
+- Centralized: only `CashDrawerService` emits drawer bytes; no screen writes raw
+  kick commands. `cash_drawer_command.dart` is the single command source
+  (standard `ESC p`, capability-based, no per-brand adapters).
+- Windows: drawer pulses are sent as a RAW WinSpool job to the configured
+  receipt printer regardless of `windowsPrinterMode`, so the normal PDF/driver
+  receipt stack is untouched. Reprints never open the drawer.
+- Mobile (Android/iOS): the "Abrir gaveta" toggle embeds the pulse in the
+  existing ESC/POS Bluetooth/LAN path; the test action uses
+  `MobilePrintService.sendDrawerPulse()` (drawer only, no receipt).
+- Web/PWA: no raw drawer commands from the browser; reported as unsupported.
+- Failure isolation: a drawer failure never rolls back or corrupts a completed
+  sale/print; it returns a non-blocking `PrintTicketResult.warning`.
+- Settings: desktop `PrinterSettingsModel.autoOpenCashDrawer` (local per-device
+  sqflite column, auto-migrated, OFF default); mobile `openCashDrawer`.
+- Tests: `test/core/printing/cash_drawer/*` cover command bytes, service
+  policy/transports, and `printSaleTicket` wiring; widget test covers the
+  settings UI section. Physical hardware QA is required before GO.
+
 ## External Services
 
 Configured integrations include PostgreSQL, optional Redis, R2-compatible storage, FullPOS product source, Appyra usage telemetry, email/password reset provider variables, EasyPanel, Docker, and Codemagic.

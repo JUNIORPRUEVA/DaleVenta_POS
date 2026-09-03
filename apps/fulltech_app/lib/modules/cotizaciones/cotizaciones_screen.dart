@@ -5790,6 +5790,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             icon: Icons.print_disabled_outlined,
             accent: const Color(0xFFF59E0B),
           );
+        } else if (printResult.warning != null && mounted) {
+          // La venta se completó; solo se informa que la caja no se abrió.
+          _showSalesNotice(
+            title: 'Caja registradora',
+            message: printResult.warning!,
+            icon: Icons.point_of_sale_outlined,
+            accent: const Color(0xFFF59E0B),
+          );
         }
       }
 

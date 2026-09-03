@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/printing/cash_drawer/cash_drawer_service.dart';
 import '../../../core/printing/mobile_print_service.dart';
 import '../../../core/printing/models/models.dart';
 import '../../../core/printing/printing_platform_resolver.dart';
@@ -49,6 +50,7 @@ class _WindowsPrinterSettingsViewState
   bool _loading = true;
   bool _saving = false;
   bool _testing = false;
+  bool _drawerTesting = false;
   bool _showAdvanced = false;
   Timer? _saveDebounce;
 
@@ -130,6 +132,20 @@ class _WindowsPrinterSettingsViewState
     if (!mounted) return;
     setState(() => _testing = false);
     showCashToast(context, result.message, isError: !result.success);
+  }
+
+  Future<void> _testDrawer() async {
+    final drawerService = ref.read(cashDrawerServiceProvider);
+    setState(() => _drawerTesting = true);
+    final result = await drawerService.testOpenDrawer();
+    if (!mounted) return;
+    setState(() => _drawerTesting = false);
+    showCashToast(
+      context,
+      result.title,
+      detail: result.message,
+      isError: !result.success,
+    );
   }
 
   Widget _switch({
@@ -308,6 +324,42 @@ class _WindowsPrinterSettingsViewState
               value: settings.showBusinessData,
               onChanged: (value) =>
                   _save(settings.copyWith(showBusinessData: value)),
+            ),
+            const Divider(height: 18),
+            const Text(
+              'Caja registradora',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 6),
+            _switch(
+              title: 'Abrir caja automáticamente',
+              value: settings.autoOpenCashDrawer,
+              onChanged: (value) =>
+                  _save(settings.copyWith(autoOpenCashDrawer: value)),
+            ),
+            Text(
+              'Abre la caja después de imprimir una venta en efectivo. '
+              'Requiere una impresora térmica compatible con la caja '
+              'registradora conectada.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: (_testing || _drawerTesting) ? null : _testDrawer,
+                icon: _drawerTesting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.point_of_sale_outlined),
+                label: const Text('Probar apertura de caja'),
+              ),
             ),
             const SizedBox(height: 12),
             const Text(
@@ -626,6 +678,33 @@ class _MobilePrinterSettingsViewState
   Future<void> _testNetwork(MobilePrinterSettingsModel settings) {
     final printService = ref.read(mobilePrintServiceProvider);
     return _run(() => printService.testNetworkConnection(settings));
+  }
+
+  Future<void> _testMobileDrawer() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await ref.read(cashDrawerServiceProvider).testOpenDrawer();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.message.trim().isEmpty
+                ? result.title
+                : '${result.title}\n${result.message}',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo abrir la caja registradora.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   String _statusText(MobilePrinterConnectionStatus status) {
@@ -1286,6 +1365,15 @@ class _MobilePrinterSettingsViewState
                 value: settings.openCashDrawer,
                 onChanged: (value) =>
                     _save(settings.copyWith(openCashDrawer: value)),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _testMobileDrawer,
+                  icon: const Icon(Icons.point_of_sale_outlined),
+                  label: const Text('Probar apertura de caja'),
+                ),
               ),
             ],
           ),
