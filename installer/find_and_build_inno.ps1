@@ -1,8 +1,14 @@
+param(
+  [string]$Version = '1.0.3+120',
+  [string]$VersionInfo = '1.0.3.120',
+  [string]$SourceDir = '..\apps\fulltech_app\build\windows\x64\runner\Release'
+)
+
 $ErrorActionPreference = 'Stop'
 
-$installerDir = 'c:\Users\pc\DEV\PROYECTOS\INTERNO\FULLTECH\installer'
+$installerDir = $PSScriptRoot
 $setupScript = Join-Path $installerDir 'setup.iss'
-$outputExe = Join-Path $installerDir 'output\setup.exe'
+$outputExe = Join-Path $installerDir ('output\FullPOS-Cloud-Setup-' + ($Version -replace '\+', '-') + '.exe')
 $reportPath = Join-Path $installerDir 'inno-build-report.txt'
 
 function Find-IsccPath {
@@ -13,9 +19,9 @@ function Find-IsccPath {
     'C:\Program Files\Inno Setup 6\ISCC.exe',
     'C:\Program Files\Inno Setup 5\ISCC.exe',
     'C:\Program Files (x86)\Inno Setup 5\ISCC.exe',
-    'C:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
   )) {
-    if (Test-Path $path) { $candidates.Add($path) }
+    if (Test-Path -LiteralPath $path) { $candidates.Add($path) }
   }
 
   foreach ($root in @(
@@ -29,7 +35,7 @@ function Find-IsccPath {
           foreach ($possible in @($item.InstallLocation, (Split-Path ($item.DisplayIcon -as [string]) -Parent))) {
             if ($possible) {
               $iscc = Join-Path $possible 'ISCC.exe'
-              if (Test-Path $iscc) { $candidates.Add($iscc) }
+              if (Test-Path -LiteralPath $iscc) { $candidates.Add($iscc) }
             }
           }
         }
@@ -40,7 +46,7 @@ function Find-IsccPath {
   foreach ($dir in @('C:\Program Files', 'C:\Program Files (x86)')) {
     Get-ChildItem $dir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'Inno Setup*' } | ForEach-Object {
       $iscc = Join-Path $_.FullName 'ISCC.exe'
-      if (Test-Path $iscc) { $candidates.Add($iscc) }
+      if (Test-Path -LiteralPath $iscc) { $candidates.Add($iscc) }
     }
   }
 
@@ -61,7 +67,7 @@ if (-not $isccPath) {
 
 $before = if (Test-Path $outputExe) { (Get-Item $outputExe).LastWriteTimeUtc.ToString('o') } else { '' }
 
-& $isccPath $setupScript *> $reportPath
+& $isccPath $setupScript "/DMyAppVersion=$Version" "/DMyAppVersionInfo=$VersionInfo" "/DMyAppSourceDir=$SourceDir" *> $reportPath
 
 $afterExists = Test-Path $outputExe
 $after = if ($afterExists) { (Get-Item $outputExe).LastWriteTimeUtc.ToString('o') } else { '' }
