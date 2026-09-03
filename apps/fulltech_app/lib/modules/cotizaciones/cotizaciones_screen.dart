@@ -5915,6 +5915,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     // Tipo fiscal EFECTIVO: con impuestos/comprobantes OFF queda vacío → la
     // venta se guarda como Normal y NO se reserva ni consume NCF en el backend.
     final voucherType = _effectiveFiscalVoucherType;
+    final tax = _quoteTaxSummary;
     return ref
         .read(ventasRepositoryProvider)
         .createSale(
@@ -5938,6 +5939,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           creditAmount: checkout?.creditAmount,
           expectedTotalSold: _roundCurrency(_total),
           globalDiscountAmount: _effectiveGeneralDiscountAmount,
+          optimisticTaxableBase: tax.taxableBase,
+          optimisticTaxAmount: tax.taxAmount,
+          optimisticExemptAmount: tax.exemptAmount,
+          optimisticDiscountAmount: _effectiveGeneralDiscountAmount,
+          optimisticFiscalTaxEnabled: tax.taxEnabled,
           fiscalVoucherType: voucherType.isEmpty ? null : voucherType,
           fiscalCustomerTaxId: voucherType.isEmpty
               ? null

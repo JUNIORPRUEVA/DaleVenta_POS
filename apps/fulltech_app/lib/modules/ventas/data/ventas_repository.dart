@@ -622,6 +622,15 @@ class VentasRepository {
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
+    // Valores fiscales AUTORITATIVOS del carrito, usados SOLO para el modelo
+    // local optimista (impresión inmediata offline). NUNCA se envían al
+    // backend (éste recalcula impuestos; el payload NO debe incluir campos
+    // que el DTO no acepta).
+    double? optimisticTaxableBase,
+    double? optimisticTaxAmount,
+    double? optimisticExemptAmount,
+    double? optimisticDiscountAmount,
+    bool? optimisticFiscalTaxEnabled,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -762,6 +771,11 @@ class VentasRepository {
         cashReceived: cashReceived,
         changeAmount: changeAmount,
         creditAmount: creditAmount ?? 0,
+        optimisticTaxableBase: optimisticTaxableBase,
+        optimisticTaxAmount: optimisticTaxAmount,
+        optimisticExemptAmount: optimisticExemptAmount,
+        optimisticDiscountAmount: optimisticDiscountAmount,
+        optimisticFiscalTaxEnabled: optimisticFiscalTaxEnabled,
         items: items,
         totalSold: expectedTotalSold,
       );
@@ -904,6 +918,11 @@ class VentasRepository {
     double? cashReceived,
     double? changeAmount,
     required double creditAmount,
+    double? optimisticTaxableBase,
+    double? optimisticTaxAmount,
+    double? optimisticExemptAmount,
+    double? optimisticDiscountAmount,
+    bool? optimisticFiscalTaxEnabled,
     required List<SaleDraftItem> items,
     double? totalSold,
   }) {
@@ -964,6 +983,11 @@ class VentasRepository {
       creditStatus: paymentMethod == 'credit'
           ? (balance > 0 ? 'open' : 'paid')
           : 'none',
+      fiscalTaxEnabled: optimisticFiscalTaxEnabled ?? false,
+      taxableBase: optimisticTaxableBase ?? 0,
+      taxAmount: optimisticTaxAmount ?? 0,
+      exemptAmount: optimisticExemptAmount ?? 0,
+      discountAmount: optimisticDiscountAmount ?? 0,
       isDeleted: false,
       deletedAt: null,
       items: saleItems,

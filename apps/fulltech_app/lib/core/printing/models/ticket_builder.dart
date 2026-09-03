@@ -880,10 +880,13 @@ class TicketBuilder {
           metrics: metrics,
         ),
         if (layout.showPaymentMethod &&
-            (data.paymentMethod ?? '').trim().isNotEmpty) ...[
-          pw.SizedBox(height: 1),
+            ((data.paymentMethod ?? '').trim().isNotEmpty ||
+                data.hasCashTender)) ...[
+          _lightRule(top: 5, bottom: 2),
           _paymentPanel(
-            data.paymentMethod!.trim(),
+            data.paymentMethod!.trim().isEmpty
+                ? (data.hasCashTender ? 'EFECTIVO' : '')
+                : data.paymentMethod!.trim(),
             fonts: fonts,
             metrics: metrics,
             cashReceived: data.hasCashTender ? data.cashReceived : null,

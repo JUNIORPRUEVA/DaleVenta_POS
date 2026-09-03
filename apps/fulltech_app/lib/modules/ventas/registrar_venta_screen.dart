@@ -2832,6 +2832,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   Future<SaleModel?> _createSale(_SalePaymentDraft payment) async {
+    final tax = _cartTaxSummary(
+      ref.read(productTaxUiConfigProvider).valueOrNull,
+    );
     final sale = await ref
         .read(ventasRepositoryProvider)
         .createSale(
@@ -2844,10 +2847,13 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           paymentTransferAmount: payment.transferAmount,
           cashReceived: payment.cashReceived,
           changeAmount: payment.changeAmount,
-          expectedTotalSold: _cartTaxSummary(
-            ref.read(productTaxUiConfigProvider).valueOrNull,
-          ).total,
+          expectedTotalSold: tax.total,
           fiscalVoucherType: _selectedFiscalVoucherType,
+          optimisticTaxableBase: tax.taxableBase,
+          optimisticTaxAmount: tax.taxAmount,
+          optimisticExemptAmount: tax.exemptAmount,
+          optimisticDiscountAmount: 0,
+          optimisticFiscalTaxEnabled: tax.taxEnabled,
           items: _cart,
         );
     ref.read(operationsDataRefreshProvider).refreshSalesAndCash();

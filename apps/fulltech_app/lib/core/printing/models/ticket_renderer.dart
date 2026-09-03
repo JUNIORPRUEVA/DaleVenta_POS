@@ -273,15 +273,27 @@ class TicketRenderer {
       }
     }
     addMoneyLine('TOTAL', data.total);
-    if (layout.showPaymentMethod &&
-        (data.paymentMethod ?? '').trim().isNotEmpty) {
-      add(
-        ReceiptTextUtils.leftRight('Pago', data.paymentMethod!.trim(), width),
-      );
-    }
-    if (layout.showPaymentMethod && data.hasCashTender) {
-      addMoneyLine('EFECTIVO RECIBIDO', data.cashReceived ?? 0);
-      addMoneyLine('DEVUELTA', data.changeAmount ?? 0);
+    final hasPaymentSection =
+        layout.showPaymentMethod &&
+        (((data.paymentMethod ?? '').trim().isNotEmpty) ||
+            data.hasCashTender);
+    if (hasPaymentSection) {
+      // Separación visual: el bloque de pago no debe parecer parte del
+      // cálculo de impuestos/subtotal.
+      blank();
+      if ((data.paymentMethod ?? '').trim().isNotEmpty) {
+        add(
+          ReceiptTextUtils.leftRight(
+            'Pago',
+            data.paymentMethod!.trim(),
+            width,
+          ),
+        );
+      }
+      if (data.hasCashTender) {
+        addMoneyLine('EFECTIVO RECIBIDO', data.cashReceived ?? 0);
+        addMoneyLine('DEVUELTA', data.changeAmount ?? 0);
+      }
     }
     if ((data.note ?? '').trim().isNotEmpty) {
       if (!compact58) blank();
