@@ -305,7 +305,7 @@ describe("ProductsService stock hardening", () => {
     };
     const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
     const inventory = {
-      increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+      setCountedStockInTransaction: jest.fn().mockResolvedValue({}),
     };
     const service = buildService(prisma, inventory);
 
@@ -318,13 +318,15 @@ describe("ProductsService stock hardening", () => {
       where: { id: companyA },
       select: { multiWarehouseEnabled: true },
     });
-    expect(inventory.increaseStockInTransaction).toHaveBeenCalledWith(
+    expect(inventory.setCountedStockInTransaction).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
         companyId: companyA,
         productId: "product-1",
         warehouseId: "warehouse-main",
-        quantity: new Prisma.Decimal("1"),
+        countedQuantity: new Prisma.Decimal("1"),
+        expectedCurrentQuantity: new Prisma.Decimal("0"),
+        sourceType: "PRODUCT_STOCK_COUNT",
         reason: "Ajuste desde facturacion",
         createdByUserId: "user-a",
       }),
