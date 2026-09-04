@@ -919,8 +919,7 @@ class VentasRepository {
   Future<bool> _currentInventoryEnabled() async {
     CompanySettings? settings;
     try {
-      settings = await _companySettingsRepository.getCachedSettings();
-      settings ??= await _companySettingsRepository.getSettings();
+      settings = await _companySettingsRepository.getSettings();
     } catch (_) {
       settings = CompanySettings.empty();
     }

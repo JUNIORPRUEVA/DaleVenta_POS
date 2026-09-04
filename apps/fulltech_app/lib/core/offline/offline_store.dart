@@ -656,7 +656,12 @@ class OfflineStore {
         'inventoryIntents': [
           for (var index = 0; index < itemPayloads.length; index += 1)
             if ((itemPayloads[index]['productId']?.toString().trim() ?? '')
-                .isNotEmpty)
+                    .isNotEmpty &&
+                _asBool(
+                  itemPayloads[index]['inventoryTrackedSnapshot'] ??
+                      itemPayloads[index]['inventory_tracked_snapshot'],
+                  fallback: true,
+                ))
               {
                 'id': '${localSaleId}_inventory_$index',
                 'productId': itemPayloads[index]['productId']?.toString(),

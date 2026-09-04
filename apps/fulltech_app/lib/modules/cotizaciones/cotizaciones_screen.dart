@@ -130,12 +130,15 @@ class _CheckoutResult {
   });
 
   final _CheckoutPaymentMethod method;
+
   /// Efectivo NETO aplicado/retenido por la venta (paymentCashAmount).
   final double cashAmount;
   final double transferAmount;
   final double creditAmount;
+
   /// Efectivo real entregado por el cliente (tender), p.ej. 1000 en un total de 850.
   final double cashReceived;
+
   /// Devuelta entregada al cliente, p.ej. 150 en un total de 850 con 1000 recibidos.
   final double changeAmount;
 }
@@ -215,6 +218,13 @@ CotizacionItem buildBillingItemFromProduct(ProductModel product) {
     unitSymbolSnapshot: product.unitOfMeasure.symbol,
     unitPrecisionSnapshot: product.unitOfMeasure.precision,
   );
+}
+
+bool shouldShowBillingStockState({
+  required bool companyInventoryEnabled,
+  required ProductModel product,
+}) {
+  return companyInventoryEnabled && product.isInventoryTracked;
 }
 
 CotizacionItem syncBillingItemFiscalFromProduct(
@@ -635,6 +645,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   void _syncProductsOnEnter() {
     if (!mounted) return;
     _clearMobileSearchFocus();
+    ref.invalidate(companySettingsProvider);
+    ref.invalidate(productTaxUiConfigProvider);
     _loadProducts(silent: true);
   }
 
@@ -665,6 +677,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       _startLiveSync();
+      ref.invalidate(companySettingsProvider);
+      ref.invalidate(productTaxUiConfigProvider);
       _loadProducts(silent: true);
       return;
     }
@@ -1158,6 +1172,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }).toList();
   }
 
+  bool get _companyInventoryEnabled =>
+      ref.read(companySettingsProvider).valueOrNull?.inventoryEnabled == true;
+
+  bool _productUsesPhysicalInventory(ProductModel? product) {
+    return product != null &&
+        shouldShowBillingStockState(
+          companyInventoryEnabled: _companyInventoryEnabled,
+          product: product,
+        );
+  }
+
   ProductModel? _findProductByExactCode(
     Iterable<ProductModel> products,
     String rawCode,
@@ -1435,26 +1460,33 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   List<SaleDraftItem> _buildCheckoutSaleItems() {
-    return [
-      for (final item in _items)
-        SaleDraftItem(
-          productId: item.isExternal ? null : item.productId,
-          name: item.nombre,
-          imageUrl: item.imageUrl,
-          isExternal: item.isExternal,
-          qty: item.qty,
-          priceSoldUnit: _roundUnitPrice(item.unitPrice),
-          originalUnitPrice: item.originalUnitPrice,
-          costUnitSnapshot: item.tracedCostUnit ?? 0,
-          unitCodeSnapshot: item.unitSnapshot.code,
-          unitNameSnapshot: item.unitSnapshot.name,
-          unitSymbolSnapshot: item.unitSnapshot.symbol,
-          unitPrecisionSnapshot: item.unitSnapshot.precision,
-          taxTreatment: item.taxTreatment,
-          taxRate: item.taxRate > 0 ? item.taxRate : null,
-          taxPriceMode: item.taxPriceMode,
-        ),
-    ];
+    return [for (final item in _items) _saleDraftItemFromBillingItem(item)];
+  }
+
+  SaleDraftItem _saleDraftItemFromBillingItem(CotizacionItem item) {
+    final official = item.isExternal
+        ? null
+        : _findOfficialProduct(item.productId);
+    return SaleDraftItem(
+      product: official,
+      productId: item.isExternal ? null : item.productId,
+      productSource: item.productSource ?? official?.productSource,
+      sourceProductId: item.sourceProductId ?? official?.sourceProductId,
+      name: item.nombre,
+      imageUrl: item.imageUrl,
+      isExternal: item.isExternal,
+      qty: item.qty,
+      priceSoldUnit: _roundUnitPrice(item.unitPrice),
+      originalUnitPrice: item.originalUnitPrice,
+      costUnitSnapshot: item.tracedCostUnit ?? 0,
+      unitCodeSnapshot: item.unitSnapshot.code,
+      unitNameSnapshot: item.unitSnapshot.name,
+      unitSymbolSnapshot: item.unitSnapshot.symbol,
+      unitPrecisionSnapshot: item.unitSnapshot.precision,
+      taxTreatment: item.taxTreatment,
+      taxRate: item.taxRate > 0 ? item.taxRate : null,
+      taxPriceMode: item.taxPriceMode,
+    );
   }
 
   String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
@@ -2970,7 +3002,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final addingNewLine = index < 0;
     final nextQty = index >= 0 ? _items[index].qty + 1 : 1.0;
     final stock = product.stock;
-    if (stock != null && nextQty > stock) {
+    if (_productUsesPhysicalInventory(product) &&
+        stock != null &&
+        nextQty > stock) {
       _showSalesNotice(
         title: stock <= 0 ? 'Producto sin stock' : 'Stock insuficiente',
         message:
@@ -6030,7 +6064,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Widget _buildProductStrip() {
+  Widget _buildProductStrip({required bool inventoryEnabled}) {
     return _visibleProducts.isEmpty
         ? Center(
             child: Padding(
@@ -6063,6 +6097,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 onTap: () => _addProduct(product),
                 onImageTap: () => _openProductImagePreview(product),
                 money: _money,
+                showStockState: shouldShowBillingStockState(
+                  companyInventoryEnabled: inventoryEnabled,
+                  product: product,
+                ),
               );
             },
           );
@@ -6114,7 +6152,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ? null
         : _findOfficialProduct(item.productId);
     final outOfStock =
-        official != null && (official.stock == null || official.stock! <= 0);
+        _productUsesPhysicalInventory(official) &&
+        (official!.stock == null || official.stock! <= 0);
     return _TicketCompactItem(
       item: item,
       money: _money,
@@ -6811,7 +6850,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Widget _buildMobileBody(QuotationAiState aiState, UserModel? currentUser) {
+  Widget _buildMobileBody(
+    QuotationAiState aiState,
+    UserModel? currentUser, {
+    required bool inventoryEnabled,
+  }) {
     final showAiBanner = _shouldShowAiBanner(aiState);
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -6905,7 +6948,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOutCubic,
                       padding: EdgeInsets.only(bottom: collapsedCartHeight),
-                      child: _buildProductStrip(),
+                      child: _buildProductStrip(
+                        inventoryEnabled: inventoryEnabled,
+                      ),
                     ),
                   ),
                 ],
@@ -6927,7 +6972,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
-  Widget _buildDesktopBody(QuotationAiState aiState, UserModel? currentUser) {
+  Widget _buildDesktopBody(
+    QuotationAiState aiState,
+    UserModel? currentUser, {
+    required bool inventoryEnabled,
+  }) {
     final isAdmin = currentUser?.appRole == AppRole.admin;
     final showAiBanner = _shouldShowAiBanner(aiState);
     final managedCategories = ref.watch(inventoryCategoriesProvider).items;
@@ -6985,6 +7034,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             managedCategories: managedCategories,
                             allProducts: _productos,
                             visibleProducts: _visibleProducts,
+                            inventoryEnabled: inventoryEnabled,
                             loadingProducts: _loadingProducts,
                             error: _error,
                             money: _money,
@@ -7065,8 +7115,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 final official = _findOfficialProduct(
                                   item.productId,
                                 );
-                                return official != null &&
-                                    (official.stock == null ||
+                                return _productUsesPhysicalInventory(
+                                      official,
+                                    ) &&
+                                    (official!.stock == null ||
                                         official.stock! <= 0);
                               },
                               isItemExempt: _isBillingItemExempt,
@@ -7214,6 +7266,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     // Refresca la caché fiscal en cada build (subscripción a cambios del
     // provider). Los getters leen el campo, nunca `ref`.
     _taxConfigCache = ref.watch(productTaxUiConfigProvider).valueOrNull;
+    final inventoryEnabled = ref
+        .watch(companySettingsProvider)
+        .maybeWhen(
+          data: (settings) => settings.inventoryEnabled,
+          orElse: () => false,
+        );
     final user = ref.watch(authStateProvider).user;
     final aiState = ref.watch(quotationAiControllerProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
@@ -7228,8 +7286,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       body: SafeArea(
         top: false,
         child: isDesktop
-            ? _buildDesktopBody(aiState, user)
-            : _buildMobileBody(aiState, user),
+            ? _buildDesktopBody(
+                aiState,
+                user,
+                inventoryEnabled: inventoryEnabled,
+              )
+            : _buildMobileBody(
+                aiState,
+                user,
+                inventoryEnabled: inventoryEnabled,
+              ),
       ),
     );
   }
@@ -10070,8 +10136,9 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
       _CheckoutPaymentMethod.credit => cashAmount,
     };
     final changeAmount = switch (_method) {
-      _CheckoutPaymentMethod.cash =>
-        _roundMoney((_cashAmount - widget.total).clamp(0, double.infinity)),
+      _CheckoutPaymentMethod.cash => _roundMoney(
+        (_cashAmount - widget.total).clamp(0, double.infinity),
+      ),
       _CheckoutPaymentMethod.transfer => 0.0,
       _CheckoutPaymentMethod.mixed => 0.0,
       _CheckoutPaymentMethod.credit => 0.0,
@@ -11163,18 +11230,21 @@ class _ProductThumbCard extends StatelessWidget {
     required this.onTap,
     required this.onImageTap,
     required this.money,
+    required this.showStockState,
   });
 
   final ProductModel product;
   final VoidCallback onTap;
   final VoidCallback onImageTap;
   final String Function(double) money;
+  final bool showStockState;
 
   @override
   Widget build(BuildContext context) {
     final stockValue = product.stock;
-    final outOfStock = stockValue == null || stockValue <= 0;
-    final stockText = _formatProductStock(product);
+    final outOfStock =
+        showStockState && (stockValue == null || stockValue <= 0);
+    final stockText = showStockState ? _formatProductStock(product) : null;
 
     return Material(
       color: Colors.white,
@@ -11283,34 +11353,36 @@ class _ProductThumbCard extends StatelessWidget {
                       const Spacer(),
                       Row(
                         children: [
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: outOfStock
-                                    ? const Color(0xFFFEF2F2)
-                                    : const Color(0xFFE4F8FF),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                stockText,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
+                          if (stockText != null)
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
                                   color: outOfStock
-                                      ? const Color(0xFFDC2626)
-                                      : const Color(0xFF0D5EA6),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1,
+                                      ? const Color(0xFFFEF2F2)
+                                      : const Color(0xFFE4F8FF),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  stockText,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: outOfStock
+                                        ? const Color(0xFFDC2626)
+                                        : const Color(0xFF0D5EA6),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const Spacer(),
+                          if (stockText != null) const Spacer(),
+                          if (stockText == null) const Spacer(),
                           Container(
                             width: 34,
                             height: 34,
@@ -11557,6 +11629,7 @@ class _DesktopCatalogPane extends StatefulWidget {
     required this.managedCategories,
     required this.allProducts,
     required this.visibleProducts,
+    required this.inventoryEnabled,
     required this.loadingProducts,
     required this.error,
     required this.money,
@@ -11576,6 +11649,7 @@ class _DesktopCatalogPane extends StatefulWidget {
   final List<InventoryCategoryModel> managedCategories;
   final List<ProductModel> allProducts;
   final List<ProductModel> visibleProducts;
+  final bool inventoryEnabled;
   final bool loadingProducts;
   final String? error;
   final String Function(double) money;
@@ -11810,13 +11884,15 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
               ),
             ),
             const SizedBox(width: 10),
-            _CatalogLineActionButton(
-              icon: AppIcons.stockAdd,
-              label: 'Agregar stock',
-              width: 132,
-              onPressed: widget.onOpenStockAdjustments,
-            ),
-            const SizedBox(width: 7),
+            if (widget.inventoryEnabled) ...[
+              _CatalogLineActionButton(
+                icon: AppIcons.stockAdd,
+                label: 'Agregar stock',
+                width: 132,
+                onPressed: widget.onOpenStockAdjustments,
+              ),
+              const SizedBox(width: 7),
+            ],
             _CatalogLineActionButton(
               icon: AppIcons.productAdd,
               label: 'Nuevo producto',
@@ -11898,6 +11974,10 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                         child: _ModernDesktopProductCard(
                           product: widget.visibleProducts[index],
                           money: widget.money,
+                          showStockState: shouldShowBillingStockState(
+                            companyInventoryEnabled: widget.inventoryEnabled,
+                            product: widget.visibleProducts[index],
+                          ),
                           onTap: (globalStart) => widget.onAddProduct(
                             widget.visibleProducts[index],
                             globalStart,
@@ -11998,6 +12078,10 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                   child: _DesktopProductCard(
                     product: widget.visibleProducts[index],
                     money: widget.money,
+                    showStockState: shouldShowBillingStockState(
+                      companyInventoryEnabled: widget.inventoryEnabled,
+                      product: widget.visibleProducts[index],
+                    ),
                     onTap: () => widget.onAddProduct(
                       widget.visibleProducts[index],
                       null,
@@ -15313,11 +15397,13 @@ class _ModernDesktopProductCard extends StatefulWidget {
     required this.product,
     required this.money,
     required this.onTap,
+    required this.showStockState,
   });
 
   final ProductModel product;
   final String Function(double) money;
   final ValueChanged<Offset?> onTap;
+  final bool showStockState;
 
   @override
   State<_ModernDesktopProductCard> createState() =>
@@ -15333,7 +15419,7 @@ class _ModernDesktopProductCardState extends State<_ModernDesktopProductCard> {
     final product = widget.product;
     final imageUrl = (product.displayFotoUrl ?? '').trim();
     final stock = product.stock;
-    final hasStock = stock != null && stock > 0;
+    final hasStock = widget.showStockState && stock != null && stock > 0;
     final stockColor = stock == null
         ? const Color(0xFF64748B)
         : hasStock
@@ -15451,29 +15537,31 @@ class _ModernDesktopProductCardState extends State<_ModernDesktopProductCard> {
                   const Spacer(),
                   Row(
                     children: [
-                      Flexible(
-                        child: Container(
-                          height: 22,
-                          padding: const EdgeInsets.symmetric(horizontal: 7),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: stockBackground,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _formatProductStock(product),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: stockColor,
-                              fontSize: 9.5,
-                              height: 1,
-                              fontWeight: FontWeight.w900,
+                      if (widget.showStockState)
+                        Flexible(
+                          child: Container(
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 7),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: stockBackground,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _formatProductStock(product),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: stockColor,
+                                fontSize: 9.5,
+                                height: 1,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
+                      if (widget.showStockState) const SizedBox(width: 8),
+                      if (!widget.showStockState) const Spacer(),
                       Tooltip(
                         message: 'Agregar producto',
                         child: Container(
@@ -15668,11 +15756,13 @@ class _DesktopProductCard extends StatelessWidget {
     required this.product,
     required this.money,
     required this.onTap,
+    required this.showStockState,
   });
 
   final ProductModel product;
   final String Function(double) money;
   final VoidCallback onTap;
+  final bool showStockState;
 
   @override
   Widget build(BuildContext context) {
@@ -15747,36 +15837,37 @@ class _DesktopProductCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 5,
-                  left: 5,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: stockColor.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.16),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+                if (showStockState)
+                  Positioned(
+                    top: 5,
+                    left: 5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: stockColor.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.16),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        stockText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 9.2,
+                          height: 1,
                         ),
-                      ],
-                    ),
-                    child: Text(
-                      stockText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 9.2,
-                        height: 1,
                       ),
                     ),
                   ),
-                ),
                 Positioned(
                   top: 5,
                   right: 5,

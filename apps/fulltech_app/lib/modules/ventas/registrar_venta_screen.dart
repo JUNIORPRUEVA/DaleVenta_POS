@@ -216,18 +216,22 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
+  bool get _inventoryEnabled =>
+      ref.read(companySettingsProvider).valueOrNull?.inventoryEnabled ?? true;
+
+  bool _productUsesPhysicalInventory(ProductModel? product) {
+    return _inventoryEnabled && product?.isInventoryTracked == true;
+  }
+
   bool _hasNoStock(SaleDraftItem item) {
     if (item.isExternal) return false;
-    if (item.product?.itemType == 'SERVICE' ||
-        item.product?.trackInventory == false) {
-      return false;
-    }
+    if (!_productUsesPhysicalInventory(item.product)) return false;
     final stock = item.product?.stock;
     return stock == null || stock <= 0;
   }
 
   bool _productHasNoStock(ProductModel product) {
-    if (product.itemType == 'SERVICE' || !product.trackInventory) return false;
+    if (!_productUsesPhysicalInventory(product)) return false;
     final stock = product.stock;
     return stock == null || stock <= 0;
   }
@@ -443,6 +447,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   void _syncProductsOnEnter() {
     if (!mounted) return;
+    ref.invalidate(companySettingsProvider);
+    ref.invalidate(productTaxUiConfigProvider);
     _loadProducts(silent: true);
   }
 
@@ -846,6 +852,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final showInlineTotals = screenWidth >= 700 && screenHeight >= 780;
     final maxContentWidth = isWide ? 1180.0 : double.infinity;
     final taxConfig = ref.watch(productTaxUiConfigProvider).valueOrNull;
+    final inventoryEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.inventoryEnabled ??
+        true;
     final cartTaxSummary = _cartTaxSummary(taxConfig);
     final showFiscalVoucherControl = shouldShowFiscalVoucherControl(
       taxEnabled: taxConfig?.settings.taxEnabled == true,
@@ -1049,6 +1058,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                             child: _buildProductGrid(
                               isCompact: isCompact,
                               taxConfig: taxConfig,
+                              inventoryEnabled: inventoryEnabled,
                             ),
                           ),
                           Container(
@@ -1089,6 +1099,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   Widget _buildProductGrid({
     required bool isCompact,
     required ProductTaxUiConfig? taxConfig,
+    required bool inventoryEnabled,
   }) {
     final visible = _filteredProducts;
 
@@ -1139,6 +1150,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               money: _money,
               mobileGrid: mobileGrid,
               compactCard: compactCard,
+              showStockState: inventoryEnabled && product.isInventoryTracked,
               onTap: () => unawaited(_addProduct(product)),
             );
           },
@@ -2380,14 +2392,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     if (idx >= 0) {
       final current = _cart[idx];
       final nextQty = current.qty + quantity;
-      if (quantityExceedsStock(nextQty, product)) {
+      if (_productUsesPhysicalInventory(product) &&
+          quantityExceedsStock(nextQty, product)) {
         _showNoStockNotice();
         return;
       }
       _updateItem(idx, current.copyWith(qty: nextQty));
       return;
     }
-    if (quantityExceedsStock(quantity, product)) {
+    if (_productUsesPhysicalInventory(product) &&
+        quantityExceedsStock(quantity, product)) {
       _showNoStockNotice();
       return;
     }
@@ -2482,7 +2496,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     setDialogState(() => errorText = validation);
                     return;
                   }
-                  if (quantityExceedsStock(qty!, product)) {
+                  if (_productUsesPhysicalInventory(product) &&
+                      quantityExceedsStock(qty!, product)) {
                     setDialogState(
                       () => errorText = 'No hay stock suficiente.',
                     );
@@ -2597,7 +2612,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   }
 
                   final product = item.product;
-                  if (product != null && quantityExceedsStock(qty!, product)) {
+                  if (product != null &&
+                      _productUsesPhysicalInventory(product) &&
+                      quantityExceedsStock(qty!, product)) {
                     setDialogState(
                       () => errorText = 'No hay stock suficiente.',
                     );
@@ -2881,6 +2898,7 @@ class _SaleProductGridCard extends StatelessWidget {
     required this.money,
     required this.mobileGrid,
     required this.compactCard,
+    required this.showStockState,
     required this.onTap,
   });
 
@@ -2889,13 +2907,17 @@ class _SaleProductGridCard extends StatelessWidget {
   final String Function(double value) money;
   final bool mobileGrid;
   final bool compactCard;
+  final bool showStockState;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final stockValue = product.stock;
-    final outOfStock = stockValue == null || stockValue <= 0;
-    final stockText = formatStockLabel(product, compact: true);
+    final outOfStock =
+        showStockState && (stockValue == null || stockValue <= 0);
+    final stockText = showStockState
+        ? formatStockLabel(product, compact: true)
+        : null;
     final config = taxConfig;
     final taxPreview = config?.settings.taxEnabled == true
         ? ProductTaxPreviewCalculator.calculate(
@@ -2957,75 +2979,76 @@ class _SaleProductGridCard extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              left: 2,
-              top: 2,
-              child: outOfStock
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDC2626),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.55),
-                          width: 0.6,
+            if (showStockState)
+              Positioned(
+                left: 2,
+                top: 2,
+                child: outOfStock
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
                         ),
-                      ),
-                      child: Text(
-                        'SIN STOCK',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: mobileGrid ? 7 : 8,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.3,
-                          height: 1,
-                        ),
-                      ),
-                    )
-                  : Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.62),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          width: 0.7,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'DISP',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: mobileGrid ? 7 : 8,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                              height: 1,
-                            ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDC2626),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            width: 0.6,
                           ),
-                          const SizedBox(height: 1),
-                          Text(
-                            stockText,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: mobileGrid ? 13 : 15,
-                              fontWeight: FontWeight.w900,
-                              height: 1.0,
-                            ),
+                        ),
+                        child: Text(
+                          'SIN STOCK',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: mobileGrid ? 7 : 8,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.3,
+                            height: 1,
                           ),
-                        ],
+                        ),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.62),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DISP',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: mobileGrid ? 7 : 8,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
+                                height: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              stockText!,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: mobileGrid ? 13 : 15,
+                                fontWeight: FontWeight.w900,
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-            ),
+              ),
             Positioned(
               right: 2,
               top: 2,

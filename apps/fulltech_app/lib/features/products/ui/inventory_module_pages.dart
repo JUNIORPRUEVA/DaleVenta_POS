@@ -8898,33 +8898,6 @@ class _InventoryProductEditorPageState
                 _FormErrorBanner(message: _formError!),
                 const SizedBox(height: 10),
               ],
-              DropdownButtonFormField<_ProductArticleType>(
-                initialValue: _articleType,
-                isExpanded: true,
-                decoration: _inventoryTextInputDecoration(
-                  'Tipo de artículo',
-                  prefixIcon: const Icon(Icons.category_outlined),
-                ),
-                items: [
-                  for (final type in _ProductArticleType.values)
-                    DropdownMenuItem<_ProductArticleType>(
-                      value: type,
-                      child: Text(type.label),
-                    ),
-                ],
-                onChanged: _isSaving
-                    ? null
-                    : (value) {
-                        if (value == null) return;
-                        setState(() {
-                          _articleType = value;
-                          if (value != _ProductArticleType.inventoryProduct) {
-                            _stockCtrl.text = '0';
-                          }
-                        });
-                      },
-              ),
-              const SizedBox(height: 10),
               TextField(
                 controller: _nameCtrl,
                 focusNode: _nameFocus,
@@ -9075,6 +9048,33 @@ class _InventoryProductEditorPageState
                 ),
                 const SizedBox(height: 10),
               ],
+              DropdownButtonFormField<_ProductArticleType>(
+                initialValue: _articleType,
+                isExpanded: true,
+                decoration: _inventoryTextInputDecoration(
+                  'Tipo de artículo',
+                  prefixIcon: const Icon(Icons.category_outlined),
+                ),
+                items: [
+                  for (final type in _ProductArticleType.values)
+                    DropdownMenuItem<_ProductArticleType>(
+                      value: type,
+                      child: Text(type.label),
+                    ),
+                ],
+                onChanged: _isSaving
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _articleType = value;
+                          if (value != _ProductArticleType.inventoryProduct) {
+                            _stockCtrl.text = '0';
+                          }
+                        });
+                      },
+              ),
+              const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

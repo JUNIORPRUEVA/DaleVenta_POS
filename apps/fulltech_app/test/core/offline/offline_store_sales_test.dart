@@ -319,6 +319,56 @@ void main() {
     );
 
     test(
+      'does not create inventory intents when sale snapshot is untracked',
+      () async {
+        await OfflineStore.instance.saveOfflineSaleAtomically(
+          localSaleId: 'local_sale_req_untracked',
+          companyId: 'company-untracked',
+          userId: 'user-untracked',
+          clientRequestId: 'sale_req_untracked',
+          salePayload: {
+            ..._salePayload('sale_req_untracked'),
+            'items': [
+              _item('product-untracked', 1)
+                ..['inventoryTrackedSnapshot'] = false,
+            ],
+          },
+          itemPayloads: [
+            _item('product-untracked', 1)..['inventoryTrackedSnapshot'] = false,
+          ],
+          paymentPayload: {
+            'paymentMethod': 'cash',
+            'paymentCashAmount': 100,
+            'paymentTransferAmount': 0,
+            'creditAmount': 0,
+          },
+          pendingAction: _pendingSaleAction(
+            companyId: 'company-untracked',
+            userId: 'user-untracked',
+            localSaleId: 'local_sale_req_untracked',
+            clientRequestId: 'sale_req_untracked',
+            payload: {
+              ..._salePayload('sale_req_untracked'),
+              'items': [
+                _item('product-untracked', 1)
+                  ..['inventoryTrackedSnapshot'] = false,
+              ],
+            },
+          ),
+          totalSold: 100,
+        );
+
+        final aggregate = await OfflineStore.instance.getOfflineSaleAggregate(
+          companyId: 'company-untracked',
+          localSaleId: 'local_sale_req_untracked',
+        );
+
+        expect(aggregate!['items'].single['inventoryTrackedSnapshot'], isFalse);
+        expect(aggregate['inventoryIntents'], isEmpty);
+      },
+    );
+
+    test(
       'recovers stale syncing action without changing idempotency',
       () async {
         final stale =

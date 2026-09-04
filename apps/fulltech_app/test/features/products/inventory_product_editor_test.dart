@@ -999,6 +999,20 @@ void main() {
     },
   );
 
+  testWidgets('tipo de articulo aparece antes de categoria en el formulario', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    final stockTop = tester.getTopLeft(find.text('Stock disponible')).dy;
+    final typeTop = tester.getTopLeft(find.text('Tipo de artículo')).dy;
+    final categoryTop = tester.getTopLeft(find.text('Categoría')).dy;
+
+    expect(typeTop, greaterThan(stockTop));
+    expect(typeTop, lessThan(categoryTop));
+  });
+
   testWidgets('selector crea producto sin inventario sin pedir stock fisico', (
     tester,
   ) async {

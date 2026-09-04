@@ -199,7 +199,15 @@ class CompanySettingsRepository {
           )
           .timeout(_settingsTimeout);
       final settings = _settingsFromData(res.data, fallback: cached);
-      await _cache.writeMap(_scopedCacheKey, settings.toMap());
+      try {
+        await _cache.writeMap(_scopedCacheKey, settings.toMap());
+      } catch (error, stackTrace) {
+        _traceProtectedError(
+          'remote settings cache write failed',
+          error,
+          stackTrace,
+        );
+      }
       return settings;
     } on TimeoutException {
       throw ApiException(
