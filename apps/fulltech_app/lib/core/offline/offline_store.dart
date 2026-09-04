@@ -565,6 +565,14 @@ class OfflineStore {
         final item = itemPayloads[index];
         final productId = item['productId']?.toString().trim();
         if (productId == null || productId.isEmpty) continue;
+        if (_asBool(
+              item['inventoryTrackedSnapshot'] ??
+                  item['inventory_tracked_snapshot'],
+              fallback: true,
+            ) ==
+            false) {
+          continue;
+        }
         await txn.insert(
           'offline_inventory_intents',
           {
@@ -1267,5 +1275,14 @@ class OfflineStore {
   double _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  bool _asBool(dynamic value, {required bool fallback}) {
+    if (value == null) return fallback;
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final text = value.toString().trim().toLowerCase();
+    if (text.isEmpty) return fallback;
+    return text == 'true' || text == '1' || text == 'yes' || text == 'si';
   }
 }

@@ -53,6 +53,8 @@ class ProductModel {
   final bool costAvailable;
   final double? stock;
   final String stockDecimal;
+  final String itemType;
+  final bool trackInventory;
   final String unitOfMeasureId;
   final UnitOfMeasureModel unitOfMeasure;
   final String productSource;
@@ -80,6 +82,8 @@ class ProductModel {
     this.costAvailable = true,
     this.stock,
     String? stockDecimal,
+    String? itemType,
+    this.trackInventory = true,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
     String? productSource,
@@ -97,10 +101,14 @@ class ProductModel {
     this.taxRate,
     this.taxPriceMode,
   }) : stockDecimal = stockDecimal ?? (stock?.toString() ?? '0'),
+       itemType = _normalizeItemType(itemType),
        unitOfMeasureId = unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
        unitOfMeasure = unitOfMeasure ?? UnitOfMeasureModel.unit,
        productSource = productSource ?? 'LOCAL',
        sourceProductId = sourceProductId ?? id;
+
+  bool get isService => itemType == 'SERVICE';
+  bool get isInventoryTracked => itemType == 'PRODUCT' && trackInventory;
 
   ProductModel copyWith({
     String? id,
@@ -112,6 +120,8 @@ class ProductModel {
     bool? costAvailable,
     double? stock,
     String? stockDecimal,
+    String? itemType,
+    bool? trackInventory,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
     String? productSource,
@@ -139,6 +149,8 @@ class ProductModel {
       costAvailable: costAvailable ?? this.costAvailable,
       stock: stock ?? this.stock,
       stockDecimal: stockDecimal ?? this.stockDecimal,
+      itemType: itemType ?? this.itemType,
+      trackInventory: trackInventory ?? this.trackInventory,
       unitOfMeasureId: unitOfMeasureId ?? this.unitOfMeasureId,
       unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
       productSource: productSource ?? this.productSource,
@@ -261,6 +273,14 @@ class ProductModel {
       costAvailable: hasCost,
       stock: _asNullableDouble(rawStock),
       stockDecimal: _asNullableString(json['stockDecimal']) ?? '$rawStock',
+      itemType:
+          _asNullableString(json['itemType'] ?? json['item_type']) ?? 'PRODUCT',
+      trackInventory: _asBoolDefault(
+        json.containsKey('trackInventory')
+            ? json['trackInventory']
+            : json['track_inventory'],
+        true,
+      ),
       unitOfMeasureId: unitId,
       unitOfMeasure: parsedUnit.copyWith(id: unitId),
       productSource: productSource,
@@ -294,6 +314,8 @@ class ProductModel {
       'costAvailable': costAvailable,
       'stock': stock,
       'stockDecimal': stockDecimal,
+      'itemType': itemType,
+      'trackInventory': trackInventory,
       'unitOfMeasureId': unitOfMeasureId,
       'unitOfMeasure': unitOfMeasure.toJson(),
       'productSource': productSource,
@@ -326,6 +348,20 @@ class ProductModel {
 
   String get categoriaLabel =>
       (categoria == null || categoria!.isEmpty) ? 'Sin categoría' : categoria!;
+}
+
+String _normalizeItemType(String? value) {
+  final normalized = value?.trim().toUpperCase();
+  return normalized == 'SERVICE' ? 'SERVICE' : 'PRODUCT';
+}
+
+bool _asBoolDefault(dynamic value, bool fallback) {
+  if (value == null) return fallback;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  final text = value.toString().trim().toLowerCase();
+  if (text.isEmpty) return fallback;
+  return text == 'true' || text == '1' || text == 'yes' || text == 'si';
 }
 
 class UnitOfMeasureModel {

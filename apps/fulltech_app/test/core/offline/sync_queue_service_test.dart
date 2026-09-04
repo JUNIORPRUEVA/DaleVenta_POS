@@ -194,7 +194,50 @@ void main() {
     expect(actions.single.status, 'error');
     expect(actions.single.nextAttemptAt, isNotNull);
     expect(actions.single.permanent, isFalse);
-    expect(service.state.lastError, isNotNull);
+    expect(actions.single.error, contains('cambios permanecen guardados'));
+    expect(actions.single.error, isNot(contains('DioException')));
+    expect(service.state.lastError, contains('cambios permanecen guardados'));
+    expect(service.state.lastError, isNot(contains('DioException')));
+    service.dispose();
+  });
+
+  test('HTTP 500 sync failure stores customer-safe retry message', () async {
+    const scope = OfflineSyncScope(
+      companyId: 'company-server-error',
+      userId: 'user-server-error',
+    );
+    await store.putPendingAction(
+      _action(
+        id: 'sales.create:server-error',
+        companyId: 'company-server-error',
+        userId: 'user-server-error',
+        clientRequestId: 'sale-server-error',
+      ),
+    );
+
+    final service = SyncQueueService(store, scopeResolver: () async => scope);
+    service.registerHandler('sales.create', (_) async {
+      final requestOptions = RequestOptions(path: '/sales');
+      throw DioException(
+        requestOptions: requestOptions,
+        response: Response(requestOptions: requestOptions, statusCode: 500),
+        type: DioExceptionType.badResponse,
+      );
+    });
+
+    await service.processPending();
+
+    final action = (await store.listPendingActions(
+      companyId: 'company-server-error',
+      userId: 'user-server-error',
+    )).single;
+    expect(action.status, 'error');
+    expect(action.permanent, isFalse);
+    expect(action.error, contains('ventas están pendientes'));
+    expect(action.error, isNot(contains('DioException')));
+    expect(action.error, isNot(contains('RequestOptions')));
+    expect(action.error, isNot(contains('500')));
+    expect(service.state.lastError, action.error);
     service.dispose();
   });
 

@@ -170,6 +170,7 @@ describe("SalesService UoM decimal foundation", () => {
     expect(sale.items[0].unitCodeSnapshot).toBe("YARD");
     expect(sale.items[0].unitSymbolSnapshot).toBe("yd");
     expect(sale.items[0].unitPrecisionSnapshot).toBe(3);
+    expect(sale.items[0].inventoryTrackedSnapshot).toBe(true);
     expect(sale.items[0].warehouseCodeSnapshot).toBe("MAIN");
   });
 
@@ -254,6 +255,7 @@ describe("SalesService UoM decimal foundation", () => {
       subtotalSold: new Prisma.Decimal("550"),
       subtotalCost: new Prisma.Decimal("55"),
       profit: new Prisma.Decimal("495"),
+      inventoryTrackedSnapshot: true,
     };
     const prisma = {
       sale: {
@@ -357,5 +359,8 @@ describe("SalesService UoM decimal foundation", () => {
     expect(refund.items[0].qty.toString()).toBe("1.25");
     expect(refund.items[0].unitCodeSnapshot).toBe("YARD");
     expect(refund.items[0].warehouseCodeSnapshot).toBe("MAIN");
+    expect(refundCreate.mock.calls[0][0].data.items.create[0]).toMatchObject({
+      inventoryTrackedSnapshot: true,
+    });
   });
 });

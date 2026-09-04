@@ -218,11 +218,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   bool _hasNoStock(SaleDraftItem item) {
     if (item.isExternal) return false;
+    if (item.product?.itemType == 'SERVICE' ||
+        item.product?.trackInventory == false) {
+      return false;
+    }
     final stock = item.product?.stock;
     return stock == null || stock <= 0;
   }
 
   bool _productHasNoStock(ProductModel product) {
+    if (product.itemType == 'SERVICE' || !product.trackInventory) return false;
     final stock = product.stock;
     return stock == null || stock <= 0;
   }
@@ -2776,8 +2781,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           // La venta se completó; solo se informa que la caja no se abrió.
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor:
-                  Theme.of(context).colorScheme.tertiaryContainer,
+              backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
               content: Text(printResult.warning!),
             ),
           );

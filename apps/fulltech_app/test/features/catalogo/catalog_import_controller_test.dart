@@ -45,6 +45,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     creates += 1;
@@ -63,6 +65,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      itemType: itemType,
+      trackInventory: trackInventory ?? itemType != 'SERVICE',
     );
     products = [product, ...products];
     return product;
@@ -84,6 +88,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -102,6 +108,8 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      itemType: itemType,
+      trackInventory: trackInventory ?? itemType != 'SERVICE',
     );
     products = [
       for (final item in products)

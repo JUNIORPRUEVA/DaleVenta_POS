@@ -22,3 +22,6 @@ apps/fulltech_app/web/downloads/*.exe
 apps/api/w14-api-dist.tgz
 apps/fulltech_app/b/
 apps/fulltech_app/build_w14_validation/
+
+# Release artifact outputs (large installers)
+release/

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/admin_authorization.dart';
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/company/company_settings_repository.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
@@ -21,6 +22,9 @@ class WarehouseSettingsScreen extends ConsumerWidget {
     final user = ref.watch(authStateProvider).user;
     final warehouses = ref.watch(warehousesProvider);
     final terminals = ref.watch(warehouseTerminalsProvider);
+    final inventoryEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.inventoryEnabled ??
+        true;
     final compact = MediaQuery.sizeOf(context).width < 720;
     final canCreateWarehouse = _hasAnyPermission(user, const [
       AppPermission.createWarehouses,
@@ -204,6 +208,7 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                     transfers: transfers.valueOrNull ?? const [],
                     products: products.valueOrNull ?? const [],
                     canCreateTransfers: canCreateTransfers,
+                    inventoryEnabled: inventoryEnabled,
                     loading:
                         transfers.isLoading ||
                         products.isLoading ||
@@ -641,6 +646,7 @@ class _TransferPanel extends ConsumerStatefulWidget {
     required this.transfers,
     required this.products,
     required this.canCreateTransfers,
+    required this.inventoryEnabled,
     required this.loading,
     required this.error,
   });
@@ -649,6 +655,7 @@ class _TransferPanel extends ConsumerStatefulWidget {
   final List<WarehouseTransferModel> transfers;
   final List<ProductModel> products;
   final bool canCreateTransfers;
+  final bool inventoryEnabled;
   final bool loading;
   final Object? error;
 
@@ -704,7 +711,14 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 760;
-            final form = widget.canCreateTransfers
+            final form = !widget.inventoryEnabled
+                ? const _WarehouseStatePanel(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'Control de inventario desactivado',
+                    message:
+                        'Las transferencias quedan en modo consulta hasta reactivar el control de inventario.',
+                  )
+                : widget.canCreateTransfers
                 ? _buildForm(context, activeWarehouses, selectedProduct)
                 : const _WarehouseStatePanel(
                     icon: Icons.lock_outline_rounded,

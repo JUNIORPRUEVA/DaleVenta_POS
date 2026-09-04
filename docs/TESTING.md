@@ -107,6 +107,17 @@ User-facing features require functional validation. UI/UX changes require visual
 
 - Tenant/auth changes: run affected backend tenant/security tests and Flutter route/access tests.
 - Inventory/warehouse changes: run products, inventory, warehouse, UOM, purchase/sale stock tests as applicable.
+- Inventory optionality data foundation changes must prove backward
+  compatibility for existing companies, products, sales, and old Flutter cache:
+  backend schema/API defaults plus Flutter model parsing must keep legacy data
+  operating as inventory-enabled, product-tracked behavior unless explicit new
+  values are present.
+- Sales optional-inventory changes must cover tracked, non-tracked, service,
+  company-inventory-off, mixed sale, insufficient-stock, cancellation, refund,
+  idempotency, config-drift, offline storage/replay, fiscal/cash, and UoM
+  decimal regression paths. Tests must assert that
+  `SaleItem.inventoryTrackedSnapshot` is authoritative for cancellation/refund
+  restoration.
 - Fiscal/sales/tax changes: run sales fiscal, tax, NCF, PDF, and related Flutter tests.
 - Cash changes: run cash backend and Flutter cash tests.
 - Cash tender/change (EFECTIVO RECIBIDO / DEVUELTA) invariants: run backend
@@ -135,4 +146,3 @@ hardware test is required when compatible equipment is available:
 
 Without compatible hardware the implementation is CODE COMPLETE but remains
 `NO-GO — HARDWARE QA PENDING`; hardware results must never be faked.
-

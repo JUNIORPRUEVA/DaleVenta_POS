@@ -7,7 +7,12 @@ import {
   Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InventoryMovementType, Prisma, Product } from "@prisma/client";
+import {
+  InventoryMovementType,
+  Prisma,
+  Product,
+  ProductItemType,
+} from "@prisma/client";
 import { createHash } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
@@ -30,6 +35,8 @@ import { InventoryMutationService } from "../inventory/inventory-mutation.servic
 
 type ResolvedProductWarehouse = { id: string; name: string; code: string };
 const PRODUCT_HAS_HISTORY_CODE = "PRODUCT_HAS_HISTORY";
+const PRODUCT_CLASSIFICATION_PROTECTED_MESSAGE =
+  "No se puede cambiar el tipo de articulo de un producto con stock o historial.";
 const PRODUCT_INVENTORY_TRANSACTION_OPTIONS = {
   maxWait: 10000,
   timeout: 30000,
@@ -256,6 +263,114 @@ export class ProductsService {
       taxRate: rate,
       taxPriceMode: taxPriceMode ?? null,
     };
+  }
+
+  private normalizeProductClassification(
+    dto: Pick<CreateProductDto | UpdateProductDto, "itemType" | "trackInventory">,
+    current?: Pick<Product, "itemType" | "trackInventory"> | null,
+  ) {
+    const rawItemType =
+      dto.itemType === undefined || dto.itemType === null
+        ? undefined
+        : `${dto.itemType}`.trim().toUpperCase();
+    const itemType =
+      rawItemType === undefined || rawItemType === ""
+        ? (current?.itemType ?? ProductItemType.PRODUCT)
+        : rawItemType === ProductItemType.SERVICE
+          ? ProductItemType.SERVICE
+          : ProductItemType.PRODUCT;
+    const trackInventory =
+      itemType === ProductItemType.SERVICE
+        ? false
+        : dto.trackInventory ?? current?.trackInventory ?? true;
+    return { itemType, trackInventory };
+  }
+
+  private isInventoryTrackedClassification(input: {
+    itemType: ProductItemType | string;
+    trackInventory: boolean;
+  }) {
+    return (
+      input.itemType === ProductItemType.PRODUCT &&
+      input.trackInventory === true
+    );
+  }
+
+  private async companyInventoryEnabled(
+    tx: Prisma.TransactionClient | PrismaService,
+    companyId: string,
+  ) {
+    const companyApi = (tx as any).company;
+    if (!companyApi?.findUnique) {
+      return true;
+    }
+    const company = await companyApi.findUnique({
+      where: { id: companyId },
+      select: { inventoryEnabled: true },
+    });
+    return company?.inventoryEnabled !== false;
+  }
+
+  private async productClassificationProtectionCounts(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    productId: string,
+  ) {
+    const [
+      product,
+      nonZeroWarehouseStocks,
+      inventoryMovements,
+      saleItems,
+      purchaseOrderItems,
+      warehouseTransferItems,
+    ] = await Promise.all([
+      tx.product.findFirst({
+        where: { id: productId, companyId },
+        select: { stock: true },
+      }),
+      tx.warehouseStock.count({
+        where: {
+          companyId,
+          productId,
+          quantity: { not: new Prisma.Decimal(0) },
+        },
+      }),
+      tx.inventoryMovement.count({ where: { companyId, productId } }),
+      tx.saleItem.count({ where: { productId, sale: { companyId } } }),
+      tx.purchaseOrderItem.count({
+        where: { productId, purchaseOrder: { companyId } },
+      }),
+      tx.warehouseTransferItem.count({ where: { companyId, productId } }),
+    ]);
+    return {
+      productStock: new Prisma.Decimal(product?.stock ?? 0).abs().gt(0)
+        ? 1
+        : 0,
+      nonZeroWarehouseStocks,
+      inventoryMovements,
+      saleItems,
+      purchaseOrderItems,
+      warehouseTransferItems,
+    };
+  }
+
+  private async assertProductClassificationCanChange(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    productId: string,
+  ) {
+    const counts = await this.productClassificationProtectionCounts(
+      tx,
+      companyId,
+      productId,
+    );
+    if (this.hasProtectedProductHistory(counts)) {
+      throw new BadRequestException({
+        code: PRODUCT_HAS_HISTORY_CODE,
+        message: PRODUCT_CLASSIFICATION_PROTECTED_MESSAGE,
+        details: counts,
+      });
+    }
   }
 
   private async resolveUnitOfMeasure(
@@ -751,6 +866,15 @@ export class ProductsService {
           companyId,
           dto.unitOfMeasureId,
         );
+        const classification = this.normalizeProductClassification(dto);
+        const classificationTracksPhysicalInventory =
+          this.isInventoryTrackedClassification(classification);
+        const inventoryEnabled = await this.companyInventoryEnabled(
+          tx,
+          companyId,
+        );
+        const tracksPhysicalInventory =
+          inventoryEnabled && classificationTracksPhysicalInventory;
         const initialStock = new Prisma.Decimal(dto.stock ?? 0);
         validateQuantityForUnit({
           quantity: initialStock,
@@ -758,6 +882,13 @@ export class ProductsService {
           label: "stock del producto",
           allowZero: true,
         });
+        if (!tracksPhysicalInventory && initialStock.gt(0)) {
+          throw new BadRequestException(
+            inventoryEnabled
+              ? "El stock inicial solo aplica a productos con inventario."
+              : "El control de inventario esta desactivado para esta empresa.",
+          );
+        }
         const data = {
           id: operationProductId ?? undefined,
           nombre: dto.nombre,
@@ -766,6 +897,8 @@ export class ProductsService {
           precio: new Prisma.Decimal(dto.precio),
           costo: new Prisma.Decimal(dto.costo),
           stock: new Prisma.Decimal(0),
+          itemType: classification.itemType,
+          trackInventory: classification.trackInventory,
           unitOfMeasureId: unitOfMeasure.id,
           ...fiscalData,
           imagen: normalizedImagePath,
@@ -833,32 +966,34 @@ export class ProductsService {
                 update: {},
               })
             : await tx.product.create({ data });
-          const warehouse = await this.resolveInventoryWarehouse(
-            tx,
-            companyId,
-            dto.warehouseId,
-          );
-          await this.ensureZeroWarehouseStock(
-            tx,
-            companyId,
-            warehouse.id,
-            product.id,
-          );
-          if (initialStock.gt(0)) {
-            await this.inventoryMutationService().increaseStockInTransaction(
+          if (tracksPhysicalInventory) {
+            const warehouse = await this.resolveInventoryWarehouse(
               tx,
-              {
-                companyId,
-                productId: product.id,
-                warehouseId: warehouse.id,
-                quantity: initialStock,
-                type: InventoryMovementType.INITIAL_STOCK,
-                sourceType: "PRODUCT_CREATE",
-                sourceId: product.id,
-                reason: "PRODUCT_INITIAL_STOCK",
-                createdByUserId: user.id,
-              },
+              companyId,
+              dto.warehouseId,
             );
+            await this.ensureZeroWarehouseStock(
+              tx,
+              companyId,
+              warehouse.id,
+              product.id,
+            );
+            if (initialStock.gt(0)) {
+              await this.inventoryMutationService().increaseStockInTransaction(
+                tx,
+                {
+                  companyId,
+                  productId: product.id,
+                  warehouseId: warehouse.id,
+                  quantity: initialStock,
+                  type: InventoryMovementType.INITIAL_STOCK,
+                  sourceType: "PRODUCT_CREATE",
+                  sourceId: product.id,
+                  reason: "PRODUCT_INITIAL_STOCK",
+                  createdByUserId: user.id,
+                },
+              );
+            }
           }
           this.logProductSave({
             action: "create",
@@ -877,32 +1012,34 @@ export class ProductsService {
           }
           if (!this.isSchemaMismatch(error)) throw error;
           const product = await tx.product.create({ data });
-          const warehouse = await this.resolveInventoryWarehouse(
-            tx,
-            companyId,
-            dto.warehouseId,
-          );
-          await this.ensureZeroWarehouseStock(
-            tx,
-            companyId,
-            warehouse.id,
-            product.id,
-          );
-          if (initialStock.gt(0)) {
-            await this.inventoryMutationService().increaseStockInTransaction(
+          if (tracksPhysicalInventory) {
+            const warehouse = await this.resolveInventoryWarehouse(
               tx,
-              {
-                companyId,
-                productId: product.id,
-                warehouseId: warehouse.id,
-                quantity: initialStock,
-                type: InventoryMovementType.INITIAL_STOCK,
-                sourceType: "PRODUCT_CREATE",
-                sourceId: product.id,
-                reason: "PRODUCT_INITIAL_STOCK",
-                createdByUserId: user.id,
-              },
+              companyId,
+              dto.warehouseId,
             );
+            await this.ensureZeroWarehouseStock(
+              tx,
+              companyId,
+              warehouse.id,
+              product.id,
+            );
+            if (initialStock.gt(0)) {
+              await this.inventoryMutationService().increaseStockInTransaction(
+                tx,
+                {
+                  companyId,
+                  productId: product.id,
+                  warehouseId: warehouse.id,
+                  quantity: initialStock,
+                  type: InventoryMovementType.INITIAL_STOCK,
+                  sourceType: "PRODUCT_CREATE",
+                  sourceId: product.id,
+                  reason: "PRODUCT_INITIAL_STOCK",
+                  createdByUserId: user.id,
+                },
+              );
+            }
           }
           await this.pruneSafeDuplicateProducts(tx, companyId, product);
           return this.productResponse(tx, companyId, product.id);
@@ -1079,6 +1216,8 @@ export class ProductsService {
         where: { id, companyId },
         select: {
           stock: true,
+          itemType: true,
+          trackInventory: true,
           unitOfMeasureId: true,
           unitOfMeasure: {
             select: {
@@ -1108,6 +1247,21 @@ export class ProductsService {
             "El stock no se puede cambiar desde la edición del producto. Usa ajuste de stock.",
           );
         }
+      }
+      const nextClassification = this.normalizeProductClassification(
+        dto,
+        current as Pick<Product, "itemType" | "trackInventory">,
+      );
+      const currentClassification = this.normalizeProductClassification(
+        {},
+        current as Pick<Product, "itemType" | "trackInventory">,
+      );
+      const classificationChanges =
+        nextClassification.itemType !== currentClassification.itemType ||
+        nextClassification.trackInventory !==
+          currentClassification.trackInventory;
+      if (classificationChanges) {
+        await this.assertProductClassificationCanChange(tx, companyId, id);
       }
       const measurementUnitsEnabled = await this.measurementUnitsEnabled(
         tx,
@@ -1146,6 +1300,14 @@ export class ProductsService {
           dto.precio === undefined ? undefined : new Prisma.Decimal(dto.precio),
         costo:
           dto.costo === undefined ? undefined : new Prisma.Decimal(dto.costo),
+        itemType:
+          dto.itemType === undefined && dto.trackInventory === undefined
+            ? undefined
+            : nextClassification.itemType,
+        trackInventory:
+          dto.itemType === undefined && dto.trackInventory === undefined
+            ? undefined
+            : nextClassification.trackInventory,
         unitOfMeasureId:
           requestedUnitOfMeasureId === undefined ? undefined : unitOfMeasure.id,
         ...fiscalData,
@@ -1245,6 +1407,8 @@ export class ProductsService {
         select: {
           id: true,
           stock: true,
+          itemType: true,
+          trackInventory: true,
           unitOfMeasureId: true,
           unitOfMeasure: {
             select: {
@@ -1262,6 +1426,20 @@ export class ProductsService {
       });
       if (!current) {
         throw new NotFoundException("Producto no encontrado o archivado");
+      }
+      if (!(await this.companyInventoryEnabled(tx, companyId))) {
+        throw new BadRequestException(
+          "El control de inventario esta desactivado para esta empresa.",
+        );
+      }
+      if (
+        (current.itemType ?? ProductItemType.PRODUCT) !==
+          ProductItemType.PRODUCT ||
+        (current.trackInventory ?? true) !== true
+      ) {
+        throw new BadRequestException(
+          "Este articulo no maneja inventario fisico.",
+        );
       }
 
       const unitOfMeasure = this.mapUnitOfMeasure(current.unitOfMeasure);
@@ -1453,6 +1631,8 @@ export class ProductsService {
       costo: true,
       precio: true,
       stock: true,
+      itemType: true,
+      trackInventory: true,
       taxTreatment: true,
       taxRate: true,
       taxPriceMode: true,
@@ -1519,6 +1699,8 @@ export class ProductsService {
       stock: Number(product.stock ?? 0),
       cantidadDisponible: Number(product.stock ?? 0),
       stockDecimal: product.stock?.toString?.() ?? String(product.stock ?? 0),
+      itemType: productAny.itemType ?? "PRODUCT",
+      trackInventory: productAny.trackInventory !== false,
       categoria: product.categoria ?? null,
       categoriaNombre: product.categoria ?? null,
       unitOfMeasureId: productAny.unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID,

@@ -13,6 +13,10 @@ import 'sync_queue_service.dart';
 
 enum SyncHeaderStatus { synced, syncing, pending, attention, error }
 
+int retryableSyncWorkCount(SyncQueueState state) {
+  return state.pendingCount + state.errorCount;
+}
+
 SyncHeaderStatus resolveSyncHeaderStatus(SyncQueueState state) {
   if (state.isProcessing || state.syncingCount > 0) {
     return SyncHeaderStatus.syncing;
@@ -257,11 +261,9 @@ class _SyncStatusPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lastError = (state.lastError ?? '').trim();
-    final hasRetryableWork =
-        state.pendingCount > 0 ||
-        state.syncingCount > 0 ||
-        state.errorCount > 0;
+    final lastError = friendlySyncStatusMessage(state.lastError);
+    final retryableWork = retryableSyncWorkCount(state);
+    final hasRetryableWork = retryableWork > 0 || state.syncingCount > 0;
     final effectiveOnSyncNow = hasRetryableWork ? onSyncNow : null;
     final syncButtonLabel = onSyncNow == null
         ? 'Sincronizando...'
@@ -324,15 +326,12 @@ class _SyncStatusPopover extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            _SyncMetricRow(label: 'Pendientes', value: '${state.pendingCount}'),
+            _SyncMetricRow(label: 'Por enviar', value: '$retryableWork'),
             _SyncMetricRow(
               label: 'Sincronizando',
               value: '${state.syncingCount}',
             ),
-            _SyncMetricRow(
-              label: 'Errores reales',
-              value: '${state.errorCount}',
-            ),
+            _SyncMetricRow(label: 'Reintentando', value: '${state.errorCount}'),
             _SyncMetricRow(
               label: 'Requiere atención',
               value: '${state.conflictCount}',
@@ -454,7 +453,7 @@ class _SyncStatusPopover extends StatelessWidget {
       SyncHeaderStatus.syncing => 'Sincronización en curso',
       SyncHeaderStatus.pending => 'Cambios pendientes',
       SyncHeaderStatus.attention => 'Sincronización por revisar',
-      SyncHeaderStatus.error => 'Error de sincronización',
+      SyncHeaderStatus.error => 'No se pudo sincronizar',
     };
   }
 
@@ -464,9 +463,43 @@ class _SyncStatusPopover extends StatelessWidget {
       SyncHeaderStatus.syncing => 'Procesando cambios guardados',
       SyncHeaderStatus.pending => 'Se enviarán al recuperar conexión',
       SyncHeaderStatus.attention => 'Hay un conflicto que requiere decisión',
-      SyncHeaderStatus.error => 'La app conserva los datos y reintenta',
+      SyncHeaderStatus.error => 'Tus datos están guardados y se reintentará',
     };
   }
+}
+
+String friendlySyncStatusMessage(String? raw) {
+  final text = raw?.trim() ?? '';
+  if (text.isEmpty) return '';
+  final lower = text.toLowerCase();
+
+  if (_containsTechnicalSyncDetail(lower)) {
+    if (lower.contains('status code of 401') ||
+        lower.contains('status code 401') ||
+        lower.contains('statuscode: 401') ||
+        lower.contains('status=401') ||
+        lower.contains(' 401 ')) {
+      return 'Necesitas iniciar sesión nuevamente para continuar sincronizando.';
+    }
+    if (lower.contains('status code of 500') ||
+        lower.contains('status code 500') ||
+        lower.contains('statuscode: 500') ||
+        lower.contains('status=500') ||
+        lower.contains('server error')) {
+      return 'Algunas ventas están pendientes de enviarse al servidor. Tus datos permanecen guardados en este dispositivo y volveremos a intentarlo.';
+    }
+    return 'No pudimos comunicarnos con el servidor. Tus cambios permanecen guardados y se sincronizarán cuando vuelva la conexión.';
+  }
+
+  return text;
+}
+
+bool _containsTechnicalSyncDetail(String lower) {
+  return lower.contains('dioexception') ||
+      lower.contains('requestoptions') ||
+      lower.contains('validatestatus') ||
+      lower.contains('stack trace') ||
+      lower.contains('statuscode:');
 }
 
 class _OfflineConflictRow extends ConsumerWidget {
@@ -599,11 +632,12 @@ class _SyncAttentionItem {
       );
     }
     final error = (action.error ?? '').toString().trim();
+    final friendlyError = friendlySyncStatusMessage(error);
     return _SyncAttentionItem(
       title: 'Acción por revisar',
-      message: error.isEmpty
+      message: friendlyError.isEmpty
           ? 'La acción quedó detenida para proteger los datos.'
-          : error,
+          : friendlyError,
       detail: type,
     );
   }
@@ -619,7 +653,7 @@ class _SyncAttentionItem {
     } catch (_) {
       return _SyncAttentionItem(
         title: 'Venta offline sin sincronizar',
-        message: raw,
+        message: friendlySyncStatusMessage(raw),
         detail: '',
       );
     }

@@ -2820,6 +2820,39 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       reason: 'Registrar recepción de compra',
     );
     if (!allowed || !mounted) return;
+    final inventoryEnabled =
+        ref.read(companySettingsProvider).valueOrNull?.inventoryEnabled ?? true;
+    if (!inventoryEnabled) {
+      final register = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Control de inventario desactivado'),
+          content: const Text(
+            'La recepción se registrará como documento comercial sin actualizar stock físico.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Registrar recepción'),
+            ),
+          ],
+        ),
+      );
+      if (register != true || !mounted) return;
+      await _orderAction(
+        () => ref
+            .read(purchasesRepositoryProvider)
+            .receive(order: order, updateInventory: false),
+        'Recepción registrada.',
+        permission: AppPermission.receivePurchases,
+        reason: 'Registrar recepción de compra',
+      );
+      return;
+    }
     final update = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

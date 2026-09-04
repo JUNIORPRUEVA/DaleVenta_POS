@@ -3,7 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { InventoryMovementType, Prisma, ProductSource } from "@prisma/client";
+import {
+  InventoryMovementType,
+  Prisma,
+  ProductItemType,
+  ProductSource,
+} from "@prisma/client";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductSourceResolver } from "../products/product-source.resolver";
@@ -123,7 +128,11 @@ export class InventoryReportingService {
         },
       }),
       this.prisma.product.findMany({
-        where: { companyId },
+        where: {
+          companyId,
+          itemType: ProductItemType.PRODUCT,
+          trackInventory: true,
+        },
         orderBy: { nombre: "asc" },
         select: {
           id: true,
@@ -207,7 +216,11 @@ export class InventoryReportingService {
       return this.externalInventoryResponse(source.source, "reconciliation");
     }
     const rows = await this.prisma.product.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        itemType: ProductItemType.PRODUCT,
+        trackInventory: true,
+      },
       orderBy: { nombre: "asc" },
       select: {
         id: true,

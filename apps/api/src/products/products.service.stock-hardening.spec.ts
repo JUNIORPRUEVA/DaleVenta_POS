@@ -359,4 +359,207 @@ describe("ProductsService stock hardening", () => {
     );
     expect(tx.product.updateMany).not.toHaveBeenCalled();
   });
+
+  it("normalizes services to non-inventory products and skips initial stock rows", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({ id: "product-1" }),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: "product-1" }),
+      },
+      tax: { findFirst: jest.fn() },
+      warehouse: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+      },
+      warehouseStock: { upsert: jest.fn() },
+      saleItem: { count: jest.fn().mockResolvedValue(0) },
+      cotizacionItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      websiteProductOverride: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const inventory = {
+      increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    };
+    const service = buildService(prisma, inventory);
+
+    await service.create(userA as never, {
+      nombre: "Instalacion",
+      precio: 800,
+      costo: 0,
+      stock: 0,
+      categoria: "Servicios",
+      itemType: "SERVICE",
+      trackInventory: true,
+    });
+
+    expect(tx.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        itemType: "SERVICE",
+        trackInventory: false,
+        stock: new Prisma.Decimal(0),
+      }),
+    });
+    expect(tx.warehouse.findMany).not.toHaveBeenCalled();
+    expect(tx.warehouseStock.upsert).not.toHaveBeenCalled();
+    expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects initial stock for non-inventory products", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+      },
+      tax: { findFirst: jest.fn() },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const service = buildService(prisma);
+
+    await expect(
+      service.create(userA as never, {
+        nombre: "Garantia",
+        precio: 250,
+        costo: 0,
+        stock: 3,
+        categoria: "Servicios",
+        itemType: "PRODUCT",
+        trackInventory: false,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.product.create).not.toHaveBeenCalled();
+  });
+
+  it("allows classification changes only while product has no stock or history", async () => {
+    const tx = {
+      product: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: "product-1",
+            stock: new Prisma.Decimal("0"),
+            itemType: "PRODUCT",
+            trackInventory: true,
+            unitOfMeasureId: "UNIT",
+            unitOfMeasure: null,
+          })
+          .mockResolvedValueOnce({ stock: new Prisma.Decimal("0") })
+          .mockResolvedValueOnce({ id: "product-1" }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      warehouseStock: { count: jest.fn().mockResolvedValue(0) },
+      inventoryMovement: { count: jest.fn().mockResolvedValue(0) },
+      saleItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      warehouseTransferItem: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+
+    await service.update(userA as never, "product-1", {
+      nombre: "Instalacion",
+      itemType: "SERVICE",
+      trackInventory: true,
+    });
+
+    expect(tx.product.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          itemType: "SERVICE",
+          trackInventory: false,
+        }),
+      }),
+    );
+  });
+
+  it("blocks classification changes when stock or history exists", async () => {
+    const tx = {
+      product: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: "product-1",
+            stock: new Prisma.Decimal("0"),
+            itemType: "PRODUCT",
+            trackInventory: true,
+            unitOfMeasureId: "UNIT",
+            unitOfMeasure: null,
+          })
+          .mockResolvedValueOnce({ stock: new Prisma.Decimal("0") }),
+        updateMany: jest.fn(),
+      },
+      warehouseStock: { count: jest.fn().mockResolvedValue(0) },
+      inventoryMovement: { count: jest.fn().mockResolvedValue(1) },
+      saleItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      warehouseTransferItem: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+
+    await expect(
+      service.update(userA as never, "product-1", {
+        itemType: "SERVICE",
+        trackInventory: false,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects stock adjustment for services and non-inventory products", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "service-1",
+          stock: new Prisma.Decimal("0"),
+          itemType: "SERVICE",
+          trackInventory: false,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: null,
+        }),
+      },
+      warehouse: { findMany: jest.fn(), findFirst: jest.fn() },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const service = buildService(prisma);
+
+    await expect(
+      service.adjustStock(userA as never, "service-1", { stock: 1 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.warehouse.findMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects stock adjustment when inventory control is disabled", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ inventoryEnabled: false }),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("5"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: null,
+        }),
+      },
+      warehouse: { findMany: jest.fn(), findFirst: jest.fn() },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const service = buildService(prisma);
+
+    await expect(
+      service.adjustStock(userA as never, "product-1", { delta: 1 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.warehouse.findMany).not.toHaveBeenCalled();
+  });
 });

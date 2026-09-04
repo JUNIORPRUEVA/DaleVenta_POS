@@ -146,10 +146,12 @@ describe("SettingsService company master data protection", () => {
     });
 
     expect(settings.companyName).toBe("Nombre Nuevo");
+    expect(settings.inventoryEnabled).toBe(true);
     expect(prisma.company.findUnique).toHaveBeenCalledWith({
       where: { id: "company-a" },
       select: {
         name: true,
+        inventoryEnabled: true,
         measurementUnitsEnabled: true,
         multiWarehouseEnabled: true,
       },
@@ -174,6 +176,70 @@ describe("SettingsService company master data protection", () => {
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("writes inventoryEnabled only when the setting is present", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          inventoryEnabled: true,
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn().mockResolvedValue({ id: "company-a" }),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue(baseConfig()),
+      },
+    };
+    const prisma = { $transaction: jest.fn((callback) => callback(tx)) };
+    const service = buildService(prisma);
+
+    await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { inventoryEnabled: false, phone: "809-000-0000" },
+    );
+
+    expect(tx.company.update).toHaveBeenCalledWith({
+      where: { id: "company-a" },
+      data: expect.objectContaining({
+        inventoryEnabled: false,
+        measurementUnitsEnabled: false,
+        multiWarehouseEnabled: false,
+      }),
+      select: { id: true },
+    });
+    expect(tx.appConfig.upsert.mock.calls[0][0].update).not.toHaveProperty(
+      "inventoryEnabled",
+    );
+  });
+
+  it("does not change inventoryEnabled on partial settings payloads", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          inventoryEnabled: false,
+          measurementUnitsEnabled: true,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn(),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue(baseConfig()),
+      },
+    };
+    const prisma = { $transaction: jest.fn((callback) => callback(tx)) };
+    const service = buildService(prisma);
+
+    const settings = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { phone: "809-000-0000" },
+    );
+
+    expect(tx.company.update).not.toHaveBeenCalled();
+    expect(settings.inventoryEnabled).toBe(false);
   });
 
   it("rejects empty company names on the dedicated rename endpoint", async () => {

@@ -2,7 +2,13 @@ import '../errors/api_exception.dart';
 import '../utils/app_feedback.dart';
 import 'company_settings_model.dart';
 
-enum CompanySettingsToggle { measurementUnits, multiWarehouse, taxes, ncf }
+enum CompanySettingsToggle {
+  inventory,
+  measurementUnits,
+  multiWarehouse,
+  taxes,
+  ncf,
+}
 
 class CompanySettingsFeedback {
   const CompanySettingsFeedback._();
@@ -11,6 +17,9 @@ class CompanySettingsFeedback {
     CompanySettings before,
     CompanySettings after,
   ) {
+    if (before.inventoryEnabled != after.inventoryEnabled) {
+      return CompanySettingsToggle.inventory;
+    }
     if (before.measurementUnitsEnabled != after.measurementUnitsEnabled) {
       return CompanySettingsToggle.measurementUnits;
     }
@@ -126,6 +135,10 @@ class CompanySettingsFeedback {
         return after.measurementUnitsEnabled
             ? 'Unidades de medida activadas'
             : 'Unidades de medida desactivadas';
+      case CompanySettingsToggle.inventory:
+        return after.inventoryEnabled
+            ? 'Control de inventario activado'
+            : 'Control de inventario desactivado';
       case CompanySettingsToggle.multiWarehouse:
         return after.multiWarehouseEnabled
             ? 'Múltiples almacenes activados'

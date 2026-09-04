@@ -9,6 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   InventoryMovementType,
   Prisma,
+  ProductItemType,
   ProductSource,
   PurchaseOrderStatus,
   Role,
@@ -73,6 +74,16 @@ export class PurchasesService {
 
   private inventoryMutationService() {
     return this.inventoryMutations ?? new InventoryMutationService(this.prisma);
+  }
+
+  private isInventoryTrackedProduct(
+    product?: { itemType?: ProductItemType | null; trackInventory?: boolean | null } | null,
+  ) {
+    return (
+      (product?.itemType ?? ProductItemType.PRODUCT) ===
+        ProductItemType.PRODUCT &&
+      (product?.trackInventory ?? true) === true
+    );
   }
 
   private async resolveReceiptWarehouse(
@@ -364,31 +375,33 @@ export class PurchasesService {
     const totals = this.computeTotals(items, dto);
     const supplierId = this.cleanId(dto.supplierId);
     if (supplierId) await this.assertSupplier(companyId, supplierId);
-    return this.prisma.$transaction(async (tx) => {
-      const orderNumber = await this.nextOrderNumber(tx, companyId);
-      return tx.purchaseOrder.create({
-        data: {
-          companyId,
-          orderNumber,
-          supplierId,
-          expectedDeliveryDate: this.parseDate(dto.expectedDeliveryDate),
-          discount: totals.discount,
-          shippingCost: totals.shippingCost,
-          additionalCost: totals.additionalCost,
-          tax: totals.tax,
-          subtotal: totals.subtotal,
-          total: totals.total,
-          paymentTerms: this.clean(dto.paymentTerms),
-          paymentMethod: this.clean(dto.paymentMethod),
-          shippingMethod: this.clean(dto.shippingMethod),
-          notes: this.clean(dto.notes),
-          supplierInstructions: this.clean(dto.supplierInstructions),
-          createdById: user.id,
-          items: { create: items.map((item) => item.data) },
-        },
-        include: this.includeOrder(),
-      });
-    });
+    return this.createOrderWithNumberRetry(async () =>
+      this.prisma.$transaction(async (tx) => {
+        const orderNumber = await this.nextOrderNumber(tx, companyId);
+        return tx.purchaseOrder.create({
+          data: {
+            companyId,
+            orderNumber,
+            supplierId,
+            expectedDeliveryDate: this.parseDate(dto.expectedDeliveryDate),
+            discount: totals.discount,
+            shippingCost: totals.shippingCost,
+            additionalCost: totals.additionalCost,
+            tax: totals.tax,
+            subtotal: totals.subtotal,
+            total: totals.total,
+            paymentTerms: this.clean(dto.paymentTerms),
+            paymentMethod: this.clean(dto.paymentMethod),
+            shippingMethod: this.clean(dto.shippingMethod),
+            notes: this.clean(dto.notes),
+            supplierInstructions: this.clean(dto.supplierInstructions),
+            createdById: user.id,
+            items: { create: items.map((item) => item.data) },
+          },
+          include: this.includeOrder(),
+        });
+      }, PURCHASE_TRANSACTION_OPTIONS),
+    );
   }
 
   async updateOrder(
@@ -538,6 +551,11 @@ export class PurchasesService {
         "Una orden cancelada no puede recibir mercancía.",
       );
     }
+    const company = await this.prisma.company.findUnique({
+      where: { id: order.companyId },
+      select: { inventoryEnabled: true },
+    });
+    const inventoryEnabled = company?.inventoryEnabled !== false;
     const itemMap = new Map(order.items.map((item) => [item.id, item]));
     const normalized = dto.items.map((item) => {
       const current = itemMap.get(item.purchaseOrderItemId);
@@ -575,8 +593,20 @@ export class PurchasesService {
       };
     });
 
-    if (dto.updateInventory) {
+    const shouldUpdateLineInventory = (item: (typeof normalized)[number]) => {
+      if (!dto.updateInventory || !inventoryEnabled) return false;
+      if (item.current.productId) {
+        return this.isInventoryTrackedProduct(item.current.product);
+      }
+      return item.current.createInventoryProductOnReceipt === true;
+    };
+    const hasInventoryUpdates = normalized.some((item) =>
+      shouldUpdateLineInventory(item),
+    );
+
+    if (dto.updateInventory && hasInventoryUpdates) {
       for (const item of normalized) {
+        if (!shouldUpdateLineInventory(item)) continue;
         if (
           item.current.productSource &&
           item.current.productSource !== ProductSource.LOCAL
@@ -598,7 +628,7 @@ export class PurchasesService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-      const destinationWarehouse = dto.updateInventory
+      const destinationWarehouse = hasInventoryUpdates
         ? await this.resolveReceiptWarehouse(
             tx,
             order.companyId,
@@ -614,8 +644,8 @@ export class PurchasesService {
           notes: this.clean(dto.notes),
           invoiceImage: this.clean(dto.invoiceImage),
           receivedById: user.id,
-          inventoryUpdated: Boolean(dto.updateInventory),
-          inventoryUpdatedAt: dto.updateInventory ? new Date() : null,
+          inventoryUpdated: hasInventoryUpdates,
+          inventoryUpdatedAt: hasInventoryUpdates ? new Date() : null,
         },
       });
 
@@ -639,8 +669,10 @@ export class PurchasesService {
         }
 
         let productId = item.current.productId;
+        const updateLineInventory = shouldUpdateLineInventory(item);
         if (dto.updateInventory) {
           if (
+            updateLineInventory &&
             item.current.productSource &&
             item.current.productSource !== ProductSource.LOCAL
           ) {
@@ -657,7 +689,7 @@ export class PurchasesService {
               },
               data: { costo: item.unitCost },
             });
-          } else if (item.current.createInventoryProductOnReceipt) {
+          } else if (updateLineInventory && item.current.createInventoryProductOnReceipt) {
             const created = await tx.product.create({
               data: {
                 companyId: order.companyId ?? requireTenant(user),
@@ -700,7 +732,7 @@ export class PurchasesService {
           },
         });
 
-        if (dto.updateInventory && productId && destinationWarehouse) {
+        if (updateLineInventory && productId && destinationWarehouse) {
           await this.ensureWarehouseStock(
             tx,
             order.companyId,
@@ -724,7 +756,7 @@ export class PurchasesService {
             where: { id: receiptItem.id },
             data: { inventoryMovementId: movement.movementId },
           });
-        } else if (dto.updateInventory && !productId) {
+        } else if (updateLineInventory && !productId) {
           throw new BadRequestException(
             "La recepcion requiere producto local o creacion de producto de inventario.",
           );
@@ -1104,13 +1136,59 @@ export class PurchasesService {
 
   private async nextOrderNumber(tx: Prisma.TransactionClient, companyId: string) {
     const scope = companyId;
-    const current = await tx.purchaseOrderSequence.upsert({
+    await tx.$executeRaw`
+      INSERT INTO purchase_order_sequences (scope, next_value, updated_at)
+      VALUES (${scope}, 0, now())
+      ON CONFLICT (scope) DO NOTHING
+    `;
+    const [sequence] = await tx.$queryRaw<Array<{ next_value: number }>>`
+      SELECT next_value
+      FROM purchase_order_sequences
+      WHERE scope = ${scope}
+      FOR UPDATE
+    `;
+    const [historical] = await tx.$queryRaw<Array<{ highest: number | null }>>`
+      SELECT COALESCE(MAX(substring(order_number from 4)::integer), 0)::integer AS highest
+      FROM purchase_orders
+      WHERE company_id = ${companyId}::uuid
+        AND order_number ~ '^OC-[0-9]{6}$'
+    `;
+    const storedCurrent = Number(sequence?.next_value ?? 0);
+    const historicalCurrent = Number(historical?.highest ?? 0);
+    const number = Math.max(storedCurrent, historicalCurrent) + 1;
+    await tx.purchaseOrderSequence.update({
       where: { scope },
-      create: { scope, nextValue: 2 },
-      update: { nextValue: { increment: 1 } },
+      data: { nextValue: number },
     });
-    const number = current.nextValue === 2 ? 1 : current.nextValue - 1;
     return `OC-${number.toString().padStart(6, "0")}`;
+  }
+
+  private async createOrderWithNumberRetry<T>(fn: () => Promise<T>) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        if (!this.isPurchaseOrderNumberConflict(error)) throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  private isPurchaseOrderNumberConflict(error: unknown) {
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== "P2002"
+    ) {
+      return false;
+    }
+    const target = error.meta?.target;
+    return (
+      Array.isArray(target) &&
+      target.includes("company_id") &&
+      target.includes("order_number")
+    );
   }
 
   private async suppliersWithStats(

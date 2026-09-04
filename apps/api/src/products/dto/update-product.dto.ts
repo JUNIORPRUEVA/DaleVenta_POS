@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class UpdateProductDto {
   @IsOptional()
@@ -43,6 +43,14 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   stock?: number;
+
+  @IsOptional()
+  @IsIn(["PRODUCT", "SERVICE"])
+  itemType?: "PRODUCT" | "SERVICE";
+
+  @IsOptional()
+  @IsBoolean()
+  trackInventory?: boolean;
 
   @IsOptional()
   @IsIn(["INHERIT", "TAXABLE", "EXEMPT"])

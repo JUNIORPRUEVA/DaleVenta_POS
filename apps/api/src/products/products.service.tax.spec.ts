@@ -128,7 +128,7 @@ describe("ProductsService fiscal validation", () => {
     };
     const { service } = buildService(transactionClient);
 
-    await service.create(
+    const response = await service.create(
       {
         id: "user-1",
         role: "ADMIN",
@@ -151,6 +151,8 @@ describe("ProductsService fiscal validation", () => {
         taxPriceMode: undefined,
       }),
     });
+    expect(response.itemType).toBe("PRODUCT");
+    expect(response.trackInventory).toBe(true);
   });
 
   it("forces UNIT on create when company measurement units are disabled", async () => {

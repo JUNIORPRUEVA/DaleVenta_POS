@@ -27,6 +27,7 @@ import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../core/widgets/fulltech_dialog.dart';
 import '../../modules/cash/cash_turn_menu_button.dart';
 import 'delete_account_dialog.dart';
 import '../settings/data/cloud_backup_service.dart';
@@ -1754,6 +1755,7 @@ class _CompanySettingsEditorState
   bool _taxEnabled = false;
   bool _pricesIncludeTax = false;
   bool _ncfEnabled = false;
+  bool _inventoryEnabled = true;
   bool _measurementUnitsEnabled = false;
   bool _multiWarehouseEnabled = false;
 
@@ -1820,6 +1822,7 @@ class _CompanySettingsEditorState
     _taxEnabled = settings.taxEnabled;
     _pricesIncludeTax = settings.pricesIncludeTax;
     _ncfEnabled = settings.ncfEnabled;
+    _inventoryEnabled = settings.inventoryEnabled;
     _measurementUnitsEnabled = settings.measurementUnitsEnabled;
     _multiWarehouseEnabled = settings.multiWarehouseEnabled;
   }
@@ -1936,6 +1939,25 @@ class _CompanySettingsEditorState
     );
   }
 
+  Future<void> _setInventoryEnabled(bool value) async {
+    if (value == _inventoryEnabled) return;
+    final confirmed = await FullTechConfirmDialog.show(
+      context,
+      title: value
+          ? 'Activar control de inventario'
+          : 'Desactivar control de inventario',
+      message: value
+          ? 'FullPOS volverá a utilizar las existencias registradas anteriormente.\n\nRecomendamos realizar un recuento de inventario para confirmar que las cantidades actuales coincidan con las existencias físicas.'
+          : 'Podrás continuar vendiendo normalmente, pero las nuevas operaciones no modificarán las existencias de los productos.\n\nEl inventario actual se conservará y podrá utilizarse nuevamente si reactivas esta función.',
+      confirmText: value ? 'Activar' : 'Desactivar',
+      cancelText: 'Cancelar',
+      icon: value ? Icons.inventory_2_outlined : Icons.inventory_outlined,
+      iconColor: value ? AppColors.secondary : AppColors.warning,
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() => _inventoryEnabled = value);
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -2006,6 +2028,7 @@ class _CompanySettingsEditorState
           : widget.settings.defaultTaxRate,
       pricesIncludeTax: _pricesIncludeTax,
       ncfEnabled: _ncfEnabled,
+      inventoryEnabled: _inventoryEnabled,
       measurementUnitsEnabled: _measurementUnitsEnabled,
       multiWarehouseEnabled: _multiWarehouseEnabled,
       bankAccounts: [
@@ -2171,8 +2194,10 @@ class _CompanySettingsEditorState
         ),
         const SizedBox(height: 10),
         _InventorySettingsPanel(
+          inventoryEnabled: _inventoryEnabled,
           measurementUnitsEnabled: _measurementUnitsEnabled,
           multiWarehouseEnabled: _multiWarehouseEnabled,
+          onInventoryEnabledChanged: _setInventoryEnabled,
           onMeasurementUnitsEnabledChanged: (value) =>
               setState(() => _measurementUnitsEnabled = value),
           onMultiWarehouseEnabledChanged: (value) =>
@@ -2372,14 +2397,18 @@ class _FiscalSettingsPanel extends StatelessWidget {
 
 class _InventorySettingsPanel extends StatelessWidget {
   const _InventorySettingsPanel({
+    required this.inventoryEnabled,
     required this.measurementUnitsEnabled,
     required this.multiWarehouseEnabled,
+    required this.onInventoryEnabledChanged,
     required this.onMeasurementUnitsEnabledChanged,
     required this.onMultiWarehouseEnabledChanged,
   });
 
+  final bool inventoryEnabled;
   final bool measurementUnitsEnabled;
   final bool multiWarehouseEnabled;
+  final ValueChanged<bool> onInventoryEnabledChanged;
   final ValueChanged<bool> onMeasurementUnitsEnabledChanged;
   final ValueChanged<bool> onMultiWarehouseEnabledChanged;
 
@@ -2399,6 +2428,25 @@ class _InventorySettingsPanel extends StatelessWidget {
           children: [
             Text('Inventario', style: _titleStyle(15)),
             const SizedBox(height: 6),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Control de inventario'),
+              subtitle: const Text(
+                'Controla automáticamente las existencias de los productos inventariables al vender, comprar y realizar operaciones de inventario.',
+              ),
+              secondary: Text(
+                inventoryEnabled ? 'Activado' : 'Desactivado',
+                style: TextStyle(
+                  color: inventoryEnabled
+                      ? AppColors.success
+                      : AppColors.textMuted,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              value: inventoryEnabled,
+              onChanged: onInventoryEnabledChanged,
+            ),
+            const Divider(height: 16),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('Activar unidades de medida'),

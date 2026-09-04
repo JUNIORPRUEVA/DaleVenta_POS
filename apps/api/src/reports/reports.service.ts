@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { Prisma, Role } from "@prisma/client";
+import { Prisma, ProductItemType, Role } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   isAdminLike,
@@ -69,7 +69,12 @@ export class ReportsService {
       saleDate: range,
     };
 
-    const [sales, returnedSales, refundSales, products, movements] =
+    const companyPromise =
+      (this.prisma as any).company?.findUnique?.({
+        where: { id: companyId },
+        select: { inventoryEnabled: true },
+      }) ?? Promise.resolve(null);
+    const [sales, returnedSales, refundSales, products, movements, company] =
       await Promise.all([
         this.prisma.sale.findMany({
           where: saleWhere,
@@ -108,7 +113,11 @@ export class ReportsService {
           orderBy: { saleDate: "asc" },
         }),
         this.prisma.product.findMany({
-          where: { companyId },
+          where: {
+            companyId,
+            itemType: ProductItemType.PRODUCT,
+            trackInventory: true,
+          },
           select: {
             id: true,
             nombre: true,
@@ -133,7 +142,9 @@ export class ReportsService {
             ...(canSeeAll ? {} : { userId: user.id }),
           },
         }),
+        companyPromise,
       ]);
+    const inventoryEnabled = company?.inventoryEnabled !== false;
 
     const visibleSales = selectedCategory
       ? sales.filter(
@@ -402,8 +413,8 @@ export class ReportsService {
         this.addInventoryQuantityToBuckets(acc.unitsByUnit, product);
         acc.costValue += stock * cost;
         acc.saleValue += stock * price;
-        if (stock <= 0) acc.outOfStock += 1;
-        if (stock > 0 && stock <= 3) acc.lowStock += 1;
+        if (inventoryEnabled && stock <= 0) acc.outOfStock += 1;
+        if (inventoryEnabled && stock > 0 && stock <= 3) acc.lowStock += 1;
         if (cost <= 0) acc.productsWithoutCost += 1;
         return acc;
       },

@@ -6,7 +6,13 @@ import {
   Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InventoryMovementType, Prisma, ProductSource, Role } from "@prisma/client";
+import {
+  InventoryMovementType,
+  Prisma,
+  ProductItemType,
+  ProductSource,
+  Role,
+} from "@prisma/client";
 import crypto from "node:crypto";
 import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -67,6 +73,7 @@ type NormalizedSaleItem = {
   taxIncluded?: boolean;
   taxExempt?: boolean;
   lineTotal?: Prisma.Decimal;
+  inventoryTrackedSnapshot?: boolean;
 };
 
 type ResolvedSaleWarehouse = {
@@ -213,7 +220,9 @@ export class SalesService {
   }
 
   private terminalResolutionService() {
-    return this.terminalResolution ?? new TerminalResolutionService(this.prisma);
+    return (
+      this.terminalResolution ?? new TerminalResolutionService(this.prisma)
+    );
   }
 
   private async resolveLegacyCancellationWarehouse(
@@ -352,9 +361,14 @@ export class SalesService {
     companyId: string,
     saleId: string,
   ) {
-    const executeRawUnsafe = (tx as unknown as {
-      $executeRawUnsafe?: (query: string, ...values: unknown[]) => Promise<unknown>;
-    }).$executeRawUnsafe;
+    const executeRawUnsafe = (
+      tx as unknown as {
+        $executeRawUnsafe?: (
+          query: string,
+          ...values: unknown[]
+        ) => Promise<unknown>;
+      }
+    ).$executeRawUnsafe;
     if (!executeRawUnsafe) return;
     await executeRawUnsafe.call(
       tx,
@@ -746,7 +760,7 @@ export class SalesService {
     const [companySnapshot, appConfigSnapshot] = await Promise.all([
       this.prisma.company.findFirst({
         where: { id: companyId },
-        select: { name: true },
+        select: { name: true, inventoryEnabled: true },
       }),
       this.prisma.appConfig.findFirst({
         where: { companyId },
@@ -785,6 +799,8 @@ export class SalesService {
       taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
       taxRate: Prisma.Decimal | null;
       taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
+      itemType?: ProductItemType;
+      trackInventory?: boolean;
       unitOfMeasure: UnitOfMeasureSnapshot | null;
     }> = [];
     if (productIds.length) {
@@ -800,6 +816,8 @@ export class SalesService {
             taxTreatment: true,
             taxRate: true,
             taxPriceMode: true,
+            itemType: true,
+            trackInventory: true,
             unitOfMeasure: {
               select: {
                 code: true,
@@ -857,10 +875,24 @@ export class SalesService {
             taxIncluded: item.taxIncluded,
             taxExempt: item.taxExempt,
             lineTotal,
+            inventoryTrackedSnapshot: this.resolveInventoryTrackedSnapshot(
+              {
+                productId: item.productId ?? undefined,
+                productSource: item.productSource ?? undefined,
+                inventoryTrackedSnapshot: undefined,
+              },
+              productMap.get(item.productId ?? ""),
+              companySnapshot?.inventoryEnabled !== false,
+            ),
           };
         })
       : dto.items.map((item, index) =>
-          this.normalizeItem(item, index, productMap),
+          this.normalizeItem(
+            item,
+            index,
+            productMap,
+            companySnapshot?.inventoryEnabled !== false,
+          ),
         );
 
     this.assertNoUnsupportedExternalStockMutation(normalizedItems);
@@ -1109,17 +1141,21 @@ export class SalesService {
 
     try {
       const sale = await this.prisma.$transaction(async (tx) => {
-        const operationalContext: OperationalTerminalContext | null =
+        const shouldResolveOperationalContext =
           normalizedItems.some(
-          (item) => item.productId,
-        )
-          ? await this.terminalResolutionService().resolveForSale(tx, {
-              companyId,
-              terminalId: dto.terminalId,
-              deviceFingerprint: dto.deviceFingerprint,
-              requestedWarehouseId: dto.warehouseId,
-            })
-          : null;
+            (item) => item.inventoryTrackedSnapshot === true,
+          ) ||
+          Boolean(dto.terminalId?.trim()) ||
+          Boolean(dto.deviceFingerprint?.trim());
+        const operationalContext: OperationalTerminalContext | null =
+          shouldResolveOperationalContext
+            ? await this.terminalResolutionService().resolveForSale(tx, {
+                companyId,
+                terminalId: dto.terminalId,
+                deviceFingerprint: dto.deviceFingerprint,
+                requestedWarehouseId: dto.warehouseId,
+              })
+            : null;
 
         const reservedNcf = requestedVoucherType
           ? await this.ncf.reserveNextNcf(tx, {
@@ -1203,74 +1239,82 @@ export class SalesService {
 
         for (let index = 0; index < normalizedItems.length; index += 1) {
           const item = normalizedItems[index];
-          const warehouseSnapshot = item.productId
+          const warehouseSnapshot = item.inventoryTrackedSnapshot
             ? operationalContext?.warehouse
             : null;
           const saleItem = await tx.saleItem.create({
             data: {
               saleId: sale.id,
-                ...(() => {
-                  const taxLine = taxCalculation.lines[index];
-                  const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
-                  const itemNetTaxProfit = (
-                    sourceQuotation || fiscalSettings.taxEnabled
-                      ? (taxLine?.taxableBase ?? new Prisma.Decimal(0)).plus(
-                          taxLine?.exemptAmount ?? new Prisma.Decimal(0),
-                        )
-                      : lineTotal
-                  ).minus(item.subtotalCost);
-                  const itemCommercialProfit = itemNetTaxProfit;
-                  return {
-                    grossAmount: sourceQuotation
-                      ? (taxLine?.grossAmount ?? item.subtotalSold)
-                      : directCommercialLineValues[index].realGross,
-                    lineDiscountAmount: sourceQuotation
-                      ? (taxLine?.discountAmount ?? new Prisma.Decimal(0))
-                      : directCommercialLineValues[index].realLineDiscount,
-                    taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
-                    taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
-                    taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),
-                    exemptAmount: taxLine?.exemptAmount ?? item.subtotalSold,
-                    taxIncluded: taxLine?.taxIncluded ?? false,
-                    taxExempt: taxLine?.taxExempt ?? true,
-                    subtotalSold: lineTotal,
-                    profit: itemCommercialProfit,
-                    commercialProfit: itemCommercialProfit,
-                    netTaxProfit: itemNetTaxProfit,
-                  };
-                })(),
-                productId: item.productId,
-                productSource: item.productSource,
-                sourceProductId: item.sourceProductId,
-                warehouseId: warehouseSnapshot?.id ?? null,
-                warehouseNameSnapshot: warehouseSnapshot?.name ?? null,
-                warehouseCodeSnapshot: warehouseSnapshot?.code ?? null,
-                productNameSnapshot: item.productNameSnapshot,
-                productImageSnapshot: item.productImageSnapshot,
-                qty: item.qty,
-                unitCodeSnapshot: item.unitCodeSnapshot,
-                unitNameSnapshot: item.unitNameSnapshot,
-                unitSymbolSnapshot: item.unitSymbolSnapshot,
-                unitPrecisionSnapshot: item.unitPrecisionSnapshot,
-                priceSoldUnit: item.priceSoldUnit,
-                costUnitSnapshot: item.costUnitSnapshot,
-                subtotalCost: item.subtotalCost,
+              ...(() => {
+                const taxLine = taxCalculation.lines[index];
+                const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
+                const itemNetTaxProfit = (
+                  sourceQuotation || fiscalSettings.taxEnabled
+                    ? (taxLine?.taxableBase ?? new Prisma.Decimal(0)).plus(
+                        taxLine?.exemptAmount ?? new Prisma.Decimal(0),
+                      )
+                    : lineTotal
+                ).minus(item.subtotalCost);
+                const itemCommercialProfit = itemNetTaxProfit;
+                return {
+                  grossAmount: sourceQuotation
+                    ? (taxLine?.grossAmount ?? item.subtotalSold)
+                    : directCommercialLineValues[index].realGross,
+                  lineDiscountAmount: sourceQuotation
+                    ? (taxLine?.discountAmount ?? new Prisma.Decimal(0))
+                    : directCommercialLineValues[index].realLineDiscount,
+                  taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
+                  taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
+                  taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),
+                  exemptAmount: taxLine?.exemptAmount ?? item.subtotalSold,
+                  taxIncluded: taxLine?.taxIncluded ?? false,
+                  taxExempt: taxLine?.taxExempt ?? true,
+                  subtotalSold: lineTotal,
+                  profit: itemCommercialProfit,
+                  commercialProfit: itemCommercialProfit,
+                  netTaxProfit: itemNetTaxProfit,
+                };
+              })(),
+              productId: item.productId,
+              productSource: item.productSource,
+              sourceProductId: item.sourceProductId,
+              warehouseId: warehouseSnapshot?.id ?? null,
+              warehouseNameSnapshot: warehouseSnapshot?.name ?? null,
+              warehouseCodeSnapshot: warehouseSnapshot?.code ?? null,
+              productNameSnapshot: item.productNameSnapshot,
+              productImageSnapshot: item.productImageSnapshot,
+              qty: item.qty,
+              inventoryTrackedSnapshot: item.inventoryTrackedSnapshot === true,
+              unitCodeSnapshot: item.unitCodeSnapshot,
+              unitNameSnapshot: item.unitNameSnapshot,
+              unitSymbolSnapshot: item.unitSymbolSnapshot,
+              unitPrecisionSnapshot: item.unitPrecisionSnapshot,
+              priceSoldUnit: item.priceSoldUnit,
+              costUnitSnapshot: item.costUnitSnapshot,
+              subtotalCost: item.subtotalCost,
             },
           });
 
-          if (item.productId && operationalContext) {
-            await this.inventoryMutationService().decreaseStockInTransaction(tx, {
-              companyId,
-              productId: item.productId,
-              warehouseId: operationalContext.warehouse.id,
-              quantity: item.qty,
-              type: InventoryMovementType.SALE,
-              sourceType: "SALE",
-              sourceId: sale.id,
-              sourceItemId: saleItem.id,
-              reason: "SALE",
-              createdByUserId: user.id,
-            });
+          if (
+            item.productId &&
+            item.inventoryTrackedSnapshot === true &&
+            operationalContext
+          ) {
+            await this.inventoryMutationService().decreaseStockInTransaction(
+              tx,
+              {
+                companyId,
+                productId: item.productId,
+                warehouseId: operationalContext.warehouse.id,
+                quantity: item.qty,
+                type: InventoryMovementType.SALE,
+                sourceType: "SALE",
+                sourceId: sale.id,
+                sourceItemId: saleItem.id,
+                reason: "SALE",
+                createdByUserId: user.id,
+              },
+            );
           }
         }
 
@@ -1589,7 +1633,7 @@ export class SalesService {
 
       let legacyWarehouse: ResolvedSaleWarehouse | null = null;
       for (const item of sale.items) {
-        if (!item.productId) continue;
+        if (!item.productId || item.inventoryTrackedSnapshot !== true) continue;
         if (item.productSource && item.productSource !== ProductSource.LOCAL) {
           continue;
         }
@@ -1711,9 +1755,9 @@ export class SalesService {
         for (const item of requestedInput) {
           requestedByItem.set(
             item.saleItemId,
-            (requestedByItem.get(item.saleItemId) ?? new Prisma.Decimal(0)).plus(
-              item.qty,
-            ),
+            (
+              requestedByItem.get(item.saleItemId) ?? new Prisma.Decimal(0)
+            ).plus(item.qty),
           );
         }
         const requestedItems = [...requestedByItem.entries()].map(
@@ -1761,7 +1805,7 @@ export class SalesService {
               `La devolución de ${original.productNameSnapshot} supera la cantidad disponible.`,
             );
           }
-          if (restoreInventory) {
+          if (restoreInventory && original.inventoryTrackedSnapshot === true) {
             const alreadyInventoryReturned =
               inventoryReturned.get(original.id) ?? new Prisma.Decimal(0);
             const remainingInventoryQty = original.qty.minus(
@@ -1819,6 +1863,11 @@ export class SalesService {
               productNameSnapshot: original.productNameSnapshot,
               productImageSnapshot: original.productImageSnapshot,
               qty: request.qty,
+              inventoryTrackedSnapshot:
+                (original as any).inventoryTrackedSnapshot ??
+                (Boolean(original.productId) &&
+                  (!original.productSource ||
+                    original.productSource === ProductSource.LOCAL)),
               unitCodeSnapshot: original.unitCodeSnapshot,
               unitNameSnapshot: original.unitNameSnapshot,
               unitSymbolSnapshot: original.unitSymbolSnapshot,
@@ -1845,6 +1894,7 @@ export class SalesService {
         let legacyWarehouse: ResolvedSaleWarehouse | null = null;
         for (const item of refundItems) {
           if (!restoreInventory) continue;
+          if (item.original.inventoryTrackedSnapshot !== true) continue;
           if (
             item.original.productSource &&
             item.original.productSource !== "LOCAL"
@@ -1972,8 +2022,15 @@ export class SalesService {
               (candidate) =>
                 candidate.original.id === refundItem.refundedSaleItemId,
             );
-            if (!item || !item.original.productId) continue;
-            const warehouseId = item.original.warehouseId ?? item.data.warehouseId;
+            if (
+              !item ||
+              !item.original.productId ||
+              item.original.inventoryTrackedSnapshot !== true
+            ) {
+              continue;
+            }
+            const warehouseId =
+              item.original.warehouseId ?? item.data.warehouseId;
             if (!warehouseId) {
               throw new BadRequestException(
                 "No se pudo resolver el almacen original de la devolucion.",
@@ -2154,9 +2211,12 @@ export class SalesService {
         taxTreatment: "INHERIT" | "TAXABLE" | "EXEMPT";
         taxRate: Prisma.Decimal | null;
         taxPriceMode: "NO_TAX" | "TAX_ADDED" | "TAX_INCLUDED" | null;
+        itemType?: ProductItemType;
+        trackInventory?: boolean;
         unitOfMeasure: UnitOfMeasureSnapshot | null;
       }
     >,
+    companyInventoryEnabled = true,
   ): NormalizedSaleItem {
     const qty = new Prisma.Decimal(item.qty);
     const priceSoldUnit = new Prisma.Decimal(item.priceSoldUnit);
@@ -2207,6 +2267,11 @@ export class SalesService {
         taxTreatment: product.taxTreatment,
         taxRate: product.taxRate,
         taxPriceMode: product.taxPriceMode,
+        inventoryTrackedSnapshot: this.resolveInventoryTrackedSnapshot(
+          item,
+          product,
+          companyInventoryEnabled,
+        ),
       };
     }
 
@@ -2260,12 +2325,40 @@ export class SalesService {
       taxTreatment: "INHERIT" as const,
       taxRate: null,
       taxPriceMode: null,
+      inventoryTrackedSnapshot: false,
     };
   }
 
-  private assertNoUnsupportedExternalStockMutation(items: NormalizedSaleItem[]) {
+  private resolveInventoryTrackedSnapshot(
+    item: Pick<
+      CreateSaleItemDto,
+      "productId" | "productSource" | "inventoryTrackedSnapshot"
+    >,
+    product:
+      | {
+          id: string;
+          itemType?: ProductItemType;
+          trackInventory?: boolean;
+        }
+      | undefined,
+    companyInventoryEnabled: boolean,
+  ) {
+    if (!item.productId) return false;
+    const productSource = item.productSource ?? ProductSource.LOCAL;
+    if (productSource !== ProductSource.LOCAL) return false;
+    if (product?.itemType === ProductItemType.SERVICE) return false;
+    if (item.inventoryTrackedSnapshot !== undefined) {
+      return item.inventoryTrackedSnapshot === true;
+    }
+    return companyInventoryEnabled && product?.trackInventory !== false;
+  }
+
+  private assertNoUnsupportedExternalStockMutation(
+    items: NormalizedSaleItem[],
+  ) {
     const external = items.find(
-      (item) => item.productSource && item.productSource !== ProductSource.LOCAL,
+      (item) =>
+        item.productSource && item.productSource !== ProductSource.LOCAL,
     );
     if (!external) return;
     throw new BadRequestException(
@@ -2279,8 +2372,7 @@ export class SalesService {
     return {
       code,
       name: item.unitNameSnapshot?.trim() || DEFAULT_UNIT_OF_MEASURE.name,
-      symbol:
-        item.unitSymbolSnapshot?.trim() || DEFAULT_UNIT_OF_MEASURE.symbol,
+      symbol: item.unitSymbolSnapshot?.trim() || DEFAULT_UNIT_OF_MEASURE.symbol,
       precision,
       allowDecimals: precision > 0,
     };
@@ -2334,7 +2426,11 @@ export class SalesService {
         ? (response as Record<string, unknown>)
         : null;
     const code = String(body?.errorCode ?? body?.code ?? "").trim();
-    if (!code.includes("STOCK") && !code.includes("WAREHOUSE") && !code.includes("TERMINAL")) {
+    if (
+      !code.includes("STOCK") &&
+      !code.includes("WAREHOUSE") &&
+      !code.includes("TERMINAL")
+    ) {
       return;
     }
     const details =

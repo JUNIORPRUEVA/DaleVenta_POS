@@ -270,6 +270,7 @@ class CompanySettingsRepository {
         'defaultTaxRate': settings.defaultTaxRate,
         'pricesIncludeTax': settings.pricesIncludeTax,
         'ncfEnabled': settings.ncfEnabled,
+        'inventoryEnabled': settings.inventoryEnabled,
         'measurementUnitsEnabled': settings.measurementUnitsEnabled,
         'multiWarehouseEnabled': settings.multiWarehouseEnabled,
       };

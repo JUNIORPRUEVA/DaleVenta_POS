@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient, ProductItemType } from "@prisma/client";
 
 export const ZERO_CONFIG_VERSION = "W3_ZERO_CONFIG";
 export const DEFAULT_WAREHOUSE_CODE = "MAIN";
@@ -13,6 +13,8 @@ type PrismaLike = Pick<PrismaClient, "$transaction" | "company">;
 type LocalProductSnapshot = {
   id: string;
   stock: Prisma.Decimal;
+  itemType?: ProductItemType | null;
+  trackInventory?: boolean | null;
 };
 
 export type ZeroConfigCompanyResult = {
@@ -202,8 +204,12 @@ export async function backfillZeroConfigInventoryForCompany(
 
   const products = isLocalCompany
     ? await tx.product.findMany({
-        where: { companyId },
-        select: { id: true, stock: true },
+        where: {
+          companyId,
+          itemType: ProductItemType.PRODUCT,
+          trackInventory: true,
+        },
+        select: { id: true, stock: true, itemType: true, trackInventory: true },
         orderBy: { id: "asc" },
       })
     : [];

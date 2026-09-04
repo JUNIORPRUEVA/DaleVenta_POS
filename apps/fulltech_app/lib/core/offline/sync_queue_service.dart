@@ -309,14 +309,17 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
           await _store.updatePendingAction(
             syncing.copyWith(
               status: status,
-              error: '$error',
+              error: _customerSyncMessage(error),
               nextAttemptAt: nextAttemptAt,
               permanent: permanent,
               updatedAt: DateTime.now().toUtc(),
             ),
           );
-          await _recordError('$error', DateTime.now().toUtc());
-          _patchState((current) => current.copyWith(lastError: '$error'));
+          final customerMessage = _customerSyncMessage(error);
+          await _recordError(customerMessage, DateTime.now().toUtc());
+          _patchState(
+            (current) => current.copyWith(lastError: customerMessage),
+          );
         }
       }
     } catch (error, stackTrace) {
@@ -503,6 +506,45 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   String? _clean(String? value) {
     final text = value?.trim() ?? '';
     return text.isEmpty ? null : text;
+  }
+
+  String _customerSyncMessage(Object error) {
+    if (error is ApiException) {
+      if (error.type == ApiErrorType.unauthorized ||
+          error.type == ApiErrorType.forbidden) {
+        return 'Necesitas iniciar sesión nuevamente para continuar sincronizando.';
+      }
+      if (error.isNetworkError) {
+        return 'No pudimos comunicarnos con el servidor. Tus cambios permanecen guardados y se sincronizarán cuando vuelva la conexión.';
+      }
+      if (error.type == ApiErrorType.server || error.retryable) {
+        return 'Algunas ventas están pendientes de enviarse al servidor. Tus datos permanecen guardados en este dispositivo y volveremos a intentarlo.';
+      }
+      final message = error.message.trim();
+      return message.isEmpty
+          ? 'La acción quedó guardada en este dispositivo y necesita revisión.'
+          : message;
+    }
+
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403) {
+        return 'Necesitas iniciar sesión nuevamente para continuar sincronizando.';
+      }
+      if (status != null && status >= 500) {
+        return 'Algunas ventas están pendientes de enviarse al servidor. Tus datos permanecen guardados en este dispositivo y volveremos a intentarlo.';
+      }
+      if (status == null ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.unknown) {
+        return 'No pudimos comunicarnos con el servidor. Tus cambios permanecen guardados y se sincronizarán cuando vuelva la conexión.';
+      }
+    }
+
+    return 'La sincronización encontró un problema. Tus datos permanecen guardados en este dispositivo.';
   }
 
   @override

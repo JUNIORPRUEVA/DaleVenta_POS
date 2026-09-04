@@ -1,198 +1,376 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-DO">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Aplicacion empresarial FULLTECH SRL.">
+  <title>FullPOS Cloud | Sistema POS para Windows, Android, iPhone y Web</title>
+  <meta name="description" content="Sistema POS en la nube para ventas, inventario, caja, clientes y reportes. Usa FullPOS Cloud en Windows, Android, iPhone y Web con soporte remoto vía WhatsApp.">
+  <link rel="canonical" href="https://fullposcloud.fulltechrd.com/">
+  <meta name="robots" content="index, follow">
+  <meta property="og:title" content="FullPOS Cloud | Sistema POS para Windows, Android, iPhone y Web">
+  <meta property="og:description" content="Sistema POS en la nube para ventas, inventario, caja, clientes y reportes en Windows, Android, iPhone y Web/PWA.">
+  <meta property="og:url" content="https://fullposcloud.fulltechrd.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="FullPOS Cloud">
+  <meta property="og:locale" content="es_DO">
+  <meta property="og:image" content="https://fullposcloud.fulltechrd.com/assets/assets/image/landing-pos-cloud.png">
+  <meta property="og:image:alt" content="Interfaz de FullPOS Cloud en dispositivos de escritorio y móvil">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FullPOS Cloud | Sistema POS para Windows, Android, iPhone y Web">
+  <meta name="twitter:description" content="Ventas, inventario, caja, clientes y reportes en una sola plataforma con soporte remoto vía WhatsApp.">
+  <meta name="twitter:image" content="https://fullposcloud.fulltechrd.com/assets/assets/image/landing-pos-cloud.png">
   <meta name="theme-color" content="#EFF5F8">
   <meta name="msapplication-TileColor" content="#EFF5F8">
   <style>
+    :root {
+      color-scheme: light;
+      --primary: #1957e6;
+      --primary-dark: #123a75;
+      --accent: #26b6a6;
+      --ink: #0d1b2a;
+      --muted: #5e7187;
+      --line: #dce8ef;
+      --soft: #f3f7fa;
+      --surface: #ffffff;
+      --surface-alt: #fafcfe;
+    }
+
+    * { box-sizing: border-box; }
+
     html, body {
       margin: 0;
       min-height: 100%;
-      background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 58%, #f7fee7 100%);
-    }
-
-    body {
-      overflow: hidden;
+      background: var(--soft);
+      color: var(--ink);
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      letter-spacing: 0;
     }
 
-    #app-loader {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      z-index: 9999;
-      transition: opacity 220ms ease, visibility 220ms ease;
+    body.has-flutter { overflow: hidden; }
+
+    a {
+      color: var(--primary-dark);
+      font-weight: 800;
     }
 
+    a:focus-visible,
+    button:focus-visible {
+      outline: 3px solid rgba(25, 87, 230, 0.35);
+      outline-offset: 3px;
+    }
+
+    #marketing-shell {
+      min-height: 100vh;
+      background: linear-gradient(180deg, #f3f8fc 0%, #ffffff 58%, #f8fafc 100%);
+      transition: opacity 180ms ease, visibility 180ms ease;
+    }
+
+    #marketing-shell.is-hidden,
     #app-loader.is-hidden {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
 
-    #app-loader::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background:
-        repeating-radial-gradient(ellipse at 50% 24%, rgba(37, 99, 235, 0.055) 0 1px, transparent 1px 86px),
-        linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0));
-      pointer-events: none;
-    }
-
-    .loader-shell {
-      width: min(100%, 440px);
-      padding: 24px;
-      text-align: center;
-      position: relative;
-      animation: loader-intro 520ms ease-out both;
-    }
-
-    .loader-mark {
-      width: 154px;
-      height: 154px;
+    .seo-header,
+    .seo-main,
+    .seo-footer-inner {
+      width: min(1220px, calc(100% - 32px));
       margin: 0 auto;
-      border-radius: 999px;
+    }
+
+    .seo-header-wrap {
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .seo-header {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .seo-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .seo-brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
       display: grid;
       place-items: center;
-      position: relative;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      overflow: hidden;
+      box-shadow: 0 10px 24px rgba(13, 27, 42, 0.12);
     }
 
-    .loader-mark::before,
-    .loader-mark::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      border: 2px solid rgba(37, 99, 235, 0.14);
-    }
-
-    .loader-mark::after {
-      border-color: transparent;
-      border-top-color: #2563eb;
-      border-right-color: #14b8a6;
-      animation: loader-ring 1.1s linear infinite;
-    }
-
-    .loader-logo {
-      width: 116px;
-      height: 116px;
+    .seo-brand-mark img {
+      width: 100%;
+      height: 100%;
       object-fit: contain;
-      animation: loader-pulse 1.8s ease-in-out infinite;
     }
 
-    .loader-title {
-      margin: 16px 0 6px;
-      color: #0f172a;
-      font-size: 23px;
+    .seo-brand-text {
+      display: grid;
+      line-height: 1.12;
+    }
+
+    .seo-brand-text strong { font-size: 17px; }
+
+    .seo-brand-text span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .seo-nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 14px;
+    }
+
+    .seo-nav a {
+      color: var(--muted);
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    .seo-hero {
+      padding: 46px 0 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 0.92fr) minmax(300px, 1.08fr);
+      gap: 38px;
+      align-items: center;
+    }
+
+    .seo-eyebrow {
+      color: var(--primary-dark);
+      font-size: 13px;
       font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .seo-hero h1 {
+      max-width: 760px;
+      margin: 12px 0 14px;
+      font-size: clamp(34px, 5vw, 52px);
+      line-height: 1.06;
       letter-spacing: 0;
     }
 
-    .loader-copy {
+    .seo-lead {
+      max-width: 730px;
       margin: 0;
-      color: #64748b;
+      color: #334155;
+      font-size: 18px;
+      line-height: 1.52;
+      font-weight: 600;
+    }
+
+    .seo-actions,
+    .seo-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .seo-button {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .seo-button.secondary {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--primary-dark);
+    }
+
+    .seo-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      color: #20344c;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .seo-visual {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: 0 16px 38px rgba(13, 27, 42, 0.12);
+    }
+
+    .seo-visual img {
+      width: 100%;
+      display: block;
+      aspect-ratio: 1.34;
+      object-fit: cover;
+    }
+
+    .seo-visual figcaption {
+      padding: 10px 14px;
+      color: var(--muted);
       font-size: 12px;
-      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .seo-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      padding: 18px 0 44px;
+    }
+
+    .seo-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 18px;
+    }
+
+    .seo-card h2,
+    .seo-card h3 {
+      margin: 0 0 8px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    .seo-card p,
+    .seo-card li {
+      color: #43566d;
+      font-size: 14px;
+      line-height: 1.48;
+      font-weight: 600;
+    }
+
+    .seo-card p { margin: 0; }
+
+    .seo-plans { grid-column: 1 / -1; }
+
+    .seo-plan-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .seo-plan {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: var(--surface-alt);
+    }
+
+    .seo-plan strong {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .seo-plan span {
+      display: block;
+      margin-top: 4px;
+      color: var(--primary-dark);
+      font-weight: 900;
+    }
+
+    .seo-footer {
+      border-top: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .seo-footer-inner {
+      padding: 24px 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    #app-loader {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+      transition: opacity 180ms ease, visibility 180ms ease;
+    }
+
+    .loader-shell {
+      width: min(100%, 420px);
+      border: 1px solid rgba(220, 232, 239, 0.9);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 14px 36px rgba(13, 27, 42, 0.14);
+      pointer-events: auto;
+    }
+
+    .loader-title {
+      margin: 0;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .loader-copy {
+      margin: 3px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
       font-weight: 700;
     }
 
     .loader-bar {
-      margin-top: 18px;
-      width: 170px;
       height: 4px;
-      margin-left: auto;
-      margin-right: auto;
       border-radius: 999px;
       background: #e2e8f0;
       overflow: hidden;
-      position: relative;
     }
 
     .loader-progress {
       height: 100%;
       width: 38%;
       border-radius: inherit;
-      background: linear-gradient(90deg, #2563eb 0%, #14b8a6 100%);
+      background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
       animation: loader-track 1.05s ease-in-out infinite;
     }
 
-    .loader-bar::after {
-      display: none;
-    }
-
-    .loader-meta {
-      display: none;
-    }
-
-    .loader-footnote {
-      color: #64748b;
-      font-size: 12px;
-      letter-spacing: 0.01em;
-    }
-
-    .loader-percent {
-      color: #0f6a90;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-    }
-
-    @keyframes loader-intro {
-      0% {
-        opacity: 0;
-        transform: translateY(18px) scale(0.94);
-      }
-      100% {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-    }
-
-    @keyframes loader-ring {
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes loader-pulse {
-      0%, 100% { transform: scale(0.985); }
-      50% { transform: scale(1.015); }
-    }
+    .loader-meta { display: none; }
 
     @keyframes loader-track {
       0% { transform: translateX(-120%); }
       100% { transform: translateX(290%); }
-    }
-
-    @media (max-width: 640px) {
-      .loader-shell {
-        padding: 24px 20px;
-        border-radius: 24px;
-      }
-
-      .loader-title {
-        font-size: 22px;
-      }
     }
 
     #pwa-banner {
@@ -217,23 +395,20 @@
     }
 
     .pwa-banner-card {
-      box-sizing: border-box;
       width: min(100%, 560px);
-      border-radius: 22px;
-      padding: 16px 16px 14px;
+      border-radius: 8px;
+      padding: 16px;
       background: rgba(9, 21, 36, 0.92);
       color: #f8fafc;
       box-shadow: 0 18px 48px rgba(2, 8, 23, 0.28);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(14px);
       pointer-events: auto;
     }
 
     .pwa-banner-title {
       margin: 0;
       font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 0.01em;
+      font-weight: 800;
     }
 
     .pwa-banner-copy {
@@ -257,17 +432,12 @@
       padding: 10px 14px;
       font: inherit;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
-      transition: transform 150ms ease, opacity 150ms ease, background 150ms ease;
-    }
-
-    .pwa-banner-button:hover {
-      transform: translateY(-1px);
     }
 
     .pwa-banner-button-primary {
-      background: linear-gradient(135deg, #1957e6 0%, #2f7bff 100%);
+      background: var(--primary);
       color: #ffffff;
     }
 
@@ -276,34 +446,78 @@
       color: #f8fafc;
     }
 
-    @media (max-width: 640px) {
-      #pwa-banner {
-        left: 12px;
-        right: 12px;
-        bottom: 12px;
+    @media (max-width: 820px) {
+      .seo-header {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px 0;
       }
 
-      .pwa-banner-card {
-        border-radius: 18px;
-        padding: 14px;
+      .seo-nav { justify-content: flex-start; }
+
+      .seo-hero {
+        grid-template-columns: 1fr;
+        padding-top: 34px;
+      }
+
+      .seo-grid,
+      .seo-plan-list {
+        grid-template-columns: 1fr;
       }
     }
   </style>
-
-  <!-- PWA / iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="FULLTECH">
+  <meta name="apple-mobile-web-app-title" content="FullPOS Cloud">
   <link rel="apple-touch-icon" href="icons/Icon-192.png?v=20260816">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png?v=20260816"/>
-
-  <title>FULLTECH - FullPOS Cloud</title>
+  <link rel="icon" type="image/png" href="favicon.png?v=20260816">
   <link rel="manifest" href="manifest.json">
   <link rel="preload" href="main.dart.js" as="script">
-  <link rel="preload" href="assets/assets/image/logo.png" as="image">
+  <link rel="preload" href="assets/assets/image/logo-web.webp" as="image">
+  <link rel="preload" href="assets/assets/image/landing-pos-cloud.webp" as="image" media="(min-width: 821px)" type="image/webp">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://fullposcloud.fulltechrd.com/#organization",
+        "name": "FULLTECH SRL",
+        "url": "https://fullposcloud.fulltechrd.com/",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+1-829-531-9442",
+          "contactType": "customer support",
+          "availableLanguage": "es"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://fullposcloud.fulltechrd.com/#website",
+        "name": "FullPOS Cloud",
+        "url": "https://fullposcloud.fulltechrd.com/",
+        "publisher": {
+          "@id": "https://fullposcloud.fulltechrd.com/#organization"
+        },
+        "inLanguage": "es-DO"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://fullposcloud.fulltechrd.com/#software",
+        "name": "FullPOS Cloud",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Windows, Android, iOS, Web",
+        "description": "Sistema POS en la nube para ventas, inventario, caja, clientes y reportes.",
+        "url": "https://fullposcloud.fulltechrd.com/",
+        "provider": {
+          "@id": "https://fullposcloud.fulltechrd.com/#organization"
+        },
+        "inLanguage": "es-DO"
+      }
+    ]
+  }
+  </script>
   <script>
     (function () {
       var path = window.location.pathname || '/';
@@ -329,38 +543,112 @@
   </script>
 </head>
 <body>
+  <div id="marketing-shell">
+    <header class="seo-header-wrap">
+      <nav class="seo-header" aria-label="Principal">
+        <a class="seo-brand" href="/">
+          <span class="seo-brand-mark"><img src="assets/assets/image/logo-web.webp" alt="" width="42" height="42"></span>
+          <span class="seo-brand-text"><strong>FullPOS Cloud</strong><span>FULLTECH SRL</span></span>
+        </a>
+        <div class="seo-nav">
+          <a href="#beneficios">Beneficios</a>
+          <a href="#planes">Planes</a>
+          <a href="/support">Soporte</a>
+          <a href="/contact">Contacto</a>
+          <a href="/login">Iniciar sesión</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="seo-main">
+      <section class="seo-hero" aria-labelledby="landing-title">
+        <div>
+          <div class="seo-eyebrow">Sistema POS multiplataforma para negocios</div>
+          <h1 id="landing-title">Vende y controla tu negocio desde cualquier dispositivo</h1>
+          <p class="seo-lead">FullPOS Cloud reúne ventas, inventario, caja, clientes y reportes en una sola plataforma para Windows, Android, iPhone y Web.</p>
+          <div class="seo-actions">
+            <a class="seo-button" href="#planes">Ver planes y precios</a>
+            <a class="seo-button secondary" href="https://wa.me/18295319442?text=Hola%2C%20quiero%20informaci%C3%B3n%20sobre%20FullPOS%20Cloud%20y%20sus%20planes.">Hablar por WhatsApp</a>
+          </div>
+          <div class="seo-chip-row" aria-label="Plataformas soportadas">
+            <span class="seo-chip">Windows</span>
+            <span class="seo-chip">Android</span>
+            <span class="seo-chip">iPhone</span>
+            <span class="seo-chip">Web/PWA</span>
+          </div>
+        </div>
+        <figure class="seo-visual">
+          <img src="assets/assets/image/landing-pos-cloud.webp" alt="FullPOS Cloud funcionando en escritorio y móvil" width="1693" height="929">
+          <figcaption>FullPOS Cloud para mostrador, teléfono y navegador.</figcaption>
+        </figure>
+      </section>
+
+      <section id="beneficios" class="seo-grid" aria-label="Beneficios de FullPOS Cloud">
+        <article class="seo-card">
+          <h2>Opera tu negocio en una sola plataforma</h2>
+          <p>Controla ventas, inventario, caja, clientes, cotizaciones, créditos, reportes, códigos de barra e impresión térmica desde FullPOS Cloud.</p>
+        </article>
+        <article class="seo-card">
+          <h2>Instalación y soporte remoto</h2>
+          <p>La instalación y configuración remota se realizan después de activar tu licencia. El soporte remoto se ofrece vía WhatsApp.</p>
+        </article>
+        <article class="seo-card">
+          <h2>Compra inicial mínima</h2>
+          <p>La contratación mínima es de 3 meses y el pago se realiza por adelantado mediante transferencia bancaria.</p>
+        </article>
+        <article id="planes" class="seo-card seo-plans">
+          <h2>Planes de FullPOS Cloud</h2>
+          <p>Elige el plan según el tamaño de tu operación.</p>
+          <div class="seo-plan-list">
+            <div class="seo-plan"><strong>Básico</strong><span>RD$3,000 / 3 meses</span></div>
+            <div class="seo-plan"><strong>Negocio</strong><span>RD$4,500 / 3 meses</span></div>
+            <div class="seo-plan"><strong>Pro</strong><span>RD$7,500 / 3 meses</span></div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="seo-footer">
+      <div class="seo-footer-inner">
+        <span>© 2026 FULLTECH SRL. Todos los derechos reservados.</span>
+        <nav class="seo-nav" aria-label="Legal">
+          <a href="/support">Soporte</a>
+          <a href="/privacy">Privacidad</a>
+          <a href="/terms">Términos</a>
+          <a href="/account-deletion">Eliminación de cuenta</a>
+          <a href="/contact">Contacto</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
   <div id="app-loader" aria-live="polite">
     <div class="loader-shell">
-      <div class="loader-mark">
-        <img class="loader-logo" src="assets/assets/image/logo.png" alt="FULLTECH">
-      </div>
-      <h1 class="loader-title">FullPOS Cloud</h1>
-      <p class="loader-copy">Preparando tu punto de venta</p>
+      <p class="loader-title">Cargando FullPOS Cloud</p>
+      <p class="loader-copy">Preparando la aplicación</p>
       <div class="loader-bar">
         <div id="loader-progress" class="loader-progress"></div>
       </div>
       <div class="loader-meta">
-        <div id="loader-status" class="loader-footnote"></div>
-        <div id="loader-percent" class="loader-percent"></div>
+        <div id="loader-status"></div>
+        <div id="loader-percent"></div>
       </div>
     </div>
   </div>
+
   <div id="pwa-banner" aria-live="polite">
     <div class="pwa-banner-card">
-      <p id="pwa-banner-title" class="pwa-banner-title">FULLTECH listo para instalar</p>
+      <p id="pwa-banner-title" class="pwa-banner-title">FullPOS Cloud listo para instalar</p>
       <p id="pwa-banner-copy" class="pwa-banner-copy">
-        Instala la app para abrirla como aplicacion y mantener una experiencia mas estable.
+        Instala la app para abrirla como aplicación y mantener una experiencia más estable.
       </p>
       <div class="pwa-banner-actions">
-        <button id="pwa-banner-primary" class="pwa-banner-button pwa-banner-button-primary" type="button">
-          Instalar
-        </button>
-        <button id="pwa-banner-secondary" class="pwa-banner-button pwa-banner-button-secondary" type="button">
-          Ahora no
-        </button>
+        <button id="pwa-banner-primary" class="pwa-banner-button pwa-banner-button-primary" type="button">Instalar</button>
+        <button id="pwa-banner-secondary" class="pwa-banner-button pwa-banner-button-secondary" type="button">Ahora no</button>
       </div>
     </div>
   </div>
+
   <script src="env.js"></script>
   <script>
     (function () {
@@ -369,26 +657,20 @@
       var progressLabel = document.getElementById('loader-percent');
       var statusLabel = document.getElementById('loader-status');
       var milestones = [
-        { at: 18, text: 'Cargando configuracion base...' },
+        { at: 18, text: 'Cargando configuración base...' },
         { at: 34, text: 'Descargando motor de la app...' },
         { at: 52, text: 'Inicializando interfaz...' },
-        { at: 72, text: 'Preparando modulos...' },
-        { at: 88, text: 'Abriendo FULLTECH...' }
+        { at: 72, text: 'Preparando módulos...' },
+        { at: 88, text: 'Abriendo FullPOS Cloud...' }
       ];
       var milestoneIndex = 0;
 
       function renderProgress(value) {
         progress = Math.max(12, Math.min(100, value));
-        if (progressBar) {
-          progressBar.style.width = progress + '%';
-        }
-        if (progressLabel) {
-          progressLabel.textContent = progress + '%';
-        }
+        if (progressBar) progressBar.style.width = progress + '%';
+        if (progressLabel) progressLabel.textContent = progress + '%';
         while (milestoneIndex < milestones.length && progress >= milestones[milestoneIndex].at) {
-          if (statusLabel) {
-            statusLabel.textContent = milestones[milestoneIndex].text;
-          }
+          if (statusLabel) statusLabel.textContent = milestones[milestoneIndex].text;
           milestoneIndex += 1;
         }
       }
@@ -398,29 +680,29 @@
           window.clearInterval(timer);
           return;
         }
-        var next = progress + (progress < 50 ? 7 : progress < 80 ? 4 : 2);
-        renderProgress(next);
+        renderProgress(progress + (progress < 50 ? 7 : progress < 80 ? 4 : 2));
       }, 220);
 
       window.__finishAppLoader = function () {
         window.clearInterval(timer);
         renderProgress(100);
-        if (statusLabel) {
-          statusLabel.textContent = 'Listo';
-        }
+        if (statusLabel) statusLabel.textContent = 'Listo';
       };
     })();
 
     window.addEventListener('flutter-first-frame', function () {
       var loader = document.getElementById('app-loader');
-      if (!loader) return;
-      if (typeof window.__finishAppLoader === 'function') {
-        window.__finishAppLoader();
+      var shell = document.getElementById('marketing-shell');
+      document.body.classList.add('has-flutter');
+      if (typeof window.__finishAppLoader === 'function') window.__finishAppLoader();
+      if (loader) {
+        loader.classList.add('is-hidden');
+        window.setTimeout(function () { loader.remove(); }, 220);
       }
-      loader.classList.add('is-hidden');
-      window.setTimeout(function () {
-        loader.remove();
-      }, 260);
+      if (shell) {
+        shell.classList.add('is-hidden');
+        window.setTimeout(function () { shell.remove(); }, 220);
+      }
     });
 
     (function () {
@@ -442,9 +724,7 @@
       var primaryButton = document.getElementById('pwa-banner-primary');
       var secondaryButton = document.getElementById('pwa-banner-secondary');
 
-      if (!banner || !title || !copy || !primaryButton || !secondaryButton) {
-        return;
-      }
+      if (!banner || !title || !copy || !primaryButton || !secondaryButton) return;
 
       function canUseStorage() {
         try {
@@ -467,8 +747,7 @@
       }
 
       function writeTimestamp(key) {
-        if (!storageEnabled) return;
-        window.localStorage.setItem(key, String(Date.now()));
+        if (storageEnabled) window.localStorage.setItem(key, String(Date.now()));
       }
 
       function wasRecentlyDismissed(key, windowMs) {
@@ -482,11 +761,7 @@
 
       function isIosSafari() {
         var ua = window.navigator.userAgent || '';
-        var isiOS = /iPad|iPhone|iPod/.test(ua);
-        var isWebKit = /WebKit/.test(ua);
-        var isCriOS = /CriOS/.test(ua);
-        var isFxiOS = /FxiOS/.test(ua);
-        return isiOS && isWebKit && !isCriOS && !isFxiOS;
+        return /iPad|iPhone|iPod/.test(ua) && /WebKit/.test(ua) && !/CriOS|FxiOS/.test(ua);
       }
 
       function isLandingRoute() {
@@ -501,16 +776,10 @@
       }
 
       function clearRuntimeCaches() {
-        if (!('caches' in window)) {
-          return Promise.resolve();
-        }
+        if (!('caches' in window)) return Promise.resolve();
         return window.caches.keys()
           .then(function (keys) {
-            return Promise.all(
-              keys.map(function (key) {
-                return window.caches.delete(key);
-              })
-            );
+            return Promise.all(keys.map(function (key) { return window.caches.delete(key); }));
           })
           .catch(function () {});
       }
@@ -530,9 +799,7 @@
 
         if (registration && registration.waiting) {
           registration.waiting.postMessage('skipWaiting');
-          clearRuntimeCaches().finally(function () {
-            window.setTimeout(reloadPage, 1500);
-          });
+          clearRuntimeCaches().finally(function () { window.setTimeout(reloadPage, 1500); });
           return;
         }
 
@@ -546,18 +813,18 @@
         }
 
         if (variant === 'update') {
-          title.textContent = 'Hay una nueva version de FULLTECH';
-          copy.textContent = 'Recarga la PWA para usar la version mas reciente y evitar shell desactualizado.';
+          title.textContent = 'Hay una nueva versión de FullPOS Cloud';
+          copy.textContent = 'Recarga la PWA para usar la versión más reciente y evitar shell desactualizado.';
           primaryButton.textContent = 'Actualizar ahora';
           secondaryButton.textContent = 'Luego';
         } else if (variant === 'ios-install') {
-          title.textContent = 'Instala FULLTECH en tu inicio';
-          copy.textContent = 'En iPhone o iPad usa Compartir y luego Anadir a pantalla de inicio para abrir la app como PWA.';
+          title.textContent = 'Instala FullPOS Cloud en tu inicio';
+          copy.textContent = 'En iPhone o iPad usa Compartir y luego Añadir a pantalla de inicio para abrir la app como PWA.';
           primaryButton.textContent = 'Entendido';
           secondaryButton.textContent = 'Ahora no';
         } else {
-          title.textContent = 'Instala FULLTECH';
-          copy.textContent = 'Instala la app para abrirla como aplicacion, mejorar el acceso y reducir problemas de sesion en navegador.';
+          title.textContent = 'Instala FullPOS Cloud';
+          copy.textContent = 'Instala la app para abrirla como aplicación, mejorar el acceso y reducir problemas de sesión en navegador.';
           primaryButton.textContent = 'Instalar';
           secondaryButton.textContent = 'Ahora no';
         }
@@ -567,30 +834,23 @@
       }
 
       function maybeShowInstallPrompt() {
-        if (!flutterBooted) {
-          return;
-        }
-
+        if (!flutterBooted) return;
         if (isLandingRoute()) {
           hideBanner();
           return;
         }
-
         if (updatePending) {
           showVariant('update');
           return;
         }
-
         if (isStandalone()) {
           hideBanner();
           return;
         }
-
         if (deferredInstallPrompt && !wasRecentlyDismissed(installDismissKey, installDismissWindowMs)) {
           showVariant('install');
           return;
         }
-
         if (isIosSafari() && !wasRecentlyDismissed(iosDismissKey, iosDismissWindowMs)) {
           showVariant('ios-install');
         }
@@ -601,17 +861,14 @@
           hideBanner();
           return false;
         }
-
         if (deferredInstallPrompt) {
           showVariant('install');
           return true;
         }
-
         if (isIosSafari()) {
           showVariant('ios-install');
           return true;
         }
-
         showVariant('install');
         return false;
       };
@@ -626,30 +883,23 @@
           });
           return;
         }
-
         if (activeVariant === 'ios-install') {
           writeTimestamp(iosDismissKey);
           hideBanner();
           return;
         }
-
         if (!deferredInstallPrompt) {
           hideBanner();
           return;
         }
-
         var promptEvent = deferredInstallPrompt;
         deferredInstallPrompt = null;
         promptEvent.prompt();
         Promise.resolve(promptEvent.userChoice)
           .then(function (choice) {
-            if (!choice || choice.outcome !== 'accepted') {
-              writeTimestamp(installDismissKey);
-            }
+            if (!choice || choice.outcome !== 'accepted') writeTimestamp(installDismissKey);
           })
-          .catch(function () {
-            writeTimestamp(installDismissKey);
-          })
+          .catch(function () { writeTimestamp(installDismissKey); })
           .finally(function () {
             hideBanner();
             window.setTimeout(maybeShowInstallPrompt, 600);
@@ -657,13 +907,9 @@
       });
 
       secondaryButton.addEventListener('click', function () {
-        if (activeVariant === 'update') {
-          writeTimestamp(updateDismissKey);
-        } else if (activeVariant === 'ios-install') {
-          writeTimestamp(iosDismissKey);
-        } else if (activeVariant === 'install') {
-          writeTimestamp(installDismissKey);
-        }
+        if (activeVariant === 'update') writeTimestamp(updateDismissKey);
+        if (activeVariant === 'ios-install') writeTimestamp(iosDismissKey);
+        if (activeVariant === 'install') writeTimestamp(installDismissKey);
         hideBanner();
       });
 
@@ -682,11 +928,8 @@
         var standaloneQuery = window.matchMedia('(display-mode: standalone)');
         if (standaloneQuery && typeof standaloneQuery.addEventListener === 'function') {
           standaloneQuery.addEventListener('change', function () {
-            if (isStandalone()) {
-              hideBanner();
-            } else {
-              maybeShowInstallPrompt();
-            }
+            if (isStandalone()) hideBanner();
+            else maybeShowInstallPrompt();
           });
         }
       }
@@ -712,10 +955,7 @@
           });
         }
 
-        if (registration.waiting && window.navigator.serviceWorker.controller) {
-          markUpdateAvailable();
-        }
-
+        if (registration.waiting && window.navigator.serviceWorker.controller) markUpdateAvailable();
         watchInstalling(registration.installing);
         registration.addEventListener('updatefound', function () {
           watchInstalling(registration.installing);
@@ -724,9 +964,7 @@
 
       if ('serviceWorker' in window.navigator) {
         window.navigator.serviceWorker.ready
-          .then(function (registration) {
-            attachWorkerWatchers(registration);
-          })
+          .then(function (registration) { attachWorkerWatchers(registration); })
           .catch(function () {});
 
         window.addEventListener('focus', function () {

@@ -71,6 +71,8 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     createCalls += 1;
@@ -89,6 +91,8 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      itemType: itemType,
+      trackInventory: trackInventory ?? itemType != 'SERVICE',
     );
     products = [product, ...products];
     return product;
@@ -121,6 +125,8 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     lastTaxTreatment = taxTreatment;
@@ -139,6 +145,8 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
+      itemType: itemType,
+      trackInventory: trackInventory ?? itemType != 'SERVICE',
     );
     products = [
       for (final product in products)

@@ -14,7 +14,10 @@ function row(overrides: Record<string, any>) {
   return { createdAt: now, updatedAt: now, deactivatedAt: null, ...overrides };
 }
 
-function buildService(source = "LOCAL") {
+function buildService(
+  source = "LOCAL",
+  options: { inventoryEnabled?: boolean } = {},
+) {
   const db = {
     warehouses: [
       row({
@@ -58,7 +61,36 @@ function buildService(source = "LOCAL") {
       {
         id: "product-a",
         companyId: "company-a",
+        nombre: "Producto A",
+        codigo: "PA",
         stock: new Prisma.Decimal(100),
+        itemType: "PRODUCT",
+        trackInventory: true,
+        company: { productSource: "LOCAL" },
+        unitOfMeasure: {
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          precision: 0,
+          allowDecimals: false,
+        },
+      },
+      {
+        id: "service-a",
+        companyId: "company-a",
+        nombre: "Servicio A",
+        codigo: "SA",
+        stock: new Prisma.Decimal(0),
+        itemType: "SERVICE",
+        trackInventory: false,
+        company: { productSource: "LOCAL" },
+        unitOfMeasure: {
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          precision: 0,
+          allowDecimals: false,
+        },
       },
     ],
     warehouseStocks: [
@@ -84,8 +116,15 @@ function buildService(source = "LOCAL") {
     company: {
       findUnique: jest.fn(async (args: any) => {
         const companyId = args.where.id;
-        if (companyId === "company-a") return { multiWarehouseEnabled: true };
-        if (companyId === "company-b") return { multiWarehouseEnabled: false };
+        if (companyId === "company-a") {
+          return {
+            multiWarehouseEnabled: true,
+            inventoryEnabled: options.inventoryEnabled ?? true,
+          };
+        }
+        if (companyId === "company-b") {
+          return { multiWarehouseEnabled: false, inventoryEnabled: true };
+        }
         return null;
       }),
     },
@@ -227,8 +266,21 @@ function buildService(source = "LOCAL") {
               product.companyId === args.where.companyId,
           ) ?? null,
       ),
+      findMany: jest.fn(async (args: any) =>
+        db.products.filter(
+          (product) =>
+            product.companyId === args.where.companyId &&
+            args.where.id.in.includes(product.id),
+        ),
+      ),
     },
-    $transaction: jest.fn((fn: any) => fn(api)),
+    warehouseTransfer: {
+      findFirst: jest.fn(async () => null),
+      create: jest.fn(),
+    },
+    $transaction: jest.fn((input: any) =>
+      Array.isArray(input) ? Promise.all(input) : input(api),
+    ),
   };
 
   const resolver = {
@@ -366,6 +418,54 @@ describe("WarehousesService", () => {
     );
     expect(result.readOnly).toBe(true);
     expect(result.warehouses).toEqual([]);
+  });
+
+  it("returns read-only stock breakdown while inventory control is off", async () => {
+    const { service } = buildService("LOCAL", { inventoryEnabled: false });
+    const result = await service.productStockBreakdown(
+      userA as any,
+      "product-a",
+    );
+    expect(result.readOnly).toBe(true);
+    expect(result.warehouseTotalDecimal).toBe("100");
+  });
+
+  it("does not fabricate warehouse rows for services", async () => {
+    const { service } = buildService();
+    const result = await service.productStockBreakdown(
+      userA as any,
+      "service-a",
+    );
+    expect(result.readOnly).toBe(true);
+    expect(result.warehouses).toEqual([]);
+    expect(result.message).toContain("inventario fisico");
+  });
+
+  it("rejects transfers when inventory control is off before mutation", async () => {
+    const { service, api } = buildService("LOCAL", { inventoryEnabled: false });
+    await expect(
+      service.createTransfer(userA as any, {
+        sourceWarehouseId: "warehouse-main",
+        destinationWarehouseId: "warehouse-branch",
+        items: [{ productId: "product-a", quantity: 1 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(api.warehouseTransfer.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects mixed transfers with a non-inventory item before mutation", async () => {
+    const { service, api } = buildService();
+    await expect(
+      service.createTransfer(userA as any, {
+        sourceWarehouseId: "warehouse-main",
+        destinationWarehouseId: "warehouse-branch",
+        items: [
+          { productId: "product-a", quantity: 1 },
+          { productId: "service-a", quantity: 1 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(api.warehouseTransfer.create).not.toHaveBeenCalled();
   });
 
   it("reassigns terminal only to active same-company warehouse", async () => {

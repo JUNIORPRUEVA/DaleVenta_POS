@@ -97,6 +97,8 @@ enum _StockLevel { out, low, high }
 
 enum _StockFilter { all, out, low, high }
 
+enum _ProductArticleType { inventoryProduct, nonInventoryProduct, service }
+
 typedef SetProductStockCallback =
     Future<void> Function(
       ProductModel product,
@@ -114,6 +116,29 @@ extension on _StockFilter {
   };
 }
 
+extension on _ProductArticleType {
+  String get label => switch (this) {
+    _ProductArticleType.inventoryProduct => 'Producto con inventario',
+    _ProductArticleType.nonInventoryProduct => 'Producto sin inventario',
+    _ProductArticleType.service => 'Servicio',
+  };
+
+  String get itemType => switch (this) {
+    _ProductArticleType.service => 'SERVICE',
+    _ => 'PRODUCT',
+  };
+
+  bool get trackInventory => this == _ProductArticleType.inventoryProduct;
+}
+
+_ProductArticleType _articleTypeOf(ProductModel? product) {
+  if (product?.isService == true) return _ProductArticleType.service;
+  if (product?.isInventoryTracked == false) {
+    return _ProductArticleType.nonInventoryProduct;
+  }
+  return _ProductArticleType.inventoryProduct;
+}
+
 String _stockText(double? value) {
   return formatQuantityValue(value);
 }
@@ -122,6 +147,8 @@ String _productStockText(
   ProductModel product, {
   bool showMeasurementUnit = false,
 }) {
+  if (product.isService) return 'Servicio';
+  if (!product.isInventoryTracked) return 'No inventariable';
   if (!showMeasurementUnit) return formatQuantityValue(product.stock);
   return formatQuantityWithUnit(
     product.stock,
@@ -135,6 +162,8 @@ String _productStockTextFor(
   double? stock, {
   bool showMeasurementUnit = false,
 }) {
+  if (product.isService) return 'Servicio';
+  if (!product.isInventoryTracked) return 'No inventariable';
   if (!showMeasurementUnit) return formatQuantityValue(stock);
   return formatQuantityWithUnit(
     stock,
@@ -159,7 +188,16 @@ bool _looksLikeInternalProductId(String value) {
       RegExp(r'^[a-z][a-z0-9]{20,31}$').hasMatch(value);
 }
 
-double _stockOf(ProductModel product) => product.stock ?? 0;
+bool _hasPhysicalInventory(ProductModel product) => product.isInventoryTracked;
+
+bool _canAdjustPhysicalStock(
+  ProductModel product,
+  bool canAddStock, {
+  bool inventoryEnabled = true,
+}) => canAddStock && inventoryEnabled && _hasPhysicalInventory(product);
+
+double _stockOf(ProductModel product) =>
+    _hasPhysicalInventory(product) ? product.stock ?? 0 : 0;
 double _stockOfValue(ProductModel product, double? stockOverride) =>
     stockOverride ?? _stockOf(product);
 bool _hasVisibleCost(ProductModel product) => product.costAvailable;
@@ -208,7 +246,8 @@ String? _persistentProductImageSource(ProductModel product) {
   return null;
 }
 
-bool _isOutOfStock(ProductModel product) => _isOutOfStockValue(product, null);
+bool _isOutOfStock(ProductModel product) =>
+    _hasPhysicalInventory(product) && _isOutOfStockValue(product, null);
 bool _isOutOfStockValue(ProductModel product, double? stockOverride) =>
     _stockOfValue(product, stockOverride) <= 0;
 bool _isLowStock(ProductModel product) => _isLowStockValue(product, null);
@@ -218,6 +257,7 @@ bool _isLowStockValue(ProductModel product, double? stockOverride) {
 }
 
 _StockLevel _resolveStockLevel(ProductModel product) {
+  if (!_hasPhysicalInventory(product)) return _StockLevel.high;
   if (_isOutOfStock(product)) return _StockLevel.out;
   if (_isLowStock(product)) return _StockLevel.low;
   return _StockLevel.high;
@@ -229,6 +269,13 @@ String _stockLevelLabel(_StockLevel level) => switch (level) {
   _StockLevel.high => 'Stock alto',
 };
 
+String _productStatusText(ProductModel product) {
+  if (!product.activo) return 'Inactivo';
+  if (product.isService) return 'Servicio';
+  if (!product.isInventoryTracked) return 'No inventariable';
+  return _stockLevelLabel(_resolveStockLevel(product));
+}
+
 Color _stockLevelColor(_StockLevel level) => switch (level) {
   _StockLevel.out => AppColors.error,
   _StockLevel.low => AppColors.warning,
@@ -236,6 +283,9 @@ Color _stockLevelColor(_StockLevel level) => switch (level) {
 };
 
 bool _matchesStockFilter(ProductModel product, _StockFilter filter) {
+  if (!_hasPhysicalInventory(product) && filter != _StockFilter.all) {
+    return false;
+  }
   final level = _resolveStockLevel(product);
   return switch (filter) {
     _StockFilter.all => true,
@@ -1031,19 +1081,17 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     );
     if (!mounted) return;
     if (result?.adjustStock == true && result?.product != null) {
+      final settings = ref.read(companySettingsProvider).valueOrNull;
+      final inventoryEnabled = settings?.inventoryEnabled ?? true;
       await showInventoryStockAdjustmentsPanel(
         context,
         products: ref.read(catalogControllerProvider).items,
         onRefresh: _refresh,
         onSetStock: _setProductStock,
         canAddStock: ref.read(authStateProvider).user != null,
+        inventoryEnabled: inventoryEnabled,
         initialProductId: result!.product!.id,
-        showMeasurementUnits:
-            ref
-                .read(companySettingsProvider)
-                .valueOrNull
-                ?.measurementUnitsEnabled ==
-            true,
+        showMeasurementUnits: settings?.measurementUnitsEnabled == true,
       );
       return;
     }
@@ -1666,16 +1714,13 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final user = ref.watch(authStateProvider).user;
     final state = ref.watch(catalogControllerProvider);
     final products = state.items;
+    final settings = ref.watch(companySettingsProvider).valueOrNull;
+    final inventoryEnabled = settings?.inventoryEnabled ?? true;
     final canEditProducts = user != null;
     final canAddStock = user != null;
     final canViewCosts =
         user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente;
-    final measurementUnitsEnabled =
-        ref
-            .watch(companySettingsProvider)
-            .valueOrNull
-            ?.measurementUnitsEnabled ==
-        true;
+    final measurementUnitsEnabled = settings?.measurementUnitsEnabled == true;
     final isMobile = MediaQuery.sizeOf(context).width < 640;
     var tab = widget.initialMobileTab;
     if (tab == null) {
@@ -1725,6 +1770,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onSetStock: _setProductStock,
         canEditProducts: canEditProducts,
         canAddStock: canAddStock,
+        inventoryEnabled: inventoryEnabled,
         showTaxBadges: showTaxBadges,
         taxConfig: taxConfig,
         onDelete: (product) async {
@@ -1768,6 +1814,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onRefresh: _refresh,
         onSetStock: _setProductStock,
         canAddStock: canAddStock,
+        inventoryEnabled: inventoryEnabled,
         showMeasurementUnits: measurementUnitsEnabled,
       ),
       CategoriesTab(
@@ -2641,6 +2688,7 @@ class CatalogTab extends StatefulWidget {
     required this.onSetStock,
     required this.canEditProducts,
     required this.canAddStock,
+    this.inventoryEnabled = true,
     this.showTaxBadges = false,
     this.taxConfig,
     required this.onDelete,
@@ -2662,6 +2710,7 @@ class CatalogTab extends StatefulWidget {
   final SetProductStockCallback onSetStock;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool inventoryEnabled;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
   final Future<void> Function(ProductModel product) onDelete;
@@ -2819,13 +2868,19 @@ class _CatalogTabState extends State<CatalogTab> {
         builder: (_) => _ProductDetailPage(
           product: product,
           onEdit: widget.canEditProducts ? () => widget.onEdit(product) : null,
-          onStock: widget.canAddStock
+          onStock:
+              _canAdjustPhysicalStock(
+                product,
+                widget.canAddStock,
+                inventoryEnabled: widget.inventoryEnabled,
+              )
               ? () => showInventoryStockAdjustmentsPanel(
                   context,
                   products: widget.products,
                   onRefresh: widget.onRefresh,
                   onSetStock: widget.onSetStock,
                   canAddStock: widget.canAddStock,
+                  inventoryEnabled: widget.inventoryEnabled,
                   initialProductId: product.id,
                   showMeasurementUnits: showMeasurementUnits,
                 )
@@ -2968,6 +3023,7 @@ class _CatalogTabState extends State<CatalogTab> {
                     onRefresh: widget.onRefresh,
                     canEditProducts: widget.canEditProducts,
                     canAddStock: widget.canAddStock,
+                    inventoryEnabled: widget.inventoryEnabled,
                     showMeasurementUnits: measurementUnitsEnabled,
                     showTaxBadges: widget.showTaxBadges,
                     taxConfig: widget.taxConfig,
@@ -3002,6 +3058,7 @@ class _CatalogTabState extends State<CatalogTab> {
                     onRefresh: widget.onRefresh,
                     canEditProducts: widget.canEditProducts,
                     canAddStock: widget.canAddStock,
+                    inventoryEnabled: widget.inventoryEnabled,
                     showMeasurementUnits: measurementUnitsEnabled,
                     showTaxBadges: widget.showTaxBadges,
                     taxConfig: widget.taxConfig,
@@ -3556,6 +3613,7 @@ class _CatalogTable extends StatelessWidget {
     required this.onRefresh,
     required this.canEditProducts,
     required this.canAddStock,
+    required this.inventoryEnabled,
     required this.showMeasurementUnits,
     required this.showTaxBadges,
     required this.taxConfig,
@@ -3572,6 +3630,7 @@ class _CatalogTable extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool inventoryEnabled;
   final bool showMeasurementUnits;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
@@ -3659,22 +3718,27 @@ class _CatalogTable extends StatelessWidget {
                                     : null,
                                 icon: const Icon(Icons.edit_outlined),
                               ),
-                              IconButton(
-                                tooltip: 'Ajustar stock',
-                                onPressed: canAddStock
-                                    ? () => showInventoryStockAdjustmentsPanel(
+                              if (_canAdjustPhysicalStock(
+                                product,
+                                canAddStock,
+                                inventoryEnabled: inventoryEnabled,
+                              ))
+                                IconButton(
+                                  tooltip: 'Ajustar stock',
+                                  onPressed: () =>
+                                      showInventoryStockAdjustmentsPanel(
                                         context,
                                         products: products,
                                         onRefresh: onRefresh,
                                         onSetStock: onSetStock,
                                         canAddStock: canAddStock,
+                                        inventoryEnabled: inventoryEnabled,
                                         initialProductId: product.id,
                                         showMeasurementUnits:
                                             showMeasurementUnits,
-                                      )
-                                    : null,
-                                icon: const Icon(Icons.tune_outlined),
-                              ),
+                                      ),
+                                  icon: const Icon(Icons.tune_outlined),
+                                ),
                               IconButton(
                                 tooltip: 'Eliminar',
                                 onPressed: canEditProducts
@@ -3722,6 +3786,7 @@ class _CompactCatalogList extends StatelessWidget {
     required this.onRefresh,
     required this.canEditProducts,
     required this.canAddStock,
+    required this.inventoryEnabled,
     required this.showMeasurementUnits,
     required this.showTaxBadges,
     required this.taxConfig,
@@ -3737,6 +3802,7 @@ class _CompactCatalogList extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final bool canEditProducts;
   final bool canAddStock;
+  final bool inventoryEnabled;
   final bool showMeasurementUnits;
   final bool showTaxBadges;
   final ProductTaxUiConfig? taxConfig;
@@ -3761,13 +3827,19 @@ class _CompactCatalogList extends StatelessWidget {
               onSelected: (value) => onToggle(product, value),
               onTap: () => onOpenDetail(product),
               onEdit: canEditProducts ? () => onEdit(product) : null,
-              onStock: canAddStock
+              onStock:
+                  _canAdjustPhysicalStock(
+                    product,
+                    canAddStock,
+                    inventoryEnabled: inventoryEnabled,
+                  )
                   ? () => showInventoryStockAdjustmentsPanel(
                       context,
                       products: products,
                       onRefresh: onRefresh,
                       onSetStock: onSetStock,
                       canAddStock: canAddStock,
+                      inventoryEnabled: inventoryEnabled,
                       initialProductId: product.id,
                       showMeasurementUnits: showMeasurementUnits,
                     )
@@ -4226,6 +4298,7 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
     required this.onRefresh,
     required this.onSetStock,
     required this.canAddStock,
+    this.inventoryEnabled = true,
     this.initialProductId,
     this.showMeasurementUnits = false,
     this.closeAfterSave = false,
@@ -4236,6 +4309,7 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
   final Future<void> Function() onRefresh;
   final SetProductStockCallback onSetStock;
   final bool canAddStock;
+  final bool inventoryEnabled;
   final String? initialProductId;
   final bool showMeasurementUnits;
   final bool closeAfterSave;
@@ -4390,6 +4464,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
     final selected =
         _selected ?? (_products.isNotEmpty ? _products.first : null);
     if (!widget.canAddStock ||
+        !widget.inventoryEnabled ||
         _saving ||
         selected == null ||
         _quantity <= 0 ||
@@ -4411,6 +4486,15 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
         title: 'Sin permiso',
         message: 'No tienes permiso para ajustar stock.',
         icon: Icons.lock_outline_rounded,
+        accent: const Color(0xFFB45309),
+      );
+      return;
+    }
+    if (!widget.inventoryEnabled) {
+      _showTopNotice(
+        title: 'Control de inventario desactivado',
+        message: 'Activa el control de inventario para ajustar stock.',
+        icon: Icons.inventory_2_outlined,
         accent: const Color(0xFFB45309),
       );
       return;
@@ -4708,6 +4792,13 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                           product: selected,
                           showMeasurementUnit: widget.showMeasurementUnits,
                         ),
+                      if (!widget.inventoryEnabled) ...[
+                        const SizedBox(height: 12),
+                        const _InlineInfo(
+                          icon: Icons.inventory_2_outlined,
+                          message: 'Control de inventario desactivado',
+                        ),
+                      ],
                       if (selected != null) ...[
                         const SizedBox(height: 12),
                         if (multipleWarehouses) ...[
@@ -6742,7 +6833,6 @@ class _ProductDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final level = _resolveStockLevel(product);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomAppBar(
@@ -6812,7 +6902,7 @@ class _ProductDetailPage extends StatelessWidget {
                     showMeasurementUnit: showMeasurementUnit,
                   ),
                 ),
-                ('Estado', _stockLevelLabel(level)),
+                ('Estado', _productStatusText(product)),
                 ('Costo', _costText(product)),
                 ('Precio', formatRdCurrencyAccounting(product.precio)),
                 (
@@ -7309,11 +7399,9 @@ class _StockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (
-      foreground,
-      background,
-      border,
-    ) = _isOutOfStockValue(product, stockOverride)
+    final (foreground, background, border) = !_hasPhysicalInventory(product)
+        ? (_textSecondary, const Color(0xFFF8FAFC), const Color(0xFFE2E8F0))
+        : _isOutOfStockValue(product, stockOverride)
         ? (
             const Color(0xFFDC2626),
             const Color(0xFFFFF1F2),
@@ -7360,6 +7448,10 @@ class _ProductStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, foreground, background) = !product.activo
         ? ('Inactivo', _textSecondary, const Color(0xFFF1F5F9))
+        : product.isService
+        ? ('Servicio', _textSecondary, const Color(0xFFF8FAFC))
+        : !product.isInventoryTracked
+        ? ('No inventariable', _textSecondary, const Color(0xFFF8FAFC))
         : _isOutOfStockValue(product, stockOverride)
         ? ('Agotado', const Color(0xFFB91C1C), const Color(0xFFFFF1F2))
         : _isLowStockValue(product, stockOverride)
@@ -7878,6 +7970,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
   required Future<void> Function() onRefresh,
   required SetProductStockCallback onSetStock,
   required bool canAddStock,
+  bool inventoryEnabled = true,
   String? initialProductId,
   bool showMeasurementUnits = false,
 }) {
@@ -7909,6 +8002,7 @@ Future<void> showInventoryStockAdjustmentsPanel(
                   onRefresh: onRefresh,
                   onSetStock: onSetStock,
                   canAddStock: canAddStock,
+                  inventoryEnabled: inventoryEnabled,
                   initialProductId: initialProductId,
                   showMeasurementUnits: showMeasurementUnits,
                   closeAfterSave: true,
@@ -8006,6 +8100,7 @@ class _InventoryProductEditorPageState
   String _taxTreatment = 'INHERIT';
   double? _taxRate;
   String? _taxPriceMode;
+  late _ProductArticleType _articleType;
   List<UnitOfMeasureModel> _unitOptions = const [UnitOfMeasureModel.unit];
   UnitOfMeasureModel _selectedUnit = UnitOfMeasureModel.unit;
   bool _loadingUnits = false;
@@ -8066,6 +8161,7 @@ class _InventoryProductEditorPageState
     _taxTreatment = product?.taxTreatment ?? 'INHERIT';
     _taxRate = product?.taxRate;
     _taxPriceMode = product?.taxPriceMode;
+    _articleType = _articleTypeOf(product);
     _selectedUnit = product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
     _unitOptions = _selectedUnit.id == UnitOfMeasureModel.unit.id
         ? const [UnitOfMeasureModel.unit]
@@ -8175,6 +8271,7 @@ class _InventoryProductEditorPageState
       _taxTreatment = 'INHERIT';
       _taxRate = null;
       _taxPriceMode = null;
+      _articleType = _ProductArticleType.inventoryProduct;
       _formError = null;
       _selectedUnit = UnitOfMeasureModel.unit;
       _unitOptions = const [UnitOfMeasureModel.unit];
@@ -8486,13 +8583,22 @@ class _InventoryProductEditorPageState
 
     final name = _nameCtrl.text.trim();
     final code = _codeCtrl.text.trim();
+    final selectedType = _articleType;
     final price = _parseInventoryNumber(_priceCtrl.text);
-    final cost = _parseInventoryNumber(_costCtrl.text);
+    final cost =
+        selectedType == _ProductArticleType.service &&
+            _costCtrl.text.trim().isEmpty
+        ? 0.0
+        : _parseInventoryNumber(_costCtrl.text);
     final product = _product;
     final isEditing = product != null;
+    final tracksPhysicalInventory =
+        selectedType == _ProductArticleType.inventoryProduct;
     final stock = isEditing
         ? product.stock ?? 0
-        : _parseInventoryNumber(_stockCtrl.text);
+        : tracksPhysicalInventory
+        ? _parseInventoryNumber(_stockCtrl.text)
+        : 0.0;
     final category = _categoryCtrl.text.trim();
     final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
     final measurementUnitsEnabled =
@@ -8510,11 +8616,13 @@ class _InventoryProductEditorPageState
       setState(
         () => _formError = isEditing
             ? 'Completa nombre, precio, costo y categoría'
-            : 'Completa nombre, precio, costo, stock y categoría',
+            : tracksPhysicalInventory
+            ? 'Completa nombre, precio, costo, stock y categoría'
+            : 'Completa nombre, precio, costo y categoría',
       );
       return;
     }
-    if (!isEditing) {
+    if (!isEditing && tracksPhysicalInventory) {
       if (stock == null) {
         setState(
           () =>
@@ -8599,6 +8707,8 @@ class _InventoryProductEditorPageState
               taxPriceMode: taxPriceModeForSave,
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
+              itemType: selectedType.itemType,
+              trackInventory: selectedType.trackInventory,
             ) ??
             await repo.createProduct(
               nombre: name,
@@ -8614,6 +8724,8 @@ class _InventoryProductEditorPageState
               taxPriceMode: taxPriceModeForSave,
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
+              itemType: selectedType.itemType,
+              trackInventory: selectedType.trackInventory,
               skipLoader: true,
             );
       } else {
@@ -8633,6 +8745,8 @@ class _InventoryProductEditorPageState
               taxPriceMode: taxPriceModeForSave,
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
+              itemType: selectedType.itemType,
+              trackInventory: selectedType.trackInventory,
             ) ??
             await repo.updateProduct(
               id: product.id,
@@ -8649,6 +8763,8 @@ class _InventoryProductEditorPageState
               taxPriceMode: taxPriceModeForSave,
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
+              itemType: selectedType.itemType,
+              trackInventory: selectedType.trackInventory,
               skipLoader: true,
             );
       }
@@ -8728,7 +8844,8 @@ class _InventoryProductEditorPageState
       return;
     }
     if (_costFocus.hasFocus) {
-      if (_product == null) {
+      if (_product == null &&
+          _articleType == _ProductArticleType.inventoryProduct) {
         _stockFocus.requestFocus();
       } else {
         _categoryFocus.requestFocus();
@@ -8781,6 +8898,33 @@ class _InventoryProductEditorPageState
                 _FormErrorBanner(message: _formError!),
                 const SizedBox(height: 10),
               ],
+              DropdownButtonFormField<_ProductArticleType>(
+                initialValue: _articleType,
+                isExpanded: true,
+                decoration: _inventoryTextInputDecoration(
+                  'Tipo de artículo',
+                  prefixIcon: const Icon(Icons.category_outlined),
+                ),
+                items: [
+                  for (final type in _ProductArticleType.values)
+                    DropdownMenuItem<_ProductArticleType>(
+                      value: type,
+                      child: Text(type.label),
+                    ),
+                ],
+                onChanged: _isSaving
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _articleType = value;
+                          if (value != _ProductArticleType.inventoryProduct) {
+                            _stockCtrl.text = '0';
+                          }
+                        });
+                      },
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: _nameCtrl,
                 focusNode: _nameFocus,
@@ -8833,7 +8977,8 @@ class _InventoryProductEditorPageState
                 ],
               ),
               const SizedBox(height: 10),
-              if (product == null)
+              if (_articleType == _ProductArticleType.inventoryProduct &&
+                  product == null)
                 TextField(
                   controller: _stockCtrl,
                   focusNode: _stockFocus,
@@ -8850,7 +8995,8 @@ class _InventoryProductEditorPageState
                         : _selectedUnit.symbol,
                   ),
                 )
-              else
+              else if (_articleType == _ProductArticleType.inventoryProduct &&
+                  product != null)
                 _ReadOnlyStockPanel(
                   stockText: measurementUnitsEnabled
                       ? formatQuantityWithUnit(
@@ -8866,7 +9012,8 @@ class _InventoryProductEditorPageState
                       ? null
                       : () => _openStockAdjustmentFromEditor(product),
                 ),
-              if (product != null) ...[
+              if (_articleType == _ProductArticleType.inventoryProduct &&
+                  product != null) ...[
                 const SizedBox(height: 10),
                 Consumer(
                   builder: (context, ref, _) {

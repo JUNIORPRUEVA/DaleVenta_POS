@@ -278,6 +278,20 @@ void main() {
 
     expect(
       CompanySettingsFeedback.success(
+        base.copyWith(inventoryEnabled: false),
+        base.copyWith(inventoryEnabled: true),
+      ).title,
+      'Control de inventario activado',
+    );
+    expect(
+      CompanySettingsFeedback.success(
+        base.copyWith(inventoryEnabled: true),
+        base.copyWith(inventoryEnabled: false),
+      ).title,
+      'Control de inventario desactivado',
+    );
+    expect(
+      CompanySettingsFeedback.success(
         base.copyWith(measurementUnitsEnabled: false),
         base.copyWith(measurementUnitsEnabled: true),
       ).title,
@@ -333,6 +347,61 @@ void main() {
       'Comprobantes fiscales desactivados',
     );
   });
+
+  testWidgets(
+    'inventory setting requires confirmation and saves only after confirm',
+    (tester) async {
+      final repository = _FakeCompanySettingsRepository(
+        initialSettings: CompanySettings.empty().copyWith(
+          companyName: 'FULLTECH',
+          inventoryEnabled: true,
+        ),
+      );
+      await _pumpSettingsRouter(
+        tester,
+        initialLocation: Routes.configuracionEmpresa,
+        viewport: const Size(1366, 1600),
+        companyRepository: repository,
+        initialSettings: CompanySettings.empty().copyWith(
+          companyName: 'FULLTECH',
+          inventoryEnabled: true,
+        ),
+      );
+
+      final inventorySwitch = find.widgetWithText(
+        SwitchListTile,
+        'Control de inventario',
+      );
+      await tester.ensureVisible(inventorySwitch);
+      await tester.tap(inventorySwitch);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Desactivar control de inventario'), findsOneWidget);
+      expect(
+        find.textContaining('El inventario actual se conservará'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancelar').last);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(inventorySwitch).value, isTrue);
+      expect(repository.lastSavedSettings, isNull);
+
+      await tester.tap(inventorySwitch);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Desactivar').last);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(inventorySwitch).value, isFalse);
+
+      final save = find.text('Guardar empresa');
+      await tester.ensureVisible(save);
+      await tester.tap(save.hitTestable());
+      await _settleSettingsFrame(tester);
+
+      expect(repository.lastSavedSettings?.inventoryEnabled, isFalse);
+      expect(find.text('Control de inventario desactivado'), findsOneWidget);
+      expect(find.textContaining('DioException'), findsNothing);
+    },
+  );
 
   testWidgets('persistent notification remains until closed with X', (
     tester,

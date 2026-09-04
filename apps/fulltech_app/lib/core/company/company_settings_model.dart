@@ -77,6 +77,7 @@ class CompanySettings {
   final double defaultTaxRate;
   final bool pricesIncludeTax;
   final bool ncfEnabled;
+  final bool inventoryEnabled;
   final bool measurementUnitsEnabled;
   final bool multiWarehouseEnabled;
 
@@ -115,6 +116,7 @@ class CompanySettings {
     this.defaultTaxRate = 0,
     this.pricesIncludeTax = false,
     this.ncfEnabled = false,
+    this.inventoryEnabled = true,
     this.measurementUnitsEnabled = false,
     this.multiWarehouseEnabled = false,
   });
@@ -155,6 +157,7 @@ class CompanySettings {
       defaultTaxRate: 0,
       pricesIncludeTax: false,
       ncfEnabled: false,
+      inventoryEnabled: true,
       measurementUnitsEnabled: false,
       multiWarehouseEnabled: false,
     );
@@ -195,6 +198,7 @@ class CompanySettings {
     double? defaultTaxRate,
     bool? pricesIncludeTax,
     bool? ncfEnabled,
+    bool? inventoryEnabled,
     bool? measurementUnitsEnabled,
     bool? multiWarehouseEnabled,
     bool clearLogo = false,
@@ -243,6 +247,7 @@ class CompanySettings {
       defaultTaxRate: defaultTaxRate ?? this.defaultTaxRate,
       pricesIncludeTax: pricesIncludeTax ?? this.pricesIncludeTax,
       ncfEnabled: ncfEnabled ?? this.ncfEnabled,
+      inventoryEnabled: inventoryEnabled ?? this.inventoryEnabled,
       measurementUnitsEnabled:
           measurementUnitsEnabled ?? this.measurementUnitsEnabled,
       multiWarehouseEnabled:
@@ -285,6 +290,7 @@ class CompanySettings {
     'defaultTaxRate': defaultTaxRate,
     'pricesIncludeTax': pricesIncludeTax,
     'ncfEnabled': ncfEnabled,
+    'inventoryEnabled': inventoryEnabled,
     'measurementUnitsEnabled': measurementUnitsEnabled,
     'multiWarehouseEnabled': multiWarehouseEnabled,
   };
@@ -339,6 +345,12 @@ class CompanySettings {
       defaultTaxRate: _double(map['defaultTaxRate']),
       pricesIncludeTax: _bool(map['pricesIncludeTax']),
       ncfEnabled: _bool(map['ncfEnabled']),
+      inventoryEnabled: _boolDefault(
+        map.containsKey('inventoryEnabled')
+            ? map['inventoryEnabled']
+            : map['inventory_enabled'],
+        true,
+      ),
       measurementUnitsEnabled: _bool(
         map.containsKey('measurementUnitsEnabled')
             ? map['measurementUnitsEnabled']
@@ -358,6 +370,11 @@ bool _bool(dynamic value) {
   if (value is num) return value != 0;
   final text = value?.toString().trim().toLowerCase();
   return text == 'true' || text == '1' || text == 'yes' || text == 'si';
+}
+
+bool _boolDefault(dynamic value, bool fallback) {
+  if (value == null) return fallback;
+  return _bool(value);
 }
 
 double _double(dynamic value) {

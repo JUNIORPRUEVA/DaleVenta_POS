@@ -1,4 +1,12 @@
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from "class-validator";
 
 export class CreateProductDto {
   @IsString()
@@ -40,6 +48,14 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   stock?: number;
+
+  @IsOptional()
+  @IsIn(["PRODUCT", "SERVICE"])
+  itemType?: "PRODUCT" | "SERVICE";
+
+  @IsOptional()
+  @IsBoolean()
+  trackInventory?: boolean;
 
   @IsOptional()
   @IsUUID()

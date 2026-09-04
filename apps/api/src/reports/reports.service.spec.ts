@@ -230,7 +230,7 @@ describe("ReportsService", () => {
       expect(call[0].where.companyId).toBe(user.companyId);
     }
     expect(productFindMany).toHaveBeenCalledWith({
-      where: { companyId: user.companyId },
+      where: expect.objectContaining({ companyId: user.companyId }),
       select: expect.anything(),
     });
     expect(cashFindMany).toHaveBeenCalledWith(

@@ -64,6 +64,18 @@ Confirmed capabilities:
 - Product creation/update with stock and warehouse stock support.
 - Product creation/editing can reuse the normal category creation dialog from the product form, preserving entered product data and selecting the newly created category.
 - Inventory movements and Kardex-style history.
+- Optional inventory tracking is honored for sales. New sale lines affect
+  physical inventory only when company inventory is enabled, the catalog item is
+  a `PRODUCT`, the product tracks inventory, and the line is a supported local
+  catalog product. Manual/service/non-tracked lines still sell normally without
+  stock validation or physical stock movement.
+- The effective physical-inventory rule is
+  `company.inventoryEnabled && product.itemType == PRODUCT &&
+  product.trackInventory`. It also applies to purchase receipts that request
+  stock updates, product stock adjustments/recounts, warehouse transfers, low
+  stock warnings, valuation/stock views, and zero-config stock rows. Purchase
+  orders/receipts may contain tracked products, non-inventory products, and
+  services; only tracked physical products mutate stock.
 - When measurement units are enabled for the company, quick/manual sale items can carry a configured unit-of-measure snapshot such as Unidad, Yarda, or Libra through sale creation.
 - Multi-warehouse feature flag and terminal warehouse assignment.
 - Cash session/movement workflows and close ticket printing.
@@ -88,6 +100,11 @@ Important invariant: tenant/company data must not mix across authenticated conte
 - UAT startup refuses protected production-like database names and remote hosts unless server UAT mode is explicitly configured.
 - Products can be protected from hard deletion when business history exists; archival/idempotent behavior is tested in product service tenant tests.
 - Measurement Units can be disabled only when no ACTIVE product uses a unit of measure other than the canonical `UNIT`. An active product is one whose `archivedAt` is null (state "activo"); an archived product (`archivedAt` set, state "archivado") never blocks disabling and keeps its historical UoM, sales/quotation/purchase snapshots, and inventory history unchanged. The disable validation is strictly company-scoped.
+- `SaleItem.inventoryTrackedSnapshot` records whether that original sale line
+  physically affected inventory. Cancellation and refund/return inventory
+  restoration use this historical snapshot, not current company/product
+  configuration, so later config changes do not alter the physical meaning of
+  an existing sale.
 - Product source can be `LOCAL` or an external FullPOS integration source.
 - Cash drawer automatic opening is OFF by default (`autoOpenCashDrawer` for Windows/desktop). On Windows it opens only after a successful print of a NEW sale that involves cash (cash amount > 0 or method `cash`/`mixed`) and never on reprints (`isCopy`). On mobile (Android/iOS) automatic opening is governed by the existing mobile "Abrir gaveta" toggle (`openCashDrawer`) embedded in the ESC/POS print. A drawer failure never rolls back or corrupts a completed sale; it only surfaces a professional, non-blocking hardware warning.
 - Multi-warehouse access is gated in routing by company settings.

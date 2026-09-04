@@ -103,6 +103,8 @@ describe("SalesService tenant isolation", () => {
         imagen: true,
         costo: true,
         stock: true,
+        itemType: true,
+        trackInventory: true,
         taxTreatment: true,
         taxRate: true,
         taxPriceMode: true,

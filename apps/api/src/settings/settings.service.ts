@@ -61,6 +61,7 @@ export class SettingsService {
         where: { id: companyId },
         select: {
           name: true,
+          inventoryEnabled: true,
           measurementUnitsEnabled: true,
           multiWarehouseEnabled: true,
         },
@@ -73,7 +74,14 @@ export class SettingsService {
         this.boolValue(dto, "multiWarehouseEnabled") ??
         company?.multiWarehouseEnabled ??
         false;
+      const inventoryEnabled =
+        this.boolValue(dto, "inventoryEnabled") ??
+        company?.inventoryEnabled ??
+        true;
       const companyData = this.companyProductSourceData(dto);
+      const hasInventoryEnabledChange =
+        this.boolValue(dto, "inventoryEnabled") !== undefined &&
+        inventoryEnabled !== (company?.inventoryEnabled !== false);
       const hasMultiWarehouseChange =
         this.boolValue(dto, "multiWarehouseEnabled") !== undefined &&
         multiWarehouseEnabled !== (company?.multiWarehouseEnabled === true);
@@ -83,6 +91,7 @@ export class SettingsService {
       if (
         this.boolValue(dto, "measurementUnitsEnabled") !== undefined ||
         this.boolValue(dto, "multiWarehouseEnabled") !== undefined ||
+        this.boolValue(dto, "inventoryEnabled") !== undefined ||
         Object.keys(companyData).length > 0
       ) {
         if (hasMultiWarehouseChange && !multiWarehouseEnabled) {
@@ -95,6 +104,7 @@ export class SettingsService {
           where: { id: companyId },
           data: {
             measurementUnitsEnabled,
+            inventoryEnabled,
             multiWarehouseEnabled,
             ...companyData,
           } as any,
@@ -119,7 +129,9 @@ export class SettingsService {
       return {
         ...updated,
         measurementUnitsEnabled,
+        inventoryEnabled,
         multiWarehouseEnabled,
+        inventoryEnabledChanged: hasInventoryEnabledChange,
       };
     });
     if (this.hasFiscalSettingsData(dto)) {
@@ -296,6 +308,7 @@ export class SettingsService {
       where: { id: companyId },
       select: {
         name: true,
+        inventoryEnabled: true,
         measurementUnitsEnabled: true,
         multiWarehouseEnabled: true,
       },
@@ -320,6 +333,7 @@ export class SettingsService {
     return {
       ...config,
       companyName,
+      inventoryEnabled: company?.inventoryEnabled !== false,
       measurementUnitsEnabled: company?.measurementUnitsEnabled === true,
       multiWarehouseEnabled: company?.multiWarehouseEnabled === true,
     };
@@ -556,6 +570,7 @@ export class SettingsService {
       evolutionApiInstanceName: string;
       evolutionApiApiKey: string | null;
       whatsappWebhookEnabled: boolean;
+      inventoryEnabled?: boolean;
       measurementUnitsEnabled?: boolean;
       multiWarehouseEnabled?: boolean;
       adminAuthorizationPinHash: string | null;
@@ -598,6 +613,7 @@ export class SettingsService {
       evolutionApiApiKey: "",
       hasEvolutionApiApiKey: Boolean(config.evolutionApiApiKey),
       whatsappWebhookEnabled: config.whatsappWebhookEnabled,
+      inventoryEnabled: config.inventoryEnabled !== false,
       measurementUnitsEnabled: config.measurementUnitsEnabled === true,
       multiWarehouseEnabled: config.multiWarehouseEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),

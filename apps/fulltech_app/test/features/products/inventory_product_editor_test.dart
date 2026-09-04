@@ -33,6 +33,8 @@ class _FakeCatalogRepository extends CatalogRepository {
   String? lastFotoUrl;
   String? lastCategory;
   String? lastUnitOfMeasureId;
+  String? lastItemType;
+  bool? lastTrackInventory;
   UnitOfMeasureModel? lastUnitOfMeasure;
   double? lastAdjustedStock;
   bool dropImageOnUpdateResponse = false;
@@ -91,6 +93,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     creates += 1;
@@ -101,6 +105,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastCategory = categoria;
     lastUnitOfMeasureId = unitOfMeasureId;
     lastUnitOfMeasure = unitOfMeasure;
+    lastItemType = itemType;
+    lastTrackInventory = trackInventory;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: 'created-$creates',
@@ -116,6 +122,8 @@ class _FakeCatalogRepository extends CatalogRepository {
       taxPriceMode: taxPriceMode,
       unitOfMeasureId: unitOfMeasureId,
       unitOfMeasure: unitOfMeasure,
+      itemType: itemType,
+      trackInventory: trackInventory ?? itemType != 'SERVICE',
     );
   }
 
@@ -135,6 +143,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -145,6 +155,8 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastCategory = categoria;
     lastUnitOfMeasureId = unitOfMeasureId;
     lastUnitOfMeasure = unitOfMeasure;
+    lastItemType = itemType;
+    lastTrackInventory = trackInventory;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: id,
@@ -160,6 +172,8 @@ class _FakeCatalogRepository extends CatalogRepository {
       taxPriceMode: taxPriceMode,
       unitOfMeasureId: unitOfMeasureId,
       unitOfMeasure: unitOfMeasure,
+      itemType: itemType,
+      trackInventory: trackInventory ?? itemType != 'SERVICE',
     );
   }
 
@@ -364,6 +378,8 @@ ProductModel _product({
   String? code,
   double stock = 1,
   UnitOfMeasureModel? unitOfMeasure,
+  String? itemType,
+  bool trackInventory = true,
 }) {
   return ProductModel(
     id: id,
@@ -375,7 +391,37 @@ ProductModel _product({
     categoria: category,
     unitOfMeasureId: unitOfMeasure?.id,
     unitOfMeasure: unitOfMeasure,
+    itemType: itemType,
+    trackInventory: trackInventory,
   );
+}
+
+Finder _textFieldWithLabel(String label) => find.byWidgetPredicate(
+  (widget) => widget is TextField && widget.decoration?.labelText == label,
+);
+
+Future<void> _enterProductFormText(
+  WidgetTester tester, {
+  required String name,
+  String code = '',
+  required String price,
+  String cost = '',
+  String? stock,
+  required String category,
+}) async {
+  await tester.enterText(_textFieldWithLabel('Nombre del producto'), name);
+  await tester.enterText(
+    _textFieldWithLabel('Código / código de barra (opcional)'),
+    code,
+  );
+  await tester.enterText(_textFieldWithLabel('Precio'), price);
+  if (cost.isNotEmpty) {
+    await tester.enterText(_textFieldWithLabel('Costo'), cost);
+  }
+  if (stock != null) {
+    await tester.enterText(_textFieldWithLabel('Stock disponible'), stock);
+  }
+  await tester.enterText(_textFieldWithLabel('Categoría'), category);
 }
 
 Future<ProductFormResult?> _pumpEditor(
@@ -483,6 +529,8 @@ class _UomProtectedCatalogRepository extends _FakeCatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -670,8 +718,7 @@ void main() {
             requestOptions: RequestOptions(path: '/products/x/adjust-stock'),
             type: DioExceptionType.badResponse,
             response: Response<Object>(
-              requestOptions:
-                  RequestOptions(path: '/products/x/adjust-stock'),
+              requestOptions: RequestOptions(path: '/products/x/adjust-stock'),
               statusCode: 409,
               data: {
                 'statusCode': 409,
@@ -690,7 +737,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No se pudo ajustar el stock'), findsOneWidget);
-      expect(find.textContaining('no permite modificar el stock'), findsOneWidget);
+      expect(
+        find.textContaining('no permite modificar el stock'),
+        findsOneWidget,
+      );
       expect(find.textContaining('DioException'), findsNothing);
       expect(find.textContaining('409'), findsNothing);
       expect(find.textContaining('RequestOptions'), findsNothing);
@@ -949,6 +999,80 @@ void main() {
     },
   );
 
+  testWidgets('selector crea producto sin inventario sin pedir stock fisico', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    expect(find.text('Tipo de artículo'), findsOneWidget);
+    await tester.tap(find.text('Producto con inventario').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Producto sin inventario').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stock disponible'), findsNothing);
+    await _enterProductFormText(
+      tester,
+      name: 'Garantía extendida',
+      price: '250',
+      cost: '0',
+      category: 'Servicios',
+    );
+    await tester.tap(find.text('Crear producto'));
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 1);
+    expect(repo.lastItemType, 'PRODUCT');
+    expect(repo.lastTrackInventory, isFalse);
+  });
+
+  testWidgets('selector crea servicio con costo vacio y sin stock fisico', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    await _pumpEditor(tester, repo: repo);
+
+    await tester.tap(find.text('Producto con inventario').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Servicio').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stock disponible'), findsNothing);
+    await _enterProductFormText(
+      tester,
+      name: 'Instalación',
+      price: '800',
+      category: 'Servicios',
+    );
+    await tester.tap(find.text('Crear producto'));
+    await tester.pumpAndSettle();
+
+    expect(repo.creates, 1);
+    expect(repo.lastItemType, 'SERVICE');
+    expect(repo.lastTrackInventory, isFalse);
+  });
+
+  testWidgets('editar servicio no muestra panel ni accion de ajuste de stock', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    final product = _product(
+      id: 'svc-1',
+      name: 'Instalación',
+      category: 'Servicios',
+      itemType: 'SERVICE',
+      trackInventory: false,
+      stock: 0,
+    );
+
+    await _pumpEditor(tester, repo: repo, product: product);
+
+    expect(find.text('Servicio'), findsWidgets);
+    expect(find.text('Stock actual'), findsNothing);
+    expect(find.text('Ajustar stock'), findsNothing);
+  });
+
   testWidgets('formulario rechaza stock decimal para Unidad', (tester) async {
     final repo = _FakeCatalogRepository();
     await _pumpEditor(
@@ -1131,6 +1255,42 @@ void main() {
     expect(find.text('8'), findsNothing);
     expect(find.text('15'), findsNothing);
   });
+
+  testWidgets(
+    'catálogo muestra etiquetas de artículos no inventariables y servicios',
+    (tester) async {
+      final repo = _FakeCatalogRepository()
+        ..products = [
+          _product(
+            id: 'tracked-1',
+            name: 'Audífonos',
+            category: 'Audio',
+            stock: 8,
+          ),
+          _product(
+            id: 'commercial-1',
+            name: 'Garantía extendida',
+            category: 'Servicios',
+            stock: 0,
+            trackInventory: false,
+          ),
+          _product(
+            id: 'service-1',
+            name: 'Instalación',
+            category: 'Servicios',
+            stock: 0,
+            itemType: 'SERVICE',
+            trackInventory: false,
+          ),
+        ];
+
+      await _pumpMobileInventory(tester, repo: repo);
+
+      expect(find.text('8'), findsOneWidget);
+      expect(find.text('No inventariable'), findsWidgets);
+      expect(find.text('Servicio'), findsWidgets);
+    },
+  );
 
   testWidgets(
     'catálogo con un almacén muestra almacén principal sin selector',

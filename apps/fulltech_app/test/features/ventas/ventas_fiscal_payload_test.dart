@@ -118,6 +118,10 @@ void main() {
         reason: 'El payload de venta NO debe contener saveFiscalCustomer.',
       );
       expect(data['items'], isA<List<dynamic>>());
+      expect(
+        (data['items'] as List).single,
+        containsPair('inventoryTrackedSnapshot', true),
+      );
     },
   );
 
@@ -150,6 +154,10 @@ void main() {
       expect(data.containsKey('fiscalCustomerTaxId'), isFalse);
       expect(data.containsKey('fiscalCustomerName'), isFalse);
       expect(data.containsKey('saveFiscalCustomer'), isFalse);
+      expect(
+        (data['items'] as List).single,
+        containsPair('inventoryTrackedSnapshot', true),
+      );
     },
   );
 

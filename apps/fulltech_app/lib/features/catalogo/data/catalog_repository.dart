@@ -458,6 +458,8 @@ class CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -473,6 +475,8 @@ class CatalogRepository {
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
       unitOfMeasureId: unitOfMeasureId,
+      itemType: itemType,
+      trackInventory: trackInventory,
     );
     try {
       return await _createProductRemote(
@@ -488,6 +492,8 @@ class CatalogRepository {
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
+        itemType: itemType,
+        trackInventory: trackInventory,
         skipLoader: skipLoader,
       );
     } on DioException catch (e) {
@@ -524,6 +530,8 @@ class CatalogRepository {
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
         unitOfMeasure: unitOfMeasure ?? UnitOfMeasureModel.unit,
+        itemType: itemType,
+        trackInventory: trackInventory ?? itemType != 'SERVICE',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -543,6 +551,8 @@ class CatalogRepository {
     double? taxRate,
     String? taxPriceMode,
     String? unitOfMeasureId,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     final res = await _dio.post(
@@ -561,6 +571,8 @@ class CatalogRepository {
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
+        itemType: itemType,
+        trackInventory: trackInventory,
       ),
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
@@ -581,6 +593,8 @@ class CatalogRepository {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -598,6 +612,8 @@ class CatalogRepository {
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
       unitOfMeasureId: unitOfMeasureId,
+      itemType: itemType,
+      trackInventory: trackInventory,
     );
     try {
       return await _updateProductRemote(
@@ -614,6 +630,8 @@ class CatalogRepository {
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
+        itemType: itemType,
+        trackInventory: trackInventory,
         skipLoader: skipLoader,
       );
     } on DioException catch (e) {
@@ -648,6 +666,8 @@ class CatalogRepository {
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId ?? UnitOfMeasureModel.unit.id,
         unitOfMeasure: unitOfMeasure ?? UnitOfMeasureModel.unit,
+        itemType: itemType,
+        trackInventory: trackInventory ?? itemType != 'SERVICE',
         updatedAt: DateTime.now(),
       );
     }
@@ -667,6 +687,8 @@ class CatalogRepository {
     double? taxRate,
     String? taxPriceMode,
     String? unitOfMeasureId,
+    String? itemType,
+    bool? trackInventory,
     bool skipLoader = false,
   }) async {
     final res = await _dio.patch(
@@ -686,6 +708,8 @@ class CatalogRepository {
         taxRate: taxRate,
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
+        itemType: itemType,
+        trackInventory: trackInventory,
       ),
     );
     return ProductModel.fromJson((res.data as Map).cast<String, dynamic>());
@@ -808,6 +832,8 @@ class CatalogRepository {
     double? taxRate,
     String? taxPriceMode,
     String? unitOfMeasureId,
+    String? itemType,
+    bool? trackInventory,
   }) {
     final cleanCode = codigo?.trim();
     final safeCode = cleanCode?.isEmpty == true ? null : cleanCode;
@@ -825,6 +851,9 @@ class CatalogRepository {
       if (includeStock) 'stock': stock,
       if ((unitOfMeasureId ?? '').trim().isNotEmpty)
         'unitOfMeasureId': unitOfMeasureId!.trim(),
+      if ((itemType ?? '').trim().isNotEmpty)
+        'itemType': itemType!.trim().toUpperCase(),
+      if (trackInventory != null) 'trackInventory': trackInventory,
       if ((operationId ?? '').trim().isNotEmpty)
         'operationId': operationId!.trim(),
       if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),

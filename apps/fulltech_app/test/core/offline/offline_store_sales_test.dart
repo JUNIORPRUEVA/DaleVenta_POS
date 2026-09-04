@@ -247,6 +247,78 @@ void main() {
     });
 
     test(
+      'stores inventory snapshots and creates intents only for tracked items',
+      () async {
+        await OfflineStore.instance.saveOfflineSaleAtomically(
+          localSaleId: 'local_sale_req_mixed',
+          companyId: 'company-mixed',
+          userId: 'user-mixed',
+          clientRequestId: 'sale_req_mixed',
+          salePayload: {
+            ..._salePayload('sale_req_mixed'),
+            'items': [
+              _item('product-tracked', 2)..['inventoryTrackedSnapshot'] = true,
+              _item('product-service', 1)..['inventoryTrackedSnapshot'] = false,
+            ],
+          },
+          itemPayloads: [
+            _item('product-tracked', 2)..['inventoryTrackedSnapshot'] = true,
+            _item('product-service', 1)..['inventoryTrackedSnapshot'] = false,
+          ],
+          paymentPayload: {
+            'paymentMethod': 'cash',
+            'paymentCashAmount': 300,
+            'paymentTransferAmount': 0,
+            'creditAmount': 0,
+          },
+          pendingAction: _pendingSaleAction(
+            companyId: 'company-mixed',
+            userId: 'user-mixed',
+            localSaleId: 'local_sale_req_mixed',
+            clientRequestId: 'sale_req_mixed',
+            payload: {
+              ..._salePayload('sale_req_mixed'),
+              'items': [
+                _item('product-tracked', 2)
+                  ..['inventoryTrackedSnapshot'] = true,
+                _item('product-service', 1)
+                  ..['inventoryTrackedSnapshot'] = false,
+              ],
+            },
+          ),
+          totalSold: 300,
+        );
+
+        await OfflineStore.instance.closeForTesting();
+
+        final aggregate = await OfflineStore.instance.getOfflineSaleAggregate(
+          companyId: 'company-mixed',
+          localSaleId: 'local_sale_req_mixed',
+        );
+        final actions = await OfflineStore.instance.listPendingActions(
+          companyId: 'company-mixed',
+          userId: 'user-mixed',
+        );
+
+        expect(
+          aggregate!['items'].map((item) => item['inventoryTrackedSnapshot']),
+          [true, false],
+        );
+        expect(aggregate['inventoryIntents'], hasLength(1));
+        expect(
+          aggregate['inventoryIntents'].single['productId'],
+          'product-tracked',
+        );
+        expect(
+          (actions.single.payload['items'] as List).map(
+            (item) => item['inventoryTrackedSnapshot'],
+          ),
+          [true, false],
+        );
+      },
+    );
+
+    test(
       'recovers stale syncing action without changing idempotency',
       () async {
         final stale =
@@ -288,6 +360,7 @@ PendingSyncAction _pendingSaleAction({
   required String userId,
   required String localSaleId,
   required String clientRequestId,
+  Map<String, dynamic>? payload,
 }) {
   final now = DateTime.utc(2026, 8, 19, 12);
   return PendingSyncAction(
@@ -299,7 +372,7 @@ PendingSyncAction _pendingSaleAction({
     entityType: 'sale',
     entityId: localSaleId,
     idempotencyKey: clientRequestId,
-    payload: _salePayload(clientRequestId),
+    payload: payload ?? _salePayload(clientRequestId),
     status: 'pending',
     attempts: 0,
     createdAt: now,

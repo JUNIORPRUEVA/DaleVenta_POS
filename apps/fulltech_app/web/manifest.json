@@ -1,14 +1,14 @@
 {
     "id": "./",
-    "name": "FULLTECH",
-    "short_name": "FULLTECH",
+    "name": "FullPOS Cloud",
+    "short_name": "FullPOS",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",
     "display_override": ["standalone", "minimal-ui", "browser"],
     "background_color": "#EFF5F8",
     "theme_color": "#EFF5F8",
-    "description": "Aplicacion empresarial FULLTECH SRL.",
+    "description": "Sistema POS en la nube para ventas, inventario, caja, clientes y reportes.",
     "orientation": "portrait-primary",
     "lang": "es-DO",
     "dir": "ltr",
@@ -40,7 +40,7 @@
     ],
     "shortcuts": [
         {
-            "name": "Iniciar sesion",
+            "name": "Iniciar sesión",
             "short_name": "Login",
             "url": "./login",
             "icons": [

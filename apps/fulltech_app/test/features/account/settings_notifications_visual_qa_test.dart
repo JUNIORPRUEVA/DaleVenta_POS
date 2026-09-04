@@ -82,8 +82,7 @@ Future<void> _shot(WidgetTester tester, String name) async {
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     final dir = Directory(_outDir);
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    File('${dir.path}/$name.png')
-        .writeAsBytesSync(data!.buffer.asUint8List());
+    File('${dir.path}/$name.png').writeAsBytesSync(data!.buffer.asUint8List());
   });
 }
 
@@ -300,6 +299,10 @@ void main() {
 
   group('persistent notification card visual QA', () {
     final cases = <String, AppFeedbackNotification>{
+      'success-inventory-off': CompanySettingsFeedback.success(
+        CompanySettings.empty().copyWith(inventoryEnabled: true),
+        CompanySettings.empty().copyWith(inventoryEnabled: false),
+      ),
       'success-taxes': CompanySettingsFeedback.success(
         CompanySettings.empty().copyWith(taxEnabled: false),
         CompanySettings.empty().copyWith(taxEnabled: true),
@@ -337,9 +340,7 @@ void main() {
           await tester.tap(find.text('Mostrar ${entry.key}'));
           await tester.pump();
 
-          final card = find.byKey(
-            const ValueKey('persistent_feedback_card'),
-          );
+          final card = find.byKey(const ValueKey('persistent_feedback_card'));
           expect(card, findsOneWidget);
           expect(find.text(entry.value.title), findsOneWidget);
           expect(find.text(entry.value.body), findsOneWidget);
@@ -530,17 +531,20 @@ void main() {
       expect(message.body, isNot(contains('400')));
     });
 
-    test('tax activation invalid-default rejection maps to friendly Spanish', () {
-      final message = CompanySettingsFeedback.failure(
-        CompanySettings.empty().copyWith(taxEnabled: false),
-        CompanySettings.empty().copyWith(taxEnabled: true),
-        ApiException('Impuesto predeterminado invalido', 400),
-      );
+    test(
+      'tax activation invalid-default rejection maps to friendly Spanish',
+      () {
+        final message = CompanySettingsFeedback.failure(
+          CompanySettings.empty().copyWith(taxEnabled: false),
+          CompanySettings.empty().copyWith(taxEnabled: true),
+          ApiException('Impuesto predeterminado invalido', 400),
+        );
 
-      expect(message.title, 'No se pudo activar impuestos');
-      expect(message.body, isNot(contains('ApiException')));
-      expect(message.body, isNot(contains('400')));
-    });
+        expect(message.title, 'No se pudo activar impuestos');
+        expect(message.body, isNot(contains('ApiException')));
+        expect(message.body, isNot(contains('400')));
+      },
+    );
 
     test('multi-warehouse and NCF covered toggles get success titles', () {
       final base = CompanySettings.empty();

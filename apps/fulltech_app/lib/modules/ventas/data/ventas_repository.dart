@@ -7,6 +7,8 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
+import '../../../core/company/company_settings_model.dart';
+import '../../../core/company/company_settings_repository.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
@@ -23,6 +25,7 @@ final ventasRepositoryProvider = Provider<VentasRepository>((ref) {
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
     ref.read(warehouseRepositoryProvider),
+    companySettingsRepository: ref.read(companySettingsRepositoryProvider),
   );
   repository.registerSyncHandlers();
   return repository;
@@ -32,6 +35,7 @@ class VentasRepository {
   final Dio _dio;
   final SyncQueueService _syncQueue;
   final WarehouseRepository _warehouseRepository;
+  final CompanySettingsRepository _companySettingsRepository;
   final LocalJsonCache _cache = LocalJsonCache();
   final OfflineStore _offlineStore = OfflineStore.instance;
   final TokenStorage _tokenStorage = TokenStorage();
@@ -39,7 +43,14 @@ class VentasRepository {
   static const String _creditsCacheKey = 'sales.credits.v1';
   bool _handlersRegistered = false;
 
-  VentasRepository(this._dio, this._syncQueue, this._warehouseRepository);
+  VentasRepository(
+    this._dio,
+    this._syncQueue,
+    this._warehouseRepository, {
+    CompanySettingsRepository? companySettingsRepository,
+  }) : _companySettingsRepository =
+           companySettingsRepository ??
+           CompanySettingsRepository(_dio, _syncQueue);
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -641,6 +652,16 @@ class VentasRepository {
     final clientRequestId = 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
     final occurredAt = DateTime.now().toUtc();
     final syncIdentity = await _resolveSaleSyncIdentity();
+    final inventoryEnabled = await _currentInventoryEnabled();
+    final capturedItems = items
+        .map(
+          (item) => item.inventoryTrackedSnapshot == null
+              ? item.captureInventoryDecision(
+                  inventoryEnabled: inventoryEnabled,
+                )
+              : item,
+        )
+        .toList(growable: false);
     final payload = {
       'clientRequestId': clientRequestId,
       'saleOccurredAt': occurredAt.toIso8601String(),
@@ -671,7 +692,7 @@ class VentasRepository {
         'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
       if ((fiscalCustomerName ?? '').trim().isNotEmpty)
         'fiscalCustomerName': fiscalCustomerName!.trim(),
-      'items': items.map((item) => item.toPayload()).toList(),
+      'items': capturedItems.map((item) => item.toPayload()).toList(),
     };
 
     try {
@@ -695,7 +716,7 @@ class VentasRepository {
         warehouseId: syncIdentity.warehouseId,
         deviceFingerprint: syncIdentity.deviceFingerprint,
         saleOccurredAt: occurredAt.toIso8601String(),
-        items: items,
+        items: capturedItems,
       );
     } on DioException catch (e) {
       if (!_shouldQueueNetworkFailure(e)) {
@@ -736,7 +757,9 @@ class VentasRepository {
         createdAt: occurredAt,
         updatedAt: occurredAt,
       );
-      final itemPayloads = items.map((item) => item.toPayload()).toList();
+      final itemPayloads = capturedItems
+          .map((item) => item.toPayload())
+          .toList();
       await _offlineStore.saveOfflineSaleAtomically(
         localSaleId: localId,
         companyId: companyId!,
@@ -776,7 +799,7 @@ class VentasRepository {
         optimisticExemptAmount: optimisticExemptAmount,
         optimisticDiscountAmount: optimisticDiscountAmount,
         optimisticFiscalTaxEnabled: optimisticFiscalTaxEnabled,
-        items: items,
+        items: capturedItems,
         totalSold: expectedTotalSold,
       );
     }
@@ -893,6 +916,17 @@ class VentasRepository {
     );
   }
 
+  Future<bool> _currentInventoryEnabled() async {
+    CompanySettings? settings;
+    try {
+      settings = await _companySettingsRepository.getCachedSettings();
+      settings ??= await _companySettingsRepository.getSettings();
+    } catch (_) {
+      settings = CompanySettings.empty();
+    }
+    return settings.inventoryEnabled;
+  }
+
   Map<String, dynamic> _conflictPayloadFromResponse(dynamic data) {
     if (data is Map) {
       return Map<String, dynamic>.from(data);
@@ -943,6 +977,7 @@ class VentasRepository {
             subtotalCost: item.subtotalCost,
             profit: item.profit,
             category: item.product?.categoriaLabel,
+            inventoryTrackedSnapshot: item.inventoryTrackedSnapshot ?? false,
           );
         })
         .toList(growable: false);

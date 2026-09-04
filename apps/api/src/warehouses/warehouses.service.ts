@@ -7,6 +7,7 @@ import {
 import {
   InventoryMovementType,
   Prisma,
+  ProductItemType,
   ProductSource,
   WarehouseTransferStatus,
 } from "@prisma/client";
@@ -243,11 +244,37 @@ export class WarehousesService {
       };
     }
 
-    const product = await this.prisma.product.findFirst({
+    const [company, product] = await this.prisma.$transaction([
+      this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { inventoryEnabled: true },
+      }),
+      this.prisma.product.findFirst({
       where: { id: productId, companyId },
-      select: { id: true, stock: true },
-    });
+        select: {
+          id: true,
+          stock: true,
+          itemType: true,
+          trackInventory: true,
+        },
+      }),
+    ]);
     if (!product) throw new NotFoundException("Producto no encontrado.");
+    const inventoryEnabled = company?.inventoryEnabled !== false;
+    if (!this.isInventoryTrackedProduct(product)) {
+      return {
+        productId: product.id,
+        source: source.source,
+        readOnly: true,
+        total: Number(product.stock ?? 0),
+        totalDecimal: product.stock?.toString?.() ?? "0",
+        warehouseTotal: 0,
+        warehouseTotalDecimal: "0",
+        reconciled: new Prisma.Decimal(product.stock ?? 0).equals(0),
+        warehouses: [],
+        message: "Este articulo no maneja inventario fisico.",
+      };
+    }
 
     const warehouses = await this.prisma.warehouse.findMany({
       where: { companyId },
@@ -279,7 +306,7 @@ export class WarehousesService {
     return {
       productId: product.id,
       source: source.source,
-      readOnly: false,
+      readOnly: !inventoryEnabled,
       total: Number(product.stock ?? 0),
       totalDecimal: product.stock?.toString?.() ?? "0",
       warehouseTotal: Number(total),
@@ -334,6 +361,16 @@ export class WarehousesService {
         if (existing) return this.mapTransfer(existing);
       }
 
+      const company = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { inventoryEnabled: true },
+      });
+      if (company?.inventoryEnabled === false) {
+        throw new BadRequestException(
+          "El control de inventario esta desactivado para esta empresa.",
+        );
+      }
+
       const source = await this.ensureActiveWarehouse(
         companyId,
         sourceWarehouseId,
@@ -353,6 +390,8 @@ export class WarehousesService {
           nombre: true,
           codigo: true,
           stock: true,
+          itemType: true,
+          trackInventory: true,
           company: { select: { productSource: true } },
           unitOfMeasure: {
             select: {
@@ -382,11 +421,19 @@ export class WarehousesService {
             "Solo productos LOCAL pueden transferirse entre almacenes.",
           );
         }
+        if (!this.isInventoryTrackedProduct(product)) {
+          throw new BadRequestException(
+            "Solo productos con inventario fisico pueden transferirse entre almacenes.",
+          );
+        }
         this.validateQuantityForUnit(
           item.quantity,
           product.unitOfMeasure,
           "cantidad",
         );
+      }
+
+      for (const item of items) {
         await this.assertProductStockReconciled(tx, companyId, item.productId);
       }
 
@@ -540,6 +587,17 @@ export class WarehousesService {
     });
     if (!warehouse) throw new NotFoundException("Almacen no encontrado.");
     return warehouse;
+  }
+
+  private isInventoryTrackedProduct(product: {
+    itemType?: ProductItemType | null;
+    trackInventory?: boolean | null;
+  }) {
+    return (
+      (product.itemType ?? ProductItemType.PRODUCT) ===
+        ProductItemType.PRODUCT &&
+      (product.trackInventory ?? true) === true
+    );
   }
 
   private async assertMultiWarehouseEnabled(companyId: string) {

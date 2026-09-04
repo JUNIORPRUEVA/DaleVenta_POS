@@ -128,6 +128,7 @@ class SaleItemModel {
   final String unitNameSnapshot;
   final String unitSymbolSnapshot;
   final int unitPrecisionSnapshot;
+  final bool inventoryTrackedSnapshot;
   final double grossAmount;
   final double lineDiscountAmount;
   final double taxableBase;
@@ -155,6 +156,7 @@ class SaleItemModel {
     this.unitNameSnapshot = 'Unidad',
     this.unitSymbolSnapshot = 'u',
     this.unitPrecisionSnapshot = 0,
+    this.inventoryTrackedSnapshot = true,
     this.grossAmount = 0,
     this.lineDiscountAmount = 0,
     this.taxableBase = 0,
@@ -206,6 +208,7 @@ class SaleItemModel {
       unitPrecisionSnapshot: _toInt(
         json['unitPrecisionSnapshot'] ?? json['unit_precision_snapshot'],
       ),
+      inventoryTrackedSnapshot: _saleItemInventorySnapshot(json),
       grossAmount: _toDouble(json['grossAmount']),
       lineDiscountAmount: _toDouble(json['lineDiscountAmount']),
       taxableBase: _toDouble(json['taxableBase']),
@@ -230,6 +233,21 @@ class SaleItemModel {
   );
 }
 
+bool _saleItemInventorySnapshot(Map<String, dynamic> json) {
+  final explicit = json.containsKey('inventoryTrackedSnapshot')
+      ? json['inventoryTrackedSnapshot']
+      : json['inventory_tracked_snapshot'];
+  if (explicit != null) return _toBool(explicit);
+  final productId = json['productId'] ?? json['product_id'];
+  final source = (json['productSource'] ?? json['product_source'])
+      ?.toString()
+      .trim()
+      .toUpperCase();
+  return productId != null &&
+      productId.toString().trim().isNotEmpty &&
+      (source == null || source.isEmpty || source == 'LOCAL');
+}
+
 class SaleModel {
   final String id;
   final String userId;
@@ -246,9 +264,11 @@ class SaleModel {
   final String paymentMethod;
   final double paymentCashAmount;
   final double paymentTransferAmount;
+
   /// Efectivo real entregado por el cliente (tender). NULL = tender histórico
   /// no almacenado (ventas legadas); 0 = no hubo efectivo.
   final double? cashReceived;
+
   /// Devuelta entregada al cliente. NULL cuando el tender es desconocido.
   final double? changeAmount;
   final double creditAmount;
@@ -441,6 +461,7 @@ class SaleDraftItem {
   final String? taxTreatment;
   final double? taxRate;
   final String? taxPriceMode;
+  final bool? inventoryTrackedSnapshot;
 
   const SaleDraftItem({
     this.product,
@@ -461,6 +482,7 @@ class SaleDraftItem {
     this.taxTreatment,
     this.taxRate,
     this.taxPriceMode,
+    this.inventoryTrackedSnapshot,
   });
 
   double get subtotalSold => qty * priceSoldUnit;
@@ -501,6 +523,7 @@ class SaleDraftItem {
     String? taxTreatment,
     double? taxRate,
     String? taxPriceMode,
+    bool? inventoryTrackedSnapshot,
   }) {
     return SaleDraftItem(
       product: product ?? this.product,
@@ -522,6 +545,19 @@ class SaleDraftItem {
       taxTreatment: taxTreatment ?? this.taxTreatment,
       taxRate: taxRate ?? this.taxRate,
       taxPriceMode: taxPriceMode ?? this.taxPriceMode,
+      inventoryTrackedSnapshot:
+          inventoryTrackedSnapshot ?? this.inventoryTrackedSnapshot,
+    );
+  }
+
+  SaleDraftItem captureInventoryDecision({required bool inventoryEnabled}) {
+    return copyWith(
+      inventoryTrackedSnapshot: _draftItemInventoryTracked(
+        product: product,
+        productId: productId,
+        productSource: productSource,
+        inventoryEnabled: inventoryEnabled,
+      ),
     );
   }
 
@@ -540,6 +576,8 @@ class SaleDraftItem {
       'unitNameSnapshot': unitSnapshot.name,
       'unitSymbolSnapshot': unitSnapshot.symbol,
       'unitPrecisionSnapshot': unitSnapshot.precision,
+      if (inventoryTrackedSnapshot != null)
+        'inventoryTrackedSnapshot': inventoryTrackedSnapshot,
     };
   }
 
@@ -580,8 +618,31 @@ class SaleDraftItem {
       taxTreatment: json['taxTreatment']?.toString(),
       taxRate: _nullableDouble(json['taxRate']),
       taxPriceMode: json['taxPriceMode']?.toString(),
+      inventoryTrackedSnapshot: json.containsKey('inventoryTrackedSnapshot')
+          ? _toBool(json['inventoryTrackedSnapshot'])
+          : json.containsKey('inventory_tracked_snapshot')
+          ? _toBool(json['inventory_tracked_snapshot'])
+          : null,
     );
   }
+}
+
+bool _draftItemInventoryTracked({
+  required ProductModel? product,
+  required String? productId,
+  required String? productSource,
+  required bool inventoryEnabled,
+}) {
+  final cleanProductId = productId?.trim();
+  if (cleanProductId == null || cleanProductId.isEmpty) return false;
+  final source = (productSource ?? product?.productSource ?? 'LOCAL')
+      .trim()
+      .toUpperCase();
+  if (source != 'LOCAL') return false;
+  if (!inventoryEnabled) return false;
+  if (product?.itemType == 'SERVICE') return false;
+  if (product?.trackInventory == false) return false;
+  return true;
 }
 
 class SalesDateRange {
@@ -601,6 +662,13 @@ int _toInt(dynamic value) {
   if (value is num) return value.toInt();
   if (value == null) return 0;
   return int.tryParse(value.toString()) ?? 0;
+}
+
+bool _toBool(dynamic value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  final text = value?.toString().trim().toLowerCase();
+  return text == 'true' || text == '1' || text == 'yes' || text == 'si';
 }
 
 double? _nullableDouble(dynamic value) {

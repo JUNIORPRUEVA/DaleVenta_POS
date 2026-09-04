@@ -1,0 +1,1076 @@
+{
+  "summaries": [
+    {
+      "viewport": {
+        "w": 390,
+        "h": 900
+      },
+      "state": {
+        "url": "http://127.0.0.1:8791/?phase51runtime=390",
+        "innerWidth": 390,
+        "scrollWidth": 390,
+        "bodyWidth": 390,
+        "hasFlutter": true,
+        "shellExists": false,
+        "loaderExists": false,
+        "visibleError": false,
+        "brokenDomImages": [],
+        "pwaBannerVisible": false
+      },
+      "screenshot": "C:\\Users\\pc\\DEV\\PROYECTOS\\PRODUCTOS\\DaleVentas POS\\docs\\landing-phase5-1-asset-blocker-evidence\\landing-runtime-390.png"
+    },
+    {
+      "viewport": {
+        "w": 430,
+        "h": 900
+      },
+      "state": {
+        "url": "http://127.0.0.1:8791/?phase51runtime=430",
+        "innerWidth": 430,
+        "scrollWidth": 430,
+        "bodyWidth": 430,
+        "hasFlutter": true,
+        "shellExists": false,
+        "loaderExists": false,
+        "visibleError": false,
+        "brokenDomImages": [],
+        "pwaBannerVisible": false
+      },
+      "screenshot": "C:\\Users\\pc\\DEV\\PROYECTOS\\PRODUCTOS\\DaleVentas POS\\docs\\landing-phase5-1-asset-blocker-evidence\\landing-runtime-430.png"
+    },
+    {
+      "viewport": {
+        "w": 768,
+        "h": 1024
+      },
+      "state": {
+        "url": "http://127.0.0.1:8791/?phase51runtime=768",
+        "innerWidth": 768,
+        "scrollWidth": 768,
+        "bodyWidth": 768,
+        "hasFlutter": true,
+        "shellExists": false,
+        "loaderExists": false,
+        "visibleError": false,
+        "brokenDomImages": [],
+        "pwaBannerVisible": false
+      },
+      "screenshot": "C:\\Users\\pc\\DEV\\PROYECTOS\\PRODUCTOS\\DaleVentas POS\\docs\\landing-phase5-1-asset-blocker-evidence\\landing-runtime-768.png"
+    },
+    {
+      "viewport": {
+        "w": 1024,
+        "h": 900
+      },
+      "state": {
+        "url": "http://127.0.0.1:8791/?phase51runtime=1024",
+        "innerWidth": 1024,
+        "scrollWidth": 1024,
+        "bodyWidth": 1024,
+        "hasFlutter": true,
+        "shellExists": false,
+        "loaderExists": false,
+        "visibleError": false,
+        "brokenDomImages": [],
+        "pwaBannerVisible": false
+      },
+      "screenshot": "C:\\Users\\pc\\DEV\\PROYECTOS\\PRODUCTOS\\DaleVentas POS\\docs\\landing-phase5-1-asset-blocker-evidence\\landing-runtime-1024.png"
+    },
+    {
+      "viewport": {
+        "w": 1440,
+        "h": 950
+      },
+      "state": {
+        "url": "http://127.0.0.1:8791/?phase51runtime=1440",
+        "innerWidth": 1440,
+        "scrollWidth": 1440,
+        "bodyWidth": 1440,
+        "hasFlutter": true,
+        "shellExists": false,
+        "loaderExists": false,
+        "visibleError": false,
+        "brokenDomImages": [],
+        "pwaBannerVisible": false
+      },
+      "screenshot": "C:\\Users\\pc\\DEV\\PROYECTOS\\PRODUCTOS\\DaleVentas POS\\docs\\landing-phase5-1-asset-blocker-evidence\\landing-runtime-1440.png"
+    }
+  ],
+  "browserFetch": [
+    {
+      "path": "/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "type": "image/webp",
+      "size": 115648
+    },
+    {
+      "path": "/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "type": "image/webp",
+      "size": 82894
+    },
+    {
+      "path": "/assets/assets/image/landing-mobile-drawer.webp",
+      "status": 200,
+      "type": "image/webp",
+      "size": 48380
+    },
+    {
+      "path": "/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "type": "image/webp",
+      "size": 7910
+    }
+  ],
+  "responses": [
+    {
+      "url": "http://127.0.0.1:8791/?phase51runtime=390",
+      "status": 200,
+      "mime": "text/html",
+      "type": "Document"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/env.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/manifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Manifest"
+    },
+    {
+      "url": "http://127.0.0.1:8791/flutter_bootstrap.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/icons/Icon-192.png?v=20260816",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Other"
+    },
+    {
+      "url": "http://127.0.0.1:8791/favicon.png?v=20260816",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Other"
+    },
+    {
+      "url": "http://127.0.0.1:8791/main.dart.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.wasm",
+      "status": 200,
+      "mime": "application/wasm",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.js",
+      "status": 200,
+      "mime": "text/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/FontManifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/fonts/MaterialIcons-Regular.otf",
+      "status": 200,
+      "mime": "font/otf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Medium.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-SemiBold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Bold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/cupertino_icons/assets/CupertinoIcons.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2",
+      "status": 200,
+      "mime": "font/woff2",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/wakelock_plus/assets/no_sleep.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/AssetManifest.bin.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/.env",
+      "status": 200,
+      "mime": "application/octet-stream",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo.png",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/?phase51runtime=430",
+      "status": 200,
+      "mime": "text/html",
+      "type": "Document"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/env.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/flutter_bootstrap.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.js",
+      "status": 200,
+      "mime": "text/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.wasm",
+      "status": 200,
+      "mime": "application/wasm",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/manifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Manifest"
+    },
+    {
+      "url": "http://127.0.0.1:8791/icons/Icon-192.png?v=20260816",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Other"
+    },
+    {
+      "url": "http://127.0.0.1:8791/main.dart.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/FontManifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/fonts/MaterialIcons-Regular.otf",
+      "status": 200,
+      "mime": "font/otf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Medium.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2",
+      "status": 200,
+      "mime": "font/woff2",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-SemiBold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Bold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/cupertino_icons/assets/CupertinoIcons.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/wakelock_plus/assets/no_sleep.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/AssetManifest.bin.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/.env",
+      "status": 200,
+      "mime": "application/octet-stream",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo.png",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/?phase51runtime=768",
+      "status": 200,
+      "mime": "text/html",
+      "type": "Document"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/env.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/flutter_bootstrap.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.js",
+      "status": 200,
+      "mime": "text/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.wasm",
+      "status": 200,
+      "mime": "application/wasm",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/manifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Manifest"
+    },
+    {
+      "url": "http://127.0.0.1:8791/icons/Icon-192.png?v=20260816",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Other"
+    },
+    {
+      "url": "http://127.0.0.1:8791/main.dart.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/FontManifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/fonts/MaterialIcons-Regular.otf",
+      "status": 200,
+      "mime": "font/otf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Medium.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-SemiBold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Bold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2",
+      "status": 200,
+      "mime": "font/woff2",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/cupertino_icons/assets/CupertinoIcons.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/wakelock_plus/assets/no_sleep.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/AssetManifest.bin.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/.env",
+      "status": 200,
+      "mime": "application/octet-stream",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo.png",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/?phase51runtime=1024",
+      "status": 200,
+      "mime": "text/html",
+      "type": "Document"
+    },
+    {
+      "url": "http://127.0.0.1:8791/env.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/flutter_bootstrap.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/manifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Manifest"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.js",
+      "status": 200,
+      "mime": "text/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.wasm",
+      "status": 200,
+      "mime": "application/wasm",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/icons/Icon-192.png?v=20260816",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Other"
+    },
+    {
+      "url": "http://127.0.0.1:8791/main.dart.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/FontManifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/fonts/MaterialIcons-Regular.otf",
+      "status": 200,
+      "mime": "font/otf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Medium.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2",
+      "status": 200,
+      "mime": "font/woff2",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-SemiBold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Bold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/cupertino_icons/assets/CupertinoIcons.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/wakelock_plus/assets/no_sleep.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/AssetManifest.bin.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/.env",
+      "status": 200,
+      "mime": "application/octet-stream",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo.png",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/?phase51runtime=1440",
+      "status": 200,
+      "mime": "text/html",
+      "type": "Document"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Image"
+    },
+    {
+      "url": "http://127.0.0.1:8791/env.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/flutter_bootstrap.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.js",
+      "status": 200,
+      "mime": "text/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "https://www.gstatic.com/flutter-canvaskit/425cfb54d01a9472b3e81d9e76fd63a4a44cfbcb/chromium/canvaskit.wasm",
+      "status": 200,
+      "mime": "application/wasm",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/manifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Manifest"
+    },
+    {
+      "url": "http://127.0.0.1:8791/icons/Icon-192.png?v=20260816",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Other"
+    },
+    {
+      "url": "http://127.0.0.1:8791/main.dart.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/FontManifest.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/fonts/MaterialIcons-Regular.otf",
+      "status": 200,
+      "mime": "font/otf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Medium.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-SemiBold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://fonts.gstatic.com/s/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2",
+      "status": 200,
+      "mime": "font/woff2",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Bold.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/cupertino_icons/assets/CupertinoIcons.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/packages/wakelock_plus/assets/no_sleep.js",
+      "status": 200,
+      "mime": "application/javascript",
+      "type": "Script"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/AssetManifest.bin.json",
+      "status": 200,
+      "mime": "application/json",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/.env",
+      "status": 200,
+      "mime": "application/octet-stream",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/fonts/manrope/Manrope-Regular.ttf",
+      "status": 200,
+      "mime": "font/ttf",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo.png",
+      "status": 200,
+      "mime": "image/png",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-pos-cloud.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-drawer.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/landing-mobile-sale.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    },
+    {
+      "url": "http://127.0.0.1:8791/assets/assets/image/logo-web.webp",
+      "status": 200,
+      "mime": "image/webp",
+      "type": "Fetch"
+    }
+  ],
+  "failedRequests": [],
+  "consoleEvents": [
+    {
+      "type": "debug",
+      "text": "Injecting <script> tag. Using callback."
+    },
+    {
+      "type": "info",
+      "text": "Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.",
+      "url": "http://127.0.0.1:8791/?phase51runtime=390"
+    },
+    {
+      "type": "log",
+      "text": "APP_BOOT imageCache platform=web maxEntries=80 maxBytes=33554432"
+    },
+    {
+      "type": "log",
+      "text": "Loaded env file: .env"
+    },
+    {
+      "type": "log",
+      "text": "API_BASE_URL: http://127.0.0.1:8791/api"
+    },
+    {
+      "type": "debug",
+      "text": "Injecting <script> tag. Using callback."
+    },
+    {
+      "type": "info",
+      "text": "Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.",
+      "url": "http://127.0.0.1:8791/?phase51runtime=430"
+    },
+    {
+      "type": "log",
+      "text": "APP_BOOT imageCache platform=web maxEntries=80 maxBytes=33554432"
+    },
+    {
+      "type": "log",
+      "text": "Loaded env file: .env"
+    },
+    {
+      "type": "log",
+      "text": "API_BASE_URL: http://127.0.0.1:8791/api"
+    },
+    {
+      "type": "debug",
+      "text": "Injecting <script> tag. Using callback."
+    },
+    {
+      "type": "info",
+      "text": "Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.",
+      "url": "http://127.0.0.1:8791/?phase51runtime=768"
+    },
+    {
+      "type": "log",
+      "text": "APP_BOOT imageCache platform=web maxEntries=80 maxBytes=33554432"
+    },
+    {
+      "type": "log",
+      "text": "Loaded env file: .env"
+    },
+    {
+      "type": "log",
+      "text": "API_BASE_URL: http://127.0.0.1:8791/api"
+    },
+    {
+      "type": "debug",
+      "text": "Injecting <script> tag. Using callback."
+    },
+    {
+      "type": "info",
+      "text": "Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.",
+      "url": "http://127.0.0.1:8791/?phase51runtime=1024"
+    },
+    {
+      "type": "log",
+      "text": "APP_BOOT imageCache platform=web maxEntries=80 maxBytes=33554432"
+    },
+    {
+      "type": "log",
+      "text": "Loaded env file: .env"
+    },
+    {
+      "type": "log",
+      "text": "API_BASE_URL: http://127.0.0.1:8791/api"
+    },
+    {
+      "type": "debug",
+      "text": "Injecting <script> tag. Using callback."
+    },
+    {
+      "type": "info",
+      "text": "Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.",
+      "url": "http://127.0.0.1:8791/?phase51runtime=1440"
+    },
+    {
+      "type": "log",
+      "text": "APP_BOOT imageCache platform=web maxEntries=80 maxBytes=33554432"
+    },
+    {
+      "type": "log",
+      "text": "Loaded env file: .env"
+    },
+    {
+      "type": "log",
+      "text": "API_BASE_URL: http://127.0.0.1:8791/api"
+    }
+  ],
+  "exceptions": []
+}

@@ -426,6 +426,8 @@ class CatalogController extends StateNotifier<CatalogState> {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
   }) async {
     if (state.saving) return null;
     state = state.copyWith(saving: true, actionError: null);
@@ -472,6 +474,8 @@ class CatalogController extends StateNotifier<CatalogState> {
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
         unitOfMeasure: unitOfMeasure,
+        itemType: itemType,
+        trackInventory: trackInventory,
       );
       _mutationSeq += 1;
       final mutationSeq = _mutationSeq;
@@ -682,6 +686,8 @@ class CatalogController extends StateNotifier<CatalogState> {
     String? taxPriceMode,
     String? unitOfMeasureId,
     UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
   }) async {
     if (state.saving) return null;
     state = state.copyWith(saving: true, actionError: null);
@@ -731,6 +737,8 @@ class CatalogController extends StateNotifier<CatalogState> {
         taxPriceMode: taxPriceMode,
         unitOfMeasureId: unitOfMeasureId,
         unitOfMeasure: unitOfMeasure,
+        itemType: itemType,
+        trackInventory: trackInventory,
       );
       final fallbackFotoUrl =
           (uploadedFotoUrl ?? fotoUrl)?.trim().isNotEmpty == true

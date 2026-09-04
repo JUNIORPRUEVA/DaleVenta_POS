@@ -40,6 +40,25 @@ class StockAdjustmentFeedback {
       );
     }
 
+    if (normalized.contains('control de inventario') &&
+        normalized.contains('desactiv')) {
+      return const AppFeedbackNotification(
+        title: title,
+        body:
+            'El control de inventario está desactivado. Actívalo para ajustar stock físico.',
+        kind: AppFeedbackKind.warning,
+      );
+    }
+
+    if (normalized.contains('no maneja inventario fisico')) {
+      return const AppFeedbackNotification(
+        title: title,
+        body:
+            'Este artículo no maneja inventario físico. La venta o compra se registra sin ajuste de stock.',
+        kind: AppFeedbackKind.warning,
+      );
+    }
+
     // Stock insuficiente / no puede quedar negativo.
     if (_codeIs(code, 'INSUFFICIENT_WAREHOUSE_STOCK') ||
         normalized.contains('insuficiente') ||

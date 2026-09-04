@@ -75,6 +75,11 @@ export class CreateSaleItemDto {
   @IsNumber()
   @Min(0)
   unitPrecisionSnapshot?: number;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  inventoryTrackedSnapshot?: boolean;
 }
 
 export class CreateSaleDto {

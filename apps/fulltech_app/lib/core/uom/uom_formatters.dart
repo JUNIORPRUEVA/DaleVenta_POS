@@ -106,6 +106,7 @@ double quantizeQuantityToUnit(num value, UnitOfMeasureModel unit) {
 }
 
 bool quantityExceedsStock(num quantity, ProductModel product) {
+  if (product.itemType == 'SERVICE' || !product.trackInventory) return false;
   final stock = product.stock;
   if (stock == null) return false;
   return quantity.toDouble() > stock;

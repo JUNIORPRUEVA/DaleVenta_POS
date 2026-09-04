@@ -77,6 +77,13 @@ The schema includes tenant, user, inventory, warehouse, sale, cash, fiscal, purc
 
 Important root models/enums include `Company`, `User`, `CompanyMember`, `AuthSession`, `Product`, `Warehouse`, `WarehouseStock`, `Terminal`, `InventoryMovement`, `WarehouseTransfer`, `Sale`, `CashSession`, `NcfSequence`, `Tax`, `PurchaseOrder`, `Client`, `Cotizacion`, `ServiceOrder`, and `AiAssistantConversationTurn`.
 
+Inventory optionality fields are default-preserving and active in sales:
+`Company.inventoryEnabled` defaults to enabled, `Product.itemType` defaults to
+`PRODUCT`, `Product.trackInventory` defaults to true, and
+`SaleItem.inventoryTrackedSnapshot` records whether a sale line physically
+affected inventory. Sales, cancellation, and refund restoration use the
+persisted sale-item snapshot for historical safety.
+
 ## Authentication
 
 Backend authentication uses JWT/passport strategy and auth services/controllers. Flutter stores tokens locally through `TokenStorage` and hydrates sessions on app start. Password recovery and account deletion are present.
@@ -107,6 +114,23 @@ Inventory is represented through products, warehouse stock, inventory movements,
 - Flutter: `features/products`, `features/warehouses`, `core/uom`, `core/offline`.
 
 Multi-warehouse is gated by company settings on the frontend and has backend services/tests.
+
+Sales inventory mutation is gated per line by the effective rule:
+`company.inventoryEnabled && product.itemType == PRODUCT &&
+product.trackInventory`, limited to supported local catalog products. Flutter
+captures this decision in the sale item payload before offline storage, and sync
+replay sends the original snapshot so company/product config drift does not
+change the physical semantics of an offline sale. Cancellation and refund
+restoration never use current product/company config when a sale-item snapshot
+exists.
+
+The same effective physical-inventory rule gates purchase receipts with
+`updateInventory=true`, product stock adjustments/recounts, and warehouse
+transfers. Purchase orders and receipts remain commercial documents for
+services and non-inventory products; those lines do not create `WarehouseStock`,
+`Product.stock`, or `InventoryMovement` changes. Physical stock reports and
+zero-config warehouse stock rows include only tracked `PRODUCT` items, while
+Kardex/movement history remains readable for historical audit.
 
 ## Offline, Cache, and Sync
 
