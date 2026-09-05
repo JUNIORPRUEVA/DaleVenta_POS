@@ -10,9 +10,8 @@ void main() {
 
   test('landing optimized image assets are bundled', () async {
     const assetPaths = [
-      'assets/image/landing-pos-cloud.webp',
-      'assets/image/landing-mobile-sale.webp',
-      'assets/image/landing-mobile-drawer.webp',
+      'assets/image/fullpos-windows-ios-android.webp',
+      'assets/image/fullpos-ios-android.webp',
       'assets/image/logo-web.webp',
     ];
 
@@ -42,7 +41,20 @@ void main() {
       find.text('Vende y controla tu negocio desde cualquier dispositivo'),
       findsOneWidget,
     );
-    expect(find.text('Ver planes y precios'), findsOneWidget);
+    expect(find.text('Probar gratis 5 días'), findsWidgets);
+    expect(find.text('Prueba FullPOS Cloud gratis por 5 días'), findsOneWidget);
+    expect(find.text('Descargar para Windows'), findsOneWidget);
+    expect(find.text('Descargar para Android'), findsOneWidget);
+    expect(find.text('iPhone'), findsWidgets);
+    expect(find.text('Usar Web/PWA'), findsOneWidget);
+    expect(find.text('Instalar PWA'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'FullPOS Cloud es autogestionado: tú realizas la instalación y configuración desde tu dispositivo.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Ver planes'), findsWidgets);
     expect(find.text('Básico'), findsOneWidget);
     expect(find.text('Negocio'), findsOneWidget);
     expect(find.text('Pro'), findsOneWidget);
@@ -54,10 +66,14 @@ void main() {
       find.text('Pago anticipado mediante transferencia bancaria.'),
       findsNWidgets(3),
     );
-    expect(find.text('Instalar PWA'), findsNothing);
     expect(find.text('Crear mi cuenta'), findsNothing);
     expect(find.text('Ahorra RD\$ 2,000 anual'), findsNothing);
     expect(find.text('WhatsApp: 829-531-9442'), findsOneWidget);
+    expect(find.textContaining('Instalación remota incluida'), findsNothing);
+    expect(find.textContaining('instalación remota incluida'), findsNothing);
+    expect(find.textContaining('configuración remota'), findsNothing);
+    expect(find.textContaining('Configuración inicial remota'), findsNothing);
+    expect(find.textContaining('te ayuda remotamente'), findsNothing);
   });
 
   testWidgets('landing renders without layout errors on responsive widths', (

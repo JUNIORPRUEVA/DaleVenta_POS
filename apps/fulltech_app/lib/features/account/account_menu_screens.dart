@@ -1451,7 +1451,7 @@ class _LicensePlanCardState extends State<_LicensePlanCard> {
             _StatusBanner(
               icon: Icons.hourglass_top_rounded,
               title: 'Prueba gratis activa',
-              message: 'Incluye 7 días de uso inicial con límites controlados.',
+              message: 'Incluye 5 días de uso inicial con límites controlados.',
               accent: AppColors.warning,
             ),
           const SizedBox(height: 12),

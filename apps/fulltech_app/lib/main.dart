@@ -474,7 +474,7 @@ class LicensePurchaseOverlay extends ConsumerWidget {
                               ),
                               SizedBox(height: 3),
                               Text(
-                                'Tu prueba de 7 dias ya vencio.',
+                                'Tu prueba de 5 dias ya vencio.',
                                 style: TextStyle(
                                   color: Color(0xFF5E7187),
                                   fontSize: 13,
@@ -489,7 +489,7 @@ class LicensePurchaseOverlay extends ConsumerWidget {
                     ),
                     const SizedBox(height: 22),
                     const Text(
-                      'Para continuar usando FullPOS Cloud necesitas comprar o renovar tu licencia. El plan demo incluye 2 usuarios y 100 productos durante una semana.',
+                      'Para continuar usando FullPOS Cloud necesitas comprar o renovar tu licencia. El plan demo incluye 2 usuarios y 100 productos durante 5 dias.',
                       style: TextStyle(
                         color: Color(0xFF31465C),
                         fontSize: 15,

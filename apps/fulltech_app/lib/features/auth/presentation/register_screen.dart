@@ -426,7 +426,7 @@ class _Header extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                '7 dias gratis. Plan basico: 2 usuarios y 100 productos.',
+                '5 dias gratis. Plan basico: 2 usuarios y 100 productos.',
                 style: TextStyle(
                   color: Color(0xFF52667C),
                   fontSize: 13,

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/app_access/app_access_links.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/utils/safe_url_launcher.dart';
+import 'pwa_install_prompt.dart';
 
 const _supportPhoneDisplay = '829-531-9442';
 const _supportWhatsappIntl = '18295319442';
@@ -22,11 +24,11 @@ class LandingScreen extends StatelessWidget {
   static final _topKey = GlobalKey();
   static final _featuresKey = GlobalKey();
   static final _platformsKey = GlobalKey();
+  static final _demoKey = GlobalKey();
   static final _pricingKey = GlobalKey();
   static final _processKey = GlobalKey();
   static final _supportKey = GlobalKey();
   static final _faqKey = GlobalKey();
-  static final _showcaseKey = GlobalKey();
 
   static Future<void> openGenericWhatsApp(BuildContext context) {
     return _openWhatsApp(
@@ -47,6 +49,36 @@ class LandingScreen extends StatelessWidget {
     );
   }
 
+  static Future<void> openWindowsDownload(BuildContext context) {
+    return safeOpenUrl(
+      context,
+      AppAccessLinks.windowsReleaseUri,
+      copiedMessage: 'No se pudo abrir la descarga. Enlace copiado.',
+    );
+  }
+
+  static Future<void> openAndroidDownload(BuildContext context) {
+    return safeOpenUrl(
+      context,
+      AppAccessLinks.androidReleaseUri,
+      copiedMessage: 'No se pudo abrir la descarga. Enlace copiado.',
+    );
+  }
+
+  static Future<void> openPwa(BuildContext context) {
+    return safeOpenUrl(
+      context,
+      AppAccessLinks.pwaUri,
+      copiedMessage: 'No se pudo abrir la PWA. Enlace copiado.',
+    );
+  }
+
+  static Future<void> installPwa(BuildContext context) async {
+    final prompted = requestPwaInstallPrompt();
+    if (prompted) return;
+    return openPwa(context);
+  }
+
   static void scrollTo(BuildContext context, GlobalKey key) {
     final target = key.currentContext;
     if (target == null) return;
@@ -60,7 +92,7 @@ class LandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = MediaQuery.sizeOf(context).width < 820;
+    final isMobile = MediaQuery.sizeOf(context).width < 1180;
     final isNarrowPhone = MediaQuery.sizeOf(context).width < 560;
     final baseTheme = Theme.of(context);
 
@@ -125,13 +157,13 @@ class LandingScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 34),
                               _Anchor(
-                                key: _showcaseKey,
-                                child: const _ShowcaseSection(),
+                                key: _platformsKey,
+                                child: const _PlatformsSection(),
                               ),
                               const SizedBox(height: 34),
                               _Anchor(
-                                key: _platformsKey,
-                                child: const _PlatformsSection(),
+                                key: _demoKey,
+                                child: const _DemoSection(),
                               ),
                               const SizedBox(height: 34),
                               _Anchor(
@@ -243,6 +275,10 @@ class _TopBar extends StatelessWidget {
                   _NavButton(
                     'Plataformas',
                     onTap: () => onNav(LandingScreen._platformsKey),
+                  ),
+                  _NavButton(
+                    'Demo',
+                    onTap: () => onNav(LandingScreen._demoKey),
                   ),
                   _NavButton(
                     'Planes',
@@ -386,6 +422,9 @@ class _LandingDrawer extends StatelessWidget {
             _DrawerAction('Plataformas', Icons.devices_rounded, () {
               go(LandingScreen._platformsKey);
             }),
+            _DrawerAction('Demo', Icons.rocket_launch_rounded, () {
+              go(LandingScreen._demoKey);
+            }),
             _DrawerAction('Planes', Icons.payments_rounded, () {
               go(LandingScreen._pricingKey);
             }),
@@ -403,9 +442,14 @@ class _LandingDrawer extends StatelessWidget {
               Navigator.of(context).maybePop();
               context.go(Routes.login);
             }),
-            _DrawerAction('Ver planes', Icons.arrow_downward_rounded, () {
-              go(LandingScreen._pricingKey);
-            }, emphasized: true),
+            _DrawerAction(
+              'Probar gratis 5 días',
+              Icons.rocket_launch_rounded,
+              () {
+                go(LandingScreen._demoKey);
+              },
+              emphasized: true,
+            ),
           ],
         ),
       ),
@@ -490,12 +534,10 @@ class _HeroSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   FilledButton.icon(
-                    onPressed: () => LandingScreen.scrollTo(
-                      context,
-                      LandingScreen._pricingKey,
-                    ),
-                    icon: const Icon(Icons.payments_rounded, size: 19),
-                    label: const Text('Ver planes y precios'),
+                    onPressed: () =>
+                        LandingScreen.scrollTo(context, LandingScreen._demoKey),
+                    icon: const Icon(Icons.rocket_launch_rounded, size: 19),
+                    label: const Text('Probar gratis 5 días'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -505,13 +547,10 @@ class _HeroSection extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: () => LandingScreen.scrollTo(
                       context,
-                      LandingScreen._showcaseKey,
+                      LandingScreen._pricingKey,
                     ),
-                    icon: const Icon(
-                      Icons.play_circle_outline_rounded,
-                      size: 19,
-                    ),
-                    label: const Text('Ver FullPOS en acción'),
+                    icon: const Icon(Icons.payments_rounded, size: 19),
+                    label: const Text('Ver planes'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -525,12 +564,10 @@ class _HeroSection extends StatelessWidget {
                 runSpacing: 12,
                 children: [
                   FilledButton.icon(
-                    onPressed: () => LandingScreen.scrollTo(
-                      context,
-                      LandingScreen._pricingKey,
-                    ),
-                    icon: const Icon(Icons.payments_rounded, size: 19),
-                    label: const Text('Ver planes y precios'),
+                    onPressed: () =>
+                        LandingScreen.scrollTo(context, LandingScreen._demoKey),
+                    icon: const Icon(Icons.rocket_launch_rounded, size: 19),
+                    label: const Text('Probar gratis 5 días'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -539,13 +576,10 @@ class _HeroSection extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: () => LandingScreen.scrollTo(
                       context,
-                      LandingScreen._showcaseKey,
+                      LandingScreen._pricingKey,
                     ),
-                    icon: const Icon(
-                      Icons.play_circle_outline_rounded,
-                      size: 19,
-                    ),
-                    label: const Text('Ver FullPOS en acción'),
+                    icon: const Icon(Icons.payments_rounded, size: 19),
+                    label: const Text('Ver planes'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -565,9 +599,11 @@ class _HeroSection extends StatelessWidget {
               text,
               const SizedBox(height: 22),
               const _ProductImageCard(
-                image: 'assets/image/landing-pos-cloud.webp',
+                image: 'assets/image/fullpos-windows-ios-android.webp',
                 label: 'FullPOS Cloud en escritorio y móvil',
                 aspectRatio: 1.82,
+                contain: true,
+                framed: false,
               ),
             ],
           );
@@ -581,9 +617,11 @@ class _HeroSection extends StatelessWidget {
             const Expanded(
               flex: 9,
               child: _ProductImageCard(
-                image: 'assets/image/landing-pos-cloud.webp',
+                image: 'assets/image/fullpos-windows-ios-android.webp',
                 label: 'FullPOS Cloud en escritorio y móvil',
                 aspectRatio: 1.82,
+                contain: true,
+                framed: false,
               ),
             ),
           ],
@@ -599,9 +637,9 @@ class _TrustPoints extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      'Instalación remota incluida después de activar tu licencia',
+      'Prueba gratis durante 5 días',
+      'Disponible en Windows, Android, iPhone y Web',
       'Soporte remoto por WhatsApp',
-      'Contratación mínima de 3 meses',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,7 +663,7 @@ class _TrustStrip extends StatelessWidget {
       (Icons.android_rounded, 'Android'),
       (Icons.phone_iphone_rounded, 'iPhone'),
       (Icons.language_rounded, 'Web/PWA'),
-      (Icons.support_agent_rounded, 'Instalación remota'),
+      (Icons.rocket_launch_rounded, 'Prueba autogestionada'),
       (Icons.chat_rounded, 'Soporte por WhatsApp'),
       (Icons.location_on_rounded, 'República Dominicana'),
     ];
@@ -714,51 +752,6 @@ class _BenefitsSection extends StatelessWidget {
   }
 }
 
-class _ShowcaseSection extends StatelessWidget {
-  const _ShowcaseSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionShell(
-      eyebrow: 'Producto real',
-      title: 'FullPOS Cloud en acción',
-      copy:
-          'Una misma plataforma para vender y administrar tu negocio desde diferentes dispositivos.',
-      child: Column(
-        children: const [
-          _ShowcaseRow(
-            image: 'assets/image/landing-pos-cloud.webp',
-            title: 'Tu operación conectada en una sola vista',
-            copy:
-                'Usa FullPOS Cloud para ventas, clientes, inventario y reportes desde web, escritorio o móvil, según el dispositivo que tengas disponible.',
-            points: [
-              'Interfaz real del producto',
-              'Diseñado para trabajo diario',
-              'Acceso desde distintos dispositivos',
-            ],
-            imageOnRight: false,
-            aspectRatio: 1.82,
-          ),
-          SizedBox(height: 18),
-          _ShowcaseRow(
-            image: 'assets/image/landing-mobile-sale.webp',
-            title: 'Ventas y gestión también desde móvil',
-            copy:
-                'El equipo puede operar y consultar información autorizada desde Android, iPhone o navegador, manteniendo el control del negocio.',
-            points: [
-              'Ventas y clientes',
-              'Cotizaciones y compras',
-              'Permisos por usuario',
-            ],
-            imageOnRight: true,
-            aspectRatio: 1.5,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PlatformsSection extends StatelessWidget {
   const _PlatformsSection();
 
@@ -807,27 +800,203 @@ class _PlatformsSection extends StatelessWidget {
             ),
             itemBuilder: (context, index) => _PlatformCard(platforms[index]),
           );
-          const visual = _ProductImageCard(
-            image: 'assets/image/landing-pos-cloud.webp',
-            label: 'FullPOS Cloud en Windows, Android, iPhone y Web',
-            aspectRatio: 1.82,
-            contain: true,
-          );
           if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [visual, const SizedBox(height: 16), labels],
-            );
+            return labels;
           }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Expanded(flex: 6, child: visual),
-              const SizedBox(width: 22),
-              Expanded(flex: 5, child: labels),
-            ],
-          );
+          return labels;
         },
+      ),
+    );
+  }
+}
+
+class _DemoSection extends StatelessWidget {
+  const _DemoSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionShell(
+      eyebrow: 'Prueba gratis',
+      title: 'Prueba FullPOS Cloud gratis por 5 días',
+      copy:
+          'Descarga, instala y configura FullPOS Cloud por tu cuenta y conoce el sistema durante 5 días antes de adquirir una licencia.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SelfServiceNote(),
+          const SizedBox(height: 14),
+          const _ProductImageCard(
+            image: 'assets/image/fullpos-ios-android.webp',
+            label: 'FullPOS Cloud en iPhone y Android',
+            aspectRatio: 1.5,
+            contain: true,
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth > 900
+                  ? 4
+                  : constraints.maxWidth > 560
+                  ? 2
+                  : 1;
+              return GridView.builder(
+                itemCount: 4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: columns == 1 ? 220 : 238,
+                ),
+                itemBuilder: (context, index) {
+                  final cards = [
+                    _DownloadOptionCard(
+                      icon: Icons.desktop_windows_rounded,
+                      title: 'Windows',
+                      copy: 'Descarga el instalador oficial para escritorio.',
+                      actionLabel: 'Descargar para Windows',
+                      onPressed: () =>
+                          LandingScreen.openWindowsDownload(context),
+                    ),
+                    _DownloadOptionCard(
+                      icon: Icons.android_rounded,
+                      title: 'Android',
+                      copy: 'Descarga el APK oficial para móviles y tablets.',
+                      actionLabel: 'Descargar para Android',
+                      onPressed: () =>
+                          LandingScreen.openAndroidDownload(context),
+                    ),
+                    _DownloadOptionCard(
+                      icon: Icons.phone_iphone_rounded,
+                      title: 'iPhone',
+                      copy:
+                          'Accede desde Safari y usa la opción Web/PWA disponible.',
+                      actionLabel: 'Usar Web/PWA',
+                      onPressed: () => LandingScreen.openPwa(context),
+                    ),
+                    _DownloadOptionCard(
+                      icon: Icons.language_rounded,
+                      title: 'Web / PWA',
+                      copy:
+                          'Abre la app web o instala la PWA desde el navegador.',
+                      actionLabel: 'Instalar PWA',
+                      onPressed: () => LandingScreen.installPwa(context),
+                    ),
+                  ];
+                  return cards[index];
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelfServiceNote extends StatelessWidget {
+  const _SelfServiceNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFD),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _line),
+      ),
+      child: const Text(
+        'FullPOS Cloud es autogestionado: tú realizas la instalación y configuración desde tu dispositivo. Puedes comenzar cuando quieras siguiendo el flujo de instalación de la plataforma que elijas.',
+        style: TextStyle(
+          color: Color(0xFF31465C),
+          fontSize: 13.5,
+          height: 1.45,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _DownloadOptionCard extends StatelessWidget {
+  const _DownloadOptionCard({
+    required this.icon,
+    required this.title,
+    required this.copy,
+    required this.actionLabel,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String copy;
+  final String actionLabel;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF2FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: _primary, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Text(
+              copy,
+              style: const TextStyle(
+                color: Color(0xFF60748C),
+                fontSize: 12.5,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: Text(actionLabel),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 42),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -857,15 +1026,15 @@ class _PurchaseProcessSection extends StatelessWidget {
       ),
       _StepInfo(
         'Activamos tu licencia',
-        'Preparamos el acceso correspondiente a tu plan.',
+        'Tu licencia queda habilitada según el plan adquirido.',
       ),
       _StepInfo(
-        'Instalación y configuración remota',
-        'Coordinamos contigo la instalación/configuración remota cuando corresponda.',
+        'Descarga o accede a FullPOS',
+        'Utiliza Windows, Android, iPhone o Web/PWA según corresponda.',
       ),
       _StepInfo(
-        'Empieza a utilizar FullPOS',
-        'Nuestro equipo te ayuda con la configuración inicial.',
+        'Instala y configura',
+        'La instalación y configuración son realizadas por el usuario.',
       ),
       _StepInfo(
         'Renueva al finalizar',
@@ -877,7 +1046,7 @@ class _PurchaseProcessSection extends StatelessWidget {
       eyebrow: 'Compra clara',
       title: 'Cómo adquirir FullPOS Cloud',
       copy:
-          'El proceso está pensado para que sepas qué pagas, cuándo se activa tu licencia y cómo recibes la ayuda inicial.',
+          'El proceso está pensado para que sepas qué pagas, cuándo se activa tu licencia y cómo comienzas de forma autogestionada.',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
@@ -929,6 +1098,8 @@ class _PricingSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const _PricingSelfServiceNote(),
+          const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 860;
@@ -965,6 +1136,17 @@ class _PricingSection extends StatelessWidget {
   }
 }
 
+class _PricingSelfServiceNote extends StatelessWidget {
+  const _PricingSelfServiceNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _DisclosureText(
+      'Después de confirmar el pago, activamos tu licencia para que puedas comenzar a utilizar FullPOS Cloud. La instalación y configuración del sistema son autogestionadas por el usuario.',
+    );
+  }
+}
+
 class _SupportSection extends StatelessWidget {
   const _SupportSection();
 
@@ -986,7 +1168,7 @@ class _SupportSection extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
+          final compact = constraints.maxWidth < 900;
           final text = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
@@ -997,7 +1179,7 @@ class _SupportSection extends StatelessWidget {
               ),
               SizedBox(height: 14),
               Text(
-                'No te dejamos solo con el sistema',
+                'Soporte cuando lo necesites',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 28,
@@ -1007,7 +1189,7 @@ class _SupportSection extends StatelessWidget {
               ),
               SizedBox(height: 10),
               Text(
-                'Después de activar tu licencia, nuestro equipo te ayuda remotamente con la instalación y configuración inicial correspondiente.',
+                'Si tienes dudas o necesitas reportar una incidencia relacionada con FullPOS Cloud, puedes contactarnos mediante nuestro canal de soporte.',
                 style: TextStyle(
                   color: Color(0xFFD7E3EF),
                   fontSize: 15,
@@ -1017,7 +1199,7 @@ class _SupportSection extends StatelessWidget {
               ),
               SizedBox(height: 10),
               Text(
-                'También cuentas con soporte remoto vía WhatsApp para asistencia relacionada con FullPOS Cloud.',
+                'Soporte remoto vía WhatsApp.',
                 style: TextStyle(
                   color: Color(0xFFD7E3EF),
                   fontSize: 15,
@@ -1084,12 +1266,16 @@ class _FaqSection extends StatelessWidget {
         'Actualmente aceptamos únicamente transferencia bancaria.',
       ),
       (
-        '¿Debo pagar antes de la instalación?',
-        'Sí. Una vez confirmado el pago de tu licencia, coordinamos contigo la instalación y configuración remota correspondiente.',
+        '¿Puedo probar FullPOS antes de comprar?',
+        'Sí. Puedes probar FullPOS Cloud gratis durante 5 días.',
       ),
       (
-        '¿La instalación está incluida?',
-        'Sí. Después de confirmar y activar tu licencia, FullTech te ayuda remotamente con la instalación y configuración inicial correspondiente.',
+        '¿Quién realiza la instalación y configuración?',
+        'La instalación y configuración de FullPOS Cloud son autogestionadas por el usuario. Puedes descargar o acceder al sistema desde las plataformas disponibles.',
+      ),
+      (
+        '¿La prueba de 5 días requiere instalación?',
+        'Depende de la plataforma que elijas. En Windows o Android utilizas la opción de descarga correspondiente; en iPhone y Web/PWA puedes acceder o instalar la aplicación web. El proceso es realizado por el usuario.',
       ),
       (
         '¿Cómo funciona el soporte?',
@@ -1105,7 +1291,7 @@ class _FaqSection extends StatelessWidget {
       eyebrow: 'Preguntas frecuentes',
       title: 'Respuestas claras antes de adquirir FullPOS Cloud',
       copy:
-          'Estas son las dudas principales sobre contratación, pago, instalación remota y soporte.',
+          'Estas son las dudas principales sobre contratación, pago, prueba gratis, autogestión y soporte.',
       child: Column(
         children: [
           for (final faq in faqs) _FaqTile(question: faq.$1, answer: faq.$2),
@@ -1136,12 +1322,12 @@ class _FinalCtaSection extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
+          final compact = constraints.maxWidth < 900;
           final text = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
               Text(
-                'Empieza a controlar mejor tu negocio con FullPOS Cloud',
+                'Empieza con FullPOS Cloud',
                 style: TextStyle(
                   color: _ink,
                   fontSize: 28,
@@ -1151,7 +1337,7 @@ class _FinalCtaSection extends StatelessWidget {
               ),
               SizedBox(height: 10),
               Text(
-                'Elige el plan que mejor se adapte a tu negocio y escríbenos. Te explicaremos el proceso de pago y, una vez activada tu licencia, te ayudaremos remotamente con la instalación y configuración.',
+                'Prueba el sistema gratis durante 5 días o elige uno de nuestros planes para tu negocio.',
                 style: TextStyle(
                   color: Color(0xFF43566D),
                   fontSize: 15,
@@ -1168,10 +1354,17 @@ class _FinalCtaSection extends StatelessWidget {
             children: [
               FilledButton.icon(
                 onPressed: () =>
+                    LandingScreen.scrollTo(context, LandingScreen._demoKey),
+                icon: const Icon(Icons.rocket_launch_rounded, size: 18),
+                label: const Text('Probar gratis 5 días'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+              ),
+              OutlinedButton.icon(
+                onPressed: () =>
                     LandingScreen.scrollTo(context, LandingScreen._pricingKey),
                 icon: const Icon(Icons.payments_rounded, size: 18),
                 label: const Text('Ver planes'),
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
               ),
               OutlinedButton.icon(
                 onPressed: () => LandingScreen.openGenericWhatsApp(context),
@@ -1441,15 +1634,33 @@ class _ProductImageCard extends StatelessWidget {
     required this.label,
     required this.aspectRatio,
     this.contain = false,
+    this.framed = true,
   });
 
   final String image;
   final String label;
   final double aspectRatio;
   final bool contain;
+  final bool framed;
 
   @override
   Widget build(BuildContext context) {
+    final imageWidget = ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: AspectRatio(
+        aspectRatio: aspectRatio,
+        child: Image.asset(
+          image,
+          fit: contain ? BoxFit.contain : BoxFit.cover,
+          semanticLabel: label,
+        ),
+      ),
+    );
+
+    if (!framed) {
+      return SizedBox(width: double.infinity, child: imageWidget);
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(8),
@@ -1465,123 +1676,7 @@ class _ProductImageCard extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: AspectRatio(
-          aspectRatio: aspectRatio,
-          child: Image.asset(
-            image,
-            fit: contain ? BoxFit.contain : BoxFit.cover,
-            semanticLabel: label,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ShowcaseRow extends StatelessWidget {
-  const _ShowcaseRow({
-    required this.image,
-    required this.title,
-    required this.copy,
-    required this.points,
-    required this.imageOnRight,
-    required this.aspectRatio,
-  });
-
-  final String image;
-  final String title;
-  final String copy;
-  final List<String> points;
-  final bool imageOnRight;
-  final double aspectRatio;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = _InfoPanel(title: title, copy: copy, points: points);
-    final visual = _ProductImageCard(
-      image: image,
-      label: title,
-      aspectRatio: aspectRatio,
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 760) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [visual, const SizedBox(height: 14), text],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              flex: imageOnRight ? 5 : 6,
-              child: imageOnRight ? text : visual,
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              flex: imageOnRight ? 6 : 5,
-              child: imageOnRight ? visual : text,
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _InfoPanel extends StatelessWidget {
-  const _InfoPanel({
-    required this.title,
-    required this.copy,
-    required this.points,
-  });
-
-  final String title;
-  final String copy;
-  final List<String> points;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFCFE),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: _ink,
-              fontSize: 22,
-              height: 1.18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            copy,
-            style: const TextStyle(
-              color: Color(0xFF60748C),
-              fontSize: 14,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          for (final point in points) ...[
-            _InlineCheck(text: point),
-            if (point != points.last) const SizedBox(height: 8),
-          ],
-        ],
-      ),
+      child: imageWidget,
     );
   }
 }
@@ -2135,15 +2230,6 @@ class _PlanCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'La instalación y configuración remota se realizan después de confirmar el pago de tu licencia.',
-            style: TextStyle(
-              color: Color(0xFF43566D),
-              fontSize: 12.5,
-              height: 1.35,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
         ],
       ),
     );
@@ -2196,8 +2282,8 @@ class _CommonBenefits extends StatelessWidget {
       'Android',
       'iPhone',
       'Web/PWA',
-      'Instalación remota',
-      'Configuración inicial remota',
+      'Prueba gratis por 5 días',
+      'Autogestión desde tu dispositivo',
       'Soporte remoto vía WhatsApp',
     ];
     return Container(
