@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../cotizacion_models.dart';
+import '../quotation_history_utils.dart';
 import 'cotizaciones_local_repository.dart';
 
 final cotizacionesRepositoryProvider = Provider<CotizacionesRepository>((ref) {
@@ -15,6 +17,7 @@ final cotizacionesRepositoryProvider = Provider<CotizacionesRepository>((ref) {
     ref.watch(dioProvider),
     ref.read(cotizacionesLocalRepositoryProvider),
     ref.read(syncQueueServiceProvider.notifier),
+    () => ref.read(authStateProvider).user?.companyId,
   );
   repository.registerSyncHandlers();
   return repository;
@@ -24,6 +27,7 @@ class CotizacionesRepository {
   final Dio _dio;
   final CotizacionesLocalRepository _local;
   final SyncQueueService _syncQueue;
+  final String? Function() _companyIdReader;
 
   static const String _createSyncType = 'quotes.create';
   static const String _updateSyncType = 'quotes.update';
@@ -31,7 +35,12 @@ class CotizacionesRepository {
 
   bool _handlersRegistered = false;
 
-  CotizacionesRepository(this._dio, this._local, this._syncQueue);
+  CotizacionesRepository(
+    this._dio,
+    this._local,
+    this._syncQueue, [
+    String? Function()? companyIdReader,
+  ]) : _companyIdReader = companyIdReader ?? (() => null);
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -43,9 +52,10 @@ class CotizacionesRepository {
         ((payload['quote'] as Map?) ?? const <String, dynamic>{})
             .cast<String, dynamic>(),
       );
+      final companyId = _companyIdFromPayload(payload, requiredForWrite: true);
       final remote = await create(draft.copyWith(id: ''));
-      await _local.deleteById(localId);
-      await _local.upsert(remote);
+      await _local.deleteById(localId, companyId: companyId);
+      await _local.upsert(remote, companyId: companyId);
     });
 
     _syncQueue.registerHandler(_updateSyncType, (payload) async {
@@ -54,14 +64,40 @@ class CotizacionesRepository {
         ((payload['quote'] as Map?) ?? const <String, dynamic>{})
             .cast<String, dynamic>(),
       );
+      final companyId = _companyIdFromPayload(payload, requiredForWrite: true);
       final remote = await update(id, draft);
-      await _local.upsert(remote);
+      await _local.upsert(remote, companyId: companyId);
     });
 
     _syncQueue.registerHandler(_deleteSyncType, (payload) async {
       final id = (payload['id'] ?? '').toString();
+      final companyId = _companyIdFromPayload(payload, requiredForWrite: true);
       await deleteById(id);
+      await _local.deleteById(id, companyId: companyId);
     });
+  }
+
+  String? _currentCompanyId() {
+    final value = _companyIdReader()?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  String _requireCompanyId() {
+    final value = _currentCompanyId();
+    if (value == null) {
+      throw ApiException('Empresa activa requerida para cotizaciones locales');
+    }
+    return value;
+  }
+
+  String _companyIdFromPayload(
+    Map<String, dynamic> payload, {
+    required bool requiredForWrite,
+  }) {
+    final value = (payload['companyId'] ?? '').toString().trim();
+    if (value.isNotEmpty) return value;
+    if (!requiredForWrite) return _currentCompanyId() ?? '';
+    return _requireCompanyId();
   }
 
   bool _shouldQueueSync(ApiException error) {
@@ -167,7 +203,9 @@ class CotizacionesRepository {
     DateTime? to,
     int take = 80,
   }) async {
-    final items = await _local.listAll();
+    final companyId = _currentCompanyId();
+    if (companyId == null) return const [];
+    final items = await _local.listAll(companyId: companyId);
     final phone = (customerPhone ?? '').trim();
     final normalizedUserId = (userId ?? '').trim();
     final filteredByPhone = phone.isEmpty
@@ -185,10 +223,11 @@ class CotizacionesRepository {
               .toList(growable: false);
     final filteredByDate = filtered
         .where((item) {
+          final localCreatedAt = quotationHistoryLocalDate(item.createdAt);
           final created = DateTime(
-            item.createdAt.year,
-            item.createdAt.month,
-            item.createdAt.day,
+            localCreatedAt.year,
+            localCreatedAt.month,
+            localCreatedAt.day,
           );
           if (from != null) {
             final start = DateTime(from.year, from.month, from.day);
@@ -218,14 +257,17 @@ class CotizacionesRepository {
       to: to,
       take: take,
     );
+    final companyId = _requireCompanyId();
     for (final item in items) {
-      await _local.upsert(item);
+      await _local.upsert(item, companyId: companyId);
     }
     return items;
   }
 
   Future<CotizacionModel?> getCachedById(String id) async {
-    final items = await _local.listAll();
+    final companyId = _currentCompanyId();
+    if (companyId == null) return null;
+    final items = await _local.listAll(companyId: companyId);
     for (final item in items) {
       if (item.id.trim() == id.trim()) return item;
     }
@@ -261,7 +303,7 @@ class CotizacionesRepository {
 
   Future<CotizacionModel> getByIdAndCache(String id) async {
     final item = await getById(id);
-    await _local.upsert(item);
+    await _local.upsert(item, companyId: _requireCompanyId());
     return item;
   }
 
@@ -286,7 +328,7 @@ class CotizacionesRepository {
   Future<Map<String, dynamic>> purgeAllDebug() async {
     try {
       final res = await _dio.delete(ApiRoutes.cotizacionesDebugPurge);
-      await _local.clearAll();
+      await _local.clearAll(companyId: _requireCompanyId());
       return Map<String, dynamic>.from(
         (res.data as Map?) ?? const <String, dynamic>{},
       );
@@ -316,23 +358,28 @@ class CotizacionesRepository {
     final localId = draft.id.trim().isEmpty
         ? 'local_quote_${DateTime.now().microsecondsSinceEpoch}'
         : draft.id;
+    final companyId = _requireCompanyId();
     final optimistic = draft.copyWith(id: localId);
-    await _local.upsert(optimistic);
+    await _local.upsert(optimistic, companyId: companyId);
     try {
       final remote = await create(draft);
-      await _local.deleteById(localId);
-      await _local.upsert(remote);
+      await _local.deleteById(localId, companyId: companyId);
+      await _local.upsert(remote, companyId: companyId);
       return false;
     } on ApiException catch (e) {
       if (!_shouldQueueSync(e)) {
-        await _local.deleteById(localId);
+        await _local.deleteById(localId, companyId: companyId);
         rethrow;
       }
       await _syncQueue.enqueue(
         id: '$_createSyncType:$localId',
         type: _createSyncType,
         scope: 'quotes',
-        payload: {'localId': localId, 'quote': optimistic.toMap()},
+        payload: {
+          'companyId': companyId,
+          'localId': localId,
+          'quote': optimistic.toMap(),
+        },
       );
       return true;
     }
@@ -340,10 +387,11 @@ class CotizacionesRepository {
 
   Future<bool> updateOrQueue(String id, CotizacionModel draft) async {
     final optimistic = draft.copyWith(id: id);
-    await _local.upsert(optimistic);
+    final companyId = _requireCompanyId();
+    await _local.upsert(optimistic, companyId: companyId);
     try {
       final remote = await update(id, draft);
-      await _local.upsert(remote);
+      await _local.upsert(remote, companyId: companyId);
       return false;
     } on ApiException catch (e) {
       if (!_shouldQueueSync(e)) rethrow;
@@ -351,14 +399,19 @@ class CotizacionesRepository {
         id: '$_updateSyncType:$id',
         type: _updateSyncType,
         scope: 'quotes',
-        payload: {'id': id, 'quote': optimistic.toMap()},
+        payload: {
+          'companyId': companyId,
+          'id': id,
+          'quote': optimistic.toMap(),
+        },
       );
       return true;
     }
   }
 
   Future<bool> deleteOrQueue(String id) async {
-    await _local.deleteById(id);
+    final companyId = _requireCompanyId();
+    await _local.deleteById(id, companyId: companyId);
     try {
       await deleteById(id);
       return false;
@@ -368,7 +421,7 @@ class CotizacionesRepository {
         id: '$_deleteSyncType:$id',
         type: _deleteSyncType,
         scope: 'quotes',
-        payload: {'id': id},
+        payload: {'companyId': companyId, 'id': id},
       );
       return true;
     }

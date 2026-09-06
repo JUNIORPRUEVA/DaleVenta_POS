@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:daleventa_pos/core/printing/raw_printer_transport.dart';
+import 'package:daleventa_pos/core/printing/windows_printer_queue_inspector.dart';
 import 'package:daleventa_pos/core/printing/windows_raw_printer_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,6 +44,67 @@ void main() {
       throwsA(isA<RawPrinterException>()),
     );
   });
+
+  test('UNKNOWN queue status does not block RAW spool attempt', () async {
+    final spooler = _FakeRawSpooler();
+    final transport = WindowsRawPrinterTransport(
+      spooler: spooler,
+      queueInspector: _FixedQueueInspector(
+        const WindowsPrinterQueueStatus(
+          printerName: 'POS-80',
+          state: WindowsPrinterQueueState.unknown,
+          message: 'Windows reporto estado desconocido. Se intentara imprimir.',
+        ),
+      ),
+    );
+
+    final result = await transport.printRaw(
+      printerName: 'POS-80',
+      bytes: Uint8List.fromList([1, 2, 3]),
+    );
+
+    expect(result.success, isTrue);
+    expect(spooler.calls, hasLength(1));
+  });
+
+  test('PAUSED queue status blocks RAW with friendly message', () async {
+    final spooler = _FakeRawSpooler();
+    final transport = WindowsRawPrinterTransport(
+      spooler: spooler,
+      queueInspector: _FixedQueueInspector(
+        const WindowsPrinterQueueStatus(
+          printerName: 'POS-80',
+          state: WindowsPrinterQueueState.paused,
+          message: 'La cola de impresion esta pausada en Windows.',
+        ),
+      ),
+    );
+
+    await expectLater(
+      transport.printRaw(
+        printerName: 'POS-80',
+        bytes: Uint8List.fromList([1, 2, 3]),
+      ),
+      throwsA(
+        isA<RawPrinterException>().having(
+          (error) => error.message,
+          'message',
+          'La cola de impresion esta pausada en Windows.',
+        ),
+      ),
+    );
+    expect(spooler.calls, isEmpty);
+  });
+}
+
+class _FixedQueueInspector extends WindowsPrinterQueueInspector {
+  _FixedQueueInspector(this.status);
+
+  final WindowsPrinterQueueStatus status;
+
+  @override
+  Future<WindowsPrinterQueueStatus?> inspect(String printerName) async =>
+      status;
 }
 
 class _FakeRawSpooler implements WindowsRawSpooler {

@@ -47,38 +47,175 @@ void main() {
     expect(status.message, 'La impresora configurada no esta disponible.');
   });
 
-  test('marca no disponible cuando Windows reporta cola offline', () async {
-    final service = _FakeThermalPrinterService(
-      [
-        const Printer(
-          url: 'SEWOO SLK-TS100',
-          name: 'SEWOO SLK-TS100',
-          isAvailable: true,
+  test(
+    'bloquea con mensaje amable cuando Windows reporta cola pausada',
+    () async {
+      final service = _FakeThermalPrinterService(
+        [
+          const Printer(
+            url: 'SEWOO SLK-TS100',
+            name: 'SEWOO SLK-TS100',
+            isAvailable: true,
+          ),
+        ],
+        queueInspector: _FakeQueueInspector(
+          status: const WindowsPrinterQueueStatus(
+            printerName: 'SEWOO SLK-TS100',
+            state: WindowsPrinterQueueState.paused,
+            message: 'La cola de impresion esta pausada en Windows.',
+            status: 1,
+            jobCount: 1,
+          ),
         ),
-      ],
+      );
+
+      final status = await service.checkPrinterStatus(
+        const PrinterSettingsModel(selectedPrinterName: 'SEWOO SLK-TS100'),
+      );
+
+      expect(status.isAvailable, isFalse);
+      expect(status.resolvedPrinterName, 'SEWOO SLK-TS100');
+      expect(status.message, 'La cola de impresion esta pausada en Windows.');
+    },
+  );
+
+  test(
+    'intenta imprimir cuando Windows solo reporta estado desconocido',
+    () async {
+      var submitted = false;
+      final service = _FakeThermalPrinterService(
+        [
+          const Printer(
+            url: 'SEWOO SLK-TS100',
+            name: 'SEWOO SLK-TS100',
+            isAvailable: true,
+          ),
+        ],
+        queueInspector: _FakeQueueInspector(
+          status: const WindowsPrinterQueueStatus(
+            printerName: 'SEWOO SLK-TS100',
+            state: WindowsPrinterQueueState.unknown,
+            message:
+                'Windows reporto estado desconocido. Se intentara imprimir.',
+            attributes: 1024,
+            status: 0,
+          ),
+        ),
+        directPdfPrinter:
+            ({
+              required printer,
+              required name,
+              required format,
+              required dynamicLayout,
+              required usePrinterSettings,
+              required onLayout,
+            }) async {
+              submitted = true;
+              return true;
+            },
+      );
+
+      final result = await service.printDocument(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(submitted, isTrue);
+    },
+  );
+
+  test('permite cola ocupada para que Windows encole el trabajo', () async {
+    var submitted = false;
+    final service = _FakeThermalPrinterService(
+      [const Printer(url: 'POS-80', name: 'POS-80', isAvailable: true)],
       queueInspector: _FakeQueueInspector(
         status: const WindowsPrinterQueueStatus(
-          printerName: 'SEWOO SLK-TS100',
-          isUsable: false,
-          message: 'La cola de Windows no esta lista: modo sin conexion.',
-          attributes: 1024,
-          status: 0,
-          jobCount: 1,
+          printerName: 'POS-80',
+          state: WindowsPrinterQueueState.busy,
+          message:
+              'La impresora esta ocupada. Windows pondra el trabajo en cola.',
+          status: 512,
+          jobCount: 2,
         ),
       ),
+      directPdfPrinter:
+          ({
+            required printer,
+            required name,
+            required format,
+            required dynamicLayout,
+            required usePrinterSettings,
+            required onLayout,
+          }) async {
+            submitted = true;
+            return true;
+          },
     );
 
-    final status = await service.checkPrinterStatus(
-      const PrinterSettingsModel(selectedPrinterName: 'SEWOO SLK-TS100'),
+    final result = await service.printDocument(
+      bytes: Uint8List.fromList([1, 2, 3]),
+      settings: const PrinterSettingsModel(selectedPrinterName: 'POS-80'),
     );
 
-    expect(status.isAvailable, isFalse);
-    expect(status.resolvedPrinterName, 'SEWOO SLK-TS100');
-    expect(
-      status.message,
-      'La cola de Windows no esta lista: modo sin conexion.',
-    );
+    expect(result.success, isTrue);
+    expect(submitted, isTrue);
   });
+
+  test(
+    'bloquea con mensaje offline especifico cuando hay evidencia confiable',
+    () async {
+      final service = _FakeThermalPrinterService(
+        [const Printer(url: 'POS-80', name: 'POS-80', isAvailable: true)],
+        queueInspector: _FakeQueueInspector(
+          status: const WindowsPrinterQueueStatus(
+            printerName: 'POS-80',
+            state: WindowsPrinterQueueState.offline,
+            message:
+                'La impresora parece estar desconectada. Verifica que este encendida y conectada.',
+            status: 128,
+          ),
+        ),
+      );
+
+      final result = await service.printDocument(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        settings: const PrinterSettingsModel(selectedPrinterName: 'POS-80'),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.message, contains('parece estar desconectada'));
+    },
+  );
+
+  test(
+    'reporta servicio de impresion de Windows cuando el spooler no responde',
+    () async {
+      final service = _FakeThermalPrinterService(
+        [const Printer(url: 'POS-80', name: 'POS-80', isAvailable: true)],
+        queueInspector: _FakeQueueInspector(
+          status: const WindowsPrinterQueueStatus(
+            printerName: 'POS-80',
+            state: WindowsPrinterQueueState.spoolerDown,
+            message: 'El servicio de impresion de Windows no esta disponible.',
+          ),
+        ),
+      );
+
+      final result = await service.printDocument(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        settings: const PrinterSettingsModel(selectedPrinterName: 'POS-80'),
+      );
+
+      expect(result.success, isFalse);
+      expect(
+        result.message,
+        'El servicio de impresion de Windows no esta disponible.',
+      );
+    },
+  );
 
   test('no marca exito si Windows rechaza el trabajo inmediatamente', () async {
     final service = _FakeThermalPrinterService(
@@ -167,7 +304,7 @@ class _FakeQueueInspector extends WindowsPrinterQueueInspector {
     return status ??
         WindowsPrinterQueueStatus(
           printerName: printerName,
-          isUsable: true,
+          state: WindowsPrinterQueueState.ready,
           message: 'Cola de Windows disponible.',
         );
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,8 @@ import '../auth/admin_authorization.dart';
 import '../auth/admin_authorization_session.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
+import '../company/company_settings_model.dart';
+import '../company/company_settings_repository.dart';
 import '../design_system/icons/app_icon.dart';
 import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
@@ -62,14 +65,72 @@ final desktopShellRouteActionsProvider =
     StateProvider<DesktopShellRouteActions?>((ref) => null);
 
 class DesktopShellFooterContent {
-  const DesktopShellFooterContent({required this.route, required this.builder});
+  const DesktopShellFooterContent({
+    required this.route,
+    required this.builder,
+    this.ownerId,
+    this.signature,
+  });
 
   final String route;
   final WidgetBuilder builder;
+  final String? ownerId;
+  final String? signature;
 }
 
 final desktopShellFooterContentProvider =
     StateProvider<DesktopShellFooterContent?>((ref) => null);
+
+bool _isShellBuildPhase() {
+  final phase = SchedulerBinding.instance.schedulerPhase;
+  return phase == SchedulerPhase.persistentCallbacks;
+}
+
+bool _sameShellFooterContent(
+  DesktopShellFooterContent? current,
+  DesktopShellFooterContent? next,
+) {
+  return current?.route == next?.route &&
+      current?.ownerId == next?.ownerId &&
+      current?.signature == next?.signature;
+}
+
+void setDesktopShellFooterContent(
+  StateController<DesktopShellFooterContent?> notifier,
+  DesktopShellFooterContent? content,
+) {
+  void apply() {
+    if (_sameShellFooterContent(notifier.state, content)) return;
+    notifier.state = content;
+  }
+
+  if (_isShellBuildPhase()) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+    return;
+  }
+
+  apply();
+}
+
+void clearDesktopShellFooterContent({
+  required StateController<DesktopShellFooterContent?> notifier,
+  required String ownerId,
+  bool Function(DesktopShellFooterContent current)? when,
+}) {
+  void apply() {
+    final current = notifier.state;
+    if (current == null || current.ownerId != ownerId) return;
+    if (when != null && !when(current)) return;
+    notifier.state = null;
+  }
+
+  if (_isShellBuildPhase()) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+    return;
+  }
+
+  apply();
+}
 
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
@@ -83,38 +144,107 @@ class ResponsiveShell extends ConsumerStatefulWidget {
 class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   final _shellScaffoldKey = GlobalKey<ScaffoldState>();
   String? _lastAuthorizationCleanupLocation;
+  UserModel? _user;
+  bool _multiWarehouseEnabled = false;
+  DesktopShellRouteActions? _routeActions;
+  DesktopShellFooterContent? _footerContent;
+  ProviderSubscription<AuthState>? _authSubscription;
+  ProviderSubscription<AsyncValue<CompanySettings>>?
+  _companySettingsSubscription;
+  ProviderSubscription<DesktopShellRouteActions?>? _routeActionsSubscription;
+  ProviderSubscription<DesktopShellFooterContent?>? _footerContentSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(locationTrackingBootstrapProvider);
+    _user = ref.read(authStateProvider).user;
+    _multiWarehouseEnabled =
+        ref.read(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ??
+        false;
+    _routeActions = ref.read(desktopShellRouteActionsProvider);
+    _footerContent = ref.read(desktopShellFooterContentProvider);
+    _authSubscription = ref.listenManual<AuthState>(authStateProvider, (
+      previous,
+      next,
+    ) {
+      final nextUser = next.user;
+      if (identical(_user, nextUser)) return;
+      _setShellStateSafely(() => _user = nextUser);
+    });
+    _companySettingsSubscription = ref
+        .listenManual<AsyncValue<CompanySettings>>(companySettingsProvider, (
+          previous,
+          next,
+        ) {
+          final enabled = next.valueOrNull?.multiWarehouseEnabled ?? false;
+          if (enabled == _multiWarehouseEnabled) return;
+          _setShellStateSafely(() => _multiWarehouseEnabled = enabled);
+        });
+    _routeActionsSubscription = ref.listenManual<DesktopShellRouteActions?>(
+      desktopShellRouteActionsProvider,
+      (previous, next) {
+        if (identical(_routeActions, next)) return;
+        _setShellStateSafely(() => _routeActions = next);
+      },
+    );
+    _footerContentSubscription = ref.listenManual<DesktopShellFooterContent?>(
+      desktopShellFooterContentProvider,
+      (previous, next) {
+        if (_sameShellFooterContent(_footerContent, next)) return;
+        _setShellStateSafely(() => _footerContent = next);
+      },
+    );
+  }
+
+  void _setShellStateSafely(VoidCallback update) {
+    void apply() {
+      if (!mounted) return;
+      setState(update);
+    }
+
+    if (_isShellBuildPhase()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+      return;
+    }
+
+    apply();
+  }
 
   void _scheduleAuthorizationCleanup(String location) {
     if (_lastAuthorizationCleanupLocation == location) return;
     _lastAuthorizationCleanupLocation = location;
+    final notifier = ref.read(adminAuthorizationProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
+      notifier.clearIfExpired();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(locationTrackingBootstrapProvider);
-
     final media = MediaQuery.sizeOf(context);
     if (media.width < kDesktopShellBreakpoint) {
       return widget.child;
     }
 
     final theme = Theme.of(context);
-    final user = ref.watch(authStateProvider).user;
-    final sections = buildAppNavigationSections(ref, user);
+    final user = _user;
+    final sections = buildAppNavigationSections(
+      ref,
+      user,
+      multiWarehouseEnabled: _multiWarehouseEnabled,
+    );
     final location = safeCurrentLocation(context);
     AppNavigator.recordShellLocation(location);
     _scheduleAuthorizationCleanup(location);
     final title = resolveNavigationTitle(location, sections);
     final showShellAppBar = desktopShellShouldShowOwnAppBar(location);
-    final routeActions = ref.watch(desktopShellRouteActionsProvider);
+    final routeActions = _routeActions;
     final shellActions = routeActions?.route == location
         ? routeActions!.actions
         : const <DesktopShellActionItem>[];
-    final customFooter = ref.watch(desktopShellFooterContentProvider);
+    final customFooter = _footerContent;
     final footerBuilder = customFooter?.route == location
         ? customFooter!.builder
         : null;
@@ -171,6 +301,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.close();
+    _companySettingsSubscription?.close();
+    _routeActionsSubscription?.close();
+    _footerContentSubscription?.close();
+    super.dispose();
   }
 }
 

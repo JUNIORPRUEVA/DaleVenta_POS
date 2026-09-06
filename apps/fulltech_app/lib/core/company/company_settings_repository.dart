@@ -24,7 +24,6 @@ final companySettingsRepositoryProvider = Provider<CompanySettingsRepository>((
     canWriteSettings:
         user?.appRole == AppRole.admin || user?.appRole == AppRole.asistente,
   );
-  repository.registerSyncHandlers();
   return repository;
 });
 

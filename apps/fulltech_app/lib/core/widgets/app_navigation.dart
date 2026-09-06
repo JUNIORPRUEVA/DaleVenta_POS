@@ -40,16 +40,18 @@ class AppNavigationSection {
 
 List<AppNavigationSection> buildAppNavigationSections(
   WidgetRef ref,
-  UserModel? currentUser,
-) {
+  UserModel? currentUser, {
+  bool? multiWarehouseEnabled,
+}) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
     return true;
   }
 
-  final multiWarehouseEnabled =
-      ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
-      true;
+  final resolvedMultiWarehouseEnabled =
+      multiWarehouseEnabled ??
+      (ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
+          true);
 
   final sections = <AppNavigationSection>[
     AppNavigationSection(
@@ -132,7 +134,7 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Recuento',
             route: Routes.catalogoConteo,
           ),
-        if (multiWarehouseEnabled &&
+        if (resolvedMultiWarehouseEnabled &&
             canOrAuthorize(AppPermission.viewInventoryHistory))
           const AppNavigationItem(
             icon: Icons.history_rounded,
@@ -140,7 +142,7 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Kardex',
             route: Routes.catalogoKardex,
           ),
-        if (multiWarehouseEnabled &&
+        if (resolvedMultiWarehouseEnabled &&
             canOrAuthorize(AppPermission.manageWarehouses))
           const AppNavigationItem(
             icon: Icons.warehouse_outlined,

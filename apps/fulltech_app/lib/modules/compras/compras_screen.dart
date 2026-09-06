@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/auth/admin_authorization.dart';
@@ -24,6 +22,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
+import 'data/purchase_order_draft_storage.dart';
 import 'data/purchases_repository.dart';
 import 'purchase_models.dart';
 import 'utils/purchase_order_pdf_service.dart';
@@ -39,8 +38,7 @@ class ComprasScreen extends ConsumerStatefulWidget {
 
 class _ComprasScreenState extends ConsumerState<ComprasScreen>
     with SingleTickerProviderStateMixin {
-  static const _draftStorageKey = 'purchase_order_draft_v1';
-
+  static const _draftStorage = PurchaseOrderDraftStorage();
   late final TabController _tabs;
   final _searchCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
@@ -3757,20 +3755,19 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       return;
     }
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _draftStorageKey,
-        jsonEncode({
-          'supplierId': _selectedSupplierId,
-          'notes': _notesCtrl.text,
-          'instructions': _instructionsCtrl.text,
-          'discount': _discountCtrl.text,
-          'shipping': _shippingCtrl.text,
-          'additional': _additionalCtrl.text,
-          'tax': _taxCtrl.text,
-          'showPurchaseExtras': _showPurchaseExtras,
-          'items': _cart.map((item) => item.toDraftJson()).toList(),
-        }),
+      await _draftStorage.save(
+        companyId: _activeCompanyIdForLocalDrafts(),
+        draft: PurchaseOrderDraftData(
+          supplierId: _selectedSupplierId,
+          notes: _notesCtrl.text,
+          instructions: _instructionsCtrl.text,
+          discount: _discountCtrl.text,
+          shipping: _shippingCtrl.text,
+          additional: _additionalCtrl.text,
+          tax: _taxCtrl.text,
+          showPurchaseExtras: _showPurchaseExtras,
+          items: _cart,
+        ),
       );
     } catch (_) {
       // El borrador local no debe bloquear la operacion principal.
@@ -3779,39 +3776,26 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _restoreDraft() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_draftStorageKey);
-      if (raw == null || raw.trim().isEmpty) return;
-      final data = jsonDecode(raw);
-      if (data is! Map) return;
-      final items = ((data['items'] as List?) ?? const [])
-          .whereType<Map>()
-          .map(
-            (row) =>
-                PurchaseDraftItem.fromDraftJson(Map<String, dynamic>.from(row)),
-          )
-          .where((item) => item.productName.trim().isNotEmpty)
-          .toList();
+      final data = await _draftStorage.restore(
+        companyId: _activeCompanyIdForLocalDrafts(),
+      );
+      if (data == null) return;
       if (!mounted) return;
       _restoringDraft = true;
       setState(() {
-        final supplierId = data['supplierId'];
         _selectedSupplierId =
-            supplierId is String &&
-                _suppliers.any((supplier) => supplier.id == supplierId)
-            ? supplierId
+            data.supplierId != null &&
+                _suppliers.any((supplier) => supplier.id == data.supplierId)
+            ? data.supplierId
             : null;
-        _notesCtrl.text = '${data['notes'] ?? ''}';
-        _instructionsCtrl.text = '${data['instructions'] ?? ''}';
-        _discountCtrl.text = '${data['discount'] ?? '0'}';
-        _shippingCtrl.text = '${data['shipping'] ?? '0'}';
-        _additionalCtrl.text = '${data['additional'] ?? '0'}';
-        _taxCtrl.text = '${data['tax'] ?? '0'}';
-        final storedExtrasVisibility = data['showPurchaseExtras'];
-        _showPurchaseExtras = storedExtrasVisibility is bool
-            ? storedExtrasVisibility || _hasPurchaseExtras
-            : _hasPurchaseExtras;
-        _cart = items;
+        _notesCtrl.text = data.notes;
+        _instructionsCtrl.text = data.instructions;
+        _discountCtrl.text = data.discount;
+        _shippingCtrl.text = data.shipping;
+        _additionalCtrl.text = data.additional;
+        _taxCtrl.text = data.tax;
+        _showPurchaseExtras = data.showPurchaseExtras || _hasPurchaseExtras;
+        _cart = data.items;
       });
     } catch (_) {
       await _clearDraft();
@@ -3822,9 +3806,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _clearDraft() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_draftStorageKey);
+      await _draftStorage.clear(companyId: _activeCompanyIdForLocalDrafts());
     } catch (_) {}
+  }
+
+  String _activeCompanyIdForLocalDrafts() {
+    return ref.read(authStateProvider).user?.companyId?.trim() ?? '';
   }
 }
 

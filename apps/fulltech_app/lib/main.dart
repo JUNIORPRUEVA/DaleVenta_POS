@@ -20,6 +20,7 @@ import 'core/auth/auth_session_events.dart';
 import 'core/company/company_settings_repository.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
+import 'core/debug/runtime_diagnostics.dart';
 import 'core/license/license_repository.dart';
 import 'core/lifecycle/app_lifecycle_coordinator.dart';
 import 'core/offline/sync_queue_service.dart';
@@ -64,6 +65,7 @@ Future<void> main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      await logFullPosRuntimeDiagnostics();
       usePathUrlStrategy();
       GoogleFonts.config.allowRuntimeFetching = false;
       if (!kIsWeb) {
@@ -474,7 +476,7 @@ class LicensePurchaseOverlay extends ConsumerWidget {
                               ),
                               SizedBox(height: 3),
                               Text(
-                                'Tu prueba de 5 dias ya vencio.',
+                                'Tu prueba de 7 dias ya vencio.',
                                 style: TextStyle(
                                   color: Color(0xFF5E7187),
                                   fontSize: 13,
@@ -489,7 +491,7 @@ class LicensePurchaseOverlay extends ConsumerWidget {
                     ),
                     const SizedBox(height: 22),
                     const Text(
-                      'Para continuar usando FullPOS Cloud necesitas comprar o renovar tu licencia. El plan demo incluye 2 usuarios y 100 productos durante 5 dias.',
+                      'Para continuar usando FullPOS Cloud necesitas comprar o renovar tu licencia. El plan demo incluye 2 usuarios y 100 productos durante 7 dias.',
                       style: TextStyle(
                         color: Color(0xFF31465C),
                         fontSize: 15,

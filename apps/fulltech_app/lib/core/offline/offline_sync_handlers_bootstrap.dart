@@ -15,5 +15,5 @@ final offlineSyncHandlersBootstrapProvider = Provider<void>((ref) {
   ref.read(clientesRepositoryProvider);
   ref.read(cotizacionesRepositoryProvider);
   ref.read(companyManualRepositoryProvider);
-  ref.read(companySettingsRepositoryProvider);
+  ref.read(companySettingsRepositoryProvider).registerSyncHandlers();
 });

@@ -3,28 +3,48 @@ import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
+enum WindowsPrinterQueueState {
+  ready,
+  busy,
+  paused,
+  offline,
+  unknown,
+  notFound,
+  spoolerDown,
+}
+
 class WindowsPrinterQueueStatus {
   const WindowsPrinterQueueStatus({
     required this.printerName,
-    required this.isUsable,
+    required this.state,
     required this.message,
     this.attributes = 0,
     this.status = 0,
     this.jobCount = 0,
+    this.technicalDetails,
   });
 
   final String printerName;
-  final bool isUsable;
+  final WindowsPrinterQueueState state;
   final String message;
   final int attributes;
   final int status;
   final int jobCount;
+  final String? technicalDetails;
+
+  bool get isUsable =>
+      state == WindowsPrinterQueueState.ready ||
+      state == WindowsPrinterQueueState.busy ||
+      state == WindowsPrinterQueueState.unknown;
 }
 
 class WindowsPrinterQueueInspector {
   WindowsPrinterQueueInspector({DynamicLibrary? spoolLibrary})
     : _spool = Platform.isWindows
           ? (spoolLibrary ?? DynamicLibrary.open('winspool.drv'))
+          : null,
+      _kernel = Platform.isWindows
+          ? DynamicLibrary.open('kernel32.dll')
           : null {
     final spool = _spool;
     if (spool == null) return;
@@ -36,7 +56,15 @@ class WindowsPrinterQueueInspector {
     );
     _closePrinter = spool
         .lookupFunction<_ClosePrinterNative, _ClosePrinterDart>('ClosePrinter');
+    _getLastError = _kernel!
+        .lookupFunction<_GetLastErrorNative, _GetLastErrorDart>('GetLastError');
   }
+
+  static const int _errorInvalidPrinterName = 1801;
+  static const int _errorPrinterDeleted = 1905;
+  static const int _rpcServerUnavailable = 1722;
+  static const int _rpcCallFailed = 1726;
+  static const int _errorSpoolerNotLoaded = 3003;
 
   static const int _printerAttributeWorkOffline = 0x00000400;
   static const int _printerStatusPaused = 0x00000001;
@@ -92,9 +120,11 @@ class WindowsPrinterQueueInspector {
   };
 
   final DynamicLibrary? _spool;
+  final DynamicLibrary? _kernel;
   late final _OpenPrinterDart _openPrinter;
   late final _GetPrinterDart _getPrinter;
   late final _ClosePrinterDart _closePrinter;
+  late final _GetLastErrorDart _getLastError;
 
   Future<WindowsPrinterQueueStatus?> inspect(String printerName) async {
     if (!Platform.isWindows || _spool == null) return null;
@@ -107,10 +137,13 @@ class WindowsPrinterQueueInspector {
     Pointer<Uint8>? buffer;
     try {
       if (_openPrinter(namePtr, handlePtr, nullptr) == 0) {
+        final errorCode = _getLastError();
+        final state = _openPrinterFailureState(errorCode);
         return WindowsPrinterQueueStatus(
           printerName: normalized,
-          isUsable: false,
-          message: 'Windows no pudo abrir la cola de impresion.',
+          state: state,
+          message: _friendlyMessageForState(state),
+          technicalDetails: 'OpenPrinterW fallo. Win32 error: $errorCode',
         );
       }
       handle = handlePtr.value;
@@ -121,16 +154,21 @@ class WindowsPrinterQueueInspector {
         if (needed == 0) {
           return WindowsPrinterQueueStatus(
             printerName: normalized,
-            isUsable: false,
-            message: 'Windows no entrego informacion de la cola.',
+            state: WindowsPrinterQueueState.unknown,
+            message:
+                'Windows no entrego el estado de la impresora. Se intentara imprimir.',
+            technicalDetails: 'GetPrinterW nivel 2 no entrego tamano.',
           );
         }
         buffer = calloc<Uint8>(needed);
         if (_getPrinter(handle, 2, buffer, needed, neededPtr) == 0) {
+          final errorCode = _getLastError();
           return WindowsPrinterQueueStatus(
             printerName: normalized,
-            isUsable: false,
-            message: 'Windows rechazo la lectura de la cola.',
+            state: WindowsPrinterQueueState.unknown,
+            message:
+                'Windows no entrego el estado de la impresora. Se intentara imprimir.',
+            technicalDetails: 'GetPrinterW fallo. Win32 error: $errorCode',
           );
         }
       } finally {
@@ -145,49 +183,117 @@ class WindowsPrinterQueueInspector {
       for (final entry in _statusMessages.entries) {
         if ((status & entry.key) != 0) blockingStatuses.add(entry.value);
       }
-      final hasBlockingStatus =
-          (status &
-              (_printerStatusPaused |
-                  _printerStatusError |
-                  _printerStatusPendingDeletion |
-                  _printerStatusPaperJam |
-                  _printerStatusPaperOut |
-                  _printerStatusOffline |
-                  _printerStatusNotAvailable |
-                  _printerStatusUserIntervention |
-                  _printerStatusOutOfMemory |
-                  _printerStatusDoorOpen |
-                  _printerStatusServerUnknown)) !=
-          0;
-      if (workOffline || hasBlockingStatus) {
-        final details = [
-          if (workOffline) 'modo sin conexion',
-          ...blockingStatuses,
-        ].join(', ');
+      final state = _stateFromFlags(
+        attributes: attributes,
+        status: status,
+        workOffline: workOffline,
+      );
+      if (state != WindowsPrinterQueueState.ready &&
+          state != WindowsPrinterQueueState.busy &&
+          state != WindowsPrinterQueueState.unknown) {
+        final details = blockingStatuses.join(', ');
         return WindowsPrinterQueueStatus(
           printerName: normalized,
-          isUsable: false,
-          message: 'La cola de Windows no esta lista: $details.',
+          state: state,
+          message: _friendlyMessageForState(state),
           attributes: attributes,
           status: status,
           jobCount: info.cJobs,
+          technicalDetails:
+              'Bloqueo de cola Windows: ${details.isEmpty ? 'sin detalle' : details}.',
         );
       }
       return WindowsPrinterQueueStatus(
         printerName: normalized,
-        isUsable: true,
-        message: info.cJobs > 0
+        state: state,
+        message: state == WindowsPrinterQueueState.unknown
+            ? 'Windows reporto estado desconocido. Se intentara imprimir.'
+            : info.cJobs > 0
             ? 'Cola de Windows disponible con ${info.cJobs} trabajo(s) pendiente(s).'
             : 'Cola de Windows disponible.',
         attributes: attributes,
         status: status,
         jobCount: info.cJobs,
+        technicalDetails: workOffline
+            ? 'Windows reporto WorkOffline sin estado OFFLINE confiable.'
+            : null,
       );
     } finally {
       if (handle != null) _closePrinter(handle);
       if (buffer != null) calloc.free(buffer);
       calloc.free(handlePtr);
       calloc.free(namePtr);
+    }
+  }
+
+  WindowsPrinterQueueState _openPrinterFailureState(int errorCode) {
+    if (errorCode == _errorInvalidPrinterName ||
+        errorCode == _errorPrinterDeleted) {
+      return WindowsPrinterQueueState.notFound;
+    }
+    if (errorCode == _rpcServerUnavailable ||
+        errorCode == _rpcCallFailed ||
+        errorCode == _errorSpoolerNotLoaded) {
+      return WindowsPrinterQueueState.spoolerDown;
+    }
+    return WindowsPrinterQueueState.unknown;
+  }
+
+  WindowsPrinterQueueState _stateFromFlags({
+    required int attributes,
+    required int status,
+    required bool workOffline,
+  }) {
+    if ((status & _printerStatusPaused) != 0) {
+      return WindowsPrinterQueueState.paused;
+    }
+    if ((status &
+            (_printerStatusOffline |
+                _printerStatusNotAvailable |
+                _printerStatusPendingDeletion |
+                _printerStatusPaperJam |
+                _printerStatusPaperOut |
+                _printerStatusUserIntervention |
+                _printerStatusOutOfMemory |
+                _printerStatusDoorOpen)) !=
+        0) {
+      return WindowsPrinterQueueState.offline;
+    }
+    if ((status &
+            (_printerStatusBusy |
+                _printerStatusPrinting |
+                _printerStatusIoActive |
+                _printerStatusWaiting |
+                _printerStatusProcessing |
+                _printerStatusInitializing |
+                _printerStatusWarmingUp |
+                _printerStatusPowerSave)) !=
+        0) {
+      return WindowsPrinterQueueState.busy;
+    }
+    if ((status & (_printerStatusServerUnknown | _printerStatusError)) != 0 ||
+        workOffline) {
+      return WindowsPrinterQueueState.unknown;
+    }
+    return WindowsPrinterQueueState.ready;
+  }
+
+  String _friendlyMessageForState(WindowsPrinterQueueState state) {
+    switch (state) {
+      case WindowsPrinterQueueState.paused:
+        return 'La cola de impresion esta pausada en Windows.';
+      case WindowsPrinterQueueState.offline:
+        return 'La impresora parece estar desconectada. Verifica que este encendida y conectada.';
+      case WindowsPrinterQueueState.notFound:
+        return 'La impresora configurada no esta disponible. Selecciona una impresora nuevamente.';
+      case WindowsPrinterQueueState.spoolerDown:
+        return 'El servicio de impresion de Windows no esta disponible.';
+      case WindowsPrinterQueueState.unknown:
+        return 'Windows no entrego el estado de la impresora. Se intentara imprimir.';
+      case WindowsPrinterQueueState.busy:
+        return 'La impresora esta ocupada. Windows pondra el trabajo en cola.';
+      case WindowsPrinterQueueState.ready:
+        return 'Cola de Windows disponible.';
     }
   }
 }
@@ -242,3 +348,6 @@ typedef _GetPrinterDart =
 
 typedef _ClosePrinterNative = Int32 Function(Pointer<Void>);
 typedef _ClosePrinterDart = int Function(Pointer<Void>);
+
+typedef _GetLastErrorNative = Uint32 Function();
+typedef _GetLastErrorDart = int Function();

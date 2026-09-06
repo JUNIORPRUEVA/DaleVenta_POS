@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,7 @@ import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
 import 'data/open_sales_tickets_repository.dart';
+import 'quotation_history_utils.dart';
 import 'utils/cotizacion_pdf_service.dart';
 
 enum _QuotePdfShareAction {
@@ -100,6 +102,9 @@ class _CotizacionesHistorialScreenState
   bool _ownOnly = false;
   String? _selectedQuotationId;
   bool _creatingSalesTicket = false;
+  ProviderSubscription<AuthState>? _authSubscription;
+  String? _activeCompanyId;
+  int _loadGeneration = 0;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
@@ -315,16 +320,53 @@ class _CotizacionesHistorialScreenState
   @override
   void initState() {
     super.initState();
+    _activeCompanyId = ref.read(authStateProvider).user?.companyId?.trim();
+    _authSubscription = ref.listenManual<AuthState>(authStateProvider, (
+      previous,
+      next,
+    ) {
+      final nextCompanyId = next.user?.companyId?.trim();
+      if (nextCompanyId == _activeCompanyId) return;
+      _activeCompanyId = nextCompanyId;
+      _loadGeneration++;
+      if (!mounted) return;
+      setState(() {
+        _items = const [];
+        _knownClients = const [];
+        _ownedClientIds = const {};
+        _ownedClientPhones = const {};
+        _selectedClientKey = null;
+        _selectedQuoteTag = null;
+        _fromDate = null;
+        _toDate = null;
+        _ownOnly = false;
+        _selectedQuotationId = null;
+        _searchQuery = '';
+        _searchCtrl.clear();
+        _loading = true;
+        _refreshing = false;
+        _error = null;
+      });
+      _load();
+      _loadSupportData();
+    });
     _searchCtrl.addListener(_handleSearchChanged);
-    _loadSupportData();
     _load();
+    _loadSupportData();
   }
 
   @override
   void dispose() {
+    _authSubscription?.close();
     _searchCtrl.removeListener(_handleSearchChanged);
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  bool _isCurrentCompanyGeneration(int generation, String? companyId) {
+    return mounted &&
+        generation == _loadGeneration &&
+        companyId == _activeCompanyId;
   }
 
   void _handleSearchChanged() {
@@ -334,6 +376,8 @@ class _CotizacionesHistorialScreenState
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final companyId = _activeCompanyId;
     setState(() {
       _loading = true;
       _refreshing = false;
@@ -344,7 +388,7 @@ class _CotizacionesHistorialScreenState
       final cached = await repo.getCachedList(
         customerPhone: widget.customerPhone,
       );
-      if (!mounted) return;
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       if (cached.isNotEmpty) {
         setState(() {
           _items = cached;
@@ -354,7 +398,7 @@ class _CotizacionesHistorialScreenState
       }
 
       final rows = await repo.listAndCache(customerPhone: widget.customerPhone);
-      if (!mounted) return;
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       setState(() {
         _items = rows;
         _loading = false;
@@ -363,7 +407,7 @@ class _CotizacionesHistorialScreenState
 
       await _maybeAutoOpenQuote();
     } catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       setState(() {
         _error = '$e';
         _loading = false;
@@ -373,6 +417,8 @@ class _CotizacionesHistorialScreenState
   }
 
   Future<void> _loadSupportData() async {
+    final generation = _loadGeneration;
+    final companyId = _activeCompanyId;
     final user = ref.read(authStateProvider).user;
     if (user == null) return;
 
@@ -380,13 +426,9 @@ class _CotizacionesHistorialScreenState
     final salesRepo = ref.read(ventasRepositoryProvider);
 
     try {
-      final cachedClients = await clientsRepo.getCachedClients(
-        ownerId: user.id,
-      );
       final products = await salesRepo.fetchProducts(forceRefresh: true);
-      if (!mounted) return;
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       setState(() {
-        _applyKnownClients(cachedClients, userId: user.id);
         _categoryByProductId = {
           for (final product in products)
             if ((product.categoria ?? '').trim().isNotEmpty)
@@ -399,7 +441,7 @@ class _CotizacionesHistorialScreenState
         pageSize: 300,
         skipLoader: true,
       );
-      if (!mounted) return;
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       setState(() {
         _applyKnownClients(remoteClients, userId: user.id);
       });
@@ -865,10 +907,10 @@ class _CotizacionesHistorialScreenState
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) return true;
 
-    final createdDate = DateFormat(
-      'dd/MM/yyyy h:mm a',
-      'es_DO',
-    ).format(item.createdAt);
+    final createdDate = formatQuotationHistoryDate(
+      item.createdAt,
+      pattern: 'dd/MM/yyyy h:mm a',
+    );
     final haystack = [
       item.id,
       item.customerName,
@@ -969,7 +1011,9 @@ class _CotizacionesHistorialScreenState
               _fromDate!.month,
               _fromDate!.day,
             );
-            if (item.createdAt.isBefore(start)) return false;
+            if (quotationHistoryLocalDate(item.createdAt).isBefore(start)) {
+              return false;
+            }
           }
           if (_toDate != null) {
             final end = DateTime(
@@ -981,7 +1025,9 @@ class _CotizacionesHistorialScreenState
               59,
               999,
             );
-            if (item.createdAt.isAfter(end)) return false;
+            if (quotationHistoryLocalDate(item.createdAt).isAfter(end)) {
+              return false;
+            }
           }
           return true;
         })
@@ -1088,81 +1134,47 @@ class _CotizacionesHistorialScreenState
 
   Future<void> _openSummaryPanel() async {
     final visibleItems = _visibleItems;
-    final totalAmount = visibleItems.fold<double>(
-      0,
-      (sum, item) => sum + item.total,
-    );
-    final totalLines = visibleItems.fold<int>(
-      0,
-      (sum, item) => sum + item.items.length,
-    );
-    final clientsCount = {
-      for (final item in visibleItems)
-        _clientKey(
-          customerId: item.customerId,
-          customerPhone: item.customerPhone,
-          customerName: item.customerName,
-        ),
-    }.length;
-    final ownClientsCount = visibleItems.where(_isOwnClient).length;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.dashboard_customize_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Panel rapido',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Cerrar',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _SummaryRow(
-                label: 'Cotizaciones visibles',
-                value: '${visibleItems.length}',
-              ),
-              _SummaryRow(label: 'Clientes unicos', value: '$clientsCount'),
-              _SummaryRow(label: 'Lineas totales', value: '$totalLines'),
-              _SummaryRow(label: 'Total acumulado', value: _money(totalAmount)),
-              _SummaryRow(
-                label: 'Mi cliente en lista',
-                value: '$ownClientsCount',
-              ),
-              if (_activeFilterCount > 0 || _searchQuery.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Vista con filtros activos',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+    final summary = buildQuotationHistoryPanelSummary(
+      visibleItems,
+      clientKeyFor: (item) => _clientKey(
+        customerId: item.customerId,
+        customerPhone: item.customerPhone,
+        customerName: item.customerName,
       ),
+      isOwnClient: _isOwnClient,
+    );
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Panel de cotizaciones',
+      barrierColor: Colors.black.withValues(alpha: 0.26),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: _QuotationSummaryDrawer(
+            summary: summary,
+            money: _money,
+            hasActiveFilters:
+                _activeFilterCount > 0 || _searchQuery.isNotEmpty || _ownOnly,
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: FadeTransition(opacity: curved, child: child),
+        );
+      },
     );
   }
 
@@ -1490,10 +1502,10 @@ class _CotizacionesHistorialScreenState
                               docMeta(
                                 Icons.event_outlined,
                                 'Fecha',
-                                DateFormat(
-                                  'dd/MM/yyyy h:mm a',
-                                  'es_DO',
-                                ).format(item.createdAt),
+                                formatQuotationHistoryDate(
+                                  item.createdAt,
+                                  pattern: 'dd/MM/yyyy h:mm a',
+                                ),
                               ),
                               if (createdBy.isNotEmpty)
                                 docMeta(
@@ -1788,10 +1800,7 @@ class _CotizacionesHistorialScreenState
                   (_selectedQuotationId == null &&
                       visibleItems.isNotEmpty &&
                       visibleItems.first.id == item.id));
-          final dateFmt = DateFormat(
-            'dd/MM/yy · h:mm a',
-            'es_DO',
-          ).format(item.createdAt);
+          final dateFmt = formatQuotationHistoryDate(item.createdAt);
           return _HistorialListCard(
             item: item,
             selected: selected,
@@ -2059,10 +2068,9 @@ class _CotizacionesHistorialScreenState
                           final quoteTag =
                               _quoteTags(item).firstOrNull ?? 'General';
                           final isOwnClient = _isOwnClient(item);
-                          final dateFmt = DateFormat(
-                            'dd/MM/yy · h:mm a',
-                            'es_DO',
-                          ).format(item.createdAt);
+                          final dateFmt = formatQuotationHistoryDate(
+                            item.createdAt,
+                          );
 
                           return _HistorialListCard(
                             item: item,
@@ -2113,10 +2121,43 @@ class _HistorialFiltersSheet extends StatefulWidget {
 }
 
 class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
+  final TextEditingController _clientSearchCtrl = TextEditingController();
   late String? _clientKey = widget.initialState.clientKey;
   late String? _quoteTag = widget.initialState.quoteTag;
   late DateTime? _fromDate = widget.initialState.fromDate;
   late DateTime? _toDate = widget.initialState.toDate;
+  String _clientSearch = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _clientSearchCtrl.addListener(_handleClientSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _clientSearchCtrl.removeListener(_handleClientSearchChanged);
+    _clientSearchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleClientSearchChanged() {
+    final next = _clientSearchCtrl.text;
+    if (next == _clientSearch) return;
+    setState(() => _clientSearch = next);
+  }
+
+  List<_ClientFilterOption> get _filteredClientOptions {
+    return widget.clientOptions
+        .where(
+          (option) => matchesQuotationClientSearch(
+            label: option.label,
+            phone: option.subtitle,
+            query: _clientSearch,
+          ),
+        )
+        .toList(growable: false);
+  }
 
   Future<DateTime?> _pickDate(DateTime? initialDate) async {
     final now = DateTime.now();
@@ -2138,6 +2179,17 @@ class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
         toDate: _toDate,
       ),
     );
+  }
+
+  void _clearLocalState() {
+    setState(() {
+      _clientKey = null;
+      _quoteTag = null;
+      _fromDate = null;
+      _toDate = null;
+      _clientSearch = '';
+      _clientSearchCtrl.clear();
+    });
   }
 
   @override
@@ -2221,36 +2273,41 @@ class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                     children: [
-                      const _HistorialFilterSectionLabel('Cliente'),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String?>(
-                        isExpanded: true,
-                        initialValue: _clientKey,
-                        decoration: compactDecoration.copyWith(
-                          hintText: 'Cliente',
-                          prefixIcon: const Icon(Icons.person_search_outlined),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text(
-                              'Todos los clientes',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: _HistorialFilterSectionLabel('Cliente'),
                           ),
-                          ...widget.clientOptions.map(
-                            (option) => DropdownMenuItem<String?>(
-                              value: option.key,
-                              child: Text(
-                                option.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          if (_clientKey != null || _clientSearch.isNotEmpty)
+                            TextButton(
+                              onPressed: () {
+                                setState(() => _clientKey = null);
+                                _clientSearchCtrl.clear();
+                              },
+                              child: const Text('Limpiar'),
                             ),
-                          ),
                         ],
-                        onChanged: (value) =>
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _clientSearchCtrl,
+                        decoration: compactDecoration.copyWith(
+                          hintText: 'Buscar cliente por nombre o teléfono',
+                          prefixIcon: const Icon(Icons.person_search_outlined),
+                          suffixIcon: _clientSearch.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Limpiar búsqueda',
+                                  onPressed: _clientSearchCtrl.clear,
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _ClientFilterList(
+                        options: _filteredClientOptions,
+                        selectedKey: _clientKey,
+                        onSelected: (value) =>
                             setState(() => _clientKey = value),
                       ),
                       const SizedBox(height: 18),
@@ -2379,9 +2436,12 @@ class _HistorialFiltersSheetState extends State<_HistorialFiltersSheet> {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => Navigator.of(
-                            context,
-                          ).pop(const _HistorialFilterState.clear()),
+                          onPressed: () {
+                            _clearLocalState();
+                            Navigator.of(
+                              context,
+                            ).pop(const _HistorialFilterState.clear());
+                          },
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size.fromHeight(46),
                           ),
@@ -2426,6 +2486,100 @@ class _HistorialFilterSectionLabel extends StatelessWidget {
         color: AppColors.textPrimary,
         fontSize: 13,
         fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _ClientFilterList extends StatelessWidget {
+  const _ClientFilterList({
+    required this.options,
+    required this.selectedKey,
+    required this.onSelected,
+  });
+
+  final List<_ClientFilterOption> options;
+  final String? selectedKey;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final listOptions = [
+      const _ClientFilterOption(
+        key: '',
+        label: 'Todos los clientes',
+        subtitle: '',
+        owned: false,
+      ),
+      ...options,
+    ];
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 280),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: listOptions.length,
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          indent: 12,
+          endIndent: 12,
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        itemBuilder: (context, index) {
+          final option = listOptions[index];
+          final optionKey = option.key.isEmpty ? null : option.key;
+          final selected = selectedKey == optionKey;
+          final phone = option.subtitle.trim();
+          return ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            selected: selected,
+            selectedTileColor: theme.colorScheme.primary.withValues(
+              alpha: 0.10,
+            ),
+            leading: Icon(
+              option.key.isEmpty ? Icons.groups_outlined : Icons.person_outline,
+              size: 18,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            title: Text(
+              option.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+            subtitle: phone.isEmpty
+                ? null
+                : Text(phone, maxLines: 1, overflow: TextOverflow.ellipsis),
+            trailing: selected
+                ? Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  )
+                : option.owned
+                ? Text(
+                    'Mi cliente',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  )
+                : null,
+            onTap: () => onSelected(optionKey),
+          );
+        },
       ),
     );
   }
@@ -2666,14 +2820,14 @@ class _QuoteDocHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                DateFormat('dd/MM/yyyy', 'es_DO').format(createdAt),
+                formatQuotationHistoryDate(createdAt, pattern: 'dd/MM/yyyy'),
                 style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                DateFormat('h:mm a', 'es_DO').format(createdAt),
+                formatQuotationHistoryDate(createdAt, pattern: 'h:mm a'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -3661,26 +3815,465 @@ class _ClientFilterOption {
   final bool owned;
 }
 
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value});
+class _QuotationSummaryDrawer extends StatelessWidget {
+  const _QuotationSummaryDrawer({
+    required this.summary,
+    required this.money,
+    required this.hasActiveFilters,
+  });
 
-  final String label;
-  final String value;
+  final QuotationHistoryPanelSummary summary;
+  final String Function(double value) money;
+  final bool hasActiveFilters;
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.sizeOf(context);
+    final theme = Theme.of(context);
+    final width = media.width < 560
+        ? media.width
+        : (media.width * 0.32).clamp(380.0, 460.0);
+
+    return Dismissible(
+      key: const ValueKey('historial-summary-right-drawer'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: Material(
+        color: theme.colorScheme.surface,
+        elevation: 18,
+        borderRadius: BorderRadius.zero,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: width,
+          height: media.height,
+          child: SafeArea(
+            left: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.10,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.dashboard_customize_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Panel de cotizaciones',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                    children: [
+                      if (hasActiveFilters) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.08,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.18,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            'Vista con filtros activos',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      _SummaryMetricGrid(summary: summary, money: money),
+                      const SizedBox(height: 16),
+                      _SummarySection(
+                        title: 'Valor de cotizaciones',
+                        icon: Icons.bar_chart_rounded,
+                        child: _QuotationValueChart(
+                          buckets: summary.chartBuckets,
+                          money: money,
+                        ),
+                      ),
+                      if (summary.topClients.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _SummarySection(
+                          title: 'Top clientes por monto',
+                          icon: Icons.emoji_events_outlined,
+                          child: Column(
+                            children: [
+                              for (final client in summary.topClients)
+                                _TopClientRow(client: client, money: money),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryMetricGrid extends StatelessWidget {
+  const _SummaryMetricGrid({required this.summary, required this.money});
+
+  final QuotationHistoryPanelSummary summary;
+  final String Function(double value) money;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _SummaryMetricRow(
+          label: 'Cotizaciones visibles',
+          value: '${summary.visibleCount}',
+          icon: Icons.receipt_long_outlined,
+        ),
+        _SummaryMetricRow(
+          label: 'Clientes únicos',
+          value: '${summary.uniqueClientsCount}',
+          icon: Icons.people_outline,
+        ),
+        _SummaryMetricRow(
+          label: 'Líneas totales',
+          value: '${summary.totalLines}',
+          icon: Icons.format_list_numbered_rounded,
+        ),
+        _SummaryMetricRow(
+          label: 'Total acumulado',
+          value: money(summary.totalAmount),
+          icon: Icons.payments_outlined,
+          accent: true,
+        ),
+        _SummaryMetricRow(
+          label: 'Mi cliente en lista',
+          value: '${summary.ownClientsCount}',
+          icon: Icons.person_pin_outlined,
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryMetricRow extends StatelessWidget {
+  const _SummaryMetricRow({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.accent = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = accent
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: accent
+              ? theme.colorScheme.primary.withValues(alpha: 0.22)
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: color.withValues(alpha: 0.75)),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummarySection extends StatelessWidget {
+  const _SummarySection({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 15, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              title.toUpperCase(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.7,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+}
+
+class _QuotationValueChart extends StatelessWidget {
+  const _QuotationValueChart({required this.buckets, required this.money});
+
+  final List<QuotationHistoryChartBucket> buckets;
+  final String Function(double value) money;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (buckets.isEmpty) {
+      return Container(
+        height: 126,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Text(
+          'Sin datos para graficar',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
+    final maxTotal = buckets.fold<double>(
+      0,
+      (max, bucket) => bucket.total > max ? bucket.total : max,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 116,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _QuotationValueChartPainter(
+                buckets: buckets,
+                color: theme.colorScheme.primary,
+                gridColor: theme.colorScheme.outlineVariant,
+                textColor: theme.colorScheme.onSurfaceVariant,
+                maxTotal: maxTotal <= 0 ? 1 : maxTotal,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'Máx. ${money(maxTotal)}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuotationValueChartPainter extends CustomPainter {
+  const _QuotationValueChartPainter({
+    required this.buckets,
+    required this.color,
+    required this.gridColor,
+    required this.textColor,
+    required this.maxTotal,
+  });
+
+  final List<QuotationHistoryChartBucket> buckets;
+  final Color color;
+  final Color gridColor;
+  final Color textColor;
+  final double maxTotal;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final gridPaint = Paint()
+      ..color = gridColor.withValues(alpha: 0.7)
+      ..strokeWidth = 1;
+    const labelHeight = 22.0;
+    final chartHeight = size.height - labelHeight;
+    canvas.drawLine(
+      Offset(0, chartHeight),
+      Offset(size.width, chartHeight),
+      gridPaint,
+    );
+
+    final gap = buckets.length <= 1 ? 18.0 : 8.0;
+    final barWidth =
+        ((size.width - gap * (buckets.length + 1)) / buckets.length).clamp(
+          10.0,
+          38.0,
+        );
+    final totalBarsWidth =
+        barWidth * buckets.length + gap * (buckets.length - 1);
+    var x = (size.width - totalBarsWidth) / 2;
+
+    for (final bucket in buckets) {
+      final ratio = (bucket.total / maxTotal).clamp(0.0, 1.0);
+      final barHeight = (chartHeight - 10) * ratio;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, chartHeight - barHeight, barWidth, barHeight),
+        const Radius.circular(5),
+      );
+      canvas.drawRRect(rect, paint);
+
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: bucket.label,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: ui.TextDirection.ltr,
+        maxLines: 1,
+      )..layout(maxWidth: barWidth + 18);
+      textPainter.paint(
+        canvas,
+        Offset(x + (barWidth - textPainter.width) / 2, chartHeight + 6),
+      );
+      x += barWidth + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _QuotationValueChartPainter oldDelegate) {
+    return oldDelegate.buckets != buckets ||
+        oldDelegate.color != color ||
+        oldDelegate.gridColor != gridColor ||
+        oldDelegate.textColor != textColor ||
+        oldDelegate.maxTotal != maxTotal;
+  }
+}
+
+class _TopClientRow extends StatelessWidget {
+  const _TopClientRow({required this.client, required this.money});
+
+  final QuotationHistoryClientTotal client;
+  final String Function(double value) money;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+            child: Text(
+              client.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
+          const SizedBox(width: 10),
           Text(
-            value,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            money(client.total),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),

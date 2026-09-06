@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../../core/storage/local_migration_backup.dart';
 import '../../../core/storage/resilient_local_database.dart';
 import '../cotizacion_models.dart';
 
@@ -12,23 +13,33 @@ final cotizacionesLocalRepositoryProvider =
 
 class CotizacionesLocalRepository {
   static const _dbName = 'cotizaciones_local.db';
-  static const _dbVersion = 6;
+  static const _dbVersion = 7;
   static const _tableCotizaciones = 'cotizaciones';
   static const _tableItems = 'cotizacion_items';
 
+  CotizacionesLocalRepository({String? databaseFileName})
+    : _databaseFileName = databaseFileName ?? _dbName;
+
+  final String _databaseFileName;
   Database? _database;
-  List<CotizacionModel> _memoryQuotes = const [];
-  CotizacionModel? _memoryDraft;
+  final Map<String, List<CotizacionModel>> _memoryQuotesByCompany = {};
+  final Map<String, CotizacionModel> _memoryDraftByCompany = {};
 
   Future<Database> get _db async {
     if (_database != null) return _database!;
+    await backupLocalDatabaseBeforeMigration(
+      fileName: _databaseFileName,
+      label: 'cotizaciones_local',
+    );
     _database = await openResilientLocalDatabase(
-      fileName: _dbName,
+      fileName: _databaseFileName,
       version: _dbVersion,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE $_tableCotizaciones (
             id TEXT PRIMARY KEY,
+            company_id TEXT,
+            legacy_quarantined INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             customer_id TEXT,
@@ -55,6 +66,8 @@ class CotizacionesLocalRepository {
           CREATE TABLE $_tableItems (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             cotizacion_id TEXT NOT NULL,
+            company_id TEXT,
+            legacy_quarantined INTEGER NOT NULL DEFAULT 0,
             product_id TEXT NOT NULL,
             product_source TEXT,
             source_product_id TEXT,
@@ -83,6 +96,12 @@ class CotizacionesLocalRepository {
 
         await db.execute(
           'CREATE INDEX idx_cotizacion_items_quote ON $_tableItems(cotizacion_id)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_company_draft ON $_tableCotizaciones(company_id, is_draft, updated_at)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_cotizacion_items_company_quote ON $_tableItems(company_id, cotizacion_id)',
         );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -199,9 +218,56 @@ class CotizacionesLocalRepository {
             [''],
           );
         }
+        if (oldVersion < 7) {
+          await _addTenantColumnsAndQuarantineLegacy(db);
+        }
+      },
+      onOpen: (db) async {
+        await _addTenantColumnsAndQuarantineLegacy(db);
       },
     );
     return _database!;
+  }
+
+  Future<void> _addTenantColumnsAndQuarantineLegacy(DatabaseExecutor db) async {
+    await _addColumnIfMissing(
+      db,
+      tableName: _tableCotizaciones,
+      columnName: 'company_id',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: _tableCotizaciones,
+      columnName: 'legacy_quarantined',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: _tableItems,
+      columnName: 'company_id',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      tableName: _tableItems,
+      columnName: 'legacy_quarantined',
+      definition: 'INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'UPDATE $_tableCotizaciones SET legacy_quarantined = 1 WHERE company_id IS NULL OR TRIM(company_id) = ?',
+      [''],
+    );
+    await db.execute(
+      'UPDATE $_tableItems SET legacy_quarantined = 1 WHERE company_id IS NULL OR TRIM(company_id) = ?',
+      [''],
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cotizaciones_company_draft ON $_tableCotizaciones(company_id, is_draft, updated_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cotizacion_items_company_quote ON $_tableItems(company_id, cotizacion_id)',
+    );
   }
 
   Future<void> _addColumnIfMissing(
@@ -223,10 +289,15 @@ class CotizacionesLocalRepository {
     );
   }
 
-  Future<List<CotizacionModel>> listAll() async {
+  Future<List<CotizacionModel>> listAll({required String companyId}) async {
+    final scope = _normalizeCompanyId(companyId);
+    if (scope.isEmpty) return const [];
     if (kIsWeb) {
+      final draft = _memoryDraftByCompany[scope];
       final items =
-          _memoryQuotes.where((item) => !_isDraft(item)).toList(growable: false)
+          (_memoryQuotesByCompany[scope] ?? const <CotizacionModel>[])
+              .where((item) => draft?.id != item.id)
+              .toList(growable: false)
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return items;
     }
@@ -234,13 +305,14 @@ class CotizacionesLocalRepository {
     final db = await _db;
     final rows = await db.query(
       _tableCotizaciones,
-      where: 'is_draft = ?',
-      whereArgs: [0],
+      where: 'company_id = ? AND legacy_quarantined = ? AND is_draft = ?',
+      whereArgs: [scope, 0, 0],
       orderBy: 'created_at DESC',
     );
 
     final itemsByQuote = await _loadItemsGrouped(
       rows.map((row) => (row['id'] ?? '').toString()).toList(),
+      companyId: scope,
     );
 
     return rows
@@ -253,48 +325,63 @@ class CotizacionesLocalRepository {
         .toList();
   }
 
-  Future<void> upsert(CotizacionModel cotizacion) async {
+  Future<void> upsert(
+    CotizacionModel cotizacion, {
+    required String companyId,
+  }) async {
+    final scope = _requireCompanyId(companyId);
     if (kIsWeb) {
+      final existing = _memoryQuotesByCompany[scope] ?? const [];
       final next = [
-        ..._memoryQuotes.where((item) => item.id != cotizacion.id),
+        ...existing.where((item) => item.id != cotizacion.id),
         cotizacion,
       ];
       next.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      _memoryQuotes = next;
-      if (_memoryDraft?.id == cotizacion.id) {
-        _memoryDraft = null;
+      _memoryQuotesByCompany[scope] = next;
+      if (_memoryDraftByCompany[scope]?.id == cotizacion.id) {
+        _memoryDraftByCompany.remove(scope);
       }
       return;
     }
 
-    await _upsert(cotizacion, isDraft: false);
+    await _upsert(cotizacion, companyId: scope, isDraft: false);
   }
 
-  Future<void> saveDraft(CotizacionModel cotizacion) async {
+  Future<void> saveDraft(
+    CotizacionModel cotizacion, {
+    required String companyId,
+  }) async {
+    final scope = _requireCompanyId(companyId);
     if (kIsWeb) {
-      _memoryDraft = cotizacion;
+      _memoryDraftByCompany[scope] = cotizacion;
       return;
     }
 
     final db = await _db;
-    await db.delete(_tableCotizaciones, where: 'is_draft = ?', whereArgs: [1]);
+    await db.delete(
+      _tableCotizaciones,
+      where: 'company_id = ? AND legacy_quarantined = ? AND is_draft = ?',
+      whereArgs: [scope, 0, 1],
+    );
     await db.delete(
       _tableItems,
       where: 'cotizacion_id NOT IN (SELECT id FROM $_tableCotizaciones)',
     );
-    await _upsert(cotizacion, isDraft: true);
+    await _upsert(cotizacion, companyId: scope, isDraft: true);
   }
 
-  Future<CotizacionModel?> getDraft() async {
+  Future<CotizacionModel?> getDraft({required String companyId}) async {
+    final scope = _normalizeCompanyId(companyId);
+    if (scope.isEmpty) return null;
     if (kIsWeb) {
-      return _memoryDraft;
+      return _memoryDraftByCompany[scope];
     }
 
     final db = await _db;
     final rows = await db.query(
       _tableCotizaciones,
-      where: 'is_draft = ?',
-      whereArgs: [1],
+      where: 'company_id = ? AND legacy_quarantined = ? AND is_draft = ?',
+      whereArgs: [scope, 0, 1],
       orderBy: 'updated_at DESC',
       limit: 1,
     );
@@ -304,17 +391,19 @@ class CotizacionesLocalRepository {
     final quoteId = (row['id'] ?? '').toString();
     final itemRows = await db.query(
       _tableItems,
-      where: 'cotizacion_id = ?',
-      whereArgs: [quoteId],
+      where: 'company_id = ? AND legacy_quarantined = ? AND cotizacion_id = ?',
+      whereArgs: [scope, 0, quoteId],
       orderBy: 'id ASC',
     );
 
     return _toModel(row, itemRows);
   }
 
-  Future<void> clearDraft() async {
+  Future<void> clearDraft({required String companyId}) async {
+    final scope = _normalizeCompanyId(companyId);
+    if (scope.isEmpty) return;
     if (kIsWeb) {
-      _memoryDraft = null;
+      _memoryDraftByCompany.remove(scope);
       return;
     }
 
@@ -322,25 +411,37 @@ class CotizacionesLocalRepository {
     final draftRows = await db.query(
       _tableCotizaciones,
       columns: ['id'],
-      where: 'is_draft = ?',
-      whereArgs: [1],
+      where: 'company_id = ? AND legacy_quarantined = ? AND is_draft = ?',
+      whereArgs: [scope, 0, 1],
     );
 
     for (final row in draftRows) {
       final id = (row['id'] ?? '').toString();
-      await db.delete(_tableItems, where: 'cotizacion_id = ?', whereArgs: [id]);
+      await db.delete(
+        _tableItems,
+        where:
+            'company_id = ? AND legacy_quarantined = ? AND cotizacion_id = ?',
+        whereArgs: [scope, 0, id],
+      );
     }
 
-    await db.delete(_tableCotizaciones, where: 'is_draft = ?', whereArgs: [1]);
+    await db.delete(
+      _tableCotizaciones,
+      where: 'company_id = ? AND legacy_quarantined = ? AND is_draft = ?',
+      whereArgs: [scope, 0, 1],
+    );
   }
 
-  Future<void> deleteById(String id) async {
+  Future<void> deleteById(String id, {required String companyId}) async {
+    final scope = _normalizeCompanyId(companyId);
+    if (scope.isEmpty) return;
     if (kIsWeb) {
-      _memoryQuotes = _memoryQuotes
-          .where((item) => item.id != id)
-          .toList(growable: false);
-      if (_memoryDraft?.id == id) {
-        _memoryDraft = null;
+      _memoryQuotesByCompany[scope] =
+          (_memoryQuotesByCompany[scope] ?? const [])
+              .where((item) => item.id != id)
+              .toList(growable: false);
+      if (_memoryDraftByCompany[scope]?.id == id) {
+        _memoryDraftByCompany.remove(scope);
       }
       return;
     }
@@ -349,16 +450,23 @@ class CotizacionesLocalRepository {
     await db.transaction((txn) async {
       await txn.delete(
         _tableItems,
-        where: 'cotizacion_id = ?',
-        whereArgs: [id],
+        where:
+            'company_id = ? AND legacy_quarantined = ? AND cotizacion_id = ?',
+        whereArgs: [scope, 0, id],
       );
-      await txn.delete(_tableCotizaciones, where: 'id = ?', whereArgs: [id]);
+      await txn.delete(
+        _tableCotizaciones,
+        where: 'company_id = ? AND legacy_quarantined = ? AND id = ?',
+        whereArgs: [scope, 0, id],
+      );
     });
   }
 
-  Future<void> clearAll() async {
-    _memoryQuotes = const [];
-    _memoryDraft = null;
+  Future<void> clearAll({required String companyId}) async {
+    final scope = _normalizeCompanyId(companyId);
+    if (scope.isEmpty) return;
+    _memoryQuotesByCompany.remove(scope);
+    _memoryDraftByCompany.remove(scope);
 
     if (kIsWeb) {
       return;
@@ -366,13 +474,22 @@ class CotizacionesLocalRepository {
 
     final db = await _db;
     await db.transaction((txn) async {
-      await txn.delete(_tableItems);
-      await txn.delete(_tableCotizaciones);
+      await txn.delete(
+        _tableItems,
+        where: 'company_id = ? AND legacy_quarantined = ?',
+        whereArgs: [scope, 0],
+      );
+      await txn.delete(
+        _tableCotizaciones,
+        where: 'company_id = ? AND legacy_quarantined = ?',
+        whereArgs: [scope, 0],
+      );
     });
   }
 
   Future<void> _upsert(
     CotizacionModel cotizacion, {
+    required String companyId,
     required bool isDraft,
   }) async {
     final db = await _db;
@@ -381,6 +498,8 @@ class CotizacionesLocalRepository {
     await db.transaction((txn) async {
       await txn.insert(_tableCotizaciones, {
         'id': cotizacion.id,
+        'company_id': companyId,
+        'legacy_quarantined': 0,
         'created_at': cotizacion.createdAt.toIso8601String(),
         'updated_at': now,
         'customer_id': cotizacion.customerId,
@@ -404,13 +523,15 @@ class CotizacionesLocalRepository {
 
       await txn.delete(
         _tableItems,
-        where: 'cotizacion_id = ?',
-        whereArgs: [cotizacion.id],
+        where: 'company_id = ? AND cotizacion_id = ?',
+        whereArgs: [companyId, cotizacion.id],
       );
 
       for (final item in cotizacion.items) {
         await txn.insert(_tableItems, {
           'cotizacion_id': cotizacion.id,
+          'company_id': companyId,
+          'legacy_quarantined': 0,
           'product_id': item.productId,
           'product_source': item.productSource,
           'source_product_id': item.sourceProductId,
@@ -440,15 +561,16 @@ class CotizacionesLocalRepository {
   }
 
   Future<Map<String, List<Map<String, Object?>>>> _loadItemsGrouped(
-    List<String> quoteIds,
-  ) async {
+    List<String> quoteIds, {
+    required String companyId,
+  }) async {
     if (quoteIds.isEmpty) return {};
 
     final db = await _db;
     final placeholders = List.filled(quoteIds.length, '?').join(',');
     final rows = await db.rawQuery(
-      'SELECT * FROM $_tableItems WHERE cotizacion_id IN ($placeholders) ORDER BY id ASC',
-      quoteIds,
+      'SELECT * FROM $_tableItems WHERE company_id = ? AND legacy_quarantined = 0 AND cotizacion_id IN ($placeholders) ORDER BY id ASC',
+      [companyId, ...quoteIds],
     );
 
     final result = <String, List<Map<String, Object?>>>{};
@@ -521,7 +643,13 @@ class CotizacionesLocalRepository {
     );
   }
 
-  bool _isDraft(CotizacionModel cotizacion) {
-    return _memoryDraft?.id == cotizacion.id;
+  String _normalizeCompanyId(String companyId) => companyId.trim();
+
+  String _requireCompanyId(String companyId) {
+    final normalized = _normalizeCompanyId(companyId);
+    if (normalized.isEmpty) {
+      throw StateError('Empresa activa requerida para cotizaciones locales.');
+    }
+    return normalized;
   }
 }

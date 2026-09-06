@@ -426,7 +426,7 @@ class _Header extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                '5 dias gratis. Plan basico: 2 usuarios y 100 productos.',
+                'Crea tu cuenta de FullPOS Cloud y comienza tu prueba gratis por 7 dias.',
                 style: TextStyle(
                   color: Color(0xFF52667C),
                   fontSize: 13,

@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/company/company_settings_repository.dart';
 import 'printer_settings_repository.dart';
 
@@ -41,11 +42,15 @@ class CloudBackupInspection {
     required this.path,
     required this.modules,
     required this.createdAt,
+    this.companyId,
+    this.companyName,
   });
 
   final String path;
   final List<String> modules;
   final DateTime? createdAt;
+  final String? companyId;
+  final String? companyName;
 }
 
 class CloudBackupService {
@@ -66,10 +71,11 @@ class CloudBackupService {
       return null;
     }
     final prefs = await SharedPreferences.getInstance();
-    final lastRaw = prefs.getString(_lastBackupAtKey);
+    final companyId = _activeCompanyId();
+    final lastRaw = prefs.getString(_lastBackupAtKeyForCompany(companyId));
     final last = lastRaw == null ? null : DateTime.tryParse(lastRaw);
     if (last != null && DateTime.now().difference(last) < interval) {
-      final zipPath = prefs.getString(_lastBackupZipKey);
+      final zipPath = prefs.getString(_lastBackupZipKeyForCompany(companyId));
       if (zipPath != null && await File(zipPath).exists()) return null;
     }
     return createCloudBackup();
@@ -78,12 +84,24 @@ class CloudBackupService {
   Future<String?> lastBackupZipPath() async {
     if (kIsWeb) return null;
     final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString(_lastBackupZipKey);
+    final path = prefs.getString(
+      _lastBackupZipKeyForCompany(_activeCompanyId()),
+    );
     if (path == null || path.trim().isEmpty) return null;
     return File(path).existsSync() ? path : null;
   }
 
   Future<CloudBackupInspection> inspectBackupZip(String zipPath) async {
+    return inspectBackupZipForCompany(
+      zipPath,
+      expectedCompanyId: _activeCompanyId(),
+    );
+  }
+
+  static Future<CloudBackupInspection> inspectBackupZipForCompany(
+    String zipPath, {
+    String? expectedCompanyId,
+  }) async {
     if (kIsWeb) {
       throw UnsupportedError('Backup local no disponible en la version web.');
     }
@@ -94,7 +112,9 @@ class CloudBackupService {
     final archive = ZipDecoder().decodeBytes(await file.readAsBytes());
     ArchiveFile? manifest;
     for (final entry in archive.files) {
-      if (entry.name.endsWith('manifest.json')) {
+      final normalizedName = entry.name.replaceAll('\\', '/');
+      if (normalizedName.endsWith('/manifest.json') ||
+          normalizedName == 'manifest.json') {
         manifest = entry;
         break;
       }
@@ -109,12 +129,23 @@ class CloudBackupService {
         ? modulesRaw.map((item) => '$item').toList()
         : <String>[];
     final createdAtRaw = data['createdAt'];
+    final manifestCompanyId = (data['companyId'] ?? '').toString().trim();
+    final activeCompanyId = expectedCompanyId?.trim() ?? '';
+    if (manifestCompanyId.isNotEmpty &&
+        activeCompanyId.isNotEmpty &&
+        manifestCompanyId != activeCompanyId) {
+      throw const FormatException('El backup pertenece a otra empresa.');
+    }
     return CloudBackupInspection(
       path: zipPath,
       modules: modules,
       createdAt: createdAtRaw is String
           ? DateTime.tryParse(createdAtRaw)
           : null,
+      companyId: manifestCompanyId.isEmpty ? null : manifestCompanyId,
+      companyName: (data['companyName'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['companyName'] ?? '').toString().trim(),
     );
   }
 
@@ -124,8 +155,15 @@ class CloudBackupService {
     }
     final now = DateTime.now();
     final stamp = _stamp(now);
-    final root = await _backupRoot();
-    final folder = Directory(p.join(root.path, 'cloud_backup_$stamp'));
+    final companyId = _activeCompanyId();
+    final companyName = _activeCompanyName();
+    final root = await _backupRoot(companyId: companyId);
+    final safeCompany = _safePathSegment(
+      companyId.isEmpty ? 'unknown_company' : companyId,
+    );
+    final folder = Directory(
+      p.join(root.path, 'cloud_backup_${safeCompany}_$stamp'),
+    );
     await folder.create(recursive: true);
 
     final modules = <String>[];
@@ -180,6 +218,9 @@ class CloudBackupService {
     final manifest = {
       'app': 'FullPOS Cloud',
       'kind': 'cloud-local-backup',
+      'companyId': companyId,
+      'companyName': companyName,
+      'companySlug': _activeCompanySlug(),
       'createdAt': now.toIso8601String(),
       'folderPath': folder.path,
       'modules': modules,
@@ -189,7 +230,10 @@ class CloudBackupService {
     };
     await writeJson('manifest', manifest);
 
-    final zipPath = p.join(root.path, 'cloud_backup_$stamp.zip');
+    final zipPath = await _availableZipPath(
+      root.path,
+      'cloud_backup_${safeCompany}_$stamp.zip',
+    );
     final encoder = ZipFileEncoder();
     encoder.create(zipPath);
     encoder.addDirectory(folder);
@@ -208,15 +252,39 @@ class CloudBackupService {
 
   Future<void> _rememberBackup(CloudBackupResult result) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastBackupAtKey, result.createdAt.toIso8601String());
-    await prefs.setString(_lastBackupZipKey, result.zipPath);
+    final companyId = _activeCompanyId();
+    await prefs.setString(
+      _lastBackupAtKeyForCompany(companyId),
+      result.createdAt.toIso8601String(),
+    );
+    await prefs.setString(
+      _lastBackupZipKeyForCompany(companyId),
+      result.zipPath,
+    );
   }
 
-  Future<Directory> _backupRoot() async {
+  Future<Directory> _backupRoot({required String companyId}) async {
     final base = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(base.path, 'FullPOS Cloud', 'backups'));
+    final safeCompany = _safePathSegment(
+      companyId.trim().isEmpty ? 'unknown_company' : companyId,
+    );
+    final dir = Directory(
+      p.join(base.path, 'FullPOS Cloud', 'backups', safeCompany),
+    );
     await dir.create(recursive: true);
     return dir;
+  }
+
+  Future<String> _availableZipPath(String directory, String fileName) async {
+    var candidate = p.join(directory, fileName);
+    var suffix = 1;
+    while (await File(candidate).exists()) {
+      final extension = p.extension(fileName);
+      final baseName = p.basenameWithoutExtension(fileName);
+      candidate = p.join(directory, '${baseName}_$suffix$extension');
+      suffix += 1;
+    }
+    return candidate;
   }
 
   String _stamp(DateTime value) {
@@ -233,6 +301,29 @@ class CloudBackupService {
       return error.message ?? error.type.name;
     }
     return error.toString();
+  }
+
+  String _activeCompanyId() =>
+      _ref.read(authStateProvider).user?.companyId?.trim() ?? '';
+
+  String _activeCompanyName() =>
+      _ref.read(authStateProvider).user?.companyName?.trim() ?? '';
+
+  String _activeCompanySlug() =>
+      _ref.read(authStateProvider).user?.companySlug?.trim() ?? '';
+
+  String _lastBackupAtKeyForCompany(String companyId) {
+    return '$_lastBackupAtKey:${_safePathSegment(companyId.isEmpty ? 'unknown_company' : companyId)}';
+  }
+
+  String _lastBackupZipKeyForCompany(String companyId) {
+    return '$_lastBackupZipKey:${_safePathSegment(companyId.isEmpty ? 'unknown_company' : companyId)}';
+  }
+
+  String _safePathSegment(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'unknown';
+    return trimmed.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
   }
 }
 

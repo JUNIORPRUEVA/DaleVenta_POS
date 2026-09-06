@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -331,13 +332,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String? _lastSalesNoticeKey;
   int _salesNoticeCount = 0;
   bool _restoringEditorDraft = false;
-  // Caché del valor de productTaxUiConfigProvider para que los getters
-  // fiscales NO lean `ref`. Leer `ref` durante/después del dispose es ilegal
-  // (StateError "Cannot use ref after the widget was disposed"), y dispose()
-  // llama a _writeActiveDesktopDraft → _effectiveFiscalVoucherType →
-  // _currentTaxConfig. El valor se refresca en initState y en cada build
-  // (ref.watch), preservando el comportamiento fiscal exacto.
+  // Caché del valor de productTaxUiConfigProvider para que los getters fiscales
+  // NO lean `ref`. Se refresca por listener de ciclo de vida, fuera de build.
   ProductTaxUiConfig? _taxConfigCache;
+  String? _taxConfigCacheSignature;
+  ProviderSubscription<AsyncValue<ProductTaxUiConfig>>? _taxConfigSubscription;
+  CompanySettings? _companySettingsCache;
+  bool _inventoryEnabledCache = false;
+  ProviderSubscription<AsyncValue<CompanySettings>>?
+  _companySettingsSubscription;
+  ProviderSubscription<AuthState>? _authStateSubscription;
+  ProviderSubscription<CatalogState>? _catalogSubscription;
 
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _mobileSearchFocusNode = FocusNode();
@@ -374,6 +379,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   List<_DesktopTicketDraft> _desktopTickets = [];
   String? _activeDesktopTicketId;
   String? _lastPublishedDesktopFooterSignature;
+  bool _desktopShellFooterPublishScheduled = false;
+  int _lifecycleGeneration = 0;
   bool _showDesktopCalculator = false;
   bool _showMobileTicketDropdown = false;
   bool _openingBarcodeScanner = false;
@@ -394,18 +401,41 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Timer? _liveSyncTimer;
   StreamSubscription<CatalogRealtimeMessage>? _realtimeSubscription;
   late final OpenSalesTicketsRepository _openTicketsRepository;
+  late final StateController<DesktopShellFooterContent?>
+  _desktopShellFooterNotifier;
+  UserModel? _sessionUser;
   String _sessionCompanyId = '';
   String? _sessionUserId;
   String? _sessionUserName;
   static const Duration _liveSyncInterval = Duration(minutes: 2);
   static const Duration _silentRefreshMinInterval = Duration(seconds: 20);
+  late final String _desktopShellFooterOwnerId =
+      'cotizaciones:${identityHashCode(this)}';
 
   @override
   void initState() {
     super.initState();
+    _desktopShellFooterNotifier = ref.read(
+      desktopShellFooterContentProvider.notifier,
+    );
     _taxConfigCache = ref.read(productTaxUiConfigProvider).valueOrNull;
+    _taxConfigCacheSignature = _taxConfigCache == null
+        ? null
+        : _taxConfigSignature(_taxConfigCache!);
+    _taxConfigSubscription = ref.listenManual<AsyncValue<ProductTaxUiConfig>>(
+      productTaxUiConfigProvider,
+      (previous, next) => _applyTaxConfigFromProvider(next),
+    );
+    _companySettingsCache = ref.read(companySettingsProvider).valueOrNull;
+    _inventoryEnabledCache = _companySettingsCache?.inventoryEnabled ?? false;
+    _companySettingsSubscription = ref
+        .listenManual<AsyncValue<CompanySettings>>(
+          companySettingsProvider,
+          (previous, next) => _applyCompanySettingsFromProvider(next),
+        );
     _openTicketsRepository = ref.read(openSalesTicketsRepositoryProvider);
     final user = ref.read(authStateProvider).user;
+    _sessionUser = user;
     _sessionCompanyId = (user?.companyId ?? '').trim();
     _sessionUserId = user?.id;
     _sessionUserName = user?.nombreCompleto;
@@ -418,15 +448,21 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
     _desktopTickets = [initialDraft];
     _activeDesktopTicketId = initialDraft.id;
-    ref.listenManual<AuthState>(authStateProvider, (previous, next) {
+    _authStateSubscription = ref.listenManual<AuthState>(authStateProvider, (
+      previous,
+      next,
+    ) {
       final previousCompanyId = (previous?.user?.companyId ?? '').trim();
       final nextCompanyId = (next.user?.companyId ?? '').trim();
       if (previousCompanyId == nextCompanyId) return;
       _handleCompanyChanged(nextCompanyId, next.user);
     });
-    ref.listenManual<CatalogState>(catalogControllerProvider, (previous, next) {
-      _applyCatalogControllerProducts(next.items);
-    });
+    _catalogSubscription = ref.listenManual<CatalogState>(
+      catalogControllerProvider,
+      (previous, next) {
+        _applyCatalogControllerProducts(next.items);
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _applyInitialClient();
@@ -438,8 +474,98 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _scheduleDesktopShellFooterPublish();
       unawaited(_syncQuotationAi(triggerAi: false));
     });
+  }
+
+  void _applyTaxConfigFromProvider(AsyncValue<ProductTaxUiConfig> next) {
+    final config = next.valueOrNull;
+    if (config == null) return;
+    final requestCompanyId = _activeCompanyId();
+    final requestGeneration = _lifecycleGeneration;
+    final signature = _taxConfigSignature(config);
+    if (signature == _taxConfigCacheSignature) return;
+
+    void apply() {
+      if (!_isCurrentTenantGeneration(
+        companyId: requestCompanyId,
+        generation: requestGeneration,
+      )) {
+        if (mounted && _activeCompanyId().isNotEmpty) {
+          _scheduleDesktopShellFooterPublish();
+        }
+        return;
+      }
+      setState(() {
+        _taxConfigCache = config;
+        _taxConfigCacheSignature = signature;
+        _syncEditorItemsFiscalWithLoadedProducts();
+        _writeActiveDesktopDraft();
+      });
+      _scheduleDesktopShellFooterPublish();
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+      return;
+    }
+    apply();
+  }
+
+  void _applyCompanySettingsFromProvider(AsyncValue<CompanySettings> next) {
+    final settings = next.valueOrNull;
+    if (settings == null) return;
+    final inventoryEnabled = settings.inventoryEnabled;
+    if (identical(settings, _companySettingsCache) &&
+        inventoryEnabled == _inventoryEnabledCache) {
+      return;
+    }
+
+    void apply() {
+      if (!mounted) return;
+      if (identical(settings, _companySettingsCache) &&
+          inventoryEnabled == _inventoryEnabledCache) {
+        return;
+      }
+      setState(() {
+        _companySettingsCache = settings;
+        _inventoryEnabledCache = inventoryEnabled;
+      });
+      _scheduleDesktopShellFooterPublish();
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+      return;
+    }
+    apply();
+  }
+
+  String _taxConfigSignature(ProductTaxUiConfig config) {
+    final settings = config.settings;
+    final buffer = StringBuffer()
+      ..write(settings.taxEnabled)
+      ..write('|')
+      ..write(settings.ncfEnabled)
+      ..write('|')
+      ..write(settings.defaultTaxId ?? '')
+      ..write('|')
+      ..write(settings.defaultTaxRate)
+      ..write('|')
+      ..write(settings.pricesIncludeTax);
+    for (final tax in config.activeTaxes) {
+      buffer
+        ..write('|')
+        ..write(tax.id)
+        ..write(':')
+        ..write(tax.rate)
+        ..write(':')
+        ..write(tax.isDefault);
+    }
+    return buffer.toString();
   }
 
   @override
@@ -474,9 +600,38 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _handleCompanyChanged(String companyId, UserModel? user) {
     if (!mounted) return;
+    final previousCompanyId = _sessionCompanyId.trim();
+    final previousUserId = _sessionUserId;
+    final previousActiveId = _activeDesktopTicketId;
+    if (previousCompanyId.isNotEmpty && _desktopTickets.isNotEmpty) {
+      _writeActiveDesktopDraft();
+    }
+    final previousTickets = [..._desktopTickets]..sort(_compareDesktopTickets);
+    if (previousCompanyId.isNotEmpty && previousTickets.isNotEmpty) {
+      unawaited(
+        _persistEditorDraftSnapshot(
+          companyId: previousCompanyId,
+          userId: previousUserId,
+          activeId: previousActiveId,
+          tickets: previousTickets,
+          allowRemoteReplace: false,
+        ),
+      );
+    }
+
+    _lifecycleGeneration += 1;
+    _sessionUser = user;
     _sessionCompanyId = companyId;
     _sessionUserId = user?.id;
     _sessionUserName = user?.nombreCompleto;
+    _restoringEditorDraft = true;
+    _taxConfigCache = null;
+    _taxConfigCacheSignature = null;
+    _companySettingsCache = null;
+    _inventoryEnabledCache = false;
+    _lastPublishedDesktopFooterSignature = null;
+    _remoteRefreshInFlight = false;
+    _lastSuccessfulRemoteSyncAt = null;
     final initialDraft = _DesktopTicketDraft.empty(
       id: _newId(),
       title: 'Ticket 1',
@@ -493,8 +648,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     ref.invalidate(catalogControllerProvider);
     ref.invalidate(cotizacionesRepositoryProvider);
     ref.invalidate(ventasControllerProvider);
-    _schedulePersistEditorDraft(immediate: true);
     unawaited(_bootstrapCatalog());
+    if (!widget.returnSavedQuotation && companyId.trim().isNotEmpty) {
+      unawaited(_restorePersistedEditorDraftIfAny());
+    } else {
+      _restoringEditorDraft = false;
+    }
+    _scheduleDesktopShellFooterPublish();
+  }
+
+  bool _isCurrentTenantGeneration({
+    required String companyId,
+    required int generation,
+  }) {
+    return mounted &&
+        _lifecycleGeneration == generation &&
+        _activeCompanyId() == companyId.trim();
   }
 
   void _applyInitialQuotation() {
@@ -822,8 +991,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   @override
   void dispose() {
+    _lifecycleGeneration += 1;
     _hideSalesNotice();
     _clearDesktopShellFooter();
+    _taxConfigSubscription?.close();
+    _taxConfigSubscription = null;
+    _companySettingsSubscription?.close();
+    _companySettingsSubscription = null;
+    _authStateSubscription?.close();
+    _authStateSubscription = null;
+    _catalogSubscription?.close();
+    _catalogSubscription = null;
     _persistEditorDraftTimer?.cancel();
     _persistEditorDraftTimer = null;
     _writeActiveDesktopDraft(readTaxProvider: false);
@@ -841,12 +1019,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     super.dispose();
   }
 
-  String _editorDraftCacheKey() {
-    final companyId = _sessionCompanyId.trim();
-    if (companyId.isNotEmpty) {
-      return '${_editorDraftCachePrefix}company:$companyId';
+  String _editorDraftCacheKeyForCompany({
+    required String companyId,
+    required String? userId,
+  }) {
+    final normalizedCompanyId = companyId.trim();
+    if (normalizedCompanyId.isNotEmpty) {
+      return '${_editorDraftCachePrefix}company:$normalizedCompanyId';
     }
-    final ownerId = (_sessionUserId ?? 'anon').trim();
+    final ownerId = (userId ?? 'anon').trim();
     return '${_editorDraftCachePrefix}user:$ownerId';
   }
 
@@ -855,9 +1036,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _belongsToActiveCompany(_DesktopTicketDraft ticket) {
     final companyId = _activeCompanyId();
     final ticketCompanyId = (ticket.companyId ?? '').trim();
-    return companyId.isEmpty ||
-        ticketCompanyId.isEmpty ||
-        ticketCompanyId == companyId;
+    if (companyId.isEmpty) return false;
+    return ticketCompanyId == companyId;
   }
 
   int _compareDesktopTickets(
@@ -886,18 +1066,52 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _persistEditorDraft() async {
+    final companyId = _activeCompanyId();
+    if (companyId.isEmpty) return;
+    await _persistEditorDraftSnapshot(
+      companyId: companyId,
+      userId: _sessionUserId,
+      activeId: _activeDesktopTicketId,
+      tickets: ([..._desktopTickets]..sort(_compareDesktopTickets)),
+      allowRemoteReplace: true,
+      generation: _lifecycleGeneration,
+    );
+  }
+
+  Future<void> _persistEditorDraftSnapshot({
+    required String companyId,
+    required String? userId,
+    required String? activeId,
+    required List<_DesktopTicketDraft> tickets,
+    required bool allowRemoteReplace,
+    int? generation,
+  }) async {
+    final normalizedCompanyId = companyId.trim();
+    if (normalizedCompanyId.isEmpty) return;
     try {
       final map = <String, dynamic>{
         'v': 2,
-        'companyId': _activeCompanyId(),
-        'activeId': _activeDesktopTicketId,
-        'tickets': ([
-          ..._desktopTickets,
-        ]..sort(_compareDesktopTickets)).map((t) => t.toMap()).toList(),
+        'companyId': normalizedCompanyId,
+        'activeId': activeId,
+        'tickets': tickets.map((t) => t.toMap()).toList(),
       };
-      await _editorDraftCache.writeMap(_editorDraftCacheKey(), map);
+      await _editorDraftCache.writeMap(
+        _editorDraftCacheKeyForCompany(
+          companyId: normalizedCompanyId,
+          userId: userId,
+        ),
+        map,
+      );
+      if (!allowRemoteReplace) return;
+      if (generation != null &&
+          !_isCurrentTenantGeneration(
+            companyId: normalizedCompanyId,
+            generation: generation,
+          )) {
+        return;
+      }
       await _openTicketsRepository.replace(
-        activeId: _activeDesktopTicketId,
+        activeId: activeId,
         tickets: (map['tickets'] as List)
             .whereType<Map>()
             .map((row) => row.cast<String, dynamic>())
@@ -910,12 +1124,36 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _restorePersistedEditorDraftIfAny() async {
     if (!mounted) return;
+    final requestCompanyId = _activeCompanyId();
+    if (requestCompanyId.isEmpty) return;
+    final requestUserId = _sessionUserId;
+    final requestGeneration = _lifecycleGeneration;
     _restoringEditorDraft = true;
     try {
       final remote = await ref.read(openSalesTicketsRepositoryProvider).fetch();
+      if (!_isCurrentTenantGeneration(
+        companyId: requestCompanyId,
+        generation: requestGeneration,
+      )) {
+        if (mounted && _activeCompanyId().isNotEmpty) {
+          _scheduleDesktopShellFooterPublish();
+        }
+        return;
+      }
       final cached =
-          remote ?? await _editorDraftCache.readMap(_editorDraftCacheKey());
-      if (!mounted) return;
+          remote ??
+          await _editorDraftCache.readMap(
+            _editorDraftCacheKeyForCompany(
+              companyId: requestCompanyId,
+              userId: requestUserId,
+            ),
+          );
+      if (!_isCurrentTenantGeneration(
+        companyId: requestCompanyId,
+        generation: requestGeneration,
+      )) {
+        return;
+      }
       if (cached == null) return;
 
       final rawTickets = (cached['tickets'] as List?) ?? const [];
@@ -953,8 +1191,19 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       unawaited(_syncQuotationAi(triggerAi: false));
     } catch (_) {
       try {
-        final cached = await _editorDraftCache.readMap(_editorDraftCacheKey());
-        if (!mounted || cached == null) return;
+        final cached = await _editorDraftCache.readMap(
+          _editorDraftCacheKeyForCompany(
+            companyId: requestCompanyId,
+            userId: requestUserId,
+          ),
+        );
+        if (!_isCurrentTenantGeneration(
+              companyId: requestCompanyId,
+              generation: requestGeneration,
+            ) ||
+            cached == null) {
+          return;
+        }
         final rawTickets = (cached['tickets'] as List?) ?? const [];
         final tickets =
             rawTickets
@@ -980,7 +1229,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         // Ignore invalid cache entries.
       }
     } finally {
-      _restoringEditorDraft = false;
+      if (mounted && _lifecycleGeneration == requestGeneration) {
+        _restoringEditorDraft = false;
+      }
     }
   }
 
@@ -988,6 +1239,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     bool forceRemote = false,
     bool silent = false,
   }) async {
+    final requestCompanyId = _activeCompanyId();
+    if (requestCompanyId.isEmpty) return;
+    final requestGeneration = _lifecycleGeneration;
     if (silent && forceRemote && _remoteRefreshInFlight) return;
     if (silent &&
         forceRemote &&
@@ -1001,15 +1255,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _remoteRefreshInFlight = true;
     }
 
-    final requestCompanyId =
-        ref.read(authStateProvider).user?.companyId?.trim() ?? '';
-    if (requestCompanyId.isEmpty) return;
-
     if (_productos.isEmpty) {
       final cached = await ref
           .read(catalogRepositoryProvider)
           .getCachedProducts();
-      if (cached.isNotEmpty && mounted) {
+      if (cached.isNotEmpty &&
+          _isCurrentTenantGeneration(
+            companyId: requestCompanyId,
+            generation: requestGeneration,
+          )) {
         final catalogVersion = buildCatalogSyncVersion(cached);
         final syncedRows = applyCatalogSyncVersion(cached, catalogVersion);
         setState(() {
@@ -1036,19 +1290,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final rows = await ref
           .read(catalogRepositoryProvider)
           .fetchProducts(forceRefresh: forceRemote, silent: true);
-      // Si el widget se desmontó durante la descarga, ignoramos el resultado:
-      // usar `ref` ahora (con context.mounted=false) lanzaría
-      // StateError "Cannot use ref after the widget was disposed".
-      if (!mounted) return;
-      if (ref.read(authStateProvider).user?.companyId?.trim() !=
-          requestCompanyId) {
+      if (!_isCurrentTenantGeneration(
+        companyId: requestCompanyId,
+        generation: requestGeneration,
+      )) {
         return;
       }
       final catalogVersion = buildCatalogSyncVersion(rows);
       final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
       final syncedAt = DateTime.now();
 
-      if (!mounted) return;
       final productsById = {
         for (final product in syncedRows) product.id: product,
       };
@@ -1089,7 +1340,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
       _lastSuccessfulRemoteSyncAt = syncedAt;
     } catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentTenantGeneration(
+        companyId: requestCompanyId,
+        generation: requestGeneration,
+      )) {
+        return;
+      }
       if (silent) return;
       setState(() {
         _loadingProducts = false;
@@ -1994,19 +2250,40 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     });
   }
 
-  void _publishDesktopShellFooter() {
+  void _scheduleDesktopShellFooterPublish() {
+    if (_desktopShellFooterPublishScheduled) return;
+    final requestCompanyId = _activeCompanyId();
+    final requestGeneration = _lifecycleGeneration;
+    _desktopShellFooterPublishScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _desktopShellFooterPublishScheduled = false;
+      if (!_isCurrentTenantGeneration(
+        companyId: requestCompanyId,
+        generation: requestGeneration,
+      )) {
+        if (mounted && _activeCompanyId().isNotEmpty) {
+          _scheduleDesktopShellFooterPublish();
+        }
+        return;
+      }
+      final width = MediaQuery.maybeSizeOf(context)?.width;
+      if (width == null || width < _desktopBreakpoint) return;
+      _publishDesktopShellFooter(ownerCompanyId: requestCompanyId);
+    });
+  }
+
+  void _publishDesktopShellFooter({required String ownerCompanyId}) {
+    if (_activeCompanyId() != ownerCompanyId.trim()) return;
     final signature = _desktopFooterSignature();
     if (_lastPublishedDesktopFooterSignature == signature) return;
-    _lastPublishedDesktopFooterSignature = signature;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final route = _safeRouteUri()?.toString();
-      if (route == null) return;
-      ref
-          .read(desktopShellFooterContentProvider.notifier)
-          .state = DesktopShellFooterContent(
+    final route = _safeRouteUri()?.toString();
+    if (route == null) return;
+    setDesktopShellFooterContent(
+      _desktopShellFooterNotifier,
+      DesktopShellFooterContent(
         route: route,
+        ownerId: _desktopShellFooterOwnerId,
+        signature: signature,
         builder: (_) => _DesktopSalesTicketFooter(
           tickets: _desktopTickets,
           activeTicketId: _activeDesktopTicketId,
@@ -2015,8 +2292,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           onRenameTicket: (id) => unawaited(_renameDesktopTicket(id)),
           onDeleteTicket: (id) => unawaited(_deleteDesktopTicket(id)),
         ),
-      );
-    });
+      ),
+    );
+    _lastPublishedDesktopFooterSignature = signature;
   }
 
   Uri? _safeRouteUri() {
@@ -2028,7 +2306,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   String _desktopFooterSignature() {
-    final buffer = StringBuffer(_activeDesktopTicketId ?? '');
+    final buffer = StringBuffer(_activeCompanyId())
+      ..write('|')
+      ..write(_activeDesktopTicketId ?? '');
     for (final ticket in _desktopTickets) {
       final total = ticket.items.fold<double>(
         0,
@@ -2051,14 +2331,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _clearDesktopShellFooter() {
     try {
-      final notifier = ref.read(desktopShellFooterContentProvider.notifier);
-      final current = notifier.state;
-      final currentRoute = current?.route ?? '';
-      if (currentRoute == Routes.cotizaciones ||
-          currentRoute.startsWith('${Routes.cotizaciones}?')) {
-        notifier.state = null;
-        _lastPublishedDesktopFooterSignature = null;
-      }
+      clearDesktopShellFooterContent(
+        notifier: _desktopShellFooterNotifier,
+        ownerId: _desktopShellFooterOwnerId,
+        when: (current) {
+          final currentRoute = current.route;
+          return currentRoute == Routes.cotizaciones ||
+              currentRoute.startsWith('${Routes.cotizaciones}?');
+        },
+      );
+      _lastPublishedDesktopFooterSignature = null;
     } catch (_) {
       // The provider may already be disposed while the app is closing.
     }
@@ -5993,8 +6275,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         );
   }
 
-  PreferredSizeWidget _buildDesktopAppBar(QuotationAiState aiState) {
+  PreferredSizeWidget _buildDesktopAppBar(
+    QuotationAiState aiState,
+    UserModel? user,
+  ) {
     final showAiBanner = _shouldShowAiBanner(aiState);
+    final settings = _companySettingsCache;
     return FullTechPageHeader(
       title: 'Facturación',
       preferDrawerLeading: true,
@@ -6011,7 +6297,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             icon: const Icon(Icons.close_rounded),
           ),
       ],
-      trailing: const _CompanyAccountMenu(),
+      trailing: _CompanyAccountMenu(
+        user: user,
+        companyName: _compactCompanyDisplayName(settings?.companyName ?? ''),
+        logoBase64: settings?.logoBase64?.trim(),
+      ),
     );
   }
 
@@ -7263,25 +7553,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Refresca la caché fiscal en cada build (subscripción a cambios del
-    // provider). Los getters leen el campo, nunca `ref`.
-    _taxConfigCache = ref.watch(productTaxUiConfigProvider).valueOrNull;
-    final inventoryEnabled = ref
-        .watch(companySettingsProvider)
-        .maybeWhen(
-          data: (settings) => settings.inventoryEnabled,
-          orElse: () => false,
-        );
-    final user = ref.watch(authStateProvider).user;
+    final inventoryEnabled = _inventoryEnabledCache;
+    final user = _sessionUser;
     final aiState = ref.watch(quotationAiControllerProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
-    if (isDesktop) {
-      _publishDesktopShellFooter();
-    }
 
     return Scaffold(
       backgroundColor: isDesktop ? null : AppColors.background,
-      appBar: isDesktop ? _buildDesktopAppBar(aiState) : _buildMobileAppBar(),
+      appBar: isDesktop
+          ? _buildDesktopAppBar(aiState, user)
+          : _buildMobileAppBar(),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: SafeArea(
         top: false,
@@ -8399,7 +8680,15 @@ class _MobileActionsButtonState extends State<_MobileActionsButton>
 }
 
 class _CompanyAccountMenu extends ConsumerWidget {
-  const _CompanyAccountMenu();
+  const _CompanyAccountMenu({
+    this.user,
+    required this.companyName,
+    this.logoBase64,
+  });
+
+  final UserModel? user;
+  final String companyName;
+  final String? logoBase64;
 
   void _runAfterMenuCloses(VoidCallback action) {
     Future<void>.delayed(const Duration(milliseconds: 120), action);
@@ -8490,17 +8779,6 @@ class _CompanyAccountMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final company = ref.watch(companySettingsProvider);
-    final user = ref.watch(authStateProvider).user;
-    final companyName = company.maybeWhen(
-      data: (settings) => _compactCompanyDisplayName(settings.companyName),
-      orElse: () => 'Empresa',
-    );
-    final logoBase64 = company.maybeWhen(
-      data: (settings) => settings.logoBase64?.trim(),
-      orElse: () => null,
-    );
-
     return Padding(
       padding: const EdgeInsets.only(right: 10, left: 4),
       child: PopupMenuButton<String>(
@@ -8691,7 +8969,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
 }
 
 @visibleForTesting
-Widget buildCompanyAccountMenuForTesting() => const _CompanyAccountMenu();
+Widget buildCompanyAccountMenuForTesting() =>
+    const _CompanyAccountMenu(companyName: 'Empresa');
 
 String _compactCompanyDisplayName(String value) {
   final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');

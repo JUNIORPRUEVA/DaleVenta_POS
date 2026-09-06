@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-enum AppAccessKind { android, pwa, windows }
+enum AppAccessKind { android, ios, pwa, windows }
 
 class AppAccessChannel {
   const AppAccessChannel({
@@ -29,11 +29,15 @@ class AppAccessLinks {
   static final Uri pwaUri = Uri.parse('https://fullposcloud.fulltechrd.com/');
 
   static final Uri windowsReleaseUri = Uri.parse(
-    'https://fullposcloud.fulltechrd.com/downloads/FullPOS-Cloud-Setup-1.0.2-6.exe',
+    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/download/v1.0.4/FullPOS-Cloud-Setup-1.0.3-7.exe',
   );
 
   static final Uri androidReleaseUri = Uri.parse(
-    'https://fullposcloud.fulltechrd.com/downloads/fullpos-cloud-android-v1.0.2.apk',
+    'https://github.com/JUNIORPRUEVA/fullpos_cluouds/releases/latest/download/app-release.apk',
+  );
+
+  static final Uri iosAppStoreUri = Uri.parse(
+    'https://apps.apple.com/do/app/fullpos-cloud/id6801349002',
   );
 
   static List<AppAccessChannel> visibleChannels() {
@@ -53,7 +57,7 @@ class AppAccessLinks {
       return [_pwaChannel];
     }
 
-    return [_androidChannel, _pwaChannel, _windowsChannel];
+    return [_androidChannel, _iosChannel, _pwaChannel, _windowsChannel];
   }
 
   static final AppAccessChannel _androidChannel = AppAccessChannel(
@@ -63,7 +67,7 @@ class AppAccessLinks {
     status: 'APK para móviles y tablets',
     description:
         'Descarga la app Android para consultar ventas, clientes, inventario y operaciones autorizadas con las mismas credenciales.',
-    actionLabel: 'Descargar APK',
+    actionLabel: 'Descargar para Android',
     actionIcon: Icons.download_rounded,
     uri: androidReleaseUri,
   );
@@ -78,6 +82,18 @@ class AppAccessLinks {
     actionLabel: 'Abrir PWA',
     actionIcon: Icons.open_in_new_rounded,
     uri: pwaUri,
+  );
+
+  static final AppAccessChannel _iosChannel = AppAccessChannel(
+    kind: AppAccessKind.ios,
+    icon: Icons.phone_iphone_rounded,
+    title: 'iPhone',
+    status: 'App Store',
+    description:
+        'Descarga FullPOS Cloud desde la App Store oficial para iPhone.',
+    actionLabel: 'Descargar para iPhone',
+    actionIcon: Icons.open_in_new_rounded,
+    uri: iosAppStoreUri,
   );
 
   static final AppAccessChannel _windowsChannel = AppAccessChannel(

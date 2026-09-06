@@ -154,7 +154,8 @@ class ThermalPrinterService {
         '[PRINT] Windows queue status printer="${printer.name}" '
         'usable=${queueStatus.isUsable} attributes=${queueStatus.attributes} '
         'status=${queueStatus.status} jobs=${queueStatus.jobCount} '
-        'message="${queueStatus.message}"',
+        'state=${queueStatus.state.name} message="${queueStatus.message}" '
+        'technical="${queueStatus.technicalDetails ?? ''}"',
       );
       if (!queueStatus.isUsable) {
         return PrinterStatus(
@@ -239,7 +240,7 @@ class ThermalPrinterService {
         submittedToSpooler: false,
         printerName: status.resolvedPrinterName ?? status.printerName,
         printingMode: settings.windowsPrinterMode,
-        message: 'No se pudo enviar a Windows: $e',
+        message: _friendlyPrintExceptionMessage(e),
       );
     }
   }
@@ -258,5 +259,16 @@ class ThermalPrinterService {
       _thermalPageHeightMm * PdfPageFormat.mm,
       marginAll: 0,
     );
+  }
+
+  String _friendlyPrintExceptionMessage(Object error) {
+    final raw = error.toString();
+    debugPrint('[PRINT] Windows print exception detail: $raw');
+    if (raw.contains('OpenPrinter') ||
+        raw.contains('StartDocPrinter') ||
+        raw.contains('WritePrinter')) {
+      return 'Windows no pudo aceptar el trabajo de impresion. Verifica la impresora y vuelve a intentarlo.';
+    }
+    return 'No se pudo enviar el documento a Windows. Verifica la impresora y vuelve a intentarlo.';
   }
 }

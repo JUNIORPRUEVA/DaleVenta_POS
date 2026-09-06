@@ -114,10 +114,10 @@ void main() {
       platform: TargetPlatform.iOS,
     );
 
-    expect(find.text('Bienvenido a FullPOS Cloud'), findsOneWidget);
-    expect(find.text('Email corporativo'), findsOneWidget);
-    expect(find.text('Contrasena'), findsOneWidget);
-    expect(find.text('Iniciar sesion'), findsOneWidget);
+    expect(find.text('FULLPOS CLOUD'), findsOneWidget);
+    expect(find.text('Usuario'), findsOneWidget);
+    expect(find.text('Contraseña'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('¿Olvidaste tu contraseña?'), findsOneWidget);
     expect(find.text('Crear mi negocio'), findsNothing);
     expect(find.text('Crear empresa'), findsNothing);
@@ -138,7 +138,7 @@ void main() {
   ) async {
     await pumpLogin(tester, registrationDisabled: true);
 
-    expect(find.text('Iniciar sesion'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('Crear mi negocio'), findsNothing);
     expect(find.text('Crear empresa'), findsNothing);
     expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
@@ -158,7 +158,7 @@ void main() {
       platform: TargetPlatform.windows,
     );
 
-    expect(find.text('Iniciar sesion'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('Crear mi negocio'), findsOneWidget);
     expect(find.text('¿No tienes una cuenta?'), findsNothing);
     expect(tester.takeException(), isNull);

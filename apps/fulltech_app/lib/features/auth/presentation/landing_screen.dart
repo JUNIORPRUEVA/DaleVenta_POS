@@ -23,11 +23,9 @@ class LandingScreen extends StatelessWidget {
 
   static final _topKey = GlobalKey();
   static final _featuresKey = GlobalKey();
-  static final _platformsKey = GlobalKey();
   static final _demoKey = GlobalKey();
   static final _pricingKey = GlobalKey();
   static final _processKey = GlobalKey();
-  static final _supportKey = GlobalKey();
   static final _faqKey = GlobalKey();
 
   static Future<void> openGenericWhatsApp(BuildContext context) {
@@ -65,6 +63,14 @@ class LandingScreen extends StatelessWidget {
     );
   }
 
+  static Future<void> openIphoneDownload(BuildContext context) {
+    return safeOpenUrl(
+      context,
+      AppAccessLinks.iosAppStoreUri,
+      copiedMessage: 'No se pudo abrir App Store. Enlace copiado.',
+    );
+  }
+
   static Future<void> openPwa(BuildContext context) {
     return safeOpenUrl(
       context,
@@ -99,6 +105,7 @@ class LandingScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: _soft,
       endDrawer: _LandingDrawer(onNav: (key) => scrollTo(context, key)),
+      floatingActionButton: const _FloatingWhatsAppButton(),
       body: SafeArea(
         child: Theme(
           data: baseTheme.copyWith(
@@ -126,68 +133,48 @@ class LandingScreen extends StatelessWidget {
                       constraints: const BoxConstraints(
                         maxWidth: _maxContentWidth,
                       ),
-                      child: SizedBox(
-                        width: isNarrowPhone ? 370 : null,
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            isNarrowPhone
-                                ? 12
-                                : isMobile
-                                ? 18
-                                : 38,
-                            isMobile ? 20 : 38,
-                            isNarrowPhone
-                                ? 12
-                                : isMobile
-                                ? 18
-                                : 38,
-                            isMobile ? 28 : 40,
-                          ),
-                          child: Column(
-                            key: _topKey,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const _HeroSection(),
-                              const SizedBox(height: 18),
-                              const _TrustStrip(),
-                              const SizedBox(height: 34),
-                              _Anchor(
-                                key: _featuresKey,
-                                child: const _BenefitsSection(),
-                              ),
-                              const SizedBox(height: 34),
-                              _Anchor(
-                                key: _platformsKey,
-                                child: const _PlatformsSection(),
-                              ),
-                              const SizedBox(height: 34),
-                              _Anchor(
-                                key: _demoKey,
-                                child: const _DemoSection(),
-                              ),
-                              const SizedBox(height: 34),
-                              _Anchor(
-                                key: _processKey,
-                                child: const _PurchaseProcessSection(),
-                              ),
-                              const SizedBox(height: 34),
-                              _Anchor(
-                                key: _pricingKey,
-                                child: const _PricingSection(),
-                              ),
-                              const SizedBox(height: 34),
-                              _Anchor(
-                                key: _supportKey,
-                                child: const _SupportSection(),
-                              ),
-                              const SizedBox(height: 34),
-                              _Anchor(key: _faqKey, child: const _FaqSection()),
-                              const SizedBox(height: 34),
-                              const _FinalCtaSection(),
-                              const SizedBox(height: 24),
-                              const _Footer(),
-                            ],
-                          ),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          isNarrowPhone
+                              ? 12
+                              : isMobile
+                              ? 18
+                              : 38,
+                          isMobile ? 20 : 38,
+                          isNarrowPhone
+                              ? 12
+                              : isMobile
+                              ? 18
+                              : 38,
+                          isMobile ? 28 : 40,
+                        ),
+                        child: Column(
+                          key: _topKey,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const _HeroSection(),
+                            const SizedBox(height: 28),
+                            _Anchor(
+                              key: _featuresKey,
+                              child: const _BenefitsSection(),
+                            ),
+                            const SizedBox(height: 34),
+                            _Anchor(key: _demoKey, child: const _DemoSection()),
+                            const SizedBox(height: 34),
+                            _Anchor(
+                              key: _processKey,
+                              child: const _PurchaseProcessSection(),
+                            ),
+                            const SizedBox(height: 34),
+                            _Anchor(
+                              key: _pricingKey,
+                              child: const _PricingSection(),
+                            ),
+                            const SizedBox(height: 34),
+                            _Anchor(key: _faqKey, child: const _FaqSection()),
+                            const SizedBox(height: 24),
+                            const _Footer(),
+                          ],
                         ),
                       ),
                     ),
@@ -273,11 +260,7 @@ class _TopBar extends StatelessWidget {
                     onTap: () => onNav(LandingScreen._featuresKey),
                   ),
                   _NavButton(
-                    'Plataformas',
-                    onTap: () => onNav(LandingScreen._platformsKey),
-                  ),
-                  _NavButton(
-                    'Demo',
+                    'Empieza',
                     onTap: () => onNav(LandingScreen._demoKey),
                   ),
                   _NavButton(
@@ -287,10 +270,6 @@ class _TopBar extends StatelessWidget {
                   _NavButton(
                     'Cómo funciona',
                     onTap: () => onNav(LandingScreen._processKey),
-                  ),
-                  _NavButton(
-                    'Soporte',
-                    onTap: () => onNav(LandingScreen._supportKey),
                   ),
                   _NavButton('FAQ', onTap: () => onNav(LandingScreen._faqKey)),
                   const SizedBox(width: 8),
@@ -303,13 +282,14 @@ class _TopBar extends StatelessWidget {
                     child: const Text('Iniciar sesión'),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () => onNav(LandingScreen._pricingKey),
+                  FilledButton.icon(
+                    onPressed: () => context.go(Routes.register),
+                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 42),
                       padding: const EdgeInsets.symmetric(horizontal: 18),
                     ),
-                    child: const Text('Ver planes'),
+                    label: const Text('Crear cuenta gratis'),
                   ),
                 ],
               ],
@@ -419,10 +399,7 @@ class _LandingDrawer extends StatelessWidget {
             _DrawerAction('Funciones', Icons.grid_view_rounded, () {
               go(LandingScreen._featuresKey);
             }),
-            _DrawerAction('Plataformas', Icons.devices_rounded, () {
-              go(LandingScreen._platformsKey);
-            }),
-            _DrawerAction('Demo', Icons.rocket_launch_rounded, () {
+            _DrawerAction('Empieza tu prueba', Icons.rocket_launch_rounded, () {
               go(LandingScreen._demoKey);
             }),
             _DrawerAction('Planes', Icons.payments_rounded, () {
@@ -430,9 +407,6 @@ class _LandingDrawer extends StatelessWidget {
             }),
             _DrawerAction('Cómo funciona', Icons.route_rounded, () {
               go(LandingScreen._processKey);
-            }),
-            _DrawerAction('Soporte', Icons.support_agent_rounded, () {
-              go(LandingScreen._supportKey);
             }),
             _DrawerAction('FAQ', Icons.help_outline_rounded, () {
               go(LandingScreen._faqKey);
@@ -442,14 +416,10 @@ class _LandingDrawer extends StatelessWidget {
               Navigator.of(context).maybePop();
               context.go(Routes.login);
             }),
-            _DrawerAction(
-              'Probar gratis 5 días',
-              Icons.rocket_launch_rounded,
-              () {
-                go(LandingScreen._demoKey);
-              },
-              emphasized: true,
-            ),
+            _DrawerAction('Crear cuenta', Icons.person_add_alt_1_rounded, () {
+              Navigator.of(context).maybePop();
+              context.go(Routes.register);
+            }, emphasized: true),
           ],
         ),
       ),
@@ -497,15 +467,20 @@ class _HeroSection extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 820;
-        final titleSize = compact ? 34.0 : 52.0;
+        final veryCompact = constraints.maxWidth < 380;
+        final titleSize = veryCompact
+            ? 29.0
+            : compact
+            ? 32.0
+            : 52.0;
         final text = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Align(
               alignment: Alignment.centerLeft,
               child: _Badge(
-                icon: Icons.point_of_sale_rounded,
-                label: 'Sistema POS multiplataforma para negocios',
+                icon: Icons.rocket_launch_rounded,
+                label: 'Prueba gratis por 7 días',
               ),
             ),
             const SizedBox(height: 16),
@@ -518,26 +493,25 @@ class _HeroSection extends StatelessWidget {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: compact ? 12 : 16),
             const Text(
-              'FullPOS Cloud reúne ventas, inventario, caja, clientes y reportes en una sola plataforma para Windows, Android, iPhone y Web.',
+              'Crea tu cuenta una vez y usa FullPOS en Windows, Android, iPhone o Web.',
               style: TextStyle(
                 color: Color(0xFF31465C),
-                fontSize: 16.5,
-                height: 1.5,
+                fontSize: 16,
+                height: 1.42,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 22),
+            SizedBox(height: compact ? 18 : 22),
             if (compact)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   FilledButton.icon(
-                    onPressed: () =>
-                        LandingScreen.scrollTo(context, LandingScreen._demoKey),
-                    icon: const Icon(Icons.rocket_launch_rounded, size: 19),
-                    label: const Text('Probar gratis 5 días'),
+                    onPressed: () => context.go(Routes.register),
+                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
+                    label: const Text('Crear cuenta y probar gratis'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -545,12 +519,9 @@ class _HeroSection extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
-                    onPressed: () => LandingScreen.scrollTo(
-                      context,
-                      LandingScreen._pricingKey,
-                    ),
-                    icon: const Icon(Icons.payments_rounded, size: 19),
-                    label: const Text('Ver planes'),
+                    onPressed: () => context.go(Routes.login),
+                    icon: const Icon(Icons.login_rounded, size: 19),
+                    label: const Text('Ya tengo cuenta'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -564,22 +535,18 @@ class _HeroSection extends StatelessWidget {
                 runSpacing: 12,
                 children: [
                   FilledButton.icon(
-                    onPressed: () =>
-                        LandingScreen.scrollTo(context, LandingScreen._demoKey),
-                    icon: const Icon(Icons.rocket_launch_rounded, size: 19),
-                    label: const Text('Probar gratis 5 días'),
+                    onPressed: () => context.go(Routes.register),
+                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
+                    label: const Text('Crear cuenta y probar gratis'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                     ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => LandingScreen.scrollTo(
-                      context,
-                      LandingScreen._pricingKey,
-                    ),
-                    icon: const Icon(Icons.payments_rounded, size: 19),
-                    label: const Text('Ver planes'),
+                    onPressed: () => context.go(Routes.login),
+                    icon: const Icon(Icons.login_rounded, size: 19),
+                    label: const Text('Ya tengo cuenta'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -587,7 +554,7 @@ class _HeroSection extends StatelessWidget {
                   ),
                 ],
               ),
-            const SizedBox(height: 18),
+            SizedBox(height: compact ? 14 : 18),
             const _TrustPoints(),
           ],
         );
@@ -597,7 +564,7 @@ class _HeroSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               text,
-              const SizedBox(height: 22),
+              const SizedBox(height: 16),
               const _ProductImageCard(
                 image: 'assets/image/fullpos-windows-ios-android.webp',
                 label: 'FullPOS Cloud en escritorio y móvil',
@@ -637,9 +604,9 @@ class _TrustPoints extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      'Prueba gratis durante 5 días',
-      'Disponible en Windows, Android, iPhone y Web',
-      'Soporte remoto por WhatsApp',
+      'Windows, Android, iPhone y Web',
+      'Prueba gratis por 7 días',
+      'Soporte vía WhatsApp',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -649,47 +616,6 @@ class _TrustPoints extends StatelessWidget {
           if (item != items.last) const SizedBox(height: 8),
         ],
       ],
-    );
-  }
-}
-
-class _TrustStrip extends StatelessWidget {
-  const _TrustStrip();
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      (Icons.desktop_windows_rounded, 'Windows'),
-      (Icons.android_rounded, 'Android'),
-      (Icons.phone_iphone_rounded, 'iPhone'),
-      (Icons.language_rounded, 'Web/PWA'),
-      (Icons.rocket_launch_rounded, 'Prueba autogestionada'),
-      (Icons.chat_rounded, 'Soporte por WhatsApp'),
-      (Icons.location_on_rounded, 'República Dominicana'),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F0B2744),
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (final item in items) _MiniPill(icon: item.$1, label: item.$2),
-        ],
-      ),
     );
   }
 }
@@ -752,64 +678,6 @@ class _BenefitsSection extends StatelessWidget {
   }
 }
 
-class _PlatformsSection extends StatelessWidget {
-  const _PlatformsSection();
-
-  @override
-  Widget build(BuildContext context) {
-    const platforms = [
-      _PlatformInfo(
-        Icons.desktop_windows_rounded,
-        'Windows',
-        'Para caja, mostrador, facturación e impresión térmica.',
-      ),
-      _PlatformInfo(
-        Icons.android_rounded,
-        'Android',
-        'Para teléfonos y tablets del equipo autorizado.',
-      ),
-      _PlatformInfo(
-        Icons.phone_iphone_rounded,
-        'iPhone',
-        'Acceso desde Safari como PWA para trabajar con tu cuenta.',
-      ),
-      _PlatformInfo(
-        Icons.language_rounded,
-        'Web/PWA',
-        'Uso desde navegador compatible y opción de instalación web.',
-      ),
-    ];
-
-    return _SectionShell(
-      eyebrow: 'Multiplataforma',
-      title: 'FullPOS donde lo necesites',
-      copy:
-          'Trabaja desde Windows, Android, iPhone y Web/PWA con la misma operación conectada.',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 820;
-          final labels = GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: platforms.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: constraints.maxWidth > 560 ? 2 : 1,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              mainAxisExtent: 142,
-            ),
-            itemBuilder: (context, index) => _PlatformCard(platforms[index]),
-          );
-          if (compact) {
-            return labels;
-          }
-          return labels;
-        },
-      ),
-    );
-  }
-}
-
 class _DemoSection extends StatelessWidget {
   const _DemoSection();
 
@@ -817,21 +685,12 @@ class _DemoSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionShell(
       eyebrow: 'Prueba gratis',
-      title: 'Prueba FullPOS Cloud gratis por 5 días',
+      title: 'Usa FullPOS donde quieras',
       copy:
-          'Descarga, instala y configura FullPOS Cloud por tu cuenta y conoce el sistema durante 5 días antes de adquirir una licencia.',
+          'Después de crear tu cuenta, inicia sesión con los mismos datos en tus dispositivos.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SelfServiceNote(),
-          const SizedBox(height: 14),
-          const _ProductImageCard(
-            image: 'assets/image/fullpos-ios-android.webp',
-            label: 'FullPOS Cloud en iPhone y Android',
-            aspectRatio: 1.5,
-            contain: true,
-          ),
-          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final columns = constraints.maxWidth > 900
@@ -839,82 +698,75 @@ class _DemoSection extends StatelessWidget {
                   : constraints.maxWidth > 560
                   ? 2
                   : 1;
+              final cards = [
+                _DownloadOptionCard(
+                  icon: Icons.desktop_windows_rounded,
+                  title: 'Windows',
+                  description:
+                      'También puedes crear tu cuenta desde FullPOS para Windows.',
+                  actionLabel: 'Descargar para Windows',
+                  onPressed: () => LandingScreen.openWindowsDownload(context),
+                ),
+                _DownloadOptionCard(
+                  icon: Icons.android_rounded,
+                  title: 'Android',
+                  description:
+                      'Crea primero tu cuenta desde la Web o Windows y luego inicia sesión.',
+                  actionLabel: 'Descargar para Android',
+                  onPressed: () => LandingScreen.openAndroidDownload(context),
+                ),
+                _DownloadOptionCard(
+                  icon: Icons.phone_iphone_rounded,
+                  title: 'iPhone',
+                  description:
+                      'Crea primero tu cuenta desde la Web o Windows y luego inicia sesión.',
+                  actionLabel: 'Descargar para iPhone',
+                  onPressed: () => LandingScreen.openIphoneDownload(context),
+                ),
+                _DownloadOptionCard(
+                  icon: Icons.language_rounded,
+                  title: 'Web / PWA',
+                  description:
+                      'Crea tu cuenta o usa FullPOS en el navegador como PWA.',
+                  actionLabel: 'Crear cuenta',
+                  onPressed: () => context.go(Routes.register),
+                  secondaryActionLabel: 'Usar FullPOS en la Web',
+                  onSecondaryPressed: () => LandingScreen.installPwa(context),
+                  actionIcon: Icons.person_add_alt_1_rounded,
+                ),
+              ];
               return GridView.builder(
-                itemCount: 4,
+                itemCount: cards.length,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  mainAxisExtent: columns == 1 ? 220 : 238,
+                  mainAxisExtent: columns == 1 ? 220 : 210,
                 ),
-                itemBuilder: (context, index) {
-                  final cards = [
-                    _DownloadOptionCard(
-                      icon: Icons.desktop_windows_rounded,
-                      title: 'Windows',
-                      copy: 'Descarga el instalador oficial para escritorio.',
-                      actionLabel: 'Descargar para Windows',
-                      onPressed: () =>
-                          LandingScreen.openWindowsDownload(context),
-                    ),
-                    _DownloadOptionCard(
-                      icon: Icons.android_rounded,
-                      title: 'Android',
-                      copy: 'Descarga el APK oficial para móviles y tablets.',
-                      actionLabel: 'Descargar para Android',
-                      onPressed: () =>
-                          LandingScreen.openAndroidDownload(context),
-                    ),
-                    _DownloadOptionCard(
-                      icon: Icons.phone_iphone_rounded,
-                      title: 'iPhone',
-                      copy:
-                          'Accede desde Safari y usa la opción Web/PWA disponible.',
-                      actionLabel: 'Usar Web/PWA',
-                      onPressed: () => LandingScreen.openPwa(context),
-                    ),
-                    _DownloadOptionCard(
-                      icon: Icons.language_rounded,
-                      title: 'Web / PWA',
-                      copy:
-                          'Abre la app web o instala la PWA desde el navegador.',
-                      actionLabel: 'Instalar PWA',
-                      onPressed: () => LandingScreen.installPwa(context),
-                    ),
-                  ];
-                  return cards[index];
-                },
+                itemBuilder: (context, index) => cards[index],
               );
             },
           ),
+          const SizedBox(height: 16),
+          const _ProductImageCard(
+            image: 'assets/image/fullpos-ios-android.webp',
+            label: 'FullPOS Cloud en iPhone y Android',
+            aspectRatio: 1.9,
+            contain: true,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '¿Vas a usar FullPOS en Android o iPhone? Crea primero tu cuenta desde la Web o Windows y luego inicia sesión en la app con los mismos datos.',
+            style: TextStyle(
+              color: Color(0xFF43566D),
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class _SelfServiceNote extends StatelessWidget {
-  const _SelfServiceNote();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFD),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
-      ),
-      child: const Text(
-        'FullPOS Cloud es autogestionado: tú realizas la instalación y configuración desde tu dispositivo. Puedes comenzar cuando quieras siguiendo el flujo de instalación de la plataforma que elijas.',
-        style: TextStyle(
-          color: Color(0xFF31465C),
-          fontSize: 13.5,
-          height: 1.45,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }
@@ -924,21 +776,27 @@ class _DownloadOptionCard extends StatelessWidget {
   const _DownloadOptionCard({
     required this.icon,
     required this.title,
-    required this.copy,
+    required this.description,
     required this.actionLabel,
     required this.onPressed,
+    this.secondaryActionLabel,
+    this.onSecondaryPressed,
+    this.actionIcon = Icons.open_in_new_rounded,
   });
 
   final IconData icon;
   final String title;
-  final String copy;
+  final String description;
   final String actionLabel;
   final VoidCallback onPressed;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryPressed;
+  final IconData actionIcon;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -971,24 +829,23 @@ class _DownloadOptionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Expanded(
             child: Text(
-              copy,
+              description,
               style: const TextStyle(
                 color: Color(0xFF60748C),
-                fontSize: 12.5,
-                height: 1.35,
-                fontWeight: FontWeight.w600,
+                fontSize: 11.5,
+                height: 1.25,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: onPressed,
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              icon: Icon(actionIcon, size: 18),
               label: Text(actionLabel),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 42),
@@ -996,6 +853,21 @@ class _DownloadOptionCard extends StatelessWidget {
               ),
             ),
           ),
+          if (secondaryActionLabel != null && onSecondaryPressed != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: onSecondaryPressed,
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: Text(secondaryActionLabel!),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 38),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1009,49 +881,42 @@ class _PurchaseProcessSection extends StatelessWidget {
   Widget build(BuildContext context) {
     const steps = [
       _StepInfo(
-        'Elige tu plan',
-        'Selecciona el plan que mejor se adapte a tu negocio.',
+        'Crea tu cuenta',
+        'Regístrate gratis desde la Web o FullPOS para Windows.',
       ),
       _StepInfo(
-        'Escríbenos por WhatsApp',
-        'Confirmamos contigo el plan, período y datos necesarios.',
+        'Prueba FullPOS por 7 días',
+        'Inicia sesión con la misma cuenta en Windows, Android, iPhone o Web y conoce FullPOS durante tu prueba.',
       ),
       _StepInfo(
-        'Realiza la transferencia',
-        'Actualmente aceptamos pagos únicamente mediante transferencia bancaria.',
-      ),
-      _StepInfo(
-        'Validamos tu pago',
-        'Confirmamos la recepción del pago antes de activar la licencia.',
-      ),
-      _StepInfo(
-        'Activamos tu licencia',
-        'Tu licencia queda habilitada según el plan adquirido.',
-      ),
-      _StepInfo(
-        'Descarga o accede a FullPOS',
-        'Utiliza Windows, Android, iPhone o Web/PWA según corresponda.',
-      ),
-      _StepInfo(
-        'Instala y configura',
-        'La instalación y configuración son realizadas por el usuario.',
-      ),
-      _StepInfo(
-        'Renueva al finalizar',
-        'Al finalizar el período adquirido, renuevas tu licencia para continuar.',
+        'Activa tu licencia',
+        'Cuando quieras continuar, escríbenos por WhatsApp y activamos tu licencia después de confirmar el pago.',
       ),
     ];
 
     return _SectionShell(
-      eyebrow: 'Compra clara',
-      title: 'Cómo adquirir FullPOS Cloud',
+      eyebrow: 'Cómo funciona',
+      title: 'Crea tu cuenta, prueba y activa sin complicarte',
       copy:
-          'El proceso está pensado para que sepas qué pagas, cuándo se activa tu licencia y cómo comienzas de forma autogestionada.',
+          'Crea tu cuenta una sola vez y usa los mismos datos para iniciar sesión en tus dispositivos.',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
+          final whatsappButton = FilledButton.icon(
+            onPressed: () => LandingScreen._openWhatsApp(
+              context,
+              'Hola, quiero activar mi licencia de FullPOS Cloud.',
+            ),
+            icon: const Icon(Icons.chat_rounded, size: 18),
+            label: const Text('Activar por WhatsApp'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 46),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+            ),
+          );
           if (compact) {
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var index = 0; index < steps.length; index++)
                   _TimelineStep(
@@ -1060,23 +925,32 @@ class _PurchaseProcessSection extends StatelessWidget {
                     isLast: index == steps.length - 1,
                     compact: true,
                   ),
+                const SizedBox(height: 12),
+                Align(alignment: Alignment.centerLeft, child: whatsappButton),
               ],
             );
           }
-          return Wrap(
-            spacing: 0,
-            runSpacing: 14,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (var index = 0; index < steps.length; index++)
-                SizedBox(
-                  width: constraints.maxWidth / 4,
-                  child: _TimelineStep(
-                    number: index + 1,
-                    step: steps[index],
-                    isLast: index % 4 == 3 || index == steps.length - 1,
-                    compact: false,
-                  ),
-                ),
+              Wrap(
+                spacing: 0,
+                runSpacing: 14,
+                children: [
+                  for (var index = 0; index < steps.length; index++)
+                    SizedBox(
+                      width: constraints.maxWidth / 3,
+                      child: _TimelineStep(
+                        number: index + 1,
+                        step: steps[index],
+                        isLast: index == steps.length - 1,
+                        compact: false,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              whatsappButton,
             ],
           );
         },
@@ -1098,8 +972,6 @@ class _PricingSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _PricingSelfServiceNote(),
-          const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 860;
@@ -1128,112 +1000,34 @@ class _PricingSection extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 18),
-          const _CommonBenefits(),
+          const SizedBox(height: 14),
+          const _PricingTerms(),
         ],
       ),
     );
   }
 }
 
-class _PricingSelfServiceNote extends StatelessWidget {
-  const _PricingSelfServiceNote();
-
-  @override
-  Widget build(BuildContext context) {
-    return const _DisclosureText(
-      'Después de confirmar el pago, activamos tu licencia para que puedas comenzar a utilizar FullPOS Cloud. La instalación y configuración del sistema son autogestionadas por el usuario.',
-    );
-  }
-}
-
-class _SupportSection extends StatelessWidget {
-  const _SupportSection();
+class _PricingTerms extends StatelessWidget {
+  const _PricingTerms();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B1728),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF1F3452)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x240B1728),
-            blurRadius: 28,
-            offset: Offset(0, 16),
-          ),
-        ],
+        border: Border.all(color: _line),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 900;
-          final text = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              _Badge(
-                icon: Icons.support_agent_rounded,
-                label: 'Soporte remoto',
-                dark: true,
-              ),
-              SizedBox(height: 14),
-              Text(
-                'Soporte cuando lo necesites',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  height: 1.12,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Si tienes dudas o necesitas reportar una incidencia relacionada con FullPOS Cloud, puedes contactarnos mediante nuestro canal de soporte.',
-                style: TextStyle(
-                  color: Color(0xFFD7E3EF),
-                  fontSize: 15,
-                  height: 1.45,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Soporte remoto vía WhatsApp.',
-                style: TextStyle(
-                  color: Color(0xFFD7E3EF),
-                  fontSize: 15,
-                  height: 1.45,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          );
-          final action = FilledButton.icon(
-            onPressed: () => LandingScreen.openGenericWhatsApp(context),
-            icon: const Icon(Icons.chat_rounded, size: 18),
-            label: const Text('Hablar por WhatsApp'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _accent,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 48),
-            ),
-          );
-
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [text, const SizedBox(height: 18), action],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: text),
-              const SizedBox(width: 24),
-              action,
-            ],
-          );
-        },
+      child: const Text(
+        'Todos los planes incluyen ventas, inventario, caja, clientes, cotizaciones, reportes y soporte vía WhatsApp. La contratación mínima es de 3 meses y el pago es anticipado por transferencia bancaria.',
+        style: TextStyle(
+          color: Color(0xFF31465C),
+          fontSize: 13,
+          height: 1.4,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -1246,150 +1040,47 @@ class _FaqSection extends StatelessWidget {
   Widget build(BuildContext context) {
     const faqs = [
       (
-        '¿Qué es FullPOS Cloud?',
-        'FullPOS Cloud es un sistema POS en la nube para administrar ventas, inventario, caja, clientes, cotizaciones, créditos, compras y reportes desde una misma plataforma.',
+        '¿Cómo empiezo mi prueba gratis?',
+        'Crea tu cuenta de FullPOS Cloud y comienza tu prueba gratis por 7 días sin contactar a soporte primero.',
       ),
       (
-        '¿En qué dispositivos puedo usar FullPOS Cloud?',
-        'Puedes usar FullPOS Cloud en Windows, Android, iPhone y Web/PWA, de acuerdo con la plataforma y el acceso configurado para tu negocio.',
+        '¿Dónde creo mi cuenta?',
+        'Puedes crear tu cuenta desde la Web o desde FullPOS para Windows.',
       ),
       (
-        '¿Cuál es el período mínimo de licencia?',
-        'La contratación mínima es de 3 meses.',
+        '¿Cuánto dura la prueba?',
+        'FullPOS Cloud incluye una prueba gratis de 7 días.',
       ),
       (
-        '¿Puedo pagar solamente un mes?',
-        'No. Las licencias se adquieren por períodos mínimos de 3 meses.',
+        '¿Puedo usar la misma cuenta en varios dispositivos?',
+        'Sí. Crea tu cuenta una sola vez y usa los mismos datos para iniciar sesión en tus dispositivos.',
+      ),
+      (
+        '¿Cómo uso FullPOS en Android o iPhone?',
+        'Si vas a usar FullPOS en Android o iPhone, crea primero tu cuenta desde la Web o Windows y luego inicia sesión en la app con los mismos datos.',
+      ),
+      (
+        '¿Cómo activo mi licencia después de la prueba?',
+        'Durante la prueba o al finalizarla puedes escribirnos por WhatsApp para elegir tu plan y activar tu licencia después de confirmar el pago.',
       ),
       (
         '¿Cómo puedo pagar?',
-        'Actualmente aceptamos únicamente transferencia bancaria.',
+        'Actualmente aceptamos transferencia bancaria. La contratación mínima es de 3 meses.',
       ),
       (
-        '¿Puedo probar FullPOS antes de comprar?',
-        'Sí. Puedes probar FullPOS Cloud gratis durante 5 días.',
-      ),
-      (
-        '¿Quién realiza la instalación y configuración?',
-        'La instalación y configuración de FullPOS Cloud son autogestionadas por el usuario. Puedes descargar o acceder al sistema desde las plataformas disponibles.',
-      ),
-      (
-        '¿La prueba de 5 días requiere instalación?',
-        'Depende de la plataforma que elijas. En Windows o Android utilizas la opción de descarga correspondiente; en iPhone y Web/PWA puedes acceder o instalar la aplicación web. El proceso es realizado por el usuario.',
-      ),
-      (
-        '¿Cómo funciona el soporte?',
-        'El soporte se ofrece de forma remota vía WhatsApp.',
-      ),
-      (
-        '¿Qué sucede cuando vence mi licencia?',
-        'Al finalizar el período adquirido, debes renovar tu licencia para continuar utilizando el servicio correspondiente.',
+        '¿Cómo solicito asistencia?',
+        'Si tienes dudas durante la prueba o necesitas activar tu licencia, escríbenos por WhatsApp.',
       ),
     ];
 
     return _SectionShell(
       eyebrow: 'Preguntas frecuentes',
-      title: 'Respuestas claras antes de adquirir FullPOS Cloud',
-      copy:
-          'Estas son las dudas principales sobre contratación, pago, prueba gratis, autogestión y soporte.',
+      title: 'Respuestas rápidas para empezar',
+      copy: 'Lo esencial sobre descarga, prueba, pago, activación y soporte.',
       child: Column(
         children: [
           for (final faq in faqs) _FaqTile(question: faq.$1, answer: faq.$2),
         ],
-      ),
-    );
-  }
-}
-
-class _FinalCtaSection extends StatelessWidget {
-  const _FinalCtaSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4FAFF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFCBE3FF)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x121957E6),
-            blurRadius: 24,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 900;
-          final text = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text(
-                'Empieza con FullPOS Cloud',
-                style: TextStyle(
-                  color: _ink,
-                  fontSize: 28,
-                  height: 1.12,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Prueba el sistema gratis durante 5 días o elige uno de nuestros planes para tu negocio.',
-                style: TextStyle(
-                  color: Color(0xFF43566D),
-                  fontSize: 15,
-                  height: 1.45,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          );
-          final actions = Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            alignment: compact ? WrapAlignment.start : WrapAlignment.end,
-            children: [
-              FilledButton.icon(
-                onPressed: () =>
-                    LandingScreen.scrollTo(context, LandingScreen._demoKey),
-                icon: const Icon(Icons.rocket_launch_rounded, size: 18),
-                label: const Text('Probar gratis 5 días'),
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-              ),
-              OutlinedButton.icon(
-                onPressed: () =>
-                    LandingScreen.scrollTo(context, LandingScreen._pricingKey),
-                icon: const Icon(Icons.payments_rounded, size: 18),
-                label: const Text('Ver planes'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => LandingScreen.openGenericWhatsApp(context),
-                icon: const Icon(Icons.chat_rounded, size: 18),
-                label: const Text('Hablar por WhatsApp'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-              ),
-            ],
-          );
-
-          if (compact) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [text, const SizedBox(height: 18), actions],
-            );
-          }
-
-          return Row(
-            children: [
-              Expanded(child: text),
-              const SizedBox(width: 24),
-              actions,
-            ],
-          );
-        },
       ),
     );
   }
@@ -1425,11 +1116,9 @@ class _Footer extends StatelessWidget {
                     LandingScreen.scrollTo(context, LandingScreen._featuresKey),
               ),
               _FooterLink(
-                'Plataformas',
-                onTap: () => LandingScreen.scrollTo(
-                  context,
-                  LandingScreen._platformsKey,
-                ),
+                'Empieza',
+                onTap: () =>
+                    LandingScreen.scrollTo(context, LandingScreen._demoKey),
               ),
               _FooterLink(
                 'Planes',
@@ -1497,6 +1186,28 @@ class _Footer extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _FloatingWhatsAppButton extends StatelessWidget {
+  const _FloatingWhatsAppButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: FloatingActionButton.small(
+        heroTag: 'landing-whatsapp',
+        tooltip: 'Escríbenos por WhatsApp',
+        backgroundColor: _accent,
+        foregroundColor: Colors.white,
+        onPressed: () => LandingScreen._openWhatsApp(
+          context,
+          'Hola, necesito asistencia con FullPOS Cloud.',
+        ),
+        child: const Icon(Icons.chat_rounded),
       ),
     );
   }
@@ -1682,81 +1393,34 @@ class _ProductImageCard extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({required this.icon, required this.label, this.dark = false});
+  const _Badge({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
-  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: dark
-            ? Colors.white.withValues(alpha: 0.1)
-            : const Color(0xFFEAF4FF),
+        color: const Color(0xFFEAF4FF),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: dark
-              ? Colors.white.withValues(alpha: 0.16)
-              : const Color(0xFFCBE3FF),
-        ),
+        border: Border.all(color: const Color(0xFFCBE3FF)),
       ),
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: 7,
         runSpacing: 4,
         children: [
-          Icon(icon, color: dark ? Colors.white : _primary, size: 16),
+          Icon(icon, color: _primary, size: 16),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
             child: Text(
               label,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: dark ? Colors.white : _primaryDark,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniPill extends StatelessWidget {
-  const _MiniPill({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6FAFC),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _line),
-      ),
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 7,
-        runSpacing: 4,
-        children: [
-          Icon(icon, color: _primary, size: 17),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 210),
-            child: Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Color(0xFF20344C),
+                color: _primaryDark,
                 fontSize: 12,
                 fontWeight: FontWeight.w900,
               ),
@@ -1830,31 +1494,6 @@ class _BenefitCard extends StatelessWidget {
       copy: info.copy,
       accent: _primary,
       background: const Color(0xFFEAF2FF),
-    );
-  }
-}
-
-class _PlatformInfo {
-  const _PlatformInfo(this.icon, this.title, this.copy);
-
-  final IconData icon;
-  final String title;
-  final String copy;
-}
-
-class _PlatformCard extends StatelessWidget {
-  const _PlatformCard(this.info);
-
-  final _PlatformInfo info;
-
-  @override
-  Widget build(BuildContext context) {
-    return _FeatureCard(
-      icon: info.icon,
-      title: info.title,
-      copy: info.copy,
-      accent: const Color(0xFF0F8C7D),
-      background: const Color(0xFFE8F8F5),
     );
   }
 }
@@ -2051,7 +1690,6 @@ class _TimelineStep extends StatelessWidget {
 class _PlanInfo {
   const _PlanInfo({
     required this.name,
-    required this.description,
     required this.total,
     required this.monthlyEquivalent,
     required this.features,
@@ -2059,7 +1697,6 @@ class _PlanInfo {
   });
 
   final String name;
-  final String description;
   final String total;
   final String monthlyEquivalent;
   final List<String> features;
@@ -2069,16 +1706,12 @@ class _PlanInfo {
 const _plans = [
   _PlanInfo(
     name: 'Básico',
-    description:
-        'Para pequeños negocios que quieren comenzar a organizar sus ventas y operaciones.',
     total: 'RD\$3,000',
     monthlyEquivalent: 'RD\$1,000',
     features: ['100 productos', '2 usuarios', '1 almacén', '1 caja / terminal'],
   ),
   _PlanInfo(
     name: 'Negocio',
-    description:
-        'Para negocios en crecimiento que necesitan más capacidad y control.',
     total: 'RD\$4,500',
     monthlyEquivalent: 'RD\$1,500',
     features: [
@@ -2091,7 +1724,6 @@ const _plans = [
   ),
   _PlanInfo(
     name: 'Pro',
-    description: 'Para negocios con mayor inventario, equipo y operación.',
     total: 'RD\$7,500',
     monthlyEquivalent: 'RD\$2,500',
     features: [
@@ -2167,17 +1799,7 @@ class _PlanCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            plan.description,
-            style: const TextStyle(
-              color: Color(0xFF60748C),
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Text(
             plan.total,
             style: const TextStyle(
@@ -2210,19 +1832,13 @@ class _PlanCard extends StatelessWidget {
             _InlineCheck(text: feature),
             const SizedBox(height: 8),
           ],
-          const SizedBox(height: 8),
-          const _DisclosureText('Contratación mínima de 3 meses.'),
-          const SizedBox(height: 6),
-          const _DisclosureText(
-            'Pago anticipado mediante transferencia bancaria.',
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: () => LandingScreen._openPlanWhatsApp(context, plan),
               icon: const Icon(Icons.chat_rounded, size: 18),
-              label: Text('Elegir ${plan.name} por WhatsApp'),
+              label: Text('Activar ${plan.name}'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(0, 48),
                 backgroundColor: highlighted ? _primary : _primaryDark,
@@ -2230,89 +1846,6 @@ class _PlanCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-        ],
-      ),
-    );
-  }
-}
-
-class _DisclosureText extends StatelessWidget {
-  const _DisclosureText(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFD),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: _ink,
-          fontSize: 12.5,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-class _CommonBenefits extends StatelessWidget {
-  const _CommonBenefits();
-
-  @override
-  Widget build(BuildContext context) {
-    const benefits = [
-      'Ventas / facturación',
-      'Inventario',
-      'Clientes',
-      'Cotizaciones',
-      'Créditos',
-      'Caja y turnos',
-      'Reportes',
-      'Código de barras',
-      'Impresión térmica',
-      'Windows',
-      'Android',
-      'iPhone',
-      'Web/PWA',
-      'Prueba gratis por 5 días',
-      'Autogestión desde tu dispositivo',
-      'Soporte remoto vía WhatsApp',
-    ];
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Beneficios incluidos en los planes',
-            style: TextStyle(
-              color: _ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 9,
-            runSpacing: 9,
-            children: [
-              for (final benefit in benefits)
-                _MiniPill(icon: Icons.check_rounded, label: benefit),
-            ],
-          ),
         ],
       ),
     );

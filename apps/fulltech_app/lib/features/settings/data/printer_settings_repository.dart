@@ -4,11 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/storage/local_database_path.dart';
+import '../../../core/storage/local_migration_backup.dart';
 import 'printer_settings_model.dart';
 
 final printerSettingsRepositoryProvider = Provider<PrinterSettingsRepository>(
-  (_) => PrinterSettingsRepository(),
+  (ref) => PrinterSettingsRepository(
+    companyId: ref.watch(authStateProvider).user?.companyId,
+  ),
 );
 
 final printerSettingsProvider = FutureProvider<PrinterSettingsModel>((ref) {
@@ -19,13 +23,24 @@ class PrinterSettingsRepository {
   static const _legacyKey = 'fulltech_printer_settings_v1';
   static const _dbName = 'fulltech_printing.db';
   static const _table = 'printer_settings';
+  static const _companyTable = 'printer_company_settings';
 
+  PrinterSettingsRepository({String? companyId, String? databaseFileName})
+    : _companyId = companyId?.trim() ?? '',
+      _databaseFileName = databaseFileName ?? _dbName;
+
+  final String _companyId;
+  final String _databaseFileName;
   Database? _db;
 
   Future<Database> _database() async {
     final existing = _db;
     if (existing != null && existing.isOpen) return existing;
-    final path = await resolveLocalDatabasePath(_dbName);
+    await backupLocalDatabaseBeforeMigration(
+      fileName: _databaseFileName,
+      label: 'fulltech_printing',
+    );
+    final path = await resolveLocalDatabasePath(_databaseFileName);
     final db = await openDatabase(path, version: 1);
     _db = db;
     await _ensureSchema(db);
@@ -92,6 +107,32 @@ class PrinterSettingsRepository {
       if (names.contains(column.key)) continue;
       await db.execute('ALTER TABLE $_table ADD COLUMN ${column.value}');
     }
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_companyTable (
+        company_id TEXT PRIMARY KEY,
+        showItbis INTEGER NOT NULL DEFAULT 1,
+        showElectronicInvoiceReference INTEGER NOT NULL DEFAULT 1,
+        showCashier INTEGER NOT NULL DEFAULT 1,
+        showClient INTEGER NOT NULL DEFAULT 1,
+        showPaymentMethod INTEGER NOT NULL DEFAULT 1,
+        showDiscounts INTEGER NOT NULL DEFAULT 1,
+        showCode INTEGER NOT NULL DEFAULT 1,
+        showDatetime INTEGER NOT NULL DEFAULT 1,
+        headerBusinessName TEXT NOT NULL DEFAULT 'FULLPOS',
+        headerRnc TEXT NOT NULL DEFAULT '',
+        headerAddress TEXT NOT NULL DEFAULT '',
+        headerPhone TEXT NOT NULL DEFAULT '',
+        headerExtra TEXT NOT NULL DEFAULT '',
+        footerMessage TEXT NOT NULL DEFAULT '¡Gracias por su preferencia!',
+        warrantyPolicy TEXT NOT NULL DEFAULT '',
+        itbisRate REAL NOT NULL DEFAULT 0.18,
+        showLogo INTEGER NOT NULL DEFAULT 1,
+        showBusinessData INTEGER NOT NULL DEFAULT 1,
+        showSubtotalItbisTotal INTEGER NOT NULL DEFAULT 1,
+        createdAtMs INTEGER NOT NULL DEFAULT 0,
+        updatedAtMs INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
   }
 
   static const Map<String, String> _columnDefinitions = {
@@ -152,7 +193,7 @@ class PrinterSettingsRepository {
     final db = await _database();
     final rows = await db.query(_table, limit: 1);
     if (rows.isNotEmpty) {
-      return PrinterSettingsModel.fromMap(rows.first);
+      return _mergeDeviceAndCompanyRows(db, rows.first);
     }
 
     final legacy = await _readLegacySettings();
@@ -199,9 +240,15 @@ class PrinterSettingsRepository {
     );
     await db.insert(
       _table,
-      _toDbMap(normalized),
+      _filterMap(_toDbMap(normalized), _deviceGlobalFields),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    if (_companyId.isNotEmpty) {
+      await db.insert(_companyTable, {
+        'company_id': _companyId,
+        ..._filterMap(_toDbMap(normalized), _companySpecificFields),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
   }
 
   Future<PrinterSettingsModel> resetToDefaults() async {
@@ -259,4 +306,101 @@ class PrinterSettingsRepository {
       return MapEntry(key, value);
     });
   }
+
+  Future<PrinterSettingsModel> _mergeDeviceAndCompanyRows(
+    Database db,
+    Map<String, Object?> deviceRow,
+  ) async {
+    final merged = Map<String, Object?>.from(deviceRow);
+    if (_companyId.isNotEmpty) {
+      final companyRows = await db.query(
+        _companyTable,
+        where: 'company_id = ?',
+        whereArgs: [_companyId],
+        limit: 1,
+      );
+      if (companyRows.isNotEmpty) {
+        merged.addAll(companyRows.first);
+      } else {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        merged.addAll(
+          _filterMap(
+            _toDbMap(
+              PrinterSettingsModel(
+                id: (deviceRow['id'] as num?)?.toInt() ?? 1,
+                createdAtMs: now,
+                updatedAtMs: now,
+              ),
+            ),
+            _companySpecificFields,
+          ),
+        );
+      }
+    }
+    return PrinterSettingsModel.fromMap(merged.cast<String, dynamic>());
+  }
+
+  Map<String, Object?> _filterMap(
+    Map<String, Object?> source,
+    Set<String> fields,
+  ) {
+    return {
+      for (final entry in source.entries)
+        if (fields.contains(entry.key)) entry.key: entry.value,
+    };
+  }
+
+  static const Set<String> _deviceGlobalFields = {
+    'id',
+    'selectedPrinterName',
+    'windowsPrinterMode',
+    'paperWidthMm',
+    'charsPerLine',
+    'autoPrintOnPayment',
+    'autoOpenDrawerOnChargeWithoutTicket',
+    'autoOpenCashDrawer',
+    'copies',
+    'leftMargin',
+    'rightMargin',
+    'autoCut',
+    'fontFamily',
+    'fontSize',
+    'logoSize',
+    'autoHeight',
+    'topMargin',
+    'bottomMargin',
+    'fontSizeLevel',
+    'lineSpacingLevel',
+    'sectionSpacingLevel',
+    'sectionSeparatorStyle',
+    'headerAlignment',
+    'detailsAlignment',
+    'totalsAlignment',
+    'createdAtMs',
+    'updatedAtMs',
+  };
+
+  static const Set<String> _companySpecificFields = {
+    'showItbis',
+    'showElectronicInvoiceReference',
+    'showCashier',
+    'showClient',
+    'showPaymentMethod',
+    'showDiscounts',
+    'showCode',
+    'showDatetime',
+    'headerBusinessName',
+    'headerRnc',
+    'headerAddress',
+    'headerPhone',
+    'headerExtra',
+    'footerMessage',
+    'warrantyPolicy',
+    'itbisRate',
+    'showLogo',
+    'showBusinessData',
+    'showSubtotalItbisTotal',
+    'createdAtMs',
+    'updatedAtMs',
+  };
 }
