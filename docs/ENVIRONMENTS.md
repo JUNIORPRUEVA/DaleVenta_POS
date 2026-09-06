@@ -54,6 +54,29 @@ Seed policy:
 
 - `npm run api:seed` is forbidden unless explicitly authorized and target is confirmed non-production.
 
+## Windows Desktop Local Storage
+
+Official installed Release layout:
+
+- Product root: `C:\Program Files\DaleVentas POS`
+- Runtime app files: `C:\Program Files\DaleVentas POS\app`
+- Local databases: `C:\Program Files\DaleVentas POS\databases`
+- Company backups: `C:\Program Files\DaleVentas POS\backups`
+- App-owned media cache: `C:\Program Files\DaleVentas POS\media_cache`
+- Reserved logs/config folders: `C:\Program Files\DaleVentas POS\logs` and `C:\Program Files\DaleVentas POS\config`
+
+The installer must grant standard users modify permissions only on mutable folders
+(`databases`, `backups`, `media_cache`, `logs`, `config`) and preserve those folders on uninstall.
+Legacy local databases are copied into the official `databases` folder when
+the target database file does not already exist. Legacy locations are not deleted
+by migration.
+
+Backup ownership, manifest validation, restore blocking rules, automatic
+retention, manual-backup preservation, and staging cleanup are documented in
+`docs/BACKUP_RESTORE_RETENTION.md`. The production-grade backend authority
+boundary, `.dvbackup` target format, platform responsibilities, and restore gate
+are documented in `docs/BACKUP_ARCHITECTURE.md`.
+
 ## Local UAT
 
 Purpose:

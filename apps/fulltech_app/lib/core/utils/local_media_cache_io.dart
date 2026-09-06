@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/windows_product_paths.dart';
+
 Future<String?> saveLocalMediaCopy({
   required String module,
   required String scopeId,
@@ -27,11 +29,15 @@ Future<String?> saveLocalMediaCopy({
     return normalizedSource.isEmpty ? null : normalizedSource;
   }
 
-  final supportDir = await getApplicationSupportDirectory();
+  final supportDir =
+      WindowsProductPaths.folder(WindowsProductFolder.mediaCache) ??
+      await getApplicationSupportDirectory();
   final targetDir = Directory(
     p.join(
       supportDir.path,
-      'fulltech_media_cache',
+      WindowsProductPaths.isOfficialWindowsStorageEnabled
+          ? ''
+          : 'fulltech_media_cache',
       normalizedModule,
       normalizedScope,
     ),

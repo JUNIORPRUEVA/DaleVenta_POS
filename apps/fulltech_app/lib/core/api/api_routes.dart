@@ -21,6 +21,11 @@ class ApiRoutes {
   static const licenseActivate = '/license/activate';
   static const licenseBlock = '/license/block';
   static const licenseLimits = '/license/limits';
+  static const backups = '/backups';
+  static const backupsValidateUpload = '/backups/validate-upload';
+  static const backupsImport = '/backups/import';
+  static String backupRestore(String id) => '/backups/$id/restore';
+  static String backupDownload(String id) => '/backups/$id/download';
 
   // Usuarios
   static const users = '/users';

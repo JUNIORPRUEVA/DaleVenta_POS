@@ -25,3 +25,5 @@ apps/fulltech_app/build_w14_validation/
 
 # Release artifact outputs (large installers)
 release/
+evidence/
+installer/inno-build-report.txt

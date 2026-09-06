@@ -46,9 +46,17 @@ iOS:
 - Codemagic workflows in `codemagic.yaml`.
 - TestFlight workflow builds IPA and can publish through App Store Connect integration.
 
-Android/Windows:
+Android:
 
-- Flutter platform folders exist. OWNER VALIDATION REQUIRED for the current official production packaging path.
+- Flutter platform folder exists. Package with the approved store or sideload workflow for the target release.
+
+Windows:
+
+- Build from `apps/fulltech_app` with the production API dart-define.
+- Package with `installer/setup.iss` through `installer/find_and_build_inno.ps1`.
+- Official install root is `C:\Program Files\DaleVentas POS`.
+- Runtime files are installed under `app`; mutable local folders are `databases`, `backups`, `media_cache`, `logs`, and `config`.
+- Verify installer ACLs allow a standard Windows user to write `databases`, `backups`, `media_cache`, `logs`, and `config`, while preserving those folders on uninstall.
 
 ## Migration Safeguards
 

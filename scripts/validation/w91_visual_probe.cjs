@@ -1,11 +1,13 @@
+const path = require("node:path");
 const { chromium } = require("playwright-core");
 
+const projectRoot = path.resolve(__dirname, "../..");
 const chromePath = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const appUrl = process.env.W91_APP_URL || "http://127.0.0.1:5000";
 const probeUrl = process.env.W91_PROBE_URL || appUrl;
 const outputDir =
   process.env.W91_OUTPUT_DIR ||
-  "C:/Users/pc/DEV/PROYECTOS/PRODUCTOS/DaleVentas POS/docs/uom-visual-evidence";
+  path.join(projectRoot, "docs", "uom-visual-evidence");
 const email = process.env.W91_EMAIL || "w9.visual@daleventa.local";
 const password = process.env.W91_PASSWORD;
 const suffix = process.env.W91_SUFFIX || "desktop";

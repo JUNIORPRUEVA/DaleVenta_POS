@@ -4,10 +4,13 @@ Esta carpeta empaqueta la aplicacion Windows con Inno Setup desde archivos del r
 
 ## Que toma el instalador
 
-- Nombre del producto: `FullPOS Cloud`
+- Nombre del producto: `DaleVentas POS`
 - Ejecutable: `fullpos_cloud.exe`
 - Icono del setup: `apps/fulltech_app/windows/runner/resources/app_icon.ico`
 - Release Flutter esperado: `apps/fulltech_app/build/windows/x64/runner/Release`
+- Raiz oficial instalada: `C:\Program Files\DaleVentas POS`
+- Runtime Flutter instalado en: `C:\Program Files\DaleVentas POS\app`
+- Datos locales preservados: `databases`, `backups`, `media_cache`, `logs`, `config`
 - Redistributables opcionales: `installer/redist/VC_redist.x64.exe` y `installer/redist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`
 
 `installer/redist/` esta ignorado por git para no versionar binarios de terceros. Si esos instaladores estan presentes se incluyen y se ejecutan de forma silenciosa; si no estan presentes, el instalador se genera sin ellos.
@@ -39,7 +42,7 @@ Tambien puedes llamar directamente a Inno Setup si ya conoces la ruta de `ISCC.e
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\setup.iss /DMyAppVersion=1.0.3+120 /DMyAppVersionInfo=1.0.3.120
 ```
 
-El ejecutable final queda en `installer/output/FullPOS-Cloud-Setup-<version>.exe`.
+El ejecutable final queda en `installer/output/DaleVentas-POS-Setup-<version>.exe`.
 
 Si quieres forzar otra version puntual:
 
