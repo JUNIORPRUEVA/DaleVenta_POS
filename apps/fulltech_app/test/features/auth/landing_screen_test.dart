@@ -87,18 +87,23 @@ void main() {
     expect(find.text('Básico'), findsOneWidget);
     expect(find.text('Negocio'), findsOneWidget);
     expect(find.text('Pro'), findsOneWidget);
-    expect(find.text('RD\$3,000'), findsOneWidget);
-    expect(find.text('RD\$4,500'), findsOneWidget);
-    expect(find.text('RD\$7,500'), findsOneWidget);
+    expect(find.text('RD\$1,000 / mes'), findsOneWidget);
+    expect(find.text('RD\$1,500 / mes'), findsOneWidget);
+    expect(find.text('RD\$2,500 / mes'), findsOneWidget);
+    expect(find.text('Facturación mínima de 3 meses'), findsNWidgets(3));
+    expect(find.text('Total trimestral: RD\$3,000'), findsOneWidget);
+    expect(find.text('Total trimestral: RD\$4,500'), findsOneWidget);
+    expect(find.text('Total trimestral: RD\$7,500'), findsOneWidget);
+    expect(find.text('Todo lo esencial para comenzar'), findsOneWidget);
+    expect(find.text('Más espacio para crecer'), findsOneWidget);
+    expect(find.text('Mayor capacidad para tu operación'), findsOneWidget);
     expect(find.text('MÁS ELEGIDO'), findsOneWidget);
     expect(find.textContaining('pago es anticipado'), findsOneWidget);
     expect(find.text('Crear mi cuenta'), findsNothing);
     expect(find.text('Ahorra RD\$ 2,000 anual'), findsNothing);
     expect(find.text('WhatsApp: 829-531-9442'), findsOneWidget);
     expect(find.byTooltip('Escríbenos por WhatsApp'), findsOneWidget);
-    expect(find.text('Activar Básico'), findsOneWidget);
-    expect(find.text('Activar Negocio'), findsOneWidget);
-    expect(find.text('Activar Pro'), findsOneWidget);
+    expect(find.text('Comenzar prueba'), findsNWidgets(3));
     expect(find.textContaining('Instalación remota incluida'), findsNothing);
     expect(find.textContaining('instalación remota incluida'), findsNothing);
     expect(find.textContaining('configuración remota'), findsNothing);
@@ -203,9 +208,12 @@ void main() {
         isNull,
         reason: 'Landing should not throw layout errors at text scale $scale.',
       );
-      expect(find.text('RD\$3,000'), findsOneWidget);
-      expect(find.text('RD\$4,500'), findsOneWidget);
-      expect(find.text('RD\$7,500'), findsOneWidget);
+      expect(find.text('RD\$1,000 / mes'), findsOneWidget);
+      expect(find.text('RD\$1,500 / mes'), findsOneWidget);
+      expect(find.text('RD\$2,500 / mes'), findsOneWidget);
+      expect(find.text('Total trimestral: RD\$3,000'), findsOneWidget);
+      expect(find.text('Total trimestral: RD\$4,500'), findsOneWidget);
+      expect(find.text('Total trimestral: RD\$7,500'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

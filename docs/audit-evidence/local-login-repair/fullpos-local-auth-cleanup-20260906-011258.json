@@ -1,0 +1,120 @@
+{
+  "createdAt": "2026-09-06T01:12:58.2633889-03:00",
+  "scope": "LOCAL WINDOWS SESSION IDENTITY ONLY",
+  "targetCompanyId": "165e3fca-6225-479b-8805-d2205f10536c",
+  "targetCompanyName": "FULLTECH, SRL",
+  "targetUserId": "f6a41e76-67b8-485f-ab5f-4d29fba1c192",
+  "note": "No plaintext passwords, tokens, refresh tokens, or hashes are stored in this manifest.",
+  "entries": [
+    {
+      "path": "C:\\Users\\pc\\AppData\\Roaming\\FullPOS Cloud\\FullPOS Cloud - Sistema de facturacion\\shared_preferences.json",
+      "allKeysCount": 8,
+      "sessionRelatedKeysDetected": [],
+      "plannedKeysToClear": [],
+      "tokenPresent": false,
+      "tokenUserId": null,
+      "tokenCompanyId": null,
+      "snapshotPresent": false,
+      "snapshotUserId": null,
+      "snapshotCompanyId": null,
+      "snapshotCompanyName": null,
+      "rememberedEmailPresent": false,
+      "rememberedPasswordPresent": false,
+      "sensitiveValuesRedacted": true
+    },
+    {
+      "path": "C:\\Users\\pc\\AppData\\Roaming\\DaleVenta POS\\DaleVenta POS - Sistema de facturacion\\shared_preferences.json",
+      "allKeysCount": 4,
+      "sessionRelatedKeysDetected": [
+        "flutter.accessToken",
+        "flutter.authUserSnapshot",
+        "flutter.refreshToken"
+      ],
+      "plannedKeysToClear": [
+        "flutter.accessToken",
+        "flutter.authUserSnapshot",
+        "flutter.refreshToken"
+      ],
+      "tokenPresent": true,
+      "tokenUserId": "21a44af3-eb13-42e1-86d1-5c847a8429ed",
+      "tokenCompanyId": "165e3fca-6225-479b-8805-d2205f10536c",
+      "snapshotPresent": true,
+      "snapshotUserId": "21a44af3-eb13-42e1-86d1-5c847a8429ed",
+      "snapshotCompanyId": null,
+      "snapshotCompanyName": null,
+      "rememberedEmailPresent": false,
+      "rememberedPasswordPresent": false,
+      "sensitiveValuesRedacted": true
+    },
+    {
+      "path": "C:\\Users\\pc\\AppData\\Roaming\\com.example\\frondend\\shared_preferences.json",
+      "allKeysCount": 8,
+      "sessionRelatedKeysDetected": [],
+      "plannedKeysToClear": [],
+      "tokenPresent": false,
+      "tokenUserId": null,
+      "tokenCompanyId": null,
+      "snapshotPresent": false,
+      "snapshotUserId": null,
+      "snapshotCompanyId": null,
+      "snapshotCompanyName": null,
+      "rememberedEmailPresent": false,
+      "rememberedPasswordPresent": false,
+      "sensitiveValuesRedacted": true
+    },
+    {
+      "path": "C:\\Users\\pc\\AppData\\Roaming\\DaleVenta POS\\DaleVenta POS\\shared_preferences.json",
+      "allKeysCount": 3,
+      "sessionRelatedKeysDetected": [
+        "flutter.accessToken",
+        "flutter.authUserSnapshot",
+        "flutter.refreshToken"
+      ],
+      "plannedKeysToClear": [
+        "flutter.accessToken",
+        "flutter.authUserSnapshot",
+        "flutter.refreshToken"
+      ],
+      "tokenPresent": true,
+      "tokenUserId": "21a44af3-eb13-42e1-86d1-5c847a8429ed",
+      "tokenCompanyId": "165e3fca-6225-479b-8805-d2205f10536c",
+      "snapshotPresent": true,
+      "snapshotUserId": "21a44af3-eb13-42e1-86d1-5c847a8429ed",
+      "snapshotCompanyId": null,
+      "snapshotCompanyName": null,
+      "rememberedEmailPresent": false,
+      "rememberedPasswordPresent": false,
+      "sensitiveValuesRedacted": true
+    },
+    {
+      "path": "C:\\Users\\pc\\AppData\\Roaming\\FullTech\\FullTech\\shared_preferences.json",
+      "allKeysCount": 11,
+      "sessionRelatedKeysDetected": [
+        "flutter.accessToken",
+        "flutter.authUserSnapshot",
+        "flutter.refreshToken",
+        "flutter.remember_email",
+        "flutter.remember_flag",
+        "flutter.remember_password"
+      ],
+      "plannedKeysToClear": [
+        "flutter.accessToken",
+        "flutter.authUserSnapshot",
+        "flutter.refreshToken",
+        "flutter.remember_email",
+        "flutter.remember_flag",
+        "flutter.remember_password"
+      ],
+      "tokenPresent": true,
+      "tokenUserId": "b444f0c1-0905-4a7a-9c97-61ef03be6adf",
+      "tokenCompanyId": null,
+      "snapshotPresent": true,
+      "snapshotUserId": "b444f0c1-0905-4a7a-9c97-61ef03be6adf",
+      "snapshotCompanyId": null,
+      "snapshotCompanyName": null,
+      "rememberedEmailPresent": true,
+      "rememberedPasswordPresent": true,
+      "sensitiveValuesRedacted": true
+    }
+  ]
+}

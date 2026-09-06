@@ -966,9 +966,9 @@ class _PricingSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SectionShell(
       eyebrow: 'Planes y precios',
-      title: 'Elige el plan que mejor se adapte a tu operación',
+      title: 'Elige el plan que mejor se adapte a tu negocio',
       copy:
-          'La contratación mínima es de 3 meses. El pago se realiza por adelantado mediante transferencia bancaria.',
+          'Todos los planes muestran su costo mensual para que puedas comparar fácilmente. La activación mínima es por 3 meses.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1690,6 +1690,8 @@ class _TimelineStep extends StatelessWidget {
 class _PlanInfo {
   const _PlanInfo({
     required this.name,
+    required this.subtitle,
+    required this.valueMessage,
     required this.total,
     required this.monthlyEquivalent,
     required this.features,
@@ -1697,6 +1699,8 @@ class _PlanInfo {
   });
 
   final String name;
+  final String subtitle;
+  final String valueMessage;
   final String total;
   final String monthlyEquivalent;
   final List<String> features;
@@ -1706,12 +1710,16 @@ class _PlanInfo {
 const _plans = [
   _PlanInfo(
     name: 'Básico',
+    subtitle: 'Para comenzar',
+    valueMessage: 'Todo lo esencial para comenzar',
     total: 'RD\$3,000',
     monthlyEquivalent: 'RD\$1,000',
     features: ['100 productos', '2 usuarios', '1 almacén', '1 caja / terminal'],
   ),
   _PlanInfo(
     name: 'Negocio',
+    subtitle: 'Más elegido',
+    valueMessage: 'Más espacio para crecer',
     total: 'RD\$4,500',
     monthlyEquivalent: 'RD\$1,500',
     features: [
@@ -1724,6 +1732,8 @@ const _plans = [
   ),
   _PlanInfo(
     name: 'Pro',
+    subtitle: 'Para negocios en crecimiento',
+    valueMessage: 'Mayor capacidad para tu operación',
     total: 'RD\$7,500',
     monthlyEquivalent: 'RD\$2,500',
     features: [
@@ -1769,13 +1779,27 @@ class _PlanCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  plan.name,
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      plan.name,
+                      style: const TextStyle(
+                        color: _ink,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      plan.subtitle,
+                      style: const TextStyle(
+                        color: _primaryDark,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (highlighted)
@@ -1801,7 +1825,7 @@ class _PlanCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            plan.total,
+            '${plan.monthlyEquivalent} / mes',
             style: const TextStyle(
               color: _ink,
               fontSize: 36,
@@ -1811,23 +1835,33 @@ class _PlanCard extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           const Text(
-            '/ 3 meses',
+            'Facturación mínima de 3 meses',
             style: TextStyle(
-              color: _ink,
-              fontSize: 15,
+              color: Color(0xFF42566D),
+              fontSize: 13,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            '${plan.monthlyEquivalent}/mes equivalente',
+            'Total trimestral: ${plan.total}',
             style: const TextStyle(
               color: _primaryDark,
-              fontSize: 13,
+              fontSize: 15,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 16),
+          Text(
+            plan.valueMessage,
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 14,
+              height: 1.35,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
           for (final feature in plan.features) ...[
             _InlineCheck(text: feature),
             const SizedBox(height: 8),
@@ -1838,7 +1872,7 @@ class _PlanCard extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: () => LandingScreen._openPlanWhatsApp(context, plan),
               icon: const Icon(Icons.chat_rounded, size: 18),
-              label: Text('Activar ${plan.name}'),
+              label: const Text('Comenzar prueba'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(0, 48),
                 backgroundColor: highlighted ? _primary : _primaryDark,
