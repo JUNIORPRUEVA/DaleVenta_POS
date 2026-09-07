@@ -55,6 +55,22 @@ enum LicenseStatus {
   @@map("license_status")
 }
 
+enum BackupType {
+  MANUAL
+  AUTOMATIC
+  PRE_RESTORE_SAFETY
+
+  @@map("backup_type")
+}
+
+enum BackupStatus {
+  PENDING
+  COMPLETE
+  FAILED
+
+  @@map("backup_status")
+}
+
 enum CompanyMemberRole {
   OWNER
   ADMIN
@@ -694,6 +710,7 @@ model Company {
   passwordResetTokens              PasswordResetToken[]
   passwordResetAuditLogs           PasswordResetAuditLog[]
   licenseAuditLogs                 CompanyLicenseAuditLog[]
+  backupRecords                    BackupRecord[]
   products                         Product[]
   unitOfMeasures                   UnitOfMeasure[]
   suppliers                        Supplier[]
@@ -959,10 +976,36 @@ model User {
   warehousesDeactivated     Warehouse[]             @relation("WarehouseDeactivatedByUser")
   inventoryMovementsCreated InventoryMovement[]     @relation("InventoryMovementCreatedByUser")
   warehouseTransfersCreated WarehouseTransfer[]     @relation("WarehouseTransferCreatedByUser")
+  backupRecords             BackupRecord[]          @relation("BackupRecordCreatedByUser")
 
   @@index([companyId])
   @@index([companyId, role])
   @@map("users")
+}
+
+model BackupRecord {
+  id                  String       @id @default(uuid()) @db.Uuid
+  companyId           String       @map("company_id") @db.Uuid
+  createdByUserId     String?      @map("created_by_user_id") @db.Uuid
+  type                BackupType
+  status              BackupStatus @default(PENDING)
+  formatVersion       Int          @map("format_version")
+  storageKey          String       @map("storage_key")
+  sizeBytes           BigInt       @default(0) @map("size_bytes")
+  checksum            String?
+  companyNameSnapshot String       @map("company_name_snapshot")
+  failureReason       String?      @map("failure_reason") @db.Text
+  createdAt           DateTime     @default(now()) @map("created_at")
+  validatedAt         DateTime?    @map("validated_at")
+  deletedAt           DateTime?    @map("deleted_at")
+
+  company       Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdByUser User?   @relation("BackupRecordCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, type, status, createdAt])
+  @@index([companyId, deletedAt])
+  @@map("backup_records")
 }
 
 model PasswordResetToken {

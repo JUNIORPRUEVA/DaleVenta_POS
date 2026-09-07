@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -30,6 +31,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../modules/cash/cash_turn_menu_button.dart';
 import 'delete_account_dialog.dart';
+import '../settings/data/backup_open_intent_service.dart';
 import '../settings/data/cloud_backup_service.dart';
 import '../settings/ui/printer_settings_page.dart';
 
@@ -2670,12 +2672,36 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   bool _running = false;
   CloudBackupResult? _result;
   CloudBackupInspection? _inspection;
+  CloudBackupServerPreview? _serverPreview;
+  CloudBackupServerMetadata? _importedBackup;
+  String? _validationError;
   String? _lastZipPath;
+  String? _selectedBackupPath;
+  String? _selectedBackupName;
+  Uint8List? _selectedBackupBytes;
+  StreamSubscription<String>? _openedBackupSubscription;
+  String? _lastHandledOpenPath;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadLastBackup());
+    _openedBackupSubscription = BackupOpenIntentService.openedBackups.listen((
+      path,
+    ) {
+      if (!mounted) return;
+      unawaited(_handleOpenedBackupPath(path));
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadLastBackup();
+      await _loadOpenedBackup();
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_cleanupSelectedTemporaryBackup(clearSelection: false));
+    _openedBackupSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadLastBackup() async {
@@ -2695,11 +2721,13 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
       setState(() => _result = result);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            result.hasFailures
-                ? 'Backup creado con algunos módulos pendientes.'
-                : 'Backup local creado correctamente.',
-          ),
+          content: Text(switch (result.status) {
+            CloudBackupStatus.complete =>
+              'Backup local completo creado correctamente.',
+            CloudBackupStatus.partial =>
+              'Backup parcial creado. Revisa los módulos pendientes.',
+            CloudBackupStatus.failed => 'No se pudo completar el backup.',
+          }),
         ),
       );
       await _loadLastBackup();
@@ -2716,26 +2744,194 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   Future<void> _inspectBackup() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['zip'],
-      withData: false,
+      allowedExtensions: ['dvbackup', 'zip'],
+      withData: kIsWeb,
     );
-    final path = picked?.files.single.path;
-    if (path == null) return;
+    final file = picked?.files.single;
+    final path = file?.path;
+    final bytes = file?.bytes;
+    if (path == null && bytes == null) return;
+    await _cleanupSelectedTemporaryBackup(clearSelection: false);
     if (!mounted) return;
+    setState(() {
+      _selectedBackupPath = path;
+      _selectedBackupName = file?.name;
+      _selectedBackupBytes = bytes;
+      _inspection = null;
+      _serverPreview = null;
+      _importedBackup = null;
+      _validationError = null;
+    });
+    await _validateSelectedBackup();
+  }
+
+  Future<void> _loadOpenedBackup() async {
+    final path = await BackupOpenIntentService().takeInitialBackupPath();
+    if (path == null || !mounted) return;
+    await _handleOpenedBackupPath(path);
+  }
+
+  Future<void> _handleOpenedBackupPath(String path) async {
+    final normalized = path.trim();
+    if (normalized.isEmpty || normalized == _lastHandledOpenPath) return;
+    await _cleanupSelectedTemporaryBackup(clearSelection: false);
+    if (!mounted) return;
+    _lastHandledOpenPath = normalized;
+    setState(() {
+      _selectedBackupPath = normalized;
+      _selectedBackupName = normalized.split(RegExp(r'[\\/]')).last;
+      _selectedBackupBytes = null;
+      _inspection = null;
+      _serverPreview = null;
+      _importedBackup = null;
+      _validationError = null;
+    });
+    await _validateSelectedBackup();
+  }
+
+  Future<void> _validateSelectedBackup() async {
+    final path = _selectedBackupPath;
+    final bytes = _selectedBackupBytes;
+    if (path == null && bytes == null) return;
     final backupService = ref.read(cloudBackupServiceProvider);
+    setState(() => _running = true);
     try {
-      final inspection = await backupService.inspectBackupZip(path);
-      if (!mounted) return;
-      setState(() => _inspection = inspection);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Backup validado correctamente.')),
+      CloudBackupInspection? inspection;
+      if (!kIsWeb && path != null) {
+        inspection = await backupService.inspectBackupZip(path);
+      }
+      final serverPreview = await backupService.validateCanonicalUpload(
+        path: path,
+        bytes: bytes,
+        fileName: _selectedBackupName,
       );
-    } catch (error) {
       if (!mounted) return;
+      setState(() {
+        _inspection = inspection;
+        _serverPreview = serverPreview;
+        _validationError = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            serverPreview.canRestore
+                ? 'Backup validado correctamente.'
+                : 'Backup validado con advertencias. Restauración bloqueada.',
+          ),
+        ),
+      );
+      if (!serverPreview.canRestore) {
+        unawaited(_cleanupSelectedTemporaryBackup(clearSelection: false));
+      }
+    } catch (error) {
+      await _cleanupSelectedTemporaryBackup(clearSelection: true);
+      if (!mounted) return;
+      final errorText = error.toString();
+      final isWrongCompany = errorText.contains(
+        'Este backup pertenece a otra empresa',
+      );
+      setState(() {
+        _inspection = null;
+        _serverPreview = null;
+        _validationError = isWrongCompany
+            ? 'Este backup pertenece a otra empresa y no puede restaurarse aquí.'
+            : 'El archivo seleccionado no es un backup canónico válido. La restauración fue bloqueada.';
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo validar el backup: $error')),
       );
+    } finally {
+      if (mounted) setState(() => _running = false);
     }
+  }
+
+  Future<void> _restoreSelectedBackup() async {
+    final path = _selectedBackupPath;
+    final bytes = _selectedBackupBytes;
+    final preview = _serverPreview;
+    if ((path == null && bytes == null) || preview?.canRestore != true) return;
+    final authorized = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.manageSettings,
+      reason: 'Restaurar backup de la empresa',
+      forceAdminAuthorization: true,
+    );
+    if (!authorized || !mounted) {
+      await _cleanupSelectedTemporaryBackup(clearSelection: true);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Restaurar backup'),
+        content: Text(
+          'Se reemplazarán los datos restaurables de ${preview?.companyName ?? 'esta empresa'} con el archivo seleccionado. Antes de aplicar, el servidor creará un backup de seguridad.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.restore_outlined),
+            label: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      await _cleanupSelectedTemporaryBackup(clearSelection: true);
+      return;
+    }
+    final backupService = ref.read(cloudBackupServiceProvider);
+    setState(() => _running = true);
+    try {
+      final imported = await backupService.importCanonicalUpload(
+        path: path,
+        bytes: bytes,
+        fileName: _selectedBackupName,
+      );
+      final restored = await backupService.restoreCanonicalBackup(
+        imported.backupId,
+      );
+      if (!mounted) return;
+      setState(() => _importedBackup = imported);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            restored.ok
+                ? 'Backup restaurado correctamente.'
+                : 'El backend no confirmó la restauración.',
+          ),
+        ),
+      );
+    } catch (error) {
+      await _cleanupSelectedTemporaryBackup(clearSelection: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo restaurar el backup: $error')),
+      );
+    } finally {
+      await _cleanupSelectedTemporaryBackup(clearSelection: false);
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  Future<void> _cleanupSelectedTemporaryBackup({
+    required bool clearSelection,
+  }) async {
+    final path = _selectedBackupPath;
+    if (!BackupOpenIntentService.isAppOwnedTemporaryBackupPath(path)) return;
+    await BackupOpenIntentService.cleanupTemporaryBackupCopy(path);
+    if (!mounted || !clearSelection) return;
+    setState(() {
+      _selectedBackupPath = null;
+      _selectedBackupName = null;
+      _selectedBackupBytes = null;
+    });
   }
 
   @override
@@ -2757,7 +2953,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
           'Origen',
           'Nube, empresa, impresora y módulos activos',
         ),
-        const _DetailRow('Destino', 'Carpeta local FullPOS Cloud / backups'),
+        const _DetailRow(
+          'Destino',
+          r'C:\Program Files\DaleVentas POS\backups\<empresa>',
+        ),
         if (shownZipPath != null) _DetailRow('Último ZIP', shownZipPath),
         const SizedBox(height: 12),
         LayoutBuilder(
@@ -2782,15 +2981,29 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
               onPressed: _running ? null : _inspectBackup,
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text(
-                'Validar backup',
+                'Seleccionar / validar',
                 overflow: TextOverflow.ellipsis,
               ),
+              style: _outlinedButtonStyle(),
+            );
+            final applyRestore = OutlinedButton.icon(
+              onPressed: _running || _serverPreview?.canRestore != true
+                  ? null
+                  : _restoreSelectedBackup,
+              icon: const Icon(Icons.restore_outlined),
+              label: const Text('Restaurar', overflow: TextOverflow.ellipsis),
               style: _outlinedButtonStyle(),
             );
             if (stack) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [create, const SizedBox(height: 8), restore],
+                children: [
+                  create,
+                  const SizedBox(height: 8),
+                  restore,
+                  const SizedBox(height: 8),
+                  applyRestore,
+                ],
               );
             }
             return Row(
@@ -2798,6 +3011,8 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                 Expanded(child: create),
                 const SizedBox(width: 10),
                 Expanded(child: restore),
+                const SizedBox(width: 10),
+                Expanded(child: applyRestore),
               ],
             );
           },
@@ -2812,7 +3027,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
                 ? 'Backup creado con observaciones'
                 : 'Backup listo para recuperación',
             message:
-                '${result.modules.length} módulos guardados. ZIP: ${result.zipPath}',
+                '${result.modules.length} módulos guardados. Estado: ${result.status.name.toUpperCase()}. ZIP: ${result.zipPath}',
             accent: result.hasFailures
                 ? const Color(0xFFE08A00)
                 : const Color(0xFF178A5C),
@@ -2827,9 +3042,60 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
           const SizedBox(height: 14),
           _StatusBanner(
             icon: Icons.fact_check_outlined,
-            title: 'Backup válido para recuperación',
+            title: _inspection!.canRestoreByDefault
+                ? 'Backup válido'
+                : 'Backup no restaurable automáticamente',
             message:
-                '${_inspection!.modules.length} módulos encontrados. Archivo: ${_inspection!.path}',
+                '${_inspection!.modules.length} módulos encontrados. Estado: ${_inspection!.backupStatus?.name.toUpperCase() ?? 'INVALID'}. Archivo: ${_inspection!.path}',
+            accent: _inspection!.canRestoreByDefault
+                ? const Color(0xFF178A5C)
+                : const Color(0xFFE08A00),
+          ),
+        ],
+        if (_validationError != null) ...[
+          const SizedBox(height: 14),
+          _StatusBanner(
+            icon: Icons.warning_amber_rounded,
+            title: 'Backup no restaurable',
+            message: _validationError!,
+            accent: const Color(0xFFE08A00),
+          ),
+        ],
+        if (_serverPreview != null) ...[
+          const SizedBox(height: 14),
+          _StatusBanner(
+            icon: _serverPreview!.canRestore
+                ? Icons.fact_check_outlined
+                : Icons.warning_amber_rounded,
+            title: _serverPreview!.canRestore
+                ? 'Vista previa validada'
+                : 'Backup no restaurable',
+            message:
+                '${_serverPreview!.modules.length} módulos canónicos. Empresa: ${_serverPreview!.companyName ?? _serverPreview!.companyId ?? 'sin nombre'}. Archivo: ${_selectedBackupName ?? _selectedBackupPath ?? 'seleccionado'}',
+            accent: _serverPreview!.canRestore
+                ? const Color(0xFF178A5C)
+                : const Color(0xFFE08A00),
+          ),
+          if (_serverPreview!.recordCounts.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _DetailRow(
+              'Registros',
+              _serverPreview!.recordCounts.entries
+                  .take(6)
+                  .map((entry) => '${entry.key}: ${entry.value}')
+                  .join(' · '),
+            ),
+          ],
+          for (final error in _serverPreview!.errors)
+            _DetailRow('Error', error),
+        ],
+        if (_importedBackup != null) ...[
+          const SizedBox(height: 14),
+          _StatusBanner(
+            icon: Icons.restore_page_outlined,
+            title: 'Restore aplicado',
+            message:
+                'Backup ${_importedBackup!.backupId} importado y restaurado para ${_importedBackup!.companyName ?? _importedBackup!.companyId}.',
             accent: const Color(0xFF178A5C),
           ),
         ],

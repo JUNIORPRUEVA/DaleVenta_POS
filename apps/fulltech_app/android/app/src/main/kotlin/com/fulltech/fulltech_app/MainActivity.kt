@@ -3,6 +3,8 @@ package com.daleventa.pos
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -14,14 +16,29 @@ import kotlin.concurrent.thread
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.daleventa.pos/native_bluetooth_printer"
+    private val backupOpenChannelName = "com.daleventa.pos/backup_open"
     private val logTag = "FullPOSBT"
     private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     private val mainHandler = Handler(Looper.getMainLooper())
     private var socket: BluetoothSocket? = null
     private var connectedAddress: String? = null
+    private var pendingBackupPath: String? = null
+    private var backupOpenChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        pendingBackupPath = cacheBackupFromIntent(intent)
+        backupOpenChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, backupOpenChannelName)
+        backupOpenChannel?.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "takeInitialBackupPath" -> {
+                        val path = pendingBackupPath
+                        pendingBackupPath = null
+                        result.success(path)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -46,6 +63,38 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingBackupPath = cacheBackupFromIntent(intent)
+        pendingBackupPath?.let { path ->
+            backupOpenChannel?.invokeMethod("backupOpened", path)
+        }
+    }
+
+    private fun cacheBackupFromIntent(intent: Intent?): String? {
+        if (intent == null) return null
+        val uri = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+            else -> null
+        } ?: return null
+        return runCatching {
+            val name = uri.lastPathSegment
+                ?.substringAfterLast('/')
+                ?.takeIf { it.endsWith(".dvbackup", ignoreCase = true) || it.endsWith(".zip", ignoreCase = true) }
+                ?: "import.dvbackup"
+            val target = java.io.File(cacheDir, "backup-open/$name")
+            target.parentFile?.mkdirs()
+            contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: return@runCatching null
+            target.absolutePath
+        }.onFailure {
+            Log.w(logTag, "backup open cache failed", it)
+        }.getOrNull()
     }
 
     private fun pairedDevices(): List<Map<String, String>> {

@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $installerDir = $PSScriptRoot
 $setupScript = Join-Path $installerDir 'setup.iss'
-$outputExe = Join-Path $installerDir ('output\FullPOS-Cloud-Setup-' + ($Version -replace '\+', '-') + '.exe')
+$outputExe = Join-Path $installerDir ('output\DaleVentas-POS-Setup-' + ($Version -replace '\+', '-') + '.exe')
 $reportPath = Join-Path $installerDir 'inno-build-report.txt'
 $expectedApiHost = 'daleventapos-backend.gcdndd.easypanel.host'
 $forbiddenApiHost = 'ventas-fullpos-backend.gcdndd.easypanel.host'

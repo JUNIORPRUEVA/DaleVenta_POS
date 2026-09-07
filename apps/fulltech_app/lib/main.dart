@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
 import 'core/routing/app_router.dart';
+import 'core/routing/routes.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/loading/app_loading_overlay.dart';
@@ -35,6 +37,7 @@ import 'core/app_update/update_guard_overlay.dart';
 import 'core/utils/safe_url_launcher.dart';
 import 'core/widgets/fulltech_global_background.dart';
 import 'features/contabilidad/contabilidad_init.dart';
+import 'features/settings/data/backup_open_intent_service.dart';
 
 class _GlobalErrorFallback extends StatefulWidget {
   final FlutterErrorDetails details;
@@ -61,10 +64,12 @@ class _GlobalErrorFallbackState extends State<_GlobalErrorFallback> {
   }
 }
 
-Future<void> main() async {
+Future<void> main([List<String> args = const []]) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      BackupOpenIntentService.setStartupArguments(args);
+      BackupOpenIntentService.initializeListener();
       await logFullPosRuntimeDiagnostics();
       usePathUrlStrategy();
       GoogleFonts.config.allowRuntimeFetching = false;
@@ -152,6 +157,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   bool _backgroundStartupStarted = false;
   ProviderSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<LicenseRealtimeMessage>? _licenseRealtimeSubscription;
+  StreamSubscription<String>? _backupOpenSubscription;
   Timer? _licensePollTimer;
   Timer? _cashPollTimer;
   final _lifecycleCoordinator = AppLifecycleCoordinator();
@@ -248,6 +254,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           .read(operationsRealtimeServiceProvider)
           .licenseStream
           .listen(_handleLicenseRealtimeMessage);
+      _backupOpenSubscription ??=
+          BackupOpenIntentService.openedBackups.listen((_) {
+            if (!mounted) return;
+            final context = appRootNavigatorKey.currentContext;
+            if (context == null) return;
+            // ignore: use_build_context_synchronously
+            GoRouter.of(context).go(Routes.configuracionBackup);
+          });
+      unawaited(BackupOpenIntentService.primeInitialBackupPath());
     });
   }
 
@@ -256,6 +271,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     _stopLicensePolling();
     _stopCashRevalidationPolling();
     _licenseRealtimeSubscription?.cancel();
+    _backupOpenSubscription?.cancel();
     _authStateSubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

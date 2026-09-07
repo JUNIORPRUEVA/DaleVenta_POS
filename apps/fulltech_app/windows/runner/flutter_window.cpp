@@ -3,6 +3,13 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "utils.h"
+
+namespace {
+
+constexpr ULONG_PTR kBackupOpenCopyDataId = 0x4456424B;
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +32,11 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  backup_open_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "com.daleventa.pos/backup_open",
+          &flutter::StandardMethodCodec::GetInstance());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -43,6 +55,7 @@ void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
+  backup_open_channel_ = nullptr;
 
   Win32Window::OnDestroy();
 }
@@ -62,6 +75,24 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_COPYDATA: {
+      const auto* payload = reinterpret_cast<COPYDATASTRUCT*>(lparam);
+      if (payload && payload->dwData == kBackupOpenCopyDataId &&
+          payload->lpData && payload->cbData >= sizeof(wchar_t)) {
+        const auto* path = static_cast<const wchar_t*>(payload->lpData);
+        if (backup_open_channel_) {
+          backup_open_channel_->InvokeMethod(
+              "backupOpened",
+              std::make_unique<flutter::EncodableValue>(Utf8FromUtf16(path)));
+        }
+        if (::IsIconic(hwnd)) {
+          ::ShowWindow(hwnd, SW_RESTORE);
+        }
+        ::SetForegroundWindow(hwnd);
+        return TRUE;
+      }
+      break;
+    }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

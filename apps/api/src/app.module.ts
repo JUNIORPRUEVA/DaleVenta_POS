@@ -28,6 +28,7 @@ import { UsageTelemetryModule } from './usage-telemetry/usage-telemetry.module';
 import { TaxModule } from './tax/tax.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
+import { BackupsModule } from './backups/backups.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { WarehousesModule } from './warehouses/warehouses.module';
     TaxModule,
     InventoryModule,
     WarehousesModule,
+    BackupsModule,
   ]
 })
 export class AppModule {}

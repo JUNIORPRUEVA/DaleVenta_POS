@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:validators/validators.dart' as validators;
 
 import '../../../core/auth/app_role.dart';
@@ -18,6 +17,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import '../../../core/widgets/primary_button.dart';
+import '../data/remembered_login_storage.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -34,9 +34,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _rememberMe = false;
   bool _obscurePassword = true;
 
-  static const _rememberEmailKey = 'remember_email';
-  static const _rememberPasswordKey = 'remember_password';
-  static const _rememberFlagKey = 'remember_flag';
+  final _rememberedLoginStorage = const RememberedLoginStorage();
 
   @override
   void initState() {
@@ -63,30 +61,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _loadRememberedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final remembered = prefs.getBool(_rememberFlagKey) ?? false;
-    final email = prefs.getString(_rememberEmailKey) ?? '';
-    await prefs.remove(_rememberPasswordKey);
+    final remembered = await _rememberedLoginStorage.load();
     if (!mounted) return;
     setState(() {
-      _rememberMe = remembered;
-      if (remembered) {
-        _emailCtrl.text = email;
+      _rememberMe = remembered.remember;
+      if (remembered.remember) {
+        _emailCtrl.text = remembered.email;
       }
     });
   }
 
   Future<void> _persistRememberedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_rememberMe) {
-      await prefs.setBool(_rememberFlagKey, true);
-      await prefs.setString(_rememberEmailKey, _emailCtrl.text.trim());
-      await prefs.remove(_rememberPasswordKey);
-    } else {
-      await prefs.remove(_rememberFlagKey);
-      await prefs.remove(_rememberEmailKey);
-      await prefs.remove(_rememberPasswordKey);
-    }
+    await _rememberedLoginStorage.save(
+      remember: _rememberMe,
+      email: _emailCtrl.text,
+    );
   }
 
   _LoginNoticeData _buildErrorNotice(ApiException error) {
