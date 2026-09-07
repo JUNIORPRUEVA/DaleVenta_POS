@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, Role, type Client } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,7 @@ import { UpdateClientLocationDto } from './dto/update-client-location.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
 import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
+import { UsageTelemetryService } from '../usage-telemetry/usage-telemetry.service';
 
 type AuthUser = TenantUser & { role: Role };
 
@@ -26,6 +28,8 @@ export class ClientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: CatalogRealtimeRelayService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   private static readonly adminLikeRoles = new Set<Role>([
@@ -345,22 +349,33 @@ export class ClientsService {
     );
     await this.assertNoActiveDuplicateTaxId(companyId, normalizedTaxId);
     try {
-      const client = await this.prisma.client.create({
-        data: {
-          nombre: dto.nombre,
-          telefono: dto.telefono,
-          email: dto.email,
-          direccion: dto.direccion,
-          notas: dto.notas,
-          taxId: normalizedTaxId || null,
-          businessName: dto.businessName?.trim() || null,
-          taxIdType: dto.taxIdType?.trim() || null,
-          ownerId: user.id,
+      const client = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.client.create({
+          data: {
+            nombre: dto.nombre,
+            telefono: dto.telefono,
+            email: dto.email,
+            direccion: dto.direccion,
+            notas: dto.notas,
+            taxId: normalizedTaxId || null,
+            businessName: dto.businessName?.trim() || null,
+            taxIdType: dto.taxIdType?.trim() || null,
+            ownerId: user.id,
+            companyId,
+            phoneNormalized,
+            lastActivityAt: new Date(),
+            ...(locationData ?? {}),
+          },
+        });
+        await this.telemetry?.enqueueBusinessEvent(tx, {
           companyId,
-          phoneNormalized,
-          lastActivityAt: new Date(),
-          ...(locationData ?? {}),
-        },
+          actorUserId: user.id,
+          eventType: 'CUSTOMER_CREATED',
+          entityType: 'customer',
+          entityId: created.id,
+          feature: 'CUSTOMERS',
+        });
+        return created;
       });
       this.emitClientEvent('client.created', client);
       return this.serializeClient(client);

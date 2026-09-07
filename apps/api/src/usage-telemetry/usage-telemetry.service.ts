@@ -24,10 +24,29 @@ type ModuleMetric = {
   today: number;
 };
 
+type PrismaExecutor = PrismaService | Prisma.TransactionClient;
+
+type TelemetryEventInput = {
+  eventType: string;
+  companyId: string;
+  occurredAt?: Date;
+  actorUserId?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  feature?: string | null;
+  deviceId?: string | null;
+  platform?: string | null;
+  metadata?: Record<string, unknown>;
+  dedupeKey?: string | null;
+};
+
+const WORKER_ID = `telemetry-${process.pid}-${randomUUID().slice(0, 8)}`;
+
 @Injectable()
 export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UsageTelemetryService.name);
   private timer?: NodeJS.Timeout;
+  private summaryTimer?: NodeJS.Timeout;
   private running = false;
   private readonly requestTelemetrySeen = new Map<string, number>();
 
@@ -39,18 +58,27 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     if (!this.enabled) return;
     const intervalMs = this.intervalMinutes * 60_000;
+    const workerIntervalMs = this.workerIntervalSeconds * 1000;
     const initialDelayMs = Math.min(60_000, Math.max(5_000, intervalMs / 6));
     this.timer = setInterval(() => {
-      void this.flushAllCompanies('interval');
-    }, intervalMs);
+      void this.processOutboxBatch();
+    }, workerIntervalMs);
+    this.timer.unref?.();
     setTimeout(() => {
       void this.flushAllCompanies('startup');
     }, initialDelayMs);
-    this.logger.log(`Usage telemetry enabled; interval=${this.intervalMinutes}m`);
+    this.summaryTimer = setInterval(() => {
+      void this.flushAllCompanies('interval');
+    }, intervalMs);
+    this.summaryTimer.unref?.();
+    this.logger.log(
+      `Usage telemetry enabled; summaryInterval=${this.intervalMinutes}m workerInterval=${this.workerIntervalSeconds}s`,
+    );
   }
 
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
+    if (this.summaryTimer) clearInterval(this.summaryTimer);
   }
 
   async flushAllCompanies(reason: 'startup' | 'interval' | 'manual') {
@@ -88,15 +116,20 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
       let failed = 0;
       for (const company of companies) {
         try {
-          await this.sendToAppyra(await this.buildCompanyUsagePayload(company));
+          await this.enqueueLegacyUsagePayload(
+            company.id,
+            'DAILY_USAGE_SUMMARY',
+            await this.buildCompanyUsagePayload(company),
+          );
           sent += 1;
         } catch (error) {
           failed += 1;
-          this.logger.warn(`Usage telemetry failed for company=${company.id}: ${this.errorMessage(error)}`);
+          this.logger.warn(`Usage telemetry enqueue failed for company=${company.id}: ${this.errorMessage(error)}`);
         }
       }
 
-      return { ok: true, enabled: true, reason, sent, failed, total: companies.length };
+      const delivery = await this.processOutboxBatch();
+      return { ok: true, enabled: true, reason, enqueued: sent, failed, total: companies.length, delivery };
     } finally {
       this.running = false;
     }
@@ -113,17 +146,174 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     const throttleKey = `${companyId}:${client.deviceId}:${client.platform}:${featureCode}`;
     if (this.isRequestTelemetryThrottled(throttleKey)) return;
 
-    void this.sendRequestUsage(companyId, {
-      platform: client.platform,
-      deviceFamily: client.deviceFamily,
+    void this.enqueueEvent({
+      companyId,
+      eventType: 'MODULE_USED',
+      actorUserId: (req.user as any)?.id ?? null,
+      feature: featureCode.toUpperCase(),
       deviceId: client.deviceId,
-      appVersion: this.headerValue(headers['x-client-app-version']) || this.appVersion,
-      osVersion: this.headerValue(headers['x-client-os-version']),
-      deviceModel: this.headerValue(headers['x-client-device-model']),
-      featureCode,
-      method: req.method,
-      route: this.routeForMetrics(req.path || req.url || ''),
+      platform: client.platform,
+      metadata: {
+        route: this.routeForMetrics(req.path || req.url || ''),
+        method: req.method,
+        device_family: client.deviceFamily,
+        app_version: this.headerValue(headers['x-client-app-version']) || this.appVersion,
+        os_version: this.headerValue(headers['x-client-os-version']),
+        telemetry_reason: 'coarse_module_usage',
+      },
+      dedupeKey: throttleKey,
+    }).catch((error) => {
+      this.logger.debug(`Module usage telemetry skipped: ${this.errorMessage(error)}`);
     });
+  }
+
+  async enqueueEvent(input: TelemetryEventInput, db: PrismaExecutor = this.prisma) {
+    if (!this.enabled) return null;
+    const occurredAt = input.occurredAt ?? new Date();
+    const eventId = randomUUID();
+    const payload = {
+      eventId,
+      event_id: eventId,
+      schemaVersion: 1,
+      schema_version: 1,
+      companyId: input.companyId,
+      business_id: input.companyId,
+      app_code: 'DALEVENTAS_POS',
+      project_code: 'DALEVENTAS_POS',
+      eventType: input.eventType,
+      event_type: input.eventType,
+      occurredAt: occurredAt.toISOString(),
+      occurred_at: occurredAt.toISOString(),
+      actorUserId: input.actorUserId ?? null,
+      actor_user_id: input.actorUserId ?? null,
+      entityType: input.entityType ?? null,
+      entity_type: input.entityType ?? null,
+      entityId: input.entityId ?? null,
+      entity_id: input.entityId ?? null,
+      feature: input.feature ?? null,
+      feature_code: input.feature ?? null,
+      deviceId: input.deviceId ?? `daleventas-api-${input.companyId}`,
+      device_id: input.deviceId ?? `daleventas-api-${input.companyId}`,
+      platform: input.platform ?? 'api',
+      app_version: this.appVersion,
+      metadata: this.safeMetadata(input.metadata),
+    };
+
+    try {
+      return await (db as any).telemetryOutbox.create({
+        data: {
+          eventId,
+          schemaVersion: 1,
+          companyId: input.companyId,
+          eventType: input.eventType,
+          occurredAt,
+          payload,
+          dedupeKey: input.dedupeKey ?? null,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        input.dedupeKey
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async enqueueBusinessEvent(
+    tx: Prisma.TransactionClient,
+    input: Omit<TelemetryEventInput, 'deviceId' | 'platform'>,
+  ) {
+    return this.enqueueEvent(
+      {
+        ...input,
+        deviceId: `daleventas-api-${input.companyId}`,
+        platform: 'api',
+      },
+      tx,
+    );
+  }
+
+  async processOutboxBatch(limit = this.batchSize) {
+    if (!this.enabled) return { ok: true, enabled: false, claimed: 0, sent: 0 };
+    if (!this.appyraBaseUrl) {
+      return { ok: true, enabled: true, skipped: true, reason: 'missing_appyra_base_url' };
+    }
+    const now = new Date();
+    const lockExpiry = new Date(now.getTime() - this.lockTimeoutMs);
+    const claimed = await this.claimPendingEvents(Math.min(100, Math.max(1, limit)), now, lockExpiry);
+    if (!claimed.length) return { ok: true, enabled: true, claimed: 0, sent: 0 };
+
+    try {
+      await this.sendToAppyraBatch(claimed.map((row: any) => row.payload_json ?? row.payload));
+      await this.prisma.telemetryOutbox.updateMany({
+        where: { id: { in: claimed.map((row: any) => row.id) } },
+        data: {
+          status: 'SENT',
+          sentAt: new Date(),
+          lockedAt: null,
+          lockedBy: null,
+          lastError: null,
+        },
+      });
+      return { ok: true, enabled: true, claimed: claimed.length, sent: claimed.length };
+    } catch (error) {
+      const attempts = Math.max(...claimed.map((row: any) => Number(row.attempt_count ?? row.attemptCount ?? 0))) + 1;
+      const retryable = this.isRetryableDeliveryError(error);
+      const status = !retryable || attempts >= this.maxAttempts ? 'FAILED' : 'PENDING';
+      const errMsg = this.errorMessage(error).slice(0, 1800);
+      if (!retryable) {
+        this.logger.error(`Telemetry delivery non-retryable status=${(error as any)?.status ?? 'n/a'} error=${errMsg}`);
+      } else {
+        this.logger.warn(`Telemetry delivery failed attempts=${attempts} error=${errMsg}`);
+      }
+      await this.prisma.telemetryOutbox.updateMany({
+        where: { id: { in: claimed.map((row: any) => row.id) } },
+        data: {
+          status,
+          attemptCount: attempts,
+          nextAttemptAt: new Date(Date.now() + this.backoffMs(attempts)),
+          lockedAt: null,
+          lockedBy: null,
+          lastError: errMsg,
+        },
+      });
+      return { ok: false, enabled: true, claimed: claimed.length, sent: 0, status, retryable };
+    }
+  }
+
+  async diagnostics() {
+    const [pending, failed, oldestPending, lastSent] = await Promise.all([
+      this.prisma.telemetryOutbox.count({ where: { status: 'PENDING' } }),
+      this.prisma.telemetryOutbox.count({ where: { status: 'FAILED' } }),
+      this.prisma.telemetryOutbox.findFirst({
+        where: { status: 'PENDING' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      this.prisma.telemetryOutbox.findFirst({
+        where: { status: 'SENT', sentAt: { not: null } },
+        orderBy: { sentAt: 'desc' },
+        select: { sentAt: true },
+      }),
+    ]);
+    return {
+      enabled: this.enabled,
+      appyraConfigured: Boolean(this.appyraBaseUrl),
+      pending,
+      failed,
+      oldestPendingAgeSeconds: oldestPending
+        ? Math.max(0, Math.floor((Date.now() - oldestPending.createdAt.getTime()) / 1000))
+        : null,
+      lastSuccessfulDeliveryAt: lastSent?.sentAt ?? null,
+      retryPolicy: {
+        maxAttempts: this.maxAttempts,
+        backoff: '1m, 5m, 15m, 1h, 3h, then 6h capped',
+      },
+    };
   }
 
   private async buildCompanyUsagePayload(company: CompanySeed) {
@@ -296,67 +486,55 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async sendRequestUsage(
+  private async enqueueLegacyUsagePayload(
     companyId: string,
-    client: {
-      platform: string;
-      deviceFamily: string;
-      deviceId: string;
-      appVersion: string;
-      osVersion: string;
-      deviceModel: string;
-      featureCode: string;
-      method: string;
-      route: string;
-    },
+    eventType: string,
+    payload: Record<string, unknown>,
   ) {
-    try {
-      const company = await this.prisma.company.findUnique({
-        where: { id: companyId },
-        select: { id: true, name: true, slug: true, licenseKey: true },
-      });
-      if (!company) return;
-
-      const now = new Date();
-      await this.sendToAppyra({
-        app_code: 'DALEVENTAS_POS',
-        project_code: 'DALEVENTAS_POS',
-        business_id: company.id,
-        license_key: company.licenseKey,
-        device_id: client.deviceId,
-        session_id: `${client.deviceId}-${this.isoDate(now)}`,
-        app_version: client.appVersion,
-        event_type: 'client_request_heartbeat',
-        occurred_at: now.toISOString(),
-        active_seconds: this.requestHeartbeatSeconds,
-        metrics: {
-          business_name: company.name,
-          business_slug: company.slug,
-          platform: client.platform,
-          device_family: client.deviceFamily,
-          os_version: client.osVersion,
-          device_model: client.deviceModel,
-          feature_code: client.featureCode,
-          request_method: client.method,
-          route: client.route,
-          telemetry_reason: 'client_platform_usage',
-        },
-        metadata: {
-          generated_by: 'daleventas-api',
-          generated_at: now.toISOString(),
-          privacy: 'technical_usage_only',
-        },
-      });
-    } catch (error) {
-      this.logger.debug(`Client usage telemetry skipped: ${this.errorMessage(error)}`);
-    }
+    const occurredAt = new Date(String(payload.occurred_at || new Date().toISOString()));
+    return this.enqueueEvent({
+      companyId,
+      eventType,
+      occurredAt,
+      feature: String(payload.feature_code || payload.event_type || eventType).toUpperCase(),
+      deviceId: String(payload.device_id || `daleventas-api-${companyId}`),
+      platform: String((payload.metrics as any)?.platform || 'api'),
+      metadata: {
+        metrics: payload.metrics,
+        legacy_event_type: payload.event_type,
+        active_seconds: payload.active_seconds,
+        telemetry_reason: 'daily_usage_summary_outbox',
+      },
+      dedupeKey: `daily:${companyId}:${this.isoDate(occurredAt)}`,
+    });
   }
 
-  private async sendToAppyra(payload: Record<string, unknown>) {
+  private async claimPendingEvents(limit: number, now: Date, lockExpiry: Date) {
+    return this.prisma.$queryRaw<any[]>`
+      UPDATE telemetry_outbox
+      SET status = 'PROCESSING',
+          locked_at = ${now},
+          locked_by = ${WORKER_ID},
+          updated_at = ${now}
+      WHERE id IN (
+        SELECT id
+        FROM telemetry_outbox
+        WHERE status IN ('PENDING', 'PROCESSING')
+          AND next_attempt_at <= ${now}
+          AND (locked_at IS NULL OR locked_at < ${lockExpiry})
+        ORDER BY next_attempt_at ASC, created_at ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `;
+  }
+
+  private async sendToAppyraBatch(events: Record<string, unknown>[]) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await fetch(`${this.appyraBaseUrl}/api/usage/heartbeat`, {
+      const response = await fetch(`${this.appyraBaseUrl}/api/usage/batch`, {
         method: 'POST',
         signal: controller.signal,
         headers: {
@@ -364,15 +542,62 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
           'Content-Type': 'application/json',
           ...(this.ingestSecret ? { 'x-usage-ingest-secret': this.ingestSecret } : {}),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ events }),
       });
       if (!response.ok) {
         const text = await response.text().catch(() => '');
-        throw new Error(`Appyra usage ingest failed ${response.status}: ${text.slice(0, 240)}`);
+        const error = new Error(`Appyra usage ingest failed ${response.status}: ${text.slice(0, 240)}`);
+        (error as any).status = response.status;
+        throw error;
       }
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private isRetryableDeliveryError(error: unknown) {
+    const status = Number((error as any)?.status || 0);
+    if (!status) return true;
+    return status === 429 || status >= 500;
+  }
+
+  private backoffMs(attempts: number) {
+    if (attempts <= 1) return 60_000;
+    if (attempts === 2) return 5 * 60_000;
+    if (attempts === 3) return 15 * 60_000;
+    if (attempts === 4) return 60 * 60_000;
+    if (attempts === 5) return 3 * 60 * 60_000;
+    return 6 * 60 * 60_000;
+  }
+
+  private safeMetadata(value?: Record<string, unknown>) {
+    const out: Record<string, unknown> = {};
+    const blocked = new Set([
+      'password',
+      'token',
+      'jwt',
+      'authorization',
+      'email',
+      'phone',
+      'address',
+      'tax_id',
+      'rnc',
+      'customer',
+      'items',
+      'lines',
+      'payload',
+    ]);
+    for (const [key, raw] of Object.entries(value || {}).slice(0, 30)) {
+      const safeKey = key.trim().slice(0, 80);
+      if (!safeKey || blocked.has(safeKey.toLowerCase())) continue;
+      if (raw == null || ['string', 'number', 'boolean'].includes(typeof raw)) {
+        out[safeKey] = typeof raw === 'string' ? raw.slice(0, 300) : raw;
+      } else if (safeKey === 'metrics' && raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        out[safeKey] = this.safeMetadata(raw as Record<string, unknown>);
+      }
+    }
+    out.privacy = 'minimal_activity_metadata';
+    return out;
   }
 
   private saleWhere(companyId: string, from?: Date): Prisma.SaleWhereInput {
@@ -455,8 +680,25 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
 
   private featureCodeFromPath(path: string) {
     const clean = path.split('?')[0].split('/').filter(Boolean);
-    const first = clean[0] || 'api';
-    return this.sanitizeToken(first.toLowerCase().replace(/-/g, '_'), 60) || 'api';
+    const first = this.sanitizeToken((clean[0] || 'api').toLowerCase().replace(/-/g, '_'), 60);
+    const canonical: Record<string, string> = {
+      sales: 'SALES',
+      sale: 'SALES',
+      cotizaciones: 'QUOTATIONS',
+      quotations: 'QUOTATIONS',
+      quotes: 'QUOTATIONS',
+      products: 'PRODUCTS',
+      catalogo: 'PRODUCTS',
+      inventory: 'INVENTORY',
+      inventory_reporting: 'INVENTORY',
+      clients: 'CUSTOMERS',
+      customers: 'CUSTOMERS',
+      cash: 'CASH',
+      reports: 'REPORTS',
+      purchases: 'PURCHASES',
+      warehouses: 'WAREHOUSES',
+    };
+    return canonical[first] || first.toUpperCase() || 'API';
   }
 
   private routeForMetrics(path: string) {
@@ -540,15 +782,31 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     return Number.isFinite(raw) ? Math.max(1000, raw) : 12000;
   }
 
+  private get workerIntervalSeconds() {
+    const raw = Number(this.config.get<string>('APPYRA_USAGE_OUTBOX_WORKER_INTERVAL_SECONDS') ?? '30');
+    return Number.isFinite(raw) ? Math.max(5, raw) : 30;
+  }
+
+  private get batchSize() {
+    const raw = Number(this.config.get<string>('APPYRA_USAGE_OUTBOX_BATCH_SIZE') ?? '50');
+    return Number.isFinite(raw) ? Math.min(100, Math.max(1, raw)) : 50;
+  }
+
+  private get lockTimeoutMs() {
+    const raw = Number(this.config.get<string>('APPYRA_USAGE_OUTBOX_LOCK_TIMEOUT_SECONDS') ?? '120');
+    const seconds = Number.isFinite(raw) ? Math.max(30, raw) : 120;
+    return seconds * 1000;
+  }
+
+  private get maxAttempts() {
+    const raw = Number(this.config.get<string>('APPYRA_USAGE_OUTBOX_MAX_ATTEMPTS') ?? '6');
+    return Number.isFinite(raw) ? Math.max(1, raw) : 6;
+  }
+
   private get requestTelemetryThrottleMs() {
     const raw = Number(this.config.get<string>('APPYRA_USAGE_CLIENT_THROTTLE_SECONDS') ?? '300');
     const seconds = Number.isFinite(raw) ? Math.max(60, raw) : 300;
     return seconds * 1000;
-  }
-
-  private get requestHeartbeatSeconds() {
-    const raw = Number(this.config.get<string>('APPYRA_USAGE_CLIENT_ACTIVE_SECONDS') ?? '60');
-    return Number.isFinite(raw) ? Math.min(600, Math.max(0, raw)) : 60;
   }
 
   private get appVersion() {

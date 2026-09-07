@@ -32,6 +32,7 @@ import {
   type UnitOfMeasureSnapshot,
 } from "./unit-of-measure.util";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 type ResolvedProductWarehouse = { id: string; name: string; code: string };
 const PRODUCT_HAS_HISTORY_CODE = "PRODUCT_HAS_HISTORY";
@@ -56,6 +57,8 @@ export class ProductsService {
     private readonly licenses: LicenseService,
     @Optional()
     private readonly inventoryMutations?: InventoryMutationService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {
     const base =
       this.config.get<string>("PUBLIC_BASE_URL") ??
@@ -266,7 +269,10 @@ export class ProductsService {
   }
 
   private normalizeProductClassification(
-    dto: Pick<CreateProductDto | UpdateProductDto, "itemType" | "trackInventory">,
+    dto: Pick<
+      CreateProductDto | UpdateProductDto,
+      "itemType" | "trackInventory"
+    >,
     current?: Pick<Product, "itemType" | "trackInventory"> | null,
   ) {
     const rawItemType =
@@ -282,7 +288,7 @@ export class ProductsService {
     const trackInventory =
       itemType === ProductItemType.SERVICE
         ? false
-        : dto.trackInventory ?? current?.trackInventory ?? true;
+        : (dto.trackInventory ?? current?.trackInventory ?? true);
     return { itemType, trackInventory };
   }
 
@@ -343,9 +349,7 @@ export class ProductsService {
       tx.warehouseTransferItem.count({ where: { companyId, productId } }),
     ]);
     return {
-      productStock: new Prisma.Decimal(product?.stock ?? 0).abs().gt(0)
-        ? 1
-        : 0,
+      productStock: new Prisma.Decimal(product?.stock ?? 0).abs().gt(0) ? 1 : 0,
       nonZeroWarehouseStocks,
       inventoryMovements,
       saleItems,
@@ -790,10 +794,30 @@ export class ProductsService {
     return this.mapProduct(product as any);
   }
 
+  private async enqueueProductTelemetry(
+    tx: Prisma.TransactionClient,
+    input: {
+      companyId: string;
+      actorUserId?: string | null;
+      eventType: string;
+      productId: string;
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    await this.telemetry?.enqueueBusinessEvent(tx, {
+      companyId: input.companyId,
+      actorUserId: input.actorUserId ?? null,
+      eventType: input.eventType,
+      entityType: "product",
+      entityId: input.productId,
+      feature: "PRODUCTS",
+      metadata: input.metadata,
+    });
+  }
+
   async create(user: TenantUser, dto: CreateProductDto): Promise<any> {
     const companyId = requireTenant(user);
     await this.assertWritable(companyId);
-    await this.licenses.assertCanCreateProduct(companyId);
     const operationProductIdForRecovery = this.operationProductId(
       companyId,
       dto.operationId,
@@ -867,27 +891,39 @@ export class ProductsService {
           companyId,
           dto.unitOfMeasureId,
         );
-        const classification = this.normalizeProductClassification(dto);
-        const classificationTracksPhysicalInventory =
-          this.isInventoryTrackedClassification(classification);
         const inventoryEnabled = await this.companyInventoryEnabled(
           tx,
           companyId,
         );
+        const requestedClassification =
+          this.normalizeProductClassification(dto);
+        const classification = inventoryEnabled
+          ? requestedClassification
+          : {
+              ...requestedClassification,
+              trackInventory: false,
+            };
+        const classificationTracksPhysicalInventory =
+          this.isInventoryTrackedClassification(classification);
         const tracksPhysicalInventory =
           inventoryEnabled && classificationTracksPhysicalInventory;
-        const initialStock = new Prisma.Decimal(dto.stock ?? 0);
+        const requestedInitialStock = new Prisma.Decimal(dto.stock ?? 0);
+        const initialStock = tracksPhysicalInventory
+          ? requestedInitialStock
+          : new Prisma.Decimal(0);
         validateQuantityForUnit({
-          quantity: initialStock,
+          quantity: requestedInitialStock,
           unit: unitOfMeasure,
           label: "stock del producto",
           allowZero: true,
         });
-        if (!tracksPhysicalInventory && initialStock.gt(0)) {
+        if (
+          inventoryEnabled &&
+          !tracksPhysicalInventory &&
+          requestedInitialStock.gt(0)
+        ) {
           throw new BadRequestException(
-            inventoryEnabled
-              ? "El stock inicial solo aplica a productos con inventario."
-              : "El control de inventario esta desactivado para esta empresa.",
+            "El stock inicial solo aplica a productos con inventario.",
           );
         }
         const data = {
@@ -956,10 +992,21 @@ export class ProductsService {
             operationId: dto.operationId,
             result: `updated-existing deletedDuplicates=${prune.deleted} skippedDuplicates=${prune.skipped}`,
           });
+          await this.enqueueProductTelemetry(tx, {
+            companyId,
+            actorUserId: user.id,
+            eventType: "PRODUCT_UPDATED",
+            productId: product.id,
+            metadata: { reason: "reuse_equivalent_product" },
+          });
           return this.productResponse(tx, companyId, product.id);
         }
 
         try {
+          await this.licenses.assertCanCreateProductInTransaction(
+            tx,
+            companyId,
+          );
           const product = operationProductId
             ? await tx.product.upsert({
                 where: { id: operationProductId },
@@ -1006,12 +1053,22 @@ export class ProductsService {
             result: "created",
           });
           await this.pruneSafeDuplicateProducts(tx, companyId, product);
+          await this.enqueueProductTelemetry(tx, {
+            companyId,
+            actorUserId: user.id,
+            eventType: "PRODUCT_CREATED",
+            productId: product.id,
+          });
           return this.productResponse(tx, companyId, product.id);
         } catch (error) {
           if (this.isUniqueConstraint(error)) {
             throw error;
           }
           if (!this.isSchemaMismatch(error)) throw error;
+          await this.licenses.assertCanCreateProductInTransaction(
+            tx,
+            companyId,
+          );
           const product = await tx.product.create({ data });
           if (tracksPhysicalInventory) {
             const warehouse = await this.resolveInventoryWarehouse(
@@ -1043,6 +1100,13 @@ export class ProductsService {
             }
           }
           await this.pruneSafeDuplicateProducts(tx, companyId, product);
+          await this.enqueueProductTelemetry(tx, {
+            companyId,
+            actorUserId: user.id,
+            eventType: "PRODUCT_CREATED",
+            productId: product.id,
+            metadata: { path: "schema_mismatch_fallback" },
+          });
           return this.productResponse(tx, companyId, product.id);
         }
       }, PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
@@ -1226,7 +1290,11 @@ export class ProductsService {
       if (!current) {
         throw new NotFoundException("Producto no encontrado");
       }
-      if (hasLegacyStockEcho) {
+      const inventoryEnabled = await this.companyInventoryEnabled(
+        tx,
+        companyId,
+      );
+      if (inventoryEnabled && hasLegacyStockEcho) {
         const echoedStock = new Prisma.Decimal(dto.stock ?? 0);
         validateQuantityForUnit({
           quantity: echoedStock,
@@ -1240,19 +1308,34 @@ export class ProductsService {
           );
         }
       }
-      const nextClassification = this.normalizeProductClassification(
+      const requestedNextClassification = this.normalizeProductClassification(
         dto,
         current as Pick<Product, "itemType" | "trackInventory">,
       );
+      const nextClassification = inventoryEnabled
+        ? requestedNextClassification
+        : {
+            ...requestedNextClassification,
+            trackInventory: false,
+          };
       const currentClassification = this.normalizeProductClassification(
         {},
         current as Pick<Product, "itemType" | "trackInventory">,
       );
-      const classificationChanges =
-        nextClassification.itemType !== currentClassification.itemType ||
+      const itemTypeChanges =
+        nextClassification.itemType !== currentClassification.itemType;
+      const trackInventoryChanges =
         nextClassification.trackInventory !==
-          currentClassification.trackInventory;
-      if (classificationChanges) {
+        currentClassification.trackInventory;
+      const onlyCompanyInventoryDisableForcesOff =
+        !inventoryEnabled &&
+        !itemTypeChanges &&
+        currentClassification.trackInventory === true &&
+        nextClassification.trackInventory === false;
+      if (
+        itemTypeChanges ||
+        (trackInventoryChanges && !onlyCompanyInventoryDisableForcesOff)
+      ) {
         await this.assertProductClassificationCanChange(tx, companyId, id);
       }
       const measurementUnitsEnabled = await this.measurementUnitsEnabled(
@@ -1296,8 +1379,9 @@ export class ProductsService {
           dto.itemType === undefined && dto.trackInventory === undefined
             ? undefined
             : nextClassification.itemType,
-        trackInventory:
-          dto.itemType === undefined && dto.trackInventory === undefined
+        trackInventory: !inventoryEnabled
+          ? false
+          : dto.itemType === undefined && dto.trackInventory === undefined
             ? undefined
             : nextClassification.trackInventory,
         unitOfMeasureId:
@@ -1351,6 +1435,12 @@ export class ProductsService {
           operationId: dto.operationId,
           result: `updated deletedDuplicates=${prune.deleted} skippedDuplicates=${prune.skipped}`,
         });
+        await this.enqueueProductTelemetry(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "PRODUCT_UPDATED",
+          productId: updated.id,
+        });
         return this.productResponse(tx, companyId, updated.id);
       } catch (error) {
         if (this.isUniqueConstraint(error)) {
@@ -1373,6 +1463,13 @@ export class ProductsService {
           throw new NotFoundException("Producto no encontrado");
         }
         await this.pruneSafeDuplicateProducts(tx, companyId, updated);
+        await this.enqueueProductTelemetry(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "PRODUCT_UPDATED",
+          productId: updated.id,
+          metadata: { path: "schema_mismatch_fallback" },
+        });
         return this.productResponse(tx, companyId, updated.id);
       }
     });
@@ -1517,6 +1614,19 @@ export class ProductsService {
         }
       }
 
+      await this.telemetry?.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "INVENTORY_ADJUSTED",
+        entityType: "product",
+        entityId: id,
+        feature: "INVENTORY",
+        metadata: {
+          adjustment_mode: hasCountedStock ? "counted_stock" : "delta",
+          warehouse_id: warehouse.id,
+        },
+      });
+
       return this.productResponse(tx, companyId, id);
     }, PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
   }
@@ -1530,25 +1640,33 @@ export class ProductsService {
     });
     if (!existing) return { ok: true };
     if (existing.archivedAt) return { ok: true, archived: true };
-    const references = await this.protectedProductReferenceCounts(
-      this.prisma,
-      companyId,
-      id,
-    );
-    if (this.hasProtectedProductHistory(references)) {
-      throw this.productHasHistoryConflict(references);
-    }
-    try {
-      await this.prisma.product.deleteMany({ where: { id, companyId } });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2003"
-      ) {
-        throw this.productHasHistoryConflict();
+    await this.prisma.$transaction(async (tx) => {
+      const references = await this.protectedProductReferenceCounts(
+        tx,
+        companyId,
+        id,
+      );
+      if (this.hasProtectedProductHistory(references)) {
+        throw this.productHasHistoryConflict(references);
       }
-      throw error;
-    }
+      try {
+        await tx.product.deleteMany({ where: { id, companyId } });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003"
+        ) {
+          throw this.productHasHistoryConflict();
+        }
+        throw error;
+      }
+      await this.enqueueProductTelemetry(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "PRODUCT_DELETED",
+        productId: id,
+      });
+    });
     return { ok: true };
   }
 
@@ -1579,15 +1697,61 @@ export class ProductsService {
         product: await this.productResponse(this.prisma, companyId, id),
       };
     }
-    await this.prisma.product.updateMany({
-      where: { id, companyId, archivedAt: null },
-      data: { archivedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { id, companyId, archivedAt: null },
+        data: { archivedAt: new Date() },
+      });
+      await this.enqueueProductTelemetry(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "PRODUCT_ARCHIVED",
+        productId: id,
+      });
     });
     return {
       ok: true,
       archived: true,
       product: await this.productResponse(this.prisma, companyId, id),
     };
+  }
+
+  async reactivate(user: TenantUser, id: string) {
+    const companyId = requireTenant(user);
+    await this.assertWritable(companyId);
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.product.findFirst({
+        where: { id, companyId },
+        select: { id: true, archivedAt: true },
+      });
+      if (!existing) {
+        throw new NotFoundException("Producto no encontrado");
+      }
+      if (!existing.archivedAt) {
+        return {
+          ok: true,
+          archived: false,
+          product: await this.productResponse(tx, companyId, id),
+        };
+      }
+
+      await this.licenses.assertCanCreateProductInTransaction(tx, companyId);
+      await tx.product.updateMany({
+        where: { id, companyId, archivedAt: { not: null } },
+        data: { archivedAt: null },
+      });
+      await this.enqueueProductTelemetry(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "PRODUCT_REACTIVATED",
+        productId: id,
+      });
+      return {
+        ok: true,
+        archived: false,
+        product: await this.productResponse(tx, companyId, id),
+      };
+    }, PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
   }
 
   async purgeAllForDebug(user: TenantUser) {
@@ -1762,7 +1926,10 @@ export class ProductsService {
     return `${this.publicBaseUrl}${normalized}`;
   }
 
-  private normalizeUpdateImagePatch(dto: UpdateProductDto, companyId: string): {
+  private normalizeUpdateImagePatch(
+    dto: UpdateProductDto,
+    companyId: string,
+  ): {
     normalizedImagePath: string | null | undefined;
     data: {
       imagen?: string | null;

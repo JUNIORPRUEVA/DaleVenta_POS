@@ -11,6 +11,11 @@ describe("ClientsService multi-tenant isolation", () => {
   };
 
   function serviceWith(prisma: Record<string, unknown>) {
+    if (!('$transaction' in prisma)) {
+      (prisma as any).$transaction = jest.fn(
+        async (work: (tx: typeof prisma) => unknown) => work(prisma),
+      );
+    }
     return new ClientsService(
       prisma as never,
       { emitOps: jest.fn() } as never,

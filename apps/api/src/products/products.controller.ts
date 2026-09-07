@@ -532,6 +532,14 @@ export class ProductsController {
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Permissions("editProducts")
+  @Patch(":id/reactivate")
+  reactivate(@Req() req: Request, @Param("id") id: string) {
+    return this.products.reactivate(req.user as TenantUser, id);
+  }
+
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Roles(Role.ADMIN, Role.ASISTENTE)
+  @Permissions("editProducts")
   @Patch(":id")
   update(
     @Req() req: Request,

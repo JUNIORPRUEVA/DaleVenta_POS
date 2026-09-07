@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -24,6 +25,7 @@ import { LicenseService } from "../license/license.service";
 import { RedisService } from "../common/redis/redis.service";
 import { PasswordResetEmailService } from "./password-reset-email.service";
 import { provisionZeroConfigForNewCompany } from "../inventory/zero-config-inventory";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 const PASSWORD_RESET_GENERIC_MESSAGE =
   "Si tu cuenta permite recuperación por correo, recibirás las instrucciones correspondientes. De lo contrario, contacta al administrador de tu empresa.";
@@ -41,6 +43,8 @@ export class AuthService {
     private readonly licenses: LicenseService,
     private readonly redis: RedisService,
     private readonly passwordResetEmail: PasswordResetEmailService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   async login(identifier: string, password: string) {
@@ -80,6 +84,19 @@ export class AuthService {
       sessionRecord.sessionId,
     );
     await this.storeRefreshHash(sessionRecord.sessionId, refreshToken);
+    const loginCompanyId = session.activeCompany?.id ?? user.companyId ?? null;
+    if (loginCompanyId) {
+      await this.telemetry?.enqueueEvent({
+        companyId: loginCompanyId,
+        actorUserId: user.id,
+        eventType: "USER_LOGIN_SUCCESS",
+        entityType: "auth_session",
+        entityId: sessionRecord.sessionId,
+        feature: "AUTH",
+        platform: "api",
+        metadata: { session_id: sessionRecord.sessionId },
+      });
+    }
 
     return {
       accessToken,

@@ -38,6 +38,7 @@ import {
   UpsertSupplierDto,
 } from "./dto/purchases.dto";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 type RequestUser = { id: string; role: Role; companyId?: string | null };
 type ResolvedPurchaseWarehouse = { id: string; name: string; code: string };
@@ -51,6 +52,8 @@ export class PurchasesService {
     private readonly r2: R2Service,
     @Optional()
     private readonly inventoryMutations?: InventoryMutationService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   private includeOrder() {
@@ -786,6 +789,16 @@ export class PurchasesService {
         where: { id: receipt.id },
         include: { items: true },
       });
+      if (hasInventoryUpdates) {
+        await this.telemetry?.enqueueBusinessEvent(tx, {
+          companyId: order.companyId,
+          actorUserId: user.id,
+          eventType: "STOCK_RECEIVED",
+          entityType: "purchase_receipt",
+          entityId: receipt.id,
+          feature: "PURCHASES",
+        });
+      }
       return { receipt: refreshedReceipt, order: updated };
     }, PURCHASE_TRANSACTION_OPTIONS);
     } catch (error) {

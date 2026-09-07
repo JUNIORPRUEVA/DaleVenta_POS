@@ -18,6 +18,7 @@ import {
   OpenCashSessionDto,
 } from "./dto/cash.dto";
 import { TerminalResolutionService } from "../terminals/terminal-resolution.service";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 type RequestUser = TenantUser;
 
@@ -30,6 +31,8 @@ export class CashService {
     private readonly realtime: CatalogRealtimeRelayService,
     @Optional()
     private readonly terminalResolution?: TerminalResolutionService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   private terminalResolutionService() {
@@ -151,6 +154,15 @@ export class CashService {
               businessDate,
               note: dto.note,
             },
+          });
+
+          await this.telemetry?.enqueueBusinessEvent(tx, {
+            companyId,
+            actorUserId: user.id,
+            eventType: "CASH_SESSION_OPENED",
+            entityType: "cash_session",
+            entityId: session.id,
+            feature: "CASH",
           });
 
           return this.mapActiveSession(session);
@@ -284,6 +296,15 @@ export class CashService {
           },
         });
       }
+
+      await this.telemetry?.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "CASH_SESSION_CLOSED",
+        entityType: "cash_session",
+        entityId: closed.id,
+        feature: "CASH",
+      });
 
       return {
         session: closed,

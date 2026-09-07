@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import {
   InventoryMovementType,
@@ -14,6 +15,7 @@ import {
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductSourceResolver } from "../products/product-source.resolver";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 import {
   CreateWarehouseTransferDto,
   CreateWarehouseDto,
@@ -32,6 +34,8 @@ export class WarehousesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productSourceResolver: ProductSourceResolver,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   async list(user: TenantUser) {
@@ -92,14 +96,25 @@ export class WarehousesService {
     await this.assertMultiWarehouseEnabled(companyId);
     const name = this.cleanName(dto.name);
     const code = this.cleanCode(dto.code);
-    return this.prisma.warehouse.create({
-      data: {
+    return this.prisma.$transaction(async (tx) => {
+      const warehouse = await tx.warehouse.create({
+        data: {
+          companyId,
+          name,
+          code,
+          isActive: true,
+          isDefault: false,
+        },
+      });
+      await this.telemetry?.enqueueBusinessEvent(tx, {
         companyId,
-        name,
-        code,
-        isActive: true,
-        isDefault: false,
-      },
+        actorUserId: user.id ?? null,
+        eventType: "WAREHOUSE_CREATED",
+        entityType: "warehouse",
+        entityId: warehouse.id,
+        feature: "WAREHOUSES",
+      });
+      return warehouse;
     });
   }
 
@@ -190,7 +205,7 @@ export class WarehousesService {
           "Reasigna las terminales activas antes de desactivar este almacen.",
         );
       }
-      return tx.warehouse.update({
+      const deactivated = await tx.warehouse.update({
         where: { id },
         data: {
           isActive: false,
@@ -198,6 +213,15 @@ export class WarehousesService {
           deactivatedById: user.id ?? null,
         },
       });
+      await this.telemetry?.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: user.id ?? null,
+        eventType: "WAREHOUSE_DEACTIVATED",
+        entityType: "warehouse",
+        entityId: deactivated.id,
+        feature: "WAREHOUSES",
+      });
+      return deactivated;
     });
   }
 
@@ -566,6 +590,14 @@ export class WarehousesService {
       const completed = await tx.warehouseTransfer.findFirstOrThrow({
         where: { id: transfer.id, companyId },
         include: this.transferInclude(),
+      });
+      await this.telemetry?.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: user.id ?? null,
+        eventType: "WAREHOUSE_TRANSFER_COMPLETED",
+        entityType: "warehouse_transfer",
+        entityId: transfer.id,
+        feature: "WAREHOUSES",
       });
       return this.mapTransfer(completed);
     });

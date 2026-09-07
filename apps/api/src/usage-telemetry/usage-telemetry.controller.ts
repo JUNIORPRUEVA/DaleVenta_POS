@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Headers, Post } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Headers, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UsageTelemetryService } from './usage-telemetry.service';
 
@@ -13,6 +13,18 @@ export class UsageTelemetryController {
   async flush(@Headers('x-license-admin-secret') secret?: string | string[]) {
     this.assertInternalSecret(secret);
     return this.telemetry.flushAllCompanies('manual');
+  }
+
+  @Post('process')
+  async process(@Headers('x-license-admin-secret') secret?: string | string[]) {
+    this.assertInternalSecret(secret);
+    return this.telemetry.processOutboxBatch();
+  }
+
+  @Get('health')
+  async health(@Headers('x-license-admin-secret') secret?: string | string[]) {
+    this.assertInternalSecret(secret);
+    return this.telemetry.diagnostics();
   }
 
   private assertInternalSecret(rawSecret?: string | string[]) {

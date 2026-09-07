@@ -42,6 +42,15 @@ export class LicenseController {
     return this.licenses.listAdminCompanies(query);
   }
 
+  @Get('admin/:companyId/usage')
+  async getCompanyUsage(
+    @Param('companyId') companyId: string,
+    @Headers('x-license-admin-secret') secret?: string | string[],
+  ) {
+    await this.licenses.assertAdminSecret(secret);
+    return this.licenses.getAdminCompanyUsage(companyId);
+  }
+
   @Get('admin/:companyId')
   async getCompany(
     @Param('companyId') companyId: string,

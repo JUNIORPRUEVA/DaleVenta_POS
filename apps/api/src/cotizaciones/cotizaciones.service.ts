@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
@@ -44,6 +45,7 @@ import {
   validateQuantityForUnit,
   type UnitOfMeasureSnapshot,
 } from "../products/unit-of-measure.util";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 type AiRuntimeConfig = {
   apiKey: string;
@@ -84,6 +86,8 @@ export class CotizacionesService {
     private readonly redis: RedisService,
     private readonly evolutionWhatsApp: EvolutionWhatsAppService,
     private readonly taxes: TaxService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   private buildQuoteInclude() {
@@ -773,6 +777,15 @@ export class CotizacionesService {
           created.createdAt,
         );
 
+        await this.telemetry?.enqueueBusinessEvent(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "QUOTATION_CREATED",
+          entityType: "quotation",
+          entityId: created.id,
+          feature: "QUOTATIONS",
+        });
+
         return created;
       })
       .then(async (created) => {
@@ -1017,6 +1030,15 @@ export class CotizacionesService {
           nextCustomerId ?? null,
           updated.updatedAt,
         );
+
+        await this.telemetry?.enqueueBusinessEvent(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "QUOTATION_UPDATED",
+          entityType: "quotation",
+          entityId: updated.id,
+          feature: "QUOTATIONS",
+        });
 
         return updated;
       })

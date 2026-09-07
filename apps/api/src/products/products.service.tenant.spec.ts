@@ -16,6 +16,11 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     const prisma = options.prisma ?? {
       product: { findMany },
     };
+    if (!prisma.$transaction) {
+      prisma.$transaction = jest.fn(async (work: (tx: typeof prisma) => unknown) =>
+        work(prisma),
+      );
+    }
     const resolveSource =
       options.resolveSource ??
       jest.fn(async (companyId: string) => ({
@@ -39,6 +44,7 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       } as unknown as ConfigService,
       {
         assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
+        assertCanCreateProductInTransaction: jest.fn().mockResolvedValue(undefined),
       } as never,
     );
     return { service, prisma, resolveSource };

@@ -6,6 +6,7 @@ function buildService(prisma: any) {
   const config = { get: jest.fn().mockReturnValue(undefined) };
   const licenses = {
     assertCanCreateUser: jest.fn().mockResolvedValue(undefined),
+    assertCanCreateUserInTransaction: jest.fn().mockResolvedValue(undefined),
   };
   const realtime = { emitCompanyUser: jest.fn() };
   return {
@@ -208,6 +209,17 @@ describe("UsersService tenant isolation", () => {
 
   it("allows blocking one admin when another operational admin remains", async () => {
     const updatedAt = new Date("2026-08-27T13:00:00.000Z");
+    const tx = {
+      user: {
+        update: jest.fn().mockResolvedValue({
+          id: "admin-b",
+          email: "admin-b@test.local",
+          role: Role.ADMIN,
+          blocked: true,
+          updatedAt,
+        }),
+      },
+    };
     const prisma = {
       user: {
         findFirst: jest
@@ -220,14 +232,8 @@ describe("UsersService tenant isolation", () => {
             blocked: false,
           }),
         count: jest.fn().mockResolvedValue(1),
-        update: jest.fn().mockResolvedValue({
-          id: "admin-b",
-          email: "admin-b@test.local",
-          role: Role.ADMIN,
-          blocked: true,
-          updatedAt,
-        }),
       },
+      $transaction: jest.fn((fn) => fn(tx)),
       companyMember: {
         findFirst: jest.fn().mockResolvedValue({
           role: CompanyMemberRole.ADMIN,
@@ -243,6 +249,58 @@ describe("UsersService tenant isolation", () => {
         true,
       ),
     ).resolves.toMatchObject({ id: "admin-b", blocked: true });
+  });
+
+  it("checks user quota before unblocking a user", async () => {
+    const licenses = {
+      assertCanCreateUser: jest.fn().mockResolvedValue(undefined),
+      assertCanCreateUserInTransaction: jest.fn().mockResolvedValue(undefined),
+    };
+    const tx = {
+      user: {
+        update: jest.fn().mockResolvedValue({
+          id: "user-b",
+          email: "user-b@test.local",
+          role: Role.CAJERO,
+          blocked: false,
+          updatedAt: new Date("2026-08-27T13:00:00.000Z"),
+        }),
+      },
+    };
+    const prisma = {
+      user: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({ id: "user-b" })
+          .mockResolvedValueOnce({
+            id: "user-b",
+            companyId: "company-a",
+            role: Role.CAJERO,
+            blocked: true,
+          }),
+      },
+      companyMember: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const config = { get: jest.fn().mockReturnValue(undefined) };
+    const service = new UsersService(
+      prisma as any,
+      config as any,
+      licenses as any,
+      { emitCompanyUser: jest.fn() } as any,
+    );
+
+    await expect(
+      service.setBlocked(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        "user-b",
+        false,
+      ),
+    ).resolves.toMatchObject({ id: "user-b", blocked: false });
+    expect(licenses.assertCanCreateUserInTransaction).toHaveBeenCalledWith(
+      tx,
+      "company-a",
+    );
   });
 
   it("rejects removing the last operational admin in a company", async () => {

@@ -25,13 +25,17 @@ function sourceContext() {
 function buildService(
   prisma: Record<string, unknown>,
   inventory: Record<string, unknown> = {},
+  licenses: Record<string, unknown> = {
+    assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
+    assertCanCreateProductInTransaction: jest.fn().mockResolvedValue(undefined),
+  },
 ) {
   const service = new ProductsService(
     prisma as never,
     {} as never,
     { resolveForCompany: jest.fn(async () => sourceContext()) } as never,
     { get: jest.fn(() => "") } as unknown as ConfigService,
-    { assertCanCreateProduct: jest.fn().mockResolvedValue(undefined) } as never,
+    licenses as never,
     inventory as never,
   );
   jest.spyOn(service as never, "productResponse").mockResolvedValue({
@@ -433,6 +437,57 @@ describe("ProductsService stock hardening", () => {
     expect(tx.product.create).not.toHaveBeenCalled();
   });
 
+  it("forces non-inventory create and skips initial stock when company inventory is disabled", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ inventoryEnabled: false }),
+      },
+      product: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({ id: "product-1" }),
+      },
+      tax: { findFirst: jest.fn() },
+      warehouse: { findMany: jest.fn(), findFirst: jest.fn() },
+      warehouseStock: { upsert: jest.fn() },
+      saleItem: { count: jest.fn().mockResolvedValue(0) },
+      cotizacionItem: { count: jest.fn().mockResolvedValue(0) },
+      purchaseOrderItem: { count: jest.fn().mockResolvedValue(0) },
+      websiteProductOverride: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const inventory = {
+      increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    };
+    const service = buildService(prisma, inventory);
+
+    await service.create(userA as never, {
+      nombre: "Producto sin modulo inventario",
+      precio: 250,
+      costo: 100,
+      stock: 7,
+      categoria: "General",
+      itemType: "PRODUCT",
+      trackInventory: true,
+    });
+
+    expect(tx.company.findUnique).toHaveBeenCalledWith({
+      where: { id: companyA },
+      select: { inventoryEnabled: true },
+    });
+    expect(tx.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        companyId: companyA,
+        itemType: "PRODUCT",
+        trackInventory: false,
+        stock: new Prisma.Decimal(0),
+      }),
+    });
+    expect(tx.warehouse.findMany).not.toHaveBeenCalled();
+    expect(tx.warehouseStock.upsert).not.toHaveBeenCalled();
+    expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
+  });
+
   it("allows classification changes only while product has no stock or history", async () => {
     const tx = {
       product: {
@@ -476,6 +531,57 @@ describe("ProductsService stock hardening", () => {
         }),
       }),
     );
+  });
+
+  it("forces stale inventory-tracked product off on update when company inventory is disabled without touching stock", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ inventoryEnabled: false }),
+      },
+      product: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: "product-1",
+            stock: new Prisma.Decimal("15"),
+            itemType: "PRODUCT",
+            trackInventory: true,
+            unitOfMeasureId: "UNIT",
+            unitOfMeasure: null,
+          })
+          .mockResolvedValueOnce({ id: "product-1" }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      warehouseStock: { count: jest.fn() },
+      inventoryMovement: { count: jest.fn() },
+      saleItem: { count: jest.fn() },
+      purchaseOrderItem: { count: jest.fn() },
+      warehouseTransferItem: { count: jest.fn() },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+
+    await service.update(userA as never, "product-1", {
+      nombre: "Metadata segura",
+      stock: 999,
+      trackInventory: true,
+    });
+
+    expect(tx.product.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "product-1", companyId: companyA, archivedAt: null },
+        data: expect.objectContaining({
+          nombre: "Metadata segura",
+          trackInventory: false,
+        }),
+      }),
+    );
+    expect(tx.product.updateMany.mock.calls[0][0].data.stock).toBeUndefined();
+    expect(tx.warehouseStock.count).not.toHaveBeenCalled();
+    expect(tx.inventoryMovement.count).not.toHaveBeenCalled();
   });
 
   it("preserves canonical R2 image identity when editing only price", async () => {
@@ -540,7 +646,9 @@ describe("ProductsService stock hardening", () => {
     };
     const prisma = {
       product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
-      company: { findUnique: jest.fn().mockResolvedValue({ taxEnabled: true }) },
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ taxEnabled: true }),
+      },
       $transaction: jest.fn((fn) => fn(tx)),
     };
     const service = buildService(prisma);
@@ -559,7 +667,9 @@ describe("ProductsService stock hardening", () => {
         taxPriceMode: null,
       }),
     );
-    expect(tx.product.updateMany.mock.calls[0][0].data.imageKey).toBeUndefined();
+    expect(
+      tx.product.updateMany.mock.calls[0][0].data.imageKey,
+    ).toBeUndefined();
   });
 
   it("preserves canonical R2 image identity when editing category", async () => {
@@ -597,7 +707,9 @@ describe("ProductsService stock hardening", () => {
     expect(tx.product.updateMany.mock.calls[0][0].data.categoria).toBe(
       "Nueva categoria",
     );
-    expect(tx.product.updateMany.mock.calls[0][0].data.imageKey).toBeUndefined();
+    expect(
+      tx.product.updateMany.mock.calls[0][0].data.imageKey,
+    ).toBeUndefined();
   });
 
   it("does not persist /media/products URLs as image identity", async () => {
@@ -840,5 +952,35 @@ describe("ProductsService stock hardening", () => {
       service.adjustStock(userA as never, "product-1", { delta: 1 }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(tx.warehouse.findMany).not.toHaveBeenCalled();
+  });
+
+  it("checks product quota before reactivating an archived product", async () => {
+    const licenses = {
+      assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
+      assertCanCreateProductInTransaction: jest.fn().mockResolvedValue(undefined),
+    };
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          archivedAt: new Date("2026-08-01T00:00:00Z"),
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const service = buildService(prisma, {}, licenses);
+
+    await expect(
+      service.reactivate(userA as never, "product-1"),
+    ).resolves.toMatchObject({ ok: true, archived: false });
+    expect(licenses.assertCanCreateProductInTransaction).toHaveBeenCalledWith(
+      tx,
+      companyA,
+    );
+    expect(tx.product.updateMany).toHaveBeenCalledWith({
+      where: { id: "product-1", companyId: companyA, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
   });
 });

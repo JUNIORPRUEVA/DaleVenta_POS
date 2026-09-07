@@ -44,6 +44,7 @@ import {
   TerminalResolutionService,
   type OperationalTerminalContext,
 } from "../terminals/terminal-resolution.service";
+import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 type NormalizedSaleItem = {
   productId: string | null;
@@ -100,6 +101,8 @@ export class SalesService {
     private readonly inventoryMutations?: InventoryMutationService,
     @Optional()
     private readonly terminalResolution?: TerminalResolutionService,
+    @Optional()
+    private readonly telemetry?: UsageTelemetryService,
   ) {}
 
   private saleInclude() {
@@ -1341,6 +1344,26 @@ export class SalesService {
           });
         }
 
+        await this.telemetry?.enqueueBusinessEvent(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "SALE_COMPLETED",
+          entityType: "sale",
+          entityId: createdSale.id,
+          feature: "SALES",
+        });
+        if (sourceQuotationId) {
+          await this.telemetry?.enqueueBusinessEvent(tx, {
+            companyId,
+            actorUserId: user.id,
+            eventType: "QUOTATION_CONVERTED_TO_SALE",
+            entityType: "quotation",
+            entityId: sourceQuotationId,
+            feature: "QUOTATIONS",
+            metadata: { sale_id: createdSale.id },
+          });
+        }
+
         return createdSale;
       }, SALE_TRANSACTION_OPTIONS);
       this.emitSaleEvent(companyId, "sale.created", sale.id, {
@@ -1662,6 +1685,15 @@ export class SalesService {
           createdByUserId: requestUser.id,
         });
       }
+
+      await this.telemetry?.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: requestUser.id,
+        eventType: "SALE_CANCELLED",
+        entityType: "sale",
+        entityId: sale.id,
+        feature: "SALES",
+      });
 
       return { ok: true, alreadyCancelled: false };
     }, SALE_TRANSACTION_OPTIONS);

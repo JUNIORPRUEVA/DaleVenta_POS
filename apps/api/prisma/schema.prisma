@@ -755,6 +755,7 @@ model Company {
   warehouseTransfers               WarehouseTransfer[]
   warehouseTransferItems           WarehouseTransferItem[]
   inventoryZeroConfigState         InventoryZeroConfigState?
+  telemetryOutbox                  TelemetryOutbox[]
 
   @@index([status])
   @@index([licenseStatus])
@@ -1867,6 +1868,34 @@ model NotificationOutbox {
   @@index([status, nextAttemptAt])
   @@index([lockedAt])
   @@map("notification_outbox")
+}
+
+model TelemetryOutbox {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventId       String    @unique @map("event_id") @db.Uuid
+  schemaVersion Int       @default(1) @map("schema_version")
+  companyId     String    @map("company_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(80)
+  payload        Json      @map("payload_json")
+  status        String    @default("PENDING") @db.VarChar(32)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at")
+  occurredAt    DateTime  @default(now()) @map("occurred_at")
+  sentAt        DateTime? @map("sent_at")
+  lastError     String?   @map("last_error") @db.VarChar(1800)
+  lockedAt      DateTime? @map("locked_at")
+  lockedBy      String?   @map("locked_by") @db.VarChar(120)
+  dedupeKey     String?   @unique @map("dedupe_key") @db.VarChar(240)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, occurredAt])
+  @@index([status, nextAttemptAt])
+  @@index([lockedAt])
+  @@index([eventType])
+  @@map("telemetry_outbox")
 }
 
 model ServiceOrderNotificationJob {

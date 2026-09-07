@@ -864,7 +864,6 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
 
   async create(requestUser: TenantUser, dto: CreateUserDto) {
     const companyId = requireTenant(requestUser);
-    await this.licenses.assertCanCreateUser(companyId);
     const email = this.normalizeEmail(dto.email);
     const cedula = this.normalizeOptionalString(dto.cedula);
     const numeroFlota =
@@ -897,6 +896,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       throw new BadRequestException("La contraseña es obligatoria");
     const passwordHash = await bcrypt.hash(password, 10);
     const created = await this.prisma.$transaction(async (tx) => {
+      await this.licenses.assertCanCreateUserInTransaction(tx, companyId);
       const user = await tx.user.create({
         data: {
           email,
@@ -1531,16 +1531,24 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       action: next ? "USER_BLOCKED" : "USER_UNBLOCKED",
     });
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: { blocked: next },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        blocked: true,
-        updatedAt: true,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (existing.blocked && !next) {
+        await this.licenses.assertCanCreateUserInTransaction(
+          tx,
+          requireTenant(requestUser),
+        );
+      }
+      return tx.user.update({
+        where: { id },
+        data: { blocked: next },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          blocked: true,
+          updatedAt: true,
+        },
+      });
     });
 
     if (existing.blocked !== next) {

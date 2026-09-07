@@ -8603,7 +8603,13 @@ class _InventoryProductEditorPageState
 
     final name = _nameCtrl.text.trim();
     final code = _codeCtrl.text.trim();
-    final selectedType = _articleType;
+    final companySettings = ref.read(companySettingsProvider).valueOrNull;
+    final companyInventoryEnabled = companySettings?.inventoryEnabled ?? true;
+    final selectedType = companyInventoryEnabled
+        ? _articleType
+        : _articleType == _ProductArticleType.service
+        ? _ProductArticleType.service
+        : _ProductArticleType.nonInventoryProduct;
     final price = _parseInventoryNumber(_priceCtrl.text);
     final cost =
         selectedType == _ProductArticleType.service &&
@@ -8613,6 +8619,7 @@ class _InventoryProductEditorPageState
     final product = _product;
     final isEditing = product != null;
     final tracksPhysicalInventory =
+        companyInventoryEnabled &&
         selectedType == _ProductArticleType.inventoryProduct;
     final stock = isEditing
         ? product.stock ?? 0
@@ -8622,11 +8629,7 @@ class _InventoryProductEditorPageState
     final category = _categoryCtrl.text.trim();
     final taxConfig = ref.read(productTaxUiConfigProvider).valueOrNull;
     final measurementUnitsEnabled =
-        ref
-            .read(companySettingsProvider)
-            .valueOrNull
-            ?.measurementUnitsEnabled ==
-        true;
+        companySettings?.measurementUnitsEnabled == true;
     final unitForSave = measurementUnitsEnabled
         ? _selectedUnit
         : product?.unitOfMeasure ?? UnitOfMeasureModel.unit;
@@ -8725,7 +8728,8 @@ class _InventoryProductEditorPageState
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
               itemType: selectedType.itemType,
-              trackInventory: selectedType.trackInventory,
+              trackInventory:
+                  companyInventoryEnabled && selectedType.trackInventory,
             ) ??
             await repo.createProduct(
               nombre: name,
@@ -8742,7 +8746,8 @@ class _InventoryProductEditorPageState
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
               itemType: selectedType.itemType,
-              trackInventory: selectedType.trackInventory,
+              trackInventory:
+                  companyInventoryEnabled && selectedType.trackInventory,
               skipLoader: true,
             );
       } else {
@@ -8764,7 +8769,8 @@ class _InventoryProductEditorPageState
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
               itemType: selectedType.itemType,
-              trackInventory: selectedType.trackInventory,
+              trackInventory:
+                  companyInventoryEnabled && selectedType.trackInventory,
             ) ??
             await repo.updateProduct(
               id: product.id,
@@ -8783,7 +8789,8 @@ class _InventoryProductEditorPageState
               unitOfMeasureId: unitForSave.id,
               unitOfMeasure: unitForSave,
               itemType: selectedType.itemType,
-              trackInventory: selectedType.trackInventory,
+              trackInventory:
+                  companyInventoryEnabled && selectedType.trackInventory,
               skipLoader: true,
             );
       }
@@ -8903,6 +8910,17 @@ class _InventoryProductEditorPageState
             .valueOrNull
             ?.measurementUnitsEnabled ==
         true;
+    final companyInventoryEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.inventoryEnabled ??
+        true;
+    final displayArticleType = companyInventoryEnabled
+        ? _articleType
+        : _articleType == _ProductArticleType.service
+        ? _ProductArticleType.service
+        : _ProductArticleType.nonInventoryProduct;
+    final showsPhysicalInventory =
+        companyInventoryEnabled &&
+        displayArticleType == _ProductArticleType.inventoryProduct;
     final categoryState = ref.watch(inventoryCategoriesProvider);
     final categoryOptions = _categoryOptions(categoryState.items);
     if (measurementUnitsEnabled && !_loadingUnits && !_unitOptionsLoaded) {
@@ -8977,8 +8995,31 @@ class _InventoryProductEditorPageState
                 ],
               ),
               const SizedBox(height: 10),
-              if (_articleType == _ProductArticleType.inventoryProduct &&
-                  product == null)
+              if (companyInventoryEnabled) ...[
+                CheckboxListTile(
+                  value:
+                      displayArticleType ==
+                      _ProductArticleType.inventoryProduct,
+                  onChanged: _isSaving
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _articleType = value == true
+                                ? _ProductArticleType.inventoryProduct
+                                : _ProductArticleType.nonInventoryProduct;
+                            if (value != true) {
+                              _stockCtrl.text = '0';
+                            }
+                          });
+                        },
+                  title: const Text('Este producto maneja inventario'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (showsPhysicalInventory && product == null)
                 TextField(
                   controller: _stockCtrl,
                   focusNode: _stockFocus,
@@ -8995,8 +9036,7 @@ class _InventoryProductEditorPageState
                         : _selectedUnit.symbol,
                   ),
                 )
-              else if (_articleType == _ProductArticleType.inventoryProduct &&
-                  product != null)
+              else if (showsPhysicalInventory && product != null)
                 _ReadOnlyStockPanel(
                   stockText: measurementUnitsEnabled
                       ? formatQuantityWithUnit(
@@ -9012,8 +9052,7 @@ class _InventoryProductEditorPageState
                       ? null
                       : () => _openStockAdjustmentFromEditor(product),
                 ),
-              if (_articleType == _ProductArticleType.inventoryProduct &&
-                  product != null) ...[
+              if (showsPhysicalInventory && product != null) ...[
                 const SizedBox(height: 10),
                 Consumer(
                   builder: (context, ref, _) {
@@ -9076,14 +9115,18 @@ class _InventoryProductEditorPageState
                 const SizedBox(height: 10),
               ],
               DropdownButtonFormField<_ProductArticleType>(
-                initialValue: _articleType,
+                initialValue: displayArticleType,
                 isExpanded: true,
                 decoration: _inventoryTextInputDecoration(
                   'Tipo de artículo',
                   prefixIcon: const Icon(Icons.category_outlined),
                 ),
                 items: [
-                  for (final type in _ProductArticleType.values)
+                  for (final type in _ProductArticleType.values.where(
+                    (type) =>
+                        companyInventoryEnabled ||
+                        type != _ProductArticleType.inventoryProduct,
+                  ))
                     DropdownMenuItem<_ProductArticleType>(
                       value: type,
                       child: Text(type.label),

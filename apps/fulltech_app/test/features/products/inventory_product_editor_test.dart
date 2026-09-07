@@ -906,15 +906,22 @@ void main() {
     );
 
     expect(find.text('Unidad de medida'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).at(0), 'Tela azul');
-    await tester.enterText(find.byType(TextField).at(2), '150');
-    await tester.enterText(find.byType(TextField).at(3), '90');
-    await tester.enterText(find.byType(TextField).at(4), '20.5');
-    await tester.tap(find.text('Unidad (u)'));
+    await _enterProductFormText(
+      tester,
+      name: 'Tela azul',
+      price: '150',
+      cost: '90',
+      stock: '20.5',
+      category: 'General',
+    );
+    final unitDropdown = find.byWidgetPredicate(
+      (widget) => widget is DropdownButtonFormField<String>,
+    );
+    await tester.ensureVisible(unitDropdown.first);
+    await tester.tap(unitDropdown.first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Yarda (yd)'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('General'));
     await tester.tap(find.text('Crear producto'));
     await tester.pumpAndSettle();
 
@@ -989,11 +996,14 @@ void main() {
       await _pumpEditor(tester, repo: repo);
 
       expect(find.text('Unidad de medida'), findsNothing);
-      await tester.enterText(find.byType(TextField).at(0), 'Caja simple');
-      await tester.enterText(find.byType(TextField).at(2), '150');
-      await tester.enterText(find.byType(TextField).at(3), '90');
-      await tester.enterText(find.byType(TextField).at(4), '20');
-      await tester.tap(find.text('General'));
+      await _enterProductFormText(
+        tester,
+        name: 'Caja simple',
+        price: '150',
+        cost: '90',
+        stock: '20',
+        category: 'General',
+      );
       await tester.tap(find.text('Crear producto'));
       await tester.pumpAndSettle();
 
@@ -1009,13 +1019,92 @@ void main() {
     final repo = _FakeCatalogRepository();
     await _pumpEditor(tester, repo: repo);
 
+    final inventoryControlTop = tester
+        .getTopLeft(find.text('Este producto maneja inventario'))
+        .dy;
     final stockTop = tester.getTopLeft(find.text('Stock disponible')).dy;
     final typeTop = tester.getTopLeft(find.text('Tipo de artículo')).dy;
     final categoryTop = tester.getTopLeft(find.text('Categoría')).dy;
 
+    expect(inventoryControlTop, lessThan(stockTop));
     expect(typeTop, greaterThan(stockTop));
     expect(typeTop, lessThan(categoryTop));
   });
+
+  testWidgets(
+    'compania con inventario apagado crea producto sin campos ni payload de inventario',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      await _pumpEditor(
+        tester,
+        repo: repo,
+        companySettings: CompanySettings.empty().copyWith(
+          inventoryEnabled: false,
+        ),
+      );
+
+      expect(find.text('Este producto maneja inventario'), findsNothing);
+      expect(find.text('Producto con inventario'), findsNothing);
+      expect(find.text('Stock disponible'), findsNothing);
+      expect(find.text('Stock actual'), findsNothing);
+      expect(find.text('Ajustar stock'), findsNothing);
+
+      await _enterProductFormText(
+        tester,
+        name: 'Producto simple',
+        price: '250',
+        cost: '100',
+        category: 'General',
+      );
+      await tester.tap(find.text('Crear producto'));
+      await tester.pumpAndSettle();
+
+      expect(repo.creates, 1);
+      expect(repo.lastItemType, 'PRODUCT');
+      expect(repo.lastTrackInventory, isFalse);
+    },
+  );
+
+  testWidgets(
+    'compania con inventario apagado edita legacy trackInventory true sin mostrar ni reenviar stock',
+    (tester) async {
+      final repo = _FakeCatalogRepository();
+      final product = _product(
+        id: 'legacy-inventory',
+        name: 'Legacy con stock',
+        category: 'General',
+        stock: 12,
+        itemType: 'PRODUCT',
+        trackInventory: true,
+      );
+      await _pumpEditor(
+        tester,
+        repo: repo,
+        product: product,
+        companySettings: CompanySettings.empty().copyWith(
+          inventoryEnabled: false,
+        ),
+      );
+
+      expect(find.text('Este producto maneja inventario'), findsNothing);
+      expect(find.text('Producto con inventario'), findsNothing);
+      expect(find.text('Stock disponible'), findsNothing);
+      expect(find.text('Stock actual'), findsNothing);
+      expect(find.text('Ajustar stock'), findsNothing);
+      expect(find.textContaining('almacén'), findsNothing);
+
+      await tester.enterText(
+        _textFieldWithLabel('Nombre del producto'),
+        'Legacy editado',
+      );
+      await tester.tap(find.text('Guardar cambios'));
+      await tester.pumpAndSettle();
+
+      expect(repo.updates, 1);
+      expect(repo.lastItemType, 'PRODUCT');
+      expect(repo.lastTrackInventory, isFalse);
+    },
+  );
 
   testWidgets('selector crea producto sin inventario sin pedir stock fisico', (
     tester,
@@ -1101,11 +1190,14 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.byType(TextField).at(0), 'Caja');
-    await tester.enterText(find.byType(TextField).at(2), '100');
-    await tester.enterText(find.byType(TextField).at(3), '50');
-    await tester.enterText(find.byType(TextField).at(4), '1.5');
-    await tester.tap(find.text('General'));
+    await _enterProductFormText(
+      tester,
+      name: 'Caja',
+      price: '100',
+      cost: '50',
+      stock: '1.5',
+      category: 'General',
+    );
     await tester.tap(find.text('Crear producto'));
     await tester.pumpAndSettle();
 

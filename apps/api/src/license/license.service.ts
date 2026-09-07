@@ -35,6 +35,9 @@ type LicenseUpdateInput = {
   actorEmail?: unknown;
 };
 
+type PrismaExecutor = PrismaService | Prisma.TransactionClient;
+type QuotaResource = 'users' | 'products';
+
 @Injectable()
 export class LicenseService {
   constructor(
@@ -74,30 +77,29 @@ export class LicenseService {
   }
 
   async assertCanCreateUser(companyId: string) {
-    const status = await this.getCompanyLicenseStatus(companyId);
-    if (!status.isUsable) {
-      throw new ForbiddenException(status.blockReason ?? 'Licencia no activa');
-    }
-    if (status.limits.maxUsers > 0 && status.usage.users >= status.limits.maxUsers) {
-      throw new ConflictException(
-        `La licencia permite ${status.limits.maxUsers} usuarios. Aumenta el limite para crear mas usuarios.`,
-      );
-    }
+    await this.prisma.$transaction((tx) =>
+      this.assertCanCreateUserInTransaction(tx, companyId),
+    );
   }
 
   async assertCanCreateProduct(companyId: string) {
-    const status = await this.getCompanyLicenseStatus(companyId);
-    if (!status.isUsable) {
-      throw new ForbiddenException(status.blockReason ?? 'Licencia no activa');
-    }
-    if (
-      status.limits.maxProducts > 0 &&
-      status.usage.products >= status.limits.maxProducts
-    ) {
-      throw new ConflictException(
-        `La licencia permite ${status.limits.maxProducts} productos. Aumenta el limite para seguir creciendo.`,
-      );
-    }
+    await this.prisma.$transaction((tx) =>
+      this.assertCanCreateProductInTransaction(tx, companyId),
+    );
+  }
+
+  async assertCanCreateUserInTransaction(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    await this.assertCanConsumeQuota(tx, companyId, 'users');
+  }
+
+  async assertCanCreateProductInTransaction(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    await this.assertCanConsumeQuota(tx, companyId, 'products');
   }
 
   async getMyLicense(user: TenantUser) {
@@ -151,6 +153,48 @@ export class LicenseService {
       take: 25,
     });
     return { ...license, auditLogs };
+  }
+
+  async getAdminCompanyUsage(companyId: string) {
+    const status = await this.getCompanyLicenseStatus(companyId);
+    return {
+      companyId: status.companyId,
+      companyName: status.companyName,
+      plan: status.plan,
+      status: status.status,
+      rawStatus: status.rawStatus,
+      isUsable: status.isUsable,
+      expiresAt: status.periodEndsAt,
+      updatedAt: status.updatedAt,
+      products: {
+        resource: 'products',
+        current: status.usage.products,
+        limit: status.limits.maxProducts,
+        enforced: true,
+        semantics: 'active_non_archived_products',
+      },
+      users: {
+        resource: 'users',
+        current: status.usage.users,
+        limit: status.limits.maxUsers,
+        enforced: true,
+        semantics: 'active_non_blocked_users_or_active_memberships',
+      },
+      warehouses: {
+        resource: 'warehouses',
+        current: null,
+        limit: null,
+        enforced: false,
+        supported: false,
+      },
+      devices: {
+        resource: 'devices',
+        current: null,
+        limit: null,
+        enforced: false,
+        supported: false,
+      },
+    };
   }
 
   async activateMyLicense(user: TenantUser, dto: LicenseUpdateInput) {
@@ -324,8 +368,11 @@ export class LicenseService {
     }
   }
 
-  private async getCompanyLicenseStatus(companyId: string) {
-    const company = await this.prisma.company.findUnique({
+  private async getCompanyLicenseStatus(
+    companyId: string,
+    db: PrismaExecutor = this.prisma,
+  ) {
+    const company = await db.company.findUnique({
       where: { id: companyId },
       select: {
         id: true,
@@ -343,6 +390,7 @@ export class LicenseService {
         licenseNotes: true,
         maxUsers: true,
         maxProducts: true,
+        updatedAt: true,
       },
     });
     if (!company) throw new ForbiddenException('Empresa no encontrada');
@@ -365,11 +413,9 @@ export class LicenseService {
         effectiveStatus === LicenseStatus.ACTIVE);
 
     const [users, products, owner, appConfig] = await Promise.all([
-      this.prisma.user.count({
-        where: this.activeUserWhere(companyId),
-      }),
-      this.prisma.product.count({ where: { companyId } }),
-      this.prisma.companyMember.findFirst({
+      this.countBillableUsers(companyId, db),
+      this.countBillableProducts(companyId, db),
+      db.companyMember.findFirst({
         where: {
           companyId,
           status: 'ACTIVE',
@@ -387,7 +433,7 @@ export class LicenseService {
           },
         },
       }),
-      this.prisma.appConfig.findFirst({
+      db.appConfig.findFirst({
         where: { companyId },
         orderBy: { createdAt: 'asc' },
         select: {
@@ -432,6 +478,7 @@ export class LicenseService {
       licenseActivatedAt: company.licenseActivatedAt,
       licenseExpiresAt: company.licenseExpiresAt,
       licenseBlockedAt: company.licenseBlockedAt,
+      updatedAt: company.updatedAt,
       periodStartedAt: periodStart,
       periodEndsAt: periodEnd,
       licenseKey: company.licenseKey,
@@ -462,6 +509,72 @@ export class LicenseService {
         legalRepresentativeRole: appConfig?.legalRepresentativeRole || null,
       },
     };
+  }
+
+  async countBillableProducts(
+    companyId: string,
+    db: PrismaExecutor = this.prisma,
+  ) {
+    return db.product.count({ where: { companyId, archivedAt: null } });
+  }
+
+  async countBillableUsers(
+    companyId: string,
+    db: PrismaExecutor = this.prisma,
+  ) {
+    return db.user.count({ where: this.activeUserWhere(companyId) });
+  }
+
+  private async assertCanConsumeQuota(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    resource: QuotaResource,
+  ) {
+    await this.lockCompanyQuota(tx, companyId, resource);
+    const status = await this.getCompanyLicenseStatus(companyId, tx);
+    if (!status.isUsable) {
+      throw new ForbiddenException(status.blockReason ?? 'Licencia no activa');
+    }
+
+    const limit =
+      resource === 'users' ? status.limits.maxUsers : status.limits.maxProducts;
+    const current =
+      resource === 'users' ? status.usage.users : status.usage.products;
+    if (limit > 0 && current >= limit) {
+      throw this.planLimitReachedException(resource, limit, current, status.plan);
+    }
+  }
+
+  private async lockCompanyQuota(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    resource: QuotaResource,
+  ) {
+    await tx.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${`daleventas:quota:${resource}:${companyId}`})) IS NULL AS locked
+    `;
+  }
+
+  private planLimitReachedException(
+    resource: QuotaResource,
+    limit: number,
+    current: number,
+    plan: string,
+  ) {
+    const label = resource === 'users' ? 'usuarios' : 'productos';
+    const action =
+      resource === 'users'
+        ? 'crear mas usuarios'
+        : 'seguir agregando productos';
+    return new ConflictException({
+      code: 'PLAN_LIMIT_REACHED',
+      errorCode: 'PLAN_LIMIT_REACHED',
+      resource,
+      limit,
+      current,
+      plan,
+      message: `Tu plan permite ${limit} ${label}. Aumenta el limite para ${action}.`,
+    });
   }
 
   private activeUserWhere(companyId: string): Prisma.UserWhereInput {

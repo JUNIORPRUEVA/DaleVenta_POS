@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { LicenseStatus } from '@prisma/client';
 import { LicenseService } from './license.service';
 
@@ -69,6 +70,7 @@ describe('LicenseService limits', () => {
           licenseNotes: null,
           maxUsers: 2,
           maxProducts: 100,
+          updatedAt: new Date('2026-08-02T00:00:00Z'),
         }),
       },
       user: { count: jest.fn().mockResolvedValue(1) },
@@ -97,6 +99,101 @@ describe('LicenseService limits', () => {
 
     expect(status.companyName).toBe('Nombre Nuevo');
     expect(status.account.businessName).toBe('Nombre Nuevo');
+    expect(prisma.product.count).toHaveBeenCalledWith({
+      where: { companyId: 'company-a', archivedAt: null },
+    });
+  });
+
+  it('throws structured plan-limit errors under the company advisory lock', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ pg_advisory_xact_lock: '' }]),
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'company-a',
+          name: 'Empresa A',
+          slug: 'empresa-a',
+          status: 'ACTIVE',
+          plan: 'STANDARD',
+          licenseStatus: LicenseStatus.ACTIVE,
+          licenseKey: 'DV-123',
+          trialStartedAt: null,
+          trialEndsAt: null,
+          licenseActivatedAt: new Date('2026-08-01T00:00:00Z'),
+          licenseExpiresAt: null,
+          licenseBlockedAt: null,
+          licenseNotes: null,
+          maxUsers: 2,
+          maxProducts: 1,
+          updatedAt: new Date('2026-08-02T00:00:00Z'),
+        }),
+      },
+      user: { count: jest.fn().mockResolvedValue(1) },
+      product: { count: jest.fn().mockResolvedValue(1) },
+      companyMember: { findFirst: jest.fn().mockResolvedValue(null) },
+      appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const scopedService = new LicenseService(
+      {} as any,
+      {} as any,
+      {} as any,
+    ) as any;
+
+    try {
+      await scopedService.assertCanCreateProductInTransaction(tx, 'company-a');
+      fail('Expected product quota to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'PLAN_LIMIT_REACHED',
+        resource: 'products',
+        limit: 1,
+        current: 1,
+        plan: 'STANDARD',
+      });
+    }
+    expect(tx.$queryRaw).toHaveBeenCalled();
+  });
+
+  it('returns authoritative usage with unsupported warehouse and device limits', async () => {
+    const prisma = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'company-a',
+          name: 'Empresa A',
+          slug: 'empresa-a',
+          status: 'ACTIVE',
+          plan: 'STANDARD',
+          licenseStatus: LicenseStatus.ACTIVE,
+          licenseKey: 'DV-123',
+          trialStartedAt: null,
+          trialEndsAt: null,
+          licenseActivatedAt: new Date('2026-08-01T00:00:00Z'),
+          licenseExpiresAt: new Date('2026-12-31T00:00:00Z'),
+          licenseBlockedAt: null,
+          licenseNotes: null,
+          maxUsers: 3,
+          maxProducts: 50,
+          updatedAt: new Date('2026-08-02T00:00:00Z'),
+        }),
+      },
+      user: { count: jest.fn().mockResolvedValue(2) },
+      product: { count: jest.fn().mockResolvedValue(7) },
+      companyMember: { findFirst: jest.fn().mockResolvedValue(null) },
+      appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const scopedService = new LicenseService(
+      prisma as any,
+      {} as any,
+      {} as any,
+    ) as any;
+
+    await expect(scopedService.getAdminCompanyUsage('company-a')).resolves.toMatchObject({
+      companyId: 'company-a',
+      products: { current: 7, limit: 50, enforced: true },
+      users: { current: 2, limit: 3, enforced: true },
+      warehouses: { enforced: false, supported: false },
+      devices: { enforced: false, supported: false },
+    });
   });
 
   it('returns a structured inactive-license error for blocked accounts', () => {

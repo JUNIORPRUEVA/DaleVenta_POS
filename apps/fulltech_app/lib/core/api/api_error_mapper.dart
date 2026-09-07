@@ -225,6 +225,8 @@ class ApiErrorMapper {
   static String _extractMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data.trim();
     if (data is Map) {
+      final planLimit = _planLimitMessage(data);
+      if (planLimit != null) return planLimit;
       final message = data['message'];
       if (message is String && message.trim().isNotEmpty) return message.trim();
       if (message is List && message.isNotEmpty) {
@@ -239,6 +241,24 @@ class ApiErrorMapper {
       if (error is String && error.trim().isNotEmpty) return error.trim();
     }
     return fallback;
+  }
+
+  static String? _planLimitMessage(Map<dynamic, dynamic> data) {
+    final code = (data['errorCode'] ?? data['code'])?.toString().trim();
+    if (code != 'PLAN_LIMIT_REACHED') return null;
+    final resource = data['resource']?.toString().trim();
+    final limit = data['limit'];
+    if (resource == 'products') {
+      return limit == null
+          ? 'Tu plan alcanzo el limite de productos activos.'
+          : 'Tu plan permite $limit productos activos. Archiva productos o actualiza el plan para agregar mas.';
+    }
+    if (resource == 'users') {
+      return limit == null
+          ? 'Tu plan alcanzo el limite de usuarios activos.'
+          : 'Tu plan permite $limit usuarios activos. Desactiva usuarios o actualiza el plan para agregar mas.';
+    }
+    return null;
   }
 
   static String? _extractMachineCode(dynamic data) {

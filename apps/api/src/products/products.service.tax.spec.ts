@@ -33,6 +33,7 @@ describe("ProductsService fiscal validation", () => {
       { get: jest.fn().mockReturnValue("") } as unknown as ConfigService,
       {
         assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
+        assertCanCreateProductInTransaction: jest.fn().mockResolvedValue(undefined),
       } as never,
       inventoryMutations as never,
     );

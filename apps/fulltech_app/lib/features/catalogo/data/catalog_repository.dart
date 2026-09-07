@@ -181,6 +181,8 @@ class CatalogRepository {
 
   String _extractMessage(dynamic data, String fallback) {
     if (data is Map) {
+      final planLimit = _planLimitMessage(data);
+      if (planLimit != null) return planLimit;
       final message = data['message'];
       if (message is String && message.trim().isNotEmpty) return message;
       if (message is List && message.isNotEmpty) {
@@ -189,6 +191,16 @@ class CatalogRepository {
       }
     }
     return fallback;
+  }
+
+  String? _planLimitMessage(Map<dynamic, dynamic> data) {
+    final code = (data['errorCode'] ?? data['code'])?.toString().trim();
+    if (code != 'PLAN_LIMIT_REACHED') return null;
+    if (data['resource']?.toString().trim() != 'products') return null;
+    final limit = data['limit'];
+    return limit == null
+        ? 'Tu plan alcanzo el limite de productos activos.'
+        : 'Tu plan permite $limit productos activos. Archiva productos o actualiza el plan para agregar mas.';
   }
 
   bool _isProductHasHistory(dynamic data) {
