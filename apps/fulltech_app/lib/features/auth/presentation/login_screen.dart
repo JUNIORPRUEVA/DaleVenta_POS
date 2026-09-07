@@ -66,13 +66,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final prefs = await SharedPreferences.getInstance();
     final remembered = prefs.getBool(_rememberFlagKey) ?? false;
     final email = prefs.getString(_rememberEmailKey) ?? '';
-    final password = prefs.getString(_rememberPasswordKey) ?? '';
+    await prefs.remove(_rememberPasswordKey);
     if (!mounted) return;
     setState(() {
       _rememberMe = remembered;
       if (remembered) {
         _emailCtrl.text = email;
-        _passwordCtrl.text = password;
       }
     });
   }
@@ -82,7 +81,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_rememberMe) {
       await prefs.setBool(_rememberFlagKey, true);
       await prefs.setString(_rememberEmailKey, _emailCtrl.text.trim());
-      await prefs.setString(_rememberPasswordKey, _passwordCtrl.text);
+      await prefs.remove(_rememberPasswordKey);
     } else {
       await prefs.remove(_rememberFlagKey);
       await prefs.remove(_rememberEmailKey);
@@ -458,7 +457,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     const SizedBox(width: 8),
                                     const Expanded(
                                       child: Text(
-                                        'Recordar contraseña',
+                                        'Recordar usuario',
                                         style: TextStyle(
                                           color: AppColors.textPrimary,
                                           fontSize: 14,

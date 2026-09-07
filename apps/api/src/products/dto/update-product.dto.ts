@@ -67,11 +67,11 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
-  fotoUrl?: string;
+  fotoUrl?: string | null;
 
   @IsOptional()
   @IsString()
-  imageKey?: string;
+  imageKey?: string | null;
 
   @IsOptional()
   @IsString()

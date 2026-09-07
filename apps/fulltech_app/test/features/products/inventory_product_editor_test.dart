@@ -35,6 +35,7 @@ class _FakeCatalogRepository extends CatalogRepository {
   String? lastUnitOfMeasureId;
   String? lastItemType;
   bool? lastTrackInventory;
+  bool lastRemoveImage = false;
   UnitOfMeasureModel? lastUnitOfMeasure;
   double? lastAdjustedStock;
   bool dropImageOnUpdateResponse = false;
@@ -145,6 +146,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -157,6 +159,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     lastUnitOfMeasure = unitOfMeasure;
     lastItemType = itemType;
     lastTrackInventory = trackInventory;
+    lastRemoveImage = removeImage;
     await Future<void>.delayed(const Duration(milliseconds: 20));
     return ProductModel(
       id: id,
@@ -166,7 +169,7 @@ class _FakeCatalogRepository extends CatalogRepository {
       costo: costo,
       stock: stock,
       categoria: categoria,
-      fotoUrl: dropImageOnUpdateResponse ? null : fotoUrl,
+      fotoUrl: removeImage || dropImageOnUpdateResponse ? null : fotoUrl,
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
@@ -531,6 +534,7 @@ class _UomProtectedCatalogRepository extends _FakeCatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     updates += 1;
@@ -2490,11 +2494,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.updates, 1);
-      expect(repo.lastFotoUrl, 'uploads/companies/c1/products/camara.png');
+      expect(repo.lastFotoUrl, isNull);
+      expect(repo.lastRemoveImage, isFalse);
     },
   );
 
-  testWidgets('editar EXEMPT reenvia la imagen actual al guardar', (
+  testWidgets('editar EXEMPT omite imagen y preserva la existente', (
     tester,
   ) async {
     final repo = _FakeCatalogRepository();
@@ -2568,9 +2573,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.lastTaxTreatment, 'EXEMPT');
-    expect(repo.lastFotoUrl, '/uploads/existing.png');
+    expect(repo.lastFotoUrl, isNull);
+    expect(repo.lastRemoveImage, isFalse);
     expect(result?.product?.taxTreatment, 'EXEMPT');
-    expect(result?.product?.displayFotoUrl, isNotNull);
+  });
+
+  testWidgets('editar elimina imagen solo con acción explícita', (
+    tester,
+  ) async {
+    final repo = _FakeCatalogRepository();
+    final product = ProductModel(
+      id: 'p-remove-image',
+      nombre: 'Monitor',
+      precio: 2500,
+      costo: 1300,
+      stock: 1,
+      categoria: 'General',
+      fotoUrl: '/media/products/p-remove-image',
+      imageKey: 'uploads/companies/c1/products/images/user/2026/09/monitor.png',
+    );
+
+    await _pumpEditor(tester, repo: repo, product: product);
+
+    final removeButton = find.widgetWithText(TextButton, 'Quitar imagen');
+    await tester.ensureVisible(removeButton);
+    await tester.tap(removeButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar cambios'));
+    await tester.pumpAndSettle();
+
+    expect(repo.updates, 1);
+    expect(repo.lastFotoUrl, isNull);
+    expect(repo.lastRemoveImage, isTrue);
   });
 
   testWidgets(

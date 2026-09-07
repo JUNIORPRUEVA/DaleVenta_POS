@@ -587,7 +587,7 @@ class CatalogController extends StateNotifier<CatalogState> {
             costo: draft.costo,
             stock: draft.stock,
             categoria: draft.categoria,
-            fotoUrl: fotoUrl ?? existing.fotoUrl,
+            fotoUrl: fotoUrl,
             taxTreatment: draft.taxTreatment,
             taxRate: draft.taxRate,
             taxPriceMode: draft.taxPriceMode,
@@ -688,6 +688,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
   }) async {
     if (state.saving) return null;
     state = state.copyWith(saving: true, actionError: null);
@@ -729,7 +730,8 @@ class CatalogController extends StateNotifier<CatalogState> {
         precio: precio,
         costo: costo,
         stock: stock,
-        fotoUrl: uploadedFotoUrl ?? fotoUrl,
+        fotoUrl: removeImage ? null : uploadedFotoUrl ?? fotoUrl,
+        removeImage: removeImage,
         categoria: categoria,
         operationId: saveOperationId,
         taxTreatment: taxTreatment,
@@ -741,7 +743,8 @@ class CatalogController extends StateNotifier<CatalogState> {
         trackInventory: trackInventory,
       );
       final fallbackFotoUrl =
-          (uploadedFotoUrl ?? fotoUrl)?.trim().isNotEmpty == true
+          !removeImage &&
+              (uploadedFotoUrl ?? fotoUrl)?.trim().isNotEmpty == true
           ? (uploadedFotoUrl ?? fotoUrl)!.trim()
           : null;
       final previousProduct = state.items.cast<ProductModel?>().firstWhere(
@@ -750,6 +753,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       );
       final resolvedUpdated =
           updated.displayFotoUrl == null &&
+              !removeImage &&
               (previousProduct != null || fallbackFotoUrl != null)
           ? updated.copyWith(
               fotoUrl: previousProduct?.fotoUrl ?? fallbackFotoUrl,

@@ -145,7 +145,11 @@ Identification:
 
 Backend/API target:
 
-- Production API/domain as configured in deployment platform and CI variables.
+- DaleVentas / FullPOS Cloud production API:
+  `https://daleventapos-backend.gcdndd.easypanel.host`.
+- FullPOS Owner is a separate product and uses
+  `https://ventas-fullpos-backend.gcdndd.easypanel.host`; DaleVentas clients
+  must never target that host.
 
 Database target:
 
@@ -184,4 +188,6 @@ Deployment policy:
 - Treat unknown environment as production-risk until proven otherwise.
 - Do not expose secrets in logs, docs, reports, screenshots, or final answers.
 - Preserve tenant isolation and company ownership.
+- For DaleVentas clients, reject `ventas-fullpos-backend.gcdndd.easypanel.host`
+  as a wrong-product backend.
 - Back up or checkpoint before approved shared-environment changes.

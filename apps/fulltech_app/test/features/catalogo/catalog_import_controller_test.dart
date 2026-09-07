@@ -1,4 +1,7 @@
+// ignore_for_file: depend_on_referenced_packages
+
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +10,21 @@ import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/features/catalogo/application/catalog_controller.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+
+class _FakePathProviderPlatform extends PathProviderPlatform
+    with MockPlatformInterfaceMixin {
+  _FakePathProviderPlatform(this.dir);
+
+  final Directory dir;
+
+  @override
+  Future<String?> getTemporaryPath() async => dir.path;
+
+  @override
+  Future<String?> getApplicationSupportPath() async => dir.path;
+}
 
 class _ImportFakeCatalogRepository extends CatalogRepository {
   _ImportFakeCatalogRepository(this.products) : super(Dio());
@@ -21,6 +39,7 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
   String? lastTaxTreatment;
   double? lastTaxRate;
   String? lastTaxPriceMode;
+  String? lastFotoUrl;
 
   @override
   Future<List<ProductModel>> fetchProducts({
@@ -90,12 +109,14 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     updates += 1;
     lastTaxTreatment = taxTreatment;
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
+    lastFotoUrl = fotoUrl;
     final product = ProductModel(
       id: id,
       nombre: nombre,
@@ -152,6 +173,20 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory tempDir;
+
+  setUp(() {
+    tempDir = Directory.systemTemp.createTempSync('catalog_import_test_');
+    PathProviderPlatform.instance = _FakePathProviderPlatform(tempDir);
+  });
+
+  tearDown(() {
+    if (tempDir.existsSync()) {
+      tempDir.deleteSync(recursive: true);
+    }
+  });
+
   test(
     'importación actualiza producto existente sin código al confirmar',
     () async {
@@ -163,6 +198,8 @@ void main() {
           costo: 400,
           stock: 2,
           categoria: 'COMPUTADORAS Y POS',
+          fotoUrl: '/media/products/p-1',
+          imageKey: 'uploads/companies/c1/products/images/p-1.png',
         ),
       ]);
       final container = ProviderContainer(
@@ -188,6 +225,7 @@ void main() {
       expect(result.updated, 1);
       expect(repo.creates, 0);
       expect(repo.updates, 1);
+      expect(repo.lastFotoUrl, isNull);
       expect(repo.products.single.id, 'p-1');
       expect(repo.products.single.codigo, '1016');
     },

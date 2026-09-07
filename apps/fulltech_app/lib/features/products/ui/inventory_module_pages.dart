@@ -235,8 +235,8 @@ String? _stripImageCacheVersion(String value) {
 
 String? _persistentProductImageSource(ProductModel product) {
   for (final candidate in [
-    product.originalFotoUrl,
     product.imageKey,
+    product.originalFotoUrl,
     product.fotoUrl,
     product.displayFotoUrl,
   ]) {
@@ -8096,6 +8096,7 @@ class _InventoryProductEditorPageState
   int _imageUploadToken = 0;
   bool _isSaving = false;
   bool _isPickingImage = false;
+  bool _removeImage = false;
   String? _formError;
   String _taxTreatment = 'INHERIT';
   double? _taxRate;
@@ -8268,6 +8269,7 @@ class _InventoryProductEditorPageState
       _pickedImagePath = null;
       _uploadedImagePath = null;
       _imageUploadFuture = null;
+      _removeImage = false;
       _taxTreatment = 'INHERIT';
       _taxRate = null;
       _taxPriceMode = null;
@@ -8352,6 +8354,7 @@ class _InventoryProductEditorPageState
         _imageBytes = bytes;
         _imageName = file.name;
         _uploadedImagePath = null;
+        _removeImage = false;
       });
       _startSelectedImageUpload(bytes: bytes, filename: file.name);
     } on TimeoutException {
@@ -8382,6 +8385,7 @@ class _InventoryProductEditorPageState
         _imageName = result.filename;
         _imageBytes = null; // Móvil: nunca mantener el original en memoria.
         _uploadedImagePath = null;
+        _removeImage = false;
       });
       // El archivo anterior ya no se usa: se puede limpiar de forma segura.
       unawaited(deleteMobileProductImageTemp(previous));
@@ -8392,6 +8396,22 @@ class _InventoryProductEditorPageState
     } on Exception catch (e) {
       if (!mounted) return;
       _showMobileImageError(e);
+    }
+  }
+
+  void _markImageForRemoval() {
+    if (_isSaving || _isPickingImage) return;
+    final pending = _pickedImagePath;
+    setState(() {
+      _imageBytes = null;
+      _imageName = null;
+      _pickedImagePath = null;
+      _uploadedImagePath = null;
+      _imageUploadFuture = null;
+      _removeImage = true;
+    });
+    if (pending != null) {
+      unawaited(deleteMobileProductImageTemp(pending));
     }
   }
 
@@ -8660,11 +8680,8 @@ class _InventoryProductEditorPageState
     try {
       final repo = ref.read(catalogRepositoryProvider);
       final pendingImageUpload = _imageUploadFuture;
-      final existingImagePath = product == null
-          ? null
-          : _persistentProductImageSource(product);
       final normalizedReadyImagePath = await _resolveSelectedImageForSave();
-      final imagePathForSave = normalizedReadyImagePath ?? existingImagePath;
+      final imagePathForSave = normalizedReadyImagePath;
       final taxTreatmentForSave = taxEnabled
           ? _taxTreatment
           : product?.taxTreatment;
@@ -8739,6 +8756,7 @@ class _InventoryProductEditorPageState
               stock: product.stock ?? 0,
               categoria: category,
               fotoUrl: imagePathForSave,
+              removeImage: _removeImage,
               operationId: operationId,
               taxTreatment: taxTreatmentForSave,
               taxRate: taxRateForSave,
@@ -8757,6 +8775,7 @@ class _InventoryProductEditorPageState
               stock: product.stock ?? 0,
               categoria: category,
               fotoUrl: imagePathForSave,
+              removeImage: _removeImage,
               operationId: operationId,
               taxTreatment: taxTreatmentForSave,
               taxRate: taxRateForSave,
@@ -8866,7 +8885,15 @@ class _InventoryProductEditorPageState
   @override
   Widget build(BuildContext context) {
     final product = _product;
-    final existingImageUrl = product?.displayFotoUrl?.trim() ?? '';
+    final existingImageUrl = _removeImage
+        ? ''
+        : product?.displayFotoUrl?.trim() ?? '';
+    final canRemoveImage =
+        product != null &&
+        !_removeImage &&
+        _imageBytes == null &&
+        (_pickedImagePath ?? '').isEmpty &&
+        existingImageUrl.isNotEmpty;
     final taxConfigAsync = ref.watch(productTaxUiConfigProvider);
     final taxConfig = taxConfigAsync.valueOrNull;
     final showTaxSection = taxConfig?.settings.taxEnabled == true;
@@ -9177,6 +9204,14 @@ class _InventoryProductEditorPageState
                   minimumSize: const Size.fromHeight(36),
                 ),
               ),
+              if (canRemoveImage) ...[
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _markImageForRemoval,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Quitar imagen'),
+                ),
+              ],
               const SizedBox(height: 12),
               SizedBox(
                 height: 180,

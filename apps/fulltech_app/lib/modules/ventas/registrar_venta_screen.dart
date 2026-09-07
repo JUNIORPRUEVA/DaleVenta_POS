@@ -62,6 +62,19 @@ final posNcfSequencesProvider = FutureProvider<List<NcfSequenceModel>>((ref) {
   return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
 });
 
+@visibleForTesting
+Set<String> sanitizePosSelectedCategories(
+  Set<String> selectedCategories,
+  List<ProductModel> products,
+) {
+  if (selectedCategories.isEmpty) return selectedCategories;
+  final available = products.map((product) => product.categoriaLabel).toSet();
+  final sanitized = selectedCategories.intersection(available);
+  return sanitized.length == selectedCategories.length
+      ? selectedCategories
+      : sanitized;
+}
+
 class RegistrarVentaScreen extends ConsumerStatefulWidget {
   const RegistrarVentaScreen({super.key});
 
@@ -348,10 +361,14 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   void initState() {
     super.initState();
     ref.listenManual<AuthState>(authStateProvider, (previous, next) {
+      final previousUserId = (previous?.user?.id ?? '').trim();
+      final nextUserId = (next.user?.id ?? '').trim();
       final previousCompanyId = (previous?.user?.companyId ?? '').trim();
       final nextCompanyId = (next.user?.companyId ?? '').trim();
-      if (previousCompanyId == nextCompanyId) return;
-      _handleCompanyChanged(nextCompanyId);
+      if (previousUserId == nextUserId && previousCompanyId == nextCompanyId) {
+        return;
+      }
+      _handleAuthScopeChanged(nextCompanyId);
     });
     ref.listenManual<CatalogState>(catalogControllerProvider, (previous, next) {
       _applyCatalogControllerProducts(next.items);
@@ -365,7 +382,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     });
   }
 
-  void _handleCompanyChanged(String _) {
+  void _handleAuthScopeChanged(String nextCompanyId) {
     if (!mounted) return;
     setState(() {
       _cart = const [];
@@ -382,7 +399,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     ref.invalidate(ventasControllerProvider);
     ref.invalidate(companySettingsProvider);
     ref.invalidate(posNcfSequencesProvider);
-    unawaited(_loadProducts(forceRemote: true, silent: true));
+    if (nextCompanyId.isNotEmpty) {
+      unawaited(_loadProducts(forceRemote: true, silent: true));
+    }
   }
 
   void _subscribeRealtime() {
@@ -420,6 +439,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     setState(() {
       if (productsChanged) {
         _products = products;
+        _selectedCategories = sanitizePosSelectedCategories(
+          _selectedCategories,
+          products,
+        );
       }
       if (cartChanged) {
         _cart = nextCart;
@@ -556,6 +579,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               requestCompanyId) {
         setState(() {
           _products = cached;
+          _selectedCategories = sanitizePosSelectedCategories(
+            _selectedCategories,
+            cached,
+          );
           _loadingProducts = false;
         });
       }
@@ -577,6 +604,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!areCatalogProductsEquivalent(_products, products)) {
         setState(() {
           _products = products;
+          _selectedCategories = sanitizePosSelectedCategories(
+            _selectedCategories,
+            products,
+          );
           _loadingProducts = false;
         });
       } else if (_loadingProducts) {

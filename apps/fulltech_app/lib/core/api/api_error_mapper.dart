@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../config/product_config.dart';
 import '../errors/api_exception.dart';
 import '../network/network_reachability.dart';
 
@@ -164,6 +165,20 @@ class ApiErrorMapper {
     required Uri requestUri,
     required String method,
   }) {
+    final productError = ProductConfig.validateApiBaseUrl(rawBaseUrl);
+    if (productError != null) {
+      return ApiException.detailed(
+        message: productError.message,
+        type: productError.type,
+        displayCode: productError.displayCode,
+        technicalDetails:
+            '${productError.technicalDetails ?? ''} method=$method uri=$requestUri',
+        uri: requestUri,
+        method: method,
+        retryable: false,
+      );
+    }
+
     final baseUrl = rawBaseUrl.trim();
     if (baseUrl.isEmpty) {
       return ApiException.detailed(

@@ -38,6 +38,56 @@ void main() {
     );
   });
 
+  test('login limpia identidad vieja antes de guardar nueva sesion', () async {
+    final storage = _FakeTokenStorage();
+
+    await _loginWith(
+      storage: storage,
+      jwtUserId: 'user-1',
+      jwtCompanyId: 'company-from-jwt',
+    );
+
+    expect(storage.operations, [
+      'clearTokens',
+      'saveTokens',
+      'saveUserSnapshot',
+    ]);
+  });
+
+  test('hydrate rechaza snapshot de otro usuario o empresa', () async {
+    final storage = _FakeTokenStorage(
+      accessToken: _jwt(userId: 'user-b', companyId: 'company-b'),
+      userSnapshot: _user(id: 'user-a', companyId: 'company-a'),
+    );
+
+    final session = await AuthRepository(
+      dio: Dio(BaseOptions(baseUrl: 'https://example.test')),
+      storage: storage,
+    ).hydrateSession();
+
+    expect(session.hasToken, isFalse);
+    expect(storage.clearedTokens, isTrue);
+  });
+
+  test('hydrate rechaza token expirado antes de renderizar snapshot', () async {
+    final storage = _FakeTokenStorage(
+      accessToken: _jwt(
+        userId: 'user-a',
+        companyId: 'company-a',
+        expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+      ),
+      userSnapshot: _user(id: 'user-a', companyId: 'company-a'),
+    );
+
+    final session = await AuthRepository(
+      dio: Dio(BaseOptions(baseUrl: 'https://example.test')),
+      storage: storage,
+    ).hydrateSession();
+
+    expect(session.hasToken, isFalse);
+    expect(storage.clearedTokens, isTrue);
+  });
+
   test('login traduce fallos de conexion sin terminos internos', () async {
     final error = await _captureAuthError(
       (repository) => repository.login('user@example.test', 'password'),
@@ -125,13 +175,18 @@ void main() {
   );
 }
 
-Future<UserModel> _loginWith({String? jwtCompanyId, Map<String, dynamic>? me}) {
-  final storage = _FakeTokenStorage();
+Future<UserModel> _loginWith({
+  String? jwtUserId,
+  String? jwtCompanyId,
+  Map<String, dynamic>? me,
+  _FakeTokenStorage? storage,
+}) {
+  final tokenStorage = storage ?? _FakeTokenStorage();
   final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
     ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
       if (options.path == '/auth/login') {
         return _jsonResponse({
-          'accessToken': _jwt(jwtCompanyId),
+          'accessToken': _jwt(userId: jwtUserId, companyId: jwtCompanyId),
           'refreshToken': 'refresh-for-test',
         });
       }
@@ -148,7 +203,7 @@ Future<UserModel> _loginWith({String? jwtCompanyId, Map<String, dynamic>? me}) {
 
   return AuthRepository(
     dio: dio,
-    storage: storage,
+    storage: tokenStorage,
   ).login('user@example.test', 'password-for-test');
 }
 
@@ -163,7 +218,7 @@ Future<UserModel> _registerWith({
     ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
       if (options.path == '/auth/register-business') {
         return _jsonResponse({
-          'accessToken': _jwt(jwtCompanyId),
+          'accessToken': _jwt(userId: 'user-1', companyId: jwtCompanyId),
           'refreshToken': 'refresh-for-test',
           'user': {
             'id': 'user-1',
@@ -228,9 +283,22 @@ bool _containsInternalTerms(String value) {
   return normalized.contains('backend') || normalized.contains('frontend');
 }
 
-String _jwt(String? companyId) {
+UserModel _user({required String id, required String companyId}) {
+  return UserModel(
+    id: id,
+    email: '$id@example.test',
+    nombreCompleto: 'Test User',
+    telefono: '',
+    role: 'ADMIN',
+    companyId: companyId,
+  );
+}
+
+String _jwt({String? userId, String? companyId, DateTime? expiresAt}) {
   final payload = <String, dynamic>{
+    if (userId != null) 'sub': userId,
     if (companyId != null) 'companyId': companyId,
+    if (expiresAt != null) 'exp': expiresAt.millisecondsSinceEpoch ~/ 1000,
   };
   String encode(Map<String, dynamic> value) =>
       base64Url.encode(utf8.encode(jsonEncode(value))).replaceAll('=', '');
@@ -238,23 +306,37 @@ String _jwt(String? companyId) {
 }
 
 class _FakeTokenStorage extends TokenStorage {
+  _FakeTokenStorage({this.accessToken, this.userSnapshot});
+
+  final String? accessToken;
+  final UserModel? userSnapshot;
   bool savedTokens = false;
   bool clearedTokens = false;
   bool savedUserSnapshot = false;
+  final operations = <String>[];
+
+  @override
+  Future<String?> getAccessToken() async => accessToken;
+
+  @override
+  Future<UserModel?> getUserSnapshot() async => userSnapshot;
 
   @override
   Future<void> saveTokens(String accessToken, [String? refreshToken]) async {
     savedTokens = true;
+    operations.add('saveTokens');
   }
 
   @override
   Future<void> saveUserSnapshot(UserModel user) async {
     savedUserSnapshot = true;
+    operations.add('saveUserSnapshot');
   }
 
   @override
   Future<void> clearTokens() async {
     clearedTokens = true;
+    operations.add('clearTokens');
   }
 }
 

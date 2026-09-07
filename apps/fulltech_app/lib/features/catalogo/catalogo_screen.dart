@@ -3254,6 +3254,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   bool _unitOptionsLoaded = false;
   bool _saving = false;
   bool _isPickingImage = false;
+  bool _removeImage = false;
 
   @override
   void initState() {
@@ -3344,6 +3345,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       setState(() {
         _imageBytes = result.files.single.bytes;
         _imageName = result.files.single.name;
+        _removeImage = false;
       });
     }
   }
@@ -3360,6 +3362,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         _pickedImagePath = result.filePath;
         _imageName = result.filename;
         _imageBytes = null; // Móvil: nunca mantener el original en memoria.
+        _removeImage = false;
       });
       // El archivo anterior ya no se usa: se puede limpiar de forma segura.
       unawaited(deleteMobileProductImageTemp(previous));
@@ -3388,6 +3391,20 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         action: action,
       ),
     );
+  }
+
+  void _markImageForRemoval() {
+    if (_saving || _isPickingImage) return;
+    final pending = _pickedImagePath;
+    setState(() {
+      _imageBytes = null;
+      _imageName = null;
+      _pickedImagePath = null;
+      _removeImage = true;
+    });
+    if (pending != null) {
+      unawaited(deleteMobileProductImageTemp(pending));
+    }
   }
 
   Future<void> _submit() async {
@@ -3469,6 +3486,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           newImageBytes: _imageBytes,
           newImageFilePath: _pickedImagePath,
           newFilename: _imageName,
+          removeImage: _removeImage,
           categoria: category,
           unitOfMeasureId: unitForSave.id,
           unitOfMeasure: unitForSave,
@@ -3495,6 +3513,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   Widget build(BuildContext context) {
     final isEdit = widget.product != null;
     final theme = Theme.of(context);
+    final existingImageUrl = _removeImage
+        ? ''
+        : widget.product?.displayFotoUrl?.trim() ?? '';
+    final canRemoveImage =
+        isEdit &&
+        !_removeImage &&
+        _imageBytes == null &&
+        (_pickedImagePath ?? '').isEmpty &&
+        existingImageUrl.isNotEmpty;
     final measurementUnitsEnabled =
         ref
             .watch(companySettingsProvider)
@@ -3658,14 +3685,14 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                     cacheHeight: 128,
                   ),
                 )
-              else if (isEdit && widget.product?.displayFotoUrl != null)
+              else if (isEdit && existingImageUrl.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
                     height: 64,
                     width: 64,
                     child: ProductNetworkImage(
-                      imageUrl: widget.product!.displayFotoUrl!,
+                      imageUrl: existingImageUrl,
                       productId: widget.product!.id,
                       productName: widget.product!.nombre,
                       originalUrl: widget.product!.originalFotoUrl,
@@ -3700,6 +3727,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                 ),
             ],
           ),
+          if (canRemoveImage)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _markImageForRemoval,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Quitar imagen'),
+              ),
+            ),
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _saving ? null : _submit,

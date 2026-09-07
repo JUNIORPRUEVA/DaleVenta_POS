@@ -41,7 +41,8 @@ class AccountAppsScreen extends StatelessWidget {
     return _AccountSidePanelScaffold(
       icon: Icons.apps_rounded,
       title: 'Apps',
-      subtitle: 'Accesos para usar FullPOS Cloud en distintos dispositivos.',
+      subtitle:
+          'Descarga las apps oficiales de FullPOS Cloud para tus dispositivos.',
       children: [
         for (final channel in AppAccessLinks.visibleChannels())
           _AccessChannelTile(

@@ -13,6 +13,163 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
+    'POS search resets on logout and login as another same-company user',
+    (tester) async {
+      final auth = await _pumpPos(
+        tester,
+        inventoryEnabled: true,
+        products: _filterProducts,
+        surfaceSize: const Size(390, 820),
+      );
+
+      await _enterMobileSearch(tester, 'coca');
+
+      expect(find.text('Coca Cola'), findsOneWidget);
+      expect(find.text('Galletas'), findsNothing);
+
+      auth.logoutForTest();
+      await tester.pumpAndSettle();
+      auth.setAuthenticated(userId: 'user-2', companyId: 'company-1');
+      await tester.pumpAndSettle();
+
+      await _expectMobileSearchEmpty(tester);
+      expect(find.text('Coca Cola'), findsOneWidget);
+      expect(find.text('Galletas'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'POS category resets on logout and login as another same-company user',
+    (tester) async {
+      final auth = await _pumpPos(
+        tester,
+        inventoryEnabled: true,
+        products: _filterProducts,
+        surfaceSize: const Size(390, 820),
+      );
+
+      await _selectCategory(tester, 'Bebidas');
+
+      expect(find.text('1 categoria(s) activa(s)'), findsOneWidget);
+      expect(find.text('Coca Cola'), findsOneWidget);
+      expect(find.text('Galletas'), findsNothing);
+
+      auth.logoutForTest();
+      await tester.pumpAndSettle();
+      auth.setAuthenticated(userId: 'user-2', companyId: 'company-1');
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 categoria(s) activa(s)'), findsNothing);
+      expect(find.text('Coca Cola'), findsOneWidget);
+      expect(find.text('Galletas'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'POS filters reset for same-company user switches without logout',
+    (tester) async {
+      final auth = await _pumpPos(
+        tester,
+        inventoryEnabled: true,
+        products: _filterProducts,
+        surfaceSize: const Size(390, 820),
+      );
+
+      await _enterMobileSearch(tester, 'coca');
+
+      auth.setAuthenticated(userId: 'user-2', companyId: 'company-1');
+      await tester.pumpAndSettle();
+
+      await _expectMobileSearchEmpty(tester);
+      expect(find.text('Coca Cola'), findsOneWidget);
+      expect(find.text('Galletas'), findsOneWidget);
+    },
+  );
+
+  testWidgets('POS filters reset when company changes', (tester) async {
+    final auth = await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      products: _filterProducts,
+      surfaceSize: const Size(390, 820),
+    );
+
+    await _enterMobileSearch(tester, 'coca');
+
+    auth.setAuthenticated(userId: 'user-1', companyId: 'company-2');
+    await tester.pumpAndSettle();
+
+    await _expectMobileSearchEmpty(tester);
+    expect(find.text('Coca Cola'), findsOneWidget);
+    expect(find.text('Galletas'), findsOneWidget);
+  });
+
+  testWidgets('POS app restart does not restore another user search', (
+    tester,
+  ) async {
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      products: _filterProducts,
+      surfaceSize: const Size(390, 820),
+    );
+
+    await _enterMobileSearch(tester, 'coca');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      products: _filterProducts,
+      userId: 'user-2',
+      companyId: 'company-1',
+      surfaceSize: const Size(390, 820),
+    );
+
+    await _expectMobileSearchEmpty(tester);
+    expect(find.text('Coca Cola'), findsOneWidget);
+    expect(find.text('Galletas'), findsOneWidget);
+  });
+
+  test('invalid POS category falls back to all categories', () {
+    expect(
+      sanitizePosSelectedCategories({'Bebidas'}, [_snackProduct]),
+      isEmpty,
+    );
+    expect(sanitizePosSelectedCategories({'Bebidas'}, [_beverageProduct]), {
+      'Bebidas',
+    });
+  });
+
+  testWidgets('normal POS search and category filtering still work', (
+    tester,
+  ) async {
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      products: _filterProducts,
+      surfaceSize: const Size(390, 820),
+    );
+
+    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'coca');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Coca Cola'), findsOneWidget);
+    expect(find.text('Galletas'), findsNothing);
+
+    await tester.tap(find.byTooltip('Cerrar búsqueda'));
+    await tester.pumpAndSettle();
+    await _selectCategory(tester, 'Snacks');
+
+    expect(find.text('Coca Cola'), findsNothing);
+    expect(find.text('Galletas'), findsOneWidget);
+  });
+
+  testWidgets(
     'inventory ON shows stock only for tracked products and keeps sale action',
     (tester) async {
       await _pumpPos(tester, inventoryEnabled: true, products: _products);
@@ -75,20 +232,31 @@ void main() {
   });
 }
 
-Future<void> _pumpPos(
+Future<_TestAuthController> _pumpPos(
   WidgetTester tester, {
   required bool inventoryEnabled,
   required List<ProductModel> products,
+  String userId = 'user-1',
+  String companyId = 'company-1',
+  Size? surfaceSize,
 }) async {
+  if (surfaceSize != null) {
+    await tester.binding.setSurfaceSize(surfaceSize);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
   final settings = CompanySettings.empty().copyWith(
     inventoryEnabled: inventoryEnabled,
     taxEnabled: false,
     ncfEnabled: false,
   );
+  late _TestAuthController auth;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_TestAuthController.new),
+        authStateProvider.overrideWith((ref) {
+          auth = _TestAuthController(ref, userId: userId, companyId: companyId);
+          return auth;
+        }),
         companySettingsProvider.overrideWith((ref) async => settings),
         productTaxUiConfigProvider.overrideWith(
           (ref) async =>
@@ -104,6 +272,7 @@ Future<void> _pumpPos(
   );
   await tester.pump();
   await tester.pumpAndSettle();
+  return auth;
 }
 
 final _trackedProduct = ProductModel(
@@ -137,6 +306,58 @@ final _service = ProductModel(
 
 final _products = [_trackedProduct, _nonInventoryProduct, _service];
 
+final _beverageProduct = ProductModel(
+  id: '44444444-4444-4444-8444-444444444444',
+  nombre: 'Coca Cola',
+  precio: 75,
+  costo: 40,
+  stock: 10,
+  categoria: 'Bebidas',
+);
+
+final _snackProduct = ProductModel(
+  id: '55555555-5555-4555-8555-555555555555',
+  nombre: 'Galletas',
+  precio: 35,
+  costo: 15,
+  stock: 12,
+  categoria: 'Snacks',
+);
+
+final _filterProducts = [_beverageProduct, _snackProduct];
+
+Future<void> _selectCategory(WidgetTester tester, String category) async {
+  await tester.tap(find.byIcon(Icons.filter_alt_outlined));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.ancestor(
+      of: find.text(category).last,
+      matching: find.byType(CheckboxListTile),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Aplicar filtros'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _enterMobileSearch(WidgetTester tester, String value) async {
+  await tester.tap(find.byTooltip('Buscar'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextField).first, value);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _expectMobileSearchEmpty(WidgetTester tester) async {
+  if (find.byType(TextField).evaluate().isEmpty) {
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+  }
+  final search = tester.widget<TextField>(find.byType(TextField).first);
+  expect(search.controller?.text, isEmpty);
+  await tester.tap(find.byTooltip('Cerrar búsqueda'));
+  await tester.pumpAndSettle();
+}
+
 class _FakeCatalogRepository extends CatalogRepository {
   _FakeCatalogRepository(this.products) : super(Dio());
 
@@ -157,18 +378,34 @@ class _FakeCatalogRepository extends CatalogRepository {
 }
 
 class _TestAuthController extends AuthController {
-  _TestAuthController(super.ref) {
+  _TestAuthController(
+    super.ref, {
+    required String userId,
+    required String companyId,
+  }) {
+    setAuthenticated(userId: userId, companyId: companyId);
+  }
+
+  void setAuthenticated({required String userId, required String companyId}) {
     state = AuthState(
       initialized: true,
       isAuthenticated: true,
-      user: UserModel(
-        id: 'user-1',
-        email: 'user@example.test',
-        nombreCompleto: 'Usuario Test',
-        telefono: '',
-        role: 'ADMIN',
-        companyId: 'company-1',
-      ),
+      user: _testUser(userId: userId, companyId: companyId),
     );
   }
+
+  void logoutForTest() {
+    state = AuthState(initialized: true, isAuthenticated: false, user: null);
+  }
+}
+
+UserModel _testUser({required String userId, required String companyId}) {
+  return UserModel(
+    id: userId,
+    email: '$userId@example.test',
+    nombreCompleto: 'Usuario $userId',
+    telefono: '',
+    role: 'ADMIN',
+    companyId: companyId,
+  );
 }

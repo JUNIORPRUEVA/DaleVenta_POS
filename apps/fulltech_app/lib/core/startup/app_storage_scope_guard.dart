@@ -5,9 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/env.dart';
 import '../auth/token_storage.dart';
 import '../cache/cache_repair.dart';
-import '../cache/fulltech_cache_manager.dart';
 import '../debug/trace_log.dart';
-import '../offline/offline_store.dart';
 import '../utils/is_flutter_test.dart';
 
 class AppStorageScopeGuard {
@@ -34,11 +32,9 @@ class AppStorageScopeGuard {
         'storage_scope',
         previous == null
             ? 'initializing storage scope'
-            : 'storage scope changed; clearing local session/cache',
+            : 'storage scope changed; clearing local auth session',
       );
 
-      await OfflineStore.instance.clearAll();
-      await FulltechImageCacheManager.clear();
       await TokenStorage().clearTokens();
       await prefs.setString(_scopeKey, current);
     } catch (error, stackTrace) {

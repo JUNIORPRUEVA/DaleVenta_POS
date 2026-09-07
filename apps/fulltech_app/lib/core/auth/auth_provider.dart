@@ -90,8 +90,6 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _logoutForUnauthorized() async {
     _sessionEvents.markLogoutHandled();
     final storage = ref.read(tokenStorageProvider);
-    await ref.read(offlineStoreProvider).clearAll(includePendingActions: false);
-    await FulltechImageCacheManager.clear();
     await storage.clearTokens();
     if (!mounted) return;
     state = AuthState(
@@ -146,9 +144,9 @@ class AuthController extends StateNotifier<AuthState> {
       }
 
       state = AuthState(
-        initialized: true,
-        isAuthenticated: true,
-        user: hydrated.user,
+        initialized: false,
+        isAuthenticated: false,
+        user: null,
         loading: false,
         restoringSession: true,
         hasSessionHint: true,
@@ -335,8 +333,6 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);
-    await ref.read(offlineStoreProvider).clearAll(includePendingActions: false);
-    await FulltechImageCacheManager.clear();
     await storage.clearTokens();
     state = AuthState(
       initialized: true,

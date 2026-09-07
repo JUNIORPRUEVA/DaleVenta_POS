@@ -21,6 +21,7 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
   String? lastTaxPriceMode;
   String? lastFotoUrl;
   bool dropImageOnUpdateResponse = false;
+  bool lastRemoveImage = false;
   List<ProductModel> cachedProducts = const [];
   final List<Completer<List<ProductModel>>> fetchCompleters = [];
   int fetchCalls = 0;
@@ -73,6 +74,7 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     createCalls += 1;
@@ -127,12 +129,14 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     lastTaxTreatment = taxTreatment;
     lastTaxRate = taxRate;
     lastTaxPriceMode = taxPriceMode;
     lastFotoUrl = fotoUrl;
+    lastRemoveImage = removeImage;
     final updated = ProductModel(
       id: id,
       nombre: nombre,
@@ -141,7 +145,7 @@ class _TaxFakeCatalogRepository extends CatalogRepository {
       costo: costo,
       stock: stock,
       categoria: categoria ?? 'General',
-      fotoUrl: dropImageOnUpdateResponse ? null : fotoUrl,
+      fotoUrl: removeImage || dropImageOnUpdateResponse ? null : fotoUrl,
       taxTreatment: taxTreatment ?? 'INHERIT',
       taxRate: taxRate,
       taxPriceMode: taxPriceMode,
@@ -825,6 +829,84 @@ void main() {
       expect(product.taxTreatment, 'EXEMPT');
       expect(product.taxRate, isNull);
       expect(product.taxPriceMode, isNull);
+    },
+  );
+
+  test('repository omite campos de imagen en edicion no relacionada', () async {
+    Map<String, dynamic>? requestPayload;
+    final dio = Dio()
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        requestPayload = (options.data as Map).cast<String, dynamic>();
+        return ResponseBody.fromString(
+          jsonEncode({
+            'id': 'p-1',
+            'nombre': 'Producto fiscal',
+            'precio': 125,
+            'costo': 60,
+            'stock': 1,
+            'categoria': 'General',
+            'fotoUrl': '/media/products/p-1',
+            'imageKey': 'uploads/companies/c1/products/images/p-1.png',
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+    final repository = CatalogRepository(dio);
+
+    await repository.updateProduct(
+      id: 'p-1',
+      nombre: 'Producto fiscal',
+      precio: 125,
+      costo: 60,
+      stock: 1,
+      categoria: 'General',
+    );
+
+    expect(requestPayload, isNot(contains('fotoUrl')));
+    expect(requestPayload, isNot(contains('imageKey')));
+  });
+
+  test(
+    'repository envia null solo para remocion explicita de imagen',
+    () async {
+      Map<String, dynamic>? requestPayload;
+      final dio = Dio()
+        ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+          requestPayload = (options.data as Map).cast<String, dynamic>();
+          return ResponseBody.fromString(
+            jsonEncode({
+              'id': 'p-1',
+              'nombre': 'Producto fiscal',
+              'precio': 100,
+              'costo': 60,
+              'stock': 1,
+              'categoria': 'General',
+              'fotoUrl': null,
+              'imageKey': null,
+            }),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+      final repository = CatalogRepository(dio);
+
+      await repository.updateProduct(
+        id: 'p-1',
+        nombre: 'Producto fiscal',
+        precio: 100,
+        costo: 60,
+        stock: 1,
+        categoria: 'General',
+        removeImage: true,
+      );
+
+      expect(requestPayload, containsPair('fotoUrl', null));
+      expect(requestPayload, containsPair('imageKey', null));
     },
   );
 

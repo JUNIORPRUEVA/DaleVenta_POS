@@ -10,6 +10,27 @@ $installerDir = $PSScriptRoot
 $setupScript = Join-Path $installerDir 'setup.iss'
 $outputExe = Join-Path $installerDir ('output\FullPOS-Cloud-Setup-' + ($Version -replace '\+', '-') + '.exe')
 $reportPath = Join-Path $installerDir 'inno-build-report.txt'
+$expectedApiHost = 'daleventapos-backend.gcdndd.easypanel.host'
+$forbiddenApiHost = 'ventas-fullpos-backend.gcdndd.easypanel.host'
+
+function Assert-DaleVentasReleaseSource {
+  param([string]$Path)
+
+  $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
+  if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
+    throw 'rg no encontrado. No se puede verificar el backend del Release antes de empaquetar.'
+  }
+
+  & rg -a --fixed-strings $expectedApiHost $resolved.Path --quiet
+  if ($LASTEXITCODE -ne 0) {
+    throw "Release source no contiene el backend oficial de DaleVentas: $expectedApiHost"
+  }
+
+  & rg -a --fixed-strings $forbiddenApiHost $resolved.Path --quiet
+  if ($LASTEXITCODE -eq 0) {
+    throw "Release source contiene backend prohibido de FullPOS Owner: $forbiddenApiHost"
+  }
+}
 
 function Find-IsccPath {
   $candidates = [System.Collections.Generic.List[string]]::new()
@@ -64,6 +85,8 @@ if (-not $isccPath) {
   ) | Set-Content -Path $reportPath -Encoding UTF8
   exit 2
 }
+
+Assert-DaleVentasReleaseSource -Path (Join-Path $installerDir $SourceDir)
 
 $before = if (Test-Path $outputExe) { (Get-Item $outputExe).LastWriteTimeUtc.ToString('o') } else { '' }
 

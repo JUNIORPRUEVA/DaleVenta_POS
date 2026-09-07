@@ -1,13 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import '../config/product_config.dart';
 import 'runtime_env.dart';
 
 class Env {
-  static const String _defaultApiBaseUrl =
-      'https://daleventapos-backend.gcdndd.easypanel.host';
-  static const String _defaultAppBaseUrl =
-      'https://daleventapos-pwa.gcdndd.easypanel.host';
+  static const String _defaultApiBaseUrl = ProductConfig.productionApiBaseUrl;
+  static const String _defaultAppBaseUrl = ProductConfig.productionAppBaseUrl;
   static const int _defaultApiTimeoutMs = 15000;
   static const int _minApiTimeoutMs = 1000;
 

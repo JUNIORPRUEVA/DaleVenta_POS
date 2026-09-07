@@ -40,57 +40,38 @@ class AppAccessLinks {
     'https://apps.apple.com/do/app/fullpos-cloud/id6801349002',
   );
 
-  static List<AppAccessChannel> visibleChannels() {
-    final platform = defaultTargetPlatform;
-    final mobilePlatform =
-        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+  static List<AppAccessChannel> visibleChannels({
+    bool? isWeb,
+    TargetPlatform? platform,
+  }) {
+    final runningOnWeb = isWeb ?? kIsWeb;
 
-    if (!kIsWeb && platform == TargetPlatform.windows) {
-      return [_androidChannel, _pwaChannel];
+    if (runningOnWeb) {
+      return [_androidChannel, _iosChannel, _windowsChannel];
     }
 
-    if (!kIsWeb && mobilePlatform) {
-      return [_pwaChannel];
-    }
-
-    if (kIsWeb && mobilePlatform) {
-      return [_pwaChannel];
-    }
-
-    return [_androidChannel, _iosChannel, _pwaChannel, _windowsChannel];
+    return [_androidChannel, _iosChannel];
   }
 
   static final AppAccessChannel _androidChannel = AppAccessChannel(
     kind: AppAccessKind.android,
     icon: Icons.android_rounded,
-    title: 'App Android',
-    status: 'APK para móviles y tablets',
+    title: 'Android',
+    status: 'APK oficial',
     description:
-        'Descarga la app Android para consultar ventas, clientes, inventario y operaciones autorizadas con las mismas credenciales.',
+        'Descarga la app Android e inicia sesión con las mismas credenciales de FullPOS Cloud.',
     actionLabel: 'Descargar para Android',
     actionIcon: Icons.download_rounded,
     uri: androidReleaseUri,
-  );
-
-  static final AppAccessChannel _pwaChannel = AppAccessChannel(
-    kind: AppAccessKind.pwa,
-    icon: Icons.language_rounded,
-    title: 'App web / PWA',
-    status: 'Abrir o instalar desde navegador',
-    description:
-        'Usa FullPOS Cloud desde el navegador o instala la PWA para trabajar con la misma base de datos en cualquier dispositivo autorizado.',
-    actionLabel: 'Abrir PWA',
-    actionIcon: Icons.open_in_new_rounded,
-    uri: pwaUri,
   );
 
   static final AppAccessChannel _iosChannel = AppAccessChannel(
     kind: AppAccessKind.ios,
     icon: Icons.phone_iphone_rounded,
     title: 'iPhone',
-    status: 'App Store',
+    status: 'App Store oficial',
     description:
-        'Descarga FullPOS Cloud desde la App Store oficial para iPhone.',
+        'Abre la ficha oficial de FullPOS Cloud en App Store para descargarla en tu iPhone.',
     actionLabel: 'Descargar para iPhone',
     actionIcon: Icons.open_in_new_rounded,
     uri: iosAppStoreUri,
@@ -99,10 +80,10 @@ class AppAccessLinks {
   static final AppAccessChannel _windowsChannel = AppAccessChannel(
     kind: AppAccessKind.windows,
     icon: Icons.desktop_windows_rounded,
-    title: 'Windows POS',
-    status: 'Instalador de escritorio',
+    title: 'Windows',
+    status: 'Instalador oficial',
     description:
-        'Descarga el instalador de Windows para caja, facturación, impresión y trabajo diario del punto de venta.',
+        'Descarga el instalador de Windows para usar FullPOS Cloud en el punto de venta.',
     actionLabel: 'Descargar Windows',
     actionIcon: Icons.download_rounded,
     uri: windowsReleaseUri,

@@ -34,6 +34,17 @@ class HydratedSession {
   const HydratedSession.empty() : this(hasToken: false);
 }
 
+class _TokenIdentity {
+  const _TokenIdentity({this.userId, this.companyId, this.expiresAt});
+
+  final String? userId;
+  final String? companyId;
+  final DateTime? expiresAt;
+
+  bool get isExpired =>
+      expiresAt != null && !expiresAt!.isAfter(DateTime.now().toUtc());
+}
+
 class SessionVerificationResult {
   final SessionVerificationStatus status;
   final UserModel? user;
@@ -487,6 +498,10 @@ class AuthRepository {
   }
 
   String? _companyIdFromAccessToken(String? accessToken) {
+    return _identityFromAccessToken(accessToken)?.companyId;
+  }
+
+  _TokenIdentity? _identityFromAccessToken(String? accessToken) {
     if (accessToken == null || accessToken.trim().isEmpty) return null;
 
     try {
@@ -499,10 +514,32 @@ class AuthRepository {
       final decoded = jsonDecode(utf8.decode(base64.decode(payload)));
       if (decoded is! Map) return null;
       final companyId = decoded['companyId']?.toString().trim();
-      return companyId == null || companyId.isEmpty ? null : companyId;
+      final userId = decoded['sub']?.toString().trim();
+      final exp = decoded['exp'];
+      DateTime? expiresAt;
+      if (exp is num) {
+        expiresAt = DateTime.fromMillisecondsSinceEpoch(
+          exp.toInt() * 1000,
+          isUtc: true,
+        );
+      }
+      return _TokenIdentity(
+        userId: userId == null || userId.isEmpty ? null : userId,
+        companyId: companyId == null || companyId.isEmpty ? null : companyId,
+        expiresAt: expiresAt,
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  bool _snapshotMatchesToken(UserModel user, _TokenIdentity identity) {
+    final tokenUserId = identity.userId ?? '';
+    final tokenCompanyId = identity.companyId ?? '';
+    final userId = user.id.trim();
+    final companyId = user.companyId?.trim() ?? '';
+    if (tokenUserId.isEmpty || tokenCompanyId.isEmpty) return false;
+    return userId == tokenUserId && companyId == tokenCompanyId;
   }
 
   UserModel _userFromMeResponse(dynamic data, String? accessToken) {
@@ -529,7 +566,20 @@ class AuthRepository {
         return const HydratedSession.empty();
       }
 
+      final identity = _identityFromAccessToken(token);
+      if (identity == null ||
+          identity.isExpired ||
+          (identity.userId ?? '').isEmpty ||
+          (identity.companyId ?? '').isEmpty) {
+        await _safeClearTokens();
+        return const HydratedSession.empty();
+      }
+
       final user = await _storage.getUserSnapshot().timeout(_storageTimeout);
+      if (user != null && !_snapshotMatchesToken(user, identity)) {
+        await _safeClearTokens();
+        return const HydratedSession.empty();
+      }
       return HydratedSession(hasToken: true, user: user);
     } catch (_) {
       return const HydratedSession.empty();
@@ -538,6 +588,7 @@ class AuthRepository {
 
   Future<UserModel> login(String email, String password) async {
     try {
+      await _safeClearTokens();
       final normalizedEmail = email.trim();
       Response<dynamic> res;
 
@@ -868,32 +919,30 @@ class AuthRepository {
     }
 
     try {
-      final user = await getMeOrNull(silent: silent);
+      final user = await getMeOrNull(
+        silent: silent,
+        allowCachedFallback: false,
+      );
       if (user != null) {
         return SessionVerificationResult.authenticated(user);
       }
 
-      final token = await _storage.getAccessToken().timeout(_storageTimeout);
-      if (token == null || token.isEmpty) {
-        return const SessionVerificationResult.invalid();
-      }
-
-      if (hydrated.user != null) {
-        return SessionVerificationResult.deferred(user: hydrated.user);
-      }
-
-      return const SessionVerificationResult.deferred();
+      await _safeClearTokens();
+      return const SessionVerificationResult.invalid();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         await _safeClearTokens();
         return const SessionVerificationResult.invalid();
       }
 
-      return SessionVerificationResult.deferred(user: hydrated.user);
+      await _safeClearTokens();
+      return const SessionVerificationResult.invalid();
     } on TimeoutException {
-      return SessionVerificationResult.deferred(user: hydrated.user);
+      await _safeClearTokens();
+      return const SessionVerificationResult.invalid();
     } catch (_) {
-      return SessionVerificationResult.deferred(user: hydrated.user);
+      await _safeClearTokens();
+      return const SessionVerificationResult.invalid();
     }
   }
 

@@ -88,6 +88,13 @@ persisted sale-item snapshot for historical safety.
 
 Backend authentication uses JWT/passport strategy and auth services/controllers. Flutter stores tokens locally through `TokenStorage` and hydrates sessions on app start. Password recovery and account deletion are present.
 
+DaleVentas client builds are guarded by `ProductConfig`: the production default
+API host is `daleventapos-backend.gcdndd.easypanel.host`, and known
+wrong-product hosts such as `ventas-fullpos-backend.gcdndd.easypanel.host` are
+rejected before API requests proceed. Session bootstrap validates token user and
+company identity against the cached user snapshot before rendering an
+authenticated tenant.
+
 ## Authorization and Permissions
 
 Backend authorization uses `RolesGuard`, role decorators, permission decorators, JWT payload context, `userPermissions`, and optional admin-authorization tokens.

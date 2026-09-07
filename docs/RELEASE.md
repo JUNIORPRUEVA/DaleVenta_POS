@@ -48,7 +48,11 @@ iOS:
 
 Android/Windows:
 
-- Flutter platform folders exist. OWNER VALIDATION REQUIRED for the current official production packaging path.
+- Flutter platform folders exist.
+- Official DaleVentas Windows Release builds must be created with
+  `scripts/release/build_windows_release.ps1`. The script fixes the DaleVentas
+  API host, rejects FullPOS Owner hosts, sets `FULLPOS_PRODUCTION_BUILD=true`,
+  and verifies the generated runtime artifact before installer packaging.
 
 ## Migration Safeguards
 

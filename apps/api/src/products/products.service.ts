@@ -853,6 +853,7 @@ export class ProductsService {
         }
 
         const imageKey = this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
+        this.assertImageKeyBelongsToTenant(imageKey, companyId);
         const normalizedImagePath = imageKey
           ? this.buildObjectMediaUrl(imageKey)
           : this.normalizeImagePathForStorage(dto.fotoUrl);
@@ -1197,16 +1198,7 @@ export class ProductsService {
         }
       }
 
-      const imageKey =
-        dto.fotoUrl === undefined && dto.imageKey === undefined
-          ? undefined
-          : this.extractR2Key(dto.imageKey ?? dto.fotoUrl);
-      const normalizedImagePath =
-        dto.fotoUrl === undefined
-          ? undefined
-          : imageKey
-            ? this.buildObjectMediaUrl(imageKey)
-            : this.normalizeImagePathForStorage(dto.fotoUrl);
+      const imagePatch = this.normalizeUpdateImagePatch(dto, companyId);
       const fiscalData = await this.normalizeProductFiscalInput(
         tx,
         companyId,
@@ -1311,26 +1303,24 @@ export class ProductsService {
         unitOfMeasureId:
           requestedUnitOfMeasureId === undefined ? undefined : unitOfMeasure.id,
         ...fiscalData,
-        imagen: normalizedImagePath,
-        imageStorageProvider:
-          imageKey === undefined ? undefined : imageKey ? "r2" : null,
-        imageKey: imageKey === undefined ? undefined : imageKey,
-        imageMimeType:
-          imageKey === undefined
-            ? undefined
-            : dto.imageMimeType?.trim() || null,
-        imageOriginalFileName:
-          imageKey === undefined
-            ? undefined
-            : dto.imageOriginalFileName?.trim() || null,
-        imageUpdatedAt:
-          imageKey === undefined ? undefined : imageKey ? new Date() : null,
+        ...imagePatch.data,
       };
 
-      if (dto.fotoUrl !== undefined && dto.fotoUrl !== normalizedImagePath) {
+      if (
+        dto.fotoUrl !== undefined &&
+        imagePatch.normalizedImagePath !== undefined &&
+        dto.fotoUrl !== imagePatch.normalizedImagePath
+      ) {
         this.logger.log(
-          `normalize update image path: "${dto.fotoUrl}" -> "${normalizedImagePath ?? ""}"`,
+          `normalize update image path: "${dto.fotoUrl}" -> "${imagePatch.normalizedImagePath ?? ""}"`,
         );
+      }
+
+      const hasPersistedChange = Object.values(data).some(
+        (value) => value !== undefined,
+      );
+      if (!hasPersistedChange) {
+        return this.productResponse(tx, companyId, id);
       }
 
       try {
@@ -1770,6 +1760,109 @@ export class ProductsService {
     if (!this.publicBaseUrl) return url;
     const normalized = url.startsWith("/") ? url : `/${url}`;
     return `${this.publicBaseUrl}${normalized}`;
+  }
+
+  private normalizeUpdateImagePatch(dto: UpdateProductDto, companyId: string): {
+    normalizedImagePath: string | null | undefined;
+    data: {
+      imagen?: string | null;
+      imageStorageProvider?: string | null;
+      imageKey?: string | null;
+      imageMimeType?: string | null;
+      imageOriginalFileName?: string | null;
+      imageUpdatedAt?: Date | null;
+    };
+  } {
+    const hasFotoUrl = Object.prototype.hasOwnProperty.call(dto, "fotoUrl");
+    const hasImageKey = Object.prototype.hasOwnProperty.call(dto, "imageKey");
+    if (!hasFotoUrl && !hasImageKey) {
+      return { normalizedImagePath: undefined, data: {} };
+    }
+
+    if (dto.fotoUrl === null || dto.imageKey === null) {
+      return {
+        normalizedImagePath: null,
+        data: {
+          imagen: null,
+          imageStorageProvider: null,
+          imageKey: null,
+          imageMimeType: null,
+          imageOriginalFileName: null,
+          imageUpdatedAt: null,
+        },
+      };
+    }
+
+    const rawIdentity = dto.imageKey ?? dto.fotoUrl;
+    if (this.isProductPresentationUrl(rawIdentity)) {
+      return { normalizedImagePath: undefined, data: {} };
+    }
+
+    const imageKey = this.extractR2Key(rawIdentity);
+    if (imageKey) {
+      this.assertImageKeyBelongsToTenant(imageKey, companyId);
+      return {
+        normalizedImagePath: this.buildObjectMediaUrl(imageKey),
+        data: {
+          imagen: this.buildObjectMediaUrl(imageKey),
+          imageStorageProvider: "r2",
+          imageKey,
+          imageMimeType: dto.imageMimeType?.trim() || null,
+          imageOriginalFileName: dto.imageOriginalFileName?.trim() || null,
+          imageUpdatedAt: new Date(),
+        },
+      };
+    }
+
+    const normalizedImagePath = hasFotoUrl
+      ? this.normalizeImagePathForStorage(dto.fotoUrl)
+      : undefined;
+    if (normalizedImagePath === undefined) {
+      return { normalizedImagePath: undefined, data: {} };
+    }
+    if (normalizedImagePath === null) {
+      return { normalizedImagePath: undefined, data: {} };
+    }
+
+    return {
+      normalizedImagePath,
+      data: {
+        imagen: normalizedImagePath,
+        imageStorageProvider: null,
+        imageKey: null,
+        imageMimeType: null,
+        imageOriginalFileName: null,
+        imageUpdatedAt: null,
+      },
+    };
+  }
+
+  private isProductPresentationUrl(raw?: string | null): boolean {
+    const value = (raw ?? "").trim();
+    if (!value) return true;
+
+    try {
+      const parsed = new URL(value, "https://daleventa.local");
+      return (
+        parsed.pathname === "/media/products" ||
+        parsed.pathname.startsWith("/media/products/") ||
+        parsed.pathname === "/api/media/products" ||
+        parsed.pathname.startsWith("/api/media/products/")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private assertImageKeyBelongsToTenant(
+    imageKey: string | null,
+    companyId: string,
+  ) {
+    if (!imageKey) return;
+    const expectedPrefix = `uploads/companies/${companyId}/`;
+    if (!imageKey.startsWith(expectedPrefix)) {
+      throw new BadRequestException("La imagen no pertenece a esta empresa");
+    }
   }
 
   private normalizeImagePathForStorage(raw?: string | null): string | null {

@@ -595,6 +595,7 @@ class CatalogRepository {
     UnitOfMeasureModel? unitOfMeasure,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     final payload = _productPayload(
@@ -606,6 +607,7 @@ class CatalogRepository {
       stock: stock,
       includeStock: false,
       fotoUrl: fotoUrl,
+      removeImage: removeImage,
       categoria: categoria,
       operationId: operationId,
       taxTreatment: taxTreatment,
@@ -624,6 +626,7 @@ class CatalogRepository {
         costo: costo,
         stock: stock,
         fotoUrl: fotoUrl,
+        removeImage: removeImage,
         categoria: categoria,
         operationId: operationId,
         taxTreatment: taxTreatment,
@@ -656,8 +659,10 @@ class CatalogRepository {
         precio: precio,
         costo: costo,
         stock: stock,
-        fotoUrl: fotoUrl?.trim().isEmpty == true ? null : fotoUrl?.trim(),
-        originalFotoUrl: fotoUrl?.trim().isEmpty == true
+        fotoUrl: removeImage || fotoUrl?.trim().isEmpty == true
+            ? null
+            : fotoUrl?.trim(),
+        originalFotoUrl: removeImage || fotoUrl?.trim().isEmpty == true
             ? null
             : fotoUrl?.trim(),
         categoria: categoria,
@@ -689,6 +694,7 @@ class CatalogRepository {
     String? unitOfMeasureId,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
     bool skipLoader = false,
   }) async {
     final res = await _dio.patch(
@@ -702,6 +708,7 @@ class CatalogRepository {
         stock: stock,
         includeStock: false,
         fotoUrl: fotoUrl,
+        removeImage: removeImage,
         categoria: categoria,
         operationId: operationId,
         taxTreatment: taxTreatment,
@@ -834,6 +841,7 @@ class CatalogRepository {
     String? unitOfMeasureId,
     String? itemType,
     bool? trackInventory,
+    bool removeImage = false,
   }) {
     final cleanCode = codigo?.trim();
     final safeCode = cleanCode?.isEmpty == true ? null : cleanCode;
@@ -856,7 +864,9 @@ class CatalogRepository {
       if (trackInventory != null) 'trackInventory': trackInventory,
       if ((operationId ?? '').trim().isNotEmpty)
         'operationId': operationId!.trim(),
-      if ((fotoUrl ?? '').trim().isNotEmpty) 'fotoUrl': fotoUrl!.trim(),
+      if (removeImage) ...{'fotoUrl': null, 'imageKey': null},
+      if (!removeImage && (fotoUrl ?? '').trim().isNotEmpty)
+        'fotoUrl': fotoUrl!.trim(),
       'categoria': categoria,
       if (hasTaxTreatment) 'taxTreatment': cleanTaxTreatment,
       if (hasTaxTreatment || taxRate != null) 'taxRate': taxRate,

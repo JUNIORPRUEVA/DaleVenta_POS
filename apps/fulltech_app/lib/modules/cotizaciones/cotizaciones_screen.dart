@@ -8989,7 +8989,8 @@ class _CompanyAppsSidePanel extends StatelessWidget {
     return _CompanySidePanelScaffold(
       icon: Icons.apps_rounded,
       title: 'Apps',
-      subtitle: 'Accesos para trabajar desde distintos dispositivos.',
+      subtitle:
+          'Descarga las apps oficiales de FullPOS Cloud para tus dispositivos.',
       children: [
         for (final channel in AppAccessLinks.visibleChannels())
           _CompanySideActionTile(

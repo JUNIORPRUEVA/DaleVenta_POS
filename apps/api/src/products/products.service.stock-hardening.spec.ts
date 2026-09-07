@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { ProductsService } from "./products.service";
 
 const companyA = "11111111-1111-1111-1111-111111111111";
+const companyB = "22222222-2222-4222-8222-222222222222";
 const userA = { id: "user-a", role: "ADMIN", companyId: companyA };
 
 function sourceContext() {
@@ -473,6 +474,284 @@ describe("ProductsService stock hardening", () => {
           itemType: "SERVICE",
           trackInventory: false,
         }),
+      }),
+    );
+  });
+
+  it("preserves canonical R2 image identity when editing only price", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+
+    await service.update(userA as never, "product-1", { precio: 125 });
+
+    expect(tx.product.updateMany.mock.calls[0][0].data).toEqual(
+      expect.not.objectContaining({
+        imagen: expect.anything(),
+        imageKey: expect.anything(),
+        imageStorageProvider: expect.anything(),
+      }),
+    );
+  });
+
+  it("preserves canonical R2 image identity when toggling EXEMPT", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      company: { findUnique: jest.fn().mockResolvedValue({ taxEnabled: true }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+
+    await service.update(userA as never, "product-1", {
+      taxTreatment: "EXEMPT",
+      taxRate: null,
+      taxPriceMode: null,
+    } as never);
+
+    expect(tx.product.updateMany.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({
+        taxTreatment: "EXEMPT",
+        taxRate: null,
+        taxPriceMode: null,
+      }),
+    );
+    expect(tx.product.updateMany.mock.calls[0][0].data.imageKey).toBeUndefined();
+  });
+
+  it("preserves canonical R2 image identity when editing category", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+
+    await service.update(userA as never, "product-1", {
+      categoria: "Nueva categoria",
+    });
+
+    expect(tx.product.updateMany.mock.calls[0][0].data.categoria).toBe(
+      "Nueva categoria",
+    );
+    expect(tx.product.updateMany.mock.calls[0][0].data.imageKey).toBeUndefined();
+  });
+
+  it("does not persist /media/products URLs as image identity", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+
+    await service.update(userA as never, "product-1", {
+      fotoUrl: "/media/products/product-1",
+    });
+
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("replaces image identity only when a new R2 key is provided", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+    const imageKey = `uploads/companies/${companyA}/products/images/user-a/2026/09/new.png`;
+
+    await service.update(userA as never, "product-1", { imageKey });
+
+    expect(tx.product.updateMany.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({
+        imageKey,
+        imageStorageProvider: "r2",
+        imagen: `/media/object?key=${encodeURIComponent(imageKey)}`,
+      }),
+    );
+  });
+
+  it("blocks replacing a product image with another tenant object key", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+
+    await expect(
+      service.update(userA as never, "product-1", {
+        imageKey: `uploads/companies/${companyB}/products/images/user-b/file.png`,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("removes image identity only on explicit null", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("15"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            allowDecimals: false,
+            precision: 0,
+          },
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      product: { findFirst: jest.fn().mockResolvedValue({ id: "product-1" }) },
+      $transaction: jest.fn((fn) => fn(tx)),
+    };
+    const service = buildService(prisma);
+    jest.spyOn(service, "findOne").mockResolvedValue({ id: "product-1" });
+
+    await service.update(userA as never, "product-1", {
+      fotoUrl: null,
+      imageKey: null,
+    } as never);
+
+    expect(tx.product.updateMany.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({
+        imagen: null,
+        imageKey: null,
+        imageStorageProvider: null,
+        imageMimeType: null,
+        imageOriginalFileName: null,
+        imageUpdatedAt: null,
       }),
     );
   });

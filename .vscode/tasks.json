@@ -60,14 +60,16 @@
     {
       "label": "fullpos-build-windows-release",
       "type": "shell",
-      "command": "flutter",
+      "command": "powershell",
       "args": [
-        "build",
-        "windows",
-        "--release"
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/release/build_windows_release.ps1"
       ],
       "options": {
-        "cwd": "${workspaceFolder}/apps/fulltech_app"
+        "cwd": "${workspaceFolder}"
       },
       "group": "build",
       "problemMatcher": []

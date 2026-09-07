@@ -22,8 +22,7 @@ No copies binarios desde carpetas historicas de otra maquina/proyecto. Descargal
 ## Generar el setup
 
 ```powershell
-Set-Location .\apps\fulltech_app
-flutter build windows --release --dart-define=API_BASE_URL=https://daleventapos-backend.gcdndd.easypanel.host
+.\scripts\release\build_windows_release.ps1
 ```
 
 Despues compila el instalador desde `installer`:
