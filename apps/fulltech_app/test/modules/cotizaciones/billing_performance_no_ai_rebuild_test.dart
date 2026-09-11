@@ -240,6 +240,67 @@ void main() {
         );
       },
     );
+
+    test(
+      'seleccionar ticket publica el footer antes de persistencia o IA',
+      () {
+        final switchStart = source.indexOf(
+          'void _switchDesktopTicket(String id) {',
+        );
+        final switchEnd = source.indexOf(
+          'Future<void> _renameDesktopTicket(String id) async {',
+        );
+        expect(switchStart, greaterThanOrEqualTo(0));
+        expect(switchEnd, greaterThan(switchStart));
+
+        final body = source.substring(switchStart, switchEnd);
+        final stateSet = body.indexOf("trace?.step('state_set');");
+        final footer = body.indexOf('_publishDesktopShellFooterImmediately(trace);');
+        final persist = body.indexOf('_schedulePersistEditorDraft();');
+        final ai = body.indexOf('unawaited(_syncQuotationAi());');
+
+        expect(stateSet, greaterThanOrEqualTo(0));
+        expect(footer, greaterThan(stateSet));
+        expect(persist, greaterThan(footer));
+        expect(ai, greaterThan(persist));
+      },
+    );
+
+    test(
+      'crear ticket publica el footer antes de persistir en cache/backend',
+      () {
+        final createStart = source.indexOf('void _createNewDesktopTicket() {');
+        final createEnd = source.indexOf(
+          'void _switchDesktopTicket(String id) {',
+        );
+        expect(createStart, greaterThanOrEqualTo(0));
+        expect(createEnd, greaterThan(createStart));
+
+        final body = source.substring(createStart, createEnd);
+        final stateSet = body.indexOf("trace?.step('local_state_set');");
+        final footer = body.indexOf('_publishDesktopShellFooterImmediately(trace);');
+        final persist = body.indexOf('_schedulePersistEditorDraft(immediate: true);');
+
+        expect(stateSet, greaterThanOrEqualTo(0));
+        expect(footer, greaterThan(stateSet));
+        expect(persist, greaterThan(footer));
+      },
+    );
+
+    test('la publicación inmediata no usa post-frame callback', () {
+      final helperStart = source.indexOf(
+        'void _publishDesktopShellFooterImmediately(PerfTrace? trace) {',
+      );
+      final helperEnd = source.indexOf(
+        'void _publishDesktopShellFooter({required String ownerCompanyId}) {',
+      );
+      expect(helperStart, greaterThanOrEqualTo(0));
+      expect(helperEnd, greaterThan(helperStart));
+
+      final helper = source.substring(helperStart, helperEnd);
+      expect(helper, contains('_publishDesktopShellFooter('));
+      expect(helper, isNot(contains('addPostFrameCallback')));
+    });
   });
 
   group('post-venta: la UI no espera a la impresión', () {

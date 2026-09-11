@@ -5,7 +5,12 @@ import { PERMISSIONS_KEY, ROLES_KEY } from "./roles.decorator";
 import { RolesGuard } from "./roles.guard";
 
 function contextFor(
-  user: { id: string; role: Role; companyId: string },
+  user: {
+    id: string;
+    role: Role;
+    companyId: string;
+    userPermissions?: Record<string, boolean>;
+  },
   headers: Record<string, string> = {},
 ) {
   return {
@@ -49,6 +54,26 @@ function guardWith({
 }
 
 describe("RolesGuard dynamic permissions", () => {
+  it("uses permissions already attached to the authenticated user without a duplicate lookup", async () => {
+    const { guard, prisma } = guardWith({
+      roles: [Role.ADMIN, Role.ASISTENTE],
+      permissions: ["viewClients"],
+      userPermissions: { viewClients: false },
+    });
+
+    await expect(
+      guard.canActivate(
+        contextFor({
+          id: "user-1",
+          role: Role.CAJERO,
+          companyId: "company-1",
+          userPermissions: { viewClients: true },
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
   it("allows a non-role user when the endpoint permission is granted", async () => {
     const { guard, prisma } = guardWith({
       roles: [Role.ADMIN, Role.ASISTENTE],

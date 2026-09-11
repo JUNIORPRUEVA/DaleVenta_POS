@@ -42,6 +42,7 @@ export class RolesGuard implements CanActivate {
           id?: string;
           role?: Role | string;
           companyId?: string | null;
+          userPermissions?: unknown;
           adminAuthorized?: boolean;
           authorizedPermissions?: string[];
         }
@@ -103,7 +104,9 @@ export class RolesGuard implements CanActivate {
   }
 
   private async hasAnyUserPermission(
-    user: { id?: string; companyId?: string | null } | undefined,
+    user:
+      | { id?: string; companyId?: string | null; userPermissions?: unknown }
+      | undefined,
     permissions: string[],
   ) {
     if (!user?.id || !user.companyId) return false;
@@ -111,6 +114,11 @@ export class RolesGuard implements CanActivate {
       .map((permission) => permission.trim())
       .filter((permission) => permission.length > 0);
     if (requested.length === 0) return false;
+
+    if (Object.prototype.hasOwnProperty.call(user, "userPermissions")) {
+      const map = this.normalizeBooleanMap(user.userPermissions);
+      return requested.some((permission) => map[permission] === true);
+    }
 
     const row = await this.prisma.user.findFirst({
       where: {

@@ -2081,6 +2081,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _createNewDesktopTicket() {
     final trace = PerfTrace.begin('ticket.create');
+    trace?.step('handler_start');
     setState(() {
       _writeActiveDesktopDraft();
       final user = ref.read(authStateProvider).user;
@@ -2097,7 +2098,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _replaceEditorStateFromDraft(ticket);
       _writeActiveDesktopDraft();
     });
-    trace?.step('set_state');
+    trace?.step('local_state_set');
+    _publishDesktopShellFooterImmediately(trace);
     _schedulePersistEditorDraft(immediate: true);
     trace?.step('persist_scheduled');
     _traceNextFrame(trace);
@@ -2105,20 +2107,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _switchDesktopTicket(String id) {
     if (id == _activeDesktopTicketId) return;
-    final trace = PerfTrace.begin('ticket.switch');
+    final trace = PerfTrace.begin('ticket.select');
+    trace?.step('handler_start');
+    final next = _findDesktopTicket(id);
+    if (next == null) {
+      trace?.finish(outcome: 'missing_ticket');
+      return;
+    }
     setState(() {
       _writeActiveDesktopDraft();
-      final next = _findDesktopTicket(id);
-      if (next == null) return;
       _activeDesktopTicketId = next.id;
       _showMobileTicketDropdown = false;
       _replaceEditorStateFromDraft(next);
       _syncEditorItemsFiscalWithLoadedProducts();
     });
-    trace?.step('set_state');
+    trace?.step('state_set');
+    _publishDesktopShellFooterImmediately(trace);
     _schedulePersistEditorDraft();
+    trace?.step('persist_scheduled');
     unawaited(_syncQuotationAi());
-    trace?.step('persist_and_ai_scheduled');
+    trace?.step('ai_scheduled');
     _traceNextFrame(trace);
   }
 
@@ -2333,6 +2341,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (width == null || width < _desktopBreakpoint) return;
       _publishDesktopShellFooter(ownerCompanyId: requestCompanyId);
     });
+  }
+
+  void _publishDesktopShellFooterImmediately(PerfTrace? trace) {
+    final width = MediaQuery.maybeSizeOf(context)?.width;
+    if (width == null || width < _desktopBreakpoint) {
+      trace?.step('footer_skipped_mobile');
+      return;
+    }
+    _publishDesktopShellFooter(ownerCompanyId: _activeCompanyId());
+    trace?.step('footer_published');
   }
 
   void _publishDesktopShellFooter({required String ownerCompanyId}) {

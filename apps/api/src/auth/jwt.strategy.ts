@@ -19,6 +19,7 @@ type JwtLookupUser = {
   role: Role | string;
   blocked: boolean;
   companyId: string | null;
+  userPermissions?: unknown;
   companyMemberships?: Array<{
     id: string;
     companyId: string;
@@ -72,6 +73,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role,
       memberRole: membership?.role ?? null,
       companyId,
+      userPermissions: user.userPermissions ?? {},
     };
   }
 
@@ -217,6 +219,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           role: true,
           blocked: true,
           companyId: true,
+          userPermissions: true,
           companyMemberships: {
             where: { status: CompanyMemberStatus.ACTIVE },
             select: { id: true, companyId: true, role: true, status: true },
@@ -232,6 +235,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             email: true,
             role: true,
             companyId: true,
+            userPermissions: true,
             companyMemberships: {
               where: { status: CompanyMemberStatus.ACTIVE },
               select: { id: true, companyId: true, role: true, status: true },
@@ -265,6 +269,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         email: row.email,
         role: row.role,
         companyId: row.companyId,
+        userPermissions: {},
         blocked: false,
       };
     }
