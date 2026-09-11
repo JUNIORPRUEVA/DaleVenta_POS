@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'raw_printer_transport.dart';
 
 class WindowsRawPrinterTransport implements RawPrinterTransport {
-  const WindowsRawPrinterTransport();
+  const WindowsRawPrinterTransport({bool checkQueueBeforeWrite = true});
 
   static const String datatype = 'RAW';
 

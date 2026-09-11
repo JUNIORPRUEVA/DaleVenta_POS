@@ -75,6 +75,105 @@ void main() {
     },
   );
 
+  test(
+    'BACKWARD COMPAT: legacy settings without channel emit the historical '
+    'Pin 2 pulse exactly once',
+    () async {
+      final ticketRaw = _RecordingRawTransport();
+      final drawerRaw = _RecordingRawTransport();
+      // Configuración de un cliente existente: sin cashDrawerChannel.
+      final container = _container(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'EPSON TM-T20',
+          copies: 1,
+          autoCut: true,
+          windowsPrinterMode: WindowsPrinterMode.escPosRaw,
+          autoOpenCashDrawer: true,
+        ),
+        ticketRaw: ticketRaw,
+        drawerRaw: drawerRaw,
+      );
+      addTearDown(container.dispose);
+      final printer = container.read(unifiedTicketPrinterProvider);
+
+      final result = await printer.printSaleTicket(sale: _cashSale());
+
+      expect(result.success, isTrue);
+      expect(result.warning, isNull);
+      // BYTE FOR BYTE idéntico al comportamiento anterior.
+      expect(drawerRaw.calls, hasLength(1));
+      expect(drawerRaw.calls.single.bytes, [0x1B, 0x70, 0x00, 0x19, 0xFA]);
+      expect(
+        drawerRaw.calls.single.bytes,
+        CashDrawerCommand.defaultPulseBytes,
+      );
+    },
+  );
+
+  test(
+    'PRINTER TARGET PARITY: drawer targets the SAME printer as the receipt',
+    () async {
+      final ticketRaw = _RecordingRawTransport();
+      final drawerRaw = _RecordingRawTransport();
+      final container = _container(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+          copies: 1,
+          autoCut: true,
+          windowsPrinterMode: WindowsPrinterMode.escPosRaw,
+          autoOpenCashDrawer: true,
+        ),
+        ticketRaw: ticketRaw,
+        drawerRaw: drawerRaw,
+      );
+      addTearDown(container.dispose);
+      final printer = container.read(unifiedTicketPrinterProvider);
+
+      await printer.printSaleTicket(sale: _cashSale());
+
+      expect(ticketRaw.calls.single.printerName, 'SEWOO SLK-TS100');
+      expect(drawerRaw.calls.single.printerName, 'SEWOO SLK-TS100');
+      // Nunca la impresora predeterminada de Windows en silencio.
+      expect(
+        drawerRaw.calls.single.printerName,
+        ticketRaw.calls.single.printerName,
+      );
+    },
+  );
+
+  test(
+    'DOCUMENT MODE INDEPENDENCE: driver/PDF printing keeps working and the '
+    'drawer still opens exactly once',
+    () async {
+      final ticketRaw = _RecordingRawTransport();
+      final drawerRaw = _RecordingRawTransport();
+      final container = _container(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+          copies: 1,
+          autoCut: true,
+          // Modo documento por driver/PDF (no RAW): el cash drawer NO debe
+          // cambiar el modo de impresión del documento.
+          windowsPrinterMode: WindowsPrinterMode.driver,
+          autoOpenCashDrawer: true,
+        ),
+        ticketRaw: ticketRaw,
+        drawerRaw: drawerRaw,
+      );
+      addTearDown(container.dispose);
+      final printer = container.read(unifiedTicketPrinterProvider);
+
+      final result = await printer.printSaleTicket(sale: _cashSale());
+
+      expect(result.success, isTrue);
+      // El documento NO usó el transporte RAW (siguió por driver/PDF).
+      expect(ticketRaw.calls, isEmpty);
+      // La gaveta sí, una sola vez, contra la impresora configurada.
+      expect(drawerRaw.calls, hasLength(1));
+      expect(drawerRaw.calls.single.printerName, 'SEWOO SLK-TS100');
+    },
+  );
+
   test('failed print never opens the drawer (success gate)', () async {
     final ticketRaw = _RecordingRawTransport(
       error: const RawPrinterException('printer offline'),

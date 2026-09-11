@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/printing/cash_drawer/cash_drawer_command.dart';
 import 'package:daleventa_pos/core/printing/printing_platform_resolver.dart';
 import 'package:daleventa_pos/core/printing/models/models.dart';
 import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
@@ -24,6 +25,8 @@ class _FakePrinterSettingsRepository extends PrinterSettingsRepository {
 
   PrinterSettingsModel get settings => _settings;
 
+  int updateSettingsCalls = 0;
+
   @override
   Future<PrinterSettingsModel?> getSettings() async => _settings;
 
@@ -32,6 +35,7 @@ class _FakePrinterSettingsRepository extends PrinterSettingsRepository {
 
   @override
   Future<void> updateSettings(PrinterSettingsModel settings) async {
+    updateSettingsCalls++;
     _settings = settings;
   }
 }
@@ -101,6 +105,50 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(printerRepository.settings.autoOpenCashDrawer, isTrue);
+    },
+  );
+
+  testWidgets(
+    'SETTINGS OPEN HAS NO SIDE EFFECT: entering the screen never saves or '
+    'mutates the existing configuration',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1366, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final printerRepository = _FakePrinterSettingsRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            printingPlatformResolverProvider.overrideWithValue(
+              const _FakePrintingPlatformResolver(),
+            ),
+            printerSettingsRepositoryProvider.overrideWithValue(
+              printerRepository,
+            ),
+            unifiedTicketPrinterProvider.overrideWith(
+              _FakeUnifiedTicketPrinter.new,
+            ),
+          ],
+          child: const MaterialApp(home: PrinterSettingsPage(embedded: true)),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      // Cargar la pantalla NO debe escribir nada. Los clientes existentes
+      // conservan impresora, auto-open y canal sin reconfigurar.
+      expect(printerRepository.updateSettingsCalls, 0);
+      expect(printerRepository.settings.selectedPrinterName, 'POS-80');
+      expect(
+        printerRepository.settings.cashDrawerChannel,
+        CashDrawerChannel.automatic,
+      );
+      expect(printerRepository.settings.autoOpenCashDrawer, isFalse);
+
+      // El nuevo selector de canal está visible con el valor histórico.
+      expect(find.text('Canal de la caja'), findsOneWidget);
     },
   );
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/printing/cash_drawer/cash_drawer_command.dart';
 import '../../../core/printing/cash_drawer/cash_drawer_service.dart';
 import '../../../core/printing/mobile_print_service.dart';
 import '../../../core/printing/models/models.dart';
@@ -345,6 +346,31 @@ class _WindowsPrinterSettingsViewState
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<CashDrawerChannel>(
+              initialValue: settings.cashDrawerChannel,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Canal de la caja',
+                border: OutlineInputBorder(),
+                helperText:
+                    'Cambia de canal solo si la gaveta no abre con el ajuste '
+                    'actual.',
+              ),
+              items: CashDrawerChannel.values
+                  .map(
+                    (channel) => DropdownMenuItem<CashDrawerChannel>(
+                      value: channel,
+                      child: Text(channel.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  _save(settings.copyWith(cashDrawerChannel: value));
+                }
+              },
             ),
             const SizedBox(height: 8),
             Align(

@@ -1,8 +1,8 @@
 import 'dart:ffi';
 import 'dart:io' show Platform;
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 
 import 'raw_printer_transport.dart';
 import 'windows_printer_queue_inspector.dart';
@@ -11,10 +11,12 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
   WindowsRawPrinterTransport({
     WindowsRawSpooler? spooler,
     WindowsPrinterQueueInspector? queueInspector,
+    bool checkQueueBeforeWrite = true,
   }) : _spooler = spooler ?? _defaultSpooler(),
        _queueInspector = queueInspector ?? WindowsPrinterQueueInspector(),
        _requiresWindowsPlatform = spooler == null,
-       _checksWindowsQueue = spooler == null || queueInspector != null;
+       _checksWindowsQueue = spooler == null || queueInspector != null,
+       _queueCheckIsBlocking = checkQueueBeforeWrite;
 
   static const String datatype = 'RAW';
 
@@ -31,6 +33,16 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
   final bool _requiresWindowsPlatform;
   final bool _checksWindowsQueue;
 
+  /// Si es `false`, un estado de cola no usable (pausada/offline/error) se
+  /// registra como diagnóstico pero NO bloquea el envío RAW.
+  ///
+  /// Los **comandos de dispositivo** (p. ej. el pulso de la gaveta, 5 bytes)
+  /// deben intentarse siempre: el estado que reporta el driver de muchas
+  /// impresoras POS es poco fiable (error/offline transitorio) mientras el
+  /// documento sí se imprime por la ruta del driver Windows. Bloquear el
+  /// comando ahí impediría abrir la gaveta sin ninguna razón real.
+  final bool _queueCheckIsBlocking;
+
   @override
   Future<RawPrintResult> printRaw({
     required String printerName,
@@ -40,7 +52,10 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
   }) async {
     final normalizedPrinter = printerName.trim();
     if (normalizedPrinter.isEmpty) {
-      throw const RawPrinterException('No hay impresora seleccionada.');
+      throw const RawPrinterException(
+        'No hay impresora seleccionada.',
+        stage: RawPrintStage.printerNotFound,
+      );
     }
     if (bytes.isEmpty) {
       throw const RawPrinterException('No hay bytes ESC/POS para imprimir.');
@@ -52,15 +67,31 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
     }
     if (_checksWindowsQueue) {
       final queueStatus = await _queueInspector.inspect(normalizedPrinter);
-      if (queueStatus != null && !queueStatus.isUsable) {
-        throw RawPrinterException(queueStatus.message);
+      if (queueStatus != null) {
+        debugPrint(
+          '[RAW] cola "$normalizedPrinter": ${queueStatus.state.name} - '
+          '${queueStatus.message}',
+        );
+        final details = queueStatus.technicalDetails;
+        if (details != null && details.isNotEmpty) {
+          debugPrint('[RAW] detalle de cola: $details');
+        }
+        if (!queueStatus.isUsable) {
+          if (_queueCheckIsBlocking) {
+            throw RawPrinterException(queueStatus.message);
+          }
+          debugPrint(
+            '[RAW] estado de cola no bloqueante para este trabajo '
+            '(comando de dispositivo). Se intenta el envio RAW igualmente.',
+          );
+        }
       }
     }
 
     final normalizedCopies = copies.clamp(1, 5);
     var totalWritten = 0;
     for (var i = 0; i < normalizedCopies; i++) {
-      totalWritten += _spooler.writeRaw(
+      final written = _spooler.writeRaw(
         printerName: normalizedPrinter,
         documentName: normalizedCopies == 1
             ? documentName
@@ -68,6 +99,16 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
         datatype: datatype,
         bytes: bytes,
       );
+      // Escritura parcial: escribir menos bytes de los solicitados NUNCA es
+      // exito. Un trabajo a medias no puede darse por enviado.
+      if (written != bytes.length) {
+        throw RawPrinterException(
+          'Escritura RAW incompleta: $written de ${bytes.length} bytes.',
+          stage: RawPrintStage.partialWrite,
+          bytesWritten: written,
+        );
+      }
+      totalWritten += written;
     }
     return RawPrintResult(
       success: true,
@@ -75,6 +116,7 @@ class WindowsRawPrinterTransport implements RawPrinterTransport {
       printerName: normalizedPrinter,
       bytesWritten: totalWritten,
       datatype: datatype,
+      stage: RawPrintStage.rawWriteSucceeded,
     );
   }
 }
@@ -152,6 +194,9 @@ final class FfiWindowsRawSpooler implements WindowsRawSpooler {
     var docStarted = false;
     var pageStarted = false;
 
+    // Traza paso a paso para soporte tecnico (solo logs, nunca UI de cliente).
+    final trace = <String>[];
+
     try {
       buffer.asTypedList(bytes.length).setAll(0, bytes);
       docInfo.ref
@@ -162,12 +207,28 @@ final class FfiWindowsRawSpooler implements WindowsRawSpooler {
       _ensureWin32(
         _openPrinter(printerNamePtr, printerHandlePtr, nullptr) != 0,
         'OpenPrinterW',
+        RawPrintStage.openPrinterFailed,
+        trace,
+        notFoundWhenMissing: true,
       );
+      trace.add('OpenPrinterW=ok');
       printerHandle = printerHandlePtr.value;
       final jobId = _startDocPrinter(printerHandle, 1, docInfo);
-      _ensureWin32(jobId != 0, 'StartDocPrinterW');
+      _ensureWin32(
+        jobId != 0,
+        'StartDocPrinterW',
+        RawPrintStage.startDocumentFailed,
+        trace,
+      );
+      trace.add('StartDocPrinterW=ok(job=$jobId)');
       docStarted = true;
-      _ensureWin32(_startPagePrinter(printerHandle) != 0, 'StartPagePrinter');
+      _ensureWin32(
+        _startPagePrinter(printerHandle) != 0,
+        'StartPagePrinter',
+        RawPrintStage.startPageFailed,
+        trace,
+      );
+      trace.add('StartPagePrinter=ok');
       pageStarted = true;
       _ensureWin32(
         _writePrinter(
@@ -178,22 +239,34 @@ final class FfiWindowsRawSpooler implements WindowsRawSpooler {
             ) !=
             0,
         'WritePrinter',
+        RawPrintStage.rawWriteFailed,
+        trace,
       );
       if (writtenPtr.value != bytes.length) {
+        trace.add('WritePrinter=PARTIAL(${writtenPtr.value}/${bytes.length})');
         throw RawPrinterException(
           'WritePrinter escribio ${writtenPtr.value} de ${bytes.length} bytes.',
+          stage: RawPrintStage.partialWrite,
+          bytesWritten: writtenPtr.value,
         );
       }
+      trace.add('WritePrinter=ok(${writtenPtr.value} bytes)');
       return writtenPtr.value;
     } finally {
       if (pageStarted && printerHandle != null) {
-        _endPagePrinter(printerHandle);
+        final ok = _endPagePrinter(printerHandle) != 0;
+        trace.add('EndPagePrinter=${ok ? 'ok' : 'FAIL(${_getLastError()})'}');
       }
       if (docStarted && printerHandle != null) {
-        _endDocPrinter(printerHandle);
+        final ok = _endDocPrinter(printerHandle) != 0;
+        trace.add('EndDocPrinter=${ok ? 'ok' : 'FAIL(${_getLastError()})'}');
       }
       if (printerHandle != null) {
-        _closePrinter(printerHandle);
+        final ok = _closePrinter(printerHandle) != 0;
+        trace.add('ClosePrinter=${ok ? 'ok' : 'FAIL(${_getLastError()})'}');
+      }
+      if (trace.isNotEmpty) {
+        debugPrint('[RAW] spooler trace: ${trace.join(' | ')}');
       }
       calloc.free(buffer);
       calloc.free(writtenPtr);
@@ -205,10 +278,26 @@ final class FfiWindowsRawSpooler implements WindowsRawSpooler {
     }
   }
 
-  void _ensureWin32(bool condition, String operation) {
+  void _ensureWin32(
+    bool condition,
+    String operation,
+    RawPrintStage stage,
+    List<String> trace, {
+    bool notFoundWhenMissing = false,
+  }) {
     if (condition) return;
     final code = _getLastError();
-    throw RawPrinterException('$operation fallo. Win32 error: $code');
+    trace.add('$operation=FAIL($code)');
+    // 1801 = ERROR_INVALID_PRINTER_NAME, 1905 = ERROR_PRINTER_DELETED.
+    final resolvedStage =
+        notFoundWhenMissing && (code == 1801 || code == 1905)
+        ? RawPrintStage.printerNotFound
+        : stage;
+    throw RawPrinterException(
+      '$operation fallo. Win32 error: $code',
+      stage: resolvedStage,
+      win32Error: code,
+    );
   }
 }
 

@@ -43,6 +43,7 @@ class CashDrawerResult {
     this.unsupported = false,
     required this.title,
     required this.message,
+    this.technicalDetail,
   });
 
   /// `true` solo cuando el pulso fue despachado correctamente al transporte.
@@ -62,6 +63,11 @@ class CashDrawerResult {
   /// Mensaje amigable para la notificación (nunca un error técnico en bruto).
   final String message;
 
+  /// Detalle técnico para soporte (impresora, canal, bytes, etapa, Win32).
+  ///
+  /// NUNCA se muestra al cliente en la UI: es para log/reporte copiable.
+  final String? technicalDetail;
+
   /// `true` = se intentó el pulso pero falló. El llamador debe mostrar una
   /// advertencia de hardware NO bloqueante; jamás revertir la venta.
   bool get shouldWarn => !success && !skipped && !unsupported;
@@ -69,19 +75,24 @@ class CashDrawerResult {
   const CashDrawerResult.success({
     this.title = 'Orden enviada',
     this.message = 'Se envió la orden para abrir la caja registradora.',
+    this.technicalDetail,
   }) : success = true,
        skipped = false,
        unsupported = false;
 
-  const CashDrawerResult.skipped({this.title = '', this.message = ''})
-    : success = false,
-      skipped = true,
-      unsupported = false;
+  const CashDrawerResult.skipped({
+    this.title = '',
+    this.message = '',
+    this.technicalDetail,
+  }) : success = false,
+       skipped = true,
+       unsupported = false;
 
   const CashDrawerResult.unsupported({
     this.title = 'No disponible',
     this.message =
         'Esta plataforma o impresora no puede abrir la caja registradora.',
+    this.technicalDetail,
   }) : success = false,
        skipped = false,
        unsupported = true;
@@ -89,6 +100,7 @@ class CashDrawerResult {
   const CashDrawerResult.failure({
     required this.title,
     required this.message,
+    this.technicalDetail,
   }) : success = false,
        skipped = false,
        unsupported = false;
@@ -128,7 +140,11 @@ class CashDrawerService {
 
   static RawPrinterTransport _defaultWindowsRawTransport() {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-      return WindowsRawPrinterTransport();
+      // Apertura de gaveta = COMANDO DE DISPOSITIVO (5 bytes). Se intenta
+      // siempre: el documento se imprime por la ruta del driver Windows, pero
+      // el estado de cola que reportan muchos drivers POS es poco fiable
+      // (error/offline transitorio) y no debe impedir enviar el pulso.
+      return WindowsRawPrinterTransport(checkQueueBeforeWrite: false);
     }
     return const _UnavailableWindowsRawTransport();
   }
@@ -142,7 +158,13 @@ class CashDrawerService {
 
   /// Envía SOLO el pulso de apertura con la impresora térmica configurada.
   /// No imprime ningún ticket.
-  Future<CashDrawerResult> testOpenDrawer() async {
+  ///
+  /// [channelOverride] permite a soporte técnico probar explícitamente el canal
+  /// alternativo (Drawer 2 / Pin 5) sin cambiar la configuración guardada, para
+  /// diagnosticar el pinout real de la impresora/gaveta.
+  Future<CashDrawerResult> testOpenDrawer({
+    CashDrawerChannel? channelOverride,
+  }) async {
     final platform = _platformResolver.platform;
     switch (platform) {
       case PrintingPlatform.windows:
@@ -157,7 +179,10 @@ class CashDrawerService {
                 'Selecciona primero la impresora térmica que controla la caja registradora.',
           );
         }
-        return _kickWindows(printer);
+        return _kickWindows(
+          printer,
+          channel: channelOverride ?? settings.cashDrawerChannel,
+        );
       case PrintingPlatform.android:
       case PrintingPlatform.ios:
         return _testOpenDrawerMobile();
@@ -250,14 +275,18 @@ class CashDrawerService {
             message: 'No hay impresora térmica configurada.',
           );
         }
-        final kick = await _kickWindows(printer);
+        final kick = await _kickWindows(
+          printer,
+          channel: settings.cashDrawerChannel,
+        );
         // `_kickWindows` solo devuelve éxito o fallo (nunca skipped/unsupported),
         // así que un fallo aquí es siempre una advertencia accionable.
         if (!kick.success) {
-          return const CashDrawerResult.failure(
+          return CashDrawerResult.failure(
             title: 'Caja registradora',
             message:
                 'La venta se completó, pero no fue posible abrir la caja registradora automáticamente.',
+            technicalDetail: kick.technicalDetail,
           );
         }
         return kick;
@@ -286,34 +315,72 @@ class CashDrawerService {
   // ---------------------------------------------------------------------
 
   /// Envía el pulso de caja por el transporte RAW de Windows (WinSpool).
-  Future<CashDrawerResult> _kickWindows(String printerName) async {
+  ///
+  /// El `technicalDetail` del resultado registra: impresora, canal, pin físico,
+  /// perfil de comando, bytes, etapa del transporte (OpenPrinter/StartDoc/
+  /// Write) y error Win32. NUNCA se muestra al cliente en la UI.
+  ///
+  /// Semántica: un éxito significa **comando enviado correctamente**
+  /// (`RAW_WRITE_SUCCEEDED`), NO que la gaveta se haya abierto físicamente.
+  Future<CashDrawerResult> _kickWindows(
+    String printerName, {
+    CashDrawerChannel channel = CashDrawerChannel.automatic,
+  }) async {
+    final pin = channel.resolvedPin;
+    final bytes = CashDrawerCommand.pulseBytesForChannel(channel);
+    final base =
+        'impresora="$printerName" | canal=${channel.name} | pin=${pin.label} '
+        '| perfil=${CashDrawerCommand.profileId} | '
+        '${CashDrawerCommand.describe(pin)} | bytes=${bytes.length}';
     try {
-      await _windowsRaw
+      final write = await _windowsRaw
           .printRaw(
             printerName: printerName,
-            bytes: CashDrawerCommand.pulseBytes(),
+            bytes: bytes,
             documentName: 'FullPOS apertura de caja',
             copies: 1,
           )
           .timeout(_kickTimeout);
-      debugPrint('[CASH DRAWER] pulso enviado a "$printerName".');
-      return const CashDrawerResult.success();
+      final detail =
+          '$base | etapa=${write.stage.label} | escrito=${write.bytesWritten} '
+          '| datatype=${write.datatype} | resultado=COMMAND_SENT';
+      debugPrint('[CASH DRAWER] OK | $detail');
+      return CashDrawerResult.success(technicalDetail: detail);
     } on TimeoutException {
-      debugPrint('[CASH DRAWER] timeout abriendo la caja en "$printerName".');
-      return const CashDrawerResult.failure(
+      final detail = '$base | etapa=TIMEOUT | drawer=NO_CONFIRMADA';
+      debugPrint('[CASH DRAWER] TIMEOUT | $detail');
+      return CashDrawerResult.failure(
         title: 'No se pudo abrir',
         message:
             'La impresora tardó demasiado en responder. Verifica que esté encendida y conectada.',
+        technicalDetail: detail,
+      );
+    } on RawPrinterException catch (error) {
+      final stage = error.stage?.label ?? 'RAW_WRITE_FAILED';
+      final win32 = error.win32Error;
+      final detail =
+          '$base | etapa=$stage'
+          '${win32 == null ? '' : ' | win32=$win32'}'
+          '${error.bytesWritten == null ? '' : ' | escrito=${error.bytesWritten}'}'
+          ' | motivo=${error.message}';
+      debugPrint('[CASH DRAWER] RAW FAIL | $detail');
+      return CashDrawerResult.failure(
+        title: 'No se pudo abrir',
+        message:
+            'No fue posible abrir la caja registradora. Verifica que la impresora térmica esté encendida y que la caja esté conectada a su puerto.',
+        technicalDetail: detail,
       );
     } catch (error, stackTrace) {
       // El detalle técnico queda solo en logs internos; el cliente nunca ve
       // RawPrinterException / bytes / pila de impresora.
-      debugPrint('[CASH DRAWER] error abriendo la caja: $error');
+      final detail = '$base | etapa=RAW_WRITE_FAILED | motivo=$error';
+      debugPrint('[CASH DRAWER] ERROR | $detail');
       debugPrint(stackTrace.toString());
-      return const CashDrawerResult.failure(
+      return CashDrawerResult.failure(
         title: 'No se pudo abrir',
         message:
             'No fue posible abrir la caja registradora. Verifica que la impresora térmica esté encendida y que la caja esté conectada a su puerto.',
+        technicalDetail: detail,
       );
     }
   }

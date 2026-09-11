@@ -58,6 +58,7 @@ class PrinterSettingsRepository {
         autoPrintOnPayment INTEGER NOT NULL DEFAULT 1,
         autoOpenDrawerOnChargeWithoutTicket INTEGER NOT NULL DEFAULT 0,
         autoOpenCashDrawer INTEGER NOT NULL DEFAULT 0,
+        cashDrawerChannel TEXT NOT NULL DEFAULT 'automatic',
         copies INTEGER NOT NULL DEFAULT 1,
         showItbis INTEGER NOT NULL DEFAULT 1,
         showElectronicInvoiceReference INTEGER NOT NULL DEFAULT 1,
@@ -145,6 +146,8 @@ class PrinterSettingsRepository {
     'autoOpenDrawerOnChargeWithoutTicket':
         'autoOpenDrawerOnChargeWithoutTicket INTEGER NOT NULL DEFAULT 0',
     'autoOpenCashDrawer': 'autoOpenCashDrawer INTEGER NOT NULL DEFAULT 0',
+    'cashDrawerChannel':
+        "cashDrawerChannel TEXT NOT NULL DEFAULT 'automatic'",
     'copies': 'copies INTEGER NOT NULL DEFAULT 1',
     'showItbis': 'showItbis INTEGER NOT NULL DEFAULT 1',
     'showElectronicInvoiceReference':
@@ -359,6 +362,7 @@ class PrinterSettingsRepository {
     'autoPrintOnPayment',
     'autoOpenDrawerOnChargeWithoutTicket',
     'autoOpenCashDrawer',
+    'cashDrawerChannel',
     'copies',
     'leftMargin',
     'rightMargin',

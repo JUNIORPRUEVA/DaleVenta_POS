@@ -1,3 +1,5 @@
+import '../../../core/printing/cash_drawer/cash_drawer_command.dart';
+
 enum WindowsPrinterMode {
   automatic,
   driver,
@@ -37,6 +39,7 @@ class PrinterSettingsModel {
     this.autoPrintOnPayment = true,
     this.autoOpenDrawerOnChargeWithoutTicket = false,
     this.autoOpenCashDrawer = false,
+    this.cashDrawerChannel = CashDrawerChannel.automatic,
     this.copies = 1,
     this.showItbis = true,
     this.showElectronicInvoiceReference = true,
@@ -89,6 +92,14 @@ class PrinterSettingsModel {
   /// efectivo elegible (solo escritorio/Windows). Por defecto OFF para no
   /// cambiar el comportamiento de instalaciones existentes.
   final bool autoOpenCashDrawer;
+
+  /// Canal físico del pulso de apertura (`ESC p m ...`).
+  ///
+  /// [CashDrawerChannel.automatic] = Pin 2, idéntico al pulso histórico de
+  /// FullPOS; las instalaciones existentes no cambian. Se expone porque el
+  /// pinout del cable RJ11/RJ12 varía entre impresoras/gavetas (una gaveta que
+  /// abre por Pin 2 en una impresora puede necesitar Pin 5 en otra).
+  final CashDrawerChannel cashDrawerChannel;
   final int copies;
   final bool showItbis;
   final bool showElectronicInvoiceReference;
@@ -138,6 +149,7 @@ class PrinterSettingsModel {
     bool? autoPrintOnPayment,
     bool? autoOpenDrawerOnChargeWithoutTicket,
     bool? autoOpenCashDrawer,
+    CashDrawerChannel? cashDrawerChannel,
     int? copies,
     bool? showItbis,
     bool? showElectronicInvoiceReference,
@@ -190,6 +202,7 @@ class PrinterSettingsModel {
           autoOpenDrawerOnChargeWithoutTicket ??
           this.autoOpenDrawerOnChargeWithoutTicket,
       autoOpenCashDrawer: autoOpenCashDrawer ?? this.autoOpenCashDrawer,
+      cashDrawerChannel: cashDrawerChannel ?? this.cashDrawerChannel,
       copies: copies ?? this.copies,
       showItbis: showItbis ?? this.showItbis,
       showElectronicInvoiceReference:
@@ -243,6 +256,7 @@ class PrinterSettingsModel {
     'autoPrintOnPayment': autoPrintOnPayment,
     'autoOpenDrawerOnChargeWithoutTicket': autoOpenDrawerOnChargeWithoutTicket,
     'autoOpenCashDrawer': autoOpenCashDrawer,
+    'cashDrawerChannel': cashDrawerChannel.name,
     'copies': copies,
     'showItbis': showItbis,
     'showElectronicInvoiceReference': showElectronicInvoiceReference,
@@ -323,6 +337,9 @@ class PrinterSettingsModel {
         false,
       ),
       autoOpenCashDrawer: b('autoOpenCashDrawer', false),
+      cashDrawerChannel: CashDrawerChannel.fromValue(
+        map['cashDrawerChannel']?.toString(),
+      ),
       copies: i('copies', 1).clamp(0, 5),
       showItbis: b('showItbis', true),
       showElectronicInvoiceReference: b('showElectronicInvoiceReference', true),

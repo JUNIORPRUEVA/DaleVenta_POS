@@ -47,6 +47,164 @@ void main() {
       },
     );
 
+    test('Windows: automatic channel keeps the legacy Pin 2 pulse', () async {
+      final raw = _RecordingRawTransport();
+      final container = _windowsContainer(
+        settings: const PrinterSettingsModel(selectedPrinterName: 'POS-80'),
+        raw: raw,
+      );
+      addTearDown(container.dispose);
+
+      final result = await container
+          .read(cashDrawerServiceProvider)
+          .testOpenDrawer();
+
+      expect(result.success, isTrue);
+      expect(raw.calls.single.bytes, [0x1B, 0x70, 0x00, 0x19, 0xFA]);
+    });
+
+    test('Windows: uses the configured channel (Pin 5 -> m = 0x01)', () async {
+      final raw = _RecordingRawTransport();
+      final container = _windowsContainer(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+          cashDrawerChannel: CashDrawerChannel.pin5,
+        ),
+        raw: raw,
+      );
+      addTearDown(container.dispose);
+
+      final result = await container
+          .read(cashDrawerServiceProvider)
+          .testOpenDrawer();
+
+      expect(result.success, isTrue);
+      expect(
+        raw.calls.single.bytes,
+        CashDrawerCommand.pulseBytesForChannel(CashDrawerChannel.pin5),
+      );
+      expect(raw.calls, hasLength(1));
+    });
+
+    test('Windows: explicit override wins over the saved setting', () async {
+      final raw = _RecordingRawTransport();
+      final container = _windowsContainer(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+          cashDrawerChannel: CashDrawerChannel.pin2,
+        ),
+        raw: raw,
+      );
+      addTearDown(container.dispose);
+
+      final result = await container
+          .read(cashDrawerServiceProvider)
+          .testOpenDrawer(channelOverride: CashDrawerChannel.pin5);
+
+      expect(result.success, isTrue);
+      expect(
+        raw.calls.single.bytes,
+        CashDrawerCommand.pulseBytesForChannel(CashDrawerChannel.pin5),
+      );
+    });
+
+    test(
+      'Windows: drawer uses EXACTLY the configured receipt printer',
+      () async {
+        final raw = _RecordingRawTransport();
+        final container = _windowsContainer(
+          settings: const PrinterSettingsModel(
+            selectedPrinterName: 'SEWOO SLK-TS100',
+            autoOpenCashDrawer: true,
+          ),
+          raw: raw,
+        );
+        addTearDown(container.dispose);
+
+        await container.read(cashDrawerServiceProvider).testOpenDrawer();
+
+        // Nunca se usa la impresora predeterminada de Windows en silencio.
+        expect(raw.calls.single.printerName, 'SEWOO SLK-TS100');
+        expect(raw.calls.single.printerName, isNot('EPSON TM-T20'));
+      },
+    );
+
+    test('Windows: honors a different printer selection (no hardcoded model)',
+        () async {
+      final raw = _RecordingRawTransport();
+      final container = _windowsContainer(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'EPSON TM-T20',
+        ),
+        raw: raw,
+      );
+      addTearDown(container.dispose);
+
+      await container.read(cashDrawerServiceProvider).testOpenDrawer();
+
+      expect(raw.calls.single.printerName, 'EPSON TM-T20');
+    });
+
+    test('Windows: partial write is reported as failure with technical detail',
+        () async {
+      final raw = _RecordingRawTransport(
+        error: const RawPrinterException(
+          'Escritura RAW incompleta: 3 de 5 bytes.',
+          stage: RawPrintStage.partialWrite,
+          bytesWritten: 3,
+          win32Error: 87,
+        ),
+      );
+      final container = _windowsContainer(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+        ),
+        raw: raw,
+      );
+      addTearDown(container.dispose);
+
+      final result = await container
+          .read(cashDrawerServiceProvider)
+          .testOpenDrawer();
+
+      expect(result.success, isFalse);
+      expect(result.shouldWarn, isTrue);
+      // UI del cliente: mensaje amigable, sin ruido tecnico.
+      expect(result.message, isNot(contains('bytes')));
+      expect(result.message, isNot(contains('Win32')));
+      expect(result.message, isNot(contains('0x')));
+      // Reporte de soporte copiable: etapa + Win32 + impresora + perfil.
+      final detail = result.technicalDetail;
+      expect(detail, isNotNull);
+      expect(detail, contains('PARTIAL_WRITE'));
+      expect(detail, contains('win32=87'));
+      expect(detail, contains('escrito=3'));
+      expect(detail, contains('SEWOO SLK-TS100'));
+      expect(detail, contains(CashDrawerCommand.profileId));
+    });
+
+    test('Windows: success detail means COMMAND_SENT, never DRAWER_OPENED',
+        () async {
+      final raw = _RecordingRawTransport();
+      final container = _windowsContainer(
+        settings: const PrinterSettingsModel(
+          selectedPrinterName: 'SEWOO SLK-TS100',
+        ),
+        raw: raw,
+      );
+      addTearDown(container.dispose);
+
+      final result = await container
+          .read(cashDrawerServiceProvider)
+          .testOpenDrawer();
+
+      expect(result.success, isTrue);
+      expect(result.technicalDetail, contains('COMMAND_SENT'));
+      expect(result.technicalDetail, contains('RAW_WRITE_SUCCEEDED'));
+      expect(result.technicalDetail, contains(CashDrawerCommand.profileId));
+      expect(result.technicalDetail, isNot(contains('DRAWER_OPENED')));
+    });
+
     test('Windows: no configured printer -> friendly error, no transport call',
         () async {
       final raw = _RecordingRawTransport();
@@ -203,6 +361,34 @@ void main() {
       expect(raw.calls, hasLength(1));
       expect(raw.calls.single.bytes, CashDrawerCommand.pulseBytes());
     });
+
+    test(
+      'enabled + eligible cash sale uses the configured Pin 5 channel once',
+      () async {
+        final raw = _RecordingRawTransport();
+        final container = _windowsContainer(
+          settings: const PrinterSettingsModel(
+            selectedPrinterName: 'SEWOO SLK-TS100',
+            autoOpenCashDrawer: true,
+            cashDrawerChannel: CashDrawerChannel.pin5,
+          ),
+          raw: raw,
+        );
+        addTearDown(container.dispose);
+
+        final result = await container
+            .read(cashDrawerServiceProvider)
+            .openDrawerAfterEligibleSalePrint(sale: _cashSale());
+
+        expect(result.success, isTrue);
+        // Un único pulso por venta (sin doble apertura).
+        expect(raw.calls, hasLength(1));
+        expect(
+          raw.calls.single.bytes,
+          CashDrawerCommand.pulseBytesForChannel(CashDrawerChannel.pin5),
+        );
+      },
+    );
 
     test('enabled but no cash involved -> skipped', () async {
       final raw = _RecordingRawTransport();
