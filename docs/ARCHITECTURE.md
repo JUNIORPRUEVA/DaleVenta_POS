@@ -161,10 +161,11 @@ Architecture (see `CASH-DRAWER-01` report):
 
 ```text
 POS cash sale / test button
-  -> Printer settings (autoOpenCashDrawer, printer name)
+  -> Printer settings (autoOpenCashDrawer, cashDrawerChannel, printer name)
   -> UnifiedTicketPrinter (sale receipt; success point reached)
   -> CashDrawerService (lib/core/printing/cash_drawer/cash_drawer_service.dart)
-  -> CashDrawerCommand.pulseBytes()  (standard ESC/POS `ESC p`, Pin 2 default)
+  -> CashDrawerCommand.pulseBytesForChannel()  (standard ESC/POS `ESC p`,
+     channel Automatic/Pin 2 default; Pin 5 optional)
   -> WindowsRawPrinterTransport (WinSpool RAW) on Windows
      |  MobilePrintService.sendDrawerPulse() on Android/iOS (Bluetooth/LAN)
      -> thermal printer -> RJ11/RJ12 drawer pulse
@@ -172,18 +173,45 @@ POS cash sale / test button
 
 - Centralized: only `CashDrawerService` emits drawer bytes; no screen writes raw
   kick commands. `cash_drawer_command.dart` is the single command source
-  (standard `ESC p`, capability-based, no per-brand adapters).
+  (standard `ESC p`, capability-based, no per-brand adapters). The physical
+  output channel is modeled explicitly as `CashDrawerChannel`
+  (`automatic` / `pin2` / `pin5`) instead of brand branches, because RJ11/RJ12
+  pinout differs between printers and drawers. `automatic` resolves to Pin 2,
+  which is the historical FullPOS pulse and keeps existing installations
+  working unchanged.
 - Windows: drawer pulses are sent as a RAW WinSpool job to the configured
   receipt printer regardless of `windowsPrinterMode`, so the normal PDF/driver
-  receipt stack is untouched. Reprints never open the drawer.
+  receipt stack is untouched. Because the pulse is a 5-byte device command, the
+  drawer transport is created with `checkQueueBeforeWrite: false`: a
+  driver-reported queue state (paused/offline/error) is logged as diagnostics
+  but never blocks the pulse. Document RAW printing keeps the blocking check.
+  Reprints never open the drawer.
 - Mobile (Android/iOS): the "Abrir gaveta" toggle embeds the pulse in the
   existing ESC/POS Bluetooth/LAN path; the test action uses
   `MobilePrintService.sendDrawerPulse()` (drawer only, no receipt).
 - Web/PWA: no raw drawer commands from the browser; reported as unsupported.
 - Failure isolation: a drawer failure never rolls back or corrupts a completed
   sale/print; it returns a non-blocking `PrintTicketResult.warning`.
-- Settings: desktop `PrinterSettingsModel.autoOpenCashDrawer` (local per-device
-  sqflite column, auto-migrated, OFF default); mobile `openCashDrawer`.
+- Settings: desktop `PrinterSettingsModel.autoOpenCashDrawer` and
+  `PrinterSettingsModel.cashDrawerChannel` (local per-device sqflite columns,
+  auto-migrated, OFF / `automatic` defaults); mobile `openCashDrawer`.
+  Diagnostics: the settings test action accepts a channel override so support
+  can try Drawer 2 (Pin 5) without altering saved configuration; the service
+  logs printer, channel, pin, byte count, bytes written and Win32 error, and
+  returns a `technicalDetail` string (log/report only, never client UI).
+- Transport result semantics: `RawPrintStage`
+  (`PRINTER_NOT_FOUND` / `OPEN_PRINTER_FAILED` / `START_DOCUMENT_FAILED` /
+  `START_PAGE_FAILED` / `RAW_WRITE_FAILED` / `PARTIAL_WRITE` /
+  `RAW_WRITE_SUCCEEDED`) distinguishes where the job failed. Partial writes are
+  failures. `RAW_WRITE_SUCCEEDED` means **command sent to the spooler**, not
+  that the drawer physically opened — FullPOS never claims hardware
+  confirmation. The WinSpool path emits a step trace
+  (`OpenPrinterW → StartDocPrinterW → StartPagePrinter → WritePrinter →
+  EndPagePrinter → EndDocPrinter → ClosePrinter`) to internal logs.
+- Command profile is generic `EPSON_ESC_POS` (CR-330K is an Epson-standard
+  drawer, SEWOO SLK-TS100 is ESC/POS); no per-brand code branches. The
+  real-time `DLE DC4` pulse is intentionally not implemented (no explicit vendor
+  evidence); `ESC p` remains the only pulse command.
 - Tests: `test/core/printing/cash_drawer/*` cover command bytes, service
   policy/transports, and `printSaleTicket` wiring; widget test covers the
   settings UI section. Physical hardware QA is required before GO.
