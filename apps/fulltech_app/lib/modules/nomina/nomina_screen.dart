@@ -13,6 +13,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_feedback.dart';
@@ -541,9 +542,16 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -2079,7 +2087,11 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
         if (!context.mounted || !scaffoldContext.mounted) return;
         await AppFeedback.showError(
           scaffoldContext,
-          'No se pudo guardar el seguro de ley: $e',
+          userSafeErrorMessage(
+            e,
+            fallback:
+                'No se pudo guardar el seguro de ley. Inténtalo nuevamente.',
+          ),
           fallbackContext: context,
           scope: 'NominaEmployeePayrollDialog',
         );
@@ -2439,7 +2451,11 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                                 if (!scaffoldContext.mounted) return;
                                 await AppFeedback.showError(
                                   scaffoldContext,
-                                  'No se pudo guardar el ajuste: $e',
+                                  userSafeErrorMessage(
+                                    e,
+                                    fallback:
+                                        'No se pudo guardar el ajuste. Inténtalo nuevamente.',
+                                  ),
                                   fallbackContext: context,
                                   scope: 'NominaEmployeePayrollDialog',
                                 );
@@ -2550,7 +2566,11 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                           if (!scaffoldContext.mounted) return;
                           await AppFeedback.showError(
                             scaffoldContext,
-                            'No se pudo enviar la nómina: $e',
+                            userSafeErrorMessage(
+                              e,
+                              fallback:
+                                  'No se pudo enviar la nómina. Inténtalo nuevamente.',
+                            ),
                             fallbackContext: context,
                             scope: 'NominaEmployeePayrollDialog',
                           );
@@ -2751,7 +2771,11 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                           if (!scaffoldContext.mounted) return;
                           await AppFeedback.showError(
                             scaffoldContext,
-                            'No se pudo crear: $e',
+                            userSafeErrorMessage(
+                              e,
+                              fallback:
+                                  'No se pudo crear el período. Inténtalo nuevamente.',
+                            ),
                             fallbackContext: context,
                             scope: 'NominaCreatePeriodDialog',
                           );
@@ -2821,7 +2845,16 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo cerrar: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo cerrar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 }
@@ -2979,7 +3012,10 @@ class _PayrollEmployeeDialogState
       if (!mounted) return;
       setState(() {
         _isSubmitting = false;
-        _errorText = 'No se pudo guardar: $e';
+        _errorText = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+        );
       });
     }
   }
@@ -3149,7 +3185,10 @@ class _PayrollUserPickerDialogState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _errorText = 'No se pudieron cargar usuarios: $e';
+        _errorText = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar los usuarios.',
+        );
       });
     }
   }
@@ -3379,7 +3418,10 @@ class _EmployeeCardState extends ConsumerState<_EmployeeCard>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _movError = 'No se pudieron cargar: $e';
+        _movError = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar los datos.',
+        );
         _movLoading = false;
       });
     }
@@ -4712,7 +4754,10 @@ class _PayrollHistoryFullScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _detailError = 'Error al cargar: $e';
+        _detailError = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo cargar el detalle.',
+        );
         _detailLoading = false;
       });
     }

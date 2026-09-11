@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -82,7 +83,10 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'No se pudo cargar pagos pendientes: $e';
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo cargar pagos pendientes.',
+        );
         _loading = false;
       });
     }
@@ -363,7 +367,12 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                   if (!ctx.mounted) return;
                   Navigator.of(dialogContext).pop(true);
                 } catch (e) {
-                  await _showSnack('No se pudo guardar: $e');
+                  await _showSnack(
+                    userSafeErrorMessage(
+                      e,
+                      fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+                    ),
+                  );
                 }
               },
               child: const Text('Guardar'),
@@ -491,7 +500,13 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                   if (!ctx.mounted) return;
                   Navigator.of(dialogContext).pop(true);
                 } catch (e) {
-                  await _showSnack('No se pudo registrar: $e');
+                  await _showSnack(
+                    userSafeErrorMessage(
+                      e,
+                      fallback:
+                          'No se pudo registrar. Inténtalo nuevamente.',
+                    ),
+                  );
                 }
               },
               child: const Text('Registrar'),
@@ -590,7 +605,13 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                   if (!ctx.mounted) return;
                   Navigator.of(dialogContext).pop(true);
                 } catch (e) {
-                  await _showSnack('No se pudo registrar el pago: $e');
+                  await _showSnack(
+                    userSafeErrorMessage(
+                      e,
+                      fallback:
+                          'No se pudo registrar el pago. Inténtalo nuevamente.',
+                    ),
+                  );
                 }
               },
               child: const Text('Confirmar pago'),
@@ -696,7 +717,12 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
           .updatePayableService(id: service.id, active: !service.active);
       await _load();
     } catch (e) {
-      await _showSnack('No se pudo actualizar estado: $e');
+      await _showSnack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo actualizar el estado. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -731,7 +757,14 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
       await _load();
       if (mounted) await _showSnack('Servicio eliminado');
     } catch (e) {
-      if (mounted) await _showSnack('No se pudo eliminar: $e');
+      if (mounted) {
+        await _showSnack(
+          userSafeErrorMessage(
+            e,
+            fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
+          ),
+        );
+      }
     }
   }
 
@@ -766,7 +799,14 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
       await _load();
       if (mounted) await _showSnack('Pago eliminado');
     } catch (e) {
-      if (mounted) await _showSnack('No se pudo eliminar: $e');
+      if (mounted) {
+        await _showSnack(
+          userSafeErrorMessage(
+            e,
+            fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
+          ),
+        );
+      }
     }
   }
 
@@ -850,7 +890,15 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                 } catch (e) {
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text('No se pudo actualizar: $e')),
+                      SnackBar(
+                        content: Text(
+                          userSafeErrorMessage(
+                            e,
+                            fallback:
+                                'No se pudo actualizar. Inténtalo nuevamente.',
+                          ),
+                        ),
+                      ),
                     );
                   }
                 }

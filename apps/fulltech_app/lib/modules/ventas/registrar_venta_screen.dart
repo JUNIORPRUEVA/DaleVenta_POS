@@ -13,6 +13,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 
 import '../../core/models/product_model.dart';
 
@@ -731,7 +732,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       if (silent) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudieron cargar productos: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudieron cargar los productos. Revisa tu conexión e inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (silent && forceRemote) {
@@ -2931,7 +2940,17 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo crear cliente: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo crear el cliente. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -3041,7 +3060,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }

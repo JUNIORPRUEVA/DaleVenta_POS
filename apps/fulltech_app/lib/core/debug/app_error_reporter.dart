@@ -3,6 +3,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../errors/api_exception.dart';
+import '../errors/app_error_policy.dart';
+import '../errors/user_facing_error.dart';
 
 enum AppErrorSeverity { warning, error, fatal }
 
@@ -22,6 +24,13 @@ class AppErrorDetails {
   final String? technicalDetails;
   final String errorType;
   final AppErrorSeverity severity;
+
+  /// Central classification of the incident (network, media, server, ...).
+  final AppErrorKind kind;
+
+  /// True when the incident was recorded for diagnostics only.
+  final bool silent;
+
   final String? retryLabel;
   final AppErrorRetryCallback? onRetry;
 
@@ -34,6 +43,8 @@ class AppErrorDetails {
     required this.stackTrace,
     required this.errorType,
     required this.severity,
+    this.kind = AppErrorKind.unknown,
+    this.silent = false,
     this.retryLabel,
     this.onRetry,
     this.context,
@@ -156,20 +167,26 @@ class AppErrorReporter {
     bool notifyUser = true,
   }) {
     if (_shouldSkipDedupe(dedupeKey)) return;
+    final presentation = AppErrorPolicy.describe(
+      error,
+      title: title,
+      message: userMessage,
+    );
+    final shouldNotify = notifyUser && !presentation.silent;
     final details = _buildDetails(
       error,
       stack,
       context: context,
-      title: title,
-      userMessage: userMessage,
+      presentation: presentation,
       technicalDetails: technicalDetails,
       severity: severity,
       retryLabel: retryLabel,
       onRetry: onRetry,
+      silent: !shouldNotify,
     );
     _log(details);
     _remember(details);
-    if (notifyUser) {
+    if (shouldNotify) {
       _setLastError(details);
     }
   }
@@ -206,20 +223,19 @@ class AppErrorReporter {
     Object error,
     StackTrace stack, {
     String? context,
-    String? title,
-    String? userMessage,
+    required UserFacingError presentation,
     String? technicalDetails,
     required AppErrorSeverity severity,
     String? retryLabel,
     AppErrorRetryCallback? onRetry,
+    required bool silent,
   }) {
     final stackText = stack.toString();
     final normalizedStack = _truncate(stackText, maxChars: 16000);
     final normalizedContext = _clean(context);
     final eventId = ++_eventSeq;
-    final resolvedTitle = _clean(title) ?? _defaultTitleForSeverity(severity);
-    final resolvedUserMessage =
-        _clean(userMessage) ?? _defaultUserMessageForSeverity(severity);
+    final resolvedTitle = presentation.title;
+    final resolvedUserMessage = presentation.message;
 
     if (error is ApiException) {
       return AppErrorDetails(
@@ -237,6 +253,8 @@ class AppErrorReporter {
             _clean(technicalDetails) ?? _clean(error.technicalDetails),
         errorType: error.runtimeType.toString(),
         severity: severity,
+        kind: presentation.kind,
+        silent: silent,
         retryLabel: _clean(retryLabel),
         onRetry: onRetry,
       );
@@ -260,6 +278,8 @@ class AppErrorReporter {
             _clean(technicalDetails) ?? _clean(error.error?.toString()),
         errorType: error.runtimeType.toString(),
         severity: severity,
+        kind: presentation.kind,
+        silent: silent,
         retryLabel: _clean(retryLabel),
         onRetry: onRetry,
       );
@@ -276,6 +296,8 @@ class AppErrorReporter {
       technicalDetails: _clean(technicalDetails),
       errorType: error.runtimeType.toString(),
       severity: severity,
+      kind: presentation.kind,
+      silent: silent,
       retryLabel: _clean(retryLabel),
       onRetry: onRetry,
     );
@@ -289,7 +311,10 @@ class AppErrorReporter {
     final isKnownKeyboardStateIssue = _isKnownKeyboardStateIssue(
       exceptionMessage,
     );
-    final isTransientNetworkIssue = _isTransientNetworkError(exceptionMessage);
+    final isSilentResourceIssue = AppErrorPolicy.isSilent(
+      exception,
+      exceptionMessage,
+    );
 
     if (isKnownKeyboardStateIssue) {
       record(
@@ -307,21 +332,21 @@ class AppErrorReporter {
       return;
     }
 
-    if (isTransientNetworkIssue) {
-      // Fallos de red al cargar recursos (p. ej. imágenes de perfil servidas
-      // por /media/object). No son críticos: el widget cae a su fallback
-      // (iniciales) sin requerir intervención del usuario. Se registran para
-      // diagnóstico pero no se muestra el toast de error.
+    if (isSilentResourceIssue) {
+      // Fallos al cargar recursos no críticos (imágenes de producto, avatares,
+      // logos) o cortes temporales de red. El widget cae a su placeholder
+      // local y el usuario nunca es interrumpido. Se registra solo para
+      // diagnóstico.
+      final media = UserFacingError.media();
       record(
         exception,
         stack,
         context: 'FlutterError',
-        title: 'Fallo de red al cargar un recurso',
-        userMessage:
-            'No se pudo cargar un recurso (imagen) por un problema temporal de red.',
+        title: media.title,
+        userMessage: media.message,
         technicalDetails: exceptionMessage,
         severity: AppErrorSeverity.warning,
-        dedupeKey: 'flutter-transient-network-image-load',
+        dedupeKey: 'flutter-resource-load-silent',
         notifyUser: false,
       );
       return;
@@ -344,30 +369,6 @@ class AppErrorReporter {
           : null,
       notifyUser: !isRenderFlexOverflow,
     );
-  }
-
-  bool _isTransientNetworkError(String value) {
-    final normalized = value.toLowerCase();
-    const markers = <String>[
-      'clientexception with socketexception',
-      'clientsocketexception',
-      'socketexception',
-      'sockettimeout',
-      'timed out',
-      'timeoutexception',
-      'semaphore timeout',
-      'connection refused',
-      'connection reset',
-      'connection failed',
-      'connection timed out',
-      'failed host lookup',
-      'no address associated',
-      'network is unreachable',
-      'host unreachable',
-      'operation timed out',
-      'address is unreachable',
-    ];
-    return markers.any(normalized.contains);
   }
 
   bool _isRenderFlexOverflowMessage(String value) {
@@ -398,26 +399,15 @@ class AppErrorReporter {
     return isLegacyRawKeyboardIssue || isHardwareKeyboardPressedKeysIssue;
   }
 
-  String _defaultTitleForSeverity(AppErrorSeverity severity) {
-    switch (severity) {
-      case AppErrorSeverity.warning:
-        return 'Atencion del sistema';
-      case AppErrorSeverity.fatal:
-        return 'No fue posible continuar';
-      case AppErrorSeverity.error:
-        return 'Algo salio mal';
-    }
-  }
-
-  String _defaultUserMessageForSeverity(AppErrorSeverity severity) {
-    switch (severity) {
-      case AppErrorSeverity.warning:
-        return 'Detectamos una incidencia menor. Puedes seguir usando la aplicacion mientras lo intentamos de nuevo.';
-      case AppErrorSeverity.fatal:
-        return 'Ocurrio un problema que impide completar esta accion en este momento.';
-      case AppErrorSeverity.error:
-        return 'No pudimos completar la accion. Intentalo nuevamente en unos segundos.';
-    }
+  /// Clears in-memory state. Intended for tests only.
+  @visibleForTesting
+  void resetForTesting() {
+    _pendingLastError = null;
+    _lastErrorUpdateScheduled = false;
+    _eventSeq = 0;
+    _history.clear();
+    _recentDedupe.clear();
+    lastError.value = null;
   }
 
   String? _clean(String? value) {

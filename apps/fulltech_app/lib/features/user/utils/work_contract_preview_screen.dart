@@ -404,7 +404,11 @@ class _WorkContractPreviewScreenState
                       } catch (e) {
                         if (!mounted) return;
                         scaffoldMessenger?.showSnackBar(
-                          SnackBar(content: Text('No se pudo guardar: $e')),
+                          const SnackBar(
+                            content: Text(
+                              'No se pudo guardar el contrato. Inténtalo nuevamente.',
+                            ),
+                          ),
                         );
                       } finally {
                         if (mounted) setState(() => _saving = false);
@@ -615,7 +619,8 @@ class _WorkContractPreviewScreenState
                         } catch (e) {
                           if (!mounted) return;
                           setDialogState(
-                            () => errorText = 'No se pudo aplicar la IA: $e',
+                            () => errorText =
+                                'No se pudo aplicar la IA. Inténtalo nuevamente.',
                           );
                         } finally {
                           if (mounted) setState(() => _aiEditing = false);

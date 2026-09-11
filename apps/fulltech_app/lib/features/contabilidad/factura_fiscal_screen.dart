@@ -17,6 +17,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/evolution/evolution_api_repository.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -2180,7 +2181,11 @@ class _FiscalInvoiceHistoryScreenState
                           } catch (e) {
                             if (!mounted) return;
                             _showScreenError(
-                              'No se pudo descargar o compartir el PDF: $e',
+                              userSafeErrorMessage(
+                                e,
+                                fallback:
+                                    'No se pudo preparar el PDF. Inténtalo nuevamente.',
+                              ),
                             );
                           }
                         },
@@ -2265,7 +2270,11 @@ class _FiscalInvoiceHistoryScreenState
                                   } catch (e) {
                                     if (!mounted) return;
                                     _showScreenError(
-                                      'No se pudo descargar o compartir el PDF: $e',
+                                      userSafeErrorMessage(
+                                        e,
+                                        fallback:
+                                            'No se pudo preparar el PDF. Inténtalo nuevamente.',
+                                      ),
                                     );
                                   }
                                 },
@@ -2441,7 +2450,11 @@ class _FiscalInvoiceHistoryScreenState
                                 } catch (e) {
                                   if (!mounted) return;
                                   _showScreenError(
-                                    'No se pudo generar el PDF del filtro: $e',
+                                    userSafeErrorMessage(
+                                      e,
+                                      fallback:
+                                          'No se pudo generar el PDF. Inténtalo nuevamente.',
+                                    ),
                                   );
                                 }
                               },

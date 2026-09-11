@@ -6,6 +6,7 @@ import '../../../core/auth/admin_authorization.dart';
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/company/company_settings_repository.dart';
+import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
@@ -1010,7 +1011,14 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
       _showMessage('Transferencia completada');
       _showTransferDetail(navigator.context, transfer);
     } catch (error) {
-      if (mounted) _showMessage('$error');
+      if (mounted) {
+        _showMessage(
+          userSafeErrorMessage(
+            error,
+            fallback: 'No se pudo completar la transferencia.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1426,9 +1434,16 @@ Future<void> _runWarehouseAction(
     ).showSnackBar(SnackBar(content: Text(successMessage)));
   } catch (error) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$error')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          userSafeErrorMessage(
+            error,
+            fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+          ),
+        ),
+      ),
+    );
   }
 }
 

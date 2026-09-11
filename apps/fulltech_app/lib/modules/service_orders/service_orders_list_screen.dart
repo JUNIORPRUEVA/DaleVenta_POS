@@ -10,6 +10,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
 import '../../core/realtime/operations_realtime_service.dart';
 import '../../core/routing/routes.dart';
@@ -153,8 +154,13 @@ class _ServiceOrdersListScreenState
       );
     } catch (e) {
       if (!mounted) return;
-      final message = e is ApiException ? e.message : '$e';
-      AppFeedback.showError(context, message);
+      AppFeedback.showError(
+        context,
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo completar la limpieza.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _purgingAllDebug = false);

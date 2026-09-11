@@ -231,7 +231,11 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         retryLabel: 'Reintentar',
         onRetry: refreshStats,
       );
-      _patchState((current) => current.copyWith(lastError: '$error'));
+      _patchState(
+        (current) => current.copyWith(
+          lastError: 'No se pudo actualizar el estado de sincronización.',
+        ),
+      );
     }
   }
 
@@ -343,7 +347,12 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         retryLabel: 'Reintentar',
         onRetry: processPending,
       );
-      _patchState((current) => current.copyWith(lastError: '$error'));
+      _patchState(
+        (current) => current.copyWith(
+          lastError:
+              'La sincronización en segundo plano encontró un problema y seguirá reintentando.',
+        ),
+      );
     } finally {
       _processing = false;
       _patchState((current) => current.copyWith(isProcessing: false));

@@ -13,7 +13,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
-import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
@@ -122,7 +122,10 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error is ApiException ? error.message : '$error';
+        _error = userSafeErrorMessage(
+          error,
+          fallback: 'No se pudieron cargar los créditos.',
+        );
         _loading = false;
       });
     }
@@ -562,7 +565,10 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       if (!mounted) return;
       showCashToast(
         context,
-        error is ApiException ? error.message : '$error',
+        userSafeErrorMessage(
+          error,
+          fallback: 'No se pudo registrar el abono. Inténtalo nuevamente.',
+        ),
         isError: true,
       );
     }
@@ -611,7 +617,10 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       if (!mounted) return;
       showCashToast(
         context,
-        error is ApiException ? error.message : '$error',
+        userSafeErrorMessage(
+          error,
+          fallback: 'No se pudo eliminar el crédito. Inténtalo nuevamente.',
+        ),
         isError: true,
       );
     }
@@ -1158,7 +1167,11 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
       if (!launchContext.mounted) return;
       showCashToast(
         launchContext,
-        'No se pudo preparar el crédito para WhatsApp: $e',
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo preparar el crédito para WhatsApp. Inténtalo nuevamente.',
+        ),
         isError: true,
       );
     }

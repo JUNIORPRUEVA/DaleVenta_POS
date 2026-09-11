@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/printing/cash_drawer/cash_drawer_command.dart';
 import '../../../core/printing/cash_drawer/cash_drawer_service.dart';
 import '../../../core/printing/mobile_print_service.dart';
@@ -663,7 +664,15 @@ class _MobilePrinterSettingsViewState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo completar la acción: $error')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              error,
+              fallback:
+                  'No se pudo completar la acción. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -786,7 +795,14 @@ class _MobilePrinterSettingsViewState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo buscar impresoras: $error')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              error,
+              fallback: 'No se pudo buscar impresoras. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1462,7 +1478,14 @@ class _MobilePrinterSettingsViewState
     final body = settings.when(
       data: _content,
       loading: () => const Center(child: Text('Sincronizando impresora...')),
-      error: (error, _) => Center(child: Text('No se pudo cargar: $error')),
+      error: (error, _) => Center(
+        child: Text(
+          userSafeErrorMessage(
+            error,
+            fallback: 'No se pudo cargar la configuración de impresión.',
+          ),
+        ),
+      ),
     );
     if (widget.embedded) {
       return Material(color: Colors.transparent, child: body);

@@ -231,7 +231,10 @@ class QuotationAiController extends StateNotifier<QuotationAiState> {
     } catch (error) {
       if (!mounted) return;
       final fallback = _buildGuaranteedAssistantReply(trimmed, isError: true);
-      _replaceLoadingMessage(fallback, chatError: '$error');
+      _replaceLoadingMessage(
+        fallback,
+        chatError: 'No se pudo completar la consulta. Inténtalo nuevamente.',
+      );
       _logDebug('chat.error', error);
     }
   }
@@ -372,7 +375,10 @@ class QuotationAiController extends StateNotifier<QuotationAiState> {
       _logDebug('ai.validation', aiValidation.summary);
     } catch (error) {
       if (!mounted) return;
-      state = state.copyWith(analyzing: false, analysisError: '$error');
+      state = state.copyWith(
+        analyzing: false,
+        analysisError: 'No se pudo validar la cotización.',
+      );
       _logDebug('ai.validation.error', error);
     }
   }

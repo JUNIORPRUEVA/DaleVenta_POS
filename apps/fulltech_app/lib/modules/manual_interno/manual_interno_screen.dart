@@ -6,7 +6,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
-import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import 'company_manual_models.dart';
 import 'company_manual_repository.dart';
 
@@ -102,7 +102,10 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e is ApiException ? e.message : '$e';
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo cargar el manual.',
+        );
         _loading = false;
       });
     }
@@ -206,9 +209,16 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
       return true;
     } catch (e) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -259,7 +269,16 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }

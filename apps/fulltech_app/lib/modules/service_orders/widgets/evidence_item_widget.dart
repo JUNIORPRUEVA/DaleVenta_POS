@@ -211,7 +211,16 @@ class _EvidenceImage extends StatelessWidget {
                   child: bytes != null
                       ? Image.memory(bytes, fit: BoxFit.contain)
                       : localProvider != null
-                      ? Image(image: localProvider, fit: BoxFit.contain)
+                      ? Image(
+                          image: localProvider,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const _MediaErrorBox(
+                              message: 'No se pudo abrir la imagen',
+                              dark: true,
+                            );
+                          },
+                        )
                       : Image.network(
                           imageUrl,
                           fit: BoxFit.contain,

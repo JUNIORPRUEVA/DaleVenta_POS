@@ -201,7 +201,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         updateInfo: updateInfo,
         checkedAt: _lastCheckedAt,
         message:
-            'No se pudo completar la actualización automática de Windows: $error',
+            'No se pudo completar la actualización automática de Windows.',
         clearDownloadProgress: true,
       );
     }

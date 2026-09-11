@@ -28,6 +28,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/design_system/icons/app_icon.dart';
 import '../../core/design_system/icons/app_icons.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
@@ -1380,7 +1381,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (silent) return;
       setState(() {
         _loadingProducts = false;
-        _error = 'No se pudieron cargar productos: $e';
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar los productos.',
+        );
       });
     } finally {
       if (silent && forceRemote) {
@@ -4436,7 +4440,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   if (currentRequest != requestId) return;
                   setStateDialog(() {
                     loading = false;
-                    error = '$e';
+                    error = userSafeErrorMessage(
+                      e,
+                      fallback: 'No se pudieron cargar los clientes.',
+                    );
                   });
                 }
               }
@@ -5248,7 +5255,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (!launchContext.mounted) return;
       ScaffoldMessenger.maybeOf(launchContext)?.showSnackBar(
         SnackBar(
-          content: Text('No se pudo preparar la factura para WhatsApp: $e'),
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo preparar la factura para WhatsApp. Inténtalo nuevamente.',
+            ),
+          ),
         ),
       );
     }
@@ -5379,7 +5392,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 );
               } catch (e) {
                 showDialogNotification(
-                  'No se pudo enviar a administradores: $e',
+                  userSafeErrorMessage(
+                    e,
+                    fallback:
+                        'No se pudo enviar a administradores. Inténtalo nuevamente.',
+                  ),
                   isError: true,
                 );
               } finally {
@@ -5404,7 +5421,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 );
               } catch (e) {
                 showDialogNotification(
-                  'No se pudo descargar la cotización: $e',
+                  userSafeErrorMessage(
+                    e,
+                    fallback:
+                        'No se pudo descargar la cotización. Inténtalo nuevamente.',
+                  ),
                   isError: true,
                 );
               } finally {
@@ -5452,7 +5473,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     );
                   } catch (e) {
                     showDialogNotification(
-                      'No se pudo enviar el PDF al cliente: $e',
+                      userSafeErrorMessage(
+                        e,
+                        fallback:
+                            'No se pudo enviar el PDF al cliente. Inténtalo nuevamente.',
+                      ),
                       isError: true,
                     );
                   }
@@ -9159,7 +9184,14 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
         _LicenseAccountCard(companyName: companyName),
         ...licenseAsync.when(
           loading: () => const [_LicenseLoadingTile()],
-          error: (error, _) => [_LicenseErrorTile(message: '$error')],
+          error: (error, _) => [
+            _LicenseErrorTile(
+              message: userSafeErrorMessage(
+                error,
+                fallback: 'No se pudo cargar la información de la licencia.',
+              ),
+            ),
+          ],
           data: (license) => [_LicenseDetailsCard(license: license)],
         ),
         _LicenseUpgradeCard(onPressed: () => _openUpgradeWhatsApp(context)),

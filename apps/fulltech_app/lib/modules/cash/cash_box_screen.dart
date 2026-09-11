@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/debug/app_error_reporter.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -209,7 +210,12 @@ class CashBoxScreen extends ConsumerWidget {
                   title: 'Caja',
                   detail: 'Preparando datos del turno...',
                 ),
-                error: (error, _) => _CashError(error: '$error'),
+                error: (error, _) => _CashError(
+                  error: userSafeErrorMessage(
+                    error,
+                    fallback: 'No se pudo cargar la caja.',
+                  ),
+                ),
                 data: (active) {
                   if (active == null) {
                     return _ClosedCashView(onOpen: () => _openCash(context, ref));

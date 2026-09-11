@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_routes.dart';
 import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
+import '../errors/user_safe_error_text.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
 import 'sync_queue_service.dart';
@@ -592,9 +593,16 @@ class _OfflineConflictRow extends ConsumerWidget {
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo archivar: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                error,
+                fallback: 'No se pudo archivar. Inténtalo nuevamente.',
+              ),
+            ),
+          ),
+        );
       }
     }
   }

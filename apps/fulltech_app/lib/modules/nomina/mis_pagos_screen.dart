@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -118,7 +119,10 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
           (e.code == 401 || e.type == ApiErrorType.unauthorized);
       final baseMessage = isSessionExpired
           ? 'Tu sesion expiro. Inicia sesion de nuevo para ver tus pagos.'
-          : 'No se pudo cargar Mis Pagos: $e';
+          : userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo cargar Mis Pagos.',
+            );
       setState(() {
         _loading = false;
         _syncing = false;
@@ -1533,7 +1537,10 @@ class _MisPagosHistoryScreenState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'No se pudo cargar el historial: $e';
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo cargar el historial.',
+        );
       });
     }
   }

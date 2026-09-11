@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
@@ -421,7 +422,15 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showClientNotice('No se pudo exportar', '$error', isError: true);
+      _showClientNotice(
+        'No se pudo exportar',
+        userSafeErrorMessage(
+          error,
+          fallback:
+              'No pudimos exportar los clientes. Inténtalo nuevamente.',
+        ),
+        isError: true,
+      );
     }
   }
 

@@ -10,6 +10,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -116,7 +117,10 @@ class _DepositosBancariosScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'No se pudieron cargar los depósitos: $e';
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar los depósitos.',
+        );
         _loading = false;
       });
     }
@@ -924,7 +928,13 @@ class _DepositosBancariosScreenState
                 await refresh();
               } catch (e) {
                 if (!mounted) return;
-                await _showSnack(e is ApiException ? e.message : '$e');
+                await _showSnack(
+                  userSafeErrorMessage(
+                    e,
+                    fallback:
+                        'No se pudo completar la operación del depósito.',
+                  ),
+                );
               }
             }
 
@@ -1222,7 +1232,12 @@ class _DepositosBancariosScreenState
       _replaceOrder(updated);
       await _showSnack('Depósito anulado correctamente.');
     } catch (e) {
-      await _showSnack('No se pudo anular el depósito: $e');
+      await _showSnack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo anular el depósito. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -1259,7 +1274,12 @@ class _DepositosBancariosScreenState
       _replaceOrder(updated);
       await _showSnack('Depósito ejecutado correctamente.');
     } catch (e) {
-      await _showSnack('No se pudo ejecutar el depósito: $e');
+      await _showSnack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo ejecutar el depósito. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -1301,7 +1321,12 @@ class _DepositosBancariosScreenState
       });
       await _showSnack('Depósito eliminado correctamente.');
     } catch (e) {
-      await _showSnack('No se pudo eliminar el depósito: $e');
+      await _showSnack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo eliminar el depósito. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -1326,7 +1351,12 @@ class _DepositosBancariosScreenState
         'Voucher cargado correctamente. Ahora puedes ejecutar el depósito.',
       );
     } catch (e) {
-      await _showSnack('No se pudo cargar el voucher: $e');
+      await _showSnack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo cargar el voucher. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 

@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../../features/settings/data/mobile_printer_settings_repository.dart';
 import '../../features/settings/data/printer_settings_model.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
+import '../errors/user_safe_error_text.dart';
 import '../../modules/ventas/sales_models.dart';
 import '../update/print_activity_tracker.dart';
 import 'esc_pos/fullpos_esc_pos_receipt_renderer.dart';
@@ -331,9 +332,13 @@ class UnifiedTicketPrinter {
         ticketNumber: data.ticketNumber,
       );
     } catch (e) {
+      debugPrint('[PRINT] ticket printing failed: $e');
       return PrintTicketResult(
         success: false,
-        message: 'No se pudo imprimir: $e',
+        message: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo imprimir el comprobante. Inténtalo nuevamente.',
+        ),
         ticketNumber: data.ticketNumber,
       );
     } finally {
@@ -378,7 +383,10 @@ class UnifiedTicketPrinter {
       debugPrint('[PRINT] RAW ERROR = $e');
       return PrintTicketResult(
         success: false,
-        message: 'RAW ERROR: $e',
+        message: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo imprimir el comprobante. Inténtalo nuevamente.',
+        ),
         ticketNumber: ticketNumber,
       );
     }
@@ -527,9 +535,13 @@ class UnifiedTicketPrinter {
         ticketNumber: ticketNumber,
       );
     } catch (e) {
+      debugPrint('[PRINT] pdf printing failed: $e');
       return PrintTicketResult(
         success: false,
-        message: 'No se pudo imprimir: $e',
+        message: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo imprimir el comprobante. Inténtalo nuevamente.',
+        ),
         ticketNumber: ticketNumber,
       );
     } finally {

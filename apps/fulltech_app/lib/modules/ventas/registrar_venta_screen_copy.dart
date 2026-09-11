@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/cache/fulltech_cache_manager.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
@@ -222,7 +223,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       if (silent) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudieron cargar productos: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudieron cargar los productos. Revisa tu conexión e inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (silent && forceRemote) {
@@ -1365,7 +1374,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo crear cliente: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo crear el cliente. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -1434,7 +1452,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -8,6 +8,7 @@ import 'package:signature/signature.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../modules/nomina/data/nomina_repository.dart';
@@ -258,9 +259,17 @@ class _WorkContractScreenState extends ConsumerState<WorkContractScreen> {
       setState(() {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo firmar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo firmar el contrato. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

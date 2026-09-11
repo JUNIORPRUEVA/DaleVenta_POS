@@ -7,6 +7,7 @@ import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
+import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
@@ -209,7 +210,18 @@ class CatalogRepository {
         data['canArchive'] == true;
   }
 
+  /// User-facing message. Never includes endpoint, URI, base URL or status.
   String _formatDioError(DioException e, String fallback) {
+    final rawMessage = _extractMessage(e.response?.data, fallback);
+    final status = e.response?.statusCode;
+    if (status == null) {
+      return '[NETWORK] $rawMessage';
+    }
+    return rawMessage;
+  }
+
+  /// Diagnostics-only detail. Logged, never shown to the customer.
+  String _formatDioErrorDetail(DioException e, String fallback) {
     final status = e.response?.statusCode;
     final endpoint = e.requestOptions.path;
     final uri = e.requestOptions.uri.toString();
@@ -285,20 +297,26 @@ class CatalogRepository {
       return products;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
+      final message = _formatDioError(e, 'No se pudieron cargar los productos');
+      TraceLog.log(
+        'CATALOG',
+        'fetchProducts failed: ${_formatDioErrorDetail(e, 'No se pudieron cargar los productos')}',
+        error: e,
+      );
       if (status == 401 || status == 402 || status == 403 || status == 423) {
-        throw ApiException(
-          _formatDioError(e, 'No se pudieron cargar los productos'),
-          status,
-        );
+        throw ApiException(message, status);
       }
       final cached = await getCachedProducts();
       if (cached.isNotEmpty) return cached;
-      throw ApiException(
-        _formatDioError(e, 'No se pudieron cargar los productos'),
-        e.response?.statusCode,
-      );
+      throw ApiException(message, status);
     } catch (e) {
-      throw ApiException('No se pudieron cargar los productos: $e');
+      TraceLog.log('CATALOG', 'fetchProducts unexpected failure', error: e);
+      throw ApiException(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar los productos',
+        ),
+      );
     }
   }
 

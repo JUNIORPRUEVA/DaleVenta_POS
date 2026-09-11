@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http_parser/http_parser.dart';
 
@@ -246,8 +245,9 @@ class ContabilidadRepository {
             )
             .toList();
       } catch (e) {
+        debugPrint('[CONTABILIDAD] cierres parse failure: $e');
         throw ApiException(
-          'Se recibieron cierres con formato inválido. Detalle: $e',
+          'Se recibieron cierres con formato inválido.',
         );
       }
     } on DioException catch (e) {

@@ -85,8 +85,9 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-      // La construcción no debe lanzar y el camino RAW debe fallar con
-      // mensaje claro de plataforma (no con error de librería dinámica).
+      // La construcción no debe lanzar y el camino RAW debe fallar con un
+      // mensaje humano y seguro (no con error de librería dinámica ni con
+      // detalles de plataforma).
       final container = _container();
       addTearDown(container.dispose);
       final printer = container.read(unifiedTicketPrinterProvider);
@@ -95,7 +96,20 @@ void main() {
         ticketNumber: 'T-2',
         documentName: 'Test',
       );
-      expect(result.message, contains('Windows'));
+      expect(result.success, isFalse);
+      expect(
+        result.message,
+        'No se pudo imprimir el comprobante. Inténtalo nuevamente.',
+      );
+      for (final pattern in _technicalPatterns) {
+        expect(
+          result.message,
+          isNot(contains(pattern)),
+          reason: 'no debe exponer "$pattern" al usuario',
+        );
+      }
+      expect(result.message, isNot(contains('Windows')));
+      expect(result.message, isNot(contains('winspool')));
     });
   });
 }

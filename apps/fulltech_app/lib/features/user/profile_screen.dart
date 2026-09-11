@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/utils/media_url.dart';
@@ -143,7 +144,15 @@ class ProfileScreen extends ConsumerWidget {
               } catch (e) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('No se pudo actualizar: $e')),
+                  SnackBar(
+                    content: Text(
+                      userSafeErrorMessage(
+                        e,
+                        fallback:
+                            'No se pudo actualizar el perfil. Inténtalo nuevamente.',
+                      ),
+                    ),
+                  ),
                 );
               }
             },
@@ -240,7 +249,14 @@ class ProfileScreen extends ConsumerWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo eliminar la foto: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar la foto. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -293,7 +309,15 @@ class ProfileScreen extends ConsumerWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo actualizar la foto: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo actualizar la foto. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -350,7 +374,14 @@ class ProfileScreen extends ConsumerWidget {
       }
       if (!messenger.mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('No se pudo subir la foto: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo subir la foto. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -413,7 +444,13 @@ class ProfileScreen extends ConsumerWidget {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('No se pudo actualizar la contraseña: $e'),
+                    content: Text(
+                      userSafeErrorMessage(
+                        e,
+                        fallback:
+                            'No se pudo actualizar la contraseña. Inténtalo nuevamente.',
+                      ),
+                    ),
                   ),
                 );
               }

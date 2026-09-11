@@ -11,6 +11,7 @@ import '../../core/utils/pdf_file_actions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/close_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -1304,9 +1305,16 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error al subir voucher: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                e,
+                fallback: 'No se pudo subir el voucher. Inténtalo nuevamente.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => draft.uploading = false);
@@ -1338,7 +1346,15 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al subir comprobante de gasto: $e')),
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                e,
+                fallback:
+                    'No se pudo subir el comprobante. Inténtalo nuevamente.',
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -1489,7 +1505,14 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al subir voucher POS: $e')),
+          SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo subir el voucher POS. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
         );
       }
     } finally {
@@ -4266,7 +4289,17 @@ class _CloseDetailFullScreenPageState
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo exportar el PDF: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo exportar el PDF. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _exportingPdf = false);
     }

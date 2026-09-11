@@ -2236,6 +2236,18 @@ class MediaPreviewCard extends StatelessWidget {
                                         : Image.network(
                                             _resolvedReferenceSource(reference),
                                             fit: BoxFit.contain,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    Center(
+                                                      child: Icon(
+                                                        Icons
+                                                            .image_not_supported_outlined,
+                                                        size: 48,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                      ),
+                                                    ),
                                           ),
                                   )
                                 : Center(

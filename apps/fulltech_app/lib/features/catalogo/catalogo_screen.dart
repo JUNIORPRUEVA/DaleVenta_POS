@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
@@ -331,7 +332,16 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo completar la limpieza. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _purgingAllDebug = false);
@@ -1002,15 +1012,29 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         ).showSnackBar(const SnackBar(content: Text('Producto archivado')));
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo archivar: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                e,
+                fallback: 'No se pudo archivar. Inténtalo nuevamente.',
+              ),
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -1069,7 +1093,15 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudieron exportar los productos: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudieron exportar los productos. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -1125,7 +1157,16 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo importar: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo importar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -3500,9 +3541,17 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       widget.onSaved();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                e,
+                fallback:
+                    'No se pudo guardar el producto. Inténtalo nuevamente.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);

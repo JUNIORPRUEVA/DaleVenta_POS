@@ -21,6 +21,7 @@ import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
+import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
@@ -418,7 +419,10 @@ class InventoryCategoriesController
       if (!mounted) return;
       state = state.copyWith(
         loading: false,
-        error: 'No se pudieron cargar las categorías: $e',
+        error: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar las categorías.',
+        ),
       );
     }
   }
@@ -479,7 +483,13 @@ class InventoryCategoriesController
       await _persist(next);
       return saved;
     } catch (e) {
-      state = state.copyWith(saving: false, error: '$e');
+      state = state.copyWith(
+        saving: false,
+        error: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo guardar la categoría.',
+        ),
+      );
       rethrow;
     }
   }
@@ -489,7 +499,13 @@ class InventoryCategoriesController
     try {
       await _persist(state.items.where((item) => item.id != id).toList());
     } catch (e) {
-      state = state.copyWith(saving: false, error: '$e');
+      state = state.copyWith(
+        saving: false,
+        error: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo eliminar la categoría.',
+        ),
+      );
       rethrow;
     }
   }
@@ -6180,7 +6196,14 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
         _clearImage = false;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = 'No se pudo leer la imagen: $e');
+      if (mounted) {
+        setState(
+          () => _error = userSafeErrorMessage(
+            e,
+            fallback: 'No se pudo leer la imagen.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _picking = false);
     }
@@ -6235,8 +6258,11 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
       } catch (e) {
         if (!mounted) return;
         setState(
-          () => _error =
-              'No se pudo guardar la foto de la categoría. Intenta seleccionarla nuevamente: $e',
+          () => _error = userSafeErrorMessage(
+            e,
+            fallback:
+                'No se pudo guardar la foto de la categoría. Intenta seleccionarla nuevamente.',
+          ),
         );
         return;
       }
@@ -8365,7 +8391,12 @@ class _InventoryProductEditorPageState
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _formError = 'No se pudo leer la imagen: $e');
+      setState(
+        () => _formError = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo leer la imagen.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isPickingImage = false);
@@ -8832,7 +8863,10 @@ class _InventoryProductEditorPageState
       }
       setState(() {
         _isSaving = false;
-        _formError = 'No se pudo guardar: $e';
+        _formError = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+        );
       });
     }
   }

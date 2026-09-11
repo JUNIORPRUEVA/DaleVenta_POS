@@ -18,6 +18,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_feedback.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/license/license_repository.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
@@ -90,7 +91,10 @@ class AccountLicensesScreen extends ConsumerWidget {
           error: (error, _) => _StatusBanner(
             icon: Icons.error_outline_rounded,
             title: 'No se pudo cargar la licencia',
-            message: '$error',
+            message: userSafeErrorMessage(
+              error,
+              fallback: 'No pudimos cargar la información de la licencia.',
+            ),
             accent: AppColors.error,
           ),
         ),
@@ -2734,7 +2738,15 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo crear el backup: $error')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              error,
+              fallback:
+                  'No se pudo crear el backup. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _running = false);
@@ -2838,7 +2850,14 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
             : 'El archivo seleccionado no es un backup canónico válido. La restauración fue bloqueada.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo validar el backup: $error')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              error,
+              fallback: 'No se pudo validar el backup.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _running = false);
@@ -2912,7 +2931,14 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
       await _cleanupSelectedTemporaryBackup(clearSelection: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo restaurar el backup: $error')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              error,
+              fallback: 'No se pudo restaurar el backup.',
+            ),
+          ),
+        ),
       );
     } finally {
       await _cleanupSelectedTemporaryBackup(clearSelection: false);

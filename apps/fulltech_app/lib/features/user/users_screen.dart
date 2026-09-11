@@ -10,6 +10,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -147,9 +148,17 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo generar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo generar el documento. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -326,7 +335,12 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
           error: (e, _) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Error al cargar usuarios: $e'),
+              Text(
+                userSafeErrorMessage(
+                  e,
+                  fallback: 'No se pudieron cargar los usuarios.',
+                ),
+              ),
               const SizedBox(height: 8),
               ElevatedButton(
                 onPressed: () =>
@@ -464,7 +478,11 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 child: _DesktopUsersEmptyState(
                   icon: Icons.error_outline,
                   title: 'No se pudieron cargar los usuarios',
-                  message: 'Error al cargar usuarios: $e',
+                  message: userSafeErrorMessage(
+                    e,
+                    fallback:
+                        'No pudimos cargar los usuarios. Inténtalo nuevamente.',
+                  ),
                   actionLabel: 'Reintentar',
                   onAction: () =>
                       ref.read(usersControllerProvider.notifier).refresh(),
@@ -636,7 +654,15 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 if (!dialogContext.mounted) return;
                 setDialogState(() => saving = false);
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('No se pudo guardar PIN: $error')),
+                  SnackBar(
+                    content: Text(
+                      userSafeErrorMessage(
+                        error,
+                        fallback:
+                            'No se pudo guardar el PIN. Inténtalo nuevamente.',
+                      ),
+                    ),
+                  ),
                 );
               }
             }
@@ -756,7 +782,16 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo actualizar: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                e,
+                fallback: 'No se pudo actualizar. Inténtalo nuevamente.',
+              ),
+            ),
+          ),
+        );
       }
     }
   }
@@ -1378,7 +1413,17 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 showSnack(const SnackBar(content: Text('Usuario eliminado')));
               } catch (e) {
                 if (!context.mounted) return;
-                showSnack(SnackBar(content: Text('No se pudo eliminar: $e')));
+                showSnack(
+                  SnackBar(
+                    content: Text(
+                      userSafeErrorMessage(
+                        e,
+                        fallback:
+                            'No se pudo eliminar. Inténtalo nuevamente.',
+                      ),
+                    ),
+                  ),
+                );
               }
             },
             child: const Text('Eliminar'),
@@ -1917,7 +1962,16 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2011,7 +2065,14 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
       body: usersState.when(
         loading: () => const Center(child: Text('Sincronizando permisos...')),
-        error: (e, _) => Center(child: Text('No se pudo cargar: $e')),
+        error: (e, _) => Center(
+          child: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudieron cargar los usuarios.',
+            ),
+          ),
+        ),
         data: (users) {
           final user = _findUser(users);
           if (user == null) {

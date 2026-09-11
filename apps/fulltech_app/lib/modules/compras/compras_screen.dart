@@ -11,6 +11,7 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -2690,7 +2691,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _snack('Orden guardada correctamente.');
     } catch (e) {
       _snack(
-        'No fue posible completar la operación. No se realizaron cambios. $e',
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No fue posible completar la operación. No se realizaron cambios.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -2756,7 +2761,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       );
       _snack(message);
     } catch (e) {
-      _snack('$e');
+      _snack(
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo completar la acción sobre la orden. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -2806,7 +2817,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       });
       _snack('Orden eliminada.');
     } catch (e) {
-      _snack('$e');
+      _snack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo eliminar la orden. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -2996,7 +3012,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 );
               } catch (e) {
                 showNotice(
-                  'No se pudo enviar la orden al suplidor: $e',
+                  userSafeErrorMessage(
+                    e,
+                    fallback:
+                        'No se pudo enviar la orden al suplidor. Inténtalo nuevamente.',
+                  ),
                   isError: true,
                 );
               } finally {
@@ -3137,7 +3157,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     } on TimeoutException {
       _snack('Tiempo de espera agotado preparando el enlace PDF.');
     } catch (e) {
-      _snack('No se pudo enviar la orden al suplidor: $e');
+      _snack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo enviar la orden al suplidor. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -3368,7 +3393,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       });
       _snack('Factura de compra guardada.');
     } catch (e) {
-      _snack('$e');
+      _snack(
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo guardar la factura de compra. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -3446,7 +3477,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       });
       _snack('Factura eliminada.');
     } catch (e) {
-      _snack('$e');
+      _snack(
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo eliminar la factura de compra. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 
@@ -3533,7 +3570,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       });
       _snack('Suplidor guardado.');
     } catch (e) {
-      _snack('$e');
+      _snack(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo guardar el suplidor. Inténtalo nuevamente.',
+        ),
+      );
     }
   }
 

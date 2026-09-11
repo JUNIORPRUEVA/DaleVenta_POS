@@ -11,6 +11,7 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
 import '../../core/theme/app_colors.dart';
@@ -431,7 +432,11 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       if (!launchContext.mounted) return;
       showCashToast(
         launchContext,
-        'No se pudo preparar la factura para WhatsApp: $e',
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo preparar la factura para WhatsApp. Inténtalo nuevamente.',
+        ),
         isError: true,
       );
     }

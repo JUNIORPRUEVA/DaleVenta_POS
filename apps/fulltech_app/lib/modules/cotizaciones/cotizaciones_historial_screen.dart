@@ -13,6 +13,7 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/routing/routes.dart';
@@ -409,7 +410,10 @@ class _CotizacionesHistorialScreenState
     } catch (e) {
       if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       setState(() {
-        _error = '$e';
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar las cotizaciones.',
+        );
         _loading = false;
         _refreshing = false;
       });
@@ -535,9 +539,16 @@ class _CotizacionesHistorialScreenState
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar la cotización.',
+            ),
+          ),
+        ),
+      );
     }
   }
 

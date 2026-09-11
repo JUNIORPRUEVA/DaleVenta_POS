@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
@@ -138,7 +139,10 @@ class _CashExpenseScreenState extends ConsumerState<CashExpenseScreen> {
               error: (error, _) => _CashPanelMessage(
                 icon: Icons.info_outline_rounded,
                 title: 'No se pudo cargar caja',
-                detail: '$error',
+                detail: userSafeErrorMessage(
+                  error,
+                  fallback: 'No se pudo cargar la información de caja.',
+                ),
               ),
               data: (active) {
                 if (active == null) {
@@ -2805,7 +2809,14 @@ class _ShiftDetailPage extends ConsumerWidget {
       );
     } catch (error) {
       if (!context.mounted) return;
-      showCashToast(context, 'No se pudo imprimir: $error', isError: true);
+      showCashToast(
+        context,
+        userSafeErrorMessage(
+          error,
+          fallback: 'No se pudo imprimir. Inténtalo nuevamente.',
+        ),
+        isError: true,
+      );
     }
   }
 

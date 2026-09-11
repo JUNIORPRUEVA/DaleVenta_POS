@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
@@ -139,7 +140,10 @@ class _KardexMovementsTab extends ConsumerWidget {
             error: (error, _) => _StatePanel(
               icon: Icons.warning_amber_rounded,
               title: 'No se pudo cargar el Kardex',
-              message: '$error',
+              message: userSafeErrorMessage(
+                error,
+                fallback: 'No pudimos cargar los movimientos.',
+              ),
             ),
             data: (data) {
               if (data.externalInventory) {

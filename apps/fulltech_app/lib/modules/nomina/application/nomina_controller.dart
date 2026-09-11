@@ -104,7 +104,7 @@ class NominaHomeController extends StateNotifier<NominaHomeState> {
     } catch (e) {
       state = state.copyWith(
         loading: false,
-        error: 'No se pudo cargar nómina: $e',
+        error: 'No se pudo cargar la nómina. Inténtalo nuevamente.',
       );
     }
   }

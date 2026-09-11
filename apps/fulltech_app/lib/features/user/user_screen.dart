@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/utils/media_url.dart';
@@ -123,7 +124,14 @@ class _UserScreenState extends ConsumerState<UserScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo eliminar la foto: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo eliminar la foto. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -169,7 +177,15 @@ class _UserScreenState extends ConsumerState<UserScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo actualizar la foto: $e')),
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback:
+                  'No se pudo actualizar la foto. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -225,7 +241,16 @@ class _UserScreenState extends ConsumerState<UserScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('No se pudo subir la foto: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo subir la foto. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     }
   }
 

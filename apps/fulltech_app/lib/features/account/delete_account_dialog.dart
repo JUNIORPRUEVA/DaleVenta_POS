@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -31,7 +32,15 @@ Future<void> showDeleteAccountDialogWithDependencies(
   } catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('No se pudo preparar la eliminacion: $error')),
+      SnackBar(
+        content: Text(
+          userSafeErrorMessage(
+            error,
+            fallback:
+                'No se pudo preparar la eliminación de la cuenta. Inténtalo nuevamente.',
+          ),
+        ),
+      ),
     );
     return;
   }

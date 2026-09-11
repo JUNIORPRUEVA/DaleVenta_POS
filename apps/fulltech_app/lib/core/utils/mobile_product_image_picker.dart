@@ -239,7 +239,7 @@ String mobileProductImageErrorMessage(Object error) {
       raw.contains('enospc')) {
     return 'No hay suficiente espacio en el dispositivo para procesar la imagen.';
   }
-  return 'No se pudo procesar la imagen: $error';
+  return 'No se pudo procesar la imagen. Intenta con otra fotografía.';
 }
 
 /// true si el error proviene de un permiso denegado de cámara/fotos

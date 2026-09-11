@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../features/settings/data/mobile_printer_settings_model.dart';
 import '../../features/settings/data/mobile_printer_settings_repository.dart';
+import '../errors/user_safe_error_text.dart';
 import 'cash_drawer/cash_drawer_command.dart';
 import 'mobile_esc_pos_generator.dart';
 
@@ -315,9 +316,14 @@ class MobilePrintService {
         message: 'Permisos Bluetooth listos.',
       );
     } catch (e) {
+      debugPrint('[PRINT] bluetooth permission validation failed: $e');
       return MobilePrintServiceResult(
         success: false,
-        message: 'No se pudieron validar permisos Bluetooth: $e',
+        message: userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudieron validar los permisos de Bluetooth. Inténtalo nuevamente.',
+        ),
       );
     }
   }
@@ -358,7 +364,12 @@ class MobilePrintService {
         message: 'Bluetooth conectado correctamente.',
       );
     } catch (e) {
-      final message = 'No se pudo conectar por Bluetooth: $e';
+      debugPrint('[PRINT] bluetooth connection failed: $e');
+      final message = userSafeErrorMessage(
+        e,
+        fallback:
+            'No se pudo conectar por Bluetooth. Verifica la impresora e inténtalo nuevamente.',
+      );
       await _saveError(settings, message);
       return MobilePrintServiceResult(success: false, message: message);
     }
@@ -394,7 +405,12 @@ class MobilePrintService {
         message: 'Conexión LAN correcta.',
       );
     } catch (e) {
-      final message = 'No se pudo conectar a la impresora LAN: $e';
+      debugPrint('[PRINT] network connection failed: $e');
+      final message = userSafeErrorMessage(
+        e,
+        fallback:
+            'No se pudo conectar a la impresora de red. Verifica la IP e inténtalo nuevamente.',
+      );
       await _saveError(settings, message);
       return MobilePrintServiceResult(success: false, message: message);
     } finally {
@@ -458,9 +474,13 @@ class MobilePrintService {
         message: 'Se abrió la impresión del sistema.',
       );
     } catch (e) {
+      debugPrint('[PRINT] mobile print failed: $e');
       return MobilePrintServiceResult(
         success: false,
-        message: 'No se pudo imprimir en móvil: $e',
+        message: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo imprimir el comprobante. Inténtalo nuevamente.',
+        ),
       );
     } finally {
       _printing = false;
@@ -536,9 +556,13 @@ class MobilePrintService {
         message: 'PDF compartido.',
       );
     } catch (e) {
+      debugPrint('[PRINT] share pdf failed: $e');
       return MobilePrintServiceResult(
         success: false,
-        message: 'No se pudo compartir el PDF: $e',
+        message: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo compartir el PDF. Inténtalo nuevamente.',
+        ),
       );
     }
   }
@@ -592,7 +616,11 @@ class MobilePrintService {
         message: 'Ticket enviado a impresora LAN.',
       );
     } catch (e) {
-      final message = 'Fallo imprimiendo por LAN: $e';
+      debugPrint('[PRINT] LAN print failed: $e');
+      final message = userSafeErrorMessage(
+        e,
+        fallback: 'No se pudo imprimir por red. Inténtalo nuevamente.',
+      );
       await _saveError(settings, message);
       return MobilePrintServiceResult(success: false, message: message);
     } finally {
@@ -728,7 +756,11 @@ class MobilePrintService {
           );
         }
       }
-      final message = 'Fallo imprimiendo por Bluetooth: $e';
+      debugPrint('[PRINT] bluetooth print failed: $e');
+      final message = userSafeErrorMessage(
+        e,
+        fallback: 'No se pudo imprimir por Bluetooth. Inténtalo nuevamente.',
+      );
       await _saveError(effectiveSettings, message);
       return MobilePrintServiceResult(success: false, message: message);
     }

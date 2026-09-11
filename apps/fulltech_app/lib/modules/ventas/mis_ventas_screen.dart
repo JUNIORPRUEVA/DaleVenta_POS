@@ -13,6 +13,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -155,7 +156,16 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       ).showSnackBar(SnackBar(content: Text('Se limpiaron $deleted ventas.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userSafeErrorMessage(
+              e,
+              fallback: 'No se pudo completar la limpieza. Inténtalo nuevamente.',
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _purgingAllDebug = false);
@@ -1188,7 +1198,11 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       if (!launchContext.mounted) return;
       showCashToast(
         launchContext,
-        'No se pudo preparar la factura para WhatsApp: $e',
+        userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo preparar la factura para WhatsApp. Inténtalo nuevamente.',
+        ),
         isError: true,
       );
     }
@@ -1328,7 +1342,10 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
         if (!context.mounted) return;
         setStateDialog(() {
           loading = false;
-          error = '$e';
+          error = userSafeErrorMessage(
+            e,
+            fallback: 'No se pudieron cargar las ventas.',
+          );
         });
       }
     }
