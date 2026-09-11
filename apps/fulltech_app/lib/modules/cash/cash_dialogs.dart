@@ -82,12 +82,15 @@ void showCashToast(
   _cashToastEntry = null;
 
   final topPadding = MediaQuery.viewPaddingOf(context).top + 14;
+  final width = MediaQuery.sizeOf(context).width;
+  final horizontalMargin = width < 520 ? 12.0 : 18.0;
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (context) {
       return Positioned(
         top: topPadding,
-        right: 18,
+        left: width < 520 ? horizontalMargin : null,
+        right: horizontalMargin,
         child: _CashTopToast(
           title: message,
           message: detail,
@@ -127,8 +130,7 @@ class _CashTopToastState extends State<_CashTopToast> {
   @override
   void initState() {
     super.initState();
-    _autoCloseTimer =
-        Timer(const Duration(milliseconds: 3200), widget.onClose);
+    _autoCloseTimer = Timer(const Duration(milliseconds: 3200), widget.onClose);
   }
 
   @override
@@ -142,10 +144,12 @@ class _CashTopToastState extends State<_CashTopToast> {
     final accent = widget.isError
         ? const Color(0xFFB42318)
         : const Color(0xFF059669);
+    final mediaWidth = MediaQuery.sizeOf(context).width;
+    final maxWidth = mediaWidth < 520 ? mediaWidth - 24 : 440.0;
     return Material(
       color: Colors.transparent,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440, minWidth: 300),
+        constraints: BoxConstraints(maxWidth: maxWidth, minWidth: 0),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -197,8 +201,8 @@ class _CashTopToastState extends State<_CashTopToast> {
                           children: [
                             Text(
                               widget.title,
-                              maxLines: widget.message == null ? 3 : 1,
-                              overflow: TextOverflow.ellipsis,
+                              maxLines: widget.message == null ? 3 : 2,
+                              overflow: TextOverflow.fade,
                               style: const TextStyle(
                                 color: Color(0xFF0F172A),
                                 fontWeight: FontWeight.w900,
@@ -210,8 +214,8 @@ class _CashTopToastState extends State<_CashTopToast> {
                               const SizedBox(height: 3),
                               Text(
                                 widget.message!,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                                maxLines: 4,
+                                overflow: TextOverflow.fade,
                                 style: const TextStyle(
                                   color: Color(0xFF475569),
                                   fontWeight: FontWeight.w600,
