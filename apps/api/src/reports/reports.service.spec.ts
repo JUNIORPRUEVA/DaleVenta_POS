@@ -63,6 +63,20 @@ describe("ReportsService", () => {
     };
   }
 
+  function cashMovement(over: Record<string, unknown> = {}) {
+    return {
+      id: "cash-1",
+      companyId: user.companyId,
+      userId: user.id,
+      type: "OUT",
+      movementType: "expense",
+      amount: decimal(100),
+      affectsProfit: true,
+      createdAt: new Date("2026-08-10T13:00:00.000Z"),
+      ...over,
+    };
+  }
+
   it("restringe devoluciones a reversiones de períodos anteriores (sin doble descuento)", async () => {
     const findMany = jest
       .fn()
@@ -125,6 +139,111 @@ describe("ReportsService", () => {
     expect(result.kpis.returnedSales).toBeCloseTo(20);
     expect(result.kpis.netSales).toBeCloseTo(80);
     expect(result.kpis.totalReturns).toBe(1);
+  });
+
+  it("expone utilidad bruta, gastos y utilidad neta sin recalcular costos históricos", async () => {
+    const invoice = sale({
+      totalSold: decimal(2100),
+      totalCost: decimal(872),
+      totalProfit: decimal(1228),
+      items: [
+        item({
+          subtotalSold: decimal(2100),
+          subtotalCost: decimal(872),
+          profit: decimal(1228),
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([invoice])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      cashMovement: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            cashMovement({ id: "expense-1", amount: decimal(700) }),
+          ]),
+      },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.totalProfit).toBeCloseTo(1228);
+    expect(result.kpis.totalExpenses).toBeCloseTo(700);
+    expect(result.kpis.netProfit).toBeCloseTo(528);
+  });
+
+  it("no descuenta de utilidad los movimientos OUT con affectsProfit=false", async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([sale()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      cashMovement: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            cashMovement({ amount: decimal(25), affectsProfit: false }),
+          ]),
+      },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.totalProfit).toBeCloseTo(40);
+    expect(result.kpis.totalExpenses).toBeCloseTo(0);
+    expect(result.kpis.netProfit).toBeCloseTo(40);
+  });
+
+  it("reduce la utilidad bruta por refunds antes de descontar gastos una sola vez", async () => {
+    const refund = sale({
+      id: "refund-profit",
+      kind: "refund",
+      totalSold: decimal(-20),
+      totalCost: decimal(-12),
+      totalProfit: decimal(-8),
+      items: [
+        item({
+          subtotalSold: decimal(-20),
+          subtotalCost: decimal(-12),
+          profit: decimal(-8),
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([sale()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([refund]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      cashMovement: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([cashMovement({ amount: decimal(10) })]),
+      },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.totalProfit).toBeCloseTo(40);
+    expect(result.kpis.totalExpenses).toBeCloseTo(10);
+    expect(result.kpis.netProfit).toBeCloseTo(22);
   });
 
   it("no calcula ticket promedio sobre ventas excluidas por el filtro de categoría", async () => {
@@ -238,6 +357,50 @@ describe("ReportsService", () => {
         where: expect.objectContaining({ companyId: user.companyId }),
       }),
     );
+  });
+
+  it("mantiene KPIs aislados cuando una empresa tiene gastos y otra no", async () => {
+    const userA = { ...user, companyId: "company-a" };
+    const userB = { ...user, companyId: "company-b" };
+    const findMany = jest.fn((args: { where: Record<string, unknown> }) => {
+      const where = args.where;
+      if (where.kind === "invoice" && where.isDeleted === false) {
+        return Promise.resolve([
+          sale({
+            companyId: where.companyId,
+            totalProfit: decimal(1000),
+            items: [item({ profit: decimal(1000) })],
+          }),
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const cashFindMany = jest.fn((args: { where: { companyId: string } }) =>
+      Promise.resolve(
+        args.where.companyId === "company-a"
+          ? [cashMovement({ companyId: "company-a", amount: decimal(700) })]
+          : [],
+      ),
+    );
+    const service = serviceWith({
+      sale: { findMany },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      cashMovement: { findMany: cashFindMany },
+    });
+
+    const resultA = await service.salesOverview(userA as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+    const resultB = await service.salesOverview(userB as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(resultA.kpis.totalExpenses).toBeCloseTo(700);
+    expect(resultA.kpis.netProfit).toBeCloseTo(300);
+    expect(resultB.kpis.totalExpenses).toBeCloseTo(0);
+    expect(resultB.kpis.netProfit).toBeCloseTo(1000);
   });
 
   it("devoluciones nulas (sin items) no rompen el reporte (null safety)", async () => {

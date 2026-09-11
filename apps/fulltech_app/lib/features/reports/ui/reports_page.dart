@@ -26,13 +26,99 @@ const _textSecondary = Color(0xFF6B7280);
 const _borderSoft = Color(0xFFE5E7EB);
 const _pageBg = Color(0xFFF6F8FB);
 
-enum DateRangePeriod { today, yesterday, week, biweekly, month, year, custom }
+/// Radio local de la superficie de FILTROS de Reportes (paneles y chips).
+/// El design system de la app usa 16/14 para tarjetas y botones y 999 (pill)
+/// para los chips globales (`chipTheme`); los filtros de Reportes deben verse
+/// mas rectangulares y profesionales, por eso se fija 10 px (dentro del rango
+/// 8-12 pedido) SIN alterar el theme global ni otras pantallas.
+const double kReportsFilterRadius = 10;
+
+/// Periodos rapidos de fecha, en el ORDEN EXACTO en que se muestran.
+/// Una sola fuente de verdad para el selector (desktop y movil) y el drawer.
+enum DateRangePeriod { today, yesterday, week, month, year, custom }
+
+const List<DateRangePeriod> kReportPeriodOrder = <DateRangePeriod>[
+  DateRangePeriod.today,
+  DateRangePeriod.yesterday,
+  DateRangePeriod.week,
+  DateRangePeriod.month,
+  DateRangePeriod.year,
+  DateRangePeriod.custom,
+];
+
+/// Filtros por defecto al abrir Reportes: Hoy + Todas las categorias.
+/// Un acceso limpio a la pantalla debe iniciar siempre en este estado para
+/// evitar que el dueno vea un rango o categoria residual y piense que sus
+/// numeros estan mal. Los rebuilds dentro de la pantalla NO deben resetearlo.
+const DateRangePeriod kDefaultReportsPeriod = DateRangePeriod.today;
+
+/// Estado de filtros de la pantalla de Reportes (periodo + categoria).
+///
+/// Inmutable, y vive en el State de la pantalla: sobrevive rebuilds, setState,
+/// rotacion, resize, carga de datos y cambios responsive sin crear estado
+/// global innecesario. Un acceso limpio arranca en Hoy + Todas.
+@immutable
+class ReportsFilterState {
+  const ReportsFilterState({
+    required this.period,
+    this.customStart,
+    this.customEnd,
+    this.category,
+  });
+
+  /// Estado inicial: Hoy + Todas las categorias.
+  static const ReportsFilterState initial = ReportsFilterState(
+    period: kDefaultReportsPeriod,
+  );
+
+  final DateRangePeriod period;
+  final DateTime? customStart;
+  final DateTime? customEnd;
+  final String? category;
+
+  bool get isDefault => period == kDefaultReportsPeriod && category == null;
+
+  /// Cambia SOLO el periodo. La categoria seleccionada se conserva.
+  ReportsFilterState withPeriod(DateRangePeriod next) {
+    return ReportsFilterState(
+      period: next,
+      customStart: customStart,
+      customEnd: customEnd,
+      category: category,
+    );
+  }
+
+  /// Fija un rango personalizado (period = custom). Conserva la categoria.
+  ReportsFilterState withCustomRange(DateTime start, DateTime end) {
+    return ReportsFilterState(
+      period: DateRangePeriod.custom,
+      customStart: start,
+      customEnd: end,
+      category: category,
+    );
+  }
+
+  /// Cambia SOLO la categoria. El periodo seleccionado se conserva.
+  /// Una categoria vacia equivale a "Todas".
+  ReportsFilterState withCategory(String? next) {
+    final normalized = (next ?? '').trim();
+    return ReportsFilterState(
+      period: period,
+      customStart: customStart,
+      customEnd: customEnd,
+      category: normalized.isEmpty ? null : normalized,
+    );
+  }
+
+  ReportsFilterState reset() => initial;
+}
 
 class KpisData {
   const KpisData({
     required this.totalSales,
     required this.totalProfit,
     required this.netProfit,
+    required this.totalExpenses,
     required this.totalCost,
     required this.salesCount,
     required this.quotesCount,
@@ -45,6 +131,7 @@ class KpisData {
   final double totalSales;
   final double totalProfit;
   final double netProfit;
+  final double totalExpenses;
   final double totalCost;
   final int salesCount;
   final int quotesCount;
@@ -53,13 +140,24 @@ class KpisData {
   final double cashIncome;
   final double cashExpense;
 
+  /// Margen del periodo = utilidad NETA / ventas netas.
+  /// Confirmado por codigo y por el caso auditado (528 / 2100 = 25.1%),
+  /// por eso el label visible es "Margen neto" y NO "Margen".
   double get margin => totalSales == 0 ? 0 : (netProfit / totalSales) * 100;
+  double get netMargin => margin;
+  bool get hasProfitExpenses => totalExpenses > 0;
+
+  /// La utilidad bruta del periodo (antes de gastos que afectan utilidad)
+  /// ya viene descontado el efecto real de devoluciones/anulaciones.
+  /// Ver [KpisData.fromReport].
+  double get grossProfit => totalProfit;
 
   factory KpisData.fromSummary(SalesSummaryModel summary) {
     return KpisData(
       totalSales: summary.totalSold,
       totalProfit: summary.totalProfit,
       netProfit: summary.totalProfit,
+      totalExpenses: 0,
       totalCost: summary.totalCost,
       salesCount: summary.totalSales,
       quotesCount: 0,
@@ -77,10 +175,29 @@ class KpisData {
         .cast<String, dynamic>();
     final totalSales = (kpis['totalSales'] as num?)?.toInt() ?? 0;
     final totalSold = _toDouble(kpis['netSales'] ?? kpis['totalSold']);
+    final totalExpenses = _toDouble(kpis['totalExpenses']);
+    final netProfit = _toDouble(kpis['netProfit'] ?? kpis['totalProfit']);
+    // UTILIDAD BRUTA = utilidad neta + gastos que afectan utilidad.
+    //
+    // El backend define, con los mismos snapshots historicos ya corregidos:
+    //   netProfit = totalProfit - returnsProfit - profitExpenses
+    // por lo tanto:
+    //   totalProfit - returnsProfit = netProfit + totalExpenses
+    //
+    // Esa es exactamente la utilidad bruta que pide el negocio: utilidad de
+    // las ventas DESPUES del efecto real de devoluciones/anulaciones y ANTES
+    // de gastos. Se deriva de campos autoritativos ya entregados por
+    // /reports/sales-overview; NO se recalcula con precios ni costos ACTUALES
+    // de Product y no se duplica logica financiera en Flutter.
+    final fallbackGross = _toDouble(kpis['totalProfit']);
+    final grossProfit = kpis['netProfit'] == null
+        ? fallbackGross
+        : netProfit + totalExpenses;
     return KpisData(
       totalSales: totalSold,
-      totalProfit: _toDouble(kpis['totalProfit']),
-      netProfit: _toDouble(kpis['netProfit'] ?? kpis['totalProfit']),
+      totalProfit: grossProfit,
+      netProfit: netProfit,
+      totalExpenses: totalExpenses,
       totalCost: _toDouble(kpis['totalCost']),
       salesCount: totalSales,
       quotesCount: 0,
@@ -170,13 +287,14 @@ class ReportsPage extends ConsumerStatefulWidget {
 }
 
 class _ReportsPageState extends ConsumerState<ReportsPage> {
-  DateRangePeriod _selectedPeriod = DateRangePeriod.month;
-  DateTime? _customStart;
-  DateTime? _customEnd;
+  // Estado de filtros de la pantalla. Vive en el State (no en providers
+  // globales) para sobrevivir setState/rebuild/rotacion/resize sin crear
+  // estado global innecesario, y para reiniciar en Hoy + Todas en un acceso
+  // limpio. Ver Fases 4 y 13 del plan de Reportes.
+  ReportsFilterState _filters = ReportsFilterState.initial;
   bool _loading = true;
   bool _generatingPdf = false;
   String? _error;
-  String? _selectedCategory;
   ProviderSubscription<int>? _salesRefreshSubscription;
   ProviderSubscription<int>? _cashRefreshSubscription;
   Timer? _realtimeReloadDebounce;
@@ -201,6 +319,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   List<_ComparisonRowData> _comparisons = const [];
 
   final _date = DateFormat('dd/MM/yyyy');
+
+  DateRangePeriod get _selectedPeriod => _filters.period;
+  DateTime? get _customStart => _filters.customStart;
+  DateTime? get _customEnd => _filters.customEnd;
+  String? get _selectedCategory => _filters.category;
 
   @override
   void initState() {
@@ -398,15 +521,26 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       _pickCustomRange();
       return;
     }
-    setState(() => _selectedPeriod = period);
+    // Cambiar el periodo NUNCA altera la categoria seleccionada.
+    setState(() => _filters = _filters.withPeriod(period));
     _loadData();
   }
 
   void _changeCategory(String? category) {
-    final normalized = (category ?? '').trim();
-    setState(() {
-      _selectedCategory = normalized.isEmpty ? null : normalized;
-    });
+    // Cambiar la categoria NUNCA altera el periodo seleccionado.
+    setState(() => _filters = _filters.withCategory(category));
+    _loadData();
+  }
+
+  /// Hay filtros distintos del estado inicial (Hoy + Todas).
+  /// Se usa solo para mostrar/ocultar la accion discreta "Restablecer".
+  bool get _hasNonDefaultFilters => !_filters.isDefault;
+
+  /// Vuelve exactamente al estado inicial: Hoy + Todas las categorias,
+  /// conservando la pantalla y recargando el reporte una sola vez.
+  void _resetFilters() {
+    if (!_hasNonDefaultFilters) return;
+    setState(() => _filters = _filters.reset());
     _loadData();
   }
 
@@ -426,10 +560,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           totalSales: _kpis.totalSales,
           totalProfit: _kpis.totalProfit,
           netProfit: _kpis.netProfit,
+          totalExpenses: _kpis.totalExpenses,
           totalCost: _kpis.totalCost,
           salesCount: _kpis.salesCount,
           avgTicket: _kpis.avgTicket,
-          margin: _kpis.margin,
+          margin: _kpis.netMargin,
         ),
         categories: _categoryProfits
             .map(
@@ -475,9 +610,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     );
     if (picked == null) return;
     setState(() {
-      _selectedPeriod = DateRangePeriod.custom;
-      _customStart = picked.start;
-      _customEnd = picked.end;
+      _filters = _filters.withCustomRange(picked.start, picked.end);
     });
     _loadData();
   }
@@ -492,11 +625,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return Align(
           alignment: Alignment.centerRight,
-          child: _ReportsFilterDrawer(
+          child: ReportsFilterDrawer(
             selectedPeriod: _selectedPeriod,
-            customLabel: _selectedPeriod == DateRangePeriod.custom
-                ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
-                : null,
             categories: _categories,
             selectedCategory: _selectedCategory,
           ),
@@ -524,10 +654,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       return;
     }
     setState(() {
-      _selectedPeriod = next.period;
-      _selectedCategory = next.category?.trim().isEmpty == true
-          ? null
-          : next.category;
+      _filters = _filters.withPeriod(next.period).withCategory(next.category);
     });
     _loadData();
   }
@@ -549,9 +676,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   tooltip: 'Filtros',
                   onPressed: _openMobileFilters,
                   icon: Badge(
-                    isLabelVisible:
-                        _selectedPeriod != DateRangePeriod.month ||
-                        (_selectedCategory?.trim().isNotEmpty ?? false),
+                    isLabelVisible: _hasNonDefaultFilters,
                     smallSize: 8,
                     child: const Icon(Icons.filter_alt_outlined),
                   ),
@@ -588,7 +713,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!mobile) ...[
-                  _ReportsTopBar(
+                  ReportsTopBar(
                     selectedPeriod: _selectedPeriod,
                     customLabel: _selectedPeriod == DateRangePeriod.custom
                         ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
@@ -601,16 +726,31 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                     onCategoryChanged: _changeCategory,
                     onReload: _loadData,
                     onDownloadPdf: _downloadPdf,
+                    showReset: _hasNonDefaultFilters,
+                    onReset: _resetFilters,
                   ),
                   const SizedBox(height: 12),
-                ] else
-                  _ActiveReportFilterBar(
+                ] else ...[
+                  // Movil: accesos rapidos de fecha en UNA fila (scroll
+                  // horizontal si no caben) + resumen del rango activo.
+                  DateRangeSelector(
+                    selectedPeriod: _selectedPeriod,
+                    customLabel: _selectedPeriod == DateRangePeriod.custom
+                        ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
+                        : null,
+                    onPeriodChanged: _changePeriod,
+                  ),
+                  const SizedBox(height: 6),
+                  ReportsActiveFilterBar(
                     period: _periodLabel(_selectedPeriod),
                     range:
                         '${_date.format(_range.start)} - ${_date.format(_range.end)}',
                     category: _selectedCategory,
                     onClearCategory: () => _changeCategory(null),
+                    showReset: _hasNonDefaultFilters,
+                    onReset: _resetFilters,
                   ),
+                ],
                 if (_loading) const LinearProgressIndicator(minHeight: 2),
                 if (_error != null)
                   Expanded(child: Center(child: Text(_error!)))
@@ -619,12 +759,17 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final wide = constraints.maxWidth >= 1120;
+                        // Periodo sin ventas: no es un error. Los KPIs quedan en
+                        // RD$0.00 y se explica claramente al usuario que puede
+                        // cambiar fecha/categoria (Fase 31).
+                        final emptyPeriod = !_loading && _kpis.salesCount == 0;
                         return RefreshIndicator(
                           onRefresh: _loadData,
                           child: ListView(
                             padding: EdgeInsets.only(bottom: mobile ? 18 : 0),
                             children: mobile
                                 ? [
+                                    if (emptyPeriod) const _EmptyPeriodNotice(),
                                     _MobileReportsContent(
                                       kpis: _kpis,
                                       salesSeries: _salesSeries,
@@ -636,6 +781,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                     ),
                                   ]
                                 : [
+                                    if (emptyPeriod) ...[
+                                      const _EmptyPeriodNotice(),
+                                      const SizedBox(height: 12),
+                                    ],
                                     _HeroReportsPanel(
                                       wide: wide,
                                       kpis: _kpis,
@@ -645,7 +794,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                           '${_date.format(_range.start)} - ${_date.format(_range.end)}',
                                     ),
                                     const SizedBox(height: 12),
-                                    _AdvancedKpiCards(kpis: _kpis),
+                                    ReportsFinancialKpiCards(kpis: _kpis),
                                     const SizedBox(height: 12),
                                     CategoryProfitTable(
                                       categories: _categoryProfits,
@@ -659,7 +808,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                               Expanded(
                                                 flex: 3,
                                                 child: _PremiumCard(
-                                                  title: 'Utilidad',
+                                                  title: 'Utilidad bruta',
                                                   child: SizedBox(
                                                     height: 260,
                                                     child: ProfitLineChart(
@@ -680,7 +829,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                         : Column(
                                             children: [
                                               _PremiumCard(
-                                                title: 'Utilidad',
+                                                title: 'Utilidad bruta',
                                                 child: SizedBox(
                                                   height: 230,
                                                   child: ProfitLineChart(
@@ -744,53 +893,112 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
 }
 
 class DateRangeHelper {
+  /// [now] permite fijar la fecha de referencia en los tests para verificar
+  /// conteos de dias inequivocos. En produccion se usa la fecha local del
+  /// dispositivo (dia comercial RD: el backend interpreta el yyyy-MM-dd
+  /// enviado como dia local y aplica fin de rango exclusivo).
   static DateTimeRange getRangeForPeriod(
     DateRangePeriod period, {
     DateTime? customStart,
     DateTime? customEnd,
+    DateTime? now,
   }) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
+    final reference = now ?? DateTime.now();
+    final today = DateTime(reference.year, reference.month, reference.day);
+    final endOfToday = DateTime(
+      reference.year,
+      reference.month,
+      reference.day,
+      23,
+      59,
+      59,
+      999,
+    );
     return switch (period) {
       DateRangePeriod.today => DateTimeRange(start: today, end: endOfToday),
       DateRangePeriod.yesterday => DateTimeRange(
         start: today.subtract(const Duration(days: 1)),
         end: today.subtract(const Duration(milliseconds: 1)),
       ),
+      // Ultimos 7 dias = HOY + los 6 dias anteriores = 7 fechas locales
+      // EXACTAS. Se usa aritmetica de CALENDARIO (constructor DateTime) y no
+      // `subtract(Duration(days: 6))`, porque Duration es tiempo ABSOLUTO: en
+      // zonas con cambio de horario devolveria 23:00 del dia anterior (8 dias).
+      // Con `days: 7` se consultaban 8 dias calendario (bug corregido).
       DateRangePeriod.week => DateTimeRange(
-        start: today.subtract(const Duration(days: 7)),
-        end: endOfToday,
-      ),
-      DateRangePeriod.biweekly => DateTimeRange(
-        start: today.subtract(const Duration(days: 15)),
+        start: DateTime(today.year, today.month, today.day - 6),
         end: endOfToday,
       ),
       DateRangePeriod.month => DateTimeRange(
-        start: DateTime(now.year, now.month, 1),
+        start: DateTime(reference.year, reference.month, 1),
         end: endOfToday,
       ),
       DateRangePeriod.year => DateTimeRange(
-        start: DateTime(now.year, 1, 1),
+        start: DateTime(reference.year, 1, 1),
         end: endOfToday,
       ),
-      DateRangePeriod.custom => DateTimeRange(
-        start: customStart ?? today,
-        end: customEnd ?? endOfToday,
+      DateRangePeriod.custom => _customRange(
+        customStart,
+        customEnd,
+        today,
+        endOfToday,
       ),
     };
   }
+
+  /// Rango personalizado normalizado a dia local completo y SIEMPRE valido
+  /// (start <= end). Evita enviar al backend un rango invertido, que el
+  /// endpoint rechaza con "La fecha inicial no puede ser mayor que la final".
+  static DateTimeRange _customRange(
+    DateTime? customStart,
+    DateTime? customEnd,
+    DateTime today,
+    DateTime endOfToday,
+  ) {
+    final start = customStart == null
+        ? today
+        : DateTime(customStart.year, customStart.month, customStart.day);
+    var end = customEnd == null
+        ? endOfToday
+        : DateTime(
+            customEnd.year,
+            customEnd.month,
+            customEnd.day,
+            23,
+            59,
+            59,
+            999,
+          );
+    if (end.isBefore(start)) {
+      end = DateTime(start.year, start.month, start.day, 23, 59, 59, 999);
+    }
+    return DateTimeRange(start: start, end: end);
+  }
 }
 
+/// Etiqueta de boton que NUNCA se parte en dos lineas ni se trunca: si el
+/// espacio es muy reducido se reduce la escala (BoxFit.scaleDown) en lugar de
+/// cortar el texto o saltar de linea.
+Widget _singleLineLabel(String text) {
+  return FittedBox(
+    fit: BoxFit.scaleDown,
+    alignment: Alignment.center,
+    child: Text(text, maxLines: 1, softWrap: false),
+  );
+}
+
+/// Etiquetas EXACTAS de los accesos rapidos de fecha: una sola fuente de
+/// verdad para el selector, el drawer movil y la barra de filtros activos.
 String _periodLabel(DateRangePeriod period) {
   return switch (period) {
     DateRangePeriod.today => 'Hoy',
     DateRangePeriod.yesterday => 'Ayer',
+    // NO es "semana calendario": es hoy + los 6 dias anteriores = 7 fechas
+    // locales exactas (ver DateRangeHelper.week).
     DateRangePeriod.week => 'Semana',
-    DateRangePeriod.biweekly => '15 días',
     DateRangePeriod.month => 'Mes',
     DateRangePeriod.year => 'Año',
-    DateRangePeriod.custom => 'Intervalo',
+    DateRangePeriod.custom => 'Personalizado',
   };
 }
 
@@ -801,24 +1009,25 @@ class _ReportsFilterDraft {
   final String? category;
 }
 
-class _ReportsFilterDrawer extends StatefulWidget {
-  const _ReportsFilterDrawer({
+// Publico (no `_`) para poder testear la UI de filtros de Reportes sin red:
+// chips, categorias, footer y SafeArea.
+class ReportsFilterDrawer extends StatefulWidget {
+  const ReportsFilterDrawer({
+    super.key,
     required this.selectedPeriod,
-    required this.customLabel,
     required this.categories,
     required this.selectedCategory,
   });
 
   final DateRangePeriod selectedPeriod;
-  final String? customLabel;
   final List<String> categories;
   final String? selectedCategory;
 
   @override
-  State<_ReportsFilterDrawer> createState() => _ReportsFilterDrawerState();
+  State<ReportsFilterDrawer> createState() => _ReportsFilterDrawerState();
 }
 
-class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
+class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
   late DateRangePeriod _period = widget.selectedPeriod;
   late String? _category = widget.selectedCategory;
 
@@ -826,6 +1035,14 @@ class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
     Navigator.of(
       context,
     ).pop(_ReportsFilterDraft(period: _period, category: _category));
+  }
+
+  /// Restablece el estado inicial (Hoy + Todas) y lo aplica de inmediato,
+  /// para no obligar al usuario a volver a tocar "Aplicar filtros".
+  void _resetAndApply() {
+    Navigator.of(context).pop(
+      const _ReportsFilterDraft(period: kDefaultReportsPeriod, category: null),
+    );
   }
 
   @override
@@ -839,7 +1056,9 @@ class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
           height: double.infinity,
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(18)),
+            borderRadius: BorderRadius.horizontal(
+              left: Radius.circular(kReportsFilterRadius),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Color(0x330B1720),
@@ -859,7 +1078,9 @@ class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.only(topLeft: Radius.circular(18)),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(kReportsFilterRadius),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -891,36 +1112,11 @@ class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final item in [
-                          DateRangePeriod.today,
-                          DateRangePeriod.yesterday,
-                          DateRangePeriod.week,
-                          DateRangePeriod.biweekly,
-                          DateRangePeriod.month,
-                          DateRangePeriod.year,
-                          DateRangePeriod.custom,
-                        ])
-                          ChoiceChip(
-                            label: Text(
-                              item == DateRangePeriod.custom &&
-                                      widget.customLabel != null
-                                  ? widget.customLabel!
-                                  : _periodLabel(item),
-                            ),
+                        for (final item in kReportPeriodOrder)
+                          _FilterChip(
+                            label: _periodLabel(item),
                             selected: _period == item,
-                            onSelected: (_) => setState(() => _period = item),
-                            selectedColor: _primaryBlue.withValues(alpha: 0.14),
-                            side: BorderSide(
-                              color: _period == item
-                                  ? _primaryBlue
-                                  : _borderSoft,
-                            ),
-                            labelStyle: TextStyle(
-                              color: _period == item
-                                  ? _primaryBlue
-                                  : _textPrimary,
-                              fontWeight: FontWeight.w800,
-                            ),
+                            onTap: () => setState(() => _period = item),
                           ),
                       ],
                     ),
@@ -942,15 +1138,41 @@ class _ReportsFilterDrawerState extends State<_ReportsFilterDrawer> {
               ),
               SafeArea(
                 top: false,
-                minimum: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                child: FilledButton.icon(
-                  onPressed: _apply,
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Aplicar filtros'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _primaryBlue,
-                    minimumSize: const Size.fromHeight(46),
-                  ),
+                // Respeta el inset inferior (navigation bar Android / home
+                // indicator iPhone) y deja aire para el pulgar.
+                minimum: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                // Wrap (no Row): cada accion conserva su ancho INTRINSECO. Si
+                // no caben juntas se apilan en una segunda linea en vez de
+                // reducir la fuente, partir el texto o desbordar.
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Accion secundaria discreta (solo texto, sin relleno).
+                    TextButton(
+                      onPressed: _resetAndApply,
+                      style: TextButton.styleFrom(
+                        foregroundColor: _primaryBlue,
+                        minimumSize: const Size(0, 46),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: _singleLineLabel('Restablecer'),
+                    ),
+                    // Accion principal: la UNICA con relleno solido, por lo que
+                    // mantiene mayor jerarquia visual que Restablecer.
+                    FilledButton.icon(
+                      onPressed: _apply,
+                      icon: const Icon(Icons.check_rounded),
+                      label: _singleLineLabel('Aplicar filtros'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _primaryBlue,
+                        minimumSize: const Size(0, 46),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1016,18 +1238,25 @@ class _FilterCategoryTile extends StatelessWidget {
   }
 }
 
-class _ActiveReportFilterBar extends StatelessWidget {
-  const _ActiveReportFilterBar({
+// Publico (no `_`) para poder testear la barra sin red: chip de categoria y
+// "Restablecer" en una sola linea.
+class ReportsActiveFilterBar extends StatelessWidget {
+  const ReportsActiveFilterBar({
+    super.key,
     required this.period,
     required this.range,
     required this.category,
     required this.onClearCategory,
+    required this.showReset,
+    required this.onReset,
   });
 
   final String period;
   final String range;
   final String? category;
   final VoidCallback onClearCategory;
+  final bool showReset;
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -1036,6 +1265,7 @@ class _ActiveReportFilterBar extends StatelessWidget {
       child: Wrap(
         spacing: 7,
         runSpacing: 7,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _Pill(text: '$period · $range'),
           if (category?.trim().isNotEmpty == true)
@@ -1045,14 +1275,29 @@ class _ActiveReportFilterBar extends StatelessWidget {
               onDeleted: onClearCategory,
               visualDensity: VisualDensity.compact,
             ),
+          if (showReset)
+            TextButton.icon(
+              onPressed: onReset,
+              icon: const Icon(Icons.restart_alt_rounded, size: 16),
+              label: _singleLineLabel('Restablecer'),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: _primaryBlue,
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-class _ReportsTopBar extends StatelessWidget {
-  const _ReportsTopBar({
+class ReportsTopBar extends StatelessWidget {
+  const ReportsTopBar({
+    super.key,
     required this.selectedPeriod,
     required this.customLabel,
     required this.loading,
@@ -1063,6 +1308,8 @@ class _ReportsTopBar extends StatelessWidget {
     required this.onCategoryChanged,
     required this.onReload,
     required this.onDownloadPdf,
+    required this.showReset,
+    required this.onReset,
   });
 
   final DateRangePeriod selectedPeriod;
@@ -1075,6 +1322,8 @@ class _ReportsTopBar extends StatelessWidget {
   final ValueChanged<String?> onCategoryChanged;
   final VoidCallback onReload;
   final VoidCallback onDownloadPdf;
+  final bool showReset;
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -1082,7 +1331,7 @@ class _ReportsTopBar extends StatelessWidget {
     final mobile = MediaQuery.sizeOf(context).width < 640;
     return _Surface(
       padding: EdgeInsets.fromLTRB(12, 10, 12, mobile ? 12 : 10),
-      radius: 14,
+      radius: kReportsFilterRadius,
       child: Column(
         children: [
           if (mobile)
@@ -1182,6 +1431,17 @@ class _ReportsTopBar extends StatelessWidget {
                   icon: const Icon(Icons.refresh_rounded, size: 16),
                   label: const Text('Recargar'),
                 ),
+                if (showReset) ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: loading ? null : onReset,
+                    icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                    label: const Text('Restablecer'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: scheme.primary,
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 FilledButton.tonalIcon(
                   onPressed: loading || generatingPdf ? null : onDownloadPdf,
@@ -1200,8 +1460,10 @@ class _ReportsTopBar extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Desktop: los 6 periodos deben caber en UNA fila sin scroll
+              // innecesario, asi que el selector toma el ancho disponible y la
+              // categoria queda en una columna de ancho fijo.
               Expanded(
-                flex: mobile ? 1 : 3,
                 child: DateRangeSelector(
                   selectedPeriod: selectedPeriod,
                   customLabel: customLabel,
@@ -1210,8 +1472,8 @@ class _ReportsTopBar extends StatelessWidget {
               ),
               if (!mobile) ...[
                 const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
+                SizedBox(
+                  width: 260,
                   child: CategoryFilterSelector(
                     categories: categories,
                     selectedCategory: selectedCategory,
@@ -1270,7 +1532,7 @@ class CategoryFilterSelector extends StatelessWidget {
         : null;
     return _Surface(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      radius: 12,
+      radius: kReportsFilterRadius,
       shadow: false,
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
@@ -1325,56 +1587,100 @@ class DateRangeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 640;
     return _Surface(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      radius: 12,
+      radius: kReportsFilterRadius,
       shadow: false,
+      // UNA SOLA FILA (nunca Wrap): si los 6 accesos no caben, la fila se
+      // desliza horizontalmente. En desktop >=900 caben y no hay scroll.
       child: SingleChildScrollView(
-        scrollDirection: mobile ? Axis.horizontal : Axis.vertical,
-        child: Wrap(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           spacing: 6,
-          runSpacing: 6,
           children: [
-            _chip(context, 'Hoy', DateRangePeriod.today),
-            _chip(context, 'Ayer', DateRangePeriod.yesterday),
-            _chip(context, 'Semana', DateRangePeriod.week),
-            _chip(context, '15 días', DateRangePeriod.biweekly),
-            _chip(context, 'Mes', DateRangePeriod.month),
-            _chip(context, 'Año', DateRangePeriod.year),
-            _chip(
-              context,
-              customLabel == null ? 'Personalizado' : customLabel!,
-              DateRangePeriod.custom,
-            ),
+            // Orden y labels con una sola fuente de verdad (kReportPeriodOrder
+            // + _periodLabel), igual que el drawer movil.
+            for (final period in kReportPeriodOrder)
+              _FilterChip(
+                key: ValueKey<String>('reports-period-${period.name}'),
+                label: period == DateRangePeriod.custom && customLabel != null
+                    ? customLabel!
+                    : _periodLabel(period),
+                selected: selectedPeriod == period,
+                onTap: () => onPeriodChanged(period),
+              ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _chip(BuildContext context, String label, DateRangePeriod period) {
+/// Chip de filtro de Reportes.
+///
+/// A diferencia del chip global (pill, radius 999) usa un radio moderado
+/// ([kReportsFilterRadius]) para verse cuadrado/profesional. El estado seleccionado
+/// es evidente por RELLENO + BORDE + peso de texto + icono check, de modo que
+/// NO depende exclusivamente del color. El espacio del icono se reserva
+/// siempre, asi el chip no cambia de ancho al seleccionarse ni al deslizar.
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final selected = selectedPeriod == period;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (value) {
-        if (value) onPeriodChanged(period);
-      },
-      backgroundColor: scheme.surface,
-      selectedColor: scheme.primary.withValues(alpha: 0.14),
-      side: BorderSide(
-        color: selected
-            ? scheme.primary.withValues(alpha: 0.22)
-            : scheme.outlineVariant,
+    return Material(
+      color: selected ? scheme.primary.withValues(alpha: 0.12) : scheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(kReportsFilterRadius),
+        side: BorderSide(
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.55)
+              : _borderSoft,
+          width: selected ? 1.4 : 1,
+        ),
       ),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      labelStyle: TextStyle(
-        color: selected ? scheme.primary : scheme.onSurface,
-        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-        fontSize: 12,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(kReportsFilterRadius),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: selected
+                    ? Icon(Icons.check_rounded, size: 14, color: scheme.primary)
+                    : null,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                // Nunca partir el texto (p. ej. "Personalizado").
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  color: selected ? scheme.primary : _textPrimary,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1443,28 +1749,9 @@ class _HeroReportsPanel extends StatelessWidget {
     final methodPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _SummaryTile(
-              label: 'Margen',
-              value: '${kpis.margin.toStringAsFixed(1)}%',
-              color: _teal,
-            ),
-            _SummaryTile(
-              label: 'Órdenes',
-              value: '${kpis.salesCount}',
-              color: _primaryBlue,
-            ),
-            _SummaryTile(
-              label: 'Utilidad',
-              value: formatRdCurrencyAccounting(kpis.netProfit),
-              color: _gold,
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
+        // NOTA: aqui NO se repiten "Margen neto" / "Utilidad neta" / "Ordenes"
+        // porque ReportsFinancialKpiCards (justo debajo en desktop) ya los
+        // muestra: repetirlos seria informacion de utilidad duplicada.
         SizedBox(
           height: mobile ? 230 : 250,
           child: PaymentMethodPieChart(data: paymentMethods),
@@ -1514,39 +1801,180 @@ class _HeroReportsPanel extends StatelessWidget {
   }
 }
 
-class _AdvancedKpiCards extends StatelessWidget {
-  const _AdvancedKpiCards({required this.kpis});
+class ReportsFinancialKpiCards extends StatelessWidget {
+  const ReportsFinancialKpiCards({super.key, required this.kpis});
   final KpisData kpis;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
+    final cards = [
+      _KpiCard(
+        key: const ValueKey('reports-kpi-sales'),
+        title: 'Ventas',
+        value: formatRdCurrencyAccounting(kpis.totalSales),
+        icon: Icons.payments_outlined,
+        color: _primaryBlue,
+      ),
+      _KpiCard(
+        key: const ValueKey('reports-kpi-net-profit'),
+        title: 'Utilidad neta',
+        value: formatRdCurrencyAccounting(kpis.netProfit),
+        icon: Icons.account_balance_wallet_outlined,
+        color: kpis.netProfit >= 0 ? _teal : _error,
+      ),
+      _KpiCard(
+        key: const ValueKey('reports-kpi-net-margin'),
+        title: 'Margen neto',
+        value: '${kpis.netMargin.toStringAsFixed(1)}%',
+        icon: Icons.percent_rounded,
+        color: _teal,
+      ),
+      _KpiCard(
+        key: const ValueKey('reports-kpi-tickets'),
+        title: 'Tickets',
+        value: '${kpis.salesCount}',
+        icon: Icons.receipt_long_outlined,
+        color: _gold,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900 ? 4 : 2;
+        const gap = 12.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final card in cards)
+                  SizedBox(width: width, height: 92, child: card),
+              ],
+            ),
+            if (kpis.hasProfitExpenses) ...[
+              const SizedBox(height: 12),
+              _ProfitBreakdownPanel(kpis: kpis),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ProfitBreakdownPanel extends StatelessWidget {
+  const _ProfitBreakdownPanel({required this.kpis});
+  final KpisData kpis;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Surface(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      radius: 14,
+      shadow: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final items = [
+            _ProfitBreakdownItem(
+              label: 'Bruta',
+              value: formatRdCurrencyAccounting(kpis.grossProfit),
+              color: _teal,
+            ),
+            _ProfitBreakdownItem(
+              label: 'Gastos',
+              value: formatRdCurrencyAccounting(-kpis.totalExpenses),
+              color: _gold,
+            ),
+            _ProfitBreakdownItem(
+              label: 'Neta',
+              value: formatRdCurrencyAccounting(kpis.netProfit),
+              color: kpis.netProfit >= 0 ? _primaryBlue : _error,
+            ),
+          ];
+          final content = constraints.maxWidth >= 720
+              ? Row(
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(child: items[i]),
+                    ],
+                  ],
+                )
+              : Column(
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 8),
+                      items[i],
+                    ],
+                  ],
+                );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Cómo se calcula la utilidad',
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              content,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ProfitBreakdownItem extends StatelessWidget {
+  const _ProfitBreakdownItem({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
       children: [
-        _KpiCard(
-          title: 'Ventas totales',
-          value: formatRdCurrencyAccounting(kpis.totalSales),
-          icon: Icons.payments_outlined,
-          color: _primaryBlue,
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
-        _KpiCard(
-          title: 'Utilidad',
-          value: formatRdCurrencyAccounting(kpis.netProfit),
-          icon: Icons.trending_up_rounded,
-          color: _teal,
-        ),
-        _KpiCard(
-          title: 'Costo vendido',
-          value: formatRdCurrencyAccounting(kpis.totalCost),
-          icon: Icons.inventory_2_outlined,
-          color: _gold,
-        ),
-        _KpiCard(
-          title: 'Ticket promedio',
-          value: formatRdCurrencyAccounting(kpis.avgTicket),
-          icon: Icons.receipt_long_outlined,
-          color: const Color(0xFF7C3AED),
+        const SizedBox(width: 12),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -1579,57 +2007,7 @@ class _MobileReportsContent extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Ventas filtradas',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  formatRdCurrencyAccounting(kpis.totalSales),
-                  style: const TextStyle(
-                    color: _textPrimary,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _FlatMetric(
-                      label: 'Utilidad',
-                      value: formatRdCurrencyAccounting(kpis.netProfit),
-                      color: _teal,
-                    ),
-                  ),
-                  Expanded(
-                    child: _FlatMetric(
-                      label: 'Margen',
-                      value: '${kpis.margin.toStringAsFixed(1)}%',
-                      color: _primaryBlue,
-                    ),
-                  ),
-                  Expanded(
-                    child: _FlatMetric(
-                      label: 'Tickets',
-                      value: '${kpis.salesCount}',
-                      color: _gold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: ReportsFinancialKpiCards(kpis: kpis),
         ),
         _FlatSection(
           title: 'Ritmo de ventas',
@@ -1639,7 +2017,7 @@ class _MobileReportsContent extends StatelessWidget {
           ),
         ),
         _FlatSection(
-          title: 'Utilidad',
+          title: 'Utilidad bruta',
           child: SizedBox(
             height: 160,
             child: ProfitLineChart(data: profitSeries),
@@ -1678,43 +2056,6 @@ class _MobileReportsContent extends StatelessWidget {
         ),
         _RecentSalesTable(sales: sales),
       ],
-    );
-  }
-}
-
-class _FlatMetric extends StatelessWidget {
-  const _FlatMetric({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: _textSecondary, fontSize: 11),
-          ),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: TextStyle(color: color, fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1989,7 +2330,7 @@ class _CategoryProfitRow extends StatelessWidget {
         color: data.totalProfit >= 0 ? _teal : _error,
       ),
       _CategoryMetric(
-        label: 'Margen',
+        label: 'Margen bruto',
         value: '${data.margin.toStringAsFixed(1)}%',
       ),
     ];
@@ -2188,6 +2529,55 @@ class _RecentSalesTable extends StatelessWidget {
   }
 }
 
+/// Estado vacío del periodo: NO es un error. Se muestra cuando el rango y la
+/// categoría seleccionados no tienen ventas; los KPIs permanecen en RD$0.00 y
+/// el usuario puede seguir cambiando fecha/categoría.
+class _EmptyPeriodNotice extends StatelessWidget {
+  const _EmptyPeriodNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Surface(
+      padding: const EdgeInsets.all(16),
+      radius: 14,
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: _primaryBlue.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.receipt_long_outlined,
+              color: _primaryBlue,
+              size: 21,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No hay ventas para este período',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Puedes cambiar la fecha o la categoría para ver otros resultados.',
+                  style: TextStyle(color: _textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Surface extends StatelessWidget {
   const _Surface({
     required this.child,
@@ -2254,6 +2644,7 @@ class _PremiumCard extends StatelessWidget {
 
 class _KpiCard extends StatelessWidget {
   const _KpiCard({
+    super.key,
     required this.title,
     required this.value,
     required this.icon,
@@ -2267,93 +2658,51 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 640;
-    return SizedBox(
-      width: mobile ? double.infinity : 260,
-      child: _Surface(
-        padding: EdgeInsets.all(mobile ? 14 : 18),
-        radius: 14,
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.11),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: _textSecondary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 22,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 640;
-    return Container(
-      width: mobile ? double.infinity : 145,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return _Surface(
+      padding: const EdgeInsets.all(11),
+      radius: 14,
+      child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: _textSecondary, fontSize: 12),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 21),
           ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textSecondary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -2916,9 +3265,15 @@ const _chartColors = [
 ];
 
 double _toDouble(dynamic value) {
-  if (value is num) return value.toDouble();
-  if (value == null) return 0;
-  return double.tryParse(value.toString()) ?? 0;
+  final parsed = switch (value) {
+    num v => v.toDouble(),
+    null => 0.0,
+    _ => double.tryParse(value.toString()) ?? 0,
+  };
+  // Fase 33: nunca propagar NaN/Infinity a la UI ni al PDF.
+  if (!parsed.isFinite) return 0;
+  // Normaliza -0.0 para que no se muestre como "-RD$0.00".
+  return parsed == 0 ? 0 : parsed;
 }
 
 List<SeriesDataPoint> _parseSeries(dynamic raw) {

@@ -13,6 +13,7 @@ class SalesReportPdfKpis {
     required this.totalSales,
     required this.totalProfit,
     required this.netProfit,
+    required this.totalExpenses,
     required this.totalCost,
     required this.salesCount,
     required this.avgTicket,
@@ -22,6 +23,7 @@ class SalesReportPdfKpis {
   final double totalSales;
   final double totalProfit;
   final double netProfit;
+  final double totalExpenses;
   final double totalCost;
   final int salesCount;
   final double avgTicket;
@@ -89,6 +91,10 @@ Future<Uint8List> buildProfessionalSalesReportPdf({
       ),
       build: (_) => [
         _kpiGrid(kpis),
+        if (kpis.totalExpenses > 0) ...[
+          pw.SizedBox(height: 10),
+          _profitBreakdown(kpis),
+        ],
         pw.SizedBox(height: 16),
         _sectionTitle('Ganancia por categoria'),
         _categoryTable(categories),
@@ -182,14 +188,14 @@ pw.Widget _header({
 pw.Widget _kpiGrid(SalesReportPdfKpis kpis) {
   final rows = [
     [
-      _metric('Ventas netas', formatRdCurrencyAccounting(kpis.totalSales)),
+      _metric('Ventas', formatRdCurrencyAccounting(kpis.totalSales)),
       _metric('Utilidad neta', formatRdCurrencyAccounting(kpis.netProfit)),
-      _metric('Margen', '${kpis.margin.toStringAsFixed(1)}%'),
+      _metric('Margen neto', '${kpis.margin.toStringAsFixed(1)}%'),
     ],
     [
-      _metric('Costo', formatRdCurrencyAccounting(kpis.totalCost)),
       _metric('Facturas', '${kpis.salesCount}'),
       _metric('Ticket promedio', formatRdCurrencyAccounting(kpis.avgTicket)),
+      _metric('Costo', formatRdCurrencyAccounting(kpis.totalCost)),
     ],
   ];
 
@@ -208,6 +214,68 @@ pw.Widget _kpiGrid(SalesReportPdfKpis kpis) {
           ),
         )
         .toList(),
+  );
+}
+
+pw.Widget _profitBreakdown(SalesReportPdfKpis kpis) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.fromLTRB(10, 9, 10, 9),
+    decoration: pw.BoxDecoration(
+      color: PdfColor.fromHex('#F8FAFC'),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+      border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.5),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Como se calcula la utilidad',
+          style: pw.TextStyle(
+            fontSize: 9,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColor.fromHex('#111827'),
+          ),
+        ),
+        pw.SizedBox(height: 7),
+        pw.Row(
+          children: [
+            _breakdownMetric(
+              'Bruta',
+              formatRdCurrencyAccounting(kpis.totalProfit),
+            ),
+            pw.SizedBox(width: 10),
+            _breakdownMetric(
+              'Gastos',
+              formatRdCurrencyAccounting(-kpis.totalExpenses),
+            ),
+            pw.SizedBox(width: 10),
+            _breakdownMetric(
+              'Neta',
+              formatRdCurrencyAccounting(kpis.netProfit),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+pw.Widget _breakdownMetric(String label, String value) {
+  return pw.Expanded(
+    child: pw.Row(
+      children: [
+        pw.Expanded(
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey600),
+          ),
+        ),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+        ),
+      ],
+    ),
   );
 }
 
