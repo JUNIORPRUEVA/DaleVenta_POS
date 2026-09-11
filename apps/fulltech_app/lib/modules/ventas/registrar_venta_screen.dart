@@ -25,6 +25,7 @@ import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
+import '../../core/utils/build_phase.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -36,6 +37,7 @@ import '../../features/catalogo/application/catalog_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/contabilidad/data/contabilidad_repository.dart';
+import '../../features/warehouses/data/warehouse_repository.dart';
 import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
 import 'application/ventas_controller.dart';
@@ -73,6 +75,73 @@ Set<String> sanitizePosSelectedCategories(
   return sanitized.length == selectedCategories.length
       ? selectedCategories
       : sanitized;
+}
+
+_SaleWarehouseContext? _resolvePosSaleWarehouseContext({
+  required List<WarehouseModel> warehouses,
+  required List<TerminalWarehouseModel> terminals,
+}) {
+  final activeWarehouses = warehouses
+      .where(
+        (warehouse) => warehouse.isActive && warehouse.id.trim().isNotEmpty,
+      )
+      .toList(growable: false);
+  if (activeWarehouses.length <= 1) return null;
+
+  TerminalWarehouseModel? selectedTerminal;
+  for (final terminal in terminals) {
+    if (terminal.isActive && terminal.deviceBound) {
+      selectedTerminal = terminal;
+      break;
+    }
+  }
+  if (selectedTerminal == null) {
+    for (final terminal in terminals) {
+      if (terminal.isActive && terminal.isDefault) {
+        selectedTerminal = terminal;
+        break;
+      }
+    }
+  }
+  if (selectedTerminal == null) {
+    for (final terminal in terminals) {
+      if (terminal.isActive) {
+        selectedTerminal = terminal;
+        break;
+      }
+    }
+  }
+
+  final terminalWarehouseId = selectedTerminal?.defaultWarehouseId.trim() ?? '';
+  WarehouseModel? warehouse;
+  for (final row in activeWarehouses) {
+    if (row.id == terminalWarehouseId) {
+      warehouse = row;
+      break;
+    }
+  }
+  if (warehouse == null) {
+    for (final row in activeWarehouses) {
+      if (row.isDefault) {
+        warehouse = row;
+        break;
+      }
+    }
+  }
+  warehouse ??= activeWarehouses.first;
+
+  final terminalWarehouseName =
+      selectedTerminal?.defaultWarehouseName.trim() ?? '';
+  return _SaleWarehouseContext(
+    warehouseId: warehouse.id,
+    warehouseName:
+        terminalWarehouseName.isNotEmpty && warehouse.id == terminalWarehouseId
+        ? terminalWarehouseName
+        : warehouse.name,
+    warehouseCode: warehouse.code,
+    terminalId: selectedTerminal?.id,
+    terminalName: selectedTerminal?.name,
+  );
 }
 
 class RegistrarVentaScreen extends ConsumerStatefulWidget {
@@ -263,13 +332,45 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return item.unitSnapshot;
   }
 
+  _SaleWarehouseContext? _resolveSaleWarehouseContext(
+    AsyncValue<List<WarehouseModel>> warehouses,
+    AsyncValue<List<TerminalWarehouseModel>> terminals,
+  ) {
+    final warehouseRows = warehouses.valueOrNull;
+    final terminalRows = terminals.valueOrNull;
+    if (warehouseRows == null || terminalRows == null) return null;
+    return _resolvePosSaleWarehouseContext(
+      warehouses: warehouseRows,
+      terminals: terminalRows,
+    );
+  }
+
+  Future<List<UnitOfMeasureModel>> _loadSaleUnitOptions() async {
+    if (!_measurementUnitsEnabled) return const [UnitOfMeasureModel.unit];
+    try {
+      final units = await ref
+          .read(catalogRepositoryProvider)
+          .fetchUnitOfMeasures();
+      if (units.any((unit) => unit.id == UnitOfMeasureModel.unit.id)) {
+        return units;
+      }
+      return [UnitOfMeasureModel.unit, ...units];
+    } catch (_) {
+      return const [UnitOfMeasureModel.unit];
+    }
+  }
+
   void _disposeTextControllersAfterFrame(
     Iterable<TextEditingController> controllers,
   ) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final controller in controllers) {
-        controller.dispose();
-      }
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 250), () {
+          for (final controller in controllers) {
+            controller.dispose();
+          }
+        }),
+      );
     });
   }
 
@@ -470,9 +571,19 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   void _syncProductsOnEnter() {
     if (!mounted) return;
-    ref.invalidate(companySettingsProvider);
-    ref.invalidate(productTaxUiConfigProvider);
-    _loadProducts(silent: true);
+    // Invocado desde `RouteAware.didPush()`/`didPopNext()`. Flutter ejecuta
+    // `didPush()` sincrónicamente dentro de `RouteObserver.subscribe()` (que se
+    // llama en `didChangeDependencies()`) → fase de BUILD.
+    //
+    // Invalidar providers en fase de build provoca que el primer `ref.watch`
+    // del mismo frame reconstruya el provider y notifique a TODOS sus
+    // listeners → `setState() or markNeedsBuild() called during build`.
+    runOutsideBuildPhase(() {
+      if (!mounted) return;
+      ref.invalidate(companySettingsProvider);
+      ref.invalidate(productTaxUiConfigProvider);
+      _loadProducts(silent: true);
+    });
   }
 
   @override
@@ -883,9 +994,14 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final showInlineTotals = screenWidth >= 700 && screenHeight >= 780;
     final maxContentWidth = isWide ? 1180.0 : double.infinity;
     final taxConfig = ref.watch(productTaxUiConfigProvider).valueOrNull;
-    final inventoryEnabled =
-        ref.watch(companySettingsProvider).valueOrNull?.inventoryEnabled ??
-        true;
+    final companySettings = ref.watch(companySettingsProvider).valueOrNull;
+    final inventoryEnabled = companySettings?.inventoryEnabled ?? true;
+    final saleWarehouseContext = companySettings?.multiWarehouseEnabled == true
+        ? _resolveSaleWarehouseContext(
+            ref.watch(warehousesProvider),
+            ref.watch(warehouseTerminalsProvider),
+          )
+        : null;
     final cartTaxSummary = _cartTaxSummary(taxConfig);
     final showFiscalVoucherControl = shouldShowFiscalVoucherControl(
       taxEnabled: taxConfig?.settings.taxEnabled == true,
@@ -1110,6 +1226,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   taxSummary: cartTaxSummary,
                                   fiscalVoucherOptions: fiscalVoucherOptions,
                                   fiscalVoucherLoading: ncfSequences.isLoading,
+                                  saleWarehouseContext: saleWarehouseContext,
                                 ),
                               ),
                             ),
@@ -1260,6 +1377,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     required _CartTaxSummary taxSummary,
     required List<FiscalVoucherOption> fiscalVoucherOptions,
     required bool fiscalVoucherLoading,
+    required _SaleWarehouseContext? saleWarehouseContext,
   }) {
     final theme = Theme.of(context);
     final hasClient = _selectedClient != null;
@@ -1519,6 +1637,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         ],
                       ),
                     ),
+                  if (saleWarehouseContext != null) ...[
+                    const SizedBox(height: 4),
+                    _SaleWarehouseIndicator(contextInfo: saleWarehouseContext),
+                  ],
                   const SizedBox(height: 3),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -1686,6 +1808,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     required _CartTaxSummary taxSummary,
     required List<FiscalVoucherOption> fiscalVoucherOptions,
     required bool fiscalVoucherLoading,
+    required _SaleWarehouseContext? saleWarehouseContext,
   }) {
     final isWide = MediaQuery.of(context).size.width >= 1024;
     if (!isWide) {
@@ -1693,6 +1816,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         taxSummary: taxSummary,
         fiscalVoucherOptions: fiscalVoucherOptions,
         fiscalVoucherLoading: fiscalVoucherLoading,
+        saleWarehouseContext: saleWarehouseContext,
       );
     }
     final hasClient = _selectedClient != null;
@@ -1934,6 +2058,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         const SizedBox(height: 4),
                         const _B01ClientRequirementNotice(),
                       ],
+                      const SizedBox(height: 4),
+                    ],
+                    if (saleWarehouseContext != null) ...[
+                      _SaleWarehouseIndicator(
+                        contextInfo: saleWarehouseContext,
+                      ),
                       const SizedBox(height: 4),
                     ],
                     Padding(
@@ -2267,84 +2397,178 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   Future<void> _openExternalItemDialog() async {
+    final measurementUnitsEnabled = _measurementUnitsEnabled;
+    final unitOptions = await _loadSaleUnitOptions();
+    if (!mounted) return;
     final nameCtrl = TextEditingController();
     final qtyCtrl = TextEditingController(text: '1');
     final priceCtrl = TextEditingController();
     final costCtrl = TextEditingController(text: '0');
+    var selectedUnit = UnitOfMeasureModel.unit;
+    if (!unitOptions.any((unit) => unit.id == selectedUnit.id)) {
+      selectedUnit = unitOptions.first;
+    }
     String? errorText;
 
     final item = await showDialog<SaleDraftItem>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
+          void submit() {
+            FocusScope.of(dialogContext).unfocus();
+            final name = nameCtrl.text.trim();
+            final qty = parseDecimalInput(qtyCtrl.text);
+            final price = parseDecimalInput(priceCtrl.text);
+            final cost = parseDecimalInput(costCtrl.text) ?? 0;
+
+            if (name.isEmpty) {
+              setDialogState(() => errorText = 'Escribe el nombre del item');
+              return;
+            }
+            final qtyError = qty == null
+                ? 'Ingresa una cantidad valida.'
+                : validateQuantityForUnit(
+                    qty,
+                    unit: selectedUnit,
+                    label: 'La cantidad',
+                  );
+            if (qtyError != null) {
+              setDialogState(() => errorText = qtyError);
+              return;
+            }
+            if (price == null || price < 0 || cost < 0) {
+              setDialogState(() => errorText = 'Revisa precio y costo');
+              return;
+            }
+            final qtyValue = qty!;
+
+            Navigator.of(dialogContext).pop(
+              SaleDraftItem(
+                name: name,
+                imageUrl: null,
+                isExternal: true,
+                qty: qtyValue,
+                priceSoldUnit: price,
+                costUnitSnapshot: cost,
+                unitCodeSnapshot: selectedUnit.code,
+                unitNameSnapshot: selectedUnit.name,
+                unitSymbolSnapshot: selectedUnit.symbol,
+                unitPrecisionSnapshot: selectedUnit.precision,
+              ),
+            );
+          }
+
           return AlertDialog(
             title: const Text('Vender fuera del inventario'),
             content: SizedBox(
               width: 340,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre del item',
-                      border: OutlineInputBorder(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) =>
+                          FocusScope.of(dialogContext).nextFocus(),
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre del item',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: qtyCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Cantidad',
-                            border: OutlineInputBorder(),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: qtyCtrl,
+                            keyboardType: TextInputType.numberWithOptions(
+                              decimal: selectedUnit.allowDecimals,
+                            ),
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) =>
+                                FocusScope.of(dialogContext).nextFocus(),
+                            decoration: InputDecoration(
+                              labelText: 'Cantidad',
+                              suffixText:
+                                  measurementUnitsEnabled &&
+                                      !selectedUnit.isUnit
+                                  ? selectedUnit.symbol
+                                  : null,
+                              border: const OutlineInputBorder(),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: priceCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: priceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) =>
+                                FocusScope.of(dialogContext).nextFocus(),
+                            decoration: const InputDecoration(
+                              labelText: 'Precio',
+                              border: OutlineInputBorder(),
+                            ),
                           ),
-                          decoration: const InputDecoration(
-                            labelText: 'Precio',
-                            border: OutlineInputBorder(),
+                        ),
+                      ],
+                    ),
+                    if (measurementUnitsEnabled) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedUnit.id,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Unidad de medida',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          for (final unit in unitOptions)
+                            DropdownMenuItem<String>(
+                              value: unit.id,
+                              child: Text('${unit.name} (${unit.symbol})'),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          final next = unitOptions.firstWhere(
+                            (unit) => unit.id == value,
+                            orElse: () => UnitOfMeasureModel.unit,
+                          );
+                          setDialogState(() => selectedUnit = next);
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: costCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => submit(),
+                      decoration: const InputDecoration(
+                        labelText: 'Costo',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          errorText!,
+                          style: TextStyle(
+                            color: Theme.of(dialogContext).colorScheme.error,
                           ),
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: costCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Costo',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  if (errorText != null) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        errorText!,
-                        style: TextStyle(
-                          color: Theme.of(dialogContext).colorScheme.error,
-                        ),
-                      ),
-                    ),
                   ],
-                ],
+                ),
               ),
             ),
             actions: [
@@ -2352,43 +2576,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Cancelar'),
               ),
-              FilledButton(
-                onPressed: () {
-                  final name = nameCtrl.text.trim();
-                  final qty = double.tryParse(qtyCtrl.text.trim());
-                  final price = double.tryParse(priceCtrl.text.trim());
-                  final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
-
-                  if (name.isEmpty) {
-                    setDialogState(
-                      () => errorText = 'Escribe el nombre del item',
-                    );
-                    return;
-                  }
-                  if (qty == null ||
-                      qty <= 0 ||
-                      price == null ||
-                      price < 0 ||
-                      cost < 0) {
-                    setDialogState(
-                      () => errorText = 'Revisa cantidad, precio y costo',
-                    );
-                    return;
-                  }
-
-                  Navigator.of(dialogContext).pop(
-                    SaleDraftItem(
-                      name: name,
-                      imageUrl: null,
-                      isExternal: true,
-                      qty: qty,
-                      priceSoldUnit: price,
-                      costUnitSnapshot: cost,
-                    ),
-                  );
-                },
-                child: const Text('Agregar'),
-              ),
+              FilledButton(onPressed: submit, child: const Text('Agregar')),
             ],
           );
         },
@@ -3219,6 +3407,66 @@ class _CartTaxSummary {
 }
 
 double _roundMoney(double value) => (value * 100).round() / 100;
+
+class _SaleWarehouseContext {
+  const _SaleWarehouseContext({
+    required this.warehouseId,
+    required this.warehouseName,
+    required this.warehouseCode,
+    this.terminalId,
+    this.terminalName,
+  });
+
+  final String warehouseId;
+  final String warehouseName;
+  final String warehouseCode;
+  final String? terminalId;
+  final String? terminalName;
+}
+
+class _SaleWarehouseIndicator extends StatelessWidget {
+  const _SaleWarehouseIndicator({required this.contextInfo});
+
+  final _SaleWarehouseContext contextInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final terminalName = (contextInfo.terminalName ?? '').trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E5EE)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.warehouse_outlined,
+            size: 16,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              terminalName.isEmpty
+                  ? 'Almacén: ${contextInfo.warehouseName}'
+                  : 'Almacén: ${contextInfo.warehouseName} · $terminalName',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _CartFiscalLine extends StatelessWidget {
   const _CartFiscalLine({required this.label, required this.value});

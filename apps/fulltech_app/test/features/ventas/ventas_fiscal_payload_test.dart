@@ -60,7 +60,10 @@ void main() {
     };
   }
 
-  VentasRepository buildRepository({bool inventoryEnabled = true}) {
+  VentasRepository buildRepository({
+    bool inventoryEnabled = true,
+    List<TerminalWarehouseModel> terminals = const <TerminalWarehouseModel>[],
+  }) {
     final dio = Dio()
       ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
         captured.add(options);
@@ -70,15 +73,12 @@ void main() {
         if (options.path.startsWith('/clients')) {
           return jsonResponse(clientJson());
         }
-        if (options.path == '/warehouses/terminals') {
-          return jsonResponse(<dynamic>[]);
-        }
         return jsonResponse(saleJson());
       });
     return VentasRepository(
       dio,
       SyncQueueService(OfflineStore.instance),
-      WarehouseRepository(dio),
+      _FakeWarehouseRepository(terminals),
     );
   }
 
@@ -329,6 +329,73 @@ void main() {
       );
     },
   );
+
+  test(
+    'createSale sends the warehouse resolved from the active terminal',
+    () async {
+      final repository = buildRepository(
+        terminals: [
+          const TerminalWarehouseModel(
+            id: 'term-a',
+            name: 'Caja A',
+            code: 'A',
+            isActive: true,
+            isDefault: true,
+            defaultWarehouseId: 'w-a',
+            defaultWarehouseName: 'Warehouse A',
+            defaultWarehouseCode: 'A',
+            deviceBound: false,
+          ),
+          const TerminalWarehouseModel(
+            id: 'term-b',
+            name: 'Caja B',
+            code: 'B',
+            isActive: true,
+            isDefault: false,
+            defaultWarehouseId: 'w-b',
+            defaultWarehouseName: 'Warehouse B',
+            defaultWarehouseCode: 'B',
+            deviceBound: false,
+          ),
+        ],
+      );
+
+      await repository.createSale(
+        paymentMethod: 'cash',
+        paymentCashAmount: 300,
+        expectedTotalSold: 300,
+        items: const [
+          SaleDraftItem(
+            productId: 'prod-1',
+            name: 'Producto',
+            imageUrl: null,
+            isExternal: false,
+            qty: 3,
+            priceSoldUnit: 100,
+            costUnitSnapshot: 40,
+          ),
+        ],
+      );
+
+      final data =
+          captured.firstWhere((item) => item.path == '/sales').data
+              as Map<String, dynamic>;
+      expect(data['terminalId'], 'term-a');
+      expect(data['warehouseId'], 'w-a');
+    },
+  );
+}
+
+class _FakeWarehouseRepository extends WarehouseRepository {
+  _FakeWarehouseRepository(this.terminals) : super(Dio());
+
+  final List<TerminalWarehouseModel> terminals;
+
+  @override
+  Future<List<TerminalWarehouseModel>> fetchTerminals() async => terminals;
+
+  @override
+  Future<List<TerminalWarehouseModel>> cachedTerminals() async => terminals;
 }
 
 Map<String, dynamic> sentSaleItem(List<RequestOptions> captured) {

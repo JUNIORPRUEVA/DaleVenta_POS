@@ -5,6 +5,7 @@ import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
+import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/registrar_venta_screen.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -230,12 +231,170 @@ void main() {
     expect(find.text('DISP'), findsNothing);
     expect(find.textContaining('Agregar stock'), findsNothing);
   });
+
+  testWidgets('manual out-of-inventory sale keeps legacy UI when UoM is off', (
+    tester,
+  ) async {
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      measurementUnitsEnabled: false,
+      products: _products,
+      surfaceSize: const Size(390, 820),
+    );
+
+    await tester.tap(find.byTooltip('Producto externo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vender fuera del inventario'), findsOneWidget);
+    expect(find.text('Unidad de medida'), findsNothing);
+  });
+
+  testWidgets('manual out-of-inventory sale rejects fractional UNIT quantity', (
+    tester,
+  ) async {
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      measurementUnitsEnabled: true,
+      products: _products,
+      unitOptions: _testUnits,
+      surfaceSize: const Size(390, 820),
+    );
+
+    await _openManualSaleDialog(tester);
+    await tester.enterText(_textFieldByLabel('Nombre del item'), 'Manual UNIT');
+    await tester.enterText(_textFieldByLabel('Cantidad'), '1.5');
+    await tester.enterText(_textFieldByLabel('Precio'), '10');
+    await tester.enterText(_textFieldByLabel('Costo'), '0');
+    await tester.tap(find.text('Agregar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('La cantidad debe ser entera para Unidad.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('manual out-of-inventory sale accepts decimal YARD quantity', (
+    tester,
+  ) async {
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      measurementUnitsEnabled: true,
+      products: _products,
+      unitOptions: _testUnits,
+      surfaceSize: const Size(390, 820),
+    );
+
+    await _openManualSaleDialog(tester);
+    await tester.enterText(_textFieldByLabel('Nombre del item'), 'Tela');
+    await tester.enterText(_textFieldByLabel('Cantidad'), '1.25');
+    await tester.enterText(_textFieldByLabel('Precio'), '20');
+    await tester.enterText(_textFieldByLabel('Costo'), '0');
+    await _selectDialogUnit(tester, 'Yarda (yd)');
+    await tester.tap(find.text('Agregar'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1.25 yd x'), findsOneWidget);
+  });
+
+  testWidgets(
+    'manual out-of-inventory sale accepts decimal POUND with submit',
+    (tester) async {
+      await _pumpPos(
+        tester,
+        inventoryEnabled: true,
+        measurementUnitsEnabled: true,
+        products: _products,
+        unitOptions: _testUnits,
+        surfaceSize: const Size(390, 820),
+      );
+
+      await _openManualSaleDialog(tester);
+      await tester.enterText(_textFieldByLabel('Nombre del item'), 'Harina');
+      await tester.enterText(_textFieldByLabel('Cantidad'), '2.75');
+      await tester.enterText(_textFieldByLabel('Precio'), '15');
+      await tester.enterText(_textFieldByLabel('Costo'), '0');
+      await _selectDialogUnit(tester, 'Libra (lb)');
+      await tester.tap(_textFieldByLabel('Costo'));
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('2.75 lb x'), findsOneWidget);
+    },
+  );
+
+  testWidgets('mobile POS shows resolved warehouse when multiple are active', (
+    tester,
+  ) async {
+    await _pumpPos(
+      tester,
+      inventoryEnabled: true,
+      multiWarehouseEnabled: true,
+      products: _products,
+      warehouses: _multipleWarehouses,
+      terminals: _defaultTerminalA,
+      surfaceSize: const Size(390, 820),
+    );
+
+    expect(find.textContaining('Almacén: Warehouse A'), findsOneWidget);
+  });
+
+  testWidgets(
+    'mobile POS hides warehouse indicator with a single active warehouse',
+    (tester) async {
+      await _pumpPos(
+        tester,
+        inventoryEnabled: true,
+        multiWarehouseEnabled: true,
+        products: _products,
+        warehouses: [_warehouseA],
+        terminals: _defaultTerminalA,
+        surfaceSize: const Size(390, 820),
+      );
+
+      expect(find.textContaining('Almacén:'), findsNothing);
+    },
+  );
+
+  for (final viewport in _mobileViewports.entries) {
+    testWidgets('mobile POS UoM and warehouse controls fit ${viewport.key}', (
+      tester,
+    ) async {
+      await _pumpPos(
+        tester,
+        inventoryEnabled: true,
+        measurementUnitsEnabled: true,
+        multiWarehouseEnabled: true,
+        products: _products,
+        unitOptions: _testUnits,
+        warehouses: _multipleWarehouses,
+        terminals: _defaultTerminalA,
+        surfaceSize: viewport.value,
+      );
+
+      expect(find.textContaining('Almacén: Warehouse A'), findsOneWidget);
+
+      await _openManualSaleDialog(tester);
+
+      expect(find.text('Unidad de medida'), findsOneWidget);
+      expect(find.text('Agregar'), findsOneWidget);
+    });
+  }
 }
 
 Future<_TestAuthController> _pumpPos(
   WidgetTester tester, {
   required bool inventoryEnabled,
   required List<ProductModel> products,
+  bool measurementUnitsEnabled = false,
+  bool multiWarehouseEnabled = false,
+  List<UnitOfMeasureModel> unitOptions = const [UnitOfMeasureModel.unit],
+  List<WarehouseModel> warehouses = const <WarehouseModel>[],
+  List<TerminalWarehouseModel> terminals = const <TerminalWarehouseModel>[],
   String userId = 'user-1',
   String companyId = 'company-1',
   Size? surfaceSize,
@@ -246,6 +405,8 @@ Future<_TestAuthController> _pumpPos(
   }
   final settings = CompanySettings.empty().copyWith(
     inventoryEnabled: inventoryEnabled,
+    measurementUnitsEnabled: measurementUnitsEnabled,
+    multiWarehouseEnabled: multiWarehouseEnabled,
     taxEnabled: false,
     ncfEnabled: false,
   );
@@ -263,8 +424,10 @@ Future<_TestAuthController> _pumpPos(
               ProductTaxUiConfig(settings: settings, activeTaxes: const []),
         ),
         catalogRepositoryProvider.overrideWithValue(
-          _FakeCatalogRepository(products),
+          _FakeCatalogRepository(products, unitOptions),
         ),
+        warehousesProvider.overrideWith((ref) async => warehouses),
+        warehouseTerminalsProvider.overrideWith((ref) async => terminals),
         posNcfSequencesProvider.overrideWith((ref) async => const []),
       ],
       child: const MaterialApp(home: RegistrarVentaScreen()),
@@ -326,6 +489,72 @@ final _snackProduct = ProductModel(
 
 final _filterProducts = [_beverageProduct, _snackProduct];
 
+const _testUnits = [
+  UnitOfMeasureModel.unit,
+  UnitOfMeasureModel(
+    id: 'uom-yard',
+    code: 'YARD',
+    name: 'Yarda',
+    symbol: 'yd',
+    category: 'LENGTH',
+    allowDecimals: true,
+    precision: 2,
+  ),
+  UnitOfMeasureModel(
+    id: 'uom-pound',
+    code: 'POUND',
+    name: 'Libra',
+    symbol: 'lb',
+    category: 'MASS',
+    allowDecimals: true,
+    precision: 2,
+  ),
+];
+
+const _warehouseA = WarehouseModel(
+  id: 'w-a',
+  name: 'Warehouse A',
+  code: 'A',
+  isDefault: true,
+  isActive: true,
+  terminalCount: 1,
+  stockRowCount: 1,
+);
+
+const _warehouseB = WarehouseModel(
+  id: 'w-b',
+  name: 'Warehouse B',
+  code: 'B',
+  isDefault: false,
+  isActive: true,
+  terminalCount: 1,
+  stockRowCount: 1,
+);
+
+const _multipleWarehouses = [_warehouseA, _warehouseB];
+
+const _defaultTerminalA = [
+  TerminalWarehouseModel(
+    id: 'term-a',
+    name: 'Caja A',
+    code: 'A',
+    isActive: true,
+    isDefault: true,
+    defaultWarehouseId: 'w-a',
+    defaultWarehouseName: 'Warehouse A',
+    defaultWarehouseCode: 'A',
+    deviceBound: false,
+  ),
+];
+
+const _mobileViewports = {
+  'Android 360x800': Size(360, 800),
+  'Android 412x915': Size(412, 915),
+  'iPhone 375x812': Size(375, 812),
+  'iPhone 390x844': Size(390, 844),
+  'iPhone 430x932': Size(430, 932),
+};
+
 Future<void> _selectCategory(WidgetTester tester, String category) async {
   await tester.tap(find.byIcon(Icons.filter_alt_outlined));
   await tester.pumpAndSettle();
@@ -358,10 +587,29 @@ Future<void> _expectMobileSearchEmpty(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Finder _textFieldByLabel(String label) {
+  return find.byWidgetPredicate(
+    (widget) => widget is TextField && widget.decoration?.labelText == label,
+  );
+}
+
+Future<void> _openManualSaleDialog(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Producto externo'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectDialogUnit(WidgetTester tester, String label) async {
+  await tester.tap(find.text('Unidad (u)'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
 class _FakeCatalogRepository extends CatalogRepository {
-  _FakeCatalogRepository(this.products) : super(Dio());
+  _FakeCatalogRepository(this.products, this.unitOptions) : super(Dio());
 
   final List<ProductModel> products;
+  final List<UnitOfMeasureModel> unitOptions;
 
   @override
   Future<List<ProductModel>> getCachedProducts({Duration? maxAge}) async {
@@ -374,6 +622,11 @@ class _FakeCatalogRepository extends CatalogRepository {
     bool silent = false,
   }) async {
     return products;
+  }
+
+  @override
+  Future<List<UnitOfMeasureModel>> fetchUnitOfMeasures() async {
+    return unitOptions;
   }
 }
 
