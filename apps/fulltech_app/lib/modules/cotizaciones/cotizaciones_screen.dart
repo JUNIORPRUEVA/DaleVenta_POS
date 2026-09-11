@@ -41,6 +41,7 @@ import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
+import '../../core/utils/build_phase.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -813,10 +814,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _syncProductsOnEnter() {
     if (!mounted) return;
-    _clearMobileSearchFocus();
-    ref.invalidate(companySettingsProvider);
-    ref.invalidate(productTaxUiConfigProvider);
-    _loadProducts(silent: true);
+    // Este método se invoca desde `RouteAware.didPush()`/`didPopNext()`, y
+    // Flutter ejecuta `didPush()` de forma sincrónica dentro de
+    // `RouteObserver.subscribe()`, el cual se llama en
+    // `didChangeDependencies()` → fase de BUILD.
+    //
+    // Invalidar `companySettingsProvider` en fase de build hace que el primer
+    // `ref.watch` del mismo frame reconstruya el provider y notifique a TODOS
+    // sus listeners → `setState() or markNeedsBuild() called during build`
+    // (p. ej. AccountSettingsScreen / AppDrawer).
+    runOutsideBuildPhase(() {
+      if (!mounted) return;
+      _clearMobileSearchFocus();
+      ref.invalidate(companySettingsProvider);
+      ref.invalidate(productTaxUiConfigProvider);
+      _loadProducts(silent: true);
+    });
   }
 
   void _clearMobileSearchFocus() {
@@ -845,10 +858,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
-      _startLiveSync();
-      ref.invalidate(companySettingsProvider);
-      ref.invalidate(productTaxUiConfigProvider);
-      _loadProducts(silent: true);
+      // El resume puede dispararse con un frame de build en curso: mismo riesgo
+      // que el resto de entradas de ruta (ver `_syncProductsOnEnter`).
+      runOutsideBuildPhase(() {
+        if (!mounted) return;
+        _startLiveSync();
+        ref.invalidate(companySettingsProvider);
+        ref.invalidate(productTaxUiConfigProvider);
+        _loadProducts(silent: true);
+      });
       return;
     }
 

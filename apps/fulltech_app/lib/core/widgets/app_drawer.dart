@@ -11,6 +11,7 @@ import '../auth/admin_authorization.dart';
 import '../auth/app_permissions.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
+import '../company/company_settings_repository.dart';
 import '../models/user_model.dart';
 
 import '../design_system/icons/app_icon.dart';
@@ -529,7 +530,17 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         currentUser?.appRole ??
         ref.watch(authStateProvider).user?.appRole ??
         AppRole.unknown;
-    final sections = buildAppNavigationSections(ref, currentUser);
+    // Snapshot declarativo: la configuración de empresa se observa UNA sola vez
+    // aquí (build del drawer) y se pasa ya resuelta al constructor de
+    // navegación, que es puro. Así `buildAppNavigationSections` nunca ejecuta
+    // `ref.watch` dentro de un helper durante el build.
+    final multiWarehouseEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ??
+        false;
+    final sections = buildAppNavigationSections(
+      currentUser,
+      multiWarehouseEnabled: multiWarehouseEnabled,
+    );
     // Estado autoritativo del turno (fuente de verdad = backend). El drawer
     // móvil observa el MISMO provider que el resto de la app: si el turno
     // cambia (realtime/poll/resumed/reconexión), el grupo "Turno" se

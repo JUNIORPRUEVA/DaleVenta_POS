@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +23,7 @@ import '../routing/app_navigator.dart';
 import '../routing/route_access.dart';
 import '../routing/routes.dart';
 import '../theme/role_branding.dart';
+import '../utils/build_phase.dart';
 import '../utils/date_time_formatters.dart';
 import '../utils/money_formatters.dart';
 import 'app_drawer.dart';
@@ -81,11 +81,6 @@ class DesktopShellFooterContent {
 final desktopShellFooterContentProvider =
     StateProvider<DesktopShellFooterContent?>((ref) => null);
 
-bool _isShellBuildPhase() {
-  final phase = SchedulerBinding.instance.schedulerPhase;
-  return phase == SchedulerPhase.persistentCallbacks;
-}
-
 bool _sameShellFooterContent(
   DesktopShellFooterContent? current,
   DesktopShellFooterContent? next,
@@ -99,17 +94,10 @@ void setDesktopShellFooterContent(
   StateController<DesktopShellFooterContent?> notifier,
   DesktopShellFooterContent? content,
 ) {
-  void apply() {
+  runOutsideBuildPhase(() {
     if (_sameShellFooterContent(notifier.state, content)) return;
     notifier.state = content;
-  }
-
-  if (_isShellBuildPhase()) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
-    return;
-  }
-
-  apply();
+  });
 }
 
 void clearDesktopShellFooterContent({
@@ -117,19 +105,12 @@ void clearDesktopShellFooterContent({
   required String ownerId,
   bool Function(DesktopShellFooterContent current)? when,
 }) {
-  void apply() {
+  runOutsideBuildPhase(() {
     final current = notifier.state;
     if (current == null || current.ownerId != ownerId) return;
     if (when != null && !when(current)) return;
     notifier.state = null;
-  }
-
-  if (_isShellBuildPhase()) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => apply());
-    return;
-  }
-
-  apply();
+  });
 }
 
 class ResponsiveShell extends ConsumerStatefulWidget {
@@ -198,17 +179,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   }
 
   void _setShellStateSafely(VoidCallback update) {
-    void apply() {
+    runOutsideBuildPhase(() {
       if (!mounted) return;
       setState(update);
-    }
-
-    if (_isShellBuildPhase()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
-      return;
-    }
-
-    apply();
+    });
   }
 
   void _scheduleAuthorizationCleanup(String location) {
@@ -217,7 +191,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final notifier = ref.read(adminAuthorizationProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      notifier.clearIfExpired();
+      notifier.clearIfInvalidForLocation(location);
     });
   }
 
@@ -231,7 +205,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final theme = Theme.of(context);
     final user = _user;
     final sections = buildAppNavigationSections(
-      ref,
       user,
       multiWarehouseEnabled: _multiWarehouseEnabled,
     );

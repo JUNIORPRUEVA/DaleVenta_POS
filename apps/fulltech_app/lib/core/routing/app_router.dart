@@ -350,7 +350,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuth = auth.isAuthenticated;
       final loc = state.uri.toString();
       final path = state.uri.path;
-      ref.read(adminAuthorizationProvider.notifier).clearIfExpired();
+      ref
+          .read(adminAuthorizationProvider.notifier)
+          .clearIfInvalidForLocation(loc);
       final registrationDisabled = ref.read(
         businessRegistrationDisabledProvider,
       );

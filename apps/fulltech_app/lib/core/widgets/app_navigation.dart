@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/app_permissions.dart';
-import '../company/company_settings_repository.dart';
 import '../design_system/icons/app_icons.dart';
 import '../models/user_model.dart';
 import '../routing/routes.dart';
@@ -38,20 +36,27 @@ class AppNavigationSection {
   final List<AppNavigationItem> items;
 }
 
+/// Construye las secciones de navegación.
+///
+/// Función PURA: no recibe `WidgetRef` ni ejecuta `ref.watch`/`ref.read`.
+/// El estado del que depende (por ahora `multiWarehouseEnabled`) debe ser
+/// observado declarativamente por el widget (una sola vez, dentro de su
+/// `build`) y llegar aquí ya resuelto.
+///
+/// Esto evita que un helper invocado en medio del build provoque lecturas de
+/// providers con efectos colaterales (Riverpod reconstruye un provider
+/// invalidado sincrónicamente y notifica listeners durante el build →
+/// `setState() or markNeedsBuild() called during build`).
 List<AppNavigationSection> buildAppNavigationSections(
-  WidgetRef ref,
   UserModel? currentUser, {
-  bool? multiWarehouseEnabled,
+  required bool multiWarehouseEnabled,
 }) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
     return true;
   }
 
-  final resolvedMultiWarehouseEnabled =
-      multiWarehouseEnabled ??
-      (ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
-          true);
+  final resolvedMultiWarehouseEnabled = multiWarehouseEnabled;
 
   final sections = <AppNavigationSection>[
     AppNavigationSection(
