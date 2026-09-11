@@ -303,9 +303,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Devolver factura ${_invoiceNumber(sale)}'),
+        title: const Text('Devolver venta'),
         content: Text(
-          '${sale.hasInventoryTrackedItems ? 'Esta accion registrara una devolucion y restaurara el stock correspondiente.' : 'Esta venta no controla inventario: se revertira solo el cobro, sin mover stock.'}\n\nMonto disponible: ${formatRdCurrencyAccounting(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
+          'Esta operación registrará la devolución de la venta y revertirá automáticamente los movimientos correspondientes.\n\nFactura ${_invoiceNumber(sale)}\nMonto disponible: ${formatRdCurrencyAccounting(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
         ),
         actions: [
           TextButton(
@@ -339,85 +339,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         error: e,
         stackTrace: stackTrace,
         context: 'Devolver factura',
-        userMessage: message,
-      );
-      showCashToast(
-        context,
-        message.title,
-        detail: message.body,
-        isError: true,
-      );
-    }
-  }
-
-  Future<void> _cancelSale(SaleModel sale) async {
-    if (!sale.canCancel) {
-      final message = salesCancelMessage(
-        ApiException.detailed(
-          message: sale.isReturned
-              ? 'La factura ya fue devuelta completamente.'
-              : 'La venta ya fue cancelada.',
-          displayCode: sale.isReturned
-              ? 'SALE_ALREADY_FULLY_RETURNED'
-              : 'SALE_ALREADY_CANCELLED',
-        ),
-      );
-      showCashToast(
-        context,
-        message.title,
-        detail: message.body,
-        isError: true,
-      );
-      return;
-    }
-
-    final allowed = await ensureAdminAuthorization(
-      context,
-      ref,
-      permission: AppPermission.cancelSales,
-      reason: 'Cancelar venta',
-    );
-    if (!allowed || !mounted) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Cancelar factura ${_invoiceNumber(sale)}?'),
-        content: Text(
-          'La venta quedara registrada como cancelada y se revertiran los movimientos correspondientes.${sale.hasInventoryTrackedItems ? '' : '\n\nEsta venta no controla inventario: el stock no se modificara.'}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Conservar venta'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.cancel_outlined),
-            label: const Text('Cancelar venta'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    try {
-      await ref.read(ventasRepositoryProvider).deleteSale(sale.id);
-      if (!mounted) return;
-      await _load();
-      if (!mounted) return;
-      showCashToast(
-        context,
-        'Venta cancelada',
-        detail: 'La venta fue cancelada correctamente.',
-      );
-    } catch (e, stackTrace) {
-      if (!mounted) return;
-      final message = salesCancelMessage(e);
-      recordSalesOperationError(
-        error: e,
-        stackTrace: stackTrace,
-        context: 'Cancelar venta',
         userMessage: message,
       );
       showCashToast(
@@ -721,7 +642,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                       onPdf: _sharePdf,
                       onPrint: _printInvoice,
                       onReturn: _returnSale,
-                      onCancel: _cancelSale,
                     )
                   : Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -742,7 +662,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                             onPdf: _sharePdf,
                             onPrint: _printInvoice,
                             onReturn: _returnSale,
-                            onCancel: _cancelSale,
                           ),
                         ),
                         const SizedBox(width: 18),
@@ -765,9 +684,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                                       setState(() => _selected = null),
                                   onReturn: selected.canReturn
                                       ? () => _returnSale(selected)
-                                      : null,
-                                  onCancel: selected.canCancel
-                                      ? () => _cancelSale(selected)
                                       : null,
                                   onPdf: () => _sharePdf(selected),
                                   onPrint: () => _printInvoice(selected),
@@ -896,7 +812,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                 ),
                 onClose: () => Navigator.of(sheetContext).pop(),
                 onReturn: sale.canReturn ? () => _returnSale(sale) : null,
-                onCancel: sale.canCancel ? () => _cancelSale(sale) : null,
                 onPdf: () => _sharePdf(sale),
                 onPrint: () => _printInvoice(sale),
               ),
@@ -1081,7 +996,6 @@ class _InvoiceListCard extends StatelessWidget {
     required this.onPdf,
     required this.onPrint,
     required this.onReturn,
-    required this.onCancel,
   });
 
   final bool loading;
@@ -1096,7 +1010,6 @@ class _InvoiceListCard extends StatelessWidget {
   final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onPrint;
   final ValueChanged<SaleModel> onReturn;
-  final ValueChanged<SaleModel> onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -1248,7 +1161,6 @@ class _InvoiceListCard extends StatelessWidget {
                         onPdf: () => onPdf(sale),
                         onPrint: () => onPrint(sale),
                         onReturn: sale.canReturn ? () => onReturn(sale) : null,
-                        onCancel: sale.canCancel ? () => onCancel(sale) : null,
                       );
                     },
                   ),
@@ -1739,7 +1651,6 @@ class _InvoiceRow extends StatelessWidget {
     required this.onPdf,
     required this.onPrint,
     required this.onReturn,
-    required this.onCancel,
   });
 
   final SaleModel sale;
@@ -1750,7 +1661,6 @@ class _InvoiceRow extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onPrint;
   final VoidCallback? onReturn;
-  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -1764,7 +1674,6 @@ class _InvoiceRow extends StatelessWidget {
         onPdf: onPdf,
         onPrint: onPrint,
         onReturn: onReturn,
-        onCancel: onCancel,
       );
     }
     return InkWell(
@@ -1853,13 +1762,6 @@ class _InvoiceRow extends StatelessWidget {
               icon: const Icon(Icons.assignment_return_outlined, size: 19),
               color: AppColors.warning,
             ),
-            IconButton(
-              tooltip: sale.canCancel ? 'Cancelar venta' : 'Venta cerrada',
-              onPressed: onCancel,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.cancel_outlined, size: 19),
-              color: AppColors.error,
-            ),
           ],
         ),
       ),
@@ -1876,7 +1778,6 @@ class _MobileInvoiceCard extends StatelessWidget {
     required this.onPdf,
     required this.onPrint,
     required this.onReturn,
-    required this.onCancel,
   });
 
   final SaleModel sale;
@@ -1886,7 +1787,6 @@ class _MobileInvoiceCard extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onPrint;
   final VoidCallback? onReturn;
-  final VoidCallback? onCancel;
 
   Future<void> _openActions(BuildContext context) async {
     await showModalBottomSheet<void>(
@@ -1914,12 +1814,6 @@ class _MobileInvoiceCard extends StatelessWidget {
               : () {
                   Navigator.of(sheetContext).pop();
                   onReturn!();
-                },
-          onCancel: onCancel == null
-              ? null
-              : () {
-                  Navigator.of(sheetContext).pop();
-                  onCancel!();
                 },
         );
       },
@@ -2038,7 +1932,6 @@ class _InvoiceActionsSheet extends StatelessWidget {
     required this.onPdf,
     required this.onPrint,
     required this.onReturn,
-    required this.onCancel,
   });
 
   final SaleModel sale;
@@ -2048,7 +1941,6 @@ class _InvoiceActionsSheet extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onPrint;
   final VoidCallback? onReturn;
-  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -2121,15 +2013,6 @@ class _InvoiceActionsSheet extends StatelessWidget {
                 onTap: onReturn!,
               ),
             ],
-            if (onCancel != null) ...[
-              const Divider(height: 1),
-              _ActionSheetTile(
-                icon: Icons.cancel_outlined,
-                label: 'Cancelar venta',
-                color: AppColors.error,
-                onTap: onCancel!,
-              ),
-            ],
             const SizedBox(height: 8),
           ],
         ),
@@ -2171,7 +2054,6 @@ class _InvoiceDetailPanel extends StatelessWidget {
     required this.onPdf,
     required this.onPrint,
     required this.onReturn,
-    required this.onCancel,
   });
 
   final SaleModel sale;
@@ -2182,7 +2064,6 @@ class _InvoiceDetailPanel extends StatelessWidget {
   final VoidCallback onPdf;
   final VoidCallback onPrint;
   final VoidCallback? onReturn;
-  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -2333,18 +2214,6 @@ class _InvoiceDetailPanel extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.secondary,
                       padding: const EdgeInsets.symmetric(vertical: 15),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onCancel,
-                    icon: const Icon(Icons.cancel_outlined),
-                    label: const Text('Cancelar'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      foregroundColor: AppColors.error,
                     ),
                   ),
                 ),

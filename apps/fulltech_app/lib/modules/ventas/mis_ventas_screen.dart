@@ -502,8 +502,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                           ),
                                       onReturn: (sale) =>
                                           _returnSale(context, sale),
-                                      onCancel: (sale) =>
-                                          _cancelSale(context, sale),
                                     ),
                                     SizedBox(height: gap),
                                     _SalesSummary(
@@ -572,7 +570,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                       onPdf: (sale) =>
                           _openSaleInvoicePdfPreview(context, sale),
                       onReturn: (sale) => _returnSale(context, sale),
-                      onCancel: (sale) => _cancelSale(context, sale),
                     ),
                     SizedBox(height: gap),
                     _SalesSummary(
@@ -666,7 +663,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                         onPdf: (sale) =>
                             _openSaleInvoicePdfPreview(context, sale),
                         onReturn: (sale) => _returnSale(context, sale),
-                        onCancel: (sale) => _cancelSale(context, sale),
                         compact: true,
                       ),
               ),
@@ -1022,7 +1018,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Devolver venta'),
         content: Text(
-          '${sale.hasInventoryTrackedItems ? 'Esta acción registrará una devolución y restaurará el stock correspondiente.' : 'Esta venta no controla inventario: se revertirá solo el cobro, sin mover stock.'} ¿Deseas continuar?\n\nMonto disponible: ${_money(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
+          'Esta operación registrará la devolución de la venta y revertirá automáticamente los movimientos correspondientes. ¿Deseas continuar?\n\nMonto disponible: ${_money(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
         ),
         actions: [
           TextButton(
@@ -1054,83 +1050,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
         error: e,
         stackTrace: stackTrace,
         context: 'Devolver venta',
-        userMessage: message,
-      );
-      showCashToast(
-        context,
-        message.title,
-        detail: message.body,
-        isError: true,
-      );
-    }
-  }
-
-  Future<void> _cancelSale(BuildContext context, SaleModel sale) async {
-    if (!sale.canCancel) {
-      final message = salesCancelMessage(
-        ApiException.detailed(
-          message: sale.isReturned
-              ? 'La venta ya fue devuelta completamente.'
-              : 'La venta ya fue cancelada.',
-          displayCode: sale.isReturned
-              ? 'SALE_ALREADY_FULLY_RETURNED'
-              : 'SALE_ALREADY_CANCELLED',
-        ),
-      );
-      showCashToast(
-        context,
-        message.title,
-        detail: message.body,
-        isError: true,
-      );
-      return;
-    }
-
-    final allowed = await ensureAdminAuthorization(
-      context,
-      ref,
-      permission: AppPermission.cancelSales,
-      reason: 'Cancelar venta',
-    );
-    if (!allowed || !context.mounted) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancelar esta venta?'),
-        content: const Text(
-          'La venta quedara registrada como cancelada y se revertiran los movimientos correspondientes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Conservar venta'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.cancel_outlined),
-            label: const Text('Cancelar venta'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    try {
-      await ref.read(ventasControllerProvider.notifier).deleteSale(sale.id);
-      if (!context.mounted) return;
-      showCashToast(
-        context,
-        'Venta cancelada',
-        detail: 'La venta fue cancelada correctamente.',
-      );
-    } catch (e, stackTrace) {
-      if (!context.mounted) return;
-      final message = salesCancelMessage(e);
-      recordSalesOperationError(
-        error: e,
-        stackTrace: stackTrace,
-        context: 'Cancelar venta',
         userMessage: message,
       );
       showCashToast(
@@ -1607,8 +1526,6 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                                       _openSaleInvoicePdfPreview(context, sale),
                                   onReturn: (sale) =>
                                       _returnSale(context, sale),
-                                  onCancel: (sale) =>
-                                      _cancelSale(context, sale),
                                   dense: true,
                                 );
                               },
@@ -1635,7 +1552,6 @@ class _SalesLedgerCard extends StatelessWidget {
     required this.onView,
     required this.onPdf,
     required this.onReturn,
-    required this.onCancel,
     this.compact = false,
   });
 
@@ -1647,7 +1563,6 @@ class _SalesLedgerCard extends StatelessWidget {
   final ValueChanged<SaleModel> onView;
   final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onReturn;
-  final ValueChanged<SaleModel> onCancel;
   final bool compact;
 
   @override
@@ -1734,7 +1649,6 @@ class _SalesLedgerCard extends StatelessWidget {
                     onView: onView,
                     onPdf: onPdf,
                     onReturn: onReturn,
-                    onCancel: onCancel,
                   );
                 },
               ),
@@ -1833,16 +1747,6 @@ class _SalesLedgerCard extends StatelessWidget {
                                       Icons.assignment_return_outlined,
                                     ),
                                   ),
-                                  IconButton(
-                                    tooltip: sale.canCancel
-                                        ? 'Cancelar venta'
-                                        : 'Venta cerrada',
-                                    onPressed: sale.canCancel
-                                        ? () => onCancel(sale)
-                                        : null,
-                                    icon: const Icon(Icons.cancel_outlined),
-                                    color: AppColors.error,
-                                  ),
                                 ],
                               ),
                             ),
@@ -1869,7 +1773,6 @@ class _SalesLedgerMobileRow extends StatelessWidget {
     required this.onView,
     required this.onPdf,
     required this.onReturn,
-    required this.onCancel,
     this.dense = false,
   });
 
@@ -1881,7 +1784,6 @@ class _SalesLedgerMobileRow extends StatelessWidget {
   final ValueChanged<SaleModel> onView;
   final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onReturn;
-  final ValueChanged<SaleModel> onCancel;
   final bool dense;
 
   @override
@@ -1981,15 +1883,6 @@ class _SalesLedgerMobileRow extends StatelessWidget {
                     tooltip: sale.canReturn ? 'Devolver' : 'Venta ya devuelta',
                     onPressed: sale.canReturn ? () => onReturn(sale) : null,
                     icon: const Icon(Icons.assignment_return_outlined),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.outlined(
-                    tooltip: sale.canCancel
-                        ? 'Cancelar venta'
-                        : 'Venta cerrada',
-                    onPressed: sale.canCancel ? () => onCancel(sale) : null,
-                    icon: const Icon(Icons.cancel_outlined),
                     visualDensity: VisualDensity.compact,
                   ),
                 ],
