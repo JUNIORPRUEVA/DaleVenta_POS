@@ -11,6 +11,7 @@ SaleModel _sale({
   String id = 'sale-1',
   double total = 100,
   bool isDeleted = false,
+  String returnStatus = 'ACTIVE',
 }) {
   return SaleModel(
     id: id,
@@ -33,6 +34,7 @@ SaleModel _sale({
     creditBalance: 0,
     creditStatus: 'none',
     isDeleted: isDeleted,
+    returnStatus: returnStatus,
     deletedAt: null,
     items: const [],
   );
@@ -50,7 +52,8 @@ Future<void> _pumpPanel(
           loadSales: loadSales,
           money: (value) => '\$${value.toStringAsFixed(2)}',
           dateLabel: (_) => '01 ago',
-          shortId: (sale) => sale.id.length > 6 ? sale.id.substring(0, 6) : sale.id,
+          shortId: (sale) =>
+              sale.id.length > 6 ? sale.id.substring(0, 6) : sale.id,
           onViewSale: (_) {},
           onOpenPdf: (_) {},
           onReprintTicket: (_) {},
@@ -88,20 +91,41 @@ void main() {
     expect(find.text('Ir al historial de ventas'), findsOneWidget);
   });
 
+  testWidgets(
+    'venta parcialmente devuelta no se muestra como activa completa',
+    (tester) async {
+      await _pumpPanel(
+        tester,
+        loadSales: () async => [_sale(returnStatus: 'PARTIALLY_RETURNED')],
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Parcial'), findsOneWidget);
+      expect(find.text('Activa'), findsNothing);
+    },
+  );
+
   testWidgets('error HTTP muestra error state con Reintentar', (tester) async {
     await _pumpPanel(
       tester,
-      loadSales: () async => throw ApiException('No se pudieron cargar las ventas'),
+      loadSales: () async =>
+          throw ApiException('No se pudieron cargar las ventas'),
     );
 
     await tester.pumpAndSettle();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('No se pudieron cargar las ventas recientes.'), findsOneWidget);
+    expect(
+      find.text('No se pudieron cargar las ventas recientes.'),
+      findsOneWidget,
+    );
     expect(find.text('Reintentar'), findsOneWidget);
   });
 
-  testWidgets('excepción de mapping también termina en error state', (tester) async {
+  testWidgets('excepción de mapping también termina en error state', (
+    tester,
+  ) async {
     await _pumpPanel(
       tester,
       loadSales: () async => throw StateError('campo inesperado'),
@@ -110,7 +134,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('No se pudieron cargar las ventas recientes.'), findsOneWidget);
+    expect(
+      find.text('No se pudieron cargar las ventas recientes.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('timeout (DioException) termina en error state', (tester) async {
@@ -122,7 +149,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('No se pudieron cargar las ventas recientes.'), findsOneWidget);
+    expect(
+      find.text('No se pudieron cargar las ventas recientes.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Reintentar vuelve a cargar tras un error', (tester) async {
@@ -147,7 +177,9 @@ void main() {
     expect(calls, 2);
   });
 
-  testWidgets('refresh manual no duplica requests mientras hay uno en vuelo', (tester) async {
+  testWidgets('refresh manual no duplica requests mientras hay uno en vuelo', (
+    tester,
+  ) async {
     var calls = 0;
     final gate = Completer<List<SaleModel>>();
     await _pumpPanel(
@@ -172,24 +204,29 @@ void main() {
     expect(calls, 1);
   });
 
-  testWidgets('cerrar panel durante request no rompe ni pinta respuesta vieja', (tester) async {
-    final gate = Completer<List<SaleModel>>();
-    await _pumpPanel(tester, loadSales: () => gate.future);
-    await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  testWidgets(
+    'cerrar panel durante request no rompe ni pinta respuesta vieja',
+    (tester) async {
+      final gate = Completer<List<SaleModel>>();
+      await _pumpPanel(tester, loadSales: () => gate.future);
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    // Cerrar/desmontar el panel mientras el request está en vuelo.
-    await tester.pumpWidget(const SizedBox.shrink());
+      // Cerrar/desmontar el panel mientras el request está en vuelo.
+      await tester.pumpWidget(const SizedBox.shrink());
 
-    // La respuesta vieja llega DESPUÉS del dispose: no debe lanzar
-    // setState after dispose ni pintar nada.
-    gate.complete([_sale()]);
-    await tester.pumpAndSettle();
+      // La respuesta vieja llega DESPUÉS del dispose: no debe lanzar
+      // setState after dispose ni pintar nada.
+      gate.complete([_sale()]);
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('reabrir panel tras una venta nueva refresca la lista', (tester) async {
+  testWidgets('reabrir panel tras una venta nueva refresca la lista', (
+    tester,
+  ) async {
     // Primer panel: sin ventas.
     await _pumpPanel(tester, loadSales: () async => []);
     await tester.pumpAndSettle();

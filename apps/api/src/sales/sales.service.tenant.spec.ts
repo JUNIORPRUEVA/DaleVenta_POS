@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { SalesService } from "./sales.service";
 
 describe("SalesService tenant isolation", () => {
@@ -163,24 +164,29 @@ describe("SalesService tenant isolation", () => {
   it("rejects FULLPOS sale lines until writable stock is proven", async () => {
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(null) },
-      company: { findFirst: jest.fn().mockResolvedValue({ name: "Empresa A" }) },
+      company: {
+        findFirst: jest.fn().mockResolvedValue({ name: "Empresa A" }),
+      },
       appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     const service = serviceWith(prisma);
 
     await expect(
-      service.create(user as never, {
-        items: [
-          {
-            productName: "Tela FULLPOS",
-            productSource: "FULLPOS",
-            sourceProductId: "same-remote-id",
-            qty: 5.5,
-            priceSoldUnit: 20,
-            costUnitSnapshot: 10,
-          },
-        ],
-      } as never),
+      service.create(
+        user as never,
+        {
+          items: [
+            {
+              productName: "Tela FULLPOS",
+              productSource: "FULLPOS",
+              sourceProductId: "same-remote-id",
+              qty: 5.5,
+              priceSoldUnit: 20,
+              costUnitSnapshot: 10,
+            },
+          ],
+        } as never,
+      ),
     ).rejects.toThrow("FULLPOS");
   });
 
@@ -234,6 +240,8 @@ describe("SalesService tenant isolation", () => {
       creditPaidAmount: 0,
       creditBalance: 0,
       creditStatus: "none",
+      kind: "invoice",
+      status: "PAID",
       isDeleted: false,
       deletedAt: null,
     };
@@ -247,20 +255,27 @@ describe("SalesService tenant isolation", () => {
     };
     const service = serviceWith(prisma);
 
-    await expect(
-      service.listInvoices(
-        user as never,
-        "2026-08-01",
-        "2026-08-20",
-        undefined,
-        true,
-      ),
-    ).resolves.toEqual([fallbackSale]);
+    const rows = await service.listInvoices(
+      user as never,
+      "2026-08-01",
+      "2026-08-20",
+      undefined,
+      true,
+    );
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        ...fallbackSale,
+        returnStatus: "ACTIVE",
+        canReturn: true,
+      }),
+    ]);
 
     expect(prisma.sale.findMany).toHaveBeenCalledTimes(2);
     expect(prisma.sale.findMany).toHaveBeenLastCalledWith({
       where: {
         companyId: user.companyId,
+        kind: "invoice",
         saleDate: {
           gte: new Date("2026-08-01T04:00:00.000Z"),
           lt: new Date("2026-08-21T04:00:00.000Z"),
@@ -293,6 +308,7 @@ describe("SalesService tenant isolation", () => {
     expect(prisma.sale.findMany).toHaveBeenCalledWith({
       where: {
         companyId: user.companyId,
+        kind: "invoice",
         isDeleted: false,
         saleDate: {
           gte: new Date("2026-08-01T04:00:00.000Z"),
@@ -352,5 +368,329 @@ describe("SalesService tenant isolation", () => {
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: undefined }),
     );
+  });
+
+  it("derives return summary for invoices without exposing refund documents", async () => {
+    const invoice = {
+      id: "invoice-1",
+      companyId: user.companyId,
+      userId: user.id,
+      customerId: null,
+      saleDate: new Date("2026-08-20T12:00:00.000Z"),
+      totalSold: new Prisma.Decimal(100),
+      kind: "invoice",
+      isDeleted: false,
+      items: [
+        {
+          id: "item-1",
+          qty: new Prisma.Decimal(2),
+        },
+      ],
+      refunds: [
+        {
+          id: "refund-1",
+          kind: "refund",
+          isDeleted: false,
+          totalSold: new Prisma.Decimal(-50),
+          items: [
+            {
+              refundedSaleItemId: "item-1",
+              qty: new Prisma.Decimal(1),
+              subtotalSold: new Prisma.Decimal(-50),
+            },
+          ],
+        },
+      ],
+    };
+    const prisma = {
+      sale: { findMany: jest.fn().mockResolvedValue([invoice]) },
+    };
+    const service = serviceWith(prisma);
+
+    const rows = await service.listInvoices(user as never);
+
+    expect(prisma.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: user.companyId,
+          kind: "invoice",
+          isDeleted: false,
+        }),
+      }),
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: "invoice-1",
+        returnStatus: "PARTIALLY_RETURNED",
+        canReturn: true,
+      }),
+    ]);
+    expect(rows[0].returnedAmount.toString()).toBe("50");
+    expect(rows[0].returnableAmount.toString()).toBe("50");
+  });
+
+  describe("financial summary cancellation policy", () => {
+    function money(value: number | string | null) {
+      return value === null ? null : new Prisma.Decimal(value);
+    }
+
+    function aggregate(
+      totalSold: number | string | null,
+      totalCost: number | string | null,
+      totalProfit: number | string | null,
+      commissionAmount: number | string | null,
+    ) {
+      return {
+        _sum: {
+          totalSold: money(totalSold),
+          totalCost: money(totalCost),
+          totalProfit: money(totalProfit),
+          commissionAmount: money(commissionAmount),
+        },
+      };
+    }
+
+    function summaryRow(
+      userId: string,
+      totalSold: number,
+      totalProfit: number,
+      commissionAmount: number,
+    ) {
+      return {
+        userId,
+        totalSold: new Prisma.Decimal(totalSold),
+        totalProfit: new Prisma.Decimal(totalProfit),
+        commissionAmount: new Prisma.Decimal(commissionAmount),
+      };
+    }
+
+    it("reverses a prior-period cancelled sale in the cancellation period", async () => {
+      const aggregateMock = jest
+        .fn()
+        .mockResolvedValueOnce(aggregate(null, null, null, null))
+        .mockResolvedValueOnce(aggregate(null, null, null, null))
+        .mockResolvedValueOnce(aggregate(1000, 700, 300, 30));
+      const countMock = jest.fn().mockResolvedValue(0);
+      const service = serviceWith({
+        sale: { aggregate: aggregateMock, count: countMock },
+      });
+
+      const summary = await service.summaryMine(
+        user as never,
+        "2026-09-08",
+        "2026-09-08",
+      );
+
+      expect(summary).toMatchObject({
+        totalSales: 0,
+        totalSold: -1000,
+        totalCost: -700,
+        totalProfit: -300,
+        totalCommission: -30,
+      });
+      expect(aggregateMock.mock.calls[2][0].where).toMatchObject({
+        companyId: user.companyId,
+        kind: "invoice",
+        isDeleted: true,
+        deletedAt: {
+          gte: new Date("2026-09-08T04:00:00.000Z"),
+          lt: new Date("2026-09-09T04:00:00.000Z"),
+        },
+        saleDate: { lt: new Date("2026-09-08T04:00:00.000Z") },
+      });
+    });
+
+    it("keeps an active non-cancelled sale summary unchanged", async () => {
+      const service = serviceWith({
+        sale: {
+          aggregate: jest
+            .fn()
+            .mockResolvedValueOnce(aggregate(1000, 700, 300, 30))
+            .mockResolvedValueOnce(aggregate(null, null, null, null))
+            .mockResolvedValueOnce(aggregate(null, null, null, null)),
+          count: jest.fn().mockResolvedValue(1),
+        },
+      });
+
+      await expect(
+        service.summaryMine(user as never, "2026-09-07", "2026-09-07"),
+      ).resolves.toMatchObject({
+        totalSales: 1,
+        totalSold: 1000,
+        totalCost: 700,
+        totalProfit: 300,
+        totalCommission: 30,
+      });
+    });
+
+    it("does not double-reverse an idempotent cancellation represented by one cancelled sale row", async () => {
+      const service = serviceWith({
+        sale: {
+          aggregate: jest
+            .fn()
+            .mockResolvedValueOnce(aggregate(null, null, null, null))
+            .mockResolvedValueOnce(aggregate(null, null, null, null))
+            .mockResolvedValueOnce(aggregate(1000, 700, 300, 30)),
+          count: jest.fn().mockResolvedValue(0),
+        },
+      });
+
+      await expect(
+        service.summaryMine(user as never, "2026-09-08", "2026-09-08"),
+      ).resolves.toMatchObject({
+        totalSold: -1000,
+        totalCost: -700,
+        totalProfit: -300,
+      });
+    });
+
+    it("scopes active refund and cancelled summary queries by companyId", async () => {
+      const aggregateMock = jest
+        .fn()
+        .mockResolvedValueOnce(aggregate(100, 70, 30, 3))
+        .mockResolvedValueOnce(aggregate(-20, -14, -6, 0))
+        .mockResolvedValueOnce(aggregate(50, 35, 15, 1.5));
+      const countMock = jest.fn().mockResolvedValue(1);
+      const service = serviceWith({
+        sale: { aggregate: aggregateMock, count: countMock },
+      });
+
+      await service.summaryMine(user as never, "2026-09-08", "2026-09-08");
+
+      for (const call of aggregateMock.mock.calls) {
+        expect(call[0].where.companyId).toBe(user.companyId);
+      }
+      expect(countMock.mock.calls[0][0].where.companyId).toBe(user.companyId);
+    });
+
+    it("reconciles summaryMine and summaryByUser for the same seller and period", async () => {
+      const saleApi = {
+        aggregate: jest
+          .fn()
+          .mockResolvedValueOnce(aggregate(1000, 700, 300, 30))
+          .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
+          .mockResolvedValueOnce(aggregate(100, 70, 30, 3)),
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([summaryRow(user.id, 1000, 300, 30)])
+          .mockResolvedValueOnce([summaryRow(user.id, -200, -60, 0)])
+          .mockResolvedValueOnce([summaryRow(user.id, 100, 30, 3)]),
+      };
+      const service = serviceWith({
+        sale: saleApi,
+        user: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([
+              {
+                id: user.id,
+                email: "user@demo.test",
+                nombreCompleto: "User A",
+              },
+            ]),
+        },
+      });
+
+      const mine = await service.summaryMine(
+        user as never,
+        "2026-09-08",
+        "2026-09-08",
+      );
+      const byUser = await service.summaryByUser(
+        user as never,
+        "2026-09-08",
+        "2026-09-08",
+        user.id,
+      );
+
+      expect(byUser.totals.totalSold).toBeCloseTo(mine.totalSold);
+      expect(byUser.totals.totalProfit).toBeCloseTo(mine.totalProfit);
+      expect(byUser.totals.totalCommission).toBeCloseTo(mine.totalCommission);
+      expect(saleApi.findMany.mock.calls[0][0].where).toMatchObject({
+        companyId: user.companyId,
+        userId: user.id,
+        kind: "invoice",
+        isDeleted: false,
+      });
+    });
+  });
+
+  describe("profit snapshot regressions", () => {
+    const product = {
+      id: "11111111-1111-4111-8111-111111111111",
+      nombre: "Producto historico",
+      imagen: null,
+      costo: new Prisma.Decimal(100),
+      stock: new Prisma.Decimal(10),
+      taxTreatment: "INHERIT",
+      taxRate: null,
+      taxPriceMode: null,
+      unitOfMeasure: {
+        code: "UNIT",
+        name: "Unidad",
+        symbol: "u",
+        allowDecimals: false,
+        precision: 0,
+      },
+    };
+
+    it("keeps historical profit based on the sale-time cost snapshot", () => {
+      const service = serviceWith({} as any);
+      const normalized = (service as any).normalizeItem(
+        { productId: product.id, qty: 2, priceSoldUnit: 150 },
+        0,
+        new Map([[product.id, product]]),
+      );
+      product.costo = new Prisma.Decimal(150);
+
+      expect(normalized.costUnitSnapshot.toString()).toBe("100");
+      expect(normalized.subtotalCost.toString()).toBe("200");
+      expect(normalized.profit.toString()).toBe("100");
+    });
+
+    it("keeps a sale snapshot unchanged after a later purchase updates Product.costo", () => {
+      const service = serviceWith({} as any);
+      const normalized = (service as any).normalizeItem(
+        { productId: product.id, qty: 1, priceSoldUnit: 150 },
+        0,
+        new Map([[product.id, { ...product, costo: new Prisma.Decimal(100) }]]),
+      );
+      const productAfterPurchase = {
+        ...product,
+        costo: new Prisma.Decimal(140),
+      };
+
+      expect(productAfterPurchase.costo.toString()).toBe("140");
+      expect(normalized.costUnitSnapshot.toString()).toBe("100");
+      expect(normalized.profit.toString()).toBe("50");
+    });
+
+    it("reconciles quick/manual sale and normal sale profit for the same economics", () => {
+      const service = serviceWith({} as any);
+      const normal = (service as any).normalizeItem(
+        { productId: product.id, qty: 2, priceSoldUnit: 150 },
+        0,
+        new Map([[product.id, { ...product, costo: new Prisma.Decimal(100) }]]),
+      );
+      const quick = (service as any).normalizeItem(
+        {
+          productName: "Producto historico",
+          qty: 2,
+          priceSoldUnit: 150,
+          costUnitSnapshot: 100,
+        },
+        0,
+        new Map(),
+      );
+
+      expect(quick.subtotalSold.toString()).toBe(
+        normal.subtotalSold.toString(),
+      );
+      expect(quick.subtotalCost.toString()).toBe(
+        normal.subtotalCost.toString(),
+      );
+      expect(quick.profit.toString()).toBe(normal.profit.toString());
+    });
   });
 });

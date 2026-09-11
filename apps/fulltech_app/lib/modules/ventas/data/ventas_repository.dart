@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
+import '../../../core/api/api_error_mapper.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/token_storage.dart';
 import '../../../core/cache/local_json_cache.dart';
@@ -540,23 +541,36 @@ class VentasRepository {
     try {
       await _dio.delete(ApiRoutes.saleDetail(id));
     } on DioException catch (e) {
-      throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo eliminar la venta'),
-        e.response?.statusCode,
+      throw ApiErrorMapper.fromDio(
+        e,
+        fallbackMessage: 'No se pudo cancelar la venta',
+        dio: _dio,
       );
     }
   }
 
-  Future<SaleModel> returnSale(String id) async {
+  Future<SaleModel> returnSale(String id, {String? clientRequestId}) async {
     try {
-      final res = await _dio.post(ApiRoutes.saleReturn(id));
+      final requestId = (clientRequestId ?? '').trim().isNotEmpty
+          ? clientRequestId!.trim()
+          : _returnClientRequestId(id);
+      final res = await _dio.post(
+        ApiRoutes.saleReturn(id),
+        data: {'clientRequestId': requestId},
+      );
       return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
     } on DioException catch (e) {
-      throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo devolver la venta'),
-        e.response?.statusCode,
+      throw ApiErrorMapper.fromDio(
+        e,
+        fallbackMessage: 'No se pudo devolver la venta',
+        dio: _dio,
       );
     }
+  }
+
+  String _returnClientRequestId(String saleId) {
+    final normalized = saleId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
+    return 'return_req_${DateTime.now().microsecondsSinceEpoch}_$normalized';
   }
 
   Future<String> createInvoicePdfShareLink({

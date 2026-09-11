@@ -545,8 +545,8 @@ export class CashService {
     for (const sale of sales) {
       const cash = this.toNumber(sale.paymentCashAmount);
       const transfer = this.toNumber(sale.paymentTransferAmount);
-      if (sale.isDeleted || sale.kind === "return") {
-        refundsCash += cash;
+      if (sale.isDeleted || sale.kind === "refund") {
+        refundsCash += Math.abs(cash);
         totalRefunds += 1;
         continue;
       }

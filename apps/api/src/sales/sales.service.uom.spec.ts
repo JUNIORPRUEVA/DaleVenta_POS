@@ -25,7 +25,9 @@ describe("SalesService UoM decimal foundation", () => {
         ),
         discountAmount: new Prisma.Decimal(0),
         lines: input.lines.map((line: any, index: number) => {
-          const lineTotal = new Prisma.Decimal(line.quantity).mul(line.unitPrice);
+          const lineTotal = new Prisma.Decimal(line.quantity).mul(
+            line.unitPrice,
+          );
           return {
             index,
             grossAmount: lineTotal,
@@ -277,6 +279,14 @@ describe("SalesService UoM decimal foundation", () => {
           fiscalCustomerName: null,
           customerAddressSnapshot: null,
           customerPhoneSnapshot: null,
+          paymentMethod: "cash",
+          totalSold: new Prisma.Decimal("25"),
+          paymentCashAmount: new Prisma.Decimal("25"),
+          paymentTransferAmount: new Prisma.Decimal("0"),
+          creditAmount: new Prisma.Decimal("0"),
+          creditPaidAmount: new Prisma.Decimal("0"),
+          creditBalance: new Prisma.Decimal("0"),
+          creditPayments: [],
           items: [originalItem],
         }),
         create: refundCreate,
@@ -314,6 +324,14 @@ describe("SalesService UoM decimal foundation", () => {
               fiscalCustomerName: null,
               customerAddressSnapshot: null,
               customerPhoneSnapshot: null,
+              paymentMethod: "cash",
+              totalSold: new Prisma.Decimal("25"),
+              paymentCashAmount: new Prisma.Decimal("25"),
+              paymentTransferAmount: new Prisma.Decimal("0"),
+              creditAmount: new Prisma.Decimal("0"),
+              creditPaidAmount: new Prisma.Decimal("0"),
+              creditBalance: new Prisma.Decimal("0"),
+              creditPayments: [],
               items: [originalItem],
             }),
             create: refundCreate,

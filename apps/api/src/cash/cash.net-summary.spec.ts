@@ -10,7 +10,7 @@ import { CashService } from "./cash.service";
 describe("CashService net-cash summary regression (TICKET-CASH-CHANGE-02)", () => {
   const companyId = "11111111-1111-1111-1111-111111111111";
 
-  function harness(sale: Record<string, unknown>) {
+  function harness(sale: Record<string, unknown> | Record<string, unknown>[]) {
     const prisma = {
       cashSession: {
         findFirst: jest.fn().mockResolvedValue({
@@ -19,7 +19,7 @@ describe("CashService net-cash summary regression (TICKET-CASH-CHANGE-02)", () =
         }),
       },
       sale: {
-        findMany: jest.fn().mockResolvedValue([sale]),
+        findMany: jest.fn().mockResolvedValue(Array.isArray(sale) ? sale : [sale]),
       },
       cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
       saleCreditPayment: { findMany: jest.fn().mockResolvedValue([]) },
@@ -62,5 +62,29 @@ describe("CashService net-cash summary regression (TICKET-CASH-CHANGE-02)", () =
     expect(summary.salesCashTotal).toBeCloseTo(0, 2);
     expect(summary.salesTransferTotal).toBeCloseTo(850, 2);
     expect(summary.expectedCash).toBeCloseTo(0, 2);
+  });
+
+  it("kind=refund se cuenta como devolución, no como ticket normal, y conserva efectivo esperado", async () => {
+    const { service } = harness([
+      netCashSale,
+      {
+        ...netCashSale,
+        totalSold: new Prisma.Decimal(-200),
+        totalProfit: new Prisma.Decimal(-80),
+        paymentMethod: "refund",
+        paymentCashAmount: new Prisma.Decimal(-200),
+        paymentTransferAmount: new Prisma.Decimal(0),
+        kind: "refund",
+      },
+    ]);
+
+    const summary = await service.buildSummaryForSession("shift-1", companyId);
+
+    expect(summary.totalTickets).toBe(1);
+    expect(summary.totalRefunds).toBe(1);
+    expect(summary.refundsCash).toBeCloseTo(200, 2);
+    expect(summary.salesCashTotal).toBeCloseTo(850, 2);
+    expect(summary.totalSales).toBeCloseTo(850, 2);
+    expect(summary.expectedCash).toBeCloseTo(650, 2);
   });
 });

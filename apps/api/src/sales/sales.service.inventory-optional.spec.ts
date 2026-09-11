@@ -377,8 +377,14 @@ describe("SalesService optional inventory tracking", () => {
         callback({
           sale: {
             findFirst: jest.fn().mockResolvedValue(sale),
-            count: jest.fn().mockResolvedValue(0),
             updateMany,
+          },
+          saleItem: {
+            groupBy: jest.fn().mockResolvedValue([]),
+            findMany: jest.fn().mockResolvedValue([]),
+          },
+          inventoryMovement: {
+            groupBy: jest.fn().mockResolvedValue([]),
           },
         }),
       ),
@@ -394,6 +400,87 @@ describe("SalesService optional inventory tracking", () => {
     expect(inventory.increaseStockInTransaction).toHaveBeenCalledTimes(1);
     expect(inventory.increaseStockInTransaction).toHaveBeenCalledWith(
       expect.anything(),
+      expect.objectContaining({
+        productId: "tracked",
+        warehouseId: "warehouse-1",
+        quantity: new Prisma.Decimal(2),
+        type: InventoryMovementType.SALE_CANCELLATION,
+      }),
+    );
+  });
+
+  it("cancels only the remaining inventory after a partial return", async () => {
+    const sale = {
+      id: "sale-partial-cancel",
+      companyId,
+      isDeleted: false,
+      kind: "invoice",
+      items: [
+        {
+          id: "item-partial",
+          productId: "tracked",
+          productSource: "LOCAL",
+          warehouseId: "warehouse-1",
+          qty: new Prisma.Decimal(3),
+          inventoryTrackedSnapshot: true,
+        },
+      ],
+    };
+    const updateMany = jest.fn().mockResolvedValueOnce({ count: 1 });
+    const tx = {
+      sale: {
+        findFirst: jest.fn().mockResolvedValue(sale),
+        updateMany,
+      },
+      saleItem: {
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            refundedSaleItemId: "item-partial",
+            _sum: { qty: new Prisma.Decimal(1) },
+          },
+        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: "refund-item-1", refundedSaleItemId: "item-partial" },
+          ]),
+      },
+      inventoryMovement: {
+        groupBy: jest
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              sourceItemId: "refund-item-1",
+              _sum: { quantityDelta: new Prisma.Decimal(1) },
+            },
+          ])
+          .mockResolvedValueOnce([]),
+      },
+    };
+    const prisma = {
+      sale: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: sale.id,
+          userId: user.id,
+          isDeleted: false,
+          kind: "invoice",
+          inventoryRestoredAt: null,
+        }),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const inventory = {
+      increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    };
+    const service = serviceWith(prisma, inventory);
+
+    await (service as any).cancelSaleInventory(user, sale.id, {
+      markDeleted: true,
+    });
+
+    expect(inventory.increaseStockInTransaction).toHaveBeenCalledTimes(1);
+    expect(inventory.increaseStockInTransaction).toHaveBeenCalledWith(
+      tx,
       expect.objectContaining({
         productId: "tracked",
         warehouseId: "warehouse-1",
@@ -472,6 +559,14 @@ describe("SalesService optional inventory tracking", () => {
       fiscalCustomerName: null,
       customerAddressSnapshot: null,
       customerPhoneSnapshot: null,
+      paymentMethod: "cash",
+      totalSold: new Prisma.Decimal("80"),
+      paymentCashAmount: new Prisma.Decimal("80"),
+      paymentTransferAmount: new Prisma.Decimal("0"),
+      creditAmount: new Prisma.Decimal("0"),
+      creditPaidAmount: new Prisma.Decimal("0"),
+      creditBalance: new Prisma.Decimal("0"),
+      creditPayments: [],
       items: [trackedOriginal, untrackedOriginal],
     };
     const prisma = {
@@ -561,5 +656,176 @@ describe("SalesService optional inventory tracking", () => {
 
     expect(result).toBe(existing);
     expect(inventory.decreaseStockInTransaction).not.toHaveBeenCalled();
+  });
+
+  it("returns existing refund on clientRequestId retry without duplicate movement", async () => {
+    const existing = {
+      id: "refund-existing",
+      kind: "refund",
+      items: [],
+    };
+    const prisma = {
+      sale: { findFirst: jest.fn().mockResolvedValue(existing) },
+      cashSession: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const inventory = { increaseStockInTransaction: jest.fn() };
+    const service = serviceWith(prisma, inventory);
+
+    const result = await service.returnSale(user as never, "sale-refund", {
+      clientRequestId: "return-retry-1",
+    });
+
+    expect(result).toBe(existing);
+    expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
+    expect(prisma.sale.findFirst).toHaveBeenCalledWith({
+      where: {
+        companyId,
+        clientRequestId: "return-retry-1",
+        kind: "refund",
+      },
+      include: expect.any(Object),
+    });
+  });
+
+  it("allocates refund money to transfer payments instead of forcing cash", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "transfer",
+        totalSold: new Prisma.Decimal(200),
+        paymentCashAmount: new Prisma.Decimal(0),
+        paymentTransferAmount: new Prisma.Decimal(200),
+        creditAmount: new Prisma.Decimal(0),
+        creditPaidAmount: new Prisma.Decimal(0),
+        creditBalance: new Prisma.Decimal(0),
+      },
+      new Prisma.Decimal(-200),
+    );
+
+    expect(allocation.paymentCashAmount.toString()).toBe("0");
+    expect(allocation.paymentTransferAmount.toString()).toBe("-200");
+    expect(allocation.creditAmount.toString()).toBe("0");
+  });
+
+  it("allocates partial mixed refund proportionally between cash and transfer", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "mixed",
+        totalSold: new Prisma.Decimal(1000),
+        paymentCashAmount: new Prisma.Decimal(400),
+        paymentTransferAmount: new Prisma.Decimal(600),
+        creditAmount: new Prisma.Decimal(0),
+        creditPaidAmount: new Prisma.Decimal(0),
+        creditBalance: new Prisma.Decimal(0),
+      },
+      new Prisma.Decimal(-500),
+    );
+
+    expect(allocation.paymentCashAmount.toString()).toBe("-200");
+    expect(allocation.paymentTransferAmount.toString()).toBe("-300");
+    expect(allocation.creditAmount.toString()).toBe("0");
+  });
+
+  it("reduces unpaid credit balance without creating cash movement", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(200),
+        paymentCashAmount: new Prisma.Decimal(0),
+        paymentTransferAmount: new Prisma.Decimal(0),
+        creditAmount: new Prisma.Decimal(200),
+        creditPaidAmount: new Prisma.Decimal(0),
+        creditBalance: new Prisma.Decimal(200),
+        creditPayments: [],
+      },
+      new Prisma.Decimal(-200),
+    );
+
+    expect(allocation.paymentCashAmount.toString()).toBe("0");
+    expect(allocation.paymentTransferAmount.toString()).toBe("0");
+    expect(allocation.creditAmount.toString()).toBe("0");
+    expect(allocation.creditPaidAmount.toString()).toBe("0");
+    expect(allocation.originalCreditUpdate).toEqual(
+      expect.objectContaining({
+        creditStatus: "none",
+        status: "PAID",
+      }),
+    );
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("0");
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
+  });
+
+  it("refunds paid credit installments through their original payment channels", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(200),
+        paymentCashAmount: new Prisma.Decimal(0),
+        paymentTransferAmount: new Prisma.Decimal(0),
+        creditAmount: new Prisma.Decimal(200),
+        creditPaidAmount: new Prisma.Decimal(150),
+        creditBalance: new Prisma.Decimal(50),
+        creditPayments: [
+          {
+            cashAmount: new Prisma.Decimal(50),
+            transferAmount: new Prisma.Decimal(100),
+          },
+        ],
+      },
+      new Prisma.Decimal(-100),
+    );
+
+    expect(allocation.paymentCashAmount.toString()).toBe("-16.67");
+    expect(allocation.paymentTransferAmount.toString()).toBe("-33.33");
+    expect(allocation.creditAmount.toString()).toBe("-100");
+    expect(allocation.creditPaidAmount.toString()).toBe("-50");
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("100");
+    expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
+      "100",
+    );
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
+  });
+
+  it("reverses fully paid credit through paid channels without negative receivable", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(200),
+        paymentCashAmount: new Prisma.Decimal(0),
+        paymentTransferAmount: new Prisma.Decimal(0),
+        creditAmount: new Prisma.Decimal(200),
+        creditPaidAmount: new Prisma.Decimal(200),
+        creditBalance: new Prisma.Decimal(0),
+        creditPayments: [
+          {
+            cashAmount: new Prisma.Decimal(80),
+            transferAmount: new Prisma.Decimal(120),
+          },
+        ],
+      },
+      new Prisma.Decimal(-200),
+    );
+
+    expect(allocation.paymentCashAmount.toString()).toBe("-80");
+    expect(allocation.paymentTransferAmount.toString()).toBe("-120");
+    expect(allocation.creditAmount.toString()).toBe("0");
+    expect(allocation.creditPaidAmount.toString()).toBe("-200");
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("0");
+    expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
+      "0",
+    );
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
   });
 });

@@ -223,9 +223,7 @@ class _RecentSalesPanelState extends State<RecentSalesPanel> {
       case RecentSalesStatus.success:
         final sales = _sales.take(12).toList(growable: false);
         if (sales.isEmpty) {
-          return const Center(
-            child: Text('No hay ventas recientes'),
-          );
+          return const Center(child: Text('No hay ventas recientes'));
         }
         return Column(
           children: [
@@ -263,10 +261,8 @@ class _RecentSalesPanelState extends State<RecentSalesPanel> {
             Expanded(
               child: ListView.separated(
                 itemCount: sales.length,
-                separatorBuilder: (_, __) => const Divider(
-                  height: 1,
-                  color: Color(0xFFE2E8F0),
-                ),
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
                 itemBuilder: (context, index) {
                   final sale = sales[index];
                   return _RecentSalesRow(
@@ -308,9 +304,21 @@ class _RecentSalesRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final returned = sale.isDeleted;
+    final active = sale.isCommerciallyActive;
+    final statusLabel = sale.isRefundDocument
+        ? 'Devolución'
+        : sale.isPartiallyReturned
+        ? 'Parcial'
+        : sale.isReturned
+        ? 'Devuelta'
+        : sale.isCancelled
+        ? 'Anulada'
+        : 'Activa';
+    final statusColor = active
+        ? const Color(0xFF1D4ED8)
+        : const Color(0xFFB45309);
     return Container(
-      color: returned ? Colors.white : const Color(0xFFEFFBFF),
+      color: active ? const Color(0xFFEFFBFF) : Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 9, 10, 9),
       child: Row(
         children: [
@@ -353,13 +361,11 @@ class _RecentSalesRow extends StatelessWidget {
           Expanded(
             flex: 5,
             child: Text(
-              returned ? 'Devuelta' : 'Activa',
+              statusLabel,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: returned
-                    ? const Color(0xFFB45309)
-                    : const Color(0xFF1D4ED8),
+                color: statusColor,
                 fontStyle: FontStyle.italic,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,

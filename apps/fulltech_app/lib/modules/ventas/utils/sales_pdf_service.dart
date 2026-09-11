@@ -237,7 +237,12 @@ pw.Widget _invoiceHeader({
     sale.issuerAddressSnapshot,
     fallback: _clean(company?.address),
   );
-  final statusText = sale.isDeleted ? 'Factura devuelta' : null;
+  final statusText = switch (sale.returnStatus.toUpperCase()) {
+    'PARTIALLY_RETURNED' => 'Factura devuelta parcialmente',
+    'RETURNED' => 'Factura devuelta',
+    'CANCELLED' => 'Factura cancelada',
+    _ => null,
+  };
   final fiscalLabel = invoicePdfDocumentLabel(sale);
   final fiscal = sale.fiscalTaxEnabled;
   final customer = _invoiceCustomerData(sale);

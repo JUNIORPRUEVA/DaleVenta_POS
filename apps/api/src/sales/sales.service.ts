@@ -83,6 +83,8 @@ type ResolvedSaleWarehouse = {
   code: string;
 };
 
+type ReturnStatus = "ACTIVE" | "PARTIALLY_RETURNED" | "RETURNED" | "CANCELLED";
+
 const SALE_TRANSACTION_OPTIONS = { maxWait: 10000, timeout: 20000 } as const;
 const SALE_RETURN_TRANSACTION_OPTIONS = {
   maxWait: 10000,
@@ -148,6 +150,18 @@ export class SalesService {
       creditPayments: {
         orderBy: { paidAt: "desc" },
       },
+      refunds: {
+        where: { kind: "refund", isDeleted: false },
+        include: {
+          items: {
+            select: {
+              refundedSaleItemId: true,
+              qty: true,
+              subtotalSold: true,
+            },
+          },
+        },
+      },
     } satisfies Prisma.SaleInclude;
   }
 
@@ -169,9 +183,169 @@ export class SalesService {
       creditPaidAmount: true,
       creditBalance: true,
       creditStatus: true,
+      kind: true,
+      status: true,
       isDeleted: true,
       deletedAt: true,
     } satisfies Prisma.SaleSelect;
+  }
+
+  private withReturnSummary<T extends Record<string, any>>(sale: T): T {
+    const items = Array.isArray(sale.items) ? sale.items : [];
+    const refunds = Array.isArray(sale.refunds) ? sale.refunds : [];
+    const refundedByItem = new Map<string, Prisma.Decimal>();
+    let returnedAmount = new Prisma.Decimal(0);
+
+    for (const refund of refunds) {
+      returnedAmount = returnedAmount.plus(
+        new Prisma.Decimal(refund.totalSold ?? 0).abs(),
+      );
+      for (const item of Array.isArray(refund.items) ? refund.items : []) {
+        const originalItemId = item.refundedSaleItemId;
+        if (!originalItemId) continue;
+        refundedByItem.set(
+          originalItemId,
+          (refundedByItem.get(originalItemId) ?? new Prisma.Decimal(0)).plus(
+            item.qty ?? 0,
+          ),
+        );
+      }
+    }
+
+    const totalSold = new Prisma.Decimal(sale.totalSold ?? 0).abs();
+    const hasItemQuantities = items.length > 0;
+    let anyReturned = returnedAmount.gt(0);
+    let allReturned = totalSold.gt(0) && returnedAmount.gte(totalSold);
+
+    if (hasItemQuantities) {
+      anyReturned = false;
+      allReturned = true;
+      for (const item of items) {
+        const qty = new Prisma.Decimal(item.qty ?? 0);
+        const returnedQty =
+          refundedByItem.get(item.id) ?? new Prisma.Decimal(0);
+        if (returnedQty.gt(0)) anyReturned = true;
+        if (qty.lte(0) || returnedQty.lt(qty)) allReturned = false;
+      }
+    }
+
+    const returnableAmount = Prisma.Decimal.max(
+      totalSold.minus(returnedAmount),
+      new Prisma.Decimal(0),
+    );
+    const returnStatus: ReturnStatus =
+      sale.isDeleted || sale.cancelledAt || sale.status === "CANCELLED"
+        ? "CANCELLED"
+        : allReturned
+          ? "RETURNED"
+          : anyReturned
+            ? "PARTIALLY_RETURNED"
+            : "ACTIVE";
+
+    return {
+      ...sale,
+      returnedAmount: returnedAmount.toDecimalPlaces(2),
+      returnableAmount: returnableAmount.toDecimalPlaces(2),
+      returnStatus,
+      canReturn:
+        sale.kind === "invoice" &&
+        returnStatus !== "CANCELLED" &&
+        returnableAmount.gt(0),
+    };
+  }
+
+  private withReturnSummaries<T extends Record<string, any>>(sales: T[]): T[] {
+    return sales.map((sale) => this.withReturnSummary(sale));
+  }
+
+  private allocateRefundPayment(
+    sale: {
+      paymentMethod: string;
+      totalSold: Prisma.Decimal;
+      paymentCashAmount: Prisma.Decimal;
+      paymentTransferAmount: Prisma.Decimal;
+      creditAmount: Prisma.Decimal;
+      creditPaidAmount: Prisma.Decimal;
+      creditBalance: Prisma.Decimal;
+      creditPayments?: Array<{
+        cashAmount: Prisma.Decimal;
+        transferAmount: Prisma.Decimal;
+      }>;
+    },
+    refundTotalSold: Prisma.Decimal,
+  ) {
+    const refundAmount = refundTotalSold.abs().toDecimalPlaces(2);
+    const originalTotal = new Prisma.Decimal(sale.totalSold).abs();
+    const ratio = originalTotal.gt(0)
+      ? refundAmount.div(originalTotal)
+      : new Prisma.Decimal(0);
+    const proportional = (value: Prisma.Decimal.Value) =>
+      new Prisma.Decimal(value).mul(ratio).toDecimalPlaces(2);
+
+    if (sale.paymentMethod === "credit") {
+      const creditPayments = sale.creditPayments ?? [];
+      const paidCash = creditPayments.reduce(
+        (sum, payment) => sum.plus(payment.cashAmount ?? 0),
+        new Prisma.Decimal(sale.paymentCashAmount ?? 0),
+      );
+      const paidTransfer = creditPayments.reduce(
+        (sum, payment) => sum.plus(payment.transferAmount ?? 0),
+        new Prisma.Decimal(sale.paymentTransferAmount ?? 0),
+      );
+      const paidTotal = paidCash.plus(paidTransfer);
+      const nextCreditAmount = Prisma.Decimal.max(
+        new Prisma.Decimal(sale.creditAmount ?? 0).minus(refundAmount),
+        new Prisma.Decimal(0),
+      ).toDecimalPlaces(2);
+      const reimbursablePaid = Prisma.Decimal.max(
+        new Prisma.Decimal(sale.creditPaidAmount ?? 0).minus(nextCreditAmount),
+        new Prisma.Decimal(0),
+      ).toDecimalPlaces(2);
+      const paidRatio = paidTotal.gt(0)
+        ? reimbursablePaid.div(paidTotal)
+        : new Prisma.Decimal(0);
+      const cash = paidCash.mul(paidRatio).toDecimalPlaces(2).neg();
+      const transfer = paidTransfer.mul(paidRatio).toDecimalPlaces(2).neg();
+      const nextCreditPaid = Prisma.Decimal.max(
+        new Prisma.Decimal(sale.creditPaidAmount ?? 0).minus(reimbursablePaid),
+        new Prisma.Decimal(0),
+      ).toDecimalPlaces(2);
+      const nextCreditBalance = Prisma.Decimal.max(
+        nextCreditAmount.minus(nextCreditPaid),
+        new Prisma.Decimal(0),
+      ).toDecimalPlaces(2);
+
+      return {
+        paymentCashAmount: cash,
+        paymentTransferAmount: transfer,
+        creditAmount: nextCreditAmount.neg(),
+        creditPaidAmount: reimbursablePaid.neg(),
+        creditBalance: new Prisma.Decimal(0),
+        originalCreditUpdate: {
+          creditAmount: nextCreditAmount,
+          creditPaidAmount: nextCreditPaid,
+          creditBalance: nextCreditBalance,
+          creditStatus: nextCreditAmount.lte(0)
+            ? "none"
+            : nextCreditBalance.gt(0)
+              ? "open"
+              : "paid",
+          status:
+            nextCreditAmount.lte(0) || nextCreditBalance.lte(0)
+              ? "PAID"
+              : "CREDIT",
+        },
+      };
+    }
+
+    return {
+      paymentCashAmount: proportional(sale.paymentCashAmount).neg(),
+      paymentTransferAmount: proportional(sale.paymentTransferAmount).neg(),
+      creditAmount: new Prisma.Decimal(0),
+      creditPaidAmount: new Prisma.Decimal(0),
+      creditBalance: new Prisma.Decimal(0),
+      originalCreditUpdate: null,
+    };
   }
 
   private async findManySalesWithFallback(
@@ -486,15 +660,17 @@ export class SalesService {
     };
 
     const include = this.saleInclude();
-    return this.findManySalesWithFallback(
+    const rows = await this.findManySalesWithFallback(
       where,
       {
         customer: include.customer,
         user: include.user,
         items: include.items,
+        refunds: include.refunds,
       },
       limit,
     );
+    return this.withReturnSummaries(rows as Array<Record<string, any>>);
   }
 
   async listInvoices(
@@ -509,12 +685,18 @@ export class SalesService {
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       companyId,
+      kind: "invoice",
       ...(includeDeleted ? {} : { isDeleted: false }),
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
       ...this.buildDateRange(from, to),
     };
 
-    return this.findManySalesWithFallback(where, this.saleInclude(), limit);
+    const rows = await this.findManySalesWithFallback(
+      where,
+      this.saleInclude(),
+      limit,
+    );
+    return this.withReturnSummaries(rows as Array<Record<string, any>>);
   }
 
   async listByUser(
@@ -536,11 +718,12 @@ export class SalesService {
       ...this.buildDateRange(from, to),
     };
 
-    return this.prisma.sale.findMany({
+    const rows = await this.prisma.sale.findMany({
       where,
       orderBy: { saleDate: "desc" },
       include: this.saleInclude(),
     });
+    return this.withReturnSummaries(rows as Array<Record<string, any>>);
   }
 
   async summaryMine(
@@ -551,53 +734,24 @@ export class SalesService {
   ) {
     const companyId = requireTenant(user);
     const normalizedCustomerId = customerId?.trim();
-    const where: Prisma.SaleWhereInput = {
+    const dateRange = this.buildDateRange(from, to);
+    const baseWhere: Prisma.SaleWhereInput = {
       companyId,
-      isDeleted: false,
       ...(normalizedCustomerId ? { customerId: normalizedCustomerId } : {}),
-      ...this.buildDateRange(from, to),
     };
-
-    let aggregate: {
-      _sum: {
-        totalSold: Prisma.Decimal | null;
-        totalCost: Prisma.Decimal | null;
-        totalProfit: Prisma.Decimal | null;
-        commissionAmount: Prisma.Decimal | null;
-      };
-    } = {
-      _sum: {
-        totalSold: null,
-        totalCost: null,
-        totalProfit: null,
-        commissionAmount: null,
-      },
-    };
-    let totalSales = 0;
 
     try {
-      [aggregate, totalSales] = await Promise.all([
-        this.prisma.sale.aggregate({
-          where,
-          _sum: {
-            totalSold: true,
-            totalCost: true,
-            totalProfit: true,
-            commissionAmount: true,
-          },
-        }),
-        this.prisma.sale.count({ where }),
-      ]);
+      return await this.summarizeSalesTotals(baseWhere, dateRange);
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
     }
 
     return {
-      totalSales,
-      totalSold: this.toNumber(aggregate._sum.totalSold),
-      totalCost: this.toNumber(aggregate._sum.totalCost),
-      totalProfit: this.toNumber(aggregate._sum.totalProfit),
-      totalCommission: this.toNumber(aggregate._sum.commissionAmount),
+      totalSales: 0,
+      totalSold: 0,
+      totalCost: 0,
+      totalProfit: 0,
+      totalCommission: 0,
       commissionRate: 0.1,
     };
   }
@@ -609,71 +763,27 @@ export class SalesService {
     userId?: string,
   ) {
     const companyId = requireTenant(user);
-    const where: Prisma.SaleWhereInput = {
+    const dateRange = this.buildDateRange(from, to);
+    const baseWhere: Prisma.SaleWhereInput = {
       companyId,
-      isDeleted: false,
       ...(userId ? { userId } : {}),
-      ...this.buildDateRange(from, to),
     };
-
-    let grouped: Array<{
+    let items: Array<{
       userId: string;
-      _sum: {
-        totalSold: Prisma.Decimal | null;
-        totalProfit: Prisma.Decimal | null;
-        commissionAmount: Prisma.Decimal | null;
-      };
-      _count: { _all: number };
+      userName: string;
+      userEmail: string;
+      totalSales: number;
+      totalSold: number;
+      totalProfit: number;
+      totalCommission: number;
     }> = [];
 
     try {
-      const groupedResult = await this.prisma.sale.groupBy({
-        by: ["userId"],
-        where,
-        _sum: {
-          totalSold: true,
-          totalProfit: true,
-          commissionAmount: true,
-        },
-        _count: {
-          _all: true,
-        },
-      });
-      grouped = groupedResult as typeof grouped;
+      items = await this.summarizeSalesByUser(baseWhere, dateRange);
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      grouped = [];
+      items = [];
     }
-
-    const userIds = grouped.map((group) => group.userId);
-    let users: Array<{ id: string; email: string; nombreCompleto: string }> =
-      [];
-    if (userIds.length) {
-      try {
-        users = await this.prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, email: true, nombreCompleto: true },
-        });
-      } catch (error) {
-        if (!this.isSchemaMismatch(error)) throw error;
-        users = [];
-      }
-    }
-
-    const userMap = new Map(users.map((user) => [user.id, user]));
-
-    const items = grouped.map((group) => {
-      const user = userMap.get(group.userId);
-      return {
-        userId: group.userId,
-        userName: user?.nombreCompleto ?? "Usuario",
-        userEmail: user?.email ?? "",
-        totalSales: group._count._all,
-        totalSold: this.toNumber(group._sum.totalSold),
-        totalProfit: this.toNumber(group._sum.totalProfit),
-        totalCommission: this.toNumber(group._sum.commissionAmount),
-      };
-    });
 
     const totals = items.reduce(
       (acc, row) => {
@@ -687,6 +797,220 @@ export class SalesService {
     );
 
     return { items, totals, commissionRate: 0.1 };
+  }
+
+  private activeInvoiceWhere(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ): Prisma.SaleWhereInput {
+    return {
+      ...baseWhere,
+      kind: "invoice",
+      isDeleted: false,
+      ...dateRange,
+    };
+  }
+
+  private refundWhere(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ): Prisma.SaleWhereInput {
+    return {
+      ...baseWhere,
+      kind: "refund",
+      isDeleted: false,
+      ...dateRange,
+    };
+  }
+
+  private historicalCancellationWhere(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ): Prisma.SaleWhereInput | null {
+    const range = dateRange.saleDate;
+    if (!range?.gte || !range?.lt) return null;
+    return {
+      ...baseWhere,
+      kind: "invoice",
+      isDeleted: true,
+      deletedAt: { gte: range.gte, lt: range.lt },
+      // Same temporal policy as ReportsService.salesOverview: only reverse
+      // sales from a previous period in the cancellation period.
+      saleDate: { lt: range.gte },
+    };
+  }
+
+  private async summarizeSalesTotals(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ) {
+    const activeWhere = this.activeInvoiceWhere(baseWhere, dateRange);
+    const refundWhere = this.refundWhere(baseWhere, dateRange);
+    const cancellationWhere = this.historicalCancellationWhere(
+      baseWhere,
+      dateRange,
+    );
+    const empty = {
+      _sum: {
+        totalSold: null,
+        totalCost: null,
+        totalProfit: null,
+        commissionAmount: null,
+      },
+    };
+
+    const [active, refund, cancelled, totalSales] = await Promise.all([
+      this.prisma.sale.aggregate({
+        where: activeWhere,
+        _sum: {
+          totalSold: true,
+          totalCost: true,
+          totalProfit: true,
+          commissionAmount: true,
+        },
+      }),
+      this.prisma.sale.aggregate({
+        where: refundWhere,
+        _sum: {
+          totalSold: true,
+          totalCost: true,
+          totalProfit: true,
+          commissionAmount: true,
+        },
+      }),
+      cancellationWhere
+        ? this.prisma.sale.aggregate({
+            where: cancellationWhere,
+            _sum: {
+              totalSold: true,
+              totalCost: true,
+              totalProfit: true,
+              commissionAmount: true,
+            },
+          })
+        : Promise.resolve(empty),
+      this.prisma.sale.count({ where: activeWhere }),
+    ]);
+
+    return {
+      totalSales,
+      totalSold:
+        this.toNumber(active._sum.totalSold) +
+        this.toNumber(refund._sum.totalSold) -
+        this.toNumber(cancelled._sum.totalSold),
+      totalCost:
+        this.toNumber(active._sum.totalCost) +
+        this.toNumber(refund._sum.totalCost) -
+        this.toNumber(cancelled._sum.totalCost),
+      totalProfit:
+        this.toNumber(active._sum.totalProfit) +
+        this.toNumber(refund._sum.totalProfit) -
+        this.toNumber(cancelled._sum.totalProfit),
+      totalCommission:
+        this.toNumber(active._sum.commissionAmount) +
+        this.toNumber(refund._sum.commissionAmount) -
+        this.toNumber(cancelled._sum.commissionAmount),
+      commissionRate: 0.1,
+    };
+  }
+
+  private async summarizeSalesByUser(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ) {
+    type SalesSummaryRow = {
+      userId: string;
+      totalSold: Prisma.Decimal;
+      totalProfit: Prisma.Decimal;
+      commissionAmount: Prisma.Decimal;
+    };
+    const cancellationWhere = this.historicalCancellationWhere(
+      baseWhere,
+      dateRange,
+    );
+    const [active, refund, cancelled] = await Promise.all([
+      this.prisma.sale.findMany({
+        where: this.activeInvoiceWhere(baseWhere, dateRange),
+        select: {
+          userId: true,
+          totalSold: true,
+          totalProfit: true,
+          commissionAmount: true,
+        },
+      }),
+      this.prisma.sale.findMany({
+        where: this.refundWhere(baseWhere, dateRange),
+        select: {
+          userId: true,
+          totalSold: true,
+          totalProfit: true,
+          commissionAmount: true,
+        },
+      }),
+      cancellationWhere
+        ? this.prisma.sale.findMany({
+            where: cancellationWhere,
+            select: {
+              userId: true,
+              totalSold: true,
+              totalProfit: true,
+              commissionAmount: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const rows = new Map<
+      string,
+      {
+        userId: string;
+        totalSales: number;
+        totalSold: number;
+        totalProfit: number;
+        totalCommission: number;
+      }
+    >();
+    const apply = (row: SalesSummaryRow, sign: 1 | -1, countSales: boolean) => {
+      const current = rows.get(row.userId) ?? {
+        userId: row.userId,
+        totalSales: 0,
+        totalSold: 0,
+        totalProfit: 0,
+        totalCommission: 0,
+      };
+      if (countSales) current.totalSales += 1;
+      current.totalSold += sign * this.toNumber(row.totalSold);
+      current.totalProfit += sign * this.toNumber(row.totalProfit);
+      current.totalCommission += sign * this.toNumber(row.commissionAmount);
+      rows.set(row.userId, current);
+    };
+    active.forEach((row) => apply(row, 1, true));
+    refund.forEach((row) => apply(row, 1, false));
+    cancelled.forEach((row) => apply(row, -1, false));
+
+    const userIds = [...rows.keys()];
+    const users = userIds.length
+      ? await this.prisma.user.findMany({
+          where: {
+            id: { in: userIds },
+            companyId: baseWhere.companyId as string,
+          },
+          select: { id: true, email: true, nombreCompleto: true },
+        })
+      : [];
+    const userMap = new Map(users.map((user) => [user.id, user]));
+
+    return [...rows.values()].map((row) => {
+      const user = userMap.get(row.userId);
+      return {
+        userId: row.userId,
+        userName: user?.nombreCompleto ?? "Usuario",
+        userEmail: user?.email ?? "",
+        totalSales: row.totalSales,
+        totalSold: row.totalSold,
+        totalProfit: row.totalProfit,
+        totalCommission: row.totalCommission,
+      };
+    });
   }
 
   async create(user: TenantUser, dto: CreateSaleDto) {
@@ -1620,18 +1944,26 @@ export class SalesService {
         throw new NotFoundException("Venta no encontrada");
       }
 
-      const refundCount = await tx.sale.count({
-        where: {
+      const { financialReturned, inventoryReturned } =
+        await this.returnQuantityMaps(
+          tx,
           companyId,
-          refundedSaleId: saleId,
-          kind: "refund",
-          isDeleted: false,
-        },
-      });
-      if (refundCount > 0) {
-        throw new BadRequestException(
-          "No se puede cancelar una venta con devoluciones registradas.",
+          saleId,
+          sale.items.map((item) => item.id),
         );
+      const allFinanciallyReturned =
+        sale.items.length > 0 &&
+        sale.items.every((item) =>
+          (financialReturned.get(item.id) ?? new Prisma.Decimal(0)).gte(
+            item.qty,
+          ),
+        );
+      if (allFinanciallyReturned) {
+        throw new BadRequestException({
+          code: "SALE_ALREADY_FULLY_RETURNED",
+          message:
+            "Esta venta ya fue devuelta completamente y no necesita cancelarse.",
+        });
       }
 
       const claim = await tx.sale.updateMany({
@@ -1672,11 +2004,19 @@ export class SalesService {
           reason = "LEGACY_MAIN_WAREHOUSE_FALLBACK";
         }
 
+        const alreadyInventoryReturned =
+          inventoryReturned.get(item.id) ?? new Prisma.Decimal(0);
+        const remainingInventoryQty = Prisma.Decimal.max(
+          item.qty.minus(alreadyInventoryReturned),
+          new Prisma.Decimal(0),
+        );
+        if (remainingInventoryQty.lte(0)) continue;
+
         await this.inventoryMutationService().increaseStockInTransaction(tx, {
           companyId,
           productId: item.productId,
           warehouseId,
-          quantity: item.qty,
+          quantity: remainingInventoryQty,
           type: InventoryMovementType.SALE_CANCELLATION,
           sourceType: "SALE",
           sourceId: sale.id,
@@ -1751,15 +2091,19 @@ export class SalesService {
         await this.lockReturnableSale(tx, companyId, saleId);
         const sale = await tx.sale.findFirst({
           where: { id: saleId, companyId },
-          include: { items: true },
+          include: {
+            items: true,
+            creditPayments: true,
+          },
         });
         if (!sale || sale.isDeleted || sale.kind !== "invoice") {
           throw new NotFoundException("Venta no encontrada");
         }
         if (sale.cancelledAt || sale.inventoryRestoredAt) {
-          throw new BadRequestException(
-            "No se puede devolver una venta cuyo inventario ya fue restaurado por cancelacion.",
-          );
+          throw new BadRequestException({
+            code: "SALE_CANCELLED",
+            message: "Esta venta ya fue cancelada y no puede devolverse.",
+          });
         }
         if (clientRequestId) {
           const existing = await tx.sale.findFirst({
@@ -1833,9 +2177,14 @@ export class SalesService {
             alreadyFinancialReturned,
           );
           if (request.qty.greaterThan(remainingFinancialQty)) {
-            throw new BadRequestException(
-              `La devolución de ${original.productNameSnapshot} supera la cantidad disponible.`,
-            );
+            throw new BadRequestException({
+              code: remainingFinancialQty.lte(0)
+                ? "SALE_ALREADY_FULLY_RETURNED"
+                : "RETURN_QUANTITY_EXCEEDED",
+              message: remainingFinancialQty.lte(0)
+                ? "Esta venta ya fue devuelta completamente."
+                : `La devolución de ${original.productNameSnapshot} supera la cantidad disponible.`,
+            });
           }
           if (restoreInventory && original.inventoryTrackedSnapshot === true) {
             const alreadyInventoryReturned =
@@ -1844,9 +2193,10 @@ export class SalesService {
               alreadyInventoryReturned,
             );
             if (request.qty.greaterThan(remainingInventoryQty)) {
-              throw new BadRequestException(
-                `La devolución de ${original.productNameSnapshot} supera la cantidad disponible para restaurar inventario.`,
-              );
+              throw new BadRequestException({
+                code: "RETURN_QUANTITY_EXCEEDED",
+                message: `La devolución de ${original.productNameSnapshot} supera la cantidad disponible para restaurar inventario.`,
+              });
             }
           }
           const ratio = request.qty.div(original.qty);
@@ -1992,6 +2342,7 @@ export class SalesService {
         const netTaxMargin = netTaxRevenue.abs().gt(0)
           ? netTaxProfit.div(netTaxRevenue.abs()).toDecimalPlaces(4)
           : new Prisma.Decimal(0);
+        const paymentAllocation = this.allocateRefundPayment(sale, totalSold);
 
         const returned = await tx.sale.create({
           data: {
@@ -2008,11 +2359,11 @@ export class SalesService {
                 ? "DEVOLUCION: venta devuelta desde historial."
                 : "REEMBOLSO FINANCIERO: no restaura inventario."),
             paymentMethod: "refund",
-            paymentCashAmount: totalSold,
-            paymentTransferAmount: new Prisma.Decimal(0),
-            creditAmount: new Prisma.Decimal(0),
-            creditPaidAmount: new Prisma.Decimal(0),
-            creditBalance: new Prisma.Decimal(0),
+            paymentCashAmount: paymentAllocation.paymentCashAmount,
+            paymentTransferAmount: paymentAllocation.paymentTransferAmount,
+            creditAmount: paymentAllocation.creditAmount,
+            creditPaidAmount: paymentAllocation.creditPaidAmount,
+            creditBalance: paymentAllocation.creditBalance,
             creditStatus: "none",
             kind: "refund",
             status: "RETURNED",
@@ -2047,6 +2398,13 @@ export class SalesService {
           },
           include: this.saleInclude(),
         });
+
+        if (paymentAllocation.originalCreditUpdate) {
+          await tx.sale.update({
+            where: { id: saleId },
+            data: paymentAllocation.originalCreditUpdate,
+          });
+        }
 
         if (restoreInventory) {
           for (const refundItem of returned.items) {

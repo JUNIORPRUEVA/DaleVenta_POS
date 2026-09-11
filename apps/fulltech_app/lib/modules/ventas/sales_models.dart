@@ -276,8 +276,13 @@ class SaleModel {
   final double creditBalance;
   final String creditStatus;
   final String kind;
+  final String status;
   final bool isDeleted;
   final DateTime? deletedAt;
+  final String returnStatus;
+  final double returnedAmount;
+  final double returnableAmount;
+  final bool canReturn;
   final bool fiscalTaxEnabled;
   final String fiscalPriceMode;
   final double taxableBase;
@@ -323,6 +328,11 @@ class SaleModel {
     required this.isDeleted,
     required this.deletedAt,
     this.kind = 'invoice',
+    this.status = '',
+    this.returnStatus = 'ACTIVE',
+    this.returnedAmount = 0,
+    this.returnableAmount = 0,
+    this.canReturn = true,
     this.fiscalTaxEnabled = false,
     this.fiscalPriceMode = 'NO_TAX',
     this.taxableBase = 0,
@@ -408,10 +418,20 @@ class SaleModel {
       creditBalance: _toDouble(json['creditBalance']),
       creditStatus: (json['creditStatus'] ?? '').toString(),
       kind: (json['kind'] ?? 'invoice').toString(),
+      status: (json['status'] ?? '').toString(),
       isDeleted: json['isDeleted'] == true,
       deletedAt: json['deletedAt'] != null
           ? DateTime.tryParse(json['deletedAt'].toString())
           : null,
+      returnStatus: (json['returnStatus'] ?? '').toString().trim().isEmpty
+          ? (json['isDeleted'] == true ? 'CANCELLED' : 'ACTIVE')
+          : json['returnStatus'].toString(),
+      returnedAmount: _toDouble(json['returnedAmount']),
+      returnableAmount: _toDouble(json['returnableAmount']),
+      canReturn: json.containsKey('canReturn')
+          ? _toBool(json['canReturn'])
+          : (json['kind'] ?? 'invoice').toString() == 'invoice' &&
+                json['isDeleted'] != true,
       fiscalTaxEnabled: json['fiscalTaxEnabled'] == true,
       fiscalPriceMode: (json['fiscalPriceMode'] ?? 'NO_TAX').toString(),
       taxableBase: _toDouble(json['taxableBase']),
@@ -439,6 +459,20 @@ class SaleModel {
           .map((item) => SaleItemModel.fromJson(item.cast<String, dynamic>()))
           .toList(),
     );
+  }
+
+  bool get isRefundDocument => kind == 'refund';
+  bool get isCancelled => returnStatus == 'CANCELLED' || isDeleted;
+  bool get isReturned => returnStatus == 'RETURNED';
+  bool get isPartiallyReturned => returnStatus == 'PARTIALLY_RETURNED';
+  bool get isCommerciallyActive =>
+      returnStatus == 'ACTIVE' && !isRefundDocument;
+  bool get canCancel =>
+      kind == 'invoice' && !isCancelled && !isReturned && !isRefundDocument;
+  double get netActiveAmount {
+    if (isCancelled || isRefundDocument) return 0;
+    final value = totalSold - returnedAmount;
+    return value < 0 ? 0 : value;
   }
 }
 

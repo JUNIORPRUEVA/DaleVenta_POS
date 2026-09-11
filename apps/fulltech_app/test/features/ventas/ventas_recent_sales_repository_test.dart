@@ -94,6 +94,35 @@ void main() {
     expect(captured.last.queryParameters['includeDeleted'], 'true');
   });
 
+  test('returnSale envía clientRequestId idempotente en el cuerpo', () async {
+    final repository = buildRepository((options) => jsonResponse(saleRow()));
+
+    final sale = await repository.returnSale(
+      'sale-1',
+      clientRequestId: 'return-request-1',
+    );
+
+    expect(sale.id, 'sale-1');
+    expect(captured.last.path, '/sales/sale-1/return');
+    expect(captured.last.data, <String, dynamic>{
+      'clientRequestId': 'return-request-1',
+    });
+  });
+
+  test(
+    'returnSale genera clientRequestId cuando el caller no lo provee',
+    () async {
+      final repository = buildRepository((options) => jsonResponse(saleRow()));
+
+      await repository.returnSale('sale-2');
+
+      expect(captured.last.path, '/sales/sale-2/return');
+      final body = (captured.last.data as Map).cast<String, dynamic>();
+      expect(body['clientRequestId'], isA<String>());
+      expect(body['clientRequestId'], contains('sale-2'));
+    },
+  );
+
   test('timeout en listSales termina en error (nunca cuelga)', () async {
     final repository = buildRepository(
       (options) => throw DioException(
