@@ -27,3 +27,9 @@ apps/fulltech_app/build_w14_validation/
 release/
 evidence/
 installer/inno-build-report.txt
+
+# Temporary audit / E2E capture artifacts (not source, not test assets)
+release_artifacts/
+.codex-img-e2e/
+.codex-mobile-visual-audit/
+.codex-pwa-smoke/
