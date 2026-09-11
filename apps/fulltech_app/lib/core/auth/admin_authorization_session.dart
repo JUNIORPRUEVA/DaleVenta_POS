@@ -6,12 +6,18 @@ import 'auth_provider.dart';
 
 enum AdminAuthorizationScope { action, route }
 
+final adminAuthorizationNowProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
+
 class AdminAuthorizationState {
   const AdminAuthorizationState({
     this.authorizedUntil,
     this.token,
     this.scope = AdminAuthorizationScope.action,
     this.routePath,
+    this.userId,
+    this.companyId,
     this.singleUse = true,
   });
 
@@ -19,6 +25,8 @@ class AdminAuthorizationState {
   final String? token;
   final AdminAuthorizationScope scope;
   final String? routePath;
+  final String? userId;
+  final String? companyId;
   final bool singleUse;
 
   bool get isAuthorized {
@@ -55,7 +63,9 @@ class AdminAuthorizationController
   AdminAuthorizationController(this._ref)
     : super(const AdminAuthorizationState()) {
     _ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (previous?.user?.id != next.user?.id || !next.isAuthenticated) {
+      if (previous?.user?.id != next.user?.id ||
+          previous?.user?.companyId != next.user?.companyId ||
+          !next.isAuthenticated) {
         clear();
       }
     });
@@ -64,8 +74,10 @@ class AdminAuthorizationController
   final Ref _ref;
   Timer? _expiryTimer;
 
-  bool get isAuthorized => state.isAuthorized;
-  bool get hasActionAuthorization => state.isActionAuthorization;
+  bool get isAuthorized =>
+      _matchesCurrentPrincipal() && _isStateAuthorizedAt(_now());
+  bool get hasActionAuthorization =>
+      isAuthorized && state.scope == AdminAuthorizationScope.action;
 
   void authorizeFor(Duration duration, String token) {
     authorizeAction(duration, token);
@@ -73,10 +85,13 @@ class AdminAuthorizationController
 
   void authorizeAction(Duration duration, String token) {
     final capped = _capDuration(duration);
+    final user = _ref.read(authStateProvider).user;
     state = AdminAuthorizationState(
-      authorizedUntil: DateTime.now().add(capped),
+      authorizedUntil: _now().add(capped),
       token: token,
       scope: AdminAuthorizationScope.action,
+      userId: user?.id,
+      companyId: user?.companyId,
       singleUse: true,
     );
     _scheduleExpiry(capped);
@@ -84,21 +99,31 @@ class AdminAuthorizationController
 
   void authorizeRoute(Duration duration, String token, String location) {
     final capped = _capDuration(duration);
+    final user = _ref.read(authStateProvider).user;
     state = AdminAuthorizationState(
-      authorizedUntil: DateTime.now().add(capped),
+      authorizedUntil: _now().add(capped),
       token: token,
       scope: AdminAuthorizationScope.route,
       routePath: _normalizePath(location),
+      userId: user?.id,
+      companyId: user?.companyId,
       singleUse: false,
     );
     _scheduleExpiry(capped);
   }
 
   bool isAuthorizedForRoute(String location) =>
-      state.isAuthorizedForRoute(location);
+      _matchesCurrentPrincipal() &&
+      _isStateAuthorizedAt(_now()) &&
+      state.scope == AdminAuthorizationScope.route &&
+      _stateMatchesRoute(location);
 
   String? tokenForRequest(String location) {
-    return state.canAttachToRequest(location) ? state.token : null;
+    if (!_matchesCurrentPrincipal() || !_isStateAuthorizedAt(_now())) {
+      return null;
+    }
+    if (state.scope == AdminAuthorizationScope.action) return state.token;
+    return _stateMatchesRoute(location) ? state.token : null;
   }
 
   void consumeActionAuthorization() {
@@ -108,18 +133,26 @@ class AdminAuthorizationController
   }
 
   void clearIfInvalidForLocation(String location) {
-    if (!state.isAuthorized) {
+    if (!_matchesCurrentPrincipal()) {
+      clear();
+      return;
+    }
+    if (!_isStateAuthorizedAt(_now())) {
       if (state.token != null || state.authorizedUntil != null) clear();
       return;
     }
     if (state.scope == AdminAuthorizationScope.route &&
-        !state.isAuthorizedForRoute(location)) {
+        !_stateMatchesRoute(location)) {
       clear();
     }
   }
 
   void clearIfExpired() {
-    if (!state.isAuthorized &&
+    if (!_matchesCurrentPrincipal()) {
+      clear();
+      return;
+    }
+    if (!_isStateAuthorizedAt(_now()) &&
         (state.token != null || state.authorizedUntil != null)) {
       clear();
     }
@@ -138,7 +171,7 @@ class AdminAuthorizationController
   }
 
   Duration _capDuration(Duration duration) {
-    const maxDuration = Duration(minutes: 10);
+    const maxDuration = Duration(minutes: 20);
     if (duration <= Duration.zero) return Duration.zero;
     return duration > maxDuration ? maxDuration : duration;
   }
@@ -150,6 +183,28 @@ class AdminAuthorizationController
       return;
     }
     _expiryTimer = Timer(duration, clear);
+  }
+
+  DateTime _now() => _ref.read(adminAuthorizationNowProvider)();
+
+  bool _isStateAuthorizedAt(DateTime now) {
+    final until = state.authorizedUntil;
+    return state.token != null && until != null && until.isAfter(now);
+  }
+
+  bool _stateMatchesRoute(String location) {
+    final expected = state.routePath;
+    return expected != null &&
+        expected.isNotEmpty &&
+        _normalizePath(location) == expected;
+  }
+
+  bool _matchesCurrentPrincipal() {
+    if (state.token == null && state.authorizedUntil == null) return true;
+    final user = _ref.read(authStateProvider).user;
+    return user != null &&
+        user.id == state.userId &&
+        user.companyId == state.companyId;
   }
 }
 
