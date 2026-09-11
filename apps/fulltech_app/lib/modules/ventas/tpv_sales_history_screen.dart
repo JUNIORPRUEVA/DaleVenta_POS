@@ -305,7 +305,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       builder: (context) => AlertDialog(
         title: Text('Devolver factura ${_invoiceNumber(sale)}'),
         content: Text(
-          'Esta accion registrara una devolucion y restaurara el stock correspondiente.\n\nMonto disponible: ${formatRdCurrencyAccounting(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
+          '${sale.hasInventoryTrackedItems ? 'Esta accion registrara una devolucion y restaurara el stock correspondiente.' : 'Esta venta no controla inventario: se revertira solo el cobro, sin mover stock.'}\n\nMonto disponible: ${formatRdCurrencyAccounting(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
         ),
         actions: [
           TextButton(
@@ -383,8 +383,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Cancelar factura ${_invoiceNumber(sale)}?'),
-        content: const Text(
-          'La venta quedara registrada como cancelada y se revertiran los movimientos correspondientes.',
+        content: Text(
+          'La venta quedara registrada como cancelada y se revertiran los movimientos correspondientes.${sale.hasInventoryTrackedItems ? '' : '\n\nEsta venta no controla inventario: el stock no se modificara.'}',
         ),
         actions: [
           TextButton(

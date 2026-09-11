@@ -823,6 +823,13 @@ export class SalesService {
     };
   }
 
+  private static readonly ZERO_REFUND_OFFSETS = {
+    totalSold: 0,
+    totalCost: 0,
+    totalProfit: 0,
+    commissionAmount: 0,
+  };
+
   private historicalCancellationWhere(
     baseWhere: Prisma.SaleWhereInput,
     dateRange: { saleDate?: Prisma.DateTimeFilter },
@@ -838,6 +845,83 @@ export class SalesService {
       // sales from a previous period in the cancellation period.
       saleDate: { lt: range.gte },
     };
+  }
+
+  /**
+   * Refunds (dated inside the period) that belong to sales cancelled inside the
+   * same period. A cancelled sale is reversed by its own row/sum; counting its
+   * refunds on top would reverse the returned portion twice. Grouped by seller
+   * so the per-user breakdown stays consistent with the global totals.
+   */
+  private async cancelledRefundOffsets(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ) {
+    const range = dateRange.saleDate;
+    if (!range) return [];
+
+    const cancelledSales = await this.prisma.sale.findMany({
+      where: {
+        ...baseWhere,
+        kind: "invoice",
+        isDeleted: true,
+        deletedAt: { gte: range.gte, lt: range.lt },
+      },
+      select: { id: true, userId: true },
+    });
+    if (cancelledSales.length === 0) return [];
+
+    const rows = await this.prisma.sale.groupBy({
+      by: ["refundedSaleId"],
+      where: {
+        ...baseWhere,
+        kind: "refund",
+        isDeleted: false,
+        refundedSaleId: { in: cancelledSales.map((sale) => sale.id) },
+        ...dateRange,
+      },
+      _sum: {
+        totalSold: true,
+        totalCost: true,
+        totalProfit: true,
+        commissionAmount: true,
+      },
+    });
+
+    const ownerBySaleId = new Map(
+      cancelledSales.map((sale) => [sale.id, sale.userId]),
+    );
+
+    return rows
+      .filter((row) => row.refundedSaleId)
+      .map((row) => ({
+        // Attributed to the seller who owned the cancelled sale, because that
+        // is whose cancellation reversal was overstated.
+        userId: ownerBySaleId.get(row.refundedSaleId as string) ?? "",
+        totalSold: this.toNumber(row._sum.totalSold),
+        totalCost: this.toNumber(row._sum.totalCost),
+        totalProfit: this.toNumber(row._sum.totalProfit),
+        commissionAmount: this.toNumber(row._sum.commissionAmount),
+      }));
+  }
+
+  private sumRefundOffsets(
+    rows: Array<{
+      totalSold: number;
+      totalCost: number;
+      totalProfit: number;
+      commissionAmount: number;
+    }>,
+  ) {
+    return rows.reduce(
+      (acc, row) => ({
+        totalSold: acc.totalSold + row.totalSold,
+        totalCost: acc.totalCost + row.totalCost,
+        totalProfit: acc.totalProfit + row.totalProfit,
+        commissionAmount: acc.commissionAmount + row.commissionAmount,
+      }),
+      { ...SalesService.ZERO_REFUND_OFFSETS },
+    );
   }
 
   private async summarizeSalesTotals(
@@ -859,57 +943,67 @@ export class SalesService {
       },
     };
 
-    const [active, refund, cancelled, totalSales] = await Promise.all([
-      this.prisma.sale.aggregate({
-        where: activeWhere,
-        _sum: {
-          totalSold: true,
-          totalCost: true,
-          totalProfit: true,
-          commissionAmount: true,
-        },
-      }),
-      this.prisma.sale.aggregate({
-        where: refundWhere,
-        _sum: {
-          totalSold: true,
-          totalCost: true,
-          totalProfit: true,
-          commissionAmount: true,
-        },
-      }),
-      cancellationWhere
-        ? this.prisma.sale.aggregate({
-            where: cancellationWhere,
-            _sum: {
-              totalSold: true,
-              totalCost: true,
-              totalProfit: true,
-              commissionAmount: true,
-            },
-          })
-        : Promise.resolve(empty),
-      this.prisma.sale.count({ where: activeWhere }),
-    ]);
+    const [active, refund, cancelled, totalSales, refundOffsets] =
+      await Promise.all([
+        this.prisma.sale.aggregate({
+          where: activeWhere,
+          _sum: {
+            totalSold: true,
+            totalCost: true,
+            totalProfit: true,
+            commissionAmount: true,
+          },
+        }),
+        this.prisma.sale.aggregate({
+          where: refundWhere,
+          _sum: {
+            totalSold: true,
+            totalCost: true,
+            totalProfit: true,
+            commissionAmount: true,
+          },
+        }),
+        cancellationWhere
+          ? this.prisma.sale.aggregate({
+              where: cancellationWhere,
+              _sum: {
+                totalSold: true,
+                totalCost: true,
+                totalProfit: true,
+                commissionAmount: true,
+              },
+            })
+          : Promise.resolve(empty),
+        this.prisma.sale.count({ where: activeWhere }),
+        cancellationWhere
+          ? this.cancelledRefundOffsets(baseWhere, dateRange)
+          : Promise.resolve([]),
+      ]);
+
+    // A cancelled sale is reversed by its own sum. Refunds already counted in
+    // this period were consumed by that reversal, so only the remaining part of
+    // the sale must be reversed here (never the full total twice).
+    const offsets = this.sumRefundOffsets(refundOffsets);
 
     return {
       totalSales,
       totalSold:
         this.toNumber(active._sum.totalSold) +
         this.toNumber(refund._sum.totalSold) -
-        this.toNumber(cancelled._sum.totalSold),
+        (this.toNumber(cancelled._sum.totalSold) + offsets.totalSold),
       totalCost:
         this.toNumber(active._sum.totalCost) +
         this.toNumber(refund._sum.totalCost) -
-        this.toNumber(cancelled._sum.totalCost),
+        (this.toNumber(cancelled._sum.totalCost) + offsets.totalCost),
       totalProfit:
         this.toNumber(active._sum.totalProfit) +
         this.toNumber(refund._sum.totalProfit) -
-        this.toNumber(cancelled._sum.totalProfit),
+        (this.toNumber(cancelled._sum.totalProfit) + offsets.totalProfit),
       totalCommission:
         this.toNumber(active._sum.commissionAmount) +
         this.toNumber(refund._sum.commissionAmount) -
-        this.toNumber(cancelled._sum.commissionAmount),
+        (this.toNumber(cancelled._sum.commissionAmount) +
+          offsets.commissionAmount),
       commissionRate: 0.1,
     };
   }
@@ -928,7 +1022,7 @@ export class SalesService {
       baseWhere,
       dateRange,
     );
-    const [active, refund, cancelled] = await Promise.all([
+    const [active, refund, cancelled, refundOffsets] = await Promise.all([
       this.prisma.sale.findMany({
         where: this.activeInvoiceWhere(baseWhere, dateRange),
         select: {
@@ -958,6 +1052,9 @@ export class SalesService {
             },
           })
         : Promise.resolve([]),
+      cancellationWhere
+        ? this.cancelledRefundOffsets(baseWhere, dateRange)
+        : Promise.resolve([]),
     ]);
     const rows = new Map<
       string,
@@ -986,6 +1083,15 @@ export class SalesService {
     active.forEach((row) => apply(row, 1, true));
     refund.forEach((row) => apply(row, 1, false));
     cancelled.forEach((row) => apply(row, -1, false));
+    // Refunds of a cancelled sale were already consumed by that sale's
+    // reversal, so they must not be subtracted a second time.
+    refundOffsets.forEach((offset) => {
+      const current = rows.get(offset.userId);
+      if (!current) return;
+      current.totalSold -= offset.totalSold;
+      current.totalProfit -= offset.totalProfit;
+      current.totalCommission -= offset.commissionAmount;
+    });
 
     const userIds = [...rows.keys()];
     const users = userIds.length

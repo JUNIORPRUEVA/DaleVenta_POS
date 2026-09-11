@@ -472,7 +472,12 @@ describe("SalesService tenant isolation", () => {
         .mockResolvedValueOnce(aggregate(1000, 700, 300, 30));
       const countMock = jest.fn().mockResolvedValue(0);
       const service = serviceWith({
-        sale: { aggregate: aggregateMock, count: countMock },
+        sale: {
+          aggregate: aggregateMock,
+          count: countMock,
+          findMany: jest.fn().mockResolvedValue([]),
+          groupBy: jest.fn().mockResolvedValue([]),
+        },
       });
 
       const summary = await service.summaryMine(
@@ -509,6 +514,8 @@ describe("SalesService tenant isolation", () => {
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(null, null, null, null)),
           count: jest.fn().mockResolvedValue(1),
+          findMany: jest.fn().mockResolvedValue([]),
+          groupBy: jest.fn().mockResolvedValue([]),
         },
       });
 
@@ -532,6 +539,8 @@ describe("SalesService tenant isolation", () => {
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(1000, 700, 300, 30)),
           count: jest.fn().mockResolvedValue(0),
+          findMany: jest.fn().mockResolvedValue([]),
+          groupBy: jest.fn().mockResolvedValue([]),
         },
       });
 
@@ -552,7 +561,12 @@ describe("SalesService tenant isolation", () => {
         .mockResolvedValueOnce(aggregate(50, 35, 15, 1.5));
       const countMock = jest.fn().mockResolvedValue(1);
       const service = serviceWith({
-        sale: { aggregate: aggregateMock, count: countMock },
+        sale: {
+          aggregate: aggregateMock,
+          count: countMock,
+          findMany: jest.fn().mockResolvedValue([]),
+          groupBy: jest.fn().mockResolvedValue([]),
+        },
       });
 
       await service.summaryMine(user as never, "2026-09-08", "2026-09-08");
@@ -571,11 +585,14 @@ describe("SalesService tenant isolation", () => {
           .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
           .mockResolvedValueOnce(aggregate(100, 70, 30, 3)),
         count: jest.fn().mockResolvedValue(1),
+        groupBy: jest.fn().mockResolvedValue([]),
         findMany: jest
           .fn()
+          .mockResolvedValueOnce([])
           .mockResolvedValueOnce([summaryRow(user.id, 1000, 300, 30)])
           .mockResolvedValueOnce([summaryRow(user.id, -200, -60, 0)])
-          .mockResolvedValueOnce([summaryRow(user.id, 100, 30, 3)]),
+          .mockResolvedValueOnce([summaryRow(user.id, 100, 30, 3)])
+          .mockResolvedValue([]),
       };
       const service = serviceWith({
         sale: saleApi,
@@ -607,11 +624,100 @@ describe("SalesService tenant isolation", () => {
       expect(byUser.totals.totalSold).toBeCloseTo(mine.totalSold);
       expect(byUser.totals.totalProfit).toBeCloseTo(mine.totalProfit);
       expect(byUser.totals.totalCommission).toBeCloseTo(mine.totalCommission);
-      expect(saleApi.findMany.mock.calls[0][0].where).toMatchObject({
+      expect(saleApi.findMany.mock.calls[1][0].where).toMatchObject({
         companyId: user.companyId,
         userId: user.id,
         kind: "invoice",
         isDeleted: false,
+      });
+    });
+
+    function refundOffsetRow(
+      saleId: string,
+      totalSold: number,
+      totalCost: number,
+      totalProfit: number,
+      commissionAmount = 0,
+    ) {
+      return {
+        refundedSaleId: saleId,
+        _sum: {
+          totalSold: new Prisma.Decimal(totalSold),
+          totalCost: new Prisma.Decimal(totalCost),
+          totalProfit: new Prisma.Decimal(totalProfit),
+          commissionAmount: new Prisma.Decimal(commissionAmount),
+        },
+      };
+    }
+
+    it("reverses only the remaining amount when a refunded sale is cancelled", async () => {
+      // Prior-period sale of 600, refunded 200 and cancelled in this period.
+      // Correct period net = -200 (refund) + -400 (remaining) = -600.
+      // Reversing the whole 600 on top of the refund would report -800.
+      const service = serviceWith({
+        sale: {
+          aggregate: jest
+            .fn()
+            .mockResolvedValueOnce(aggregate(null, null, null, null))
+            .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
+            .mockResolvedValueOnce(aggregate(600, 420, 180, 18)),
+          count: jest.fn().mockResolvedValue(0),
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ id: "sale-cancelled", userId: user.id }]),
+          groupBy: jest
+            .fn()
+            .mockResolvedValue([
+              refundOffsetRow("sale-cancelled", -200, -140, -60),
+            ]),
+        },
+      });
+
+      const summary = await service.summaryMine(
+        user as never,
+        "2026-09-08",
+        "2026-09-08",
+      );
+
+      expect(summary).toMatchObject({
+        totalSold: -600,
+        totalCost: -420,
+        totalProfit: -180,
+      });
+    });
+
+    it("reports zero when a sale is refunded and cancelled in the same period", async () => {
+      // The gross sale never entered the period (isDeleted), so the period net
+      // must be 0 instead of the orphan refund (-200).
+      const service = serviceWith({
+        sale: {
+          aggregate: jest
+            .fn()
+            .mockResolvedValueOnce(aggregate(null, null, null, null))
+            .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
+            .mockResolvedValueOnce(aggregate(null, null, null, null)),
+          count: jest.fn().mockResolvedValue(0),
+          findMany: jest
+            .fn()
+            .mockResolvedValue([{ id: "sale-same-period", userId: user.id }]),
+          groupBy: jest
+            .fn()
+            .mockResolvedValue([
+              refundOffsetRow("sale-same-period", -200, -140, -60),
+            ]),
+        },
+      });
+
+      const summary = await service.summaryMine(
+        user as never,
+        "2026-09-08",
+        "2026-09-08",
+      );
+
+      expect(summary).toMatchObject({
+        totalSold: 0,
+        totalCost: 0,
+        totalProfit: 0,
       });
     });
   });

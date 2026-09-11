@@ -56,6 +56,10 @@ describe("ReportsService", () => {
   }
 
   function emptyPrisma(findMany: jest.Mock) {
+    // Queries beyond the ones a test queues explicitly (e.g. the cancelled
+    // sales of the period) resolve to an empty list, so each test only has to
+    // describe the rows it cares about.
+    findMany.mockResolvedValue([]);
     return {
       sale: { findMany },
       product: { findMany: jest.fn().mockResolvedValue([]) },
@@ -326,12 +330,64 @@ describe("ReportsService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it("no descuenta dos veces una venta devuelta y luego cancelada", async () => {
+    // Venta de período anterior (600) devuelta 200 y cancelada en el período.
+    // Reversión correcta del período: 600 (no 600 + 200 = 800).
+    const cancelled = sale({
+      id: "sale-cancelled",
+      totalSold: decimal(600),
+      items: [
+        item({
+          subtotalSold: decimal(600),
+          subtotalCost: decimal(360),
+          profit: decimal(240),
+        }),
+      ],
+    });
+    const refund = sale({
+      id: "refund-1",
+      kind: "refund",
+      refundedSaleId: "sale-cancelled",
+      totalSold: decimal(-200),
+      items: [
+        item({
+          id: "refund-item-1",
+          subtotalSold: decimal(-200),
+          subtotalCost: decimal(-120),
+          profit: decimal(-80),
+        }),
+      ],
+    });
+    const findMany = jest.fn((args: { where: Record<string, unknown> }) => {
+      const where = args.where;
+      if (where.kind === "refund") return Promise.resolve([refund]);
+      if (where.kind === "invoice" && where.isDeleted === true) {
+        return Promise.resolve([cancelled]);
+      }
+      return Promise.resolve([]);
+    });
+    const service = serviceWith({
+      sale: { findMany },
+      product: { findMany: jest.fn().mockResolvedValue([]) },
+      cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.returnedSales).toBe(600);
+    expect(result.kpis.netSales).toBe(-600);
+  });
+
   it("aísla todas las consultas por companyId (multiempresa)", async () => {
     const findMany = jest
       .fn()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([]);
     const productFindMany = jest.fn().mockResolvedValue([]);
     const cashFindMany = jest.fn().mockResolvedValue([]);
     const service = serviceWith({

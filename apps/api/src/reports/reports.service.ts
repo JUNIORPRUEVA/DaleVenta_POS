@@ -74,8 +74,15 @@ export class ReportsService {
         where: { id: companyId },
         select: { inventoryEnabled: true },
       }) ?? Promise.resolve(null);
-    const [sales, returnedSales, refundSales, products, movements, company] =
-      await Promise.all([
+    const [
+      sales,
+      returnedSales,
+      refundSales,
+      products,
+      movements,
+      cancelledInRangeSales,
+      company,
+    ] = await Promise.all([
         this.prisma.sale.findMany({
           where: saleWhere,
           include: {
@@ -142,6 +149,16 @@ export class ReportsService {
             ...(canSeeAll ? {} : { userId: user.id }),
           },
         }),
+        this.prisma.sale.findMany({
+          where: {
+            companyId,
+            ...userFilter,
+            kind: "invoice",
+            isDeleted: true,
+            deletedAt: range,
+          },
+          select: { id: true },
+        }),
         companyPromise,
       ]);
     const inventoryEnabled = company?.inventoryEnabled !== false;
@@ -152,13 +169,30 @@ export class ReportsService {
             this.saleItemsForCategory(sale, selectedCategory).length > 0,
         )
       : sales;
-    const returnedAndRefundedSales = [...returnedSales, ...refundSales];
-    const visibleReturnedSales = selectedCategory
-      ? returnedAndRefundedSales.filter(
-          (sale) =>
-            this.saleItemsForCategory(sale, selectedCategory).length > 0,
-        )
-      : returnedAndRefundedSales;
+    // Refunds of a cancelled sale are already covered by that sale's reversal
+    // (returnedWhere for prior periods, or never counted at all when the sale
+    // was created and cancelled inside this same period). Counting them again
+    // as returns would discount the returned portion twice (600 + 200 = 800).
+    const cancelledInRangeIds = new Set(
+      cancelledInRangeSales.map((row) => row.id),
+    );
+    const visibleByCategory = (rows: typeof sales) =>
+      selectedCategory
+        ? rows.filter(
+            (sale) =>
+              this.saleItemsForCategory(sale, selectedCategory).length > 0,
+          )
+        : rows;
+    const visibleCancelledSales = visibleByCategory(returnedSales);
+    const visibleRefundSales = visibleByCategory(refundSales).filter(
+      (refund) =>
+        !refund.refundedSaleId ||
+        !cancelledInRangeIds.has(refund.refundedSaleId),
+    );
+    const visibleReturnedSales = [
+      ...visibleCancelledSales,
+      ...visibleRefundSales,
+    ];
 
     const totals = visibleSales.reduce(
       (acc, sale) => {

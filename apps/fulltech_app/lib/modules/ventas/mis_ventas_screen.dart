@@ -1022,7 +1022,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Devolver venta'),
         content: Text(
-          'Esta acción registrará una devolución y restaurará el stock correspondiente. ¿Deseas continuar?\n\nMonto disponible: ${_money(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
+          '${sale.hasInventoryTrackedItems ? 'Esta acción registrará una devolución y restaurará el stock correspondiente.' : 'Esta venta no controla inventario: se revertirá solo el cobro, sin mover stock.'} ¿Deseas continuar?\n\nMonto disponible: ${_money(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
         ),
         actions: [
           TextButton(

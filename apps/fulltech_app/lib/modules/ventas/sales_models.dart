@@ -469,6 +469,11 @@ class SaleModel {
       returnStatus == 'ACTIVE' && !isRefundDocument;
   bool get canCancel =>
       kind == 'invoice' && !isCancelled && !isReturned && !isRefundDocument;
+  /// Una venta solo afectó inventario si alguna de sus lineas se vendió con
+  /// control de existencias. Las ventas fuera de inventario (productos con
+  /// trackInventory=false o lineas sin producto) no mueven stock.
+  bool get hasInventoryTrackedItems =>
+      items.any((item) => item.inventoryTrackedSnapshot);
   double get netActiveAmount {
     if (isCancelled || isRefundDocument) return 0;
     final value = totalSold - returnedAmount;
