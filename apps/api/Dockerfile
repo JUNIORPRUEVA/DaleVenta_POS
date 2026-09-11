@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim AS builder
+FROM node:20-bookworm-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=development
@@ -11,7 +11,7 @@ COPY src ./src
 COPY scripts ./scripts
 RUN npm run build
 
-FROM node:20-bullseye-slim AS runner
+FROM node:20-bookworm-slim AS runner
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
