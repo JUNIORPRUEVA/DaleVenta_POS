@@ -65,6 +65,49 @@ type StockConflictDetails = {
   warehouseCode?: string;
 };
 
+/**
+ * Producto/almacén ya resueltos por un lote. Permiten reutilizar
+ * `runMutationInTransaction` sin repetir `product.findFirst` +
+ * `warehouse.findFirst` en cada línea de una venta (corrección del N+1).
+ */
+type PreloadedProduct = {
+  id: string;
+  nombre: string;
+  stock: Prisma.Decimal;
+  unitOfMeasure: {
+    code: string;
+    name: string;
+    symbol: string;
+    precision: number;
+    allowDecimals: boolean;
+  };
+  company: { productSource: ProductSource | null };
+};
+
+type PreloadedWarehouse = { id: string; name: string; code: string };
+
+type MutationOptions = {
+  expectedCurrentQuantity?: Prisma.Decimal;
+  preloadedProduct?: PreloadedProduct;
+  preloadedWarehouse?: PreloadedWarehouse;
+};
+
+/** Línea de una venta a descontar en lote. */
+export type SaleStockDecreaseItem = {
+  productId: string;
+  quantity: Prisma.Decimal.Value;
+  sourceItemId?: string | null;
+};
+
+export type SaleStockDecreaseInput = {
+  companyId: string;
+  warehouseId: string;
+  /** `id` de la venta ya persistida (queda como `sourceId` del movimiento). */
+  saleId: string;
+  createdByUserId?: string | null;
+  items: SaleStockDecreaseItem[];
+};
+
 @Injectable()
 export class InventoryMutationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -95,6 +138,103 @@ export class InventoryMutationService {
       ...input,
       quantityDelta: this.requirePositive(input.quantity, "quantity").negated(),
     });
+  }
+
+  /**
+   * Descarga el stock de TODAS las líneas de una venta dentro de la misma
+   * transacción, resolviendo productos y almacén UNA sola vez.
+   *
+   * Antes, `sales.service.create` llamaba a `decreaseStockInTransaction` por
+   * línea, y cada llamada repetía `product.findFirst` + `warehouse.findFirst`
+   * sobre el mismo almacén y, en ventas con el mismo producto repetido, sobre
+   * el mismo producto. Esta variante por lote elimina esas 2 consultas por
+   * línea sin relajar NINGUNA validación: cada línea sigue pasando por
+   * `runMutationInTransaction` (scope de empresa, producto LOCAL, almacén
+   * activo, precisión de unidad, reconciliación Product.stock ↔
+   * WarehouseStock, stock insuficiente, movimiento inmutable).
+   *
+   * Los movimientos se ejecutan en serie (no `Promise.all`) a propósito: el
+   * orden de las actualizaciones sobre `WarehouseStock`/`Product.stock` debe
+   * ser determinista dentro de la transacción.
+   */
+  async decreaseStockForSaleInTransaction(
+    tx: Tx,
+    input: SaleStockDecreaseInput,
+  ): Promise<InventoryMutationResult[]> {
+    if (input.items.length === 0) return [];
+
+    // 1 consulta total (antes: 1 por línea).
+    const warehouse = await tx.warehouse.findFirst({
+      where: {
+        id: input.warehouseId,
+        companyId: input.companyId,
+        isActive: true,
+      },
+      select: { id: true, name: true, code: true },
+    });
+    if (!warehouse) {
+      throw this.conflict("WAREHOUSE_INACTIVE", "Almacen activo no encontrado", {
+        warehouseId: input.warehouseId,
+      });
+    }
+
+    // 1 consulta total para todos los productos distintos de la venta
+    // (antes: 1 por línea). El `where` incluye `companyId`, así que un id de
+    // otra empresa simplemente no aparece y la línea falla con el mismo
+    // "Producto no encontrado" de siempre.
+    const productIds = Array.from(
+      new Set(input.items.map((item) => item.productId)),
+    );
+    const products = await tx.product.findMany({
+      where: { companyId: input.companyId, id: { in: productIds } },
+      select: {
+        id: true,
+        nombre: true,
+        stock: true,
+        unitOfMeasure: {
+          select: {
+            code: true,
+            name: true,
+            symbol: true,
+            precision: true,
+            allowDecimals: true,
+          },
+        },
+        company: { select: { productSource: true } },
+      },
+    });
+    const productById = new Map(
+      products.map((product) => [product.id, product]),
+    );
+
+    const results: InventoryMutationResult[] = [];
+    for (const item of input.items) {
+      const product = productById.get(item.productId);
+      if (!product) throw new NotFoundException("Producto no encontrado");
+
+      results.push(
+        await this.runMutationInTransaction(
+          tx,
+          {
+            companyId: input.companyId,
+            productId: item.productId,
+            warehouseId: input.warehouseId,
+            quantityDelta: this.requirePositive(
+              item.quantity,
+              "quantity",
+            ).negated(),
+            type: InventoryMovementType.SALE,
+            sourceType: "SALE",
+            sourceId: input.saleId,
+            sourceItemId: item.sourceItemId ?? null,
+            reason: "SALE",
+            createdByUserId: input.createdByUserId ?? null,
+          },
+          { preloadedProduct: product, preloadedWarehouse: warehouse },
+        ),
+      );
+    }
+    return results;
   }
 
   async setCountedStock(input: SetCountedStockInput) {
@@ -228,26 +368,28 @@ export class InventoryMutationService {
       quantityDelta: Prisma.Decimal;
       type: InventoryMovementType;
     },
-    options: { expectedCurrentQuantity?: Prisma.Decimal } = {},
+    options: MutationOptions = {},
   ) {
-    const product = await tx.product.findFirst({
-      where: { id: input.productId, companyId: input.companyId },
-      select: {
-        id: true,
-        nombre: true,
-        stock: true,
-        unitOfMeasure: {
-          select: {
-            code: true,
-            name: true,
-            symbol: true,
-            precision: true,
-            allowDecimals: true,
+    const product =
+      options.preloadedProduct ??
+      (await tx.product.findFirst({
+        where: { id: input.productId, companyId: input.companyId },
+        select: {
+          id: true,
+          nombre: true,
+          stock: true,
+          unitOfMeasure: {
+            select: {
+              code: true,
+              name: true,
+              symbol: true,
+              precision: true,
+              allowDecimals: true,
+            },
           },
+          company: { select: { productSource: true } },
         },
-        company: { select: { productSource: true } },
-      },
-    });
+      }));
     if (!product) throw new NotFoundException("Producto no encontrado");
     if (
       product.company.productSource &&
@@ -258,14 +400,16 @@ export class InventoryMutationService {
       );
     }
 
-    const warehouse = await tx.warehouse.findFirst({
-      where: {
-        id: input.warehouseId,
-        companyId: input.companyId,
-        isActive: true,
-      },
-      select: { id: true, name: true, code: true },
-    });
+    const warehouse =
+      options.preloadedWarehouse ??
+      (await tx.warehouse.findFirst({
+        where: {
+          id: input.warehouseId,
+          companyId: input.companyId,
+          isActive: true,
+        },
+        select: { id: true, name: true, code: true },
+      }));
     if (!warehouse) {
       throw this.conflict("WAREHOUSE_INACTIVE", "Almacen activo no encontrado", {
         warehouseId: input.warehouseId,

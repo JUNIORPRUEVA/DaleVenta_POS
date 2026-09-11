@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
@@ -106,6 +107,46 @@ export class SalesService {
     @Optional()
     private readonly telemetry?: UsageTelemetryService,
   ) {}
+
+  /**
+   * Trazador de tiempos de `create()`, activado SOLO con
+   * `SALES_PERF_LOG=true`. Permite medir por fase (lookups, producto, fiscal,
+   * caja, transacción) sin instalar un APM. Se apaga solo: en producción
+   * normal retorna `null` y no hay coste ni logs.
+   */
+  private salePerfTracer(itemCount: number): {
+    mark: (label: string) => void;
+    countInventoryMutations: (count: number) => void;
+    finish: () => void;
+  } | null {
+    if ((process.env.SALES_PERF_LOG ?? "").trim().toLowerCase() !== "true") {
+      return null;
+    }
+    const logger = new Logger("SalePerf");
+    const startedAt = Date.now();
+    let previous = startedAt;
+    let inventoryMutations = 0;
+    logger.log(`create.start items=${itemCount}`);
+    return {
+      mark: (label: string) => {
+        const now = Date.now();
+        logger.log(
+          `create.${label} +${now - previous}ms total=${now - startedAt}ms`,
+        );
+        previous = now;
+      },
+      countInventoryMutations: (count: number) => {
+        inventoryMutations += count;
+      },
+      finish: () => {
+        const now = Date.now();
+        logger.log(
+          `create.done total=${now - startedAt}ms items=${itemCount} ` +
+            `inventoryMutations=${inventoryMutations}`,
+        );
+      },
+    };
+  }
 
   private saleInclude() {
     return {
@@ -1124,6 +1165,7 @@ export class SalesService {
     if (!dto.items.length) {
       throw new BadRequestException("La venta requiere al menos 1 item");
     }
+    const perf = this.salePerfTracer(dto.items.length);
 
     const sourceQuotationId = dto.sourceQuotationId?.trim() || null;
     const sourceQuotation = sourceQuotationId
@@ -1149,6 +1191,7 @@ export class SalesService {
       if (existingFromQuotation) return existingFromQuotation;
     }
 
+    perf?.mark("document_lookups");
     const customerId =
       dto.customerId?.trim() || sourceQuotation?.customerId || null;
     const clientRequestId = dto.clientRequestId?.trim() || null;
@@ -1190,6 +1233,7 @@ export class SalesService {
       }
     }
 
+    perf?.mark("core_lookups");
     const [companySnapshot, appConfigSnapshot] = await Promise.all([
       this.prisma.company.findFirst({
         where: { id: companyId },
@@ -1329,6 +1373,7 @@ export class SalesService {
         );
 
     this.assertNoUnsupportedExternalStockMutation(normalizedItems);
+    perf?.mark("products");
 
     const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
     const defaultPriceMode = this.taxes.resolvePriceMode(fiscalSettings);
@@ -1379,6 +1424,7 @@ export class SalesService {
           })),
         });
 
+    perf?.mark("fiscal");
     // Descuento COMERCIAL real por línea (ventas directas). Se separa del
     // prorrateo fiscal del descuento general (que calculate() guardaba en
     // lineDiscountAmount): el PDF solo muestra el descuento comercial.
@@ -1503,6 +1549,7 @@ export class SalesService {
     if (!activeSession) {
       throw new BadRequestException("Debes abrir caja antes de facturar.");
     }
+    perf?.mark("cash_gate");
 
     const requestedVoucherType = dto.fiscalVoucherType?.trim()
       ? this.ncf.normalizeType(dto.fiscalVoucherType)
@@ -1572,6 +1619,7 @@ export class SalesService {
       creditBalance,
     } = payment;
 
+    perf?.mark("pre_transaction");
     try {
       const sale = await this.prisma.$transaction(async (tx) => {
         const shouldResolveOperationalContext =
@@ -1670,82 +1718,93 @@ export class SalesService {
           },
         });
 
-        for (let index = 0; index < normalizedItems.length; index += 1) {
-          const item = normalizedItems[index];
+        // Las líneas se construyen primero y se insertan en UNA sola sentencia
+        // (`createMany`) en lugar de N `saleItem.create` secuenciales. Los ids
+        // se generan aquí porque el movimiento de inventario los necesita como
+        // `sourceItemId` y `createMany` no devuelve las filas creadas.
+        const saleItemRows = normalizedItems.map((item, index) => {
           const warehouseSnapshot = item.inventoryTrackedSnapshot
             ? operationalContext?.warehouse
             : null;
-          const saleItem = await tx.saleItem.create({
-            data: {
-              saleId: sale.id,
-              ...(() => {
-                const taxLine = taxCalculation.lines[index];
-                const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
-                const itemNetTaxProfit = (
-                  sourceQuotation || fiscalSettings.taxEnabled
-                    ? (taxLine?.taxableBase ?? new Prisma.Decimal(0)).plus(
-                        taxLine?.exemptAmount ?? new Prisma.Decimal(0),
-                      )
-                    : lineTotal
-                ).minus(item.subtotalCost);
-                const itemCommercialProfit = itemNetTaxProfit;
-                return {
-                  grossAmount: sourceQuotation
-                    ? (taxLine?.grossAmount ?? item.subtotalSold)
-                    : directCommercialLineValues[index].realGross,
-                  lineDiscountAmount: sourceQuotation
-                    ? (taxLine?.discountAmount ?? new Prisma.Decimal(0))
-                    : directCommercialLineValues[index].realLineDiscount,
-                  taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
-                  taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
-                  taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),
-                  exemptAmount: taxLine?.exemptAmount ?? item.subtotalSold,
-                  taxIncluded: taxLine?.taxIncluded ?? false,
-                  taxExempt: taxLine?.taxExempt ?? true,
-                  subtotalSold: lineTotal,
-                  profit: itemCommercialProfit,
-                  commercialProfit: itemCommercialProfit,
-                  netTaxProfit: itemNetTaxProfit,
-                };
-              })(),
-              productId: item.productId,
-              productSource: item.productSource,
-              sourceProductId: item.sourceProductId,
-              warehouseId: warehouseSnapshot?.id ?? null,
-              warehouseNameSnapshot: warehouseSnapshot?.name ?? null,
-              warehouseCodeSnapshot: warehouseSnapshot?.code ?? null,
-              productNameSnapshot: item.productNameSnapshot,
-              productImageSnapshot: item.productImageSnapshot,
-              qty: item.qty,
-              inventoryTrackedSnapshot: item.inventoryTrackedSnapshot === true,
-              unitCodeSnapshot: item.unitCodeSnapshot,
-              unitNameSnapshot: item.unitNameSnapshot,
-              unitSymbolSnapshot: item.unitSymbolSnapshot,
-              unitPrecisionSnapshot: item.unitPrecisionSnapshot,
-              priceSoldUnit: item.priceSoldUnit,
-              costUnitSnapshot: item.costUnitSnapshot,
-              subtotalCost: item.subtotalCost,
-            },
-          });
+          const taxLine = taxCalculation.lines[index];
+          const lineTotal = taxLine?.lineTotal ?? item.subtotalSold;
+          const itemNetTaxProfit = (
+            sourceQuotation || fiscalSettings.taxEnabled
+              ? (taxLine?.taxableBase ?? new Prisma.Decimal(0)).plus(
+                  taxLine?.exemptAmount ?? new Prisma.Decimal(0),
+                )
+              : lineTotal
+          ).minus(item.subtotalCost);
+          const itemCommercialProfit = itemNetTaxProfit;
+          return {
+            id: crypto.randomUUID(),
+            saleId: sale.id,
+            grossAmount: sourceQuotation
+              ? (taxLine?.grossAmount ?? item.subtotalSold)
+              : directCommercialLineValues[index].realGross,
+            lineDiscountAmount: sourceQuotation
+              ? (taxLine?.discountAmount ?? new Prisma.Decimal(0))
+              : directCommercialLineValues[index].realLineDiscount,
+            taxableBase: taxLine?.taxableBase ?? new Prisma.Decimal(0),
+            taxRate: taxLine?.taxRate ?? new Prisma.Decimal(0),
+            taxAmount: taxLine?.taxAmount ?? new Prisma.Decimal(0),
+            exemptAmount: taxLine?.exemptAmount ?? item.subtotalSold,
+            taxIncluded: taxLine?.taxIncluded ?? false,
+            taxExempt: taxLine?.taxExempt ?? true,
+            subtotalSold: lineTotal,
+            profit: itemCommercialProfit,
+            commercialProfit: itemCommercialProfit,
+            netTaxProfit: itemNetTaxProfit,
+            productId: item.productId,
+            productSource: item.productSource,
+            sourceProductId: item.sourceProductId,
+            warehouseId: warehouseSnapshot?.id ?? null,
+            warehouseNameSnapshot: warehouseSnapshot?.name ?? null,
+            warehouseCodeSnapshot: warehouseSnapshot?.code ?? null,
+            productNameSnapshot: item.productNameSnapshot,
+            productImageSnapshot: item.productImageSnapshot,
+            qty: item.qty,
+            inventoryTrackedSnapshot: item.inventoryTrackedSnapshot === true,
+            unitCodeSnapshot: item.unitCodeSnapshot,
+            unitNameSnapshot: item.unitNameSnapshot,
+            unitSymbolSnapshot: item.unitSymbolSnapshot,
+            unitPrecisionSnapshot: item.unitPrecisionSnapshot,
+            priceSoldUnit: item.priceSoldUnit,
+            costUnitSnapshot: item.costUnitSnapshot,
+            subtotalCost: item.subtotalCost,
+          };
+        });
 
-          if (
-            item.productId &&
-            item.inventoryTrackedSnapshot === true &&
-            operationalContext
-          ) {
-            await this.inventoryMutationService().decreaseStockInTransaction(
+        if (saleItemRows.length > 0) {
+          await tx.saleItem.createMany({ data: saleItemRows });
+        }
+
+        // El stock se descarga en lote: productos y almacén se resuelven una
+        // sola vez para toda la venta (antes: 2 consultas por línea).
+        if (operationalContext) {
+          const stockItems = saleItemRows.flatMap((row, index) => {
+            const item = normalizedItems[index];
+            if (!item.productId || item.inventoryTrackedSnapshot !== true) {
+              return [];
+            }
+            return [
+              {
+                productId: item.productId,
+                quantity: item.qty,
+                sourceItemId: row.id,
+              },
+            ];
+          });
+          if (stockItems.length > 0) {
+            perf?.countInventoryMutations(stockItems.length);
+            await this.inventoryMutationService().decreaseStockForSaleInTransaction(
               tx,
               {
                 companyId,
-                productId: item.productId,
                 warehouseId: operationalContext.warehouse.id,
-                quantity: item.qty,
-                type: InventoryMovementType.SALE,
-                sourceType: "SALE",
-                sourceId: sale.id,
-                sourceItemId: saleItem.id,
-                reason: "SALE",
+                saleId: sale.id,
                 createdByUserId: user.id,
+                items: stockItems,
               },
             );
           }
@@ -1796,11 +1855,13 @@ export class SalesService {
 
         return createdSale;
       }, SALE_TRANSACTION_OPTIONS);
+      perf?.mark("transaction");
       this.emitSaleEvent(companyId, "sale.created", sale.id, {
         userId: user.id,
         cashSessionId: sale.cashSessionId,
         saleDate: sale.saleDate,
       });
+      perf?.finish();
       return sale;
     } catch (error) {
       this.logOfflineSyncConflictIfSafe(error, {

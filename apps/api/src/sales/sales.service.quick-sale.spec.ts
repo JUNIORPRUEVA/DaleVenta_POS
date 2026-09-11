@@ -178,6 +178,7 @@ function buildCancelHarness(sale: ReturnType<typeof quickSale>) {
   };
   const inventory = {
     increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    decreaseStockForSaleInTransaction: jest.fn().mockResolvedValue([]),
     decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
   };
   return { service: serviceWith(prisma, inventory), prisma, inventory, updateMany };
@@ -233,6 +234,7 @@ function buildReturnHarness(
   };
   const inventory = {
     increaseStockInTransaction: jest.fn().mockResolvedValue({}),
+    decreaseStockForSaleInTransaction: jest.fn().mockResolvedValue([]),
     decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
   };
   return {
@@ -247,10 +249,10 @@ function buildReturnHarness(
 describe("SalesService quick sale (sin inventario) cancel/return", () => {
   it("creates an out-of-inventory sale without stock mutation or warehouse", async () => {
     const createdItems: any[] = [];
-    const saleItemCreate = jest.fn().mockImplementation((args: any) => {
-      const row = { id: `item-${createdItems.length + 1}`, ...args.data };
-      createdItems.push(row);
-      return Promise.resolve(row);
+    const saleItemCreateMany = jest.fn().mockImplementation((args: any) => {
+      const rows = (args.data as any[]).map((row) => ({ ...row }));
+      createdItems.push(...rows);
+      return Promise.resolve({ count: rows.length });
     });
     const prisma = {
       cotizacion: { findFirst: jest.fn() },
@@ -285,12 +287,12 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
               }),
             ),
           },
-          saleItem: { create: saleItemCreate },
+          saleItem: { createMany: saleItemCreateMany },
         }),
       ),
     };
     const inventory = {
-      decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
+      decreaseStockForSaleInTransaction: jest.fn().mockResolvedValue([]),
       increaseStockInTransaction: jest.fn().mockResolvedValue({}),
     };
     const service = serviceWith(prisma, inventory);
@@ -307,9 +309,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
       ],
     } as never);
 
-    expect(inventory.decreaseStockInTransaction).not.toHaveBeenCalled();
-    expect(saleItemCreate).toHaveBeenCalledTimes(1);
-    expect(saleItemCreate.mock.calls[0][0].data).toEqual(
+    expect(
+      inventory.decreaseStockForSaleInTransaction,
+    ).not.toHaveBeenCalled();
+    expect(saleItemCreateMany).toHaveBeenCalledTimes(1);
+    expect(saleItemCreateMany.mock.calls[0][0].data[0]).toEqual(
       expect.objectContaining({
         productId: null,
         warehouseId: null,
@@ -678,7 +682,9 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     await service.returnSale(user as never, "sale-untracked-return", {} as never);
 
     expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
-    expect(inventory.decreaseStockInTransaction).not.toHaveBeenCalled();
+    expect(
+      inventory.decreaseStockForSaleInTransaction,
+    ).not.toHaveBeenCalled();
   });
 
   it("restores stock exactly once for a tracked quick-sale line", async () => {

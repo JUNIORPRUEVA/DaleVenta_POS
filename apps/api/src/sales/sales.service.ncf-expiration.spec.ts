@@ -17,13 +17,13 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
       userId: user.id,
     };
     let createdItem: Record<string, unknown> | null = null;
-    const saleItemCreate = jest.fn().mockImplementation((args) => {
-      createdItem = { id: "sale-item-a", ...args.data };
-      return Promise.resolve(createdItem);
+    const saleItemCreateMany = jest.fn().mockImplementation((args) => {
+      createdItem = { ...(args.data as Record<string, unknown>[])[0] };
+      return Promise.resolve({ count: 1 });
     });
     const tx = {
       client: { update: jest.fn() },
-      saleItem: { create: saleItemCreate },
+      saleItem: { createMany: saleItemCreateMany },
       sale: {
         create: jest.fn().mockResolvedValue(createdSale),
         findUniqueOrThrow: jest.fn().mockImplementation(() =>

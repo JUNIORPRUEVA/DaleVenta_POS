@@ -79,9 +79,9 @@ describe("SalesService UoM decimal foundation", () => {
       cashSessionId: "cash-1",
       saleDate: new Date("2026-08-30T12:00:00.000Z"),
     });
-    const saleItemCreate = jest.fn().mockImplementation((args) => {
-      createdItem = { id: "item-1", ...args.data };
-      return Promise.resolve(createdItem);
+    const saleItemCreateMany = jest.fn().mockImplementation((args) => {
+      createdItem = { ...(args.data as Record<string, unknown>[])[0] };
+      return Promise.resolve({ count: 1 });
     });
     const prisma = {
       product: {
@@ -129,7 +129,7 @@ describe("SalesService UoM decimal foundation", () => {
               },
             }),
           },
-          saleItem: { create: saleItemCreate },
+          saleItem: { createMany: saleItemCreateMany },
           sale: {
             create: saleCreate,
             findUniqueOrThrow: jest.fn().mockImplementation(() =>
@@ -145,7 +145,7 @@ describe("SalesService UoM decimal foundation", () => {
       ),
     };
     const inventory = {
-      decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
+      decreaseStockForSaleInTransaction: jest.fn().mockResolvedValue([]),
     };
     const service = serviceWith(prisma, inventory);
 
@@ -159,14 +159,18 @@ describe("SalesService UoM decimal foundation", () => {
       ],
     });
 
-    expect(inventory.decreaseStockInTransaction).toHaveBeenCalledWith(
+    expect(inventory.decreaseStockForSaleInTransaction).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         warehouseId: "warehouse-1",
-        quantity: new Prisma.Decimal("5.5"),
-        sourceType: "SALE",
-        sourceId: "sale-1",
-        sourceItemId: "item-1",
+        saleId: "sale-1",
+        items: [
+          expect.objectContaining({
+            productId: "product-yard",
+            quantity: new Prisma.Decimal("5.5"),
+            sourceItemId: createdItem!["id"],
+          }),
+        ],
       }),
     );
     expect(sale.items[0].unitCodeSnapshot).toBe("YARD");

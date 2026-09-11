@@ -97,10 +97,10 @@ function buildCreateHarness(options: {
     cashSessionId: "cash-1",
     saleDate: new Date("2026-09-04T10:00:00.000Z"),
   });
-  const saleItemCreate = jest.fn().mockImplementation((args) => {
-    const row = { id: `item-${createdItems.length + 1}`, ...args.data };
-    createdItems.push(row);
-    return Promise.resolve(row);
+  const saleItemCreateMany = jest.fn().mockImplementation((args) => {
+    const rows = (args.data as any[]).map((row) => ({ ...row }));
+    createdItems.push(...rows);
+    return Promise.resolve({ count: rows.length });
   });
   const existingSaleFind = jest.fn().mockResolvedValue(null);
   const txSaleFind = jest.fn().mockImplementation(() =>
@@ -153,11 +153,12 @@ function buildCreateHarness(options: {
           create: saleCreate,
           findUniqueOrThrow: txSaleFind,
         },
-        saleItem: { create: saleItemCreate },
+        saleItem: { createMany: saleItemCreateMany },
       }),
     ),
   };
   const inventory = {
+    decreaseStockForSaleInTransaction: jest.fn().mockResolvedValue([]),
     decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
     increaseStockInTransaction: jest.fn().mockResolvedValue({}),
   };
@@ -185,7 +186,9 @@ describe("SalesService optional inventory tracking", () => {
 
     expect(createdItems[0].inventoryTrackedSnapshot).toBe(true);
     expect(createdItems[0].warehouseCodeSnapshot).toBe("MAIN");
-    expect(inventory.decreaseStockInTransaction).toHaveBeenCalledTimes(1);
+    expect(inventory.decreaseStockForSaleInTransaction).toHaveBeenCalledTimes(
+      1,
+    );
     expect(sale.paymentCashAmount.toString()).toBe("118");
     expect(sale.cashReceived.toString()).toBe("120");
     expect(sale.changeAmount.toString()).toBe("2");
@@ -215,7 +218,9 @@ describe("SalesService optional inventory tracking", () => {
 
     expect(createdItems[0].inventoryTrackedSnapshot).toBe(false);
     expect(createdItems[0].warehouseId).toBeNull();
-    expect(inventory.decreaseStockInTransaction).not.toHaveBeenCalled();
+    expect(
+      inventory.decreaseStockForSaleInTransaction,
+    ).not.toHaveBeenCalled();
     const tx = (prisma.$transaction as jest.Mock).mock.calls[0][0];
     expect(tx).toBeDefined();
   });
@@ -229,7 +234,7 @@ describe("SalesService optional inventory tracking", () => {
     });
     expect(serviceHarness.createdItems[0].inventoryTrackedSnapshot).toBe(false);
     expect(
-      serviceHarness.inventory.decreaseStockInTransaction,
+      serviceHarness.inventory.decreaseStockForSaleInTransaction,
     ).not.toHaveBeenCalled();
 
     const offHarness = buildCreateHarness({
@@ -241,7 +246,7 @@ describe("SalesService optional inventory tracking", () => {
     });
     expect(offHarness.createdItems[0].inventoryTrackedSnapshot).toBe(false);
     expect(
-      offHarness.inventory.decreaseStockInTransaction,
+      offHarness.inventory.decreaseStockForSaleInTransaction,
     ).not.toHaveBeenCalled();
   });
 
@@ -279,12 +284,20 @@ describe("SalesService optional inventory tracking", () => {
       false,
       false,
     ]);
-    expect(inventory.decreaseStockInTransaction).toHaveBeenCalledTimes(1);
-    expect(inventory.decreaseStockInTransaction).toHaveBeenCalledWith(
+    expect(inventory.decreaseStockForSaleInTransaction).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(inventory.decreaseStockForSaleInTransaction).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        productId: "tracked-yard",
-        quantity: new Prisma.Decimal("2.375"),
+        warehouseId: "warehouse-1",
+        items: [
+          expect.objectContaining({
+            productId: "tracked-yard",
+            quantity: new Prisma.Decimal("2.375"),
+            sourceItemId: createdItems[0].id,
+          }),
+        ],
       }),
     );
   });
@@ -646,7 +659,7 @@ describe("SalesService optional inventory tracking", () => {
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(existing) },
     };
-    const inventory = { decreaseStockInTransaction: jest.fn() };
+    const inventory = { decreaseStockForSaleInTransaction: jest.fn() };
     const service = serviceWith(prisma, inventory);
 
     const result = await service.create(user as never, {
@@ -655,7 +668,9 @@ describe("SalesService optional inventory tracking", () => {
     });
 
     expect(result).toBe(existing);
-    expect(inventory.decreaseStockInTransaction).not.toHaveBeenCalled();
+    expect(
+      inventory.decreaseStockForSaleInTransaction,
+    ).not.toHaveBeenCalled();
   });
 
   it("returns existing refund on clientRequestId retry without duplicate movement", async () => {

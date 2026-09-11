@@ -32,6 +32,7 @@ import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/offline/sync_status_menu_button.dart';
+import '../../core/perf/perf_trace.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
@@ -318,6 +319,18 @@ String? nextActiveTicketIdAfterRemoval(
       ? 0
       : originalIndex.clamp(0, remaining.length - 1);
   return remaining[nextIndex];
+}
+
+/// Indexa el catálogo por `id` una sola vez.
+///
+/// `_findOfficialProduct` recorre `_productos` de forma lineal, así que buscar
+/// el producto oficial de cada línea del ticket dentro de un bucle es
+/// O(líneas × catálogo). Este índice lo convierte en O(catálogo + líneas).
+Map<String, ProductModel> indexProductsById(List<ProductModel> products) {
+  if (products.isEmpty) return const <String, ProductModel>{};
+  return <String, ProductModel>{
+    for (final product in products) product.id: product,
+  };
 }
 
 class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
@@ -1982,8 +1995,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     unawaited(_syncQuotationAi());
   }
 
+  /// El banner de advertencias de IA está DESACTIVADO en Facturación.
+  ///
+  /// Se mantiene el interruptor explícito (en lugar de dejar el `false` suelto)
+  /// porque de él dependen dos decisiones de rendimiento con impacto real en el
+  /// flujo de caja:
+  ///
+  /// 1. `build()` no se suscribe al estado de IA mientras esté apagado (ver el
+  ///    `select` del `build`), evitando reconstruir TODO el POS en cada edición
+  ///    del carrito o cambio de ticket.
+  /// 2. `_syncQuotationAi()` no dispara el análisis remoto mientras esté apagado
+  ///    (evita `POST /cotizaciones/ai/analyze` tras cada cambio de carrito).
+  ///
+  /// Al reactivarlo, ambos comportamientos vuelven solos: no hay que tocar nada
+  /// más.
+  static const bool _aiBannerEnabled = false;
+
   bool _shouldShowAiBanner(QuotationAiState aiState) {
-    return false;
+    return _aiBannerEnabled;
   }
 
   void _hideSalesNotice() {
@@ -2042,7 +2071,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   String _nextDesktopTicketTitle() => 'Ticket ${_desktopTickets.length + 1}';
 
+  /// Cierra una traza de interacción cuando el frame disparado por el
+  /// `setState` asociado ya se pintó. Con la instrumentación apagada
+  /// (`trace == null`) no se programa ningún callback: coste cero en release.
+  void _traceNextFrame(PerfTrace? trace) {
+    if (trace == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => trace.finish());
+  }
+
   void _createNewDesktopTicket() {
+    final trace = PerfTrace.begin('ticket.create');
     setState(() {
       _writeActiveDesktopDraft();
       final user = ref.read(authStateProvider).user;
@@ -2059,11 +2097,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _replaceEditorStateFromDraft(ticket);
       _writeActiveDesktopDraft();
     });
+    trace?.step('set_state');
     _schedulePersistEditorDraft(immediate: true);
+    trace?.step('persist_scheduled');
+    _traceNextFrame(trace);
   }
 
   void _switchDesktopTicket(String id) {
     if (id == _activeDesktopTicketId) return;
+    final trace = PerfTrace.begin('ticket.switch');
     setState(() {
       _writeActiveDesktopDraft();
       final next = _findDesktopTicket(id);
@@ -2073,8 +2115,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _replaceEditorStateFromDraft(next);
       _syncEditorItemsFiscalWithLoadedProducts();
     });
+    trace?.step('set_state');
     _schedulePersistEditorDraft();
     unawaited(_syncQuotationAi());
+    trace?.step('persist_and_ai_scheduled');
+    _traceNextFrame(trace);
   }
 
   Future<void> _renameDesktopTicket(String id) async {
@@ -2954,9 +2999,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _syncQuotationAi({bool triggerAi = true}) {
+    // Con el banner de IA apagado, el resultado del análisis remoto no tiene
+    // ningún consumidor visible: dispararlo solo añadía un POST
+    // `/cotizaciones/ai/analyze` (backend → OpenAI) 1,1 s después de cada
+    // cambio del carrito, compitiendo por red y servidor con `POST /sales`.
+    // El contexto local se sigue publicando (barato) para que el asistente
+    // funcione sin cambios si se reactiva el banner.
+    final effectiveTriggerAi = triggerAi && _aiBannerEnabled;
     return ref
         .read(quotationAiControllerProvider.notifier)
-        .setContext(_buildQuotationAiContext(), triggerAi: triggerAi);
+        .setContext(_buildQuotationAiContext(), triggerAi: effectiveTriggerAi);
   }
 
   QuotationContext _buildQuotationAiContext({String? noteOverride}) {
@@ -2968,9 +3020,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ? '${_items.length} productos seleccionados'
         : null;
 
+    // `_findOfficialProduct` recorre el catálogo completo de forma lineal. Este
+    // contexto se reconstruye en cada edición del ticket, así que se indexa el
+    // catálogo una sola vez por contexto en lugar de una vez por línea.
+    final officialById = indexProductsById(_productos);
+
     final contextItems = _items
         .map((item) {
-          final official = _findOfficialProduct(item.productId);
+          final official = officialById[item.productId];
           return QuotationContextItem(
             productId: item.productId,
             productName: item.nombre,
@@ -6069,25 +6126,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _finalizeCotizacion({_CheckoutResult? checkout}) async {
-    if (!_validateCheckoutReady()) return;
+    final trace = PerfTrace.begin('sale');
+    if (!_validateCheckoutReady()) {
+      trace?.finish(outcome: 'validation_failed');
+      return;
+    }
 
     final popOnSave =
         (_safeRouteUri()?.queryParameters['popOnSave'] ?? '').trim() == '1';
 
-    if (checkout != null) {
-      final cashState = await _cashStateWithAuthorizationFallback();
-      if (cashState == null) return;
-      if (cashState.activeSession == null) {
-        if (!mounted) return;
-        _showSalesNotice(
-          title: 'Caja cerrada',
-          message: 'No se puede cobrar ventas con la caja cerrada.',
-          icon: Icons.lock_outline_rounded,
-          accent: const Color(0xFFF59E0B),
-        );
-        return;
-      }
-    }
+    // El gate de caja NO se repite aquí: `_openCheckoutDialog` ya lo ejecutó
+    // (con el mismo `_cashStateWithAuthorizationFallback`) antes de abrir el
+    // diálogo de cobro, y el backend vuelve a validar la sesión activa antes de
+    // crear la venta. Repetirlo costaba un `GET /cash/state` completo — ~1 RTT
+    // extra en CADA cobro — sin añadir ninguna garantía nueva.
 
     final paymentLabel = checkout == null
         ? null
@@ -6099,13 +6151,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
     try {
       final saleItems = _buildCheckoutSaleItems();
+      trace?.step('build_payload');
 
       final createdSale = await _createSaleWithAuthorizationFallback(
         checkout: checkout,
         saleNote: saleNote,
         saleItems: saleItems,
       );
+      trace?.step('post_sales');
       if (createdSale == null) {
+        trace?.finish(outcome: 'not_authorized');
         if (!mounted) return;
         _showSalesNotice(
           title: 'Cobro no autorizado',
@@ -6117,36 +6172,21 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         return;
       }
 
-      if (checkout != null) {
-        final saleToPrint = createdSale.items.isNotEmpty
-            ? createdSale
-            : await ref.read(ventasRepositoryProvider).getById(createdSale.id);
-        final printResult = await ref
-            .read(unifiedTicketPrinterProvider)
-            .printSaleTicket(sale: saleToPrint, items: saleToPrint.items);
-        if (!printResult.success && mounted) {
-          _showSalesNotice(
-            title: 'Factura guardada sin imprimir',
-            message: printResult.message,
-            icon: Icons.print_disabled_outlined,
-            accent: const Color(0xFFF59E0B),
-          );
-        } else if (printResult.warning != null && mounted) {
-          // La venta se completó; solo se informa que la caja no se abrió.
-          _showSalesNotice(
-            title: 'Caja registradora',
-            message: printResult.warning!,
-            icon: Icons.point_of_sale_outlined,
-            accent: const Color(0xFFF59E0B),
-          );
-        }
+      // ============================================================
+      // 1) UI PRIMERO. El `await` anterior terminó con 2xx: la venta YA está
+      //    persistida. Todo lo que el usuario percibe (ticket fuera, aviso
+      //    "Venta guardada", invalidación de datos) se hace aquí, antes de
+      //    cualquier operación secundaria que pueda tardar segundos (impresión
+      //    física, apertura de cajón, consulta extra).
+      //
+      //    El widget no puede haberse desmontado durante el POST si llegamos
+      //    aquí (el POST es awaited y no toca `ref` después), pero se comprueba
+      //    por robustez antes de usar `ref`.
+      // ============================================================
+      if (!mounted) {
+        trace?.finish(outcome: 'unmounted_after_commit');
+        return;
       }
-
-      // Tras awaits largos (impresión/consulta de la venta) el widget pudo
-      // desmontarse: usar `ref` aquí lanzaría
-      // "Cannot use ref after the widget was disposed". Si la pantalla ya no
-      // existe, el realtime (salesStream) refresca créditos/ventas.
-      if (!mounted) return;
       if (checkout?.method == _CheckoutPaymentMethod.credit) {
         ref.invalidate(salesCreditsProvider);
       }
@@ -6166,7 +6206,45 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         icon: Icons.check_circle_outline_rounded,
         accent: const Color(0xFF1957E6),
       );
+      trace?.step('ui_updated');
+
+      // ============================================================
+      // 2) Secundario DESPUÉS de la UI. La impresión puede tardar segundos
+      //    (spooler del sistema, impresora térmica, red) y NO debe retrasar ni
+      //    la confirmación visual ni la liberación del ticket. Un fallo aquí
+      //    jamás altera la venta: solo informa.
+      // ============================================================
+      if (checkout != null) {
+        final printer = ref.read(unifiedTicketPrinterProvider);
+        final saleToPrint = createdSale.items.isNotEmpty
+            ? createdSale
+            : await ref.read(ventasRepositoryProvider).getById(createdSale.id);
+        trace?.step('print_prepare');
+        final printResult = await printer.printSaleTicket(
+          sale: saleToPrint,
+          items: saleToPrint.items,
+        );
+        trace?.step('print');
+        if (!printResult.success && mounted) {
+          _showSalesNotice(
+            title: 'Factura guardada sin imprimir',
+            message: printResult.message,
+            icon: Icons.print_disabled_outlined,
+            accent: const Color(0xFFF59E0B),
+          );
+        } else if (printResult.warning != null && mounted) {
+          // La venta se completó; solo se informa que la caja no se abrió.
+          _showSalesNotice(
+            title: 'Caja registradora',
+            message: printResult.warning!,
+            icon: Icons.point_of_sale_outlined,
+            accent: const Color(0xFFF59E0B),
+          );
+        }
+      }
+      trace?.finish(outcome: 'ok');
     } catch (e) {
+      trace?.finish(outcome: 'error');
       if (!mounted) return;
       _showSalesNotice(
         title: 'No se pudo completar',
@@ -6294,10 +6372,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   PreferredSizeWidget _buildDesktopAppBar(
-    QuotationAiState aiState,
+    QuotationAiState? aiState,
     UserModel? user,
   ) {
-    final showAiBanner = _shouldShowAiBanner(aiState);
+    final showAiBanner = aiState != null && _shouldShowAiBanner(aiState);
     final settings = _companySettingsCache;
     return FullTechPageHeader(
       title: 'Facturación',
@@ -7159,11 +7237,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Widget _buildMobileBody(
-    QuotationAiState aiState,
+    QuotationAiState? aiState,
     UserModel? currentUser, {
     required bool inventoryEnabled,
   }) {
-    final showAiBanner = _shouldShowAiBanner(aiState);
+    final bannerState = (aiState != null && _shouldShowAiBanner(aiState))
+        ? aiState
+        : null;
     return LayoutBuilder(
       builder: (context, constraints) {
         final bottomSafe = MediaQuery.viewPaddingOf(context).bottom;
@@ -7233,13 +7313,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         children: [
                           _buildMobileTicketInfoBar(),
                           _buildMobileSearchBar(),
-                          if (showAiBanner)
+                          if (bannerState != null)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
                               child: AiWarningBanner(
-                                warnings: aiState.visibleWarnings,
+                                warnings: bannerState.visibleWarnings,
                                 analyzing:
-                                    aiState.analyzing || aiState.loadingRules,
+                                    bannerState.analyzing ||
+                                    bannerState.loadingRules,
                                 onOpenRule: (warning) => _openAiRelatedRule(
                                   warning.relatedRuleId,
                                   warning.relatedRuleTitle,
@@ -7281,12 +7362,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Widget _buildDesktopBody(
-    QuotationAiState aiState,
+    QuotationAiState? aiState,
     UserModel? currentUser, {
     required bool inventoryEnabled,
   }) {
     final isAdmin = currentUser?.appRole == AppRole.admin;
-    final showAiBanner = _shouldShowAiBanner(aiState);
+    final bannerState = (aiState != null && _shouldShowAiBanner(aiState))
+        ? aiState
+        : null;
     final managedCategories = ref.watch(inventoryCategoriesProvider).items;
     final desktopCategories = _catalogCategories(managedCategories);
     final hasDesktopCategories = desktopCategories.isNotEmpty;
@@ -7294,12 +7377,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
       child: Column(
         children: [
-          if (showAiBanner)
+          if (bannerState != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: AiWarningBanner(
-                warnings: aiState.visibleWarnings,
-                analyzing: aiState.analyzing || aiState.loadingRules,
+                warnings: bannerState.visibleWarnings,
+                analyzing: bannerState.analyzing || bannerState.loadingRules,
                 onOpenRule: (warning) => _openAiRelatedRule(
                   warning.relatedRuleId,
                   warning.relatedRuleTitle,
@@ -7573,7 +7656,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   Widget build(BuildContext context) {
     final inventoryEnabled = _inventoryEnabledCache;
     final user = _sessionUser;
-    final aiState = ref.watch(quotationAiControllerProvider);
+    // IMPORTANTE (rendimiento): la pantalla NO se suscribe al estado de IA.
+    // El `select` solo emite cuando el banner está realmente visible
+    // (`_shouldShowAiBanner`), por lo que con el banner apagado el POS deja de
+    // reconstruirse entero cada vez que `_syncQuotationAi()` publica contexto
+    // (cada edición del carrito, cambio/eliminación de ticket, carga de
+    // catálogo, selección de cliente). Si el banner se reactiva, el `select`
+    // vuelve a notificar con normalidad sin cambios adicionales.
+    final aiState = ref.watch(
+      quotationAiControllerProvider.select(
+        (state) => _shouldShowAiBanner(state) ? state : null,
+      ),
+    );
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
 
     return Scaffold(

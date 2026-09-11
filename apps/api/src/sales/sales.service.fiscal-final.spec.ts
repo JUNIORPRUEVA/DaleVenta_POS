@@ -110,9 +110,9 @@ describe("SalesService fiscal closure", () => {
       saleDate: new Date(),
     };
     let createdItem: Record<string, unknown> | null = null;
-    const saleItemCreate = jest.fn().mockImplementation((args) => {
-      createdItem = { id: "sale-item-a", ...args.data };
-      return Promise.resolve(createdItem);
+    const saleItemCreateMany = jest.fn().mockImplementation((args) => {
+      createdItem = { ...(args.data as Record<string, unknown>[])[0] };
+      return Promise.resolve({ count: 1 });
     });
     const tx = {
       terminal: {
@@ -132,7 +132,7 @@ describe("SalesService fiscal closure", () => {
           },
         }),
       },
-      saleItem: { create: saleItemCreate },
+      saleItem: { createMany: saleItemCreateMany },
       client: { update: jest.fn() },
       sale: {
         create: jest.fn().mockResolvedValue(createdSale),
@@ -237,7 +237,7 @@ describe("SalesService fiscal closure", () => {
       } as never,
       ncf as never,
       {
-        decreaseStockInTransaction: jest.fn().mockResolvedValue({}),
+        decreaseStockForSaleInTransaction: jest.fn().mockResolvedValue([]),
       } as never,
     );
 
@@ -275,19 +275,21 @@ describe("SalesService fiscal closure", () => {
         }),
       }),
     );
-    expect(tx.saleItem.create).toHaveBeenCalledWith(
+    expect(tx.saleItem.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          saleId: "sale-a",
-          warehouseId: "warehouse-a",
-          warehouseCodeSnapshot: "MAIN",
-          taxableBase: new Prisma.Decimal("21779.66"),
-          taxAmount: new Prisma.Decimal("3920.34"),
-          subtotalCost: new Prisma.Decimal("18000"),
-          profit: new Prisma.Decimal("3779.66"),
-          commercialProfit: new Prisma.Decimal("3779.66"),
-          netTaxProfit: new Prisma.Decimal("3779.66"),
-        }),
+        data: [
+          expect.objectContaining({
+            saleId: "sale-a",
+            warehouseId: "warehouse-a",
+            warehouseCodeSnapshot: "MAIN",
+            taxableBase: new Prisma.Decimal("21779.66"),
+            taxAmount: new Prisma.Decimal("3920.34"),
+            subtotalCost: new Prisma.Decimal("18000"),
+            profit: new Prisma.Decimal("3779.66"),
+            commercialProfit: new Prisma.Decimal("3779.66"),
+            netTaxProfit: new Prisma.Decimal("3779.66"),
+          }),
+        ],
       }),
     );
   });
