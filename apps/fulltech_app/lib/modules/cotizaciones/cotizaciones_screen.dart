@@ -294,6 +294,8 @@ const String _billingClientIconAsset = 'assets/image/billing/client.png';
 const String _billingActionsIconAsset = 'assets/image/billing/actions.png';
 const String _billingDeleteIconAsset = 'assets/image/billing/delete.png';
 const String _billingQuoteIconAsset = 'assets/image/billing/quote.png';
+const String _billingMobileAppBarActionsIconAsset =
+    'assets/image/billing/spark_actions.png';
 
 /// Devuelve el id del ticket que debe quedar ACTIVO después de retirar el
 /// ticket completado [removedId] de la lista de tickets abiertos
@@ -2540,8 +2542,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(28),
-                      bottomLeft: Radius.circular(28),
+                      topLeft: Radius.circular(8),
+                      bottomLeft: Radius.circular(8),
+                    ),
+                    border: Border(
+                      left: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -2553,8 +2558,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ),
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(28),
-                      bottomLeft: Radius.circular(28),
+                      topLeft: Radius.circular(8),
+                      bottomLeft: Radius.circular(8),
                     ),
                     child: Stack(
                       children: [
@@ -6445,51 +6450,100 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   PreferredSizeWidget _buildMobileAppBar() {
-    return AppBar(
-      toolbarHeight: 44,
-      elevation: 0,
-      centerTitle: true,
-      leadingWidth: 50,
-      titleSpacing: 0,
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      foregroundColor: const Color(0xFF0F172A),
-      shadowColor: Colors.transparent,
-      systemOverlayStyle: SystemUiOverlayStyle.dark,
-      shape: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-      leading: Builder(
-        builder: (context) => Center(
-          child: _AnimatedDrawerButton(
-            onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(50),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF2F6BFF),
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: Color(0xFFF7FAFF),
+        ),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF2F6BFF), Color(0xFF2472F3)],
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                height: 50,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const Center(
+                      child: Text(
+                        'Facturación',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 19.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: 56,
+                          child: Builder(
+                            builder: (context) => Center(
+                              child: _AnimatedDrawerButton(
+                                onPressed: () =>
+                                    Scaffold.maybeOf(context)?.openDrawer(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _MobileHeaderIconButton(
+                                tooltip: 'Escanear producto',
+                                onPressed: _openBarcodeScanner,
+                                icon: const Icon(
+                                  Icons.qr_code_scanner_rounded,
+                                  size: 20,
+                                ),
+                              ),
+                              _MobileHeaderIconButton(
+                                tooltip: 'Acciones',
+                                onPressed: _openMobileActionsDrawer,
+                                icon: const ImageIcon(
+                                  AssetImage(
+                                    _billingMobileAppBarActionsIconAsset,
+                                  ),
+                                  size: 20,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
-      title: const Text(
-        'Facturación',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: Color(0xFF0F172A),
-          fontSize: 19.5,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0,
-        ),
-      ),
-      actions: [
-        IconButton(
-          tooltip: 'Escanear producto',
-          onPressed: _openBarcodeScanner,
-          constraints: const BoxConstraints.tightFor(width: 38, height: 40),
-          icon: const Icon(Icons.qr_code_scanner_rounded, size: 21),
-        ),
-        IconButton(
-          tooltip: 'Acciones',
-          onPressed: _openMobileActionsDrawer,
-          constraints: const BoxConstraints.tightFor(width: 38, height: 40),
-          icon: const Icon(Icons.more_vert_rounded, size: 22),
-        ),
-        const SizedBox(width: 2),
-      ],
     );
   }
 
@@ -6511,12 +6565,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             ),
           )
         : GridView.builder(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+            padding: const EdgeInsets.fromLTRB(8, 5, 8, 8),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.98,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 1.08,
             ),
             itemCount: _visibleProducts.length,
             itemBuilder: (context, index) {
@@ -6616,7 +6670,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         : ticketLabel;
     final canExpandTickets = _desktopTickets.length > 1;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 5, 12, 5),
+      padding: const EdgeInsets.fromLTRB(12, 9, 12, 6),
       child: Row(
         children: [
           Expanded(
@@ -6649,19 +6703,27 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Widget _buildMobileSearchBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
       child: Container(
-        height: 40,
+        height: 36,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.zero,
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.82)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F3D8F).withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: TextField(
           controller: _searchCtrl,
           focusNode: _mobileSearchFocusNode,
           textInputAction: TextInputAction.search,
+          textAlignVertical: TextAlignVertical.center,
           canRequestFocus: true,
           onTapOutside: (_) => _mobileSearchFocusNode.unfocus(),
           onChanged: (_) => _commitEditorChange(() {}),
@@ -6684,11 +6746,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             prefixIcon: const Icon(
               Icons.search_rounded,
               color: Color(0xFF334155),
-              size: 20,
+              size: 18,
             ),
             prefixIconConstraints: const BoxConstraints(
-              minWidth: 38,
-              minHeight: 38,
+              minWidth: 34,
+              minHeight: 34,
             ),
             suffixIcon: Badge(
               isLabelVisible: _hasCategoryFilter,
@@ -6698,21 +6760,27 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ? 'Categorias: $_selectedCategoryLabel'
                     : 'Filtrar productos',
                 onPressed: _pickCategory,
-                icon: const Icon(Icons.tune_rounded, color: Color(0xFF2563EB)),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 34,
+                  height: 34,
+                ),
+                icon: const Icon(
+                  Icons.tune_rounded,
+                  color: Color(0xFF2563EB),
+                  size: 19,
+                ),
               ),
             ),
             suffixIconConstraints: const BoxConstraints(
-              minWidth: 38,
-              minHeight: 38,
+              minWidth: 34,
+              minHeight: 34,
             ),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
             disabledBorder: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 11,
-              vertical: 8,
-            ),
+            contentPadding: EdgeInsets.zero,
           ),
         ),
       ),
@@ -6893,9 +6961,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               width: compactForKeyboard ? 42 : 52,
               height: 4,
               decoration: BoxDecoration(
-                color: hasItems
-                    ? const Color(0xFF94A3B8)
-                    : const Color(0xFFCBD5E1),
+                gradient: hasItems
+                    ? const LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [Color(0xFF2F6BFF), Color(0xFF26B6E6)],
+                      )
+                    : null,
+                color: hasItems ? null : const Color(0xFFCBD5E1),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -6926,7 +6999,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             ? () => unawaited(_animateMobileCartTo(nextExtent))
             : null,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 0 : 2, 12, 5),
+          padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 0 : 1, 12, 4),
           child: Column(
             children: [
               Center(child: cartDragHandle()),
@@ -6936,8 +7009,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     width: 30,
                     height: 30,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(color: const Color(0xFFD7E5FF)),
                     ),
                     child: const Icon(
                       Icons.shopping_cart_outlined,
@@ -7036,7 +7110,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     onPressed: hasItems ? _saveCurrentAsQuotation : null,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF2563EB),
-                      side: const BorderSide(color: Color(0xFF2563EB)),
+                      side: const BorderSide(
+                        color: Color(0xFF2563EB),
+                        width: 1.2,
+                      ),
+                      backgroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -7059,7 +7137,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   label: const Text('Cobrar'),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(38),
-                    backgroundColor: const Color(0xFF2563EB),
+                    backgroundColor: const Color(0xFF2F6BFF),
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: const Color(0xFF93C5FD),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -7079,173 +7157,196 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
 
       return Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 1),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFFEAF2FF).withValues(alpha: 0.78),
+                Colors.white,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFDDE7F3)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(9, 5, 9, 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _applyGeneralDiscount,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isAdmin) ...[
-                          const Text(
-                            'Utilidad (i)',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w400,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _applyGeneralDiscount,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (isAdmin) ...[
+                              const Text(
+                                'Utilidad (i)',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              Text(
+                                _money(_utilityAmount),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF2563EB),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ] else if (_effectiveGeneralDiscountAmount > 0)
+                              Text(
+                                'Rebaja ${_money(_effectiveGeneralDiscountAmount)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF2563EB),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            if (_discountAmount > 0)
+                              Text(
+                                'Descuento ${_money(_discountAmount)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: GestureDetector(
+                        onTap: _applyGeneralDiscount,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (_shouldShowItbis)
+                              GestureDetector(
+                                onTap: () => unawaited(
+                                  _openMobileFiscalInvoicePanel(
+                                    authorized: true,
+                                  ),
+                                ),
+                                child: Text(
+                                  '$_fiscalInvoiceLabel · ITBIS ${_money(_taxAmount)}',
+                                  textAlign: TextAlign.right,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFF2563EB),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.05,
+                                  ),
+                                ),
+                              ),
+                            const Text(
+                              'Total',
+                              style: TextStyle(
+                                color: Color(0xFF334155),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                          Text(
-                            _money(_utilityAmount),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF2563EB),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: FittedBox(
+                                key: ValueKey(_money(_total)),
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _money(_total),
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    color: Color(0xFF0F172A),
+                                    fontSize: 25,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ] else if (_effectiveGeneralDiscountAmount > 0)
-                          Text(
-                            'Rebaja ${_money(_effectiveGeneralDiscountAmount)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: SizedBox(
+                        height: 40,
+                        child: OutlinedButton(
+                          onPressed: hasItems ? _saveCurrentAsQuotation : null,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF2563EB),
+                            side: const BorderSide(
                               color: Color(0xFF2563EB),
-                              fontSize: 11,
+                              width: 1.2,
+                            ),
+                            backgroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        if (_discountAmount > 0)
-                          Text(
-                            'Descuento ${_money(_discountAmount)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                      ],
+                          child: const Text('Cotizar'),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: GestureDetector(
-                    onTap: _applyGeneralDiscount,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (_shouldShowItbis)
-                          GestureDetector(
-                            onTap: () => unawaited(
-                              _openMobileFiscalInvoicePanel(authorized: true),
-                            ),
-                            child: Text(
-                              '$_fiscalInvoiceLabel · ITBIS ${_money(_taxAmount)}',
-                              textAlign: TextAlign.right,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF2563EB),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                height: 1.05,
-                              ),
-                            ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 7,
+                      child: FilledButton.icon(
+                        onPressed: hasItems ? _openCheckoutDialog : null,
+                        icon: const Icon(Icons.check_rounded, size: 20),
+                        label: const Text('Cobrar'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(40),
+                          backgroundColor: const Color(0xFF2F6BFF),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: const Color(0xFF93C5FD),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
                           ),
-                        const Text(
-                          'Total',
-                          style: TextStyle(
-                            color: Color(0xFF334155),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
+                          textStyle: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          child: FittedBox(
-                            key: ValueKey(_money(_total)),
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              _money(_total),
-                              maxLines: 1,
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                height: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 3),
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: SizedBox(
-                    height: 42,
-                    child: OutlinedButton(
-                      onPressed: hasItems ? _saveCurrentAsQuotation : null,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF2563EB),
-                        side: const BorderSide(color: Color(0xFF2563EB)),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      child: const Text('Cotizar'),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 7,
-                  child: FilledButton.icon(
-                    onPressed: hasItems ? _openCheckoutDialog : null,
-                    icon: const Icon(Icons.check_rounded, size: 20),
-                    label: const Text('Cobrar'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(42),
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFF93C5FD),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -7257,22 +7358,41 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       height: panelHeight,
       child: Material(
         color: Colors.white,
-        elevation: 18,
-        shadowColor: Colors.black.withValues(alpha: 0.22),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        elevation: 22,
+        shadowColor: const Color(0xFF0F172A).withValues(alpha: 0.26),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         clipBehavior: Clip.antiAlias,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFFFFFFF), Color(0xFFF7FAFF)],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border.all(color: const Color(0xFFDDE7F3)),
           ),
-          child: Column(
-            children: [
-              cartHeader(),
-              Expanded(child: cartProductsList()),
-              checkoutFooter(),
-            ],
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: Column(
+              children: [
+                const SizedBox(
+                  height: 3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [Color(0xFF2F6BFF), Color(0xFF26B6E6)],
+                      ),
+                    ),
+                  ),
+                ),
+                cartHeader(),
+                Expanded(child: cartProductsList()),
+                checkoutFooter(),
+              ],
+            ),
           ),
         ),
       ),
@@ -7298,7 +7418,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             ? 8.0
             : 0.0;
         final collapsedBaseHeight =
-            (keyboardVisible ? 112.0 : 168.0) + fiscalTotalsExtraHeight;
+            (keyboardVisible ? 112.0 : 182.0) + fiscalTotalsExtraHeight;
         final collapsedMaxRatio = keyboardVisible ? 0.24 : 0.28;
         final maxCollapsedCartHeight =
             constraints.maxHeight * collapsedMaxRatio;
@@ -7339,10 +7459,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
+                  stops: [0.0, 0.14, 0.28, 1.0],
                   colors: [
+                    Color(0xFF2472F3),
+                    Color(0xFF2F6BFF),
+                    Color(0xFFEAF2FF),
                     Color(0xFFF8FBFF),
-                    Color(0xFFF4F8FF),
-                    Color(0xFFEEF5FF),
                   ],
                 ),
               ),
@@ -7351,27 +7473,47 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildMobileTicketInfoBar(),
-                          _buildMobileSearchBar(),
-                          if (bannerState != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                              child: AiWarningBanner(
-                                warnings: bannerState.visibleWarnings,
-                                analyzing:
-                                    bannerState.analyzing ||
-                                    bannerState.loadingRules,
-                                onOpenRule: (warning) => _openAiRelatedRule(
-                                  warning.relatedRuleId,
-                                  warning.relatedRuleTitle,
-                                ),
-                                onAskAi: _askAiAboutWarning,
-                              ),
+                      Transform.translate(
+                        offset: const Offset(0, -1),
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0xFF2472F3), Color(0xFF2F6BFF)],
                             ),
-                        ],
+                            borderRadius: BorderRadius.vertical(
+                              bottom: Radius.circular(14),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildMobileTicketInfoBar(),
+                              _buildMobileSearchBar(),
+                              if (bannerState != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    14,
+                                    0,
+                                    14,
+                                    8,
+                                  ),
+                                  child: AiWarningBanner(
+                                    warnings: bannerState.visibleWarnings,
+                                    analyzing:
+                                        bannerState.analyzing ||
+                                        bannerState.loadingRules,
+                                    onOpenRule: (warning) => _openAiRelatedRule(
+                                      warning.relatedRuleId,
+                                      warning.relatedRuleTitle,
+                                    ),
+                                    onAskAi: _askAiAboutWarning,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -8253,6 +8395,56 @@ enum _MobileQuickAction {
 
 enum _InventoryFloatingAction { addProduct, adjustStock }
 
+class _MobileHeaderIconButton extends StatelessWidget {
+  const _MobileHeaderIconButton({
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+  });
+
+  final String tooltip;
+  final VoidCallback onPressed;
+  final Widget icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Tooltip(
+        message: tooltip,
+        child: SizedBox(
+          width: 36,
+          height: 40,
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.28),
+                  width: 0.8,
+                ),
+              ),
+              child: IconButton(
+                onPressed: onPressed,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                icon: IconTheme.merge(
+                  data: const IconThemeData(color: Colors.white),
+                  child: icon,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SalesNoticeToast extends StatelessWidget {
   const _SalesNoticeToast({
     required this.title,
@@ -8702,28 +8894,20 @@ class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOutCubic,
                 width: 38,
-                height: 34,
+                height: 32,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: active
-                        ? const [Color(0xFFEAF1FF), Color(0xFFFFFFFF)]
-                        : const [Color(0xFFFFFFFF), Color(0xFFF6F9FF)],
-                  ),
-                  borderRadius: BorderRadius.circular(7),
+                  color: Colors.white.withValues(alpha: active ? 0.24 : 0.18),
+                  borderRadius: BorderRadius.circular(9),
                   border: Border.all(
-                    color: active
-                        ? const Color(0xFF9FBCFF)
-                        : const Color(0xFFD5E2FF),
+                    color: Colors.white.withValues(alpha: active ? 0.36 : 0.28),
                     width: 0.8,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(
-                        0xFF1957E6,
-                      ).withValues(alpha: active ? 0.14 : 0.05),
-                      blurRadius: active ? 12 : 7,
+                      color: Colors.black.withValues(
+                        alpha: active ? 0.10 : 0.04,
+                      ),
+                      blurRadius: active ? 10 : 6,
                       offset: Offset(0, active ? 4 : 2),
                     ),
                   ],
@@ -8735,7 +8919,7 @@ class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
                   child: const Icon(
                     Icons.menu_rounded,
                     size: 21,
-                    color: Color(0xFF1957E6),
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -11601,21 +11785,36 @@ class _MobileSelectorButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(11),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(11),
         child: Container(
-          height: 40,
+          height: 42,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.82)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F3D8F).withValues(alpha: 0.10),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              Icon(icon, color: const Color(0xFF2563EB), size: 17),
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF1FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: const Color(0xFF2563EB), size: 16),
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Column(
@@ -11690,31 +11889,31 @@ class _ProductThumbCard extends StatelessWidget {
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(11),
       elevation: 0,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(11),
         onTap: onTap,
         child: Ink(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE9EEF5)),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: const Color(0xFFE1EAF5)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.025),
-                blurRadius: 7,
-                offset: const Offset(0, 2),
+                color: const Color(0xFF0F3D8F).withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 38,
+                  flex: 43,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: onImageTap,
@@ -11724,11 +11923,11 @@ class _ProductThumbCard extends StatelessWidget {
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(11),
+                          borderRadius: BorderRadius.circular(9),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: Padding(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(4),
                           child: (product.displayFotoUrl ?? '').trim().isEmpty
                               ? const Center(
                                   child: Icon(
@@ -11746,14 +11945,14 @@ class _ProductThumbCard extends StatelessWidget {
                                   loading: const Center(
                                     child: Icon(
                                       Icons.inventory_2_outlined,
-                                      size: 28,
+                                      size: 30,
                                       color: Color(0xFFCBD5E1),
                                     ),
                                   ),
                                   fallback: const Center(
                                     child: Icon(
                                       Icons.broken_image_outlined,
-                                      size: 28,
+                                      size: 30,
                                       color: Color(0xFF94A3B8),
                                     ),
                                   ),
@@ -11763,50 +11962,61 @@ class _ProductThumbCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 3),
                 Expanded(
-                  flex: 62,
+                  flex: 57,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        product.nombre,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF1E293B),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.15,
+                      SizedBox(
+                        height: 28,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            product.nombre,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF1E293B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              height: 1.16,
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 4),
                       Text(
                         money(product.precio),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Color(0xFF1E293B),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 13.6,
+                          fontWeight: FontWeight.w700,
                           height: 1,
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           if (stockText != null)
                             Flexible(
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 3,
+                                  horizontal: 6,
+                                  vertical: 2.5,
                                 ),
                                 decoration: BoxDecoration(
                                   color: outOfStock
-                                      ? const Color(0xFFFEF2F2)
+                                      ? const Color(0xFFF1F5F9)
                                       : const Color(0xFFE4F8FF),
                                   borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: outOfStock
+                                        ? const Color(0xFFDDE7F3)
+                                        : const Color(0xFFCDEFFF),
+                                  ),
                                 ),
                                 child: Text(
                                   stockText,
@@ -11814,9 +12024,9 @@ class _ProductThumbCard extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: outOfStock
-                                        ? const Color(0xFFDC2626)
+                                        ? const Color(0xFF111827)
                                         : const Color(0xFF0D5EA6),
-                                    fontSize: 10,
+                                    fontSize: 9.6,
                                     fontWeight: FontWeight.w500,
                                     height: 1,
                                   ),
@@ -11826,17 +12036,28 @@ class _ProductThumbCard extends StatelessWidget {
                           if (stockText != null) const Spacer(),
                           if (stockText == null) const Spacer(),
                           Container(
-                            width: 34,
-                            height: 34,
+                            width: 31,
+                            height: 31,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE4F8FF),
-                              borderRadius: BorderRadius.circular(11),
-                              border: Border.all(color: _billingBorderColor),
+                              color: const Color(0xFFDDF6FF),
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(
+                                color: const Color(0xFFBEEBFF),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF0D5EA6,
+                                  ).withValues(alpha: 0.10),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
                             ),
                             child: const Icon(
                               Icons.add_rounded,
                               color: Color(0xFF0D5EA6),
-                              size: 22,
+                              size: 20,
                             ),
                           ),
                         ],
@@ -18190,21 +18411,21 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         onTap: editAction,
         onDoubleTap: widget.onEditLine,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(7),
                 child: SizedBox(
-                  width: 38,
-                  height: 38,
+                  width: 36,
+                  height: 36,
                   child: (item.imageUrl ?? '').trim().isEmpty
                       ? Container(
                           color: const Color(0xFFF1F5F9),
@@ -18236,7 +18457,7 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                         ),
                 ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -18270,7 +18491,7 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                       textAlign: TextAlign.left,
                       style: const TextStyle(
                         color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         fontSize: 12,
                         height: 1.15,
                       ),
@@ -18285,13 +18506,13 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF2F2),
+                              color: const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
                               'Sin stock',
                               style: TextStyle(
-                                color: Color(0xFFDC2626),
+                                color: Color(0xFF111827),
                                 fontSize: 8.5,
                                 fontWeight: FontWeight.w500,
                                 height: 1,
@@ -18326,24 +18547,24 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                     textAlign: TextAlign.right,
                     style: const TextStyle(
                       color: Color(0xFF0F172A),
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(
-                    width: 70,
+                    width: 68,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Container(
-                          width: 32,
-                          height: 32,
+                          width: 30,
+                          height: 30,
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            color: const Color(0xFFF8FBFF),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: const Color(0xFFDDE7F3)),
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
@@ -18358,12 +18579,12 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                         ),
                         const SizedBox(width: 6),
                         Container(
-                          width: 32,
-                          height: 32,
+                          width: 30,
+                          height: 30,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFEF2F2),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFEE2E2)),
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: const Color(0xFFDDE7F3)),
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
@@ -18371,7 +18592,7 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                             iconSize: 16,
                             icon: const Icon(
                               Icons.delete_outline,
-                              color: Color(0xFFEF4444),
+                              color: Color(0xFF111827),
                             ),
                             onPressed: widget.onRemove,
                           ),
