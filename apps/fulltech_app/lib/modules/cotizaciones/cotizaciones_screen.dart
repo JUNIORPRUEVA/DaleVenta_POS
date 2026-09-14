@@ -836,7 +836,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     // `didChangeDependencies()` → fase de BUILD.
     //
     // Invalidar `companySettingsProvider` en fase de build hace que el primer
-    // `ref.watch` del mismo frame reconstruya el provider y notifique a TODOS
+    // `ref.watch` del mismo frame reconstruya el provider y notifique a todos
     // sus listeners → `setState() or markNeedsBuild() called during build`
     // (p. ej. AccountSettingsScreen / AppDrawer).
     runOutsideBuildPhase(() {
