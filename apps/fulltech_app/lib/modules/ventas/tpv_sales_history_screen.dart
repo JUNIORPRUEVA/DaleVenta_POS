@@ -186,7 +186,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   Iterable<SaleModel> get _invoiceRows =>
       _sales.where((sale) => !sale.isRefundDocument);
 
-  int get _invoiceCount => _invoiceRows.length;
+  int get _invoiceCount =>
+      _invoiceRows.where((sale) => sale.contributesToInvoiceCount).length;
 
   double get _netInvoiceTotal =>
       _invoiceRows.fold(0.0, (sum, sale) => sum + sale.netActiveAmount);
@@ -738,7 +739,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
   void _showSummary() {
     final invoices = _invoiceRows.toList();
-    final totalInvoices = invoices.length;
+    final totalInvoices = invoices
+        .where((sale) => sale.contributesToInvoiceCount)
+        .length;
     final activeInvoices = invoices.where((s) => s.isCommerciallyActive).length;
     final returnedInvoices = invoices
         .where((s) => s.isReturned || s.isPartiallyReturned)

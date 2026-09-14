@@ -62,6 +62,7 @@ void main() {
       expect(showsReturnAction(sale), isTrue);
       expect(sale.isPartiallyReturned, isTrue);
       expect(sale.netActiveAmount, 400);
+      expect(sale.contributesToInvoiceCount, isTrue);
     });
 
     test('DEVUELTA no ofrece una segunda devolución', () {
@@ -74,6 +75,7 @@ void main() {
 
       expect(showsReturnAction(sale), isFalse);
       expect(sale.isReturned, isTrue);
+      expect(sale.contributesToInvoiceCount, isFalse);
     });
 
     test('CANCELADA histórica no ofrece ninguna acción', () {
@@ -87,6 +89,7 @@ void main() {
       expect(showsReturnAction(sale), isFalse);
       expect(sale.isCancelled, isTrue);
       expect(sale.netActiveAmount, 0);
+      expect(sale.contributesToInvoiceCount, isFalse);
     });
 
     test('documento de devolución (refund) no ofrece acciones de venta', () {
@@ -101,6 +104,7 @@ void main() {
       expect(showsReturnAction(refund), isFalse);
       expect(refund.isRefundDocument, isTrue);
       expect(refund.isCommerciallyActive, isFalse);
+      expect(refund.contributesToInvoiceCount, isFalse);
     });
 
     test('una venta borrada sin returnStatus se trata como CANCELADA', () {

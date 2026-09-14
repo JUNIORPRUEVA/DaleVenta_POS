@@ -429,6 +429,89 @@ describe("SalesService tenant isolation", () => {
     expect(rows[0].returnableAmount.toString()).toBe("50");
   });
 
+  it("marks effective invoice count contribution from derived return status", async () => {
+    const invoice = (
+      id: string,
+      totalSold: number,
+      qty: number,
+      refundQty = 0,
+      isDeleted = false,
+      kind = "invoice",
+    ) => ({
+      id,
+      companyId: user.companyId,
+      userId: user.id,
+      customerId: null,
+      saleDate: new Date("2026-09-08T12:00:00.000Z"),
+      totalSold: new Prisma.Decimal(totalSold),
+      kind,
+      status: isDeleted ? "CANCELLED" : "PAID",
+      isDeleted,
+      cancelledAt: isDeleted ? new Date("2026-09-08T13:00:00.000Z") : null,
+      items: [{ id: `${id}-item`, qty: new Prisma.Decimal(qty) }],
+      refunds:
+        refundQty > 0
+          ? [
+              {
+                id: `${id}-refund`,
+                kind: "refund",
+                isDeleted: false,
+                totalSold: new Prisma.Decimal(-totalSold * (refundQty / qty)),
+                items: [
+                  {
+                    refundedSaleItemId: `${id}-item`,
+                    qty: new Prisma.Decimal(refundQty),
+                    subtotalSold: new Prisma.Decimal(
+                      -totalSold * (refundQty / qty),
+                    ),
+                  },
+                ],
+              },
+            ]
+          : [],
+    });
+    const rows = [
+      invoice("active", 100, 1),
+      invoice("partial", 600, 3, 1),
+      invoice("full", 200, 1, 1),
+      invoice("cancelled", 100, 1, 0, true),
+      invoice("refund-doc", -100, 1, 0, false, "refund"),
+    ];
+    const prisma = {
+      sale: { findMany: jest.fn().mockResolvedValue(rows) },
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.listInvoices(user as never);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "active",
+        returnStatus: "ACTIVE",
+        contributesToInvoiceCount: true,
+      }),
+      expect.objectContaining({
+        id: "partial",
+        returnStatus: "PARTIALLY_RETURNED",
+        contributesToInvoiceCount: true,
+      }),
+      expect.objectContaining({
+        id: "full",
+        returnStatus: "RETURNED",
+        contributesToInvoiceCount: false,
+      }),
+      expect.objectContaining({
+        id: "cancelled",
+        returnStatus: "CANCELLED",
+        contributesToInvoiceCount: false,
+      }),
+      expect.objectContaining({
+        id: "refund-doc",
+        contributesToInvoiceCount: false,
+      }),
+    ]);
+  });
+
   describe("financial summary cancellation policy", () => {
     function money(value: number | string | null) {
       return value === null ? null : new Prisma.Decimal(value);
@@ -470,11 +553,9 @@ describe("SalesService tenant isolation", () => {
         .mockResolvedValueOnce(aggregate(null, null, null, null))
         .mockResolvedValueOnce(aggregate(null, null, null, null))
         .mockResolvedValueOnce(aggregate(1000, 700, 300, 30));
-      const countMock = jest.fn().mockResolvedValue(0);
       const service = serviceWith({
         sale: {
           aggregate: aggregateMock,
-          count: countMock,
           findMany: jest.fn().mockResolvedValue([]),
           groupBy: jest.fn().mockResolvedValue([]),
         },
@@ -513,8 +594,18 @@ describe("SalesService tenant isolation", () => {
             .mockResolvedValueOnce(aggregate(1000, 700, 300, 30))
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(null, null, null, null)),
-          count: jest.fn().mockResolvedValue(1),
-          findMany: jest.fn().mockResolvedValue([]),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: "sale-active",
+              totalSold: new Prisma.Decimal(1000),
+              kind: "invoice",
+              status: "PAID",
+              isDeleted: false,
+              cancelledAt: null,
+              items: [{ id: "item-active", qty: new Prisma.Decimal(1) }],
+              refunds: [],
+            },
+          ]),
           groupBy: jest.fn().mockResolvedValue([]),
         },
       });
@@ -538,7 +629,6 @@ describe("SalesService tenant isolation", () => {
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(1000, 700, 300, 30)),
-          count: jest.fn().mockResolvedValue(0),
           findMany: jest.fn().mockResolvedValue([]),
           groupBy: jest.fn().mockResolvedValue([]),
         },
@@ -559,12 +649,11 @@ describe("SalesService tenant isolation", () => {
         .mockResolvedValueOnce(aggregate(100, 70, 30, 3))
         .mockResolvedValueOnce(aggregate(-20, -14, -6, 0))
         .mockResolvedValueOnce(aggregate(50, 35, 15, 1.5));
-      const countMock = jest.fn().mockResolvedValue(1);
+      const findManyMock = jest.fn().mockResolvedValue([]);
       const service = serviceWith({
         sale: {
           aggregate: aggregateMock,
-          count: countMock,
-          findMany: jest.fn().mockResolvedValue([]),
+          findMany: findManyMock,
           groupBy: jest.fn().mockResolvedValue([]),
         },
       });
@@ -574,7 +663,9 @@ describe("SalesService tenant isolation", () => {
       for (const call of aggregateMock.mock.calls) {
         expect(call[0].where.companyId).toBe(user.companyId);
       }
-      expect(countMock.mock.calls[0][0].where.companyId).toBe(user.companyId);
+      for (const call of findManyMock.mock.calls) {
+        expect(call[0].where.companyId).toBe(user.companyId);
+      }
     });
 
     it("reconciles summaryMine and summaryByUser for the same seller and period", async () => {
@@ -584,14 +675,26 @@ describe("SalesService tenant isolation", () => {
           .mockResolvedValueOnce(aggregate(1000, 700, 300, 30))
           .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
           .mockResolvedValueOnce(aggregate(100, 70, 30, 3)),
-        count: jest.fn().mockResolvedValue(1),
         groupBy: jest.fn().mockResolvedValue([]),
         findMany: jest
           .fn()
+          .mockResolvedValueOnce([
+            {
+              id: "sale-active",
+              totalSold: new Prisma.Decimal(1000),
+              kind: "invoice",
+              status: "PAID",
+              isDeleted: false,
+              cancelledAt: null,
+              items: [{ id: "item-active", qty: new Prisma.Decimal(1) }],
+              refunds: [],
+            },
+          ])
           .mockResolvedValueOnce([])
           .mockResolvedValueOnce([summaryRow(user.id, 1000, 300, 30)])
           .mockResolvedValueOnce([summaryRow(user.id, -200, -60, 0)])
           .mockResolvedValueOnce([summaryRow(user.id, 100, 30, 3)])
+          .mockResolvedValueOnce([])
           .mockResolvedValue([]),
       };
       const service = serviceWith({
@@ -624,7 +727,7 @@ describe("SalesService tenant isolation", () => {
       expect(byUser.totals.totalSold).toBeCloseTo(mine.totalSold);
       expect(byUser.totals.totalProfit).toBeCloseTo(mine.totalProfit);
       expect(byUser.totals.totalCommission).toBeCloseTo(mine.totalCommission);
-      expect(saleApi.findMany.mock.calls[1][0].where).toMatchObject({
+      expect(saleApi.findMany.mock.calls[2][0].where).toMatchObject({
         companyId: user.companyId,
         userId: user.id,
         kind: "invoice",
@@ -661,9 +764,9 @@ describe("SalesService tenant isolation", () => {
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
             .mockResolvedValueOnce(aggregate(600, 420, 180, 18)),
-          count: jest.fn().mockResolvedValue(0),
           findMany: jest
             .fn()
+            .mockResolvedValueOnce([])
             .mockResolvedValue([{ id: "sale-cancelled", userId: user.id }]),
           groupBy: jest
             .fn()
@@ -696,9 +799,9 @@ describe("SalesService tenant isolation", () => {
             .mockResolvedValueOnce(aggregate(null, null, null, null))
             .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
             .mockResolvedValueOnce(aggregate(null, null, null, null)),
-          count: jest.fn().mockResolvedValue(0),
           findMany: jest
             .fn()
+            .mockResolvedValueOnce([])
             .mockResolvedValue([{ id: "sale-same-period", userId: user.id }]),
           groupBy: jest
             .fn()

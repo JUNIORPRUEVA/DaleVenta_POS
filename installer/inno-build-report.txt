@@ -31,6 +31,7 @@ Parsing [Setup] section, line 49
 Parsing [Setup] section, line 50
 Parsing [Setup] section, line 51
 Parsing [Setup] section, line 52
+Parsing [Setup] section, line 53
 Reading file (WizardImageFile)
 Reading file (WizardSmallImageFile)
 Preparing Setup program executable
@@ -45,18 +46,28 @@ Parsing [LangOptions], [Messages], and [CustomMessages] sections
    Reading file: C:\Users\pc\AppData\Local\Programs\Inno Setup 6\Default.isl
    Messages in script file
 Reading [Code] section
-Parsing [Tasks] section, line 68
-Parsing [Icons] section, line 64
-Parsing [Icons] section, line 65
-Parsing [Run] section, line 72
-Parsing [Run] section, line 75
-Parsing [Run] section, line 77
-Parsing [Files] section, line 55
-Parsing [Files] section, line 57
+Parsing [Tasks] section, line 83
+Parsing [Dirs] section, line 56
+Parsing [Dirs] section, line 57
+Parsing [Dirs] section, line 58
+Parsing [Dirs] section, line 59
+Parsing [Dirs] section, line 60
+Parsing [Dirs] section, line 61
+Parsing [Icons] section, line 73
+Parsing [Icons] section, line 74
+Parsing [Registry] section, line 77
+Parsing [Registry] section, line 78
+Parsing [Registry] section, line 79
+Parsing [Registry] section, line 80
+Parsing [Run] section, line 87
+Parsing [Run] section, line 90
+Parsing [Run] section, line 92
+Parsing [Files] section, line 64
+Parsing [Files] section, line 66
    Reading version info: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\redist\VC_redist.x64.exe
-Parsing [Files] section, line 60
+Parsing [Files] section, line 69
    Reading version info: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\redist\MicrosoftEdgeWebView2RuntimeInstallerX64.exe
-Deleting FullPOS-Cloud-Setup-1.0.3-120.exe from output directory
+Deleting DaleVentas-POS-Setup-1.0.5-123.exe from output directory
 Creating setup files
    Verification successful
    Updating icons (Setup.exe)
@@ -89,21 +100,27 @@ Creating setup files
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\app.so
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\icudtl.dat
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\.env
-   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\.env.example
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\AssetManifest.bin
-   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\AssetManifest.bin.json
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\FontManifest.json
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\NativeAssetsManifest.json
-   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\NOTICES
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\NOTICES.Z
-   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\.env.example
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\fonts\RobotoMono-Medium.ttf
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\fonts\RobotoMono-Regular.ttf
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\fonts\manrope\Manrope-Bold.ttf
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\fonts\manrope\Manrope-Medium.ttf
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\fonts\manrope\Manrope-Regular.ttf
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\fonts\manrope\Manrope-SemiBold.ttf
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\fullpos-ios-android.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\fullpos-ios-android.webp
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\fullpos-windows-ios-android.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\fullpos-windows-ios-android.webp
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\landing-mobile-drawer.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\landing-mobile-drawer.webp
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\landing-mobile-sale.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\landing-mobile-sale.webp
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\landing-pos-cloud.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\landing-pos-cloud.webp
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\logo-web.webp
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\logo.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\logo_launcher.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\wa_bg_light.png
@@ -137,12 +154,12 @@ Creating setup files
    Updating manifest (Setup.exe)
 
 
-Successful compile (57.234 sec). Resulting Setup program filename is:
-C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\FullPOS-Cloud-Setup-1.0.3-120.exe
+Successful compile (31.484 sec). Resulting Setup program filename is:
+C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\DaleVentas-POS-Setup-1.0.5-123.exe
 
 RESULT=OK
 ISCC_PATH=C:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISCC.exe
-OUTPUT_EXE=C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\FullPOS-Cloud-Setup-1.0.3-120.exe
-BEFORE_UTC=2026-09-01T19:57:18.9223886Z
+OUTPUT_EXE=C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\DaleVentas-POS-Setup-1.0.5-123.exe
+BEFORE_UTC=2026-09-10T14:11:04.8725920Z
 AFTER_EXISTS=True
-AFTER_UTC=2026-09-03T00:48:15.3809323Z
+AFTER_UTC=2026-09-11T14:09:54.7095106Z

@@ -18,7 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// `setContext` (cada edición del carrito, cada cambio/eliminación de ticket,
 /// cada carga de catálogo, cada selección de cliente). Con el banner de IA
 /// apagado (`_shouldShowAiBanner` siempre false) eso significaba reconstruir
-/// TODO el POS por un estado que no se pinta en ninguna parte.
+/// todo el POS por un estado que no se pinta en ninguna parte.
 ///
 /// La corrección es observar solo lo que el banner necesita
 /// (`select((state) => _shouldShowAiBanner(state) ? state : null)`), de modo

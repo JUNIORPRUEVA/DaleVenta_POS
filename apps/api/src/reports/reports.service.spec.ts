@@ -82,10 +82,15 @@ describe("ReportsService", () => {
   }
 
   it("restringe devoluciones a reversiones de períodos anteriores (sin doble descuento)", async () => {
+    const cancelledSamePeriod = sale({
+      id: "sale-cancelled-same-period",
+      isDeleted: true,
+      deletedAt: new Date("2026-08-10T13:00:00.000Z"),
+    });
     const findMany = jest
       .fn()
-      .mockResolvedValueOnce([]) // sales activas
-      .mockResolvedValueOnce([]) // returnedSales
+      .mockResolvedValueOnce([cancelledSamePeriod]) // sales emitted in range
+      .mockResolvedValueOnce([cancelledSamePeriod]) // cancelled in range
       .mockResolvedValueOnce([]); // refundSales
     const service = serviceWith(emptyPrisma(findMany));
 
@@ -94,20 +99,202 @@ describe("ReportsService", () => {
       to: "2026-08-22",
     });
 
-    // La consulta de devoluciones ahora exige saleDate < inicio del rango:
-    // una venta creada y anulada dentro del mismo período NO se descuenta dos
-    // veces y el neto no puede quedar negativo.
+    // Movimiento del período: la venta emitida entra al bruto y su cancelación
+    // entra como reversa. El neto queda 0 sin clamps ni signos visuales.
+    const saleWhere = findMany.mock.calls[0][0].where;
+    expect(saleWhere).toMatchObject({
+      companyId: user.companyId,
+      kind: "invoice",
+    });
+    expect(saleWhere.isDeleted).toBeUndefined();
     const returnedWhere = findMany.mock.calls[1][0].where;
     expect(returnedWhere).toMatchObject({
       companyId: user.companyId,
       kind: "invoice",
       isDeleted: true,
     });
-    expect(returnedWhere.saleDate).toEqual({
-      lt: new Date(Date.UTC(2026, 7, 1, 4, 0, 0, 0)),
-    });
+    expect(returnedWhere.saleDate).toBeUndefined();
     expect(result.kpis.netSales).toBe(0);
-    expect(result.kpis.totalReturns).toBe(0);
+    expect(result.kpis.totalReturns).toBe(1);
+  });
+
+  it("netea venta + devolución completa del mismo período a cero", async () => {
+    const invoice = sale({
+      id: "sale-full-refund",
+      totalSold: decimal(100),
+      totalCost: decimal(40),
+      totalProfit: decimal(60),
+      items: [
+        item({
+          subtotalSold: decimal(100),
+          subtotalCost: decimal(40),
+          profit: decimal(60),
+        }),
+      ],
+    });
+    const refund = sale({
+      id: "refund-full",
+      kind: "refund",
+      refundedSaleId: "sale-full-refund",
+      totalSold: decimal(-100),
+      totalCost: decimal(-40),
+      totalProfit: decimal(-60),
+      items: [
+        item({
+          subtotalSold: decimal(-100),
+          subtotalCost: decimal(-40),
+          profit: decimal(-60),
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([invoice])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([refund]);
+    const service = serviceWith(emptyPrisma(findMany));
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.grossSales).toBeCloseTo(100);
+    expect(result.kpis.returnedSales).toBeCloseTo(100);
+    expect(result.kpis.netSales).toBeCloseTo(0);
+    expect(result.kpis.totalCost).toBeCloseTo(40);
+    expect(result.kpis.totalProfit).toBeCloseTo(60);
+    expect(result.kpis.netProfit).toBeCloseTo(0);
+  });
+
+  it("netea venta + devolución parcial del mismo período al remanente", async () => {
+    const invoice = sale({
+      id: "sale-partial-refund",
+      totalSold: decimal(100),
+      totalCost: decimal(40),
+      totalProfit: decimal(60),
+      items: [
+        item({
+          subtotalSold: decimal(100),
+          subtotalCost: decimal(40),
+          profit: decimal(60),
+        }),
+      ],
+    });
+    const refund = sale({
+      id: "refund-partial",
+      kind: "refund",
+      refundedSaleId: "sale-partial-refund",
+      totalSold: decimal(-40),
+      totalCost: decimal(-16),
+      totalProfit: decimal(-24),
+      items: [
+        item({
+          subtotalSold: decimal(-40),
+          subtotalCost: decimal(-16),
+          profit: decimal(-24),
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([invoice])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([refund]);
+    const service = serviceWith(emptyPrisma(findMany));
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.netSales).toBeCloseTo(60);
+    expect(result.kpis.netProfit).toBeCloseTo(36);
+  });
+
+  it("netea venta + devolución parcial + cancelación en el mismo período a cero", async () => {
+    const invoice = sale({
+      id: "sale-partial-cancel",
+      isDeleted: true,
+      deletedAt: new Date("2026-08-10T13:00:00.000Z"),
+      totalSold: decimal(100),
+      totalCost: decimal(40),
+      totalProfit: decimal(60),
+      items: [
+        item({
+          subtotalSold: decimal(100),
+          subtotalCost: decimal(40),
+          profit: decimal(60),
+        }),
+      ],
+    });
+    const refund = sale({
+      id: "refund-partial-cancel",
+      kind: "refund",
+      refundedSaleId: "sale-partial-cancel",
+      totalSold: decimal(-40),
+      totalCost: decimal(-16),
+      totalProfit: decimal(-24),
+      items: [
+        item({
+          subtotalSold: decimal(-40),
+          subtotalCost: decimal(-16),
+          profit: decimal(-24),
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([invoice])
+      .mockResolvedValueOnce([invoice])
+      .mockResolvedValueOnce([refund]);
+    const service = serviceWith(emptyPrisma(findMany));
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.grossSales).toBeCloseTo(100);
+    expect(result.kpis.returnedSales).toBeCloseTo(100);
+    expect(result.kpis.netSales).toBeCloseTo(0);
+    expect(result.kpis.netProfit).toBeCloseTo(0);
+    expect(result.audit.refundDocumentRows).toBe(1);
+    expect(result.kpis.totalReturns).toBe(1);
+  });
+
+  it("mantiene refund de período actual contra venta de período anterior como movimiento negativo", async () => {
+    const refund = sale({
+      id: "refund-prior-sale",
+      kind: "refund",
+      refundedSaleId: "sale-prior-period",
+      totalSold: decimal(-100),
+      totalCost: decimal(-40),
+      totalProfit: decimal(-60),
+      items: [
+        item({
+          subtotalSold: decimal(-100),
+          subtotalCost: decimal(-40),
+          profit: decimal(-60),
+        }),
+      ],
+    });
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([refund]);
+    const service = serviceWith(emptyPrisma(findMany));
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
+
+    expect(result.kpis.grossSales).toBeCloseTo(0);
+    expect(result.kpis.returnedSales).toBeCloseTo(100);
+    expect(result.kpis.netSales).toBeCloseTo(-100);
+    expect(result.kpis.netProfit).toBeCloseTo(-60);
   });
 
   it("resta documentos de devolución (kind=refund) del neto", async () => {

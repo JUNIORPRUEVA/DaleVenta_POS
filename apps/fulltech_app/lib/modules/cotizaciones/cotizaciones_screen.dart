@@ -2008,7 +2008,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   /// flujo de caja:
   ///
   /// 1. `build()` no se suscribe al estado de IA mientras esté apagado (ver el
-  ///    `select` del `build`), evitando reconstruir TODO el POS en cada edición
+  ///    `select` del `build`), evitando reconstruir todo el POS en cada edición
   ///    del carrito o cambio de ticket.
   /// 2. `_syncQuotationAi()` no dispara el análisis remoto mientras esté apagado
   ///    (evita `POST /cotizaciones/ai/analyze` tras cada cambio de carrito).

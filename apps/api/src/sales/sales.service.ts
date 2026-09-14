@@ -288,6 +288,10 @@ export class SalesService {
       returnedAmount: returnedAmount.toDecimalPlaces(2),
       returnableAmount: returnableAmount.toDecimalPlaces(2),
       returnStatus,
+      contributesToInvoiceCount: this.invoiceContributesToEffectiveCount({
+        ...sale,
+        returnStatus,
+      }),
       canReturn:
         sale.kind === "invoice" &&
         returnStatus !== "CANCELLED" &&
@@ -297,6 +301,59 @@ export class SalesService {
 
   private withReturnSummaries<T extends Record<string, any>>(sales: T[]): T[] {
     return sales.map((sale) => this.withReturnSummary(sale));
+  }
+
+  private invoiceContributesToEffectiveCount(
+    sale: Record<string, any>,
+  ): boolean {
+    if (sale.kind !== "invoice") return false;
+    if (sale.isDeleted || sale.cancelledAt || sale.status === "CANCELLED") {
+      return false;
+    }
+    const returnStatus = `${sale.returnStatus ?? "ACTIVE"}`.toUpperCase();
+    return returnStatus !== "RETURNED" && returnStatus !== "CANCELLED";
+  }
+
+  private async countEffectiveInvoices(
+    where: Prisma.SaleWhereInput,
+  ): Promise<number> {
+    const rows = await this.prisma.sale.findMany({
+      where,
+      select: this.effectiveInvoiceCountSelect(),
+    });
+    return this.withReturnSummaries(rows as Array<Record<string, any>>).filter(
+      (sale) => sale.contributesToInvoiceCount,
+    ).length;
+  }
+
+  private effectiveInvoiceCountSelect() {
+    return {
+      id: true,
+      totalSold: true,
+      kind: true,
+      status: true,
+      isDeleted: true,
+      cancelledAt: true,
+      items: {
+        select: {
+          id: true,
+          qty: true,
+        },
+      },
+      refunds: {
+        where: { kind: "refund", isDeleted: false },
+        select: {
+          totalSold: true,
+          items: {
+            select: {
+              refundedSaleItemId: true,
+              qty: true,
+              subtotalSold: true,
+            },
+          },
+        },
+      },
+    } satisfies Prisma.SaleSelect;
   }
 
   private allocateRefundPayment(
@@ -1015,7 +1072,7 @@ export class SalesService {
               },
             })
           : Promise.resolve(empty),
-        this.prisma.sale.count({ where: activeWhere }),
+        this.countEffectiveInvoices(activeWhere),
         cancellationWhere
           ? this.cancelledRefundOffsets(baseWhere, dateRange)
           : Promise.resolve([]),
@@ -1071,6 +1128,29 @@ export class SalesService {
           totalSold: true,
           totalProfit: true,
           commissionAmount: true,
+          kind: true,
+          status: true,
+          isDeleted: true,
+          cancelledAt: true,
+          items: {
+            select: {
+              id: true,
+              qty: true,
+            },
+          },
+          refunds: {
+            where: { kind: "refund", isDeleted: false },
+            select: {
+              totalSold: true,
+              items: {
+                select: {
+                  refundedSaleItemId: true,
+                  qty: true,
+                  subtotalSold: true,
+                },
+              },
+            },
+          },
         },
       }),
       this.prisma.sale.findMany({
@@ -1121,7 +1201,10 @@ export class SalesService {
       current.totalCommission += sign * this.toNumber(row.commissionAmount);
       rows.set(row.userId, current);
     };
-    active.forEach((row) => apply(row, 1, true));
+    active.forEach((row) => {
+      const summary = this.withReturnSummary(row as Record<string, any>);
+      apply(row, 1, summary.contributesToInvoiceCount === true);
+    });
     refund.forEach((row) => apply(row, 1, false));
     cancelled.forEach((row) => apply(row, -1, false));
     // Refunds of a cancelled sale were already consumed by that sale's

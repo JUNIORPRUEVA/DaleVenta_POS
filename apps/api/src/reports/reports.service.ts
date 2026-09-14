@@ -45,7 +45,6 @@ export class ReportsService {
       companyId,
       ...userFilter,
       kind: "invoice",
-      isDeleted: false,
       saleDate: range,
     };
     const returnedWhere: Prisma.SaleWhereInput = {
@@ -54,12 +53,6 @@ export class ReportsService {
       kind: "invoice",
       isDeleted: true,
       deletedAt: range,
-      // Reversión contable segura: solo restamos ventas anuladas que se
-      // contabilizaron en un período ANTERIOR (saleDate < inicio del rango).
-      // Una venta creada y anulada dentro del mismo período nunca entró al
-      // "gross" (filtro isDeleted:false) y restarla aquí la descontaría dos
-      // veces, produciendo un neto negativo incorrecto.
-      saleDate: { lt: range.gte },
     };
     const refundWhere: Prisma.SaleWhereInput = {
       companyId,

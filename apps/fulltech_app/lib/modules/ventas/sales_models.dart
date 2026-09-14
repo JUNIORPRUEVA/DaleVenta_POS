@@ -282,6 +282,7 @@ class SaleModel {
   final String returnStatus;
   final double returnedAmount;
   final double returnableAmount;
+  final bool contributesToInvoiceCount;
   final bool canReturn;
   final bool fiscalTaxEnabled;
   final String fiscalPriceMode;
@@ -332,6 +333,7 @@ class SaleModel {
     this.returnStatus = 'ACTIVE',
     this.returnedAmount = 0,
     this.returnableAmount = 0,
+    this.contributesToInvoiceCount = true,
     this.canReturn = true,
     this.fiscalTaxEnabled = false,
     this.fiscalPriceMode = 'NO_TAX',
@@ -428,6 +430,9 @@ class SaleModel {
           : json['returnStatus'].toString(),
       returnedAmount: _toDouble(json['returnedAmount']),
       returnableAmount: _toDouble(json['returnableAmount']),
+      contributesToInvoiceCount: json.containsKey('contributesToInvoiceCount')
+          ? _toBool(json['contributesToInvoiceCount'])
+          : _legacyContributesToInvoiceCount(json),
       canReturn: json.containsKey('canReturn')
           ? _toBool(json['canReturn'])
           : (json['kind'] ?? 'invoice').toString() == 'invoice' &&
@@ -708,6 +713,17 @@ bool _toBool(dynamic value) {
   if (value is num) return value != 0;
   final text = value?.toString().trim().toLowerCase();
   return text == 'true' || text == '1' || text == 'yes' || text == 'si';
+}
+
+bool _legacyContributesToInvoiceCount(Map<String, dynamic> json) {
+  final kind = (json['kind'] ?? 'invoice').toString();
+  final status = (json['returnStatus'] ?? '').toString().trim().isEmpty
+      ? (json['isDeleted'] == true ? 'CANCELLED' : 'ACTIVE')
+      : json['returnStatus'].toString();
+  return kind == 'invoice' &&
+      json['isDeleted'] != true &&
+      status != 'RETURNED' &&
+      status != 'CANCELLED';
 }
 
 double? _nullableDouble(dynamic value) {
