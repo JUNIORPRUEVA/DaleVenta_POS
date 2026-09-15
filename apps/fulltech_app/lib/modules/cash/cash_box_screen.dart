@@ -810,6 +810,10 @@ class _CompositionCard extends StatelessWidget {
           const SizedBox(height: 8),
           _Metric('Ventas efectivo', summary.salesCashTotal),
           _Metric('Transferencias', summary.salesTransferTotal),
+          if (summary.creditPaymentCash > 0)
+            _Metric('Abonos efectivo', summary.creditPaymentCash),
+          if (summary.creditPaymentTransfer > 0)
+            _Metric('Abonos transf.', summary.creditPaymentTransfer),
           _Metric('Ventas a crédito', summary.creditSalesTotal),
           _Metric('Balance crédito', summary.creditBalanceTotal),
           _Metric('Entradas manuales', summary.cashInManual),

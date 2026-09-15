@@ -122,6 +122,21 @@ Important invariant: tenant/company data must not mix across authenticated conte
   cash rows. Reprints use the persisted tender so the reprint matches the
   original checkout. Cash sessions, shift closing, cash reports, and cash
   drawer eligibility all continue to use the NET `paymentCashAmount`.
+- Credit sales are ACCRUAL for sales and profit (`Sale.totalSold` /
+  `Sale.totalProfit` are recognized at `saleDate`; inventory decreases at sale
+  time) and CASH / event-based for money. `Sale.paymentCashAmount` and
+  `Sale.paymentTransferAmount` are the CUMULATIVE (lifetime) cash/transfer
+  retained by that sale: the payment received at creation plus every later
+  `SaleCreditPayment` abono. `SaleCreditPayment` (`sale_credit_payments`,
+  `paidAt` / `cashSessionId` / `userId`) is the dated ledger of those abonos and
+  is never added again on top of the cumulative fields (doing so counted the
+  same money twice in cash sessions and under-registered credit refunds).
+  Cash sessions therefore read `salesCashTotal` (cash retained when the shift's
+  sales were created) plus `creditPaymentsCashTotal` (abonos collected in that
+  shift), and reports attribute the initial payment to `saleDate` while each
+  abono is attributed to its real `paidAt`; `Sale.creditBalance` is the
+  accounts-receivable balance. Shared helpers and the exact derivation live in
+  `apps/api/src/common/utils/sale-credit-payment.util.ts`.
 
 ## Integrations
 

@@ -19,6 +19,10 @@ import {
 } from "./dto/cash.dto";
 import { TerminalResolutionService } from "../terminals/terminal-resolution.service";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import {
+  creditPaymentTotalsBySaleId,
+  deriveSalePaymentBreakdown,
+} from "../common/utils/sale-credit-payment.util";
 
 type RequestUser = TenantUser;
 
@@ -488,34 +492,47 @@ export class CashService {
       throw new NotFoundException("No encontramos el turno solicitado.");
     }
 
-    const [sales, movements, creditPayments] = await Promise.all([
-      this.prisma.sale.findMany({
-        where: { cashSessionId: sessionId, companyId },
-        select: {
-          totalSold: true,
-          totalProfit: true,
-          paymentMethod: true,
-          paymentCashAmount: true,
-          paymentTransferAmount: true,
-          creditAmount: true,
-          creditBalance: true,
-          isDeleted: true,
-          kind: true,
-          items: {
-            select: {
-              subtotalSold: true,
-              profit: true,
-              productNameSnapshot: true,
-              product: {
-                select: { categoria: true },
-              },
+    // Las ventas del turno se leen primero porque sus ids alimentan UNA query
+    // batched del ledger de abonos (nunca una consulta por venta).
+    const sales = await this.prisma.sale.findMany({
+      where: { cashSessionId: sessionId, companyId },
+      select: {
+        id: true,
+        totalSold: true,
+        totalProfit: true,
+        paymentMethod: true,
+        paymentCashAmount: true,
+        paymentTransferAmount: true,
+        creditAmount: true,
+        creditBalance: true,
+        isDeleted: true,
+        kind: true,
+        items: {
+          select: {
+            subtotalSold: true,
+            profit: true,
+            productNameSnapshot: true,
+            product: {
+              select: { categoria: true },
             },
           },
         },
-      }),
+      },
+    });
+
+    const [movements, creditPayments, creditPaymentLedger] = await Promise.all([
       this.prisma.cashMovement.findMany({ where: { sessionId, companyId } }),
       this.prisma.saleCreditPayment.findMany({
         where: { cashSessionId: sessionId, companyId },
+      }),
+      // Solo una venta a crédito puede tener filas en `sale_credit_payments`
+      // (`addCreditPayment` exige `creditStatus !== 'none'`), así que el ledger
+      // batched solo se consulta cuando el turno contiene ventas a crédito.
+      creditPaymentTotalsBySaleId(this.prisma, {
+        companyId,
+        saleIds: sales
+          .filter((sale) => sale.paymentMethod === "credit")
+          .map((sale) => sale.id),
       }),
     ]);
 
@@ -532,6 +549,13 @@ export class CashService {
     let creditBalanceTotal = 0;
     let creditPaymentCash = 0;
     let creditPaymentTransfer = 0;
+    // Abonos cobrados EN ESTE TURNO (efectivo físico). Se mantiene separado de
+    // `salesCashTotal` para no contar dos veces el mismo peso: `salesCashTotal`
+    // es solo el efectivo recibido AL CREAR las ventas del turno.
+    let creditPaymentsCashTotal = 0;
+    // Ventas cuyo ledger de abonos excede el acumulado de la venta (data
+    // invariante rota). Se reporta, nunca se corrige con `max(0)`.
+    let paymentBreakdownViolations = 0;
     const categories = new Map<
       string,
       {
@@ -546,18 +570,34 @@ export class CashService {
       const cash = this.toNumber(sale.paymentCashAmount);
       const transfer = this.toNumber(sale.paymentTransferAmount);
       if (sale.isDeleted || sale.kind === "refund") {
+        // Política vigente de anulación/devolución: el efectivo que debe salir
+        // del cajón con la reversión sigue siendo el acumulado del documento
+        // (no se deriva el pago inicial). Ver reporte de hardening, FASE 19.
         refundsCash += Math.abs(cash);
         totalRefunds += 1;
         continue;
       }
+
+      const ledger = creditPaymentLedger.get(sale.id);
+      const breakdown = deriveSalePaymentBreakdown({
+        cumulativeCash: cash,
+        cumulativeTransfer: transfer,
+        creditPaymentsCash: ledger?.cash,
+        creditPaymentsTransfer: ledger?.transfer,
+      });
+      if (breakdown.invariantViolation) paymentBreakdownViolations += 1;
+
+      const initialCash = this.toNumber(breakdown.initialCash);
+      const initialTransfer = this.toNumber(breakdown.initialTransfer);
+
       totalTickets += 1;
       totalSales += this.toNumber(sale.totalSold);
-      salesCashTotal += cash;
-      salesTransferTotal += transfer;
+      salesCashTotal += initialCash;
+      salesTransferTotal += initialTransfer;
       if (sale.paymentMethod === "credit") {
         creditSalesTotal += this.toNumber(sale.totalSold);
-        creditInitialCash += cash;
-        creditInitialTransfer += transfer;
+        creditInitialCash += initialCash;
+        creditInitialTransfer += initialTransfer;
         creditBalanceTotal += this.toNumber(sale.creditBalance);
       }
       for (const item of sale.items) {
@@ -582,8 +622,9 @@ export class CashService {
       creditAbonos += amount;
       creditPaymentCash += cash;
       creditPaymentTransfer += transfer;
-      salesCashTotal += cash;
-      salesTransferTotal += transfer;
+      // Abonos cobrados en este turno: entran a `expectedCash` por su propio
+      // carril. NUNCA se suman a `salesCashTotal` (que ya no contiene abonos).
+      creditPaymentsCashTotal += cash;
     }
 
     let cashInManual = 0;
@@ -604,9 +645,16 @@ export class CashService {
     }
 
     const openingAmount = this.toNumber(session.initialAmount);
+    if (paymentBreakdownViolations > 0) {
+      this.logger.warn(
+        `cash.session.payment_breakdown_invariant_violation companyId=${companyId} ` +
+          `sessionId=${sessionId} sales=${paymentBreakdownViolations}`,
+      );
+    }
     const expectedCash =
       openingAmount +
-      salesCashTotal -
+      salesCashTotal +
+      creditPaymentsCashTotal -
       refundsCash +
       cashInManual -
       cashOutManual;
@@ -626,23 +674,31 @@ export class CashService {
       creditBalanceTotal,
       creditPaymentCash,
       creditPaymentTransfer,
+      creditPaymentsCashTotal,
+      paymentBreakdownViolations,
       layawayAbonos: 0,
       salesCashTotal,
       salesCardTotal: 0,
       salesTransferTotal,
       salesCreditTotal: sales
         .filter((sale) => !sale.isDeleted && sale.paymentMethod === "credit")
-        .reduce(
-          (sum, sale) =>
+        .reduce((sum, sale) => {
+          const ledger = creditPaymentLedger.get(sale.id);
+          const breakdown = deriveSalePaymentBreakdown({
+            cumulativeCash: sale.paymentCashAmount,
+            cumulativeTransfer: sale.paymentTransferAmount,
+            creditPaymentsCash: ledger?.cash,
+            creditPaymentsTransfer: ledger?.transfer,
+          });
+          return (
             sum +
-            Math.max(
-              0,
-              this.toNumber(sale.totalSold) -
-                this.toNumber(sale.paymentCashAmount) -
-                this.toNumber(sale.paymentTransferAmount),
-            ),
-          0,
-        ),
+            this.toNumber(
+              new Prisma.Decimal(sale.totalSold)
+                .minus(breakdown.initialCash)
+                .minus(breakdown.initialTransfer),
+            )
+          );
+        }, 0),
       refundsCash,
       expectedCash,
       totalTickets,

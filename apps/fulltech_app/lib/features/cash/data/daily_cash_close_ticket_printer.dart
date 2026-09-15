@@ -38,6 +38,10 @@ class DailyCashCloseTicketPrinter {
       'Total vendido: ${money.format(summary.totalSales)}',
       'Efectivo ventas: ${money.format(summary.salesCashTotal)}',
       'Transferencias: ${money.format(summary.salesTransferTotal)}',
+      if (summary.creditPaymentCash > 0)
+        'Abonos efectivo: ${money.format(summary.creditPaymentCash)}',
+      if (summary.creditPaymentTransfer > 0)
+        'Abonos transf.: ${money.format(summary.creditPaymentTransfer)}',
       'Entradas manuales: ${money.format(summary.cashInManual)}',
       'Salidas manuales: ${money.format(summary.cashOutManual)}',
       'Gastos: ${money.format(summary.totalExpenses)}',

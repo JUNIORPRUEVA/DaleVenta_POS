@@ -153,8 +153,12 @@ class FullPosEscPosShiftCloseRenderer {
       addMoney('Retiros', vm.withdrawals);
       addMoney('Devoluciones', vm.refunds);
 
-      // CRÉDITO (solo si el cierre oficial tiene ventas a crédito).
-      if (vm.creditSales > 0) {
+      // CRÉDITO (se muestra si el turno originó ventas a crédito O si en el
+      // turno se cobraron abonos de crédito: ese efectivo ya está dentro del
+      // efectivo esperado y debe aparecer en el desglose).
+      if (vm.creditSales > 0 ||
+          vm.creditPaymentCash > 0 ||
+          vm.creditPaymentTransfer > 0) {
         addRule();
         addSection('CREDITO');
         addMoney('Ventas credito', vm.creditSales);

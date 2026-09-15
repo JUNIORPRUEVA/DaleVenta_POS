@@ -117,13 +117,17 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false
+  # Genera los mipmap del launcher de Android a partir del maestro cuadrado
+  # (1024x1024, con transparencia) producido por
+  # scripts/branding/generate_app_icons.py
   image_path: "assets/image/logo_launcher.png"
   min_sdk_android: 21
+  # El icono de Windows es un .ico multi-resolucion (16/24/32/48/64/128/256)
+  # generado por scripts/branding/generate_app_icons.py. flutter_launcher_icons
+  # solo produce un icono de una sola resolucion, por eso se desactiva aqui.
   windows:
-    generate: true
-    image_path: "assets/image/logo_launcher.png"
-    icon_size: 48
+    generate: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

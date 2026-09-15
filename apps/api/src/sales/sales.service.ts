@@ -40,6 +40,7 @@ import {
 } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { deriveCashTenderChange } from "./cash-change.util";
+import { MONEY_EPSILON } from "../common/utils/sale-credit-payment.util";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 import {
   TerminalResolutionService,
@@ -365,6 +366,12 @@ export class SalesService {
       creditAmount: Prisma.Decimal;
       creditPaidAmount: Prisma.Decimal;
       creditBalance: Prisma.Decimal;
+      /**
+       * Ledger de abonos (`sale_credit_payments`). NUNCA se suma aquí: el
+       * acumulado ya está incluido en `paymentCashAmount` /
+       * `paymentTransferAmount` (ver `sale-credit-payment.util.ts`). Solo se
+       * mantiene para trazabilidad del contrato de lectura.
+       */
       creditPayments?: Array<{
         cashAmount: Prisma.Decimal;
         transferAmount: Prisma.Decimal;
@@ -381,15 +388,14 @@ export class SalesService {
       new Prisma.Decimal(value).mul(ratio).toDecimalPlaces(2);
 
     if (sale.paymentMethod === "credit") {
-      const creditPayments = sale.creditPayments ?? [];
-      const paidCash = creditPayments.reduce(
-        (sum, payment) => sum.plus(payment.cashAmount ?? 0),
-        new Prisma.Decimal(sale.paymentCashAmount ?? 0),
-      );
-      const paidTransfer = creditPayments.reduce(
-        (sum, payment) => sum.plus(payment.transferAmount ?? 0),
-        new Prisma.Decimal(sale.paymentTransferAmount ?? 0),
-      );
+      // `Sale.paymentCashAmount` / `paymentTransferAmount` son ACUMULADOS:
+      // pago inicial + todos los abonos posteriores. El ledger `SaleCreditPayment`
+      // NO se vuelve a sumar: hacerlo duplicaba `paidTotal`, sesgaba `paidRatio`
+      // y subregistraba el reembolso en el canal original (BUG de devoluciones
+      // de crédito). El ledger se consume para timeline/atribución por fecha y
+      // sesión, nunca para reconstruir un total ya acumulado en la venta.
+      const paidCash = new Prisma.Decimal(sale.paymentCashAmount ?? 0);
+      const paidTransfer = new Prisma.Decimal(sale.paymentTransferAmount ?? 0);
       const paidTotal = paidCash.plus(paidTransfer);
       const nextCreditAmount = Prisma.Decimal.max(
         new Prisma.Decimal(sale.creditAmount ?? 0).minus(refundAmount),
@@ -3155,12 +3161,19 @@ export class SalesService {
       dto.creditAmount ?? 0,
     ).toDecimalPlaces(2);
     const computedCreditAmount = total.minus(paidAmount);
+    if (
+      paymentMethod === "credit" &&
+      requestedCreditAmount.minus(computedCreditAmount).gt(MONEY_EPSILON)
+    ) {
+      throw new BadRequestException(
+        "El monto a crédito no puede superar el saldo pendiente de la factura.",
+      );
+    }
+    // El crédito financiado es SIEMPRE el saldo real de la factura. Un
+    // `creditAmount` del cliente por encima de `total - pagado` (API client
+    // hostil/desactualizado) inflaba `creditBalance` y la cuenta por cobrar.
     const creditAmount =
-      paymentMethod === "credit"
-        ? requestedCreditAmount.greaterThan(computedCreditAmount)
-          ? requestedCreditAmount
-          : computedCreditAmount
-        : new Prisma.Decimal(0);
+      paymentMethod === "credit" ? computedCreditAmount : new Prisma.Decimal(0);
     const creditBalance =
       paymentMethod === "credit" ? creditAmount : new Prisma.Decimal(0);
 

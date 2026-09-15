@@ -64,6 +64,10 @@ describe("ReportsService", () => {
       sale: { findMany },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
+      saleCreditPayment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
     };
   }
 
@@ -247,7 +251,10 @@ describe("ReportsService", () => {
       .fn()
       .mockResolvedValueOnce([invoice])
       .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([refund]);
+      .mockResolvedValueOnce([refund])
+      // La venta cancelada del período alimenta `cancelledInRangeIds`: sin ella
+      // el refund volvería a descontarse (100 cancelada + 40 devuelta = 140).
+      .mockResolvedValueOnce([invoice]);
     const service = serviceWith(emptyPrisma(findMany));
 
     const result = await service.salesOverview(user as never, {
@@ -557,6 +564,10 @@ describe("ReportsService", () => {
       sale: { findMany },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
+      saleCreditPayment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
     });
 
     const result = await service.salesOverview(user as never, {
@@ -577,10 +588,16 @@ describe("ReportsService", () => {
       .mockResolvedValue([]);
     const productFindMany = jest.fn().mockResolvedValue([]);
     const cashFindMany = jest.fn().mockResolvedValue([]);
+    const creditFindMany = jest.fn().mockResolvedValue([]);
+    const creditGroupBy = jest.fn().mockResolvedValue([]);
     const service = serviceWith({
       sale: { findMany },
       product: { findMany: productFindMany },
       cashMovement: { findMany: cashFindMany },
+      saleCreditPayment: {
+        findMany: creditFindMany,
+        groupBy: creditGroupBy,
+      },
     });
 
     await service.salesOverview(user as never, {
@@ -600,6 +617,14 @@ describe("ReportsService", () => {
         where: expect.objectContaining({ companyId: user.companyId }),
       }),
     );
+    expect(creditFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ companyId: user.companyId }),
+      }),
+    );
+    for (const call of creditGroupBy.mock.calls) {
+      expect(call[0].where.companyId).toBe(user.companyId);
+    }
   });
 
   it("mantiene KPIs aislados cuando una empresa tiene gastos y otra no", async () => {
@@ -607,7 +632,10 @@ describe("ReportsService", () => {
     const userB = { ...user, companyId: "company-b" };
     const findMany = jest.fn((args: { where: Record<string, unknown> }) => {
       const where = args.where;
-      if (where.kind === "invoice" && where.isDeleted === false) {
+      // La consulta real de facturas del período NO filtra por `isDeleted`
+      // (la reversión de canceladas se resta aparte). Un mock que exige
+      // `isDeleted === false` quedaba desactualizado y devolvía 0 ventas.
+      if (where.kind === "invoice" && where.isDeleted === undefined) {
         return Promise.resolve([
           sale({
             companyId: where.companyId,
@@ -629,6 +657,10 @@ describe("ReportsService", () => {
       sale: { findMany },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       cashMovement: { findMany: cashFindMany },
+      saleCreditPayment: {
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
     });
 
     const resultA = await service.salesOverview(userA as never, {

@@ -785,8 +785,9 @@ describe("SalesService optional inventory tracking", () => {
       {
         paymentMethod: "credit",
         totalSold: new Prisma.Decimal(200),
-        paymentCashAmount: new Prisma.Decimal(0),
-        paymentTransferAmount: new Prisma.Decimal(0),
+        // Acumulado real: inicial 0 + abonos 50 efectivo / 100 transferencia.
+        paymentCashAmount: new Prisma.Decimal(50),
+        paymentTransferAmount: new Prisma.Decimal(100),
         creditAmount: new Prisma.Decimal(200),
         creditPaidAmount: new Prisma.Decimal(150),
         creditBalance: new Prisma.Decimal(50),
@@ -818,8 +819,9 @@ describe("SalesService optional inventory tracking", () => {
       {
         paymentMethod: "credit",
         totalSold: new Prisma.Decimal(200),
-        paymentCashAmount: new Prisma.Decimal(0),
-        paymentTransferAmount: new Prisma.Decimal(0),
+        // Acumulado real: inicial 0 + abonos 80 efectivo / 120 transferencia.
+        paymentCashAmount: new Prisma.Decimal(80),
+        paymentTransferAmount: new Prisma.Decimal(120),
         creditAmount: new Prisma.Decimal(200),
         creditPaidAmount: new Prisma.Decimal(200),
         creditBalance: new Prisma.Decimal(0),
@@ -840,6 +842,161 @@ describe("SalesService optional inventory tracking", () => {
     expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("0");
     expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
       "0",
+    );
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
+  });
+
+  // ---------------------------------------------------------------------
+  // Devoluciones de crédito con fixtures REALISTAS (FASE 13/16).
+  //
+  // Invariante de producción (`sale-credit-payment.util.ts`):
+  //   Sale.paymentCashAmount     = pago inicial + Σ ledger.cashAmount
+  //   Sale.paymentTransferAmount = pago inicial + Σ ledger.transferAmount
+  // Los fixtures anteriores usaban `paymentCashAmount = 0` junto a un ledger
+  // poblado: una combinación que producción nunca genera y que ocultaba el
+  // sub-registro del reembolso.
+  // ---------------------------------------------------------------------
+
+  it("refunds a credit sale paid at creation without any later credit payment", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(1000),
+        // Acumulado real del alta: 200 en efectivo, ledger vacío.
+        paymentCashAmount: new Prisma.Decimal(200),
+        paymentTransferAmount: new Prisma.Decimal(0),
+        creditAmount: new Prisma.Decimal(800),
+        creditPaidAmount: new Prisma.Decimal(200),
+        creditBalance: new Prisma.Decimal(600),
+        creditPayments: [],
+      },
+      new Prisma.Decimal(-1000),
+    );
+
+    // Solo el dinero realmente cobrado vuelve al cliente: 200 en efectivo.
+    expect(allocation.paymentCashAmount.toString()).toBe("-200");
+    expect(allocation.paymentTransferAmount.toString()).toBe("0");
+    expect(allocation.creditAmount.toString()).toBe("0");
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("0");
+    expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
+      "0",
+    );
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
+  });
+
+  it("refunds initial payment plus later payments proportionally on a partial return", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(1000),
+        // Inicial 200 + abono posterior 300 (todo efectivo).
+        paymentCashAmount: new Prisma.Decimal(500),
+        paymentTransferAmount: new Prisma.Decimal(0),
+        creditAmount: new Prisma.Decimal(800),
+        creditPaidAmount: new Prisma.Decimal(500),
+        creditBalance: new Prisma.Decimal(300),
+        creditPayments: [
+          {
+            cashAmount: new Prisma.Decimal(300),
+            transferAmount: new Prisma.Decimal(0),
+          },
+        ],
+      },
+      new Prisma.Decimal(-400),
+    );
+
+    // Devuelto 400: 300 seguía sin cobrarse y 100 ya había entrado en caja.
+    expect(allocation.paymentCashAmount.toString()).toBe("-100");
+    expect(allocation.paymentTransferAmount.toString()).toBe("0");
+    expect(allocation.creditAmount.toString()).toBe("-400");
+    expect(allocation.creditPaidAmount.toString()).toBe("-100");
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("400");
+    expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
+      "400",
+    );
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
+  });
+
+  it("refunds multiple later credit payments by channel on a full return", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(1000),
+        // Sin pago inicial: abonos 100 + 200 efectivo y 150 transferencia.
+        paymentCashAmount: new Prisma.Decimal(300),
+        paymentTransferAmount: new Prisma.Decimal(150),
+        creditAmount: new Prisma.Decimal(1000),
+        creditPaidAmount: new Prisma.Decimal(450),
+        creditBalance: new Prisma.Decimal(550),
+        creditPayments: [
+          {
+            cashAmount: new Prisma.Decimal(100),
+            transferAmount: new Prisma.Decimal(0),
+          },
+          {
+            cashAmount: new Prisma.Decimal(200),
+            transferAmount: new Prisma.Decimal(0),
+          },
+          {
+            cashAmount: new Prisma.Decimal(0),
+            transferAmount: new Prisma.Decimal(150),
+          },
+        ],
+      },
+      new Prisma.Decimal(-1000),
+    );
+
+    expect(allocation.paymentCashAmount.toString()).toBe("-300");
+    expect(allocation.paymentTransferAmount.toString()).toBe("-150");
+    expect(allocation.creditAmount.toString()).toBe("0");
+    expect(allocation.creditPaidAmount.toString()).toBe("-450");
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("0");
+    expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
+      "0",
+    );
+    expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
+  });
+
+  it("keeps channel proportionality when the initial payment and the abonos use different channels", () => {
+    const service = serviceWith({}, {});
+
+    const allocation = (service as any).allocateRefundPayment(
+      {
+        paymentMethod: "credit",
+        totalSold: new Prisma.Decimal(1000),
+        // Inicial 200 en efectivo + abono posterior de 300 por transferencia.
+        // Sumar el ledger otra vez sobre el acumulado daba 200 / 600 en lugar
+        // de 200 / 300 y desviaba el reembolso por canal.
+        paymentCashAmount: new Prisma.Decimal(200),
+        paymentTransferAmount: new Prisma.Decimal(300),
+        creditAmount: new Prisma.Decimal(1000),
+        creditPaidAmount: new Prisma.Decimal(500),
+        creditBalance: new Prisma.Decimal(500),
+        creditPayments: [
+          {
+            cashAmount: new Prisma.Decimal(0),
+            transferAmount: new Prisma.Decimal(300),
+          },
+        ],
+      },
+      new Prisma.Decimal(-750),
+    );
+
+    // Devuelto 750: 250 seguía sin cobrarse y 250 ya había entrado (50% de
+    // cada canal): 100 efectivo + 150 transferencia.
+    expect(allocation.paymentCashAmount.toString()).toBe("-100");
+    expect(allocation.paymentTransferAmount.toString()).toBe("-150");
+    expect(allocation.creditAmount.toString()).toBe("-250");
+    expect(allocation.creditPaidAmount.toString()).toBe("-250");
+    expect(allocation.originalCreditUpdate.creditAmount.toString()).toBe("250");
+    expect(allocation.originalCreditUpdate.creditPaidAmount.toString()).toBe(
+      "250",
     );
     expect(allocation.originalCreditUpdate.creditBalance.toString()).toBe("0");
   });

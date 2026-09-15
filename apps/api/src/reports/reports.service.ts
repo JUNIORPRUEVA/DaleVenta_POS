@@ -6,6 +6,10 @@ import {
   requireTenant,
   type TenantUser,
 } from "../auth/tenant-context";
+import {
+  creditPaymentTotalsBySaleId,
+  deriveSalePaymentBreakdown,
+} from "../common/utils/sale-credit-payment.util";
 
 type RequestUser = TenantUser;
 
@@ -187,6 +191,72 @@ export class ReportsService {
       ...visibleRefundSales,
     ];
 
+    // ---------------------------------------------------------------------
+    // DINERO DEVENGADO vs DINERO COBRADO.
+    //
+    // `Sale.paymentCashAmount/paymentTransferAmount` son ACUMULADOS: pago
+    // inicial + todos los abonos posteriores. Usarlos directamente atribuía un
+    // abono del 10/09 al reporte del 01/09. La composición correcta es:
+    //   A) pago inicial (acumulado menos ledger lifetime de esa venta) de las
+    //      ventas cuya `saleDate` cae en el período;
+    //   B) abonos (`SaleCreditPayment`) cuyo `paidAt` real cae en el período.
+    // Ambas lecturas son batched (sin N+1) y filtradas por `companyId`.
+    // ---------------------------------------------------------------------
+    const creditPaymentLedger = await creditPaymentTotalsBySaleId(this.prisma, {
+      companyId,
+      saleIds: visibleSales
+        .filter((sale) => sale.paymentMethod === "credit")
+        .map((sale) => sale.id),
+    });
+
+    const creditPaymentWhere: Prisma.SaleCreditPaymentWhereInput = {
+      companyId,
+      paidAt: range,
+      // Semántica de filtro por usuario MANTENIDA (SELLER): el reporte atribuye
+      // el dinero cobrado al vendedor de la venta, igual que antes de este fix.
+      // El cobrador (`SaleCreditPayment.userId`) se conserva para auditoría.
+      ...(canSeeAll ? {} : { sale: { userId: user.id } }),
+    };
+    const creditPaymentsInRange = await this.prisma.saleCreditPayment.findMany({
+      where: creditPaymentWhere,
+      select: {
+        saleId: true,
+        cashAmount: true,
+        transferAmount: true,
+        amount: true,
+        sale: {
+          select: {
+            items: {
+              select: {
+                subtotalSold: true,
+                product: { select: { categoria: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let paymentBreakdownViolations = 0;
+    const initialPaymentBySaleId = new Map<
+      string,
+      { cash: number; transfer: number }
+    >();
+    for (const sale of visibleSales) {
+      const ledger = creditPaymentLedger.get(sale.id);
+      const breakdown = deriveSalePaymentBreakdown({
+        cumulativeCash: sale.paymentCashAmount,
+        cumulativeTransfer: sale.paymentTransferAmount,
+        creditPaymentsCash: ledger?.cash,
+        creditPaymentsTransfer: ledger?.transfer,
+      });
+      if (breakdown.invariantViolation) paymentBreakdownViolations += 1;
+      initialPaymentBySaleId.set(sale.id, {
+        cash: this.toNumber(breakdown.initialCash),
+        transfer: this.toNumber(breakdown.initialTransfer),
+      });
+    }
+
     const totals = visibleSales.reduce(
       (acc, sale) => {
         const categoryItems = this.saleItemsForCategory(sale, selectedCategory);
@@ -231,6 +301,10 @@ export class ReportsService {
         );
         const saleSold = this.toNumber(sale.totalSold);
         const allocation = saleSold > 0 ? itemSold / saleSold : 0;
+        const initialPayment = initialPaymentBySaleId.get(sale.id) ?? {
+          cash: 0,
+          transfer: 0,
+        };
         acc.totalSold += itemSold;
         acc.totalCost += itemCost;
         acc.totalProfit += itemProfit;
@@ -240,8 +314,9 @@ export class ReportsService {
         acc.discountAmount += itemDiscountAmount + generalDiscount * allocation;
         acc.totalCommission +=
           this.toNumber(sale.commissionAmount) * allocation;
-        acc.cash += this.toNumber(sale.paymentCashAmount) * allocation;
-        acc.transfer += this.toNumber(sale.paymentTransferAmount) * allocation;
+        // Pago recibido AL CREAR la venta (atribuido a `saleDate`).
+        acc.cash += initialPayment.cash * allocation;
+        acc.transfer += initialPayment.transfer * allocation;
         return acc;
       },
       {
@@ -257,6 +332,34 @@ export class ReportsService {
         discountAmount: 0,
       },
     );
+
+    // Abonos con fecha real (`paidAt`) dentro del período. Se prorratean por
+    // categoría con el MISMO criterio ya usado para el pago inicial
+    // (participación de la categoría en el total de la venta): no se inventa un
+    // contrato de reparto nuevo.
+    let creditPaymentsCashInPeriod = 0;
+    let creditPaymentsTransferInPeriod = 0;
+    let creditPaymentsCashOperations = 0;
+    let creditPaymentsTransferOperations = 0;
+    for (const payment of creditPaymentsInRange) {
+      const allocation = this.paymentCategoryAllocation(payment, selectedCategory);
+      if (allocation <= 0) continue;
+      const cash = this.toNumber(payment.cashAmount) * allocation;
+      const transfer = this.toNumber(payment.transferAmount) * allocation;
+      if (cash > 0) creditPaymentsCashOperations += 1;
+      if (transfer > 0) creditPaymentsTransferOperations += 1;
+      creditPaymentsCashInPeriod += cash;
+      creditPaymentsTransferInPeriod += transfer;
+      totals.cash += cash;
+      totals.transfer += transfer;
+    }
+
+    const initialCashOperations = visibleSales.filter(
+      (sale) => (initialPaymentBySaleId.get(sale.id)?.cash ?? 0) > 0,
+    ).length;
+    const initialTransferOperations = visibleSales.filter(
+      (sale) => (initialPaymentBySaleId.get(sale.id)?.transfer ?? 0) > 0,
+    ).length;
 
     const returns = visibleReturnedSales.reduce(
       (acc, sale) => {
@@ -461,16 +564,12 @@ export class ReportsService {
       {
         method: "Efectivo",
         amount: totals.cash,
-        count: visibleSales.filter(
-          (sale) => this.toNumber(sale.paymentCashAmount) > 0,
-        ).length,
+        count: initialCashOperations + creditPaymentsCashOperations,
       },
       {
         method: "Transferencia",
         amount: totals.transfer,
-        count: visibleSales.filter(
-          (sale) => this.toNumber(sale.paymentTransferAmount) > 0,
-        ).length,
+        count: initialTransferOperations + creditPaymentsTransferOperations,
       },
     ].filter((row) => row.amount > 0 || row.count > 0);
 
@@ -482,6 +581,16 @@ export class ReportsService {
     const netSales = totals.totalSold - returns.amount;
     const netProfit = totals.totalProfit - returns.profit - profitExpenses;
     const warnings = [
+      ...(paymentBreakdownViolations > 0
+        ? [
+            {
+              code: "payment_breakdown_invariant_violation",
+              severity: "warning",
+              message:
+                `${paymentBreakdownViolations} ventas tienen abonos registrados por encima del efectivo/transferencia acumulado de la venta. El efectivo se expone sin recortar para que la inconsistencia sea auditable.`,
+            },
+          ]
+        : []),
       ...(returns.count > 0
         ? [
             {
@@ -556,6 +665,11 @@ export class ReportsService {
         totalExpenses: profitExpenses,
         cashIncome,
         cashExpense,
+        // Efectivo/transferencia cobrados por abonos de crédito DENTRO del
+        // período (fecha real `paidAt`), separados del pago inicial.
+        creditPaymentsCash: creditPaymentsCashInPeriod,
+        creditPaymentsTransfer: creditPaymentsTransferInPeriod,
+        creditPaymentsCount: creditPaymentsInRange.length,
         zeroCostItems,
         zeroCostSoldAmount,
       },
@@ -590,6 +704,8 @@ export class ReportsService {
         returnedRows: returns.count,
         refundDocumentRows: refundSales.length,
         cashMovementRows: movements.length,
+        creditPaymentRows: creditPaymentsInRange.length,
+        paymentBreakdownViolations,
         categoryFiltered: selectedCategory !== null,
         warnings,
       },
@@ -609,6 +725,46 @@ export class ReportsService {
 
   private normalizeCategoryKey(value: string) {
     return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es-DO");
+  }
+
+  /**
+   * Participación de la categoría filtrada dentro del total de la venta dueña
+   * del abono. Sin filtro de categoría la participación es 1 (el abono se cuenta
+   * completo); con filtro, un abono de una venta sin esa categoría aporta 0.
+   * Mismo criterio que el pago inicial para no introducir un contrato nuevo.
+   */
+  private paymentCategoryAllocation(
+    payment: {
+      sale: {
+        items: Array<{
+          subtotalSold: MoneyLike;
+          product: { categoria: string | null } | null;
+        }>;
+      };
+    },
+    selectedCategory: string | null,
+  ) {
+    if (!selectedCategory) return 1;
+    const saleTotal = payment.sale.items.reduce(
+      (sum, item) => sum + this.toNumber(item.subtotalSold),
+      0,
+    );
+    if (saleTotal <= 0) return 0;
+    const categoryTotal = payment.sale.items.reduce(
+      (sum, item) =>
+        this.normalizeCategoryKey(this.itemCategoryFromParts(item)) ===
+        selectedCategory
+          ? sum + this.toNumber(item.subtotalSold)
+          : sum,
+      0,
+    );
+    return categoryTotal / saleTotal;
+  }
+
+  private itemCategoryFromParts(item: {
+    product: { categoria: string | null } | null;
+  }) {
+    return item.product?.categoria?.trim() || "Sin categoria";
   }
 
   private itemCategory(item: SaleOverviewItem) {

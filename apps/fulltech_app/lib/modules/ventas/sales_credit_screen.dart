@@ -50,7 +50,7 @@ bool _shouldUseCreditDesktopLayout(double width) {
 }
 
 double _creditInfoColumnWidth(double width) {
-  return (width * 0.33).clamp(420.0, 640.0);
+  return (width * 0.30).clamp(360.0, 520.0);
 }
 
 class SalesCreditScreen extends ConsumerStatefulWidget {
@@ -2137,10 +2137,10 @@ class _PanelSection extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: colorScheme.outlineVariant.withValues(alpha: 0.55),
         ),
@@ -2150,11 +2150,12 @@ class _PanelSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: theme.textTheme.titleSmall?.copyWith(
+            style: theme.textTheme.labelLarge?.copyWith(
               fontWeight: FontWeight.w900,
+              letterSpacing: 0,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           child,
         ],
       ),
@@ -2173,14 +2174,14 @@ class _DetailLine extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           SizedBox(
-            width: 112,
+            width: 104,
             child: Text(
               label,
-              style: theme.textTheme.labelMedium?.copyWith(
+              style: theme.textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w700,
               ),
@@ -2190,7 +2191,7 @@ class _DetailLine extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -2436,15 +2437,14 @@ class _CreditFixedInfoColumn extends StatelessWidget {
         ),
         border: Border(
           left: BorderSide(
-            color: colorScheme.primary.withValues(alpha: 0.16),
-            width: 1.2,
+            color: colorScheme.outlineVariant.withValues(alpha: 0.66),
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.075),
-            blurRadius: 30,
-            offset: const Offset(-10, 0),
+            color: colorScheme.shadow.withValues(alpha: 0.045),
+            blurRadius: 24,
+            offset: const Offset(-8, 0),
           ),
         ],
       ),
@@ -2452,34 +2452,26 @@ class _CreditFixedInfoColumn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Row(
               children: [
                 Container(
-                  width: 54,
-                  height: 54,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.tertiary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                    color: colorScheme.primary.withValues(alpha: 0.09),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: colorScheme.primary.withValues(alpha: 0.18),
                     ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.primary.withValues(alpha: 0.24),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.credit_score_rounded,
-                    color: Colors.white,
-                    size: 27,
+                    color: colorScheme.primary,
+                    size: 22,
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2488,17 +2480,17 @@ class _CreditFixedInfoColumn extends StatelessWidget {
                         'Crédito seleccionado',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
+                        style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w900,
-                          letterSpacing: -0.25,
+                          letterSpacing: 0,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         refreshing
                             ? 'Sincronizando · $totalCredits créditos'
                             : '$totalCredits créditos visibles',
-                        style: theme.textTheme.labelMedium?.copyWith(
+                        style: theme.textTheme.labelSmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w800,
                         ),
@@ -2544,8 +2536,8 @@ class _CreditDocHeader extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 22),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -2555,25 +2547,25 @@ class _CreditDocHeader extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: colorScheme.primary.withValues(alpha: 0.16)),
       ),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: colorScheme.primary,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.request_quote_rounded,
               color: Colors.white,
-              size: 20,
+              size: 17,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2583,14 +2575,15 @@ class _CreditDocHeader extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: colorScheme.primary,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
+                    letterSpacing: 0.6,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '#$number',
-                  style: theme.textTheme.titleSmall?.copyWith(
+                  style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
                   ),
                 ),
               ],
@@ -2608,7 +2601,7 @@ class _CreditDocHeader extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 date,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -2659,20 +2652,20 @@ class _CreditDetailBody extends StatelessWidget {
       children: [
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _CreditDocHeader(number: 'CRE-$shortId', date: date),
                 Text(
                   sale.customerName ?? 'Cliente sin nombre',
-                  style: theme.textTheme.headlineMedium?.copyWith(
+                  style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w900,
-                    letterSpacing: -0.8,
-                    height: 1.0,
+                    letterSpacing: 0,
+                    height: 1.05,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     _CreditStatusDot(paid: paid),
@@ -2682,7 +2675,7 @@ class _CreditDetailBody extends StatelessWidget {
                         phone,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium?.copyWith(
+                        style: theme.textTheme.labelSmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2690,14 +2683,13 @@ class _CreditDetailBody extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 if (cashier.isNotEmpty) ...[
                   _CreditInfoLine(
                     icon: Icons.person_outline_rounded,
                     label: 'Cajero',
                     value: cashier,
                   ),
-                  const SizedBox(height: 10),
                 ],
                 _CreditInfoAmount(
                   label: 'Total factura',
@@ -2714,7 +2706,7 @@ class _CreditDetailBody extends StatelessWidget {
                   value: sale.creditBalance,
                   danger: !paid,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
                 if (hasRegisteredPayments) ...[
                   _PanelSection(
                     title: 'Pagos registrados',
@@ -2744,7 +2736,7 @@ class _CreditDetailBody extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                 ],
                 _PanelSection(
                   title: 'Productos',
@@ -2755,7 +2747,7 @@ class _CreditDetailBody extends StatelessWidget {
                   ),
                 ),
                 if ((sale.note ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   _PanelSection(
                     title: 'Nota',
                     child: Text(
@@ -2771,7 +2763,7 @@ class _CreditDetailBody extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -2781,7 +2773,7 @@ class _CreditDetailBody extends StatelessWidget {
                 onPressed: paid ? null : onPayment,
                 prominent: true,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 7),
               Row(
                 children: [
                   Expanded(
@@ -2801,7 +2793,7 @@ class _CreditDetailBody extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 7),
               Row(
                 children: [
                   Expanded(
@@ -2822,7 +2814,7 @@ class _CreditDetailBody extends StatelessWidget {
                 ],
               ),
               if (onDelete != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 _CreditColumnAction(
                   icon: Icons.delete_outline_rounded,
                   label: 'Eliminar crédito',
@@ -2894,44 +2886,44 @@ class _CreditInfoLine extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: colorScheme.primary.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: colorScheme.primary.withValues(alpha: 0.13),
               ),
             ),
-            child: Icon(icon, size: 19, color: colorScheme.primary),
+            child: Icon(icon, size: 16, color: colorScheme.primary),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
-                  style: theme.textTheme.labelMedium?.copyWith(
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.18,
+                    letterSpacing: 0,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 3),
                 Text(
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    height: 1.16,
-                    letterSpacing: -0.08,
+                    height: 1.14,
+                    letterSpacing: 0,
                   ),
                 ),
               ],
@@ -2959,12 +2951,12 @@ class _CreditInfoAmount extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: danger
             ? colorScheme.errorContainer.withValues(alpha: 0.35)
             : colorScheme.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: danger
               ? colorScheme.error.withValues(alpha: 0.25)
@@ -2976,7 +2968,7 @@ class _CreditInfoAmount extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: theme.textTheme.labelMedium?.copyWith(
+              style: theme.textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w800,
               ),
@@ -2984,7 +2976,7 @@ class _CreditInfoAmount extends StatelessWidget {
           ),
           Text(
             formatRdCurrencyAccounting(value),
-            style: theme.textTheme.titleSmall?.copyWith(
+            style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w900,
               color: danger ? colorScheme.error : colorScheme.primary,
             ),
@@ -3016,14 +3008,13 @@ class _CreditColumnAction extends StatelessWidget {
       return OutlinedButton.icon(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(44),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
+          minimumSize: const Size.fromHeight(36),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           foregroundColor: Theme.of(context).colorScheme.error,
           side: BorderSide(color: Theme.of(context).colorScheme.error),
         ),
-        icon: Icon(icon, size: 17),
+        icon: Icon(icon, size: 15),
         label: Text(label),
       );
     }
@@ -3031,22 +3022,22 @@ class _CreditColumnAction extends StatelessWidget {
       return FilledButton.icon(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          minimumSize: const Size.fromHeight(40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        icon: Icon(icon, size: 18),
+        icon: Icon(icon, size: 16),
         label: Text(label),
       );
     }
     return OutlinedButton.icon(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(44),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        minimumSize: const Size.fromHeight(36),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      icon: Icon(icon, size: 17),
+      icon: Icon(icon, size: 15),
       label: Text(label),
     );
   }

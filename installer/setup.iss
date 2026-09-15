@@ -1,8 +1,15 @@
+; Nombre visible del producto (accesos directos, Menu Inicio, Panel de control).
 #ifndef MyAppName
-#define MyAppName "DaleVentas POS"
+#define MyAppName "FullPOS"
+#endif
+; Carpeta de instalacion. Se mantiene "DaleVentas POS" por compatibilidad: el
+; cliente resuelve la base de datos, backups, media_cache, logs y config en
+; %ProgramFiles%\DaleVentas POS (ver lib/core/storage/windows_product_paths.dart).
+#ifndef MyAppFolderName
+#define MyAppFolderName "DaleVentas POS"
 #endif
 #ifndef MyAppPublisher
-#define MyAppPublisher "DaleVentas POS"
+#define MyAppPublisher "FullPOS"
 #endif
 #ifndef MyAppPublisherURL
 #define MyAppPublisherURL "https://daleventa-pos.local"
@@ -37,12 +44,12 @@ VersionInfoProductVersion={#MyAppVersionInfo}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppPublisherURL}
 AppSupportURL={#MyAppSupportURL}
-DefaultDirName={autopf}\{#MyAppName}
+DefaultDirName={autopf}\{#MyAppFolderName}
 UsePreviousAppDir=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=DaleVentas-POS-Setup-{#StringChange(MyAppVersion, "+", "-")}
+OutputBaseFilename=FullPOS-Setup-{#StringChange(MyAppVersion, "+", "-")}
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -69,13 +76,20 @@ Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#WebView2RedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 #endif
 
+[InstallDelete]
+; El nombre visible cambio de "DaleVentas POS" a "FullPOS": al actualizar una
+; instalacion previa se eliminan sus accesos directos para no dejar entradas
+; huerfanas duplicadas en el Menu Inicio ni en el escritorio.
+Type: filesandordirs; Name: "{commonprograms}\DaleVentas POS"
+Type: files; Name: "{commondesktop}\DaleVentas POS.lnk"
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"; Tasks: desktopicon
 
 [Registry]
 Root: HKCR; Subkey: ".dvbackup"; ValueType: string; ValueName: ""; ValueData: "DaleVentasBackup"; Flags: uninsdeletevalue
-Root: HKCR; Subkey: "DaleVentasBackup"; ValueType: string; ValueName: ""; ValueData: "DaleVentas POS Backup"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "DaleVentasBackup"; ValueType: string; ValueName: ""; ValueData: "FullPOS Backup"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "DaleVentasBackup\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\app\{#MyAppExeName},0"
 Root: HKCR; Subkey: "DaleVentasBackup\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\app\{#MyAppExeName}"" ""%1"""
 

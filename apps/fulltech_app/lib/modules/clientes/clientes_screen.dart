@@ -46,7 +46,7 @@ bool _shouldUseClientesDesktopLayout(double width) {
 }
 
 double _clientesInfoColumnWidth(double width) {
-  return (width * 0.33).clamp(420.0, 640.0);
+  return (width * 0.30).clamp(360.0, 520.0);
 }
 
 final _clientActivityBundleProvider = FutureProvider.family
@@ -426,8 +426,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
         'No se pudo exportar',
         userSafeErrorMessage(
           error,
-          fallback:
-              'No pudimos exportar los clientes. Inténtalo nuevamente.',
+          fallback: 'No pudimos exportar los clientes. Inténtalo nuevamente.',
         ),
         isError: true,
       );
@@ -1034,10 +1033,7 @@ class _ClienteCard extends ConsumerWidget {
 }
 
 class _ClientRowEditButton extends StatelessWidget {
-  const _ClientRowEditButton({
-    required this.onPressed,
-    required this.tooltip,
-  });
+  const _ClientRowEditButton({required this.onPressed, required this.tooltip});
 
   final VoidCallback onPressed;
   final String tooltip;
@@ -1112,12 +1108,12 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 18),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Row(
               children: [
                 Container(
-                  width: 54,
-                  height: 54,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: desktopSalesAccentSoft,
                     borderRadius: BorderRadius.circular(8),
@@ -1133,10 +1129,10 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                   child: const Icon(
                     Icons.person_search_rounded,
                     color: desktopSalesAccent,
-                    size: 27,
+                    size: 22,
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1145,7 +1141,7 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                         'Cliente seleccionado',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
+                        style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0,
                         ),
@@ -1155,7 +1151,7 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                         refreshing
                             ? 'Sincronizando · $totalClients clientes'
                             : '$totalClients clientes visibles',
-                        style: theme.textTheme.labelMedium?.copyWith(
+                        style: theme.textTheme.labelSmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1174,7 +1170,7 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
             child: selected == null
                 ? _ClienteInfoEmptyState(onNewClient: onNewClient)
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1182,13 +1178,13 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                           selected.nombre.trim().isEmpty
                               ? 'Cliente sin nombre'
                               : selected.nombre.trim(),
-                          style: theme.textTheme.headlineMedium?.copyWith(
+                          style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -0.8,
-                            height: 1.0,
+                            letterSpacing: 0,
+                            height: 1.05,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         Row(
                           children: [
                             _ClientStatusDot(
@@ -1208,7 +1204,7 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 20),
                         _ClientInfoLine(
                           icon: Icons.call_outlined,
                           label: 'Teléfono',
@@ -1243,7 +1239,7 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                               ? 'Sin fecha'
                               : _formatClientDate(selected.updatedAt!),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         _ClientActivitySection(activity: activity),
                       ],
                     ),
@@ -1337,14 +1333,16 @@ class _ClientActivitySection extends StatelessWidget {
               icon: Icons.insights_rounded,
               label: 'Resumen de actividad',
             ),
-            const SizedBox(height: 10),
-            GridView.count(
-              crossAxisCount: 2,
+            const SizedBox(height: 8),
+            GridView(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 2.35,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                mainAxisExtent: 80,
+              ),
               children: [
                 _ClientMetricTile(
                   label: 'Compras',
@@ -1378,12 +1376,12 @@ class _ClientActivitySection extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             _ClientSectionTitle(
               icon: Icons.history_rounded,
               label: 'Últimos movimientos',
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             if (lastItems.isEmpty)
               const _ClientActivityMessage(
                 icon: Icons.history_toggle_off_rounded,
@@ -1411,12 +1409,12 @@ class _ClientSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 17, color: desktopSalesAccent),
-        const SizedBox(width: 7),
+        Icon(icon, size: 15, color: desktopSalesAccent),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             label,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -1443,20 +1441,22 @@ class _ClientMetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: const Color(0xFFD8E5EC)),
+        border: Border.all(
+          color: const Color(0xFFD8E5EC).withValues(alpha: 0.9),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: desktopSalesAccent),
-              const SizedBox(width: 6),
+              Icon(icon, size: 13, color: desktopSalesAccent),
+              const SizedBox(width: 5),
               Expanded(
                 child: Text(
                   label,
@@ -1470,25 +1470,31 @@ class _ClientMetricTile extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 7),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            helper,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: desktopSalesMuted,
-              fontWeight: FontWeight.w700,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                  height: 1.05,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                helper,
+                maxLines: 2,
+                overflow: TextOverflow.visible,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: desktopSalesMuted,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1505,8 +1511,8 @@ class _ClientTimelineMiniRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final amount = event.amount;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -1516,19 +1522,19 @@ class _ClientTimelineMiniRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               color: desktopSalesAccentSoft,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               _clientEventIcon(event),
-              size: 17,
+              size: 15,
               color: desktopSalesAccent,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 9),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1537,12 +1543,12 @@ class _ClientTimelineMiniRow extends StatelessWidget {
                   _clientEventTitle(event),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   [
                     _formatClientDate(event.at),
@@ -1562,7 +1568,7 @@ class _ClientTimelineMiniRow extends StatelessWidget {
           if (amount != null)
             Text(
               formatRdCurrencyAccounting(amount.toDouble()),
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: desktopSalesAccent,
                 fontWeight: FontWeight.w900,
               ),
@@ -1588,7 +1594,7 @@ class _ClientActivityMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(8),
@@ -1597,8 +1603,8 @@ class _ClientActivityMessage extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: desktopSalesMuted),
-          const SizedBox(width: 10),
+          Icon(icon, size: 18, color: desktopSalesMuted),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1674,42 +1680,42 @@ class _ClientInfoLine extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: desktopSalesAccentSoft,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFFCFE0FF)),
             ),
-            child: Icon(icon, size: 19, color: desktopSalesAccent),
+            child: Icon(icon, size: 16, color: desktopSalesAccent),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
-                  style: theme.textTheme.labelMedium?.copyWith(
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.18,
+                    letterSpacing: 0,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 3),
                 Text(
                   value,
                   maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    height: 1.16,
-                    letterSpacing: -0.08,
+                    height: 1.14,
+                    letterSpacing: 0,
                   ),
                 ),
               ],

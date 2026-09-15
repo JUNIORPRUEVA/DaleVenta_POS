@@ -369,6 +369,32 @@ void main() {
     expect(withCredit.any((l) => l.trim().startsWith('CREDITO')), isTrue);
   });
 
+  test('shows credit section when the shift only COLLECTED credit abonos', () {
+    // Turno sin ventas a crédito propias pero con abonos cobrados: ese efectivo
+    // ya suma al efectivo esperado, así que no puede desaparecer del desglose.
+    final lines = _renderer.preview(
+      _closeVm(
+        credit: 0,
+        creditPaymentCash: 300,
+        creditPaymentTransfer: 150,
+      ),
+    );
+
+    expect(lines.any((l) => l.trim().startsWith('CREDITO')), isTrue);
+    expect(
+      lines.any(
+        (l) => l.contains('ABONOS EFECTIVO') && l.contains('RD\$ 300.00'),
+      ),
+      isTrue,
+    );
+    expect(
+      lines.any(
+        (l) => l.contains('ABONOS TRANSF.') && l.contains('RD\$ 150.00'),
+      ),
+      isTrue,
+    );
+  });
+
   test('supports positive and negative difference signs', () {
     final positive = _renderer.preview(
       _closeVm(expected: 12000, declared: 12350, difference: 350),

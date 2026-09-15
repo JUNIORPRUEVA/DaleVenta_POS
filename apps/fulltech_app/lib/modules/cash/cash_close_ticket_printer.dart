@@ -444,7 +444,12 @@ class CashCloseTicketPrinter {
         money.format(snapshot.summary.salesTransferTotal),
         width,
       ),
-      if (snapshot.summary.creditSalesTotal > 0) ...[
+      // El bloque de crédito se imprime si el turno originó ventas a crédito o
+      // si cobró abonos de crédito: los abonos ya suman al efectivo esperado y
+      // no pueden quedar fuera del desglose impreso.
+      if (snapshot.summary.creditSalesTotal > 0 ||
+          snapshot.summary.creditPaymentCash > 0 ||
+          snapshot.summary.creditPaymentTransfer > 0) ...[
         ReceiptTextUtils.separator(width, 'dashed'),
         'VENTAS A CREDITO',
         ReceiptTextUtils.leftRight(
@@ -641,7 +646,9 @@ class _CashClosePdfBuilder {
       _kv('Salidas', _money.format(snapshot.summary.cashOutManual)),
       _kv('Retiros', _money.format(snapshot.summary.totalWithdrawals)),
       _kv('Devoluciones', _money.format(snapshot.summary.refundsCash)),
-      if (snapshot.summary.creditSalesTotal > 0) ...[
+      if (snapshot.summary.creditSalesTotal > 0 ||
+          snapshot.summary.creditPaymentCash > 0 ||
+          snapshot.summary.creditPaymentTransfer > 0) ...[
         _divider(),
         _section('Credito'),
         _kv('Ventas credito', _money.format(snapshot.summary.creditSalesTotal)),

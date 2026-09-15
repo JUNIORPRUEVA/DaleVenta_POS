@@ -515,9 +515,13 @@ class CashRepository {
       salesCashTotal: summary.salesCashTotal,
       salesTransferTotal: summary.salesTransferTotal,
       refundsCash: summary.refundsCash,
+      // Misma fórmula que el backend (`buildSummaryForSession`): el efectivo
+      // recibido al crear las ventas y los abonos de crédito cobrados en el
+      // turno son carriles distintos que se suman UNA sola vez.
       expectedCash:
           summary.openingAmount +
-          summary.salesCashTotal -
+          summary.salesCashTotal +
+          summary.creditPaymentCash -
           summary.refundsCash +
           cashIn -
           cashOut,

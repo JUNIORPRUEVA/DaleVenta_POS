@@ -1100,6 +1100,20 @@ class _TurnComposition extends StatelessWidget {
             icon: Icons.sync_alt_rounded,
             color: Color(0xFF1957E6),
           ),
+          if (summary.creditPaymentCash > 0)
+            _Line(
+              'Abonos efectivo',
+              summary.creditPaymentCash,
+              icon: Icons.payments_outlined,
+              color: Color(0xFF16A34A),
+            ),
+          if (summary.creditPaymentTransfer > 0)
+            _Line(
+              'Abonos transf.',
+              summary.creditPaymentTransfer,
+              icon: Icons.sync_alt_rounded,
+              color: Color(0xFF1957E6),
+            ),
           _Line(
             'Créditos',
             summary.creditSalesTotal,
@@ -1993,7 +2007,9 @@ class _HistoryTurnCardState extends ConsumerState<_HistoryTurnCard> {
             ),
           ],
         ),
-        if (summary.creditSalesTotal > 0) ...[
+        if (summary.creditSalesTotal > 0 ||
+            summary.creditPaymentCash > 0 ||
+            summary.creditPaymentTransfer > 0) ...[
           const SizedBox(height: 8),
           _HistoryDetailSection(
             title: 'Ventas a crédito',
