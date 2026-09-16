@@ -26,6 +26,15 @@ const _textSecondary = Color(0xFF6B7280);
 const _borderSoft = Color(0xFFE5E7EB);
 const _pageBg = Color(0xFFF6F8FB);
 
+const _salesKpiHelp = 'Es el total vendido en el período seleccionado.';
+const _grossProfitKpiHelp =
+    'Es la ganancia obtenida antes de descontar los gastos.';
+const _expensesKpiHelp =
+    'Son los egresos registrados en el período seleccionado.';
+const _netProfitKpiHelp =
+    'Es la ganancia final después de descontar los gastos.';
+const _reportsFilterIconAsset = 'assets/image/reports_filter.png';
+
 /// Radio local de la superficie de FILTROS de Reportes (paneles y chips).
 /// El design system de la app usa 16/14 para tarjetas y botones y 999 (pill)
 /// para los chips globales (`chipTheme`); los filtros de Reportes deben verse
@@ -468,7 +477,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     // Aritmetica de dias con el constructor (DST-proof): `subtract(Duration)`
     // es tiempo ABSOLUTO y en zonas con cambio de horario devuelve otro dia.
     final yesterday = DateTime(now.year, now.month, now.day - 1);
-    final weekStart = DateTime(now.year, now.month, now.day - (today.weekday - 1));
+    final weekStart = DateTime(
+      now.year,
+      now.month,
+      now.day - (today.weekday - 1),
+    );
     final lastWeekStart = DateTime(
       weekStart.year,
       weekStart.month,
@@ -643,6 +656,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           alignment: Alignment.centerRight,
           child: ReportsFilterDrawer(
             selectedPeriod: _selectedPeriod,
+            selectedRangeLabel:
+                '${_date.format(_range.start)} - ${_date.format(_range.end)}',
             categories: _categories,
             selectedCategory: _selectedCategory,
           ),
@@ -688,24 +703,27 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               showLogo: false,
               showDepartmentLabel: false,
               actions: [
-                IconButton(
+                _ReportsMobileAppBarAction(
                   tooltip: 'Filtros',
                   onPressed: _openMobileFilters,
-                  icon: Badge(
+                  child: Badge(
                     isLabelVisible: _hasNonDefaultFilters,
                     smallSize: 8,
-                    child: const Icon(Icons.filter_alt_outlined),
+                    child: const ImageIcon(
+                      AssetImage(_reportsFilterIconAsset),
+                      size: 18,
+                    ),
                   ),
                 ),
-                IconButton(
+                _ReportsMobileAppBarAction(
                   tooltip: 'Recargar',
                   onPressed: _loading ? null : _loadData,
-                  icon: const Icon(Icons.refresh_rounded),
+                  child: const Icon(Icons.refresh_rounded, size: 18),
                 ),
-                IconButton(
+                _ReportsMobileAppBarAction(
                   tooltip: 'PDF',
                   onPressed: _loading || _generatingPdf ? null : _downloadPdf,
-                  icon: _generatingPdf
+                  child: _generatingPdf
                       ? const SizedBox(
                           width: 18,
                           height: 18,
@@ -714,7 +732,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.picture_as_pdf_outlined),
+                      : const Icon(Icons.picture_as_pdf_outlined, size: 18),
                 ),
               ],
               trailing: const SizedBox.shrink(),
@@ -746,26 +764,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                     onReset: _resetFilters,
                   ),
                   const SizedBox(height: 12),
-                ] else ...[
-                  // Movil: accesos rapidos de fecha en UNA fila (scroll
-                  // horizontal si no caben) + resumen del rango activo.
-                  DateRangeSelector(
-                    selectedPeriod: _selectedPeriod,
-                    customLabel: _selectedPeriod == DateRangePeriod.custom
-                        ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
-                        : null,
-                    onPeriodChanged: _changePeriod,
-                  ),
-                  const SizedBox(height: 6),
-                  ReportsActiveFilterBar(
-                    period: _periodLabel(_selectedPeriod),
-                    range:
-                        '${_date.format(_range.start)} - ${_date.format(_range.end)}',
-                    category: _selectedCategory,
-                    onClearCategory: () => _changeCategory(null),
-                    showReset: _hasNonDefaultFilters,
-                    onReset: _resetFilters,
-                  ),
                 ],
                 if (_loading) const LinearProgressIndicator(minHeight: 2),
                 if (_error != null)
@@ -1025,17 +1023,69 @@ class _ReportsFilterDraft {
   final String? category;
 }
 
+class _ReportsMobileAppBarAction extends StatelessWidget {
+  const _ReportsMobileAppBarAction({
+    required this.tooltip,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onPressed,
+            child: Ink(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: enabled ? 0.14 : 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: enabled ? 0.24 : 0.12),
+                ),
+              ),
+              child: IconTheme(
+                data: IconThemeData(
+                  color: Colors.white.withValues(alpha: enabled ? 1 : 0.52),
+                  size: 18,
+                ),
+                child: Center(
+                  child: enabled ? child : Opacity(opacity: 0.52, child: child),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // Publico (no `_`) para poder testear la UI de filtros de Reportes sin red:
 // chips, categorias, footer y SafeArea.
 class ReportsFilterDrawer extends StatefulWidget {
   const ReportsFilterDrawer({
     super.key,
     required this.selectedPeriod,
+    required this.selectedRangeLabel,
     required this.categories,
     required this.selectedCategory,
   });
 
   final DateRangePeriod selectedPeriod;
+  final String selectedRangeLabel;
   final List<String> categories;
   final String? selectedCategory;
 
@@ -1059,6 +1109,16 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
     Navigator.of(context).pop(
       const _ReportsFilterDraft(period: kDefaultReportsPeriod, category: null),
     );
+  }
+
+  String get _activeRangeLabel {
+    if (_period == widget.selectedPeriod) return widget.selectedRangeLabel;
+    if (_period == DateRangePeriod.custom) {
+      return 'Selecciona el rango al aplicar';
+    }
+    final date = DateFormat('dd/MM/yyyy');
+    final range = DateRangeHelper.getRangeForPeriod(_period);
+    return '${date.format(range.start)} - ${date.format(range.end)}';
   }
 
   @override
@@ -1123,6 +1183,11 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
                 child: ListView(
                   padding: const EdgeInsets.all(14),
                   children: [
+                    _FilterRangePreview(
+                      label: _periodLabel(_period),
+                      range: _activeRangeLabel,
+                    ),
+                    const SizedBox(height: 18),
                     const _DrawerSectionTitle('Rango'),
                     Wrap(
                       spacing: 8,
@@ -1215,6 +1280,65 @@ class _DrawerSectionTitle extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w900,
         ),
+      ),
+    );
+  }
+}
+
+class _FilterRangePreview extends StatelessWidget {
+  const _FilterRangePreview({required this.label, required this.range});
+
+  final String label;
+  final String range;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: _primaryBlue.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(kReportsFilterRadius),
+        border: Border.all(color: _primaryBlue.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        children: [
+          const ImageIcon(
+            AssetImage(_reportsFilterIconAsset),
+            size: 17,
+            color: _primaryBlue,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  range,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _textSecondary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1845,6 +1969,8 @@ class ReportsFinancialKpiCards extends StatelessWidget {
         value: formatRdCurrencyAccounting(kpis.totalSales),
         icon: Icons.payments_outlined,
         color: _primaryBlue,
+        helpText: _salesKpiHelp,
+        helpKey: const ValueKey('reports-kpi-sales-help'),
       ),
       _KpiCard(
         key: const ValueKey('reports-kpi-gross-profit'),
@@ -1852,6 +1978,8 @@ class ReportsFinancialKpiCards extends StatelessWidget {
         value: formatRdCurrencyAccounting(kpis.grossProfit),
         icon: Icons.trending_up_outlined,
         color: kpis.grossProfit >= 0 ? _teal : _error,
+        helpText: _grossProfitKpiHelp,
+        helpKey: const ValueKey('reports-kpi-gross-profit-help'),
       ),
       _KpiCard(
         key: const ValueKey('reports-kpi-expenses'),
@@ -1859,6 +1987,8 @@ class ReportsFinancialKpiCards extends StatelessWidget {
         value: formatRdCurrencyAccounting(kpis.totalExpenses),
         icon: Icons.receipt_long_outlined,
         color: _gold,
+        helpText: _expensesKpiHelp,
+        helpKey: const ValueKey('reports-kpi-expenses-help'),
       ),
       _KpiCard(
         key: const ValueKey('reports-kpi-net-profit'),
@@ -1866,6 +1996,8 @@ class ReportsFinancialKpiCards extends StatelessWidget {
         value: formatRdCurrencyAccounting(kpis.netProfit),
         icon: Icons.account_balance_wallet_outlined,
         color: kpis.netProfit >= 0 ? _primaryBlue : _error,
+        helpText: _netProfitKpiHelp,
+        helpKey: const ValueKey('reports-kpi-net-profit-help'),
       ),
     ];
 
@@ -2517,9 +2649,7 @@ class _RecentSalesTable extends StatelessWidget {
   /// Fecha + estado real de la venta (devolucion parcial / devuelta), para que
   /// el monto vigente mostrado sea explicable sin abrir el detalle.
   String _recentSaleSubtitle(SaleModel sale, DateFormat date) {
-    final label = sale.saleDate == null
-        ? sale.id
-        : date.format(sale.saleDate!);
+    final label = sale.saleDate == null ? sale.id : date.format(sale.saleDate!);
     if (sale.isReturned) return '$label · Devuelta';
     if (sale.isPartiallyReturned) return '$label · Devolucion parcial';
     return label;
@@ -2693,12 +2823,16 @@ class _KpiCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.helpText,
+    this.helpKey,
   });
 
   final String title;
   final String value;
   final IconData icon;
   final Color color;
+  final String? helpText;
+  final Key? helpKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2722,15 +2856,25 @@ class _KpiCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _textSecondary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 10.5,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _textSecondary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ),
+                    if (helpText != null) ...[
+                      const SizedBox(width: 4),
+                      _KpiHelpButton(key: helpKey, message: helpText!),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 FittedBox(
@@ -2750,6 +2894,139 @@ class _KpiCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _KpiHelpButton extends StatefulWidget {
+  const _KpiHelpButton({super.key, required this.message});
+
+  final String message;
+
+  @override
+  State<_KpiHelpButton> createState() => _KpiHelpButtonState();
+}
+
+class _KpiHelpButtonState extends State<_KpiHelpButton> {
+  OverlayEntry? _helpEntry;
+
+  @override
+  void dispose() {
+    _hideHelp();
+    super.dispose();
+  }
+
+  void _toggleHelp() {
+    if (_helpEntry != null) {
+      _hideHelp();
+      return;
+    }
+    _showHelp();
+  }
+
+  void _hideHelp() {
+    _helpEntry?.remove();
+    _helpEntry = null;
+  }
+
+  void _showHelp() {
+    final overlay = Overlay.of(context);
+    final buttonBox = context.findRenderObject() as RenderBox?;
+    final overlayBox = overlay.context.findRenderObject() as RenderBox?;
+    if (buttonBox == null || overlayBox == null) return;
+
+    final buttonTopLeft = buttonBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final buttonSize = buttonBox.size;
+    final overlaySize = overlayBox.size;
+    final popoverWidth = math.min(260.0, overlaySize.width - 24);
+    final left = (buttonTopLeft.dx + buttonSize.width - popoverWidth).clamp(
+      12.0,
+      overlaySize.width - popoverWidth - 12,
+    );
+    final top = math.min(
+      buttonTopLeft.dy + buttonSize.height + 6,
+      overlaySize.height - 120,
+    );
+
+    _helpEntry = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _hideHelp,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              left: left,
+              top: top,
+              width: popoverWidth,
+              child: _KpiHelpPopover(message: widget.message),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_helpEntry!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.message,
+      waitDuration: const Duration(milliseconds: 350),
+      child: InkResponse(
+        onTap: _toggleHelp,
+        radius: 16,
+        child: const SizedBox.square(
+          dimension: 22,
+          child: Icon(Icons.info_outline, size: 15, color: _textSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiHelpPopover extends StatelessWidget {
+  const _KpiHelpPopover({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FBFF),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFCFE0FF)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Text(
+            message,
+            style: const TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              height: 1.28,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -592,6 +592,27 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         child: Stack(
           children: [
             if (!isDesktop)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 184,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF2E6BFF),
+                        AppColors.primary,
+                        AppColors.primary.withValues(alpha: 0),
+                      ],
+                      stops: const [0, 0.68, 1],
+                    ),
+                  ),
+                ),
+              ),
+            if (!isDesktop)
               const Positioned.fill(child: _MobileDrawerPattern()),
             SafeArea(
               child: Column(
@@ -667,7 +688,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                   icon: AppIcon(
                                     AppIcons.close,
                                     size: 21,
-                                    color: const Color(0xFF334155),
+                                    color: Colors.white,
                                     semanticLabel: 'Cerrar menú',
                                   ),
                                 ),

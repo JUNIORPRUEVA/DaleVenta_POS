@@ -189,26 +189,29 @@ void main() {
       },
     );
 
-    test('usa grossProfit explicito del backend cuando viene en el payload', () {
-      // Una venta totalmente devuelta reporta 0 en ventas y 0 en bruta; el
-      // cliente NO debe recalcular nada con costos actuales.
-      final kpis = KpisData.fromReport(<String, dynamic>{
-        'kpis': <String, dynamic>{
-          'totalSales': 0,
-          'netSales': 0,
-          'grossProfit': 0,
-          'totalProfit': 1000,
-          'totalExpenses': 300,
-          'netProfit': -300,
-          'avgTicket': 0,
-        },
-      });
-      expect(kpis.grossProfit, 0);
-      expect(kpis.netProfit, -300);
-      expect(kpis.grossMargin, 0);
-      expect(kpis.netMargin, 0);
-      expect(kpis.margin.isFinite, isTrue);
-    });
+    test(
+      'usa grossProfit explicito del backend cuando viene en el payload',
+      () {
+        // Una venta totalmente devuelta reporta 0 en ventas y 0 en bruta; el
+        // cliente NO debe recalcular nada con costos actuales.
+        final kpis = KpisData.fromReport(<String, dynamic>{
+          'kpis': <String, dynamic>{
+            'totalSales': 0,
+            'netSales': 0,
+            'grossProfit': 0,
+            'totalProfit': 1000,
+            'totalExpenses': 300,
+            'netProfit': -300,
+            'avgTicket': 0,
+          },
+        });
+        expect(kpis.grossProfit, 0);
+        expect(kpis.netProfit, -300);
+        expect(kpis.grossMargin, 0);
+        expect(kpis.netMargin, 0);
+        expect(kpis.margin.isFinite, isTrue);
+      },
+    );
 
     test('gastos que no afectan utilidad no reducen la utilidad neta', () {
       // El backend solo suma a totalExpenses los movimientos OUT de tipo
@@ -324,6 +327,22 @@ void main() {
       expect(find.text('Utilidad bruta'), findsOneWidget);
       expect(find.text('Gastos'), findsOneWidget);
       expect(find.text('Utilidad neta'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('reports-kpi-sales-help')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('reports-kpi-gross-profit-help')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('reports-kpi-expenses-help')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('reports-kpi-net-profit-help')),
+        findsOneWidget,
+      );
       // Metricas secundarias: margenes y tickets.
       expect(find.text('Margen y tickets'), findsOneWidget);
       expect(find.text('Margen bruto'), findsOneWidget);
@@ -331,6 +350,62 @@ void main() {
       expect(find.text('Tickets'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+
+    for (final size in <Size>[const Size(390, 800), const Size(1000, 800)]) {
+      testWidgets(
+        'cada icono de ayuda muestra el texto correcto en ${size.width.toInt()}px',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: SizedBox(
+                  width: size.width,
+                  child: ReportsFinancialKpiCards(kpis: _financialKpis()),
+                ),
+              ),
+            ),
+          );
+
+          final helpItems = <MapEntry<Key, String>>[
+            const MapEntry(
+              ValueKey('reports-kpi-sales-help'),
+              'Es el total vendido en el período seleccionado.',
+            ),
+            const MapEntry(
+              ValueKey('reports-kpi-gross-profit-help'),
+              'Es la ganancia obtenida antes de descontar los gastos.',
+            ),
+            const MapEntry(
+              ValueKey('reports-kpi-expenses-help'),
+              'Son los egresos registrados en el período seleccionado.',
+            ),
+            const MapEntry(
+              ValueKey('reports-kpi-net-profit-help'),
+              'Es la ganancia final después de descontar los gastos.',
+            ),
+          ];
+
+          for (final item in helpItems) {
+            expect(find.byKey(item.key), findsOneWidget);
+
+            await tester.tap(find.byKey(item.key));
+            await tester.pumpAndSettle();
+
+            expect(find.text(item.value), findsOneWidget);
+            expect(tester.takeException(), isNull);
+
+            await tester.tapAt(const Offset(8, 8));
+            await tester.pumpAndSettle();
+            expect(find.text(item.value), findsNothing);
+          }
+        },
+      );
+    }
 
     testWidgets('sin gastos mantiene la jerarquia con Gastos en cero', (
       tester,
@@ -860,6 +935,7 @@ void main() {
           home: Scaffold(
             body: ReportsFilterDrawer(
               selectedPeriod: DateRangePeriod.today,
+              selectedRangeLabel: '16/09/2026 - 16/09/2026',
               categories: const ['Accesorios', 'Celulares'],
               selectedCategory: null,
             ),
@@ -987,6 +1063,22 @@ void main() {
       expect(picked, DateRangePeriod.month);
     });
 
+    testWidgets('drawer movil muestra el intervalo dentro de Rango', (
+      tester,
+    ) async {
+      await pumpDrawer(tester, const Size(390, 844));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Rango'), findsOneWidget);
+      expect(find.text('Hoy'), findsWidgets);
+      expect(find.text('16/09/2026 - 16/09/2026'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('16/09/2026 - 16/09/2026')).dy,
+        lessThan(tester.getTopLeft(find.text('Rango')).dy),
+      );
+      expect(_lineCount(tester, find.text('16/09/2026 - 16/09/2026')), 1);
+    });
+
     for (final size in const <Size>[
       Size(360, 800),
       Size(390, 844),
@@ -999,8 +1091,14 @@ void main() {
           await pumpDrawer(tester, size);
 
           expect(tester.takeException(), isNull);
+          final rangeChipWrap = find.byType(Wrap).first;
           for (final label in periodLabels) {
-            expect(_lineCount(tester, find.text(label)), 1, reason: label);
+            final chipLabel = find.descendant(
+              of: rangeChipWrap,
+              matching: find.text(label),
+            );
+            expect(chipLabel, findsOneWidget, reason: label);
+            expect(_lineCount(tester, chipLabel), 1, reason: label);
           }
           for (final label in const <String>[
             'Hoy',
@@ -1010,7 +1108,7 @@ void main() {
             'Año',
             'Personalizado',
           ]) {
-            expect(find.text(label), findsOneWidget);
+            expect(find.text(label), findsWidgets);
           }
           // Categorias del tenant (solo las recibidas).
           expect(find.text('Todas las categorías'), findsOneWidget);
@@ -1040,6 +1138,7 @@ void main() {
           home: Scaffold(
             body: ReportsFilterDrawer(
               selectedPeriod: DateRangePeriod.today,
+              selectedRangeLabel: '16/09/2026 - 16/09/2026',
               categories: const <String>['Accesorios'],
               selectedCategory: null,
             ),

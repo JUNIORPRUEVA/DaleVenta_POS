@@ -3,8 +3,13 @@ import 'package:daleventa_pos/core/time/business_time.dart';
 import 'package:daleventa_pos/modules/cash/cash_models.dart';
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('es_DO');
+  });
+
   group('Business time America/Santo_Domingo', () {
     test('UTC -> RD display para 00:01 RD', () {
       final instant = parseServerInstant('2026-09-16T04:01:00.000Z')!;

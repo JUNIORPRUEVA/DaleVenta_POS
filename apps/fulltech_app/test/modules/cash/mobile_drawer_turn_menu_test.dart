@@ -7,6 +7,7 @@ import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
 import 'package:daleventa_pos/core/realtime/operations_data_refresh_service.dart';
 import 'package:daleventa_pos/core/realtime/operations_realtime_service.dart';
+import 'package:daleventa_pos/core/theme/app_colors.dart';
 import 'package:daleventa_pos/core/widgets/app_drawer.dart';
 import 'package:daleventa_pos/modules/cash/cash_close_ticket_printer.dart';
 import 'package:daleventa_pos/modules/cash/cash_models.dart';
@@ -267,6 +268,38 @@ Future<void> _expandTurnGroup(WidgetTester tester) async {
 
 void main() {
   group('Drawer móvil — grupo Turno reactivo', () {
+    testWidgets('usa azul de Facturación en la parte superior del drawer', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = _DrawerCashRepository()
+        ..stateFactory = () =>
+            const CashGateState(businessDate: '2026-08-22', canOperate: false);
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildHost(container));
+      await _openDrawer(tester);
+
+      final hasSalesBlueBand = tester
+          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+          .any((widget) {
+            final decoration = widget.decoration;
+            if (decoration is! BoxDecoration) return false;
+            final gradient = decoration.gradient;
+            if (gradient is! LinearGradient) return false;
+            return gradient.colors.contains(AppColors.primary) &&
+                gradient.colors.contains(const Color(0xFF2E6BFF));
+          });
+
+      expect(hasSalesBlueBand, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Test 1 — turno CERRADO: solo "Abrir turno" + historial', (
       tester,
     ) async {

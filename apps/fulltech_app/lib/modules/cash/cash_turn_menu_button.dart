@@ -743,10 +743,10 @@ class _CurrentTurnDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final openedAt = active == null ? null : toBusinessTime(active.openedAt);
+    final openedAt = active == null ? null : toBusinessTime(active!.openedAt);
     final activeDuration = openedAt == null
         ? 'Turno actual'
-        : _formatDuration(DateTime.now().difference(openedAt));
+        : _formatDuration(DateTime.now().toUtc().difference(active!.openedAt.toUtc()));
     final dateText = openedAt == null
         ? active?.businessDate ?? ''
         : DateFormat('dd/MM HH:mm', 'es_DO').format(openedAt);
