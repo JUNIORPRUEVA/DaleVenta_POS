@@ -185,8 +185,30 @@ void main() {
         expect(kpis.grossProfit, 1228);
         expect(kpis.netProfit, 528);
         expect(kpis.netMargin, closeTo(25.142857, 0.001));
+        expect(kpis.grossMargin, closeTo(58.476190, 0.001));
       },
     );
+
+    test('usa grossProfit explicito del backend cuando viene en el payload', () {
+      // Una venta totalmente devuelta reporta 0 en ventas y 0 en bruta; el
+      // cliente NO debe recalcular nada con costos actuales.
+      final kpis = KpisData.fromReport(<String, dynamic>{
+        'kpis': <String, dynamic>{
+          'totalSales': 0,
+          'netSales': 0,
+          'grossProfit': 0,
+          'totalProfit': 1000,
+          'totalExpenses': 300,
+          'netProfit': -300,
+          'avgTicket': 0,
+        },
+      });
+      expect(kpis.grossProfit, 0);
+      expect(kpis.netProfit, -300);
+      expect(kpis.grossMargin, 0);
+      expect(kpis.netMargin, 0);
+      expect(kpis.margin.isFinite, isTrue);
+    });
 
     test('gastos que no afectan utilidad no reducen la utilidad neta', () {
       // El backend solo suma a totalExpenses los movimientos OUT de tipo
@@ -286,35 +308,9 @@ void main() {
   });
 
   group('ReportsFinancialKpiCards', () {
-    testWidgets('sin gastos muestra KPIs simples sin bruta ni gastos', (
+    testWidgets('muestra la jerarquia principal: ventas, bruta, gastos, neta', (
       tester,
     ) async {
-      final kpis = KpisData.fromReport(<String, dynamic>{
-        'kpis': <String, dynamic>{
-          'totalSales': 4,
-          'netSales': 2100,
-          'totalProfit': 1228,
-          'totalExpenses': 0,
-          'netProfit': 1228,
-          'avgTicket': 525,
-        },
-      });
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: ReportsFinancialKpiCards(kpis: kpis)),
-        ),
-      );
-
-      expect(find.text('Utilidad neta'), findsOneWidget);
-      expect(find.text('Margen neto'), findsOneWidget);
-      expect(find.text('Tickets'), findsOneWidget);
-      expect(find.text('Utilidad bruta'), findsNothing);
-      expect(find.text('Gastos'), findsNothing);
-      expect(find.text('Utilidad'), findsNothing);
-    });
-
-    testWidgets('con gastos muestra desglose financiero', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -323,30 +319,50 @@ void main() {
         ),
       );
 
+      // Las 4 metricas principales del desempeño de ventas (FASE 14).
       expect(find.text('Ventas'), findsOneWidget);
+      expect(find.text('Utilidad bruta'), findsOneWidget);
+      expect(find.text('Gastos'), findsOneWidget);
       expect(find.text('Utilidad neta'), findsOneWidget);
+      // Metricas secundarias: margenes y tickets.
+      expect(find.text('Margen y tickets'), findsOneWidget);
+      expect(find.text('Margen bruto'), findsOneWidget);
       expect(find.text('Margen neto'), findsOneWidget);
       expect(find.text('Tickets'), findsOneWidget);
-      expect(find.text('Cómo se calcula la utilidad'), findsOneWidget);
-      expect(find.text('Bruta'), findsOneWidget);
-      expect(find.text('Gastos'), findsOneWidget);
-      expect(find.text('Neta'), findsOneWidget);
-      expect(find.text('-RD\$ 700.00'), findsOneWidget);
-      expect(find.text('Utilidad bruta'), findsNothing);
-      expect(find.text('Utilidad'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('CASE C: OUT con affectsProfit=false no activa el desglose', (
+    testWidgets('sin gastos mantiene la jerarquia con Gastos en cero', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ReportsFinancialKpiCards(kpis: _kpisWithoutExpenses()),
+          ),
+        ),
+      );
+
+      expect(find.text('Ventas'), findsOneWidget);
+      expect(find.text('Utilidad bruta'), findsOneWidget);
+      expect(find.text('Gastos'), findsOneWidget);
+      expect(find.text('Utilidad neta'), findsOneWidget);
+      // Sin gastos: la bruta y la neta son iguales y el gasto queda en 0.
+      expect(find.text(formatRdCurrencyAccounting(0)), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('CASE C: OUT con affectsProfit=false no infla los gastos', (
       tester,
     ) async {
       // El backend NO suma a totalExpenses los movimientos OUT con
       // affectsProfit=false, asi que el reporte llega con totalExpenses 0
-      // aunque el egreso exista en caja: la UI debe quedar compacta.
+      // aunque el egreso exista en caja: la tarjeta Gastos debe quedar en 0.
       final kpis = KpisData.fromReport(<String, dynamic>{
         'kpis': <String, dynamic>{
           'totalSales': 3,
           'netSales': 1500,
-          'totalProfit': 1000,
+          'grossProfit': 1000,
           'totalExpenses': 0,
           'netProfit': 1000,
         },
@@ -364,16 +380,10 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Cómo se calcula la utilidad'), findsNothing);
-      expect(find.text('Bruta'), findsNothing);
-      expect(find.text('Gastos'), findsNothing);
-      expect(find.text('Neta'), findsNothing);
-      expect(find.text('Utilidad bruta'), findsNothing);
-      // La utilidad (1000) aparece UNA sola vez: sin duplicar la bruta.
-      expect(
-        find.text(formatRdCurrencyAccounting(kpis.netProfit)),
-        findsOneWidget,
-      );
+      expect(find.text('Gastos'), findsOneWidget);
+      expect(find.text(formatRdCurrencyAccounting(0)), findsOneWidget);
+      // Nunca un gasto negativo: los gastos son un monto, no una resta.
+      expect(find.text('-RD\$ 0.00'), findsNothing);
     });
 
     testWidgets('usa distribución 2x2 en ancho móvil', (tester) async {
@@ -397,21 +407,23 @@ void main() {
       final ventas = tester.getTopLeft(
         find.byKey(const ValueKey('reports-kpi-sales')),
       );
-      final netProfit = tester.getTopLeft(
+      final bruta = tester.getTopLeft(
+        find.byKey(const ValueKey('reports-kpi-gross-profit')),
+      );
+      final gastos = tester.getTopLeft(
+        find.byKey(const ValueKey('reports-kpi-expenses')),
+      );
+      final neta = tester.getTopLeft(
         find.byKey(const ValueKey('reports-kpi-net-profit')),
       );
-      final netMargin = tester.getTopLeft(
-        find.byKey(const ValueKey('reports-kpi-net-margin')),
-      );
-      final tickets = tester.getTopLeft(
-        find.byKey(const ValueKey('reports-kpi-tickets')),
-      );
 
-      expect((ventas.dy - netProfit.dy).abs(), lessThan(2));
-      expect((netMargin.dy - tickets.dy).abs(), lessThan(2));
-      expect(netMargin.dy, greaterThan(ventas.dy));
-      expect(netProfit.dx, greaterThan(ventas.dx));
-      expect(tickets.dx, greaterThan(netMargin.dx));
+      // Fila 1: Ventas | Bruta. Fila 2: Gastos | Neta.
+      expect((bruta.dy - ventas.dy).abs(), lessThan(2));
+      expect((neta.dy - gastos.dy).abs(), lessThan(2));
+      expect(gastos.dy, greaterThan(ventas.dy));
+      expect(bruta.dx, greaterThan(ventas.dx));
+      expect((gastos.dx - ventas.dx).abs(), lessThan(2));
+      expect((neta.dx - bruta.dx).abs(), lessThan(2));
       expect(tester.takeException(), isNull);
     });
 
@@ -436,22 +448,22 @@ void main() {
       final ventas = tester.getTopLeft(
         find.byKey(const ValueKey('reports-kpi-sales')),
       );
-      final netProfit = tester.getTopLeft(
+      final bruta = tester.getTopLeft(
+        find.byKey(const ValueKey('reports-kpi-gross-profit')),
+      );
+      final gastos = tester.getTopLeft(
+        find.byKey(const ValueKey('reports-kpi-expenses')),
+      );
+      final neta = tester.getTopLeft(
         find.byKey(const ValueKey('reports-kpi-net-profit')),
       );
-      final netMargin = tester.getTopLeft(
-        find.byKey(const ValueKey('reports-kpi-net-margin')),
-      );
-      final tickets = tester.getTopLeft(
-        find.byKey(const ValueKey('reports-kpi-tickets')),
-      );
 
-      expect((ventas.dy - netProfit.dy).abs(), lessThan(2));
-      expect((ventas.dy - netMargin.dy).abs(), lessThan(2));
-      expect((ventas.dy - tickets.dy).abs(), lessThan(2));
-      expect(netProfit.dx, greaterThan(ventas.dx));
-      expect(netMargin.dx, greaterThan(netProfit.dx));
-      expect(tickets.dx, greaterThan(netMargin.dx));
+      for (final pos in <Offset>[bruta, gastos, neta]) {
+        expect((pos.dy - ventas.dy).abs(), lessThan(2));
+      }
+      expect(bruta.dx, greaterThan(ventas.dx));
+      expect(gastos.dx, greaterThan(bruta.dx));
+      expect(neta.dx, greaterThan(gastos.dx));
       expect(tester.takeException(), isNull);
     });
   });
@@ -642,18 +654,18 @@ void main() {
 
         expect(tester.takeException(), isNull);
         expect(find.text('Ventas'), findsOneWidget);
-        expect(find.text('Bruta'), findsOneWidget);
+        expect(find.text('Utilidad bruta'), findsOneWidget);
         expect(find.text('Gastos'), findsOneWidget);
         expect(find.text('Utilidad neta'), findsOneWidget);
-        expect(find.text('Cómo se calcula la utilidad'), findsOneWidget);
+        expect(find.text('Margen y tickets'), findsOneWidget);
       });
     }
 
-    // Revalidacion del estado SIN gastos (CASE A) en los mismos anchos:
-    // sin overflow, sin huecos, grilla intacta y sin info de utilidad duplicada.
+    // Geometria de la grilla de las 4 metricas principales en todos los anchos:
+    // 2x2 en movil y una sola fila en desktop, sin overflow.
     for (final size in <Size>[...mobileSizes, ...desktopSizes]) {
       testWidgets(
-        'sin gastos: grilla y sin overflow en ${size.width.toInt()}px',
+        'grilla de KPIs principales sin overflow en ${size.width.toInt()}px',
         (tester) async {
           tester.view.physicalSize = size;
           tester.view.devicePixelRatio = 1;
@@ -677,46 +689,43 @@ void main() {
 
           expect(tester.takeException(), isNull);
           expect(find.text('Ventas'), findsOneWidget);
+          expect(find.text('Utilidad bruta'), findsOneWidget);
+          expect(find.text('Gastos'), findsOneWidget);
           expect(find.text('Utilidad neta'), findsOneWidget);
-          expect(find.text('Margen neto'), findsOneWidget);
-          expect(find.text('Tickets'), findsOneWidget);
-          // CASE A: nada de datos redundantes de bruta/gastos.
-          expect(find.text('Utilidad bruta'), findsNothing);
-          expect(find.text('Bruta'), findsNothing);
-          expect(find.text('Gastos'), findsNothing);
-          expect(find.text('Neta'), findsNothing);
-          expect(find.text('Cómo se calcula la utilidad'), findsNothing);
+          // La utilidad bruta y la neta NO son la misma tarjeta: el reporte
+          // siempre muestra las 4 metricas principales.
+          expect(find.text('Margen y tickets'), findsOneWidget);
 
           final sales = tester.getTopLeft(
             find.byKey(const ValueKey('reports-kpi-sales')),
           );
+          final gross = tester.getTopLeft(
+            find.byKey(const ValueKey('reports-kpi-gross-profit')),
+          );
+          final expenses = tester.getTopLeft(
+            find.byKey(const ValueKey('reports-kpi-expenses')),
+          );
           final net = tester.getTopLeft(
             find.byKey(const ValueKey('reports-kpi-net-profit')),
-          );
-          final margin = tester.getTopLeft(
-            find.byKey(const ValueKey('reports-kpi-net-margin')),
-          );
-          final tickets = tester.getTopLeft(
-            find.byKey(const ValueKey('reports-kpi-tickets')),
           );
 
           if (size.width >= 900) {
             // Desktop: una sola fila de 4 tarjetas.
-            for (final pos in <Offset>[net, margin, tickets]) {
+            for (final pos in <Offset>[gross, expenses, net]) {
               expect((pos.dy - sales.dy).abs(), lessThan(2));
             }
-            expect(net.dx, greaterThan(sales.dx));
-            expect(margin.dx, greaterThan(net.dx));
-            expect(tickets.dx, greaterThan(margin.dx));
+            expect(gross.dx, greaterThan(sales.dx));
+            expect(expenses.dx, greaterThan(gross.dx));
+            expect(net.dx, greaterThan(expenses.dx));
           } else {
-            // Movil: grilla 2x2 -> fila 1 (Ventas, Neta), fila 2 (Margen,
-            // Tickets). Columna izquierda = Ventas/Margen, derecha = Neta/Tickets.
-            expect((net.dy - sales.dy).abs(), lessThan(2));
-            expect(margin.dy, greaterThan(sales.dy));
-            expect((tickets.dy - margin.dy).abs(), lessThan(2));
-            expect(net.dx, greaterThan(sales.dx));
-            expect((margin.dx - sales.dx).abs(), lessThan(2));
-            expect((tickets.dx - net.dx).abs(), lessThan(2));
+            // Movil: grilla 2x2 -> fila 1 (Ventas, Bruta), fila 2 (Gastos,
+            // Neta). Columna izquierda = Ventas/Gastos, derecha = Bruta/Neta.
+            expect((gross.dy - sales.dy).abs(), lessThan(2));
+            expect(expenses.dy, greaterThan(sales.dy));
+            expect((net.dy - expenses.dy).abs(), lessThan(2));
+            expect(gross.dx, greaterThan(sales.dx));
+            expect((expenses.dx - sales.dx).abs(), lessThan(2));
+            expect((net.dx - gross.dx).abs(), lessThan(2));
           }
         },
       );
@@ -743,10 +752,12 @@ void main() {
 
       expect(tester.takeException(), isNull);
       final zero = formatRdCurrencyAccounting(0);
-      expect(find.text(zero), findsNWidgets(2));
-      expect(find.text('0.0%'), findsOneWidget);
+      // Ventas, Utilidad bruta, Gastos y Utilidad neta en cero.
+      expect(find.text(zero), findsNWidgets(4));
+      // Margen bruto y margen neto, ambos en 0.0%.
+      expect(find.text('0.0%'), findsNWidgets(2));
       expect(find.text('0'), findsOneWidget);
-      expect(find.text('Gastos'), findsNothing);
+      expect(find.text('Gastos'), findsOneWidget);
       expect(find.textContaining('NaN'), findsNothing);
       expect(find.textContaining('Infinity'), findsNothing);
     });
@@ -1304,7 +1315,7 @@ KpisData _financialKpis() {
     'kpis': <String, dynamic>{
       'totalSales': 4,
       'netSales': 2100,
-      'totalProfit': 1228,
+      'grossProfit': 1228,
       'totalExpenses': 700,
       'netProfit': 528,
       'avgTicket': 525,
@@ -1312,14 +1323,14 @@ KpisData _financialKpis() {
   });
 }
 
-/// CASE A: sin gastos que afecten utilidad => utilidad bruta == utilidad neta
-/// y la UI debe quedar compacta (sin tarjetas redundantes de bruta/gastos).
+/// Gastos en 0: la jerarquia principal no cambia, la utilidad bruta es igual a
+/// la utilidad neta y el margen bruto es igual al margen neto.
 KpisData _kpisWithoutExpenses() {
   return KpisData.fromReport(<String, dynamic>{
     'kpis': <String, dynamic>{
       'totalSales': 3,
       'netSales': 1500,
-      'totalProfit': 1000,
+      'grossProfit': 1000,
       'totalExpenses': 0,
       'netProfit': 1000,
       'avgTicket': 500,

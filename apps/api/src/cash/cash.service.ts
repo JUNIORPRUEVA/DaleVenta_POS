@@ -23,6 +23,10 @@ import {
   creditPaymentTotalsBySaleId,
   deriveSalePaymentBreakdown,
 } from "../common/utils/sale-credit-payment.util";
+import {
+  currentBusinessDay,
+  businessDateRange,
+} from "../common/utils/business-time.util";
 
 type RequestUser = TenantUser;
 
@@ -44,7 +48,7 @@ export class CashService {
   }
 
   private businessDate(date = new Date()) {
-    return date.toISOString().slice(0, 10);
+    return currentBusinessDay(date);
   }
 
   private toNumber(value: Prisma.Decimal | number | null | undefined) {
@@ -405,19 +409,14 @@ export class CashService {
       if (Number.isNaN(end.getTime())) {
         throw new BadRequestException("Parámetro to inválido.");
       }
-      createdAt.lte = end;
+      createdAt.lt = end;
     }
     return { createdAt };
   }
 
   private parseDominicanDate(value: string, startOfDay: boolean) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim().slice(0, 10));
-    if (!match) return new Date(Number.NaN);
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    if (startOfDay) return new Date(Date.UTC(year, month, day, 4, 0, 0, 0));
-    return new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999));
+    const range = businessDateRange(value, value);
+    return startOfDay ? range.gte : range.lt;
   }
 
   async closedSessions(user: RequestUser) {

@@ -41,6 +41,7 @@ import {
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { deriveCashTenderChange } from "./cash-change.util";
 import { MONEY_EPSILON } from "../common/utils/sale-credit-payment.util";
+import { parseBusinessBoundary } from "../common/utils/business-time.util";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 import {
   TerminalResolutionService,
@@ -3239,13 +3240,7 @@ export class SalesService {
   }
 
   private parseDateBoundary(value: string, isStart: boolean): Date {
-    const trimmed = value.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      const date = new Date(`${trimmed}T00:00:00.000-04:00`);
-      if (isStart) return date;
-      return new Date(date.getTime() + 24 * 60 * 60 * 1000);
-    }
-    return new Date(trimmed);
+    return parseBusinessBoundary(value, isStart);
   }
 
   private emitSaleEvent(

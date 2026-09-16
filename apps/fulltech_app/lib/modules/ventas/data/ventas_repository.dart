@@ -447,6 +447,10 @@ class VentasRepository {
     required DateTime from,
     required DateTime to,
     String? category,
+    /// Ruta liviana: devuelve SOLO los KPIs de desempeño del periodo con la
+    /// misma semantica state-aware del reporte (se usa en las comparativas para
+    /// no mostrar dos numeros distintos del mismo KPI).
+    bool summaryOnly = false,
   }) async {
     try {
       final res = await _dio.get(
@@ -455,6 +459,7 @@ class VentasRepository {
           'from': _dateOnly(from),
           'to': _dateOnly(to),
           if ((category ?? '').trim().isNotEmpty) 'category': category!.trim(),
+          if (summaryOnly) 'summaryOnly': 'true',
         },
         options: Options(extra: const {'skipLoader': true}),
       );

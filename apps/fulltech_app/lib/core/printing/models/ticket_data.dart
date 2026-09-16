@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../time/business_time.dart';
 import '../../../modules/ventas/sales_models.dart';
 
 enum TicketType { sale, quote, refund, credit, copy, custom }
@@ -130,7 +131,7 @@ class TicketData {
         .toDouble();
     return TicketData(
       ticketNumber: _invoiceNumber(sale.id),
-      dateTime: sale.saleDate ?? DateTime.now(),
+      dateTime: toBusinessTime(sale.saleDate ?? DateTime.now()),
       items: saleItems
           .map(
             (item) => TicketItemData(
@@ -188,7 +189,7 @@ class TicketData {
   }) {
     return TicketData(
       ticketNumber: ticketNumber,
-      dateTime: DateTime.now(),
+      dateTime: businessNow(),
       items: const [],
       total: 0,
       type: TicketType.custom,
@@ -198,8 +199,8 @@ class TicketData {
 
   factory TicketData.demo() {
     return TicketData(
-      ticketNumber: 'TEST-${DateFormat('HHmmss').format(DateTime.now())}',
-      dateTime: DateTime.now(),
+      ticketNumber: 'TEST-${DateFormat('HHmmss').format(businessNow())}',
+      dateTime: businessNow(),
       client: const ClientInfo(name: 'Consumidor Final'),
       cashierName: 'Caja',
       paymentMethod: 'Efectivo',

@@ -137,6 +137,32 @@ Important invariant: tenant/company data must not mix across authenticated conte
   abono is attributed to its real `paidAt`; `Sale.creditBalance` is the
   accounts-receivable balance. Shared helpers and the exact derivation live in
   `apps/api/src/common/utils/sale-credit-payment.util.ts`.
+- Reports > Ventas represents net sales performance, not cash flow. For the
+  selected sale period, each non-deleted invoice contributes only its remaining
+  economic value after returns: net sales, net historical snapshot cost, gross
+  profit, category breakdowns, time series, tickets, and PDF metrics all derive
+  from the same remaining-line calculation. Refund documents are not counted as
+  negative sales. A fully returned sale contributes sales 0, cost 0, gross
+  profit 0, and ticket count 0; a partially returned sale contributes only the
+  remaining proportional revenue and cost. Net profit is gross profit minus
+  expenses that affect profit. Credit sales remain accrual sales when issued;
+  later credit payments affect collections/cash/accounts receivable, not sales
+  performance.
+
+## Date/Time Policy
+
+- Storage: timestamps are stored and exchanged as real instants in UTC.
+- Business timezone: DaleVentas uses `America/Santo_Domingo` as the canonical
+  business timezone.
+- UI/PDF/tickets: any date or time visible to the business or customer is
+  converted to `America/Santo_Domingo` before formatting.
+- Reports and daily cash boundaries: business days run from
+  `00:00:00 America/Santo_Domingo` inclusive to the next business midnight
+  exclusive, then those bounds are converted to UTC for database queries.
+- Network: API timestamps must be ISO 8601 with `Z` or an explicit offset.
+  Ambiguous timestamps without timezone must not be introduced.
+- Manual offsets such as subtracting four hours are not allowed; use the
+  canonical timezone helpers instead.
 
 ## Integrations
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/debug/app_error_reporter.dart';
+import '../../core/time/business_time.dart';
 import '../../core/utils/money_formatters.dart';
 import 'cash_close_ticket_printer.dart';
 import 'cash_dialogs.dart';
@@ -742,7 +743,7 @@ class _CurrentTurnDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final openedAt = active?.openedAt.toLocal();
+    final openedAt = active == null ? null : toBusinessTime(active.openedAt);
     final activeDuration = openedAt == null
         ? 'Turno actual'
         : _formatDuration(DateTime.now().difference(openedAt));
@@ -1730,10 +1731,10 @@ class _HistoryTurnCardState extends ConsumerState<_HistoryTurnCard> {
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
-    final opened = fmt.format(widget.row.openedAt.toLocal());
+    final opened = fmt.format(toBusinessTime(widget.row.openedAt));
     final closed = widget.row.closedAt == null
         ? 'Sin cierre'
-        : fmt.format(widget.row.closedAt!.toLocal());
+        : fmt.format(toBusinessTime(widget.row.closedAt!));
     final differenceColor = widget.row.difference.abs() < 0.01
         ? const Color(0xFF64748B)
         : widget.row.difference > 0

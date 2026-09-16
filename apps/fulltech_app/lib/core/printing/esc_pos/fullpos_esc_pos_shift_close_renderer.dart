@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 
+import '../../time/business_time.dart';
 import 'esc_pos_layout.dart';
 import 'shift_close_receipt_view_model.dart';
 import 'thermal_printer_profile.dart';
@@ -125,7 +126,7 @@ class FullPosEscPosShiftCloseRenderer {
     // 1) DATOS DEL TURNO.
     addSection('DATOS DEL TURNO');
     addMeta('No. cierre', vm.ticketNumber, rightWidth: 22);
-    addMeta('Fecha cierre', _dateTime.format(vm.capturedAt.toLocal()));
+    addMeta('Fecha cierre', _dateTime.format(toBusinessTime(vm.capturedAt)));
     if (vm.businessDate.trim().isNotEmpty) {
       addMeta('Dia negocio', vm.businessDate.trim());
     }
@@ -133,7 +134,7 @@ class FullPosEscPosShiftCloseRenderer {
       addMeta('Cajero', vm.cashierName.trim());
     }
     if (vm.openedAt != null) {
-      addMeta('Apertura', _dateTime.format(vm.openedAt!.toLocal()));
+      addMeta('Apertura', _dateTime.format(toBusinessTime(vm.openedAt!)));
     }
     if (vm.status.trim().isNotEmpty) {
       addMeta('Estado', vm.status.trim());

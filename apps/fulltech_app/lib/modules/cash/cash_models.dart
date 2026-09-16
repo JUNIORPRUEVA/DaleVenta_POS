@@ -1,11 +1,12 @@
+import '../../core/time/business_time.dart';
+
 double _asDouble(dynamic value) {
   if (value is num) return value.toDouble();
   return double.tryParse((value ?? '').toString()) ?? 0;
 }
 
 DateTime? _asDate(dynamic value) {
-  if (value == null) return null;
-  return DateTime.tryParse(value.toString());
+  return parseServerInstant(value);
 }
 
 class ActiveCashSession {

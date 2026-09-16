@@ -8,6 +8,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/time/business_time.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -283,7 +284,7 @@ class _CashMovementsHistoryScreenState
 
   bool _matchesDate(DateTime value) {
     if (_date == _MovementDateFilter.all) return true;
-    final local = value.toLocal();
+    final local = toBusinessTime(value);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final rowDay = DateTime(local.year, local.month, local.day);
@@ -1204,7 +1205,7 @@ class _CashExpensesHistoryScreenState
     return rows
         .where((row) {
           if (_expenseDate != null &&
-              !_sameCalendarDay(row.createdAt.toLocal(), _expenseDate!)) {
+              !sameBusinessDay(row.createdAt, _expenseDate!)) {
             return false;
           }
           if (query.isEmpty) return true;
@@ -1395,7 +1396,7 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
           final range = _selectedRange;
           if (range != null) {
             final rowDate =
-                DateTime.tryParse(row.businessDate) ?? row.openedAt.toLocal();
+                DateTime.tryParse(row.businessDate) ?? toBusinessTime(row.openedAt);
             final rowDay = DateTime(rowDate.year, rowDate.month, rowDate.day);
             final start = DateTime(
               range.start.year,
@@ -2118,7 +2119,7 @@ class _ExpenseHistoryRow extends StatelessWidget {
     final date = DateFormat(
       'dd/MM/yyyy HH:mm',
       'es_DO',
-    ).format(row.createdAt.toLocal());
+    ).format(toBusinessTime(row.createdAt));
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: dense ? 0 : 14,
@@ -2204,7 +2205,7 @@ class _CashMovementRow extends StatelessWidget {
     final date = DateFormat(
       'dd/MM/yyyy HH:mm',
       'es_DO',
-    ).format(row.createdAt.toLocal());
+    ).format(toBusinessTime(row.createdAt));
     final label = isIn ? 'Ingreso' : 'Salida';
 
     return Container(
@@ -2408,10 +2409,10 @@ class _TurnHistoryWideCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.sizeOf(context).width < 700;
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
-    final opened = fmt.format(row.openedAt.toLocal());
+    final opened = fmt.format(toBusinessTime(row.openedAt));
     final closed = row.closedAt == null
         ? 'Sin cierre'
-        : fmt.format(row.closedAt!.toLocal());
+        : fmt.format(toBusinessTime(row.closedAt!));
     final diffColor = row.difference.abs() < 0.01
         ? _cashMuted
         : row.difference > 0
@@ -2634,10 +2635,10 @@ class _TurnDetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
-    final opened = fmt.format(row.openedAt.toLocal());
+    final opened = fmt.format(toBusinessTime(row.openedAt));
     final closed = row.closedAt == null
         ? 'Sin cierre'
-        : fmt.format(row.closedAt!.toLocal());
+        : fmt.format(toBusinessTime(row.closedAt!));
     final diffColor = row.difference.abs() < 0.01
         ? _cashMuted
         : row.difference > 0
@@ -2823,10 +2824,10 @@ class _ShiftDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'es_DO');
-    final opened = fmt.format(row.openedAt.toLocal());
+    final opened = fmt.format(toBusinessTime(row.openedAt));
     final closed = row.closedAt == null
         ? 'Sin cierre'
-        : fmt.format(row.closedAt!.toLocal());
+        : fmt.format(toBusinessTime(row.closedAt!));
     final diffColor = row.difference.abs() < 0.01
         ? _cashBlue
         : row.difference > 0
@@ -3448,9 +3449,5 @@ InputDecoration _inputDecoration(
 }
 
 bool _sameCalendarDay(DateTime a, DateTime b) {
-  final left = a.toLocal();
-  final right = b.toLocal();
-  return left.year == right.year &&
-      left.month == right.month &&
-      left.day == right.day;
+  return sameBusinessDay(a, b);
 }

@@ -80,26 +80,43 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
     sales?: Array<Record<string, unknown>>;
     creditPayments?: Array<Record<string, unknown>>;
     ledger?: Array<{ saleId: string; cash: number; transfer: number }>;
-    refunds?: Array<Record<string, unknown>>;
+    /**
+     * Cantidad devuelta por línea original (documentos `kind=refund`, en
+     * cualquier fecha). El reporte es state-aware: descuenta la venta a la que
+     * pertenece la devolución, no el documento de devolución.
+     */
+    returnedQty?: Record<string, number>;
   }) {
     const saleFindMany = jest.fn((args: { where: Record<string, any> }) => {
       const where = args?.where ?? {};
-      if (where.kind === "refund") {
-        return Promise.resolve(options.refunds ?? []);
-      }
-      if (where.kind === "invoice" && where.isDeleted === true) {
-        return Promise.resolve([]);
-      }
       const gte = where.saleDate?.gte as Date | undefined;
       const lt = where.saleDate?.lt as Date | undefined;
       return Promise.resolve(
         (options.sales ?? []).filter(
           (row) =>
+            row.companyId === where.companyId &&
+            row.kind === where.kind &&
+            row.isDeleted === where.isDeleted &&
+            (!where.userId || row.userId === where.userId) &&
             (!gte || (row.saleDate as Date) >= gte) &&
             (!lt || (row.saleDate as Date) < lt),
         ),
       );
     });
+
+    const saleItemGroupBy = jest.fn(
+      (args: { where: { refundedSaleItemId: { in: string[] } } }) => {
+        const ids = args?.where?.refundedSaleItemId?.in ?? [];
+        return Promise.resolve(
+          ids
+            .filter((id) => (options.returnedQty?.[id] ?? 0) > 0)
+            .map((id) => ({
+              refundedSaleItemId: id,
+              _sum: { qty: dec(options.returnedQty?.[id] ?? 0) },
+            })),
+        );
+      },
+    );
 
     const creditFindMany = jest.fn((args: { where: Record<string, any> }) => {
       const where = args?.where ?? {};
@@ -129,6 +146,7 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
 
     const prisma = {
       sale: { findMany: saleFindMany },
+      saleItem: { groupBy: saleItemGroupBy },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
       saleCreditPayment: { findMany: creditFindMany, groupBy },
@@ -136,6 +154,7 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
     return {
       service: new ReportsService(prisma as never),
       saleFindMany,
+      saleItemGroupBy,
       creditFindMany,
       groupBy,
     };
@@ -271,43 +290,34 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
     );
   });
 
-  it("CASO 8: una devolución afecta el devengado pero no inyecta efectivo (contrato vigente)", async () => {
-    const { service } = harness({
-      sales: [],
-      refunds: [
-        creditSale({
-          id: "refund-1",
-          kind: "refund",
-          refundedSaleId: "sale-1",
-          paymentMethod: "refund",
-          paymentCashAmount: dec(-200),
-          totalSold: dec(-200),
-          totalCost: dec(-140),
-          totalProfit: dec(-60),
-          items: [
-            item({
-              subtotalSold: dec(-200),
-              subtotalCost: dec(-140),
-              profit: dec(-60),
-            }),
-          ],
-        }),
-      ],
-      ledger: [],
-      creditPayments: [],
+  it("CASO 8: la devolución deja el devengado en 0 (nunca negativo) y no inyecta efectivo", async () => {
+    // (a) Venta a crédito del período devuelta por completo: contribución 0.
+    const fullyReturned = harness({
+      sales: [creditSale()],
+      returnedQty: { "item-1": 1 },
     });
-
-    const report = await service.salesOverview(admin as never, {
+    const report = await fullyReturned.service.salesOverview(admin as never, {
       from: "2026-09-01",
       to: "2026-09-01",
     });
-
-    // La devolución resta del devengado…
-    expect(report.kpis.returnedSales).toBeCloseTo(200, 2);
+    expect(report.kpis.netSales).toBe(0);
+    expect(report.kpis.returnedSales).toBeCloseTo(1000, 2);
     expect(report.kpis.totalReturns).toBe(1);
-    // …pero el carril de caja del reporte sigue siendo solo dinero COBRADO.
+    expect(report.kpis.totalSales).toBe(0);
+    // El carril de caja del reporte sigue siendo solo dinero COBRADO.
     expect(report.kpis.cashIncome).toBeCloseTo(0, 2);
     expect(report.audit.creditPaymentRows).toBe(0);
+
+    // (b) La devolución de una venta de OTRO período no puede aparecer como
+    // una venta negativa en este período (bug real de Reportes/Ventas).
+    const priorPeriod = harness({ sales: [] });
+    const september = await priorPeriod.service.salesOverview(admin as never, {
+      from: "2026-09-01",
+      to: "2026-09-01",
+    });
+    expect(september.kpis.netSales).toBe(0);
+    expect(september.kpis.returnedSales).toBe(0);
+    expect(september.kpis.netProfit).toBe(0);
   });
 
   it("CASO 9-10: tenant isolation y semántica SELLER del filtro por usuario", async () => {

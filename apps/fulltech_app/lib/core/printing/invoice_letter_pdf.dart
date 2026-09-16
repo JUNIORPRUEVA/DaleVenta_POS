@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/company/company_settings_model.dart';
+import '../../core/time/business_time.dart';
 import '../../modules/ventas/sales_models.dart';
 
 class InvoiceLetterPdf {
@@ -84,7 +85,9 @@ class InvoiceLetterPdf {
                     pw.Text(
                       'Vencimiento: ${DateFormat('dd/MM/yyyy').format(sale.ncfExpirationDate!)}',
                     ),
-                  pw.Text(date.format(sale.saleDate ?? DateTime.now())),
+                  pw.Text(
+                    date.format(toBusinessTime(sale.saleDate ?? DateTime.now())),
+                  ),
                   if ((cashierName ?? sale.userName ?? '').trim().isNotEmpty)
                     pw.Text('Cajero: ${(cashierName ?? sale.userName)!}'),
                 ],

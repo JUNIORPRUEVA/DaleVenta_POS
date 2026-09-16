@@ -2,6 +2,22 @@ import { BadRequestException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { ReportsService } from "./reports.service";
 
+/**
+ * CONTRATO CANÓNICO DE REPORTES (congelado).
+ *
+ * Reportes > Ventas es DESEMPEÑO NETO DE VENTAS (state-aware), no flujo de caja:
+ *   - Cada venta del período (por `saleDate`) aporta su CONTRIBUCIÓN REMANENTE:
+ *     snapshot histórico menos la parte devuelta (proporcional a la cantidad
+ *     devuelta), sin importar cuándo ocurrió la devolución.
+ *   - Una venta totalmente devuelta aporta 0 (NUNCA -monto).
+ *   - Los documentos `kind=refund` no aportan jamás al desempeño.
+ *   - Ventas canceladas/eliminadas aportan 0.
+ *   - ventas netas   = bruto del período - devoluciones
+ *   - utilidad bruta = ventas netas - costo neto (snapshot histórico)
+ *   - utilidad neta  = utilidad bruta - gastos que afectan utilidad
+ *   - tickets: ACTIVE 1, PARTIALLY_RETURNED 1, FULLY_RETURNED/CANCELLED 0.
+ * Ver docs/PRODUCT_SPEC.md.
+ */
 describe("ReportsService", () => {
   const user = {
     id: "user-a",
@@ -21,13 +37,26 @@ describe("ReportsService", () => {
     return {
       id: "item-1",
       productId: "p1",
+      productSource: "LOCAL",
+      sourceProductId: null,
       productNameSnapshot: "Producto 1",
+      inventoryTrackedSnapshot: true,
       qty: decimal(1),
       priceSoldUnit: decimal(100),
+      grossAmount: decimal(100),
+      lineDiscountAmount: decimal(0),
       costUnitSnapshot: decimal(60),
       subtotalSold: decimal(100),
       subtotalCost: decimal(60),
       profit: decimal(40),
+      taxableBase: decimal(100),
+      taxRate: decimal(0),
+      taxAmount: decimal(0),
+      exemptAmount: decimal(0),
+      unitCodeSnapshot: "UNIT",
+      unitNameSnapshot: "Unidad",
+      unitSymbolSnapshot: "u",
+      unitPrecisionSnapshot: 0,
       product: null,
       ...over,
     };
@@ -44,30 +73,16 @@ describe("ReportsService", () => {
       isDeleted: false,
       deletedAt: null,
       saleDate: new Date("2026-08-10T12:00:00.000Z"),
+      paymentMethod: "cash",
       totalSold: decimal(100),
       totalCost: decimal(60),
       totalProfit: decimal(40),
+      discountAmount: decimal(0),
       commissionAmount: decimal(4),
       paymentCashAmount: decimal(100),
       paymentTransferAmount: decimal(0),
       items: [item()],
       ...over,
-    };
-  }
-
-  function emptyPrisma(findMany: jest.Mock) {
-    // Queries beyond the ones a test queues explicitly (e.g. the cancelled
-    // sales of the period) resolve to an empty list, so each test only has to
-    // describe the rows it cares about.
-    findMany.mockResolvedValue([]);
-    return {
-      sale: { findMany },
-      product: { findMany: jest.fn().mockResolvedValue([]) },
-      cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
-      saleCreditPayment: {
-        findMany: jest.fn().mockResolvedValue([]),
-        groupBy: jest.fn().mockResolvedValue([]),
-      },
     };
   }
 
@@ -85,363 +100,613 @@ describe("ReportsService", () => {
     };
   }
 
-  it("restringe devoluciones a reversiones de períodos anteriores (sin doble descuento)", async () => {
-    const cancelledSamePeriod = sale({
-      id: "sale-cancelled-same-period",
-      isDeleted: true,
-      deletedAt: new Date("2026-08-10T13:00:00.000Z"),
+  /**
+   * Prisma de prueba con la semántica real del backend:
+   *   - `returnedQty` describe la cantidad devuelta por línea ORIGINAL, tal como
+   *     la sumaría un documento `kind=refund` (con cualquier fecha).
+   *   - `sales` describe ventas del tenant; el mock aplica los filtros de
+   *     companyId, kind, isDeleted, userId y rango exclusivo.
+   */
+  function harness(
+    options: {
+      sales?: Array<Record<string, unknown>>;
+      returnedQty?: Record<string, number>;
+      movements?: Array<Record<string, unknown>>;
+      creditPayments?: Array<Record<string, unknown>>;
+      creditLedger?: Array<{ saleId: string; cash: number; transfer: number }>;
+      products?: Array<Record<string, unknown>>;
+      company?: Record<string, unknown> | null;
+    } = {},
+  ) {
+    const saleFindMany = jest.fn((args: { where: Record<string, any> }) => {
+      const where = args?.where ?? {};
+      const gte = where.saleDate?.gte as Date | undefined;
+      const lt = where.saleDate?.lt as Date | undefined;
+      return Promise.resolve(
+        (options.sales ?? []).filter(
+          (row) =>
+            row.companyId === where.companyId &&
+            row.kind === where.kind &&
+            row.isDeleted === where.isDeleted &&
+            (!where.userId || row.userId === where.userId) &&
+            (!gte || (row.saleDate as Date) >= gte) &&
+            (!lt || (row.saleDate as Date) < lt),
+        ),
+      );
     });
-    const findMany = jest
+
+    const saleItemGroupBy = jest.fn(
+      (args: { where: { refundedSaleItemId: { in: string[] } } }) => {
+        const ids = args?.where?.refundedSaleItemId?.in ?? [];
+        return Promise.resolve(
+          ids
+            .filter((id) => (options.returnedQty?.[id] ?? 0) > 0)
+            .map((id) => ({
+              refundedSaleItemId: id,
+              _sum: { qty: decimal(options.returnedQty?.[id] ?? 0) },
+            })),
+        );
+      },
+    );
+
+    const productFindMany = jest.fn().mockResolvedValue(options.products ?? []);
+    const cashFindMany = jest.fn().mockResolvedValue(options.movements ?? []);
+    const creditFindMany = jest
       .fn()
-      .mockResolvedValueOnce([cancelledSamePeriod]) // sales emitted in range
-      .mockResolvedValueOnce([cancelledSamePeriod]) // cancelled in range
-      .mockResolvedValueOnce([]); // refundSales
-    const service = serviceWith(emptyPrisma(findMany));
+      .mockResolvedValue(options.creditPayments ?? []);
+    const creditGroupBy = jest.fn().mockResolvedValue(
+      (options.creditLedger ?? []).map((row) => ({
+        saleId: row.saleId,
+        _sum: {
+          cashAmount: decimal(row.cash),
+          transferAmount: decimal(row.transfer),
+          amount: decimal(row.cash + row.transfer),
+        },
+      })),
+    );
 
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
+    const prisma = {
+      sale: { findMany: saleFindMany },
+      saleItem: { groupBy: saleItemGroupBy },
+      product: { findMany: productFindMany },
+      cashMovement: { findMany: cashFindMany },
+      saleCreditPayment: { findMany: creditFindMany, groupBy: creditGroupBy },
+      company: {
+        findUnique: jest.fn().mockResolvedValue(options.company ?? null),
+      },
+    };
 
-    // Movimiento del período: la venta emitida entra al bruto y su cancelación
-    // entra como reversa. El neto queda 0 sin clamps ni signos visuales.
-    const saleWhere = findMany.mock.calls[0][0].where;
-    expect(saleWhere).toMatchObject({
-      companyId: user.companyId,
-      kind: "invoice",
+    return {
+      service: serviceWith(prisma),
+      prisma,
+      saleFindMany,
+      saleItemGroupBy,
+      productFindMany,
+      cashFindMany,
+      creditFindMany,
+      creditGroupBy,
+    };
+  }
+
+  const august = { from: "2026-08-01", to: "2026-08-22" };
+
+  it("TEST 1 · venta normal: ventas, costo, bruta, neta y 1 ticket", async () => {
+    const invoice = sale({
+      id: "sale-normal",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      items: [
+        item({
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
     });
-    expect(saleWhere.isDeleted).toBeUndefined();
-    const returnedWhere = findMany.mock.calls[1][0].where;
-    expect(returnedWhere).toMatchObject({
-      companyId: user.companyId,
-      kind: "invoice",
-      isDeleted: true,
-    });
-    expect(returnedWhere.saleDate).toBeUndefined();
-    expect(result.kpis.netSales).toBe(0);
-    expect(result.kpis.totalReturns).toBe(1);
+    const { service } = harness({ sales: [invoice] });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.grossSales).toBeCloseTo(3000, 2);
+    expect(result.kpis.returnedSales).toBeCloseTo(0, 2);
+    expect(result.kpis.netSales).toBeCloseTo(3000, 2);
+    expect(result.kpis.totalCost).toBeCloseTo(2000, 2);
+    expect(result.kpis.grossProfit).toBeCloseTo(1000, 2);
+    expect(result.kpis.totalExpenses).toBeCloseTo(0, 2);
+    expect(result.kpis.netProfit).toBeCloseTo(1000, 2);
+    expect(result.kpis.totalSales).toBe(1);
   });
 
-  it("netea venta + devolución completa del mismo período a cero", async () => {
+  it("TEST 2 · devolución total: contribución exactamente 0 y 0 tickets", async () => {
     const invoice = sale({
       id: "sale-full-refund",
-      totalSold: decimal(100),
-      totalCost: decimal(40),
-      totalProfit: decimal(60),
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
       items: [
         item({
-          subtotalSold: decimal(100),
-          subtotalCost: decimal(40),
-          profit: decimal(60),
+          id: "item-full",
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
         }),
       ],
     });
-    const refund = sale({
-      id: "refund-full",
-      kind: "refund",
-      refundedSaleId: "sale-full-refund",
-      totalSold: decimal(-100),
-      totalCost: decimal(-40),
-      totalProfit: decimal(-60),
-      items: [
-        item({
-          subtotalSold: decimal(-100),
-          subtotalCost: decimal(-40),
-          profit: decimal(-60),
-        }),
-      ],
-    });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([refund]);
-    const service = serviceWith(emptyPrisma(findMany));
-
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "item-full": 1 },
     });
 
-    expect(result.kpis.grossSales).toBeCloseTo(100);
-    expect(result.kpis.returnedSales).toBeCloseTo(100);
-    expect(result.kpis.netSales).toBeCloseTo(0);
-    expect(result.kpis.totalCost).toBeCloseTo(40);
-    expect(result.kpis.totalProfit).toBeCloseTo(60);
-    expect(result.kpis.netProfit).toBeCloseTo(0);
-  });
+    const result = await service.salesOverview(user as never, august);
 
-  it("netea venta + devolución parcial del mismo período al remanente", async () => {
-    const invoice = sale({
-      id: "sale-partial-refund",
-      totalSold: decimal(100),
-      totalCost: decimal(40),
-      totalProfit: decimal(60),
-      items: [
-        item({
-          subtotalSold: decimal(100),
-          subtotalCost: decimal(40),
-          profit: decimal(60),
-        }),
-      ],
-    });
-    const refund = sale({
-      id: "refund-partial",
-      kind: "refund",
-      refundedSaleId: "sale-partial-refund",
-      totalSold: decimal(-40),
-      totalCost: decimal(-16),
-      totalProfit: decimal(-24),
-      items: [
-        item({
-          subtotalSold: decimal(-40),
-          subtotalCost: decimal(-16),
-          profit: decimal(-24),
-        }),
-      ],
-    });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([refund]);
-    const service = serviceWith(emptyPrisma(findMany));
-
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
-
-    expect(result.kpis.netSales).toBeCloseTo(60);
-    expect(result.kpis.netProfit).toBeCloseTo(36);
-  });
-
-  it("netea venta + devolución parcial + cancelación en el mismo período a cero", async () => {
-    const invoice = sale({
-      id: "sale-partial-cancel",
-      isDeleted: true,
-      deletedAt: new Date("2026-08-10T13:00:00.000Z"),
-      totalSold: decimal(100),
-      totalCost: decimal(40),
-      totalProfit: decimal(60),
-      items: [
-        item({
-          subtotalSold: decimal(100),
-          subtotalCost: decimal(40),
-          profit: decimal(60),
-        }),
-      ],
-    });
-    const refund = sale({
-      id: "refund-partial-cancel",
-      kind: "refund",
-      refundedSaleId: "sale-partial-cancel",
-      totalSold: decimal(-40),
-      totalCost: decimal(-16),
-      totalProfit: decimal(-24),
-      items: [
-        item({
-          subtotalSold: decimal(-40),
-          subtotalCost: decimal(-16),
-          profit: decimal(-24),
-        }),
-      ],
-    });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([refund])
-      // La venta cancelada del período alimenta `cancelledInRangeIds`: sin ella
-      // el refund volvería a descontarse (100 cancelada + 40 devuelta = 140).
-      .mockResolvedValueOnce([invoice]);
-    const service = serviceWith(emptyPrisma(findMany));
-
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
-
-    expect(result.kpis.grossSales).toBeCloseTo(100);
-    expect(result.kpis.returnedSales).toBeCloseTo(100);
-    expect(result.kpis.netSales).toBeCloseTo(0);
-    expect(result.kpis.netProfit).toBeCloseTo(0);
-    expect(result.audit.refundDocumentRows).toBe(1);
+    expect(result.kpis.grossSales).toBeCloseTo(3000, 2);
+    expect(result.kpis.returnedSales).toBeCloseTo(3000, 2);
+    expect(result.kpis.netSales).toBe(0);
+    expect(result.kpis.totalCost).toBe(0);
+    expect(result.kpis.grossProfit).toBe(0);
+    expect(result.kpis.netProfit).toBe(0);
+    expect(result.kpis.totalSales).toBe(0);
+    expect(result.kpis.avgTicket).toBe(0);
     expect(result.kpis.totalReturns).toBe(1);
+    // El gráfico y las categorías tampoco pueden contradecir al KPI.
+    expect(
+      result.salesSeries.reduce((sum, row) => sum + row.value, 0),
+    ).toBeCloseTo(0, 6);
+    expect(
+      result.profitSeries.reduce((sum, row) => sum + row.value, 0),
+    ).toBeCloseTo(0, 6);
+    expect(result.categoryProfits).toEqual([]);
   });
 
-  it("mantiene refund de período actual contra venta de período anterior como movimiento negativo", async () => {
-    const refund = sale({
-      id: "refund-prior-sale",
-      kind: "refund",
-      refundedSaleId: "sale-prior-period",
-      totalSold: decimal(-100),
-      totalCost: decimal(-40),
-      totalProfit: decimal(-60),
+  it("TEST 3 · devolución parcial 50%: remanente con costo snapshot histórico", async () => {
+    const invoice = sale({
+      id: "sale-partial",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
       items: [
         item({
-          subtotalSold: decimal(-100),
-          subtotalCost: decimal(-40),
-          profit: decimal(-60),
+          id: "item-partial",
+          qty: decimal(2),
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
         }),
       ],
     });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([refund]);
-    const service = serviceWith(emptyPrisma(findMany));
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "item-partial": 1 },
+    });
 
-    const result = await service.salesOverview(user as never, {
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBeCloseTo(1500, 2);
+    expect(result.kpis.totalCost).toBeCloseTo(1000, 2);
+    expect(result.kpis.grossProfit).toBeCloseTo(500, 2);
+    expect(result.kpis.returnedSales).toBeCloseTo(1500, 2);
+    expect(result.kpis.totalSales).toBe(1);
+    expect(result.categoryProfits).toEqual([
+      expect.objectContaining({
+        totalSales: 1500,
+        totalCost: 1000,
+        totalProfit: 500,
+      }),
+    ]);
+  });
+
+  it("TEST 4 · gastos que afectan utilidad: neta = bruta - gastos", async () => {
+    const invoice = sale({
+      id: "sale-expense",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      items: [
+        item({
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [invoice],
+      movements: [cashMovement({ id: "expense-1", amount: decimal(300) })],
+    });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBeCloseTo(3000, 2);
+    expect(result.kpis.grossProfit).toBeCloseTo(1000, 2);
+    expect(result.kpis.totalExpenses).toBeCloseTo(300, 2);
+    expect(result.kpis.netProfit).toBeCloseTo(700, 2);
+    expect(result.kpis.netProfit).toBeCloseTo(
+      result.kpis.grossProfit - result.kpis.totalExpenses,
+      6,
+    );
+  });
+
+  it("TEST 5 · devolución total + gasto real: neta negativa SOLO por el gasto", async () => {
+    const invoice = sale({
+      id: "sale-full-refund-expense",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      items: [
+        item({
+          id: "item-full-expense",
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "item-full-expense": 1 },
+      movements: [cashMovement({ amount: decimal(300) })],
+    });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBe(0);
+    expect(result.kpis.grossProfit).toBe(0);
+    expect(result.kpis.totalExpenses).toBeCloseTo(300, 2);
+    expect(result.kpis.netProfit).toBeCloseTo(-300, 2);
+  });
+
+  it("BUG REAL · la devolución de una venta de otro período NO produce ventas negativas", async () => {
+    // Venta del 10/08 devuelta por completo (documento de devolución fechado en
+    // septiembre). El reporte de septiembre NO puede mostrar -3000: la venta no
+    // pertenece a ese período y el documento de devolución no es una venta.
+    const invoice = sale({
+      id: "sale-prior-period",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      items: [
+        item({
+          id: "item-prior",
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "item-prior": 1 },
+    });
+
+    const september = await service.salesOverview(user as never, {
       from: "2026-09-01",
       to: "2026-09-30",
     });
+    expect(september.kpis.netSales).toBe(0);
+    expect(september.kpis.returnedSales).toBe(0);
+    expect(september.kpis.netProfit).toBe(0);
+    expect(september.kpis.totalSales).toBe(0);
 
-    expect(result.kpis.grossSales).toBeCloseTo(0);
-    expect(result.kpis.returnedSales).toBeCloseTo(100);
-    expect(result.kpis.netSales).toBeCloseTo(-100);
-    expect(result.kpis.netProfit).toBeCloseTo(-60);
+    // Y su propio período es STATE-AWARE: aporta 0 aunque la devolución haya
+    // ocurrido después.
+    const augustReport = await service.salesOverview(user as never, august);
+    expect(augustReport.kpis.netSales).toBe(0);
+    expect(augustReport.kpis.grossProfit).toBe(0);
+    expect(augustReport.kpis.totalSales).toBe(0);
   });
 
-  it("resta documentos de devolución (kind=refund) del neto", async () => {
-    const invoice = sale();
-    const refund = sale({
-      id: "refund-1",
-      kind: "refund",
-      totalSold: decimal(-20),
-      totalCost: decimal(-12),
-      totalProfit: decimal(-8),
-      commissionAmount: decimal(0),
+  it("TEST 13 · venta cancelada/eliminada: 0 ventas, 0 utilidad, 0 tickets", async () => {
+    const cancelled = sale({
+      id: "sale-cancelled",
+      isDeleted: true,
+      deletedAt: new Date("2026-08-11T13:00:00.000Z"),
+      totalSold: decimal(600),
+      totalCost: decimal(360),
+      totalProfit: decimal(240),
       items: [
         item({
-          subtotalSold: decimal(-20),
-          subtotalCost: decimal(-12),
-          profit: decimal(-8),
+          subtotalSold: decimal(600),
+          subtotalCost: decimal(360),
+          profit: decimal(240),
         }),
       ],
     });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([invoice]) // sales
-      .mockResolvedValueOnce([]) // returnedSales
-      .mockResolvedValueOnce([refund]); // refundSales
-    const service = serviceWith(emptyPrisma(findMany));
+    const { service, saleFindMany } = harness({ sales: [cancelled] });
 
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBe(0);
+    expect(result.kpis.grossProfit).toBe(0);
+    expect(result.kpis.totalSales).toBe(0);
+    // La consulta de desempeño excluye canceladas por estado (isDeleted).
+    expect(saleFindMany.mock.calls[0][0].where).toMatchObject({
+      isDeleted: false,
+      kind: "invoice",
+      companyId: user.companyId,
     });
-
-    expect(result.kpis.grossSales).toBeCloseTo(100);
-    expect(result.kpis.returnedSales).toBeCloseTo(20);
-    expect(result.kpis.netSales).toBeCloseTo(80);
-    expect(result.kpis.totalReturns).toBe(1);
   });
 
-  it("expone utilidad bruta, gastos y utilidad neta sin recalcular costos históricos", async () => {
+  it("TEST 6-7 · crédito: la venta se devenga al emitirse y el abono no vuelve a sumar", async () => {
+    const credit = sale({
+      id: "sale-credit",
+      paymentMethod: "credit",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      paymentCashAmount: decimal(0),
+      paymentTransferAmount: decimal(0),
+      items: [
+        item({
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
+    });
+    const { service } = harness({ sales: [credit], creditLedger: [] });
+
+    const report = await service.salesOverview(user as never, august);
+    expect(report.kpis.netSales).toBeCloseTo(3000, 2);
+    expect(report.kpis.grossProfit).toBeCloseTo(1000, 2);
+    expect(report.kpis.cashIncome).toBeCloseTo(0, 2);
+    expect(report.kpis.totalSales).toBe(1);
+
+    // El abono del período es cobranza: no vuelve a sumar venta, utilidad ni
+    // ticket.
+    const withPayment = harness({
+      sales: [credit],
+      creditPayments: [
+        {
+          saleId: "sale-credit",
+          cashAmount: decimal(3000),
+          transferAmount: decimal(0),
+          amount: decimal(3000),
+          sale: { items: [item({ subtotalSold: decimal(3000) })] },
+        },
+      ],
+      creditLedger: [{ saleId: "sale-credit", cash: 3000, transfer: 0 }],
+    });
+    const after = await withPayment.service.salesOverview(user as never, august);
+    expect(after.kpis.netSales).toBeCloseTo(3000, 2);
+    expect(after.kpis.grossProfit).toBeCloseTo(1000, 2);
+    expect(after.kpis.totalSales).toBe(1);
+  });
+
+  it("TEST 8-9 · devolución de venta a crédito: 0 ventas, 0 utilidad, sin venta negativa", async () => {
+    const credit = sale({
+      id: "sale-credit-refund",
+      paymentMethod: "credit",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      paymentCashAmount: decimal(0),
+      paymentTransferAmount: decimal(0),
+      creditAmount: decimal(3000),
+      creditPaidAmount: decimal(0),
+      creditBalance: decimal(3000),
+      items: [
+        item({
+          id: "item-credit",
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [credit],
+      returnedQty: { "item-credit": 1 },
+    });
+
+    const report = await service.salesOverview(user as never, august);
+
+    expect(report.kpis.netSales).toBe(0);
+    expect(report.kpis.grossProfit).toBe(0);
+    expect(report.kpis.netProfit).toBe(0);
+    expect(report.kpis.totalSales).toBe(0);
+    expect(report.kpis.cashIncome).toBeCloseTo(0, 2);
+  });
+
+  it("TEST 14 · venta rápida (sin productId ni categoría) no rompe el reporte", async () => {
+    const quick = sale({
+      id: "sale-quick",
+      totalSold: decimal(150),
+      items: [
+        item({
+          id: "quick-1",
+          productId: null,
+          productSource: null,
+          product: null,
+          inventoryTrackedSnapshot: false,
+          productNameSnapshot: "Servicio externo",
+          subtotalSold: decimal(150),
+          subtotalCost: decimal(50),
+          profit: decimal(100),
+        }),
+      ],
+    });
+    const { service } = harness({ sales: [quick] });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBeCloseTo(150, 2);
+    expect(result.kpis.grossProfit).toBeCloseTo(100, 2);
+    expect(result.categoryProfits).toEqual([
+      expect.objectContaining({ category: "Sin categoria", totalSales: 150 }),
+    ]);
+    expect(result.topProducts[0]).toEqual(
+      expect.objectContaining({ productName: "Servicio externo" }),
+    );
+  });
+
+  it("TEST 15 · exento + gravado: el ingreso neto suma base y exento", async () => {
     const invoice = sale({
-      totalSold: decimal(2100),
-      totalCost: decimal(872),
-      totalProfit: decimal(1228),
+      id: "sale-tax",
       items: [
         item({
-          subtotalSold: decimal(2100),
-          subtotalCost: decimal(872),
-          profit: decimal(1228),
+          id: "taxable",
+          subtotalSold: decimal(1000),
+          subtotalCost: decimal(600),
+          profit: decimal(400),
+          taxableBase: decimal(1000),
+          taxAmount: decimal(180),
+        }),
+        item({
+          id: "exempt",
+          subtotalSold: decimal(500),
+          subtotalCost: decimal(200),
+          profit: decimal(300),
+          taxableBase: decimal(0),
+          taxAmount: decimal(0),
+          exemptAmount: decimal(500),
         }),
       ],
     });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    const service = serviceWith({
-      ...emptyPrisma(findMany),
-      cashMovement: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([
-            cashMovement({ id: "expense-1", amount: decimal(700) }),
-          ]),
-      },
-    });
+    const { service } = harness({ sales: [invoice] });
 
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
+    const result = await service.salesOverview(user as never, august);
 
-    expect(result.kpis.totalProfit).toBeCloseTo(1228);
-    expect(result.kpis.totalExpenses).toBeCloseTo(700);
-    expect(result.kpis.netProfit).toBeCloseTo(528);
+    expect(result.kpis.netSales).toBeCloseTo(1500, 2);
+    expect(result.kpis.taxableBase).toBeCloseTo(1000, 2);
+    expect(result.kpis.exemptAmount).toBeCloseTo(500, 2);
+    expect(result.kpis.taxAmount).toBeCloseTo(180, 2);
+    expect(result.kpis.grossProfit).toBeCloseTo(700, 2);
   });
 
-  it("no descuenta de utilidad los movimientos OUT con affectsProfit=false", async () => {
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([sale()])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    const service = serviceWith({
-      ...emptyPrisma(findMany),
-      cashMovement: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([
-            cashMovement({ amount: decimal(25), affectsProfit: false }),
-          ]),
-      },
-    });
-
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
-
-    expect(result.kpis.totalProfit).toBeCloseTo(40);
-    expect(result.kpis.totalExpenses).toBeCloseTo(0);
-    expect(result.kpis.netProfit).toBeCloseTo(40);
-  });
-
-  it("reduce la utilidad bruta por refunds antes de descontar gastos una sola vez", async () => {
-    const refund = sale({
-      id: "refund-profit",
-      kind: "refund",
-      totalSold: decimal(-20),
-      totalCost: decimal(-12),
-      totalProfit: decimal(-8),
+  it("TEST 16 · descuentos: el descuento general se prorratea por la parte remanente", async () => {
+    // Venta de 2 unidades con descuento general de 200 en el documento.
+    // Se devuelve 1 unidad => el descuento aporta 100, no 200.
+    const invoice = sale({
+      id: "sale-discount",
+      discountAmount: decimal(200),
+      totalSold: decimal(1000),
       items: [
         item({
-          subtotalSold: decimal(-20),
-          subtotalCost: decimal(-12),
-          profit: decimal(-8),
+          id: "disc-1",
+          qty: decimal(2),
+          priceSoldUnit: decimal(500),
+          subtotalSold: decimal(1000),
+          subtotalCost: decimal(600),
+          profit: decimal(400),
+          lineDiscountAmount: decimal(0),
         }),
       ],
     });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([sale()])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([refund]);
-    const service = serviceWith({
-      ...emptyPrisma(findMany),
-      cashMovement: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([cashMovement({ amount: decimal(10) })]),
-      },
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "disc-1": 1 },
     });
 
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBeCloseTo(500, 2);
+    expect(result.kpis.discountAmount).toBeCloseTo(100, 2);
+  });
+
+  it("TEST 17 · reconciliación: categorías == KPIs y neta == bruta - gastos", async () => {
+    const accessories = sale({
+      id: "s-a",
+      customerId: "c1",
+      customer: { id: "c1", nombre: "Cliente 1" },
+      items: [
+        item({
+          id: "ia",
+          productId: "pa",
+          product: { categoria: "Accesorios" },
+          subtotalSold: decimal(1000),
+          subtotalCost: decimal(600),
+          profit: decimal(400),
+        }),
+      ],
+    });
+    const repairs = sale({
+      id: "s-b",
+      items: [
+        item({
+          id: "ib",
+          productId: "pb",
+          product: { categoria: "Repuestos" },
+          qty: decimal(2),
+          subtotalSold: decimal(2000),
+          subtotalCost: decimal(1500),
+          profit: decimal(500),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [accessories, repairs],
+      returnedQty: { ib: 1 },
+      movements: [cashMovement({ amount: decimal(100) })],
     });
 
-    expect(result.kpis.totalProfit).toBeCloseTo(40);
-    expect(result.kpis.totalExpenses).toBeCloseTo(10);
-    expect(result.kpis.netProfit).toBeCloseTo(22);
+    const result = await service.salesOverview(user as never, august);
+
+    const categorySales = result.categoryProfits.reduce(
+      (sum, row) => sum + row.totalSales,
+      0,
+    );
+    const categoryProfit = result.categoryProfits.reduce(
+      (sum, row) => sum + row.totalProfit,
+      0,
+    );
+    const seriesSales = result.salesSeries.reduce(
+      (sum, row) => sum + row.value,
+      0,
+    );
+
+    expect(categorySales).toBeCloseTo(result.kpis.netSales, 2);
+    expect(categoryProfit).toBeCloseTo(result.kpis.grossProfit, 2);
+    expect(seriesSales).toBeCloseTo(result.kpis.netSales, 2);
+    expect(result.kpis.grossProfit).toBeCloseTo(
+      result.kpis.netSales - result.kpis.totalCost,
+      2,
+    );
+    expect(result.kpis.netProfit).toBeCloseTo(
+      result.kpis.grossProfit - result.kpis.totalExpenses,
+      6,
+    );
+    // Repuestos: 2000 bruto, 1000 remanente (1 de 2 unidades devuelta).
+    expect(result.categoryProfits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "Repuestos", totalSales: 1000 }),
+        expect.objectContaining({ category: "Accesorios", totalSales: 1000 }),
+      ]),
+    );
+  });
+
+  it("TEST 18 · summaryOnly devuelve los MISMOS KPIs que el reporte completo", async () => {
+    const invoice = sale({
+      id: "sale-summary",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      items: [
+        item({
+          id: "item-summary",
+          qty: decimal(2),
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "item-summary": 1 },
+    });
+
+    const full = await service.salesOverview(user as never, august);
+    const light = await service.salesOverview(user as never, {
+      ...august,
+      summaryOnly: "true",
+    });
+
+    expect(light.kpis.netSales).toBeCloseTo(full.kpis.netSales, 2);
+    expect(light.kpis.grossProfit).toBeCloseTo(full.kpis.grossProfit, 2);
+    expect(light.kpis.totalSales).toBe(full.kpis.totalSales);
+    expect(light.kpis.grossSales).toBeCloseTo(full.kpis.grossSales, 2);
+    expect(light.kpis.returnedSales).toBeCloseTo(full.kpis.returnedSales, 2);
   });
 
   it("no calcula ticket promedio sobre ventas excluidas por el filtro de categoría", async () => {
@@ -473,38 +738,53 @@ describe("ReportsService", () => {
         }),
       ],
     });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([saleInCategory, otherCategory])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    const service = serviceWith(emptyPrisma(findMany));
+    const { service } = harness({ sales: [saleInCategory, otherCategory] });
 
     const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+      ...august,
       category: "Accesorios",
     });
 
     expect(result.kpis.totalSales).toBe(1);
-    // 100 / 1 (solo órdenes visibles de la categoría), no 100 / 2.
+    // 100 / 1 (solo tickets visibles de la categoría), no 100 / 2.
     expect(result.kpis.avgTicket).toBeCloseTo(100);
+    expect(result.categoryProfits).toEqual([
+      expect.objectContaining({ category: "Accesorios" }),
+    ]);
+  });
+
+  it("una categoría totalmente devuelta no aparece en el desglose", async () => {
+    const invoice = sale({
+      id: "s-cat",
+      items: [
+        item({
+          id: "i-cat",
+          productId: "p-cat",
+          product: { categoria: "Celulares" },
+          subtotalSold: decimal(6000),
+          subtotalCost: decimal(3500),
+          profit: decimal(2500),
+        }),
+      ],
+    });
+    const { service } = harness({
+      sales: [invoice],
+      returnedQty: { "i-cat": 1 },
+    });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.categoryProfits).toEqual([]);
+    // Nunca: resumen -3000 con categoría +6000.
+    expect(result.kpis.netSales).toBe(0);
   });
 
   it("usa rango exclusivo (gte/lt) sin ventana 23:59:59.999", async () => {
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    const service = serviceWith(emptyPrisma(findMany));
+    const { service, saleFindMany } = harness();
 
-    await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
+    await service.salesOverview(user as never, august);
 
-    const saleWhere = findMany.mock.calls[0][0].where;
+    const saleWhere = saleFindMany.mock.calls[0][0].where;
     expect(saleWhere.saleDate.gte).toEqual(
       new Date(Date.UTC(2026, 7, 1, 4, 0, 0, 0)),
     );
@@ -515,7 +795,7 @@ describe("ReportsService", () => {
   });
 
   it("rechaza un rango de fechas inválido", async () => {
-    const service = serviceWith(emptyPrisma(jest.fn()));
+    const { service } = harness();
     await expect(
       service.salesOverview(user as never, {
         from: "2026-08-22",
@@ -524,94 +804,42 @@ describe("ReportsService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("no descuenta dos veces una venta devuelta y luego cancelada", async () => {
-    // Venta de período anterior (600) devuelta 200 y cancelada en el período.
-    // Reversión correcta del período: 600 (no 600 + 200 = 800).
-    const cancelled = sale({
-      id: "sale-cancelled",
-      totalSold: decimal(600),
-      items: [
-        item({
-          subtotalSold: decimal(600),
-          subtotalCost: decimal(360),
-          profit: decimal(240),
-        }),
-      ],
+  it("aísla TODAS las consultas por companyId (multiempresa)", async () => {
+    const invoice = sale({
+      paymentMethod: "credit",
+      items: [item({ id: "iso-item" })],
     });
-    const refund = sale({
-      id: "refund-1",
-      kind: "refund",
-      refundedSaleId: "sale-cancelled",
-      totalSold: decimal(-200),
-      items: [
-        item({
-          id: "refund-item-1",
-          subtotalSold: decimal(-200),
-          subtotalCost: decimal(-120),
-          profit: decimal(-80),
-        }),
-      ],
-    });
-    const findMany = jest.fn((args: { where: Record<string, unknown> }) => {
-      const where = args.where;
-      if (where.kind === "refund") return Promise.resolve([refund]);
-      if (where.kind === "invoice" && where.isDeleted === true) {
-        return Promise.resolve([cancelled]);
-      }
-      return Promise.resolve([]);
-    });
-    const service = serviceWith({
-      sale: { findMany },
-      product: { findMany: jest.fn().mockResolvedValue([]) },
-      cashMovement: { findMany: jest.fn().mockResolvedValue([]) },
-      saleCreditPayment: {
-        findMany: jest.fn().mockResolvedValue([]),
-        groupBy: jest.fn().mockResolvedValue([]),
-      },
+    const {
+      service,
+      saleFindMany,
+      saleItemGroupBy,
+      productFindMany,
+      cashFindMany,
+      creditFindMany,
+      creditGroupBy,
+    } = harness({
+      sales: [invoice],
+      returnedQty: { "iso-item": 1 },
+      creditLedger: [{ saleId: "sale-1", cash: 0, transfer: 0 }],
     });
 
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
+    await service.salesOverview(user as never, august);
 
-    expect(result.kpis.returnedSales).toBe(600);
-    expect(result.kpis.netSales).toBe(-600);
-  });
-
-  it("aísla todas las consultas por companyId (multiempresa)", async () => {
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValue([]);
-    const productFindMany = jest.fn().mockResolvedValue([]);
-    const cashFindMany = jest.fn().mockResolvedValue([]);
-    const creditFindMany = jest.fn().mockResolvedValue([]);
-    const creditGroupBy = jest.fn().mockResolvedValue([]);
-    const service = serviceWith({
-      sale: { findMany },
-      product: { findMany: productFindMany },
-      cashMovement: { findMany: cashFindMany },
-      saleCreditPayment: {
-        findMany: creditFindMany,
-        groupBy: creditGroupBy,
-      },
-    });
-
-    await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
-
-    for (const call of findMany.mock.calls) {
+    for (const call of saleFindMany.mock.calls) {
       expect(call[0].where.companyId).toBe(user.companyId);
     }
-    expect(productFindMany).toHaveBeenCalledWith({
-      where: expect.objectContaining({ companyId: user.companyId }),
-      select: expect.anything(),
-    });
+    expect(saleItemGroupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          sale: expect.objectContaining({ companyId: user.companyId }),
+        }),
+      }),
+    );
+    expect(productFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ companyId: user.companyId }),
+      }),
+    );
     expect(cashFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ companyId: user.companyId }),
@@ -627,75 +855,92 @@ describe("ReportsService", () => {
     }
   });
 
-  it("mantiene KPIs aislados cuando una empresa tiene gastos y otra no", async () => {
+  it("TEST 12 · Empresa A y Empresa B no se contaminan", async () => {
     const userA = { ...user, companyId: "company-a" };
     const userB = { ...user, companyId: "company-b" };
-    const findMany = jest.fn((args: { where: Record<string, unknown> }) => {
-      const where = args.where;
-      // La consulta real de facturas del período NO filtra por `isDeleted`
-      // (la reversión de canceladas se resta aparte). Un mock que exige
-      // `isDeleted === false` quedaba desactualizado y devolvía 0 ventas.
-      if (where.kind === "invoice" && where.isDeleted === undefined) {
-        return Promise.resolve([
-          sale({
-            companyId: where.companyId,
-            totalProfit: decimal(1000),
-            items: [item({ profit: decimal(1000) })],
-          }),
-        ]);
-      }
-      return Promise.resolve([]);
+    const saleA = sale({
+      companyId: "company-a",
+      id: "sale-a",
+      totalSold: decimal(3000),
+      totalCost: decimal(2000),
+      totalProfit: decimal(1000),
+      items: [
+        item({
+          id: "item-a",
+          subtotalSold: decimal(3000),
+          subtotalCost: decimal(2000),
+          profit: decimal(1000),
+        }),
+      ],
     });
-    const cashFindMany = jest.fn((args: { where: { companyId: string } }) =>
-      Promise.resolve(
-        args.where.companyId === "company-a"
-          ? [cashMovement({ companyId: "company-a", amount: decimal(700) })]
-          : [],
-      ),
-    );
-    const service = serviceWith({
-      sale: { findMany },
-      product: { findMany: jest.fn().mockResolvedValue([]) },
-      cashMovement: { findMany: cashFindMany },
-      saleCreditPayment: {
-        findMany: jest.fn().mockResolvedValue([]),
-        groupBy: jest.fn().mockResolvedValue([]),
-      },
+    const saleB = sale({
+      companyId: "company-b",
+      id: "sale-b",
+      totalSold: decimal(500),
+      totalCost: decimal(100),
+      totalProfit: decimal(400),
+      items: [
+        item({
+          id: "item-b",
+          subtotalSold: decimal(500),
+          subtotalCost: decimal(100),
+          profit: decimal(400),
+        }),
+      ],
     });
-
-    const resultA = await service.salesOverview(userA as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
-    });
-    const resultB = await service.salesOverview(userB as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+    const { service } = harness({
+      sales: [saleA, saleB],
+      returnedQty: { "item-a": 1 },
     });
 
-    expect(resultA.kpis.totalExpenses).toBeCloseTo(700);
-    expect(resultA.kpis.netProfit).toBeCloseTo(300);
-    expect(resultB.kpis.totalExpenses).toBeCloseTo(0);
-    expect(resultB.kpis.netProfit).toBeCloseTo(1000);
+    const resultA = await service.salesOverview(userA as never, august);
+    const resultB = await service.salesOverview(userB as never, august);
+
+    expect(resultA.kpis.netSales).toBe(0);
+    expect(resultA.kpis.grossSales).toBeCloseTo(3000, 2);
+    expect(resultB.kpis.netSales).toBeCloseTo(500, 2);
+    expect(resultB.kpis.grossProfit).toBeCloseTo(400, 2);
   });
 
-  it("devoluciones nulas (sin items) no rompen el reporte (null safety)", async () => {
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        sale({ id: "r-null", kind: "refund", items: [] }),
-      ]);
-    const service = serviceWith(emptyPrisma(findMany));
+  it("el filtro por vendedor (SELLER) se aplica a las ventas del período", async () => {
+    const seller = {
+      id: "user-seller",
+      role: "VENDEDOR",
+      companyId: user.companyId,
+    };
+    const own = sale({ id: "own", userId: "user-seller" });
+    const other = sale({ id: "other", userId: "user-other" });
+    const { service, saleFindMany } = harness({ sales: [own, other] });
 
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+    const result = await service.salesOverview(seller as never, august);
+
+    expect(result.kpis.totalSales).toBe(1);
+    expect(saleFindMany.mock.calls[0][0].where.userId).toBe("user-seller");
+  });
+
+  it("no suma documentos refund como ventas negativas", async () => {
+    const { service, saleFindMany } = harness();
+
+    await service.salesOverview(user as never, august);
+
+    // Sólo se consulta desempeño: ventas emitidas (invoice, no borradas) y las
+    // cantidades devueltas de sus líneas. Ningún documento refund se suma.
+    for (const call of saleFindMany.mock.calls) {
+      expect(call[0].where.kind).toBe("invoice");
+    }
+  });
+
+  it("no descuenta de utilidad los movimientos OUT con affectsProfit=false", async () => {
+    const { service } = harness({
+      sales: [sale()],
+      movements: [cashMovement({ amount: decimal(25), affectsProfit: false })],
     });
 
-    expect(result.kpis.netSales).toBe(0);
-    expect(result.kpis.totalReturns).toBe(1);
-    expect(Number.isNaN(result.kpis.netSales)).toBe(false);
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.grossProfit).toBeCloseTo(40);
+    expect(result.kpis.totalExpenses).toBeCloseTo(0);
+    expect(result.kpis.netProfit).toBeCloseTo(40);
   });
 
   it("reporta cantidades por unidad cuando hay UoM mixtas", async () => {
@@ -736,24 +981,20 @@ describe("ReportsService", () => {
         }),
       ],
     });
-    const findMany = jest
-      .fn()
-      .mockResolvedValueOnce([invoice])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-    const service = serviceWith(emptyPrisma(findMany));
-
-    const result = await service.salesOverview(user as never, {
-      from: "2026-08-01",
-      to: "2026-08-22",
+    const { service } = harness({
+      sales: [invoice],
+      // Se devuelve media yarda: la cantidad vendida baja en esa unidad.
+      returnedQty: { "yard-1": 0.5 },
     });
+
+    const result = await service.salesOverview(user as never, august);
 
     expect(result.topProducts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           productName: "Tela",
           unitCode: "YARD",
-          totalQtyLabel: "1.5 yd",
+          totalQtyLabel: "1 yd",
         }),
         expect.objectContaining({
           productName: "Cable",
@@ -765,13 +1006,46 @@ describe("ReportsService", () => {
     expect(result.categoryProfits[0]).toEqual(
       expect.objectContaining({
         category: "Mixto",
-        totalQtyLabel: "2 u + 1.5 yd + 2.375 lb",
+        totalQtyLabel: "2 u + 1 yd + 2.375 lb",
         quantityBuckets: expect.arrayContaining([
           expect.objectContaining({ unitCode: "UNIT", quantity: 2 }),
-          expect.objectContaining({ unitCode: "YARD", quantity: 1.5 }),
+          expect.objectContaining({ unitCode: "YARD", quantity: 1 }),
           expect.objectContaining({ unitCode: "POUND", quantity: 2.375 }),
         ]),
       }),
     );
+  });
+
+  it("expone advertencia auditable cuando hay líneas sin costo", async () => {
+    const invoice = sale({
+      items: [
+        item({
+          id: "zero-cost",
+          costUnitSnapshot: decimal(0),
+          subtotalCost: decimal(0),
+        }),
+      ],
+    });
+    const { service } = harness({ sales: [invoice] });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.zeroCostItems).toBe(1);
+    expect(result.audit.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "items_without_cost" }),
+      ]),
+    );
+  });
+
+  it("venta sin líneas no rompe el reporte (null safety)", async () => {
+    const { service } = harness({ sales: [sale({ id: "empty", items: [] })] });
+
+    const result = await service.salesOverview(user as never, august);
+
+    expect(result.kpis.netSales).toBe(0);
+    expect(result.kpis.totalSales).toBe(0);
+    expect(Number.isNaN(result.kpis.netSales)).toBe(false);
+    expect(result.audit.saleRows).toBe(0);
   });
 });

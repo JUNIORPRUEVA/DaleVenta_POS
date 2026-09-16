@@ -15,6 +15,7 @@ import '../../core/errors/user_safe_error_text.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
@@ -2725,9 +2726,5 @@ InputDecoration _filterInputDecoration(String label) {
 }
 
 bool _sameCalendarDay(DateTime a, DateTime b) {
-  final left = a.toLocal();
-  final right = b.toLocal();
-  return left.year == right.year &&
-      left.month == right.month &&
-      left.day == right.day;
+  return sameBusinessDay(a, b);
 }

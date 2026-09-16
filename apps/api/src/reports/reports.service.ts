@@ -10,21 +10,88 @@ import {
   creditPaymentTotalsBySaleId,
   deriveSalePaymentBreakdown,
 } from "../common/utils/sale-credit-payment.util";
+import {
+  businessDateRange,
+  formatBusinessDay,
+} from "../common/utils/business-time.util";
 
 type RequestUser = TenantUser;
 
 type MoneyLike = Prisma.Decimal | number | string | null | undefined;
-type SaleOverviewRow = Prisma.SaleGetPayload<{
-  include: {
-    customer: { select: { id: true; nombre: true } };
-    items: {
-      include: {
-        product: { select: { categoria: true } };
-      };
-    };
-  };
-}>;
-type SaleOverviewItem = SaleOverviewRow["items"][number];
+type PerformanceSaleItem = {
+  id: string;
+  qty: MoneyLike;
+  subtotalSold: MoneyLike;
+  subtotalCost: MoneyLike;
+  profit: MoneyLike;
+  lineDiscountAmount?: MoneyLike;
+  taxableBase?: MoneyLike;
+  taxAmount?: MoneyLike;
+  exemptAmount?: MoneyLike;
+  costUnitSnapshot?: MoneyLike;
+  product?: { categoria: string | null } | null;
+  productId?: string | null;
+  productSource?: string | null;
+  sourceProductId?: string | null;
+  productNameSnapshot?: string;
+  unitCodeSnapshot?: string | null;
+  unitNameSnapshot?: string | null;
+  unitSymbolSnapshot?: string | null;
+  unitPrecisionSnapshot?: number | null;
+};
+/**
+ * Campos mínimos que necesita el cálculo de desempeño. Permite reutilizar la
+ * MISMA proyección en la ruta completa (reporte) y en la ruta liviana
+ * (`summaryOnly`) sin duplicar fórmulas.
+ */
+type PerformanceSale = {
+  id: string;
+  saleDate: Date;
+  totalSold: MoneyLike;
+  discountAmount?: MoneyLike;
+  commissionAmount?: MoneyLike;
+  paymentMethod?: string | null;
+  paymentCashAmount?: MoneyLike;
+  paymentTransferAmount?: MoneyLike;
+  customerId?: string | null;
+  customer?: { id: string; nombre: string | null } | null;
+  items: PerformanceSaleItem[];
+};
+type RemanentAmounts = {
+  qty: number;
+  returnedQty: number;
+  remainingQty: number;
+  ratio: number;
+  subtotalSold: number;
+  subtotalCost: number;
+  profit: number;
+  taxableBase: number;
+  taxAmount: number;
+  exemptAmount: number;
+  lineDiscountAmount: number;
+};
+type ProjectedSale = {
+  sale: PerformanceSale;
+  items: Array<{ item: PerformanceSaleItem; remanent: RemanentAmounts }>;
+  grossSold: number;
+  grossCost: number;
+  grossProfit: number;
+  netSold: number;
+  netCost: number;
+  netProfit: number;
+  taxableBase: number;
+  taxAmount: number;
+  exemptAmount: number;
+  lineDiscount: number;
+  generalDiscount: number;
+  generalDiscountShare: number;
+  hasReturnedItems: boolean;
+};
+/**
+ * Máximo de ids de línea por consulta de devoluciones. Evita un `IN` gigante
+ * en períodos con miles de líneas sin caer en N+1 (una consulta por lote).
+ */
+const RETURNED_QUANTITY_BATCH_SIZE = 2000;
 type QuantityBucket = {
   unitCode: string;
   unitName: string;
@@ -45,23 +112,32 @@ export class ReportsService {
     const canSeeAll = isAdminLike(user);
     const userFilter = canSeeAll ? {} : { userId: user.id };
 
+    // Modo liviano para las comparativas de la pantalla de Reportes: devuelve
+    // SOLO los KPIs de desempeño calculados con la MISMA proyección canónica
+    // (sin productos, caja, crédito ni inventario). Evita que la misma métrica
+    // se lea de otro endpoint y muestre un número distinto al del header.
+    if (this.isSummaryOnlyQuery(query)) {
+      return this.salesPerformanceSummary(companyId, userFilter, range);
+    }
+
+    // ---------------------------------------------------------------------
+    // SEMÁNTICA CANÓNICA: DESEMPEÑO NETO DE VENTAS (STATE-AWARE).
+    //
+    // Reportes/Ventas NO es flujo de caja. Cada venta aporta únicamente su
+    // CONTRIBUCIÓN ECONÓMICA REMANENTE dentro de su propio período (saleDate):
+    //
+    //   venta bruta del período  - parte devuelta  = ventas netas
+    //   costo snapshot bruto     - costo devuelto  = costo neto
+    //
+    // Los documentos `kind=refund` NUNCA se suman como una "venta negativa":
+    // eso producía que una devolución fechada en otro período generara ventas
+    // negativas artificiales. Las ventas canceladas (isDeleted) aportan 0 por
+    // estado, sin reversión fechada adicional.
+    // ---------------------------------------------------------------------
     const saleWhere: Prisma.SaleWhereInput = {
       companyId,
       ...userFilter,
       kind: "invoice",
-      saleDate: range,
-    };
-    const returnedWhere: Prisma.SaleWhereInput = {
-      companyId,
-      ...userFilter,
-      kind: "invoice",
-      isDeleted: true,
-      deletedAt: range,
-    };
-    const refundWhere: Prisma.SaleWhereInput = {
-      companyId,
-      ...userFilter,
-      kind: "refund",
       isDeleted: false,
       saleDate: range,
     };
@@ -71,41 +147,9 @@ export class ReportsService {
         where: { id: companyId },
         select: { inventoryEnabled: true },
       }) ?? Promise.resolve(null);
-    const [
-      sales,
-      returnedSales,
-      refundSales,
-      products,
-      movements,
-      cancelledInRangeSales,
-      company,
-    ] = await Promise.all([
+    const [sales, products, movements, company] = await Promise.all([
         this.prisma.sale.findMany({
           where: saleWhere,
-          include: {
-            customer: { select: { id: true, nombre: true } },
-            items: {
-              include: {
-                product: { select: { categoria: true } },
-              },
-            },
-          },
-          orderBy: { saleDate: "asc" },
-        }),
-        this.prisma.sale.findMany({
-          where: returnedWhere,
-          include: {
-            customer: { select: { id: true, nombre: true } },
-            items: {
-              include: {
-                product: { select: { categoria: true } },
-              },
-            },
-          },
-          orderBy: { deletedAt: "asc" },
-        }),
-        this.prisma.sale.findMany({
-          where: refundWhere,
           include: {
             customer: { select: { id: true, nombre: true } },
             items: {
@@ -146,50 +190,35 @@ export class ReportsService {
             ...(canSeeAll ? {} : { userId: user.id }),
           },
         }),
-        this.prisma.sale.findMany({
-          where: {
-            companyId,
-            ...userFilter,
-            kind: "invoice",
-            isDeleted: true,
-            deletedAt: range,
-          },
-          select: { id: true },
-        }),
         companyPromise,
       ]);
     const inventoryEnabled = company?.inventoryEnabled !== false;
 
-    const visibleSales = selectedCategory
-      ? sales.filter(
-          (sale) =>
-            this.saleItemsForCategory(sale, selectedCategory).length > 0,
-        )
-      : sales;
-    // Refunds of a cancelled sale are already covered by that sale's reversal
-    // (returnedWhere for prior periods, or never counted at all when the sale
-    // was created and cancelled inside this same period). Counting them again
-    // as returns would discount the returned portion twice (600 + 200 = 800).
-    const cancelledInRangeIds = new Set(
-      cancelledInRangeSales.map((row) => row.id),
+    // Cantidad DEVUELTA por línea original. Se lee de los documentos de
+    // devolución sin filtrar por fecha (el reporte es state-aware): una
+    // devolución descuenta SIEMPRE la venta a la que pertenece. Una sola
+    // consulta batched por rango de ids, acotada por companyId.
+    const returnedQtyByItemId = await this.returnedQuantityByItemId(
+      companyId,
+      sales.flatMap((sale) => sale.items.map((item) => item.id)),
     );
-    const visibleByCategory = (rows: typeof sales) =>
-      selectedCategory
-        ? rows.filter(
-            (sale) =>
-              this.saleItemsForCategory(sale, selectedCategory).length > 0,
-          )
-        : rows;
-    const visibleCancelledSales = visibleByCategory(returnedSales);
-    const visibleRefundSales = visibleByCategory(refundSales).filter(
-      (refund) =>
-        !refund.refundedSaleId ||
-        !cancelledInRangeIds.has(refund.refundedSaleId),
+
+    // Proyección única: todo el reporte (KPIs, series, categorías, top) se
+    // deriva de estas filas remanentes.
+    const projectedSales = sales
+      .map((sale) =>
+        this.projectSalePerformance(
+          sale,
+          selectedCategory,
+          returnedQtyByItemId,
+        ),
+      )
+      .filter((row) => row.items.length > 0);
+    // Ticket activo = venta con al menos una línea con contribución remanente.
+    // Totalmente devuelta / cancelada / eliminada => 0 tickets.
+    const ticketSales = projectedSales.filter((row) =>
+      row.items.some((entry) => entry.remanent.ratio > 0),
     );
-    const visibleReturnedSales = [
-      ...visibleCancelledSales,
-      ...visibleRefundSales,
-    ];
 
     // ---------------------------------------------------------------------
     // DINERO DEVENGADO vs DINERO COBRADO.
@@ -204,9 +233,9 @@ export class ReportsService {
     // ---------------------------------------------------------------------
     const creditPaymentLedger = await creditPaymentTotalsBySaleId(this.prisma, {
       companyId,
-      saleIds: visibleSales
-        .filter((sale) => sale.paymentMethod === "credit")
-        .map((sale) => sale.id),
+      saleIds: projectedSales
+        .filter((row) => row.sale.paymentMethod === "credit")
+        .map((row) => row.sale.id),
     });
 
     const creditPaymentWhere: Prisma.SaleCreditPaymentWhereInput = {
@@ -242,7 +271,8 @@ export class ReportsService {
       string,
       { cash: number; transfer: number }
     >();
-    for (const sale of visibleSales) {
+    for (const row of projectedSales) {
+      const sale = row.sale;
       const ledger = creditPaymentLedger.get(sale.id);
       const breakdown = deriveSalePaymentBreakdown({
         cumulativeCash: sale.paymentCashAmount,
@@ -257,63 +287,32 @@ export class ReportsService {
       });
     }
 
-    const totals = visibleSales.reduce(
-      (acc, sale) => {
-        const categoryItems = this.saleItemsForCategory(sale, selectedCategory);
-        const itemSold = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber(item.subtotalSold),
-          0,
-        );
-        const itemCost = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber(item.subtotalCost),
-          0,
-        );
-        const itemProfit = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber(item.profit),
-          0,
-        );
-        const itemTaxableBase = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber((item as any).taxableBase),
-          0,
-        );
-        const itemTaxAmount = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber((item as any).taxAmount),
-          0,
-        );
-        const itemExemptAmount = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber((item as any).exemptAmount),
-          0,
-        );
-        const itemDiscountAmount = categoryItems.reduce(
-          (sum, item) => sum + this.toNumber((item as any).lineDiscountAmount),
-          0,
-        );
-        // Descuento general REAL del documento (comercial). lineDiscountAmount
-        // ahora es solo el descuento comercial de línea; el general se asigna
-        // proporcionalmente por categoría para no perderlo en el reporte.
-        const saleLineDiscountTotal = sale.items.reduce(
-          (sum, item) => sum + this.toNumber(item.lineDiscountAmount),
-          0,
-        );
-        const generalDiscount = Math.max(
-          0,
-          this.toNumber(sale.discountAmount) - saleLineDiscountTotal,
-        );
-        const saleSold = this.toNumber(sale.totalSold);
-        const allocation = saleSold > 0 ? itemSold / saleSold : 0;
-        const initialPayment = initialPaymentBySaleId.get(sale.id) ?? {
+    // Totales del período desde la MISMA proyección remanente. No hay
+    // "ventas negativas": una venta devuelta aporta 0, no -monto.
+    const totals = projectedSales.reduce(
+      (acc, row) => {
+        acc.totalSold += row.netSold;
+        acc.totalCost += row.netCost;
+        acc.totalProfit += row.netProfit;
+        acc.taxableBase += row.taxableBase;
+        acc.taxAmount += row.taxAmount;
+        acc.exemptAmount += row.exemptAmount;
+        // Descuento comercial de línea (parte remanente) + descuento general
+        // del documento prorrateado por la participación remanente. Una venta
+        // devuelta no queda contada al 100% en descuentos.
+        acc.discountAmount +=
+          row.lineDiscount + row.generalDiscount * row.generalDiscountShare;
+        // La participación de la categoría para comisión y dinero cobrado se
+        // mantiene BRUTA: no se altera el contrato de caja ni el hardening de
+        // crédito (pago inicial por `saleDate`, abonos por `paidAt`).
+        const saleSold = this.toNumber(row.sale.totalSold);
+        const allocation = saleSold > 0 ? row.grossSold / saleSold : 0;
+        acc.totalCommission +=
+          this.toNumber(row.sale.commissionAmount) * allocation;
+        const initialPayment = initialPaymentBySaleId.get(row.sale.id) ?? {
           cash: 0,
           transfer: 0,
         };
-        acc.totalSold += itemSold;
-        acc.totalCost += itemCost;
-        acc.totalProfit += itemProfit;
-        acc.taxableBase += itemTaxableBase;
-        acc.taxAmount += itemTaxAmount;
-        acc.exemptAmount += itemExemptAmount;
-        acc.discountAmount += itemDiscountAmount + generalDiscount * allocation;
-        acc.totalCommission +=
-          this.toNumber(sale.commissionAmount) * allocation;
         // Pago recibido AL CREAR la venta (atribuido a `saleDate`).
         acc.cash += initialPayment.cash * allocation;
         acc.transfer += initialPayment.transfer * allocation;
@@ -354,35 +353,27 @@ export class ReportsService {
       totals.transfer += transfer;
     }
 
-    const initialCashOperations = visibleSales.filter(
-      (sale) => (initialPaymentBySaleId.get(sale.id)?.cash ?? 0) > 0,
+    const initialCashOperations = projectedSales.filter(
+      (row) => (initialPaymentBySaleId.get(row.sale.id)?.cash ?? 0) > 0,
     ).length;
-    const initialTransferOperations = visibleSales.filter(
-      (sale) => (initialPaymentBySaleId.get(sale.id)?.transfer ?? 0) > 0,
+    const initialTransferOperations = projectedSales.filter(
+      (row) => (initialPaymentBySaleId.get(row.sale.id)?.transfer ?? 0) > 0,
     ).length;
 
-    const returns = visibleReturnedSales.reduce(
-      (acc, sale) => {
-        const categoryItems = this.saleItemsForCategory(sale, selectedCategory);
-        acc.count += 1;
-        acc.amount += Math.abs(
-          categoryItems.reduce(
-            (sum, item) => sum + this.toNumber(item.subtotalSold),
-            0,
-          ),
-        );
-        acc.cost += Math.abs(
-          categoryItems.reduce(
-            (sum, item) => sum + this.toNumber(item.subtotalCost),
-            0,
-          ),
-        );
-        acc.profit += Math.abs(
-          categoryItems.reduce(
-            (sum, item) => sum + this.toNumber(item.profit),
-            0,
-          ),
-        );
+    // Devoluciones del período = porción NO remanente de las ventas del
+    // período, derivada de la MISMA proyección:
+    //   grossSales - returnedSales = netSales
+    // El documento de devolución no se cuenta nunca como una venta negativa.
+    const grossSales = projectedSales.reduce(
+      (sum, row) => sum + row.grossSold,
+      0,
+    );
+    const returns = projectedSales.reduce(
+      (acc, row) => {
+        acc.amount += row.grossSold - row.netSold;
+        acc.cost += row.grossCost - row.netCost;
+        acc.profit += row.grossProfit - row.netProfit;
+        if (row.hasReturnedItems) acc.count += 1;
         return acc;
       },
       { count: 0, amount: 0, cost: 0, profit: 0 },
@@ -439,33 +430,34 @@ export class ReportsService {
     let zeroCostItems = 0;
     let zeroCostSoldAmount = 0;
 
-    for (const sale of visibleSales) {
-      const categoryItems = this.saleItemsForCategory(sale, selectedCategory);
-      const saleSold = categoryItems.reduce(
-        (sum, item) => sum + this.toNumber(item.subtotalSold),
-        0,
-      );
-      const saleProfit = categoryItems.reduce(
-        (sum, item) => sum + this.toNumber(item.profit),
-        0,
-      );
+    // Series, categorías y rankings se alimentan de la MISMA proyección
+    // remanente: así el gráfico, el donut de categorías y los KPIs nunca
+    // muestran números distintos para el mismo filtro.
+    for (const row of projectedSales) {
+      const sale = row.sale;
       const day = this.formatDominicanDay(sale.saleDate);
-      salesSeries.set(day, (salesSeries.get(day) ?? 0) + saleSold);
-      profitSeries.set(day, (profitSeries.get(day) ?? 0) + saleProfit);
+      salesSeries.set(day, (salesSeries.get(day) ?? 0) + row.netSold);
+      profitSeries.set(day, (profitSeries.get(day) ?? 0) + row.netProfit);
 
-      const clientKey = sale.customerId ?? "general";
-      const clientName = sale.customer?.nombre?.trim() || "Consumidor final";
-      const client = clientMap.get(clientKey) ?? {
-        clientName,
-        totalSpent: 0,
-        purchaseCount: 0,
-      };
-      client.totalSpent += saleSold;
-      client.purchaseCount += 1;
-      clientMap.set(clientKey, client);
+      const activeEntries = row.items.filter(
+        (entry) => entry.remanent.ratio > 0,
+      );
+      if (activeEntries.length > 0) {
+        const clientKey = sale.customerId ?? "general";
+        const clientName = sale.customer?.nombre?.trim() || "Consumidor final";
+        const client = clientMap.get(clientKey) ?? {
+          clientName,
+          totalSpent: 0,
+          purchaseCount: 0,
+        };
+        client.totalSpent += row.netSold;
+        client.purchaseCount += 1;
+        clientMap.set(clientKey, client);
+      }
 
       const countedCategories = new Set<string>();
-      for (const item of categoryItems) {
+      for (const entry of activeEntries) {
+        const item = entry.item;
         const itemCategory = this.itemCategory(item);
         const itemUnit = this.itemUnit(item);
         const productIdentity =
@@ -484,15 +476,15 @@ export class ReportsService {
           totalQtyLabel: "0",
           totalProfit: 0,
         };
-        product.totalSales += this.toNumber(item.subtotalSold);
-        product.totalQty += this.toNumber(item.qty);
+        product.totalSales += entry.remanent.subtotalSold;
+        product.totalQty += entry.remanent.remainingQty;
         product.totalQtyLabel = this.quantityLabel(
           product.totalQty,
           product.unitSymbol,
           product.unitPrecision,
           product.unitCode,
         );
-        product.totalProfit += this.toNumber(item.profit);
+        product.totalProfit += entry.remanent.profit;
         productMap.set(productKey, product);
 
         const category = categoryMap.get(itemCategory) ?? {
@@ -505,11 +497,15 @@ export class ReportsService {
           totalQtyLabel: "0",
           salesCount: 0,
         };
-        category.totalSales += this.toNumber(item.subtotalSold);
-        category.totalCost += this.toNumber(item.subtotalCost);
-        category.totalProfit += this.toNumber(item.profit);
-        category.totalQty += this.toNumber(item.qty);
-        this.addQuantityToBuckets(category.quantityBuckets, item);
+        category.totalSales += entry.remanent.subtotalSold;
+        category.totalCost += entry.remanent.subtotalCost;
+        category.totalProfit += entry.remanent.profit;
+        category.totalQty += entry.remanent.remainingQty;
+        this.addQuantityToBuckets(
+          category.quantityBuckets,
+          item,
+          entry.remanent.remainingQty,
+        );
         category.totalQtyLabel = this.quantityBucketsLabel(
           category.quantityBuckets,
         );
@@ -521,7 +517,7 @@ export class ReportsService {
 
         if (this.toNumber(item.costUnitSnapshot) <= 0) {
           zeroCostItems += 1;
-          zeroCostSoldAmount += this.toNumber(item.subtotalSold);
+          zeroCostSoldAmount += entry.remanent.subtotalSold;
         }
       }
     }
@@ -578,8 +574,14 @@ export class ReportsService {
       ? totals.cash
       : totals.cash + expenses.cashIn;
     const cashExpense = selectedCategory ? 0 : expenses.cashOut;
-    const netSales = totals.totalSold - returns.amount;
-    const netProfit = totals.totalProfit - returns.profit - profitExpenses;
+    // UNA SOLA FUENTE DE VERDAD:
+    //   netSales    = contribución remanente (state-aware)
+    //   grossProfit = netSales - costo neto
+    //   netProfit   = grossProfit - gastos que afectan utilidad
+    const netSales = totals.totalSold;
+    const grossProfit = totals.totalProfit;
+    const netProfit = grossProfit - profitExpenses;
+    const ticketCount = ticketSales.length;
     const warnings = [
       ...(paymentBreakdownViolations > 0
         ? [
@@ -597,7 +599,7 @@ export class ReportsService {
               code: "returns_present",
               severity: "info",
               message:
-                "El reporte distingue ventas brutas, devoluciones y ventas netas usando snapshots historicos.",
+                "El reporte descuenta las devoluciones sobre la venta original (state-aware): una venta devuelta aporta 0, nunca una venta negativa.",
             },
           ]
         : []),
@@ -637,31 +639,38 @@ export class ReportsService {
       },
       categories: this.availableCategories(products),
       kpis: {
-        totalSales: visibleSales.length,
-        grossSales: totals.totalSold,
+        // Tickets con contribución remanente > 0 (ACTIVE y PARTIALLY_RETURNED
+        // cuentan 1; FULLY_RETURNED, CANCELLED, DELETED y el documento de
+        // devolución cuentan 0).
+        totalSales: ticketCount,
+        grossSales,
         returnedSales: returns.amount,
         netSales,
         totalSold: netSales,
         totalCost: totals.totalCost,
-        totalProfit: totals.totalProfit,
-        commercialProfit: totals.totalProfit,
+        grossProfit,
+        // Alias histórico: `totalProfit` SIEMPRE fue la utilidad antes de
+        // gastos = utilidad bruta. Se mantiene para no romper consumidores.
+        totalProfit: grossProfit,
+        commercialProfit: grossProfit,
         netTaxProfit:
           totals.taxableBase + totals.exemptAmount > 0
             ? totals.taxableBase + totals.exemptAmount - totals.totalCost
-            : totals.totalProfit,
+            : grossProfit,
         netProfit,
+        returnedCost: returns.cost,
+        returnedProfit: returns.profit,
         totalCommission: totals.totalCommission,
         taxableBase: totals.taxableBase,
         taxAmount: totals.taxAmount,
         exemptAmount: totals.exemptAmount,
         discountAmount: totals.discountAmount,
-        // Ticket promedio sobre el conteo de órdenes realmente visibles (respeta
-        // el filtro de categoría); evita dividir por todas las ventas del rango.
-        avgTicket:
-          visibleSales.length === 0
-            ? 0
-            : totals.totalSold / visibleSales.length,
+        // Ticket promedio sobre los tickets con contribución remanente
+        // (respeta el filtro de categoría); evita dividir por ventas que ya no
+        // aportan desempeño.
+        avgTicket: ticketCount === 0 ? 0 : netSales / ticketCount,
         totalReturns: returns.count,
+        returnedSalesCount: returns.count,
         totalExpenses: profitExpenses,
         cashIncome,
         cashExpense,
@@ -676,6 +685,9 @@ export class ReportsService {
       salesSeries: this.seriesFromMap(salesSeries),
       profitSeries: this.seriesFromMap(profitSeries),
       paymentMethods,
+      // Breakdown de dinero COBRADO (no de ventas devengadas): se mantiene el
+      // contrato de caja/crédito. La UI lo etiqueta como cobros.
+      paymentMethodsSource: "collected_cash",
       topProducts: [...productMap.values()]
         .sort((a, b) => b.totalSales - a.totalSales)
         .slice(0, 10),
@@ -683,6 +695,15 @@ export class ReportsService {
         .sort((a, b) => b.totalSpent - a.totalSpent)
         .slice(0, 10),
       categoryProfits: [...categoryMap.values()]
+        // Una categoría totalmente devuelta no aporta desempeño: se omite para
+        // no mostrar filas en cero que no cuadran con nada.
+        .filter(
+          (row) =>
+            row.salesCount > 0 ||
+            row.totalSales !== 0 ||
+            row.totalCost !== 0 ||
+            row.totalProfit !== 0,
+        )
         .map((row) => ({
           ...row,
           quantityBuckets: [...row.quantityBuckets.values()],
@@ -695,20 +716,257 @@ export class ReportsService {
       },
       audit: {
         source: "database",
-        saleRows: visibleSales.length,
-        saleItemRows: visibleSales.reduce(
-          (sum, sale) =>
-            sum + this.saleItemsForCategory(sale, selectedCategory).length,
+        // Filas de desempeño del período: ventas emitidas (no canceladas) que
+        // tienen líneas del filtro aplicado.
+        performanceRows: projectedSales.length,
+        activeTicketRows: ticketCount,
+        saleRows: projectedSales.length,
+        saleItemRows: projectedSales.reduce(
+          (sum, row) => sum + row.items.length,
           0,
         ),
         returnedRows: returns.count,
-        refundDocumentRows: refundSales.length,
         cashMovementRows: movements.length,
         creditPaymentRows: creditPaymentsInRange.length,
         paymentBreakdownViolations,
         categoryFiltered: selectedCategory !== null,
         warnings,
       },
+    };
+  }
+
+  /**
+   * KPIs de desempeño de ventas para un rango con la MISMA semántica
+   * state-aware de `salesOverview`. Alimenta las comparativas de la pantalla de
+   * Reportes: la métrica "Ventas" sale siempre de la misma fórmula, sin
+   * importar la sección que la muestre.
+   */
+  private async salesPerformanceSummary(
+    companyId: string,
+    userFilter: Prisma.SaleWhereInput,
+    range: Prisma.DateTimeFilter,
+  ) {
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        companyId,
+        ...userFilter,
+        kind: "invoice",
+        isDeleted: false,
+        saleDate: range,
+      },
+      select: {
+        id: true,
+        saleDate: true,
+        totalSold: true,
+        discountAmount: true,
+        commissionAmount: true,
+        paymentMethod: true,
+        items: {
+          select: {
+            id: true,
+            qty: true,
+            subtotalSold: true,
+            subtotalCost: true,
+            profit: true,
+            lineDiscountAmount: true,
+            taxableBase: true,
+            taxAmount: true,
+            exemptAmount: true,
+          },
+        },
+      },
+    });
+
+    const returnedQtyByItemId = await this.returnedQuantityByItemId(
+      companyId,
+      sales.flatMap((sale) => sale.items.map((item) => item.id)),
+    );
+
+    let grossSales = 0;
+    let netSales = 0;
+    let totalCost = 0;
+    let grossProfit = 0;
+    let ticketCount = 0;
+    for (const sale of sales) {
+      const row = this.projectSalePerformance(sale, null, returnedQtyByItemId);
+      grossSales += row.grossSold;
+      netSales += row.netSold;
+      totalCost += row.netCost;
+      grossProfit += row.netProfit;
+      if (row.items.some((entry) => entry.remanent.ratio > 0)) ticketCount += 1;
+    }
+
+    return {
+      range: {
+        from: range.gte,
+        to: range.lt,
+        timezone: "America/Santo_Domingo",
+      },
+      summaryOnly: true,
+      kpis: {
+        totalSales: ticketCount,
+        grossSales,
+        returnedSales: grossSales - netSales,
+        netSales,
+        totalSold: netSales,
+        totalCost,
+        grossProfit,
+        // Alias histórico de utilidad bruta.
+        totalProfit: grossProfit,
+        avgTicket: ticketCount === 0 ? 0 : netSales / ticketCount,
+      },
+    };
+  }
+
+  private isSummaryOnlyQuery(query: Record<string, string>) {
+    const raw = (query.summaryOnly ?? "").trim().toLowerCase();
+    return raw === "1" || raw === "true" || raw === "yes";
+  }
+
+  /**
+   * Cantidad devuelta por línea original, sumando TODOS los documentos de
+   * devolución de la empresa (SIN filtro de fecha: el reporte es state-aware y
+   * la devolución pertenece a la venta a la que apunta). Se resuelve en una
+   * consulta batched por lote sobre el índice de `refundedSaleItemId`; nunca una
+   * consulta por venta ni por línea.
+   */
+  private async returnedQuantityByItemId(
+    companyId: string,
+    saleItemIds: string[],
+  ) {
+    const returned = new Map<string, number>();
+    const uniqueIds = [...new Set(saleItemIds)];
+    if (uniqueIds.length === 0) return returned;
+
+    for (
+      let offset = 0;
+      offset < uniqueIds.length;
+      offset += RETURNED_QUANTITY_BATCH_SIZE
+    ) {
+      const batch = uniqueIds.slice(
+        offset,
+        offset + RETURNED_QUANTITY_BATCH_SIZE,
+      );
+      const rows = await this.prisma.saleItem.groupBy({
+        by: ["refundedSaleItemId"],
+        where: {
+          refundedSaleItemId: { in: batch },
+          sale: { companyId, kind: "refund", isDeleted: false },
+        },
+        _sum: { qty: true },
+      });
+      for (const row of rows) {
+        if (!row.refundedSaleItemId) continue;
+        returned.set(
+          row.refundedSaleItemId,
+          (returned.get(row.refundedSaleItemId) ?? 0) +
+            this.toNumber(row._sum.qty),
+        );
+      }
+    }
+    return returned;
+  }
+
+  /**
+   * Importes REMANENTES de una línea: snapshot histórico × (1 - devuelto/qty).
+   * Nunca usa el costo ACTUAL del producto y nunca produce importes negativos.
+   * Una línea totalmente devuelta aporta exactamente 0.
+   */
+  private remanentAmounts(
+    item: PerformanceSaleItem,
+    returnedQtyByItemId: Map<string, number>,
+  ): RemanentAmounts {
+    const qty = this.toNumber(item.qty);
+    const requested = Math.max(0, returnedQtyByItemId.get(item.id) ?? 0);
+    // Nunca más que lo vendido: protege ante datos legacy o devoluciones
+    // huérfanas que dejarían ratios negativos.
+    const returnedQty = qty > 0 ? Math.min(requested, qty) : 0;
+    const ratio = qty > 0 ? (qty - returnedQty) / qty : 1;
+    const scale = (value: MoneyLike) => this.toNumber(value) * ratio;
+    return {
+      qty,
+      returnedQty,
+      remainingQty: qty - returnedQty,
+      ratio,
+      subtotalSold: scale(item.subtotalSold),
+      subtotalCost: scale(item.subtotalCost),
+      profit: scale(item.profit),
+      taxableBase: scale(item.taxableBase),
+      taxAmount: scale(item.taxAmount),
+      exemptAmount: scale(item.exemptAmount),
+      lineDiscountAmount: scale(item.lineDiscountAmount),
+    };
+  }
+
+  /**
+   * Proyección canónica de una venta a desempeño remanente. Es la ÚNICA
+   * fórmula de dinero del reporte: KPIs, series, categorías y rankings salen de
+   * aquí, por lo que header, cards, gráfico y tabla de categorías reconcilian.
+   */
+  private projectSalePerformance(
+    sale: PerformanceSale,
+    categoryKey: string | null,
+    returnedQtyByItemId: Map<string, number>,
+  ): ProjectedSale {
+    const allEntries = sale.items.map((item) => ({
+      item,
+      remanent: this.remanentAmounts(item, returnedQtyByItemId),
+    }));
+    const entries =
+      categoryKey === null
+        ? allEntries
+        : allEntries.filter(
+            (entry) =>
+              this.normalizeCategoryKey(this.itemCategoryFromParts(entry.item)) ===
+              categoryKey,
+          );
+
+    const sumOf = (
+      rows: Array<{ item: PerformanceSaleItem; remanent: RemanentAmounts }>,
+      pick: (row: {
+        item: PerformanceSaleItem;
+        remanent: RemanentAmounts;
+      }) => number,
+    ) => rows.reduce((sum, row) => sum + pick(row), 0);
+
+    const allItemsGrossSold = sumOf(allEntries, (entry) =>
+      this.toNumber(entry.item.subtotalSold),
+    );
+    const allItemsLineDiscount = sumOf(allEntries, (entry) =>
+      this.toNumber(entry.item.lineDiscountAmount),
+    );
+    const netSold = sumOf(entries, (entry) => entry.remanent.subtotalSold);
+    const netCost = sumOf(entries, (entry) => entry.remanent.subtotalCost);
+
+    return {
+      sale,
+      items: entries,
+      grossSold: sumOf(entries, (entry) =>
+        this.toNumber(entry.item.subtotalSold),
+      ),
+      grossCost: sumOf(entries, (entry) =>
+        this.toNumber(entry.item.subtotalCost),
+      ),
+      grossProfit: sumOf(entries, (entry) => this.toNumber(entry.item.profit)),
+      netSold,
+      netCost,
+      netProfit: sumOf(entries, (entry) => entry.remanent.profit),
+      taxableBase: sumOf(entries, (entry) => entry.remanent.taxableBase),
+      taxAmount: sumOf(entries, (entry) => entry.remanent.taxAmount),
+      exemptAmount: sumOf(entries, (entry) => entry.remanent.exemptAmount),
+      lineDiscount: sumOf(entries, (entry) => entry.remanent.lineDiscountAmount),
+      // Descuento general REAL del documento (comercial): lo que no está
+      // repartido como descuento de línea.
+      generalDiscount: Math.max(
+        0,
+        this.toNumber(sale.discountAmount) - allItemsLineDiscount,
+      ),
+      // Participación remanente del documento. El descuento general se
+      // prorratea con el mismo criterio: una venta devuelta no descuenta el
+      // 100% del descuento general.
+      generalDiscountShare:
+        allItemsGrossSold > 0 ? netSold / allItemsGrossSold : 0,
+      hasReturnedItems: entries.some((entry) => entry.remanent.returnedQty > 0),
     };
   }
 
@@ -762,33 +1020,32 @@ export class ReportsService {
   }
 
   private itemCategoryFromParts(item: {
-    product: { categoria: string | null } | null;
+    product?: { categoria: string | null } | null;
   }) {
     return item.product?.categoria?.trim() || "Sin categoria";
   }
 
-  private itemCategory(item: SaleOverviewItem) {
+  private itemCategory(item: PerformanceSaleItem) {
     return item.product?.categoria?.trim() || "Sin categoria";
   }
 
-  private itemUnit(item: SaleOverviewItem) {
-    const unitCode =
-      (item as any).unitCodeSnapshot?.toString().trim() || "UNIT";
-    const unitName =
-      (item as any).unitNameSnapshot?.toString().trim() || "Unidad";
+  private itemUnit(item: PerformanceSaleItem) {
+    const unitCode = item.unitCodeSnapshot?.toString().trim() || "UNIT";
+    const unitName = item.unitNameSnapshot?.toString().trim() || "Unidad";
     const unitSymbol =
-      (item as any).unitSymbolSnapshot?.toString().trim() ||
+      item.unitSymbolSnapshot?.toString().trim() ||
       (unitCode === "UNIT" ? "u" : unitCode.toLowerCase());
     const unitPrecision = Math.max(
       0,
-      Number((item as any).unitPrecisionSnapshot ?? 0) || 0,
+      Number(item.unitPrecisionSnapshot ?? 0) || 0,
     );
     return { unitCode, unitName, unitSymbol, unitPrecision };
   }
 
   private addQuantityToBuckets(
     buckets: Map<string, QuantityBucket>,
-    item: SaleOverviewItem,
+    item: PerformanceSaleItem,
+    quantity: number,
   ) {
     const unit = this.itemUnit(item);
     this.addQuantityBucket(
@@ -797,7 +1054,7 @@ export class ReportsService {
       unit.unitName,
       unit.unitSymbol,
       unit.unitPrecision,
-      this.toNumber(item.qty),
+      quantity,
     );
   }
 
@@ -871,17 +1128,6 @@ export class ReportsService {
     return `${value} ${symbol || (code === "UNIT" ? "u" : code.toLowerCase())}`;
   }
 
-  private saleItemsForCategory(
-    sale: SaleOverviewRow,
-    categoryKey: string | null,
-  ) {
-    if (!categoryKey) return sale.items;
-    return sale.items.filter(
-      (item) =>
-        this.normalizeCategoryKey(this.itemCategory(item)) === categoryKey,
-    );
-  }
-
   private availableCategories(products: Array<{ categoria: string }>) {
     return Array.from(
       new Set(
@@ -891,40 +1137,15 @@ export class ReportsService {
   }
 
   private buildDateRange(from?: string, to?: string): Prisma.DateTimeFilter {
-    const start = this.parseDominicanDate(from, true);
-    const end = this.parseDominicanDate(to, false);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      throw new BadRequestException("Rango de fechas invalido");
-    }
-    if (start.getTime() >= end.getTime()) {
-      throw new BadRequestException(
-        "La fecha inicial no puede ser mayor que la final",
-      );
-    }
+    const { gte, lt } = businessDateRange(from, to);
     // Semántica de rango exclusivo: fecha >= inicio AND fecha < fin.
     // Evita la ventana de precisión de 23:59:59.999 que podría dejar fuera o
     // contar mal ventas cercanas a la medianoche (mismo criterio que /sales).
-    return { gte: start, lt: end };
-  }
-
-  private parseDominicanDate(value: string | undefined, startOfDay: boolean) {
-    const now = new Date();
-    const fallback = `${now.getUTCFullYear()}-${`${now.getUTCMonth() + 1}`.padStart(2, "0")}-${`${now.getUTCDate()}`.padStart(2, "0")}`;
-    const text = (value?.trim() || fallback).slice(0, 10);
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-    if (!match) return new Date(Number.NaN);
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    // América/Santo_Domingo es UTC-4 (sin horario de verano):
-    // inicio de día = 04:00 UTC; fin = 04:00 UTC del día siguiente (exclusivo).
-    if (startOfDay) return new Date(Date.UTC(year, month, day, 4, 0, 0, 0));
-    return new Date(Date.UTC(year, month, day + 1, 4, 0, 0, 0));
+    return { gte, lt };
   }
 
   private formatDominicanDay(date: Date) {
-    const dominicanTime = new Date(date.getTime() - 4 * 60 * 60 * 1000);
-    return `${dominicanTime.getUTCFullYear()}-${`${dominicanTime.getUTCMonth() + 1}`.padStart(2, "0")}-${`${dominicanTime.getUTCDate()}`.padStart(2, "0")}`;
+    return formatBusinessDay(date);
   }
 
   private seriesFromMap(map: Map<string, number>) {

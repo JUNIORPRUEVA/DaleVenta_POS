@@ -13,6 +13,7 @@ import '../../core/printing/models/receipt_text_utils.dart';
 import '../../core/printing/models/ticket_layout_config.dart';
 import '../../core/printing/printing_platform_resolver.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../core/time/business_time.dart';
 import '../../features/settings/data/printer_settings_model.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import 'cash_models.dart';
@@ -357,12 +358,12 @@ class CashCloseTicketPrinter {
       ReceiptTextUtils.leftRight('Cajero', row.userName, width),
       ReceiptTextUtils.leftRight(
         'Apertura',
-        date.format(row.openedAt.toLocal()),
+        date.format(toBusinessTime(row.openedAt)),
         width,
       ),
       ReceiptTextUtils.leftRight(
         'Cierre',
-        closedAt == null ? 'Sin cierre' : date.format(closedAt.toLocal()),
+        closedAt == null ? 'Sin cierre' : date.format(toBusinessTime(closedAt)),
         width,
       ),
       ReceiptTextUtils.leftRight('Estado', row.status, width),
@@ -405,7 +406,7 @@ class CashCloseTicketPrinter {
       ReceiptTextUtils.separator(width, 'dashed'),
       ReceiptTextUtils.leftRight(
         'Fecha',
-        date.format(snapshot.capturedAt.toLocal()),
+        date.format(toBusinessTime(snapshot.capturedAt)),
         width,
       ),
       if (snapshot.state.businessDate.trim().isNotEmpty)
@@ -418,7 +419,7 @@ class CashCloseTicketPrinter {
         ReceiptTextUtils.leftRight('Cajero', active.userName, width),
         ReceiptTextUtils.leftRight(
           'Apertura',
-          date.format(active.openedAt.toLocal()),
+          date.format(toBusinessTime(active.openedAt)),
           width,
         ),
       ],
@@ -628,12 +629,12 @@ class _CashClosePdfBuilder {
       _header('CORTE DE TURNO', 'Comprobante de cierre de caja'),
       _section('Datos del turno'),
       _kv('No. cierre', ticketNumber, boldValue: true),
-      _kv('Fecha cierre', _date.format(snapshot.capturedAt.toLocal())),
+      _kv('Fecha cierre', _date.format(toBusinessTime(snapshot.capturedAt))),
       if (snapshot.state.businessDate.trim().isNotEmpty)
         _kv('Dia negocio', snapshot.state.businessDate.trim()),
       if (snapshot.active != null) ...[
         _kv('Cajero', snapshot.active!.userName),
-        _kv('Apertura', _date.format(snapshot.active!.openedAt.toLocal())),
+        _kv('Apertura', _date.format(toBusinessTime(snapshot.active!.openedAt))),
       ],
       _divider(),
       _section('Ventas y efectivo'),
@@ -713,12 +714,12 @@ class _CashClosePdfBuilder {
       _kv('No. cierre', ticketNumber, boldValue: true),
       _kv('Dia negocio', row.businessDate),
       _kv('Cajero', row.userName),
-      _kv('Apertura', _date.format(row.openedAt.toLocal())),
+      _kv('Apertura', _date.format(toBusinessTime(row.openedAt))),
       _kv(
         'Cierre',
         row.closedAt == null
             ? 'Sin cierre'
-            : _date.format(row.closedAt!.toLocal()),
+            : _date.format(toBusinessTime(row.closedAt!)),
       ),
       _kv('Estado', row.status),
       _divider(),

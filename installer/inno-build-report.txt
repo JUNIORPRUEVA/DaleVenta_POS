@@ -9,13 +9,6 @@ Non-commercial use only
 
 Preprocessing
    Reading file: C:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISPPBuiltins.iss
-Parsing [Setup] section, line 31
-Parsing [Setup] section, line 32
-Parsing [Setup] section, line 33
-Parsing [Setup] section, line 34
-Parsing [Setup] section, line 35
-Parsing [Setup] section, line 36
-Parsing [Setup] section, line 37
 Parsing [Setup] section, line 38
 Parsing [Setup] section, line 39
 Parsing [Setup] section, line 40
@@ -32,6 +25,13 @@ Parsing [Setup] section, line 50
 Parsing [Setup] section, line 51
 Parsing [Setup] section, line 52
 Parsing [Setup] section, line 53
+Parsing [Setup] section, line 54
+Parsing [Setup] section, line 55
+Parsing [Setup] section, line 56
+Parsing [Setup] section, line 57
+Parsing [Setup] section, line 58
+Parsing [Setup] section, line 59
+Parsing [Setup] section, line 60
 Reading file (WizardImageFile)
 Reading file (WizardSmallImageFile)
 Preparing Setup program executable
@@ -46,28 +46,29 @@ Parsing [LangOptions], [Messages], and [CustomMessages] sections
    Reading file: C:\Users\pc\AppData\Local\Programs\Inno Setup 6\Default.isl
    Messages in script file
 Reading [Code] section
-Parsing [Tasks] section, line 83
-Parsing [Dirs] section, line 56
-Parsing [Dirs] section, line 57
-Parsing [Dirs] section, line 58
-Parsing [Dirs] section, line 59
-Parsing [Dirs] section, line 60
-Parsing [Dirs] section, line 61
-Parsing [Icons] section, line 73
-Parsing [Icons] section, line 74
-Parsing [Registry] section, line 77
-Parsing [Registry] section, line 78
-Parsing [Registry] section, line 79
-Parsing [Registry] section, line 80
-Parsing [Run] section, line 87
-Parsing [Run] section, line 90
-Parsing [Run] section, line 92
-Parsing [Files] section, line 64
-Parsing [Files] section, line 66
+Parsing [Tasks] section, line 97
+Parsing [Dirs] section, line 63
+Parsing [Dirs] section, line 64
+Parsing [Dirs] section, line 65
+Parsing [Dirs] section, line 66
+Parsing [Dirs] section, line 67
+Parsing [Dirs] section, line 68
+Parsing [Icons] section, line 87
+Parsing [Icons] section, line 88
+Parsing [Registry] section, line 91
+Parsing [Registry] section, line 92
+Parsing [Registry] section, line 93
+Parsing [Registry] section, line 94
+Parsing [InstallDelete] section, line 83
+Parsing [InstallDelete] section, line 84
+Parsing [Run] section, line 101
+Parsing [Run] section, line 104
+Parsing [Run] section, line 106
+Parsing [Files] section, line 71
+Parsing [Files] section, line 73
    Reading version info: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\redist\VC_redist.x64.exe
-Parsing [Files] section, line 69
+Parsing [Files] section, line 76
    Reading version info: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\redist\MicrosoftEdgeWebView2RuntimeInstallerX64.exe
-Deleting DaleVentas-POS-Setup-1.0.5-123.exe from output directory
 Creating setup files
    Verification successful
    Updating icons (Setup.exe)
@@ -123,12 +124,14 @@ Creating setup files
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\logo-web.webp
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\logo.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\logo_launcher.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\nuevologo.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\wa_bg_light.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\wa_bg_light.svg
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\billing\actions.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\billing\client.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\billing\delete.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\billing\quote.png
+   Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\assets\image\billing\spark_actions.png
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\fonts\MaterialIcons-Regular.otf
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\packages\cupertino_icons\assets\CupertinoIcons.ttf
    Compressing: C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\..\apps\fulltech_app\build\windows\x64\runner\Release\data\flutter_assets\packages\esc_pos_utils_plus\resources\capabilities.json
@@ -154,12 +157,12 @@ Creating setup files
    Updating manifest (Setup.exe)
 
 
-Successful compile (31.484 sec). Resulting Setup program filename is:
-C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\DaleVentas-POS-Setup-1.0.5-123.exe
+Successful compile (37.172 sec). Resulting Setup program filename is:
+C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\FullPOS-Setup-1.0.5-124.exe
 
 RESULT=OK
 ISCC_PATH=C:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISCC.exe
-OUTPUT_EXE=C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\DaleVentas-POS-Setup-1.0.5-123.exe
-BEFORE_UTC=2026-09-10T14:11:04.8725920Z
+OUTPUT_EXE=C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\DaleVentas POS\installer\output\FullPOS-Setup-1.0.5-124.exe
+BEFORE_UTC=
 AFTER_EXISTS=True
-AFTER_UTC=2026-09-11T14:09:54.7095106Z
+AFTER_UTC=2026-09-15T20:06:41.5343064Z

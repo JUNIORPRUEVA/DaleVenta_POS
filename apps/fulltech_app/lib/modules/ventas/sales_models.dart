@@ -1,4 +1,5 @@
 import '../../core/models/product_model.dart';
+import '../../core/time/business_time.dart';
 
 class SalesSummaryModel {
   final int totalSales;
@@ -398,9 +399,7 @@ class SaleModel {
           json['customerTelefono']?.toString() ??
           json['telefono']?.toString() ??
           customerPhone,
-      saleDate: json['saleDate'] != null
-          ? DateTime.tryParse(json['saleDate'].toString())
-          : null,
+      saleDate: parseServerInstant(json['saleDate']),
       note: json['note']?.toString(),
       totalSold: _toDouble(json['totalSold']),
       totalCost: _toDouble(json['totalCost']),
@@ -422,9 +421,7 @@ class SaleModel {
       kind: (json['kind'] ?? 'invoice').toString(),
       status: (json['status'] ?? '').toString(),
       isDeleted: json['isDeleted'] == true,
-      deletedAt: json['deletedAt'] != null
-          ? DateTime.tryParse(json['deletedAt'].toString())
-          : null,
+      deletedAt: parseServerInstant(json['deletedAt']),
       returnStatus: (json['returnStatus'] ?? '').toString().trim().isEmpty
           ? (json['isDeleted'] == true ? 'CANCELLED' : 'ACTIVE')
           : json['returnStatus'].toString(),

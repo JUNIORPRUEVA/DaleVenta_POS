@@ -25,6 +25,7 @@ import '../../core/routing/routes.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/build_phase.dart';
 import '../../core/utils/money_formatters.dart';
@@ -4504,7 +4505,7 @@ class _SalesClientDetailLine extends StatelessWidget {
 }
 
 String _formatSaleClientDate(DateTime value) {
-  final local = value.toLocal();
+  final local = toBusinessTime(value);
   final day = local.day.toString().padLeft(2, '0');
   final month = local.month.toString().padLeft(2, '0');
   return '$day/$month/${local.year}';

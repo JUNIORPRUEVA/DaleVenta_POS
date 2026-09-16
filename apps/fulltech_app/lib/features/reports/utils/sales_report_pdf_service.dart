@@ -6,27 +6,34 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/utils/pdf_file_actions.dart';
+import '../../../core/time/business_time.dart';
 import '../../../modules/ventas/sales_models.dart';
 
 class SalesReportPdfKpis {
   const SalesReportPdfKpis({
     required this.totalSales,
-    required this.totalProfit,
+    required this.grossProfit,
     required this.netProfit,
     required this.totalExpenses,
     required this.totalCost,
     required this.salesCount,
     required this.avgTicket,
+    required this.grossMargin,
     required this.margin,
   });
 
   final double totalSales;
-  final double totalProfit;
+
+  /// Utilidad bruta del periodo (ventas netas - costo neto).
+  final double grossProfit;
   final double netProfit;
   final double totalExpenses;
   final double totalCost;
   final int salesCount;
   final double avgTicket;
+  final double grossMargin;
+
+  /// Margen neto (utilidad neta / ventas netas).
   final double margin;
 }
 
@@ -177,7 +184,7 @@ pw.Widget _header({
           ),
         ),
         pw.Text(
-          nowFmt.format(DateTime.now()),
+          nowFmt.format(businessNow()),
           style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey200),
         ),
       ],
@@ -186,16 +193,23 @@ pw.Widget _header({
 }
 
 pw.Widget _kpiGrid(SalesReportPdfKpis kpis) {
+  // Mismas metricas que la pantalla: Ventas, Utilidad bruta, Gastos, Utilidad
+  // neta + margenes/tickets. No hay una segunda formula para el PDF.
   final rows = [
     [
       _metric('Ventas', formatRdCurrencyAccounting(kpis.totalSales)),
+      _metric('Utilidad bruta', formatRdCurrencyAccounting(kpis.grossProfit)),
+      _metric('Gastos', formatRdCurrencyAccounting(kpis.totalExpenses)),
+    ],
+    [
       _metric('Utilidad neta', formatRdCurrencyAccounting(kpis.netProfit)),
+      _metric('Margen bruto', '${kpis.grossMargin.toStringAsFixed(1)}%'),
       _metric('Margen neto', '${kpis.margin.toStringAsFixed(1)}%'),
     ],
     [
       _metric('Facturas', '${kpis.salesCount}'),
       _metric('Ticket promedio', formatRdCurrencyAccounting(kpis.avgTicket)),
-      _metric('Costo', formatRdCurrencyAccounting(kpis.totalCost)),
+      _metric('Costo neto', formatRdCurrencyAccounting(kpis.totalCost)),
     ],
   ];
 
@@ -241,7 +255,7 @@ pw.Widget _profitBreakdown(SalesReportPdfKpis kpis) {
           children: [
             _breakdownMetric(
               'Bruta',
-              formatRdCurrencyAccounting(kpis.totalProfit),
+              formatRdCurrencyAccounting(kpis.grossProfit),
             ),
             pw.SizedBox(width: 10),
             _breakdownMetric(
@@ -368,13 +382,22 @@ pw.Widget _salesTable(List<SaleModel> sales, DateFormat dateFmt) {
     headers: const ['Fecha', 'Cliente', 'Venta', 'Costo', 'Utilidad'],
     data: sales
         .map(
-          (sale) => [
-            sale.saleDate == null ? '-' : dateFmt.format(sale.saleDate!),
-            sale.customerName ?? 'Consumidor final',
-            formatRdCurrencyAccounting(sale.totalSold),
-            formatRdCurrencyAccounting(sale.totalCost),
-            formatRdCurrencyAccounting(sale.totalProfit),
-          ],
+          // Fila coherente con la semantica state-aware: el monto vigente y el
+          // costo/utilidad remanentes se derivan del MISMO ratio, de modo que
+          // una venta devuelta en su totalidad muestra 0/0/0 y una parcial
+          // muestra su parte vigente (misma regla que el backend).
+          (sale) {
+            final ratio = sale.totalSold == 0
+                ? 1.0
+                : (sale.netActiveAmount / sale.totalSold).clamp(0.0, 1.0);
+            return [
+              sale.saleDate == null ? '-' : dateFmt.format(sale.saleDate!),
+              sale.customerName ?? 'Consumidor final',
+              formatRdCurrencyAccounting(sale.netActiveAmount),
+              formatRdCurrencyAccounting(sale.totalCost * ratio),
+              formatRdCurrencyAccounting(sale.totalProfit * ratio),
+            ];
+          },
         )
         .toList(),
   );

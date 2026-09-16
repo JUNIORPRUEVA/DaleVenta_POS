@@ -212,6 +212,7 @@ class _FakeVentasRepository implements VentasRepository {
     required DateTime from,
     required DateTime to,
     String? category,
+    bool summaryOnly = false,
   }) {
     throw UnimplementedError();
   }

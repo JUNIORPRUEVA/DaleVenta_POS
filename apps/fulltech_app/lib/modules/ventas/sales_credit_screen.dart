@@ -15,6 +15,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
@@ -637,7 +638,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
         : DateFormat(
             'dd/MM/yyyy h:mm a',
             'es_DO',
-          ).format(sale.saleDate!.toLocal());
+          ).format(toBusinessTime(sale.saleDate!));
     final shortId = _shortId(sale);
     final companyName = _fallback(company.companyName, 'FULLTECH, SRL');
     final customerName = _fallback(sale.customerName, 'Cliente');
@@ -1644,7 +1645,7 @@ class _CreditCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final date = sale.saleDate == null
         ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy').format(sale.saleDate!.toLocal());
+        : DateFormat('dd/MM/yyyy').format(toBusinessTime(sale.saleDate!));
     final paid = sale.creditBalance <= 0.009;
     final shortId = sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
     final cashier = (sale.userName ?? sale.userId).trim();
@@ -1863,7 +1864,7 @@ class _CreditDetailPanel extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final date = sale.saleDate == null
         ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy HH:mm').format(sale.saleDate!.toLocal());
+        : DateFormat('dd/MM/yyyy HH:mm').format(toBusinessTime(sale.saleDate!));
     final paid = sale.creditBalance <= 0.009;
     final cashier = (sale.userName ?? sale.userId).trim();
     final hasRegisteredPayments =
@@ -2639,7 +2640,7 @@ class _CreditDetailBody extends StatelessWidget {
     final paid = sale.creditBalance <= 0.009;
     final date = sale.saleDate == null
         ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy').format(sale.saleDate!.toLocal());
+        : DateFormat('dd/MM/yyyy').format(toBusinessTime(sale.saleDate!));
     final cashier = (sale.userName ?? sale.userId).trim();
     final shortId = sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
     final phone = (sale.customerPhone ?? '').trim();

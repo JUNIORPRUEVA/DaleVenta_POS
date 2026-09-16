@@ -145,11 +145,12 @@ class KpisData {
   /// por eso el label visible es "Margen neto" y NO "Margen".
   double get margin => totalSales == 0 ? 0 : (netProfit / totalSales) * 100;
   double get netMargin => margin;
+  double get grossMargin =>
+      totalSales == 0 ? 0 : (grossProfit / totalSales) * 100;
   bool get hasProfitExpenses => totalExpenses > 0;
 
-  /// La utilidad bruta del periodo (antes de gastos que afectan utilidad)
-  /// ya viene descontado el efecto real de devoluciones/anulaciones.
-  /// Ver [KpisData.fromReport].
+  /// UTILIDAD BRUTA del periodo (ventas netas - costo neto), ya descontado el
+  /// efecto real de devoluciones/anulaciones. Ver [KpisData.fromReport].
   double get grossProfit => totalProfit;
 
   factory KpisData.fromSummary(SalesSummaryModel summary) {
@@ -177,22 +178,21 @@ class KpisData {
     final totalSold = _toDouble(kpis['netSales'] ?? kpis['totalSold']);
     final totalExpenses = _toDouble(kpis['totalExpenses']);
     final netProfit = _toDouble(kpis['netProfit'] ?? kpis['totalProfit']);
-    // UTILIDAD BRUTA = utilidad neta + gastos que afectan utilidad.
-    //
-    // El backend define, con los mismos snapshots historicos ya corregidos:
+    // UTILIDAD BRUTA: el backend la entrega explicita en `grossProfit`
+    // (= ventas netas - costo neto, ya descontadas las devoluciones de forma
+    // state-aware). Si el servidor no la envía (payload antiguo), se deriva de
+    // los campos ya autoritativos:
     //   netProfit = totalProfit - returnsProfit - profitExpenses
-    // por lo tanto:
-    //   totalProfit - returnsProfit = netProfit + totalExpenses
-    //
-    // Esa es exactamente la utilidad bruta que pide el negocio: utilidad de
-    // las ventas DESPUES del efecto real de devoluciones/anulaciones y ANTES
-    // de gastos. Se deriva de campos autoritativos ya entregados por
-    // /reports/sales-overview; NO se recalcula con precios ni costos ACTUALES
-    // de Product y no se duplica logica financiera en Flutter.
+    //   => totalProfit - returnsProfit = netProfit + totalExpenses
+    // No se recalcula con precios ni costos ACTUALES de Product y no se
+    // duplica logica financiera en Flutter.
     final fallbackGross = _toDouble(kpis['totalProfit']);
-    final grossProfit = kpis['netProfit'] == null
-        ? fallbackGross
-        : netProfit + totalExpenses;
+    final grossProfit = _toDouble(
+      kpis['grossProfit'] ??
+          (kpis['netProfit'] == null
+              ? fallbackGross
+              : netProfit + totalExpenses),
+    );
     return KpisData(
       totalSales: totalSold,
       totalProfit: grossProfit,
@@ -465,24 +465,39 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   ) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final weekStart = today.subtract(Duration(days: today.weekday - 1));
-    final lastWeekStart = weekStart.subtract(const Duration(days: 7));
+    // Aritmetica de dias con el constructor (DST-proof): `subtract(Duration)`
+    // es tiempo ABSOLUTO y en zonas con cambio de horario devuelve otro dia.
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final weekStart = DateTime(now.year, now.month, now.day - (today.weekday - 1));
+    final lastWeekStart = DateTime(
+      weekStart.year,
+      weekStart.month,
+      weekStart.day - 7,
+    );
+    final lastWeekEnd = DateTime(
+      weekStart.year,
+      weekStart.month,
+      weekStart.day - 1,
+    );
     final monthStart = DateTime(now.year, now.month, 1);
     final lastMonthStart = DateTime(now.year, now.month - 1, 1);
     final lastMonthEnd = DateTime(now.year, now.month, 0);
 
-    Future<SalesSummaryModel> summary(DateTime from, DateTime to) {
-      return repo.summary(from: from, to: to);
+    // Mismo endpoint y misma semantica state-aware que el resto de la pantalla:
+    // el KPI "Ventas" no puede mostrar dos numeros distintos segun la seccion.
+    Future<_ComparisonTotals> totals(DateTime from, DateTime to) async {
+      return _comparisonTotals(
+        await repo.reportsSalesOverview(from: from, to: to, summaryOnly: true),
+      );
     }
 
     final data = await Future.wait([
-      summary(today, today),
-      summary(yesterday, yesterday),
-      summary(weekStart, today),
-      summary(lastWeekStart, lastWeekStart.add(const Duration(days: 6))),
-      summary(monthStart, today),
-      summary(lastMonthStart, lastMonthEnd),
+      totals(today, today),
+      totals(yesterday, yesterday),
+      totals(weekStart, today),
+      totals(lastWeekStart, lastWeekEnd),
+      totals(monthStart, today),
+      totals(lastMonthStart, lastMonthEnd),
     ]);
 
     return [
@@ -490,28 +505,28 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         icon: Icons.today_outlined,
         currentLabel: 'Hoy',
         previousLabel: 'Ayer',
-        currentValue: data[0].totalSold,
-        previousValue: data[1].totalSold,
-        currentCount: data[0].totalSales,
-        previousCount: data[1].totalSales,
+        currentValue: data[0].sales,
+        previousValue: data[1].sales,
+        currentCount: data[0].tickets,
+        previousCount: data[1].tickets,
       ),
       _ComparisonRowData(
         icon: Icons.date_range_outlined,
         currentLabel: 'Esta semana',
         previousLabel: 'Semana pasada',
-        currentValue: data[2].totalSold,
-        previousValue: data[3].totalSold,
-        currentCount: data[2].totalSales,
-        previousCount: data[3].totalSales,
+        currentValue: data[2].sales,
+        previousValue: data[3].sales,
+        currentCount: data[2].tickets,
+        previousCount: data[3].tickets,
       ),
       _ComparisonRowData(
         icon: Icons.calendar_month_outlined,
         currentLabel: 'Este mes',
         previousLabel: 'Mes pasado',
-        currentValue: data[4].totalSold,
-        previousValue: data[5].totalSold,
-        currentCount: data[4].totalSales,
-        previousCount: data[5].totalSales,
+        currentValue: data[4].sales,
+        previousValue: data[5].sales,
+        currentCount: data[4].tickets,
+        previousCount: data[5].tickets,
       ),
     ];
   }
@@ -558,12 +573,13 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         categoryLabel: categoryLabel,
         kpis: SalesReportPdfKpis(
           totalSales: _kpis.totalSales,
-          totalProfit: _kpis.totalProfit,
+          grossProfit: _kpis.grossProfit,
           netProfit: _kpis.netProfit,
           totalExpenses: _kpis.totalExpenses,
           totalCost: _kpis.totalCost,
           salesCount: _kpis.salesCount,
           avgTicket: _kpis.avgTicket,
+          grossMargin: _kpis.grossMargin,
           margin: _kpis.netMargin,
         ),
         categories: _categoryProfits
@@ -1749,6 +1765,17 @@ class _HeroReportsPanel extends StatelessWidget {
     final methodPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Dinero COBRADO por metodo en el periodo (no ventas devengadas):
+        // el movimiento monetario de una devolucion vive en Caja.
+        const Text(
+          'Cobros por metodo de pago',
+          style: TextStyle(
+            color: _textSecondary,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 6),
         // NOTA: aqui NO se repiten "Margen neto" / "Utilidad neta" / "Ordenes"
         // porque ReportsFinancialKpiCards (justo debajo en desktop) ya los
         // muestra: repetirlos seria informacion de utilidad duplicada.
@@ -1807,6 +1834,10 @@ class ReportsFinancialKpiCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Jerarquia principal del reporte de desempeño de ventas:
+    // Ventas -> Utilidad bruta -> Gastos -> Utilidad neta.
+    // Las metricas secundarias (margenes y tickets) viven en el panel inferior
+    // para no mezclar el resultado del negocio con sus ratios.
     final cards = [
       _KpiCard(
         key: const ValueKey('reports-kpi-sales'),
@@ -1816,25 +1847,25 @@ class ReportsFinancialKpiCards extends StatelessWidget {
         color: _primaryBlue,
       ),
       _KpiCard(
+        key: const ValueKey('reports-kpi-gross-profit'),
+        title: 'Utilidad bruta',
+        value: formatRdCurrencyAccounting(kpis.grossProfit),
+        icon: Icons.trending_up_outlined,
+        color: kpis.grossProfit >= 0 ? _teal : _error,
+      ),
+      _KpiCard(
+        key: const ValueKey('reports-kpi-expenses'),
+        title: 'Gastos',
+        value: formatRdCurrencyAccounting(kpis.totalExpenses),
+        icon: Icons.receipt_long_outlined,
+        color: _gold,
+      ),
+      _KpiCard(
         key: const ValueKey('reports-kpi-net-profit'),
         title: 'Utilidad neta',
         value: formatRdCurrencyAccounting(kpis.netProfit),
         icon: Icons.account_balance_wallet_outlined,
-        color: kpis.netProfit >= 0 ? _teal : _error,
-      ),
-      _KpiCard(
-        key: const ValueKey('reports-kpi-net-margin'),
-        title: 'Margen neto',
-        value: '${kpis.netMargin.toStringAsFixed(1)}%',
-        icon: Icons.percent_rounded,
-        color: _teal,
-      ),
-      _KpiCard(
-        key: const ValueKey('reports-kpi-tickets'),
-        title: 'Tickets',
-        value: '${kpis.salesCount}',
-        icon: Icons.receipt_long_outlined,
-        color: _gold,
+        color: kpis.netProfit >= 0 ? _primaryBlue : _error,
       ),
     ];
 
@@ -1854,10 +1885,8 @@ class ReportsFinancialKpiCards extends StatelessWidget {
                   SizedBox(width: width, height: 92, child: card),
               ],
             ),
-            if (kpis.hasProfitExpenses) ...[
-              const SizedBox(height: 12),
-              _ProfitBreakdownPanel(kpis: kpis),
-            ],
+            const SizedBox(height: 12),
+            _ProfitBreakdownPanel(kpis: kpis),
           ],
         );
       },
@@ -1865,6 +1894,8 @@ class ReportsFinancialKpiCards extends StatelessWidget {
   }
 }
 
+/// Metricas secundarias del reporte: margenes y tickets. Se mantienen fuera de
+/// las 4 tarjetas principales para no competir con el resultado del negocio.
 class _ProfitBreakdownPanel extends StatelessWidget {
   const _ProfitBreakdownPanel({required this.kpis});
   final KpisData kpis;
@@ -1879,19 +1910,19 @@ class _ProfitBreakdownPanel extends StatelessWidget {
         builder: (context, constraints) {
           final items = [
             _ProfitBreakdownItem(
-              label: 'Bruta',
-              value: formatRdCurrencyAccounting(kpis.grossProfit),
+              label: 'Margen bruto',
+              value: '${kpis.grossMargin.toStringAsFixed(1)}%',
               color: _teal,
             ),
             _ProfitBreakdownItem(
-              label: 'Gastos',
-              value: formatRdCurrencyAccounting(-kpis.totalExpenses),
-              color: _gold,
+              label: 'Margen neto',
+              value: '${kpis.netMargin.toStringAsFixed(1)}%',
+              color: _teal,
             ),
             _ProfitBreakdownItem(
-              label: 'Neta',
-              value: formatRdCurrencyAccounting(kpis.netProfit),
-              color: kpis.netProfit >= 0 ? _primaryBlue : _error,
+              label: 'Tickets',
+              value: '${kpis.salesCount}',
+              color: _gold,
             ),
           ];
           final content = constraints.maxWidth >= 720
@@ -1916,7 +1947,7 @@ class _ProfitBreakdownPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Cómo se calcula la utilidad',
+                'Margen y tickets',
                 style: TextStyle(
                   color: _textPrimary,
                   fontSize: 13,
@@ -2024,7 +2055,9 @@ class _MobileReportsContent extends StatelessWidget {
           ),
         ),
         _FlatSection(
-          title: 'Métodos de pago',
+          // Dinero COBRADO por metodo en el periodo (no ventas devengadas):
+          // las devoluciones y sus movimientos de caja viven en Caja.
+          title: 'Cobros por metodo de pago',
           child: SizedBox(
             height: 220,
             child: PaymentMethodPieChart(data: paymentMethods),
@@ -2481,6 +2514,17 @@ class _RecentSalesTable extends StatelessWidget {
   const _RecentSalesTable({required this.sales});
   final List<SaleModel> sales;
 
+  /// Fecha + estado real de la venta (devolucion parcial / devuelta), para que
+  /// el monto vigente mostrado sea explicable sin abrir el detalle.
+  String _recentSaleSubtitle(SaleModel sale, DateFormat date) {
+    final label = sale.saleDate == null
+        ? sale.id
+        : date.format(sale.saleDate!);
+    if (sale.isReturned) return '$label · Devuelta';
+    if (sale.isPartiallyReturned) return '$label · Devolucion parcial';
+    return label;
+  }
+
   @override
   Widget build(BuildContext context) {
     final date = DateFormat('dd/MM/yyyy');
@@ -2506,16 +2550,16 @@ class _RecentSalesTable extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     subtitle: Text(
-                      sale.saleDate == null
-                          ? sale.id
-                          : date.format(sale.saleDate!),
+                      _recentSaleSubtitle(sale, date),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     trailing: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        formatRdCurrencyAccounting(sale.totalSold),
+                        // Monto VIGENTE de la venta (state-aware): una venta
+                        // devuelta no se muestra como venta completa.
+                        formatRdCurrencyAccounting(sale.netActiveAmount),
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           color: _primaryBlue,
@@ -2920,6 +2964,25 @@ class _RankingRow extends StatelessWidget {
             ),
     );
   }
+}
+
+/// Totales minimos de desempeño de un periodo para las comparativas.
+class _ComparisonTotals {
+  const _ComparisonTotals({required this.sales, required this.tickets});
+
+  /// Ventas netas del periodo (state-aware, misma semantica que el KPI).
+  final double sales;
+  final int tickets;
+}
+
+/// Lee los KPIs de la ruta liviana de `/reports/sales-overview`.
+_ComparisonTotals _comparisonTotals(Map<String, dynamic> report) {
+  final kpis = ((report['kpis'] as Map?) ?? const <String, dynamic>{})
+      .cast<String, dynamic>();
+  return _ComparisonTotals(
+    sales: _toDouble(kpis['netSales'] ?? kpis['totalSold']),
+    tickets: (kpis['totalSales'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class _ComparisonRowData {
@@ -3402,6 +3465,10 @@ List<SaleModel> _projectSalesByCategory(
         totalCost: totalCost,
         totalProfit: totalProfit,
         commissionAmount: sale.commissionAmount * allocation,
+        // La devolucion del documento se prorratea con el MISMO criterio que el
+        // backend (participacion de la categoria), para que el monto vigente
+        // mostrado no mezcle el total del documento con una linea filtrada.
+        returnedAmount: sale.returnedAmount * allocation,
         paymentMethod: sale.paymentMethod,
         paymentCashAmount: sale.paymentCashAmount * allocation,
         paymentTransferAmount: sale.paymentTransferAmount * allocation,

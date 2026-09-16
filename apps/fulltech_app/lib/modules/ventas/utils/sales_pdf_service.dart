@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/company/company_settings_model.dart';
+import '../../../core/time/business_time.dart';
 import '../../../core/uom/uom_formatters.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
@@ -77,7 +78,7 @@ Future<Uint8List> buildSalesSummaryPdf({
           data: sales
               .map(
                 (sale) => [
-                  dateFmt.format(sale.saleDate ?? DateTime.now()),
+                  dateFmt.format(toBusinessTime(sale.saleDate ?? DateTime.now())),
                   sale.customerName ?? 'Sin cliente',
                   formatRdCurrencyAccounting(sale.totalSold),
                   formatRdCurrencyAccounting(sale.totalCost),
@@ -290,7 +291,9 @@ pw.Widget _invoiceHeader({
               child: _documentFactsPanel(
                 documentLabel: fiscalLabel,
                 code: invoiceCode,
-                issuedText: dateFmt.format(sale.saleDate ?? DateTime.now()),
+                issuedText: dateFmt.format(
+                  toBusinessTime(sale.saleDate ?? DateTime.now()),
+                ),
                 statusText: statusText,
                 ncf: fiscal ? sale.ncf : null,
                 ncfExpirationDate: fiscal ? sale.ncfExpirationDate : null,

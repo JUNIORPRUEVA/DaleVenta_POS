@@ -340,6 +340,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     with WidgetsBindingObserver, TickerProviderStateMixin
     implements RouteAware {
   static const double _desktopBreakpoint = 900;
+  static const double _mobileActionsSwipeEdgeWidth = 28;
+  static const double _mobileActionsSwipeTriggerDistance = 54;
   static const String _editorDraftCachePrefix = 'cotizaciones:editorDraft:';
 
   final LocalJsonCache _editorDraftCache = LocalJsonCache();
@@ -349,6 +351,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String? _lastSalesNoticeKey;
   int _salesNoticeCount = 0;
   bool _restoringEditorDraft = false;
+  bool _mobileActionsDrawerOpen = false;
+  bool _mobileActionsSwipeTriggered = false;
+  double _mobileActionsSwipeDx = 0;
   // Caché del valor de productTaxUiConfigProvider para que los getters fiscales
   // NO lean `ref`. Se refresca por listener de ciclo de vida, fuera de build.
   ProductTaxUiConfig? _taxConfigCache;
@@ -2434,253 +2439,308 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openMobileActionsDrawer() async {
-    final action = await showGeneralDialog<_MobileQuickAction>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Menu de acciones',
-      barrierColor: Colors.black.withValues(alpha: 0.40),
-      transitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        Widget actionTile({
-          required IconData icon,
-          required String title,
-          required String subtitle,
-          required _MobileQuickAction value,
-        }) {
-          return Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
+    if (_mobileActionsDrawerOpen) return;
+    _mobileActionsDrawerOpen = true;
+    _MobileQuickAction? action;
+    try {
+      action = await showGeneralDialog<_MobileQuickAction>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Menu de acciones',
+        barrierColor: Colors.black.withValues(alpha: 0.40),
+        transitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          Widget actionTile({
+            required IconData icon,
+            required String title,
+            required String subtitle,
+            required _MobileQuickAction value,
+          }) {
+            return Material(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(18),
-              onTap: () => Navigator.of(context).pop(value),
-              child: Container(
-                height: 84,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFE8EEF5)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.025),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF4FF),
-                        borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => Navigator.of(context).pop(value),
+                child: Container(
+                  height: 84,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFE8EEF5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.025),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                      child: Icon(
-                        icon,
-                        color: const Color(0xFF2563EB),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF4FF),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          icon,
+                          color: const Color(0xFF2563EB),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFF2563EB),
                         size: 24,
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final panelWidth = (MediaQuery.sizeOf(context).width * 0.72).clamp(
+            268.0,
+            330.0,
+          );
+          final hasNote = _note.trim().isNotEmpty;
+
+          return Align(
+            alignment: Alignment.centerRight,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: SizedBox(
+                  width: panelWidth,
+                  height: double.infinity,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(8),
+                        bottomLeft: Radius.circular(8),
+                      ),
+                      border: Border(
+                        left: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x260B2A3A),
+                          blurRadius: 28,
+                          offset: Offset(-10, 0),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(8),
+                        bottomLeft: Radius.circular(8),
+                      ),
+                      child: Stack(
                         children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                height: 58,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    18,
+                                    0,
+                                    8,
+                                    0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Expanded(
+                                        child: Center(
+                                          child: Text(
+                                            'Acciones',
+                                            style: TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Cerrar',
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(),
+                                        icon: const Icon(
+                                          Icons.close_rounded,
+                                          color: Color(0xFF334155),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    12,
+                                    16,
+                                    84,
+                                  ),
+                                  children: [
+                                    actionTile(
+                                      icon: Icons.add_circle_outline_rounded,
+                                      title: 'Nuevo ticket',
+                                      subtitle: 'Crear otra venta',
+                                      value: _MobileQuickAction.newTicket,
+                                    ),
+                                    const SizedBox(height: 11),
+                                    actionTile(
+                                      icon: Icons.storefront_outlined,
+                                      title: 'Venta rápida',
+                                      subtitle: 'Cobro rápido',
+                                      value: _MobileQuickAction.externalItem,
+                                    ),
+                                    const SizedBox(height: 11),
+                                    actionTile(
+                                      icon: Icons.picture_as_pdf_outlined,
+                                      title: 'Ver PDF',
+                                      subtitle: 'Abrir documento actual',
+                                      value: _MobileQuickAction.pdf,
+                                    ),
+                                    const SizedBox(height: 11),
+                                    actionTile(
+                                      icon: hasNote
+                                          ? Icons.sticky_note_2_outlined
+                                          : Icons.note_alt_outlined,
+                                      title: 'Agregar nota',
+                                      subtitle: hasNote
+                                          ? 'Nota agregada'
+                                          : 'Añadir nota a la factura',
+                                      value: _MobileQuickAction.note,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
+                          Positioned(
+                            right: 16,
+                            bottom: 16,
+                            child: _AnimatedCalculatorFab(
+                              compact: true,
+                              filled: true,
+                              open: false,
+                              onTap: () => Navigator.of(
+                                context,
+                              ).pop(_MobileQuickAction.calculator),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Color(0xFF2563EB),
-                      size: 24,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
           );
-        }
-
-        final panelWidth = (MediaQuery.sizeOf(context).width * 0.72).clamp(
-          268.0,
-          330.0,
-        );
-        final hasNote = _note.trim().isNotEmpty;
-
-        return Align(
-          alignment: Alignment.centerRight,
-          child: SafeArea(
-            child: Material(
-              color: Colors.transparent,
-              child: SizedBox(
-                width: panelWidth,
-                height: double.infinity,
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      bottomLeft: Radius.circular(8),
-                    ),
-                    border: Border(
-                      left: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x260B2A3A),
-                        blurRadius: 28,
-                        offset: Offset(-10, 0),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      bottomLeft: Radius.circular(8),
-                    ),
-                    child: Stack(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(
-                              height: 58,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(18, 0, 8, 0),
-                                child: Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Center(
-                                        child: Text(
-                                          'Acciones',
-                                          style: TextStyle(
-                                            color: Color(0xFF0F172A),
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Cerrar',
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(),
-                                      icon: const Icon(
-                                        Icons.close_rounded,
-                                        color: Color(0xFF334155),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: ListView(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  12,
-                                  16,
-                                  84,
-                                ),
-                                children: [
-                                  actionTile(
-                                    icon: Icons.add_circle_outline_rounded,
-                                    title: 'Nuevo ticket',
-                                    subtitle: 'Crear otra venta',
-                                    value: _MobileQuickAction.newTicket,
-                                  ),
-                                  const SizedBox(height: 11),
-                                  actionTile(
-                                    icon: Icons.storefront_outlined,
-                                    title: 'Venta rápida',
-                                    subtitle: 'Cobro rápido',
-                                    value: _MobileQuickAction.externalItem,
-                                  ),
-                                  const SizedBox(height: 11),
-                                  actionTile(
-                                    icon: Icons.picture_as_pdf_outlined,
-                                    title: 'Ver PDF',
-                                    subtitle: 'Abrir documento actual',
-                                    value: _MobileQuickAction.pdf,
-                                  ),
-                                  const SizedBox(height: 11),
-                                  actionTile(
-                                    icon: hasNote
-                                        ? Icons.sticky_note_2_outlined
-                                        : Icons.note_alt_outlined,
-                                    title: 'Agregar nota',
-                                    subtitle: hasNote
-                                        ? 'Nota agregada'
-                                        : 'Añadir nota a la factura',
-                                    value: _MobileQuickAction.note,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        Positioned(
-                          right: 16,
-                          bottom: 16,
-                          child: _AnimatedCalculatorFab(
-                            compact: true,
-                            filled: true,
-                            open: false,
-                            onTap: () => Navigator.of(
-                              context,
-                            ).pop(_MobileQuickAction.calculator),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        );
-      },
-    );
+        },
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          );
+        },
+      );
+    } finally {
+      _mobileActionsDrawerOpen = false;
+    }
 
     if (action == null || !mounted) return;
     await _handleMobileQuickAction(action);
+  }
+
+  void _startMobileActionsEdgeSwipe(DragStartDetails details) {
+    _mobileActionsSwipeDx = 0;
+    _mobileActionsSwipeTriggered = false;
+  }
+
+  void _updateMobileActionsEdgeSwipe(DragUpdateDetails details) {
+    if (_mobileActionsDrawerOpen || _mobileActionsSwipeTriggered) return;
+    _mobileActionsSwipeDx += details.delta.dx;
+    if (_mobileActionsSwipeDx > 0) {
+      _mobileActionsSwipeDx = 0;
+      return;
+    }
+    if (_mobileActionsSwipeDx <= -_mobileActionsSwipeTriggerDistance) {
+      _mobileActionsSwipeTriggered = true;
+      _openMobileActionsDrawer();
+    }
+  }
+
+  void _endMobileActionsEdgeSwipe() {
+    _mobileActionsSwipeDx = 0;
+    _mobileActionsSwipeTriggered = false;
+  }
+
+  Widget _buildMobileActionsSwipeRegion() {
+    return Positioned(
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: _mobileActionsSwipeEdgeWidth,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: _startMobileActionsEdgeSwipe,
+        onHorizontalDragUpdate: _updateMobileActionsEdgeSwipe,
+        onHorizontalDragEnd: (_) => _endMobileActionsEdgeSwipe(),
+        onHorizontalDragCancel: _endMobileActionsEdgeSwipe,
+      ),
+    );
+  }
+
+  Widget _withMobileActionsEdgeSwipe(Widget child) {
+    return Stack(children: [child, _buildMobileActionsSwipeRegion()]);
   }
 
   Future<void> _openMobileCalculator() async {
@@ -7869,10 +7929,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 user,
                 inventoryEnabled: inventoryEnabled,
               )
-            : _buildMobileBody(
-                aiState,
-                user,
-                inventoryEnabled: inventoryEnabled,
+            : _withMobileActionsEdgeSwipe(
+                _buildMobileBody(
+                  aiState,
+                  user,
+                  inventoryEnabled: inventoryEnabled,
+                ),
               ),
       ),
     );
