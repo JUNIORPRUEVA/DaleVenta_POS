@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.5+124
+version: 1.0.5+128
 
 environment:
   sdk: ^3.10.1
@@ -126,7 +126,8 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   background_color_ios: "#ffffff"
   min_sdk_android: 21
-  # El icono de Windows es un .ico multi-resolucion (16/24/32/48/64/128/256)
+  # El icono de Windows es un .ico multi-resolucion
+  # (16/20/24/32/40/48/64/128/256)
   # generado por scripts/branding/generate_app_icons.py. flutter_launcher_icons
   # solo produce un icono de una sola resolucion, por eso se desactiva aqui.
   windows:
