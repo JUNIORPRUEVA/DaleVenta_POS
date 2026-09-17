@@ -2,6 +2,8 @@ import 'dart:developer' as dev;
 
 import 'package:flutter/foundation.dart';
 
+import 'trace_log_sink_stub.dart' if (dart.library.io) 'trace_log_sink_io.dart';
+
 class TraceLog {
   static int _seq = 0;
 
@@ -14,17 +16,19 @@ class TraceLog {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    if (!kDebugMode) return;
-
     final id = seq ?? nextSeq();
     final ts = DateTime.now().toIso8601String();
     final base = '[TRACE][$id][$ts][$scope] $message';
 
-    if (error != null) {
-      dev.log(base, name: 'TraceLog', error: error, stackTrace: stackTrace);
-      return;
-    }
+    TraceLogSink.write(base);
 
-    dev.log(base, name: 'TraceLog');
+    if (kDebugMode) {
+      if (error != null) {
+        dev.log(base, name: 'TraceLog', error: error, stackTrace: stackTrace);
+        return;
+      }
+
+      dev.log(base, name: 'TraceLog');
+    }
   }
 }

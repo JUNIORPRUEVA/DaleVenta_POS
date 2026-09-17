@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 
 import '../debug/trace_log.dart';
@@ -17,7 +15,7 @@ class ApiDiagnosticsInterceptor extends Interceptor {
 
     TraceLog.log(
       'ApiHttp',
-      'REQUEST ${options.method.toUpperCase()} ${options.uri} headers=${_redactHeaders(options.headers)} body=${_compact(options.data)}',
+      'REQUEST ${options.method.toUpperCase()} ${options.uri}',
       seq: traceId,
     );
     handler.next(options);
@@ -31,7 +29,7 @@ class ApiDiagnosticsInterceptor extends Interceptor {
     final elapsedMs = stopwatch?.elapsedMilliseconds;
     TraceLog.log(
       'ApiHttp',
-      'RESPONSE ${requestOptions.method.toUpperCase()} ${requestOptions.uri} status=${response.statusCode} elapsed=${elapsedMs ?? 0}ms body=${_compact(response.data)}',
+      'RESPONSE ${requestOptions.method.toUpperCase()} ${requestOptions.uri} status=${response.statusCode} elapsed=${elapsedMs ?? 0}ms',
       seq: traceId,
     );
     handler.next(response);
@@ -51,28 +49,5 @@ class ApiDiagnosticsInterceptor extends Interceptor {
       stackTrace: err.stackTrace,
     );
     handler.next(err);
-  }
-
-  String _redactHeaders(Map<String, dynamic> headers) {
-    final sanitized = <String, dynamic>{};
-    headers.forEach((key, value) {
-      final lowerKey = key.toLowerCase();
-      if (lowerKey == 'authorization' || lowerKey == 'cookie') {
-        sanitized[key] = '***';
-      } else {
-        sanitized[key] = value;
-      }
-    });
-    return jsonEncode(sanitized);
-  }
-
-  String _compact(dynamic value) {
-    if (value == null) return 'null';
-    if (value is FormData) {
-      return 'FormData(fields=${value.fields.length}, files=${value.files.length})';
-    }
-    final text = value is String ? value : jsonEncode(value);
-    if (text.length <= 400) return text;
-    return '${text.substring(0, 400)}...';
   }
 }

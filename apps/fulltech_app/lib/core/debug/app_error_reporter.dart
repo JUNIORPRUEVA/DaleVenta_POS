@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../errors/api_exception.dart';
 import '../errors/app_error_policy.dart';
 import '../errors/user_facing_error.dart';
+import 'trace_log.dart';
 
 enum AppErrorSeverity { warning, error, fatal }
 
@@ -217,6 +218,14 @@ class AppErrorReporter {
 
   void _log(AppErrorDetails details) {
     debugPrint(details.toConsoleString());
+    TraceLog.log(
+      'AppError',
+      'event=${details.eventId} severity=${details.severity.name} kind=${details.kind.name} type=${details.errorType}'
+          '${details.context == null ? '' : ' context=${details.context}'}'
+          '${details.method == null ? '' : ' method=${details.method}'}'
+          '${details.endpointUrl == null ? '' : ' endpoint=${details.endpointUrl}'}'
+          '${details.technicalDetails == null ? '' : ' detail=${details.technicalDetails}'}',
+    );
   }
 
   AppErrorDetails _buildDetails(
