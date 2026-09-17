@@ -239,13 +239,6 @@ class AccountSettingsScreen extends ConsumerWidget {
     final multiWarehouseEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
         true;
-    if (MediaQuery.sizeOf(context).width >= 900) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) context.go(Routes.cotizaciones);
-      });
-      return const SizedBox.shrink();
-    }
-
     return _SettingsHubScaffold(
       children: [
         if (!kIsWeb)
@@ -256,6 +249,7 @@ class AccountSettingsScreen extends ConsumerWidget {
             accent: const Color(0xFF2563EB),
             onTap: () => context.go(Routes.configuracionImpresora),
           ),
+        if (_showLegacyCompanyShortcut)
         _SettingsActionCard(
           icon: Icons.business_center_outlined,
           title: 'Empresa',
@@ -273,13 +267,41 @@ class AccountSettingsScreen extends ConsumerWidget {
           ),
         _SettingsActionCard(
           icon: Icons.cloud_sync_outlined,
-          title: 'Backup',
+          title: 'Respaldo',
           description: 'Crear, revisar y recuperar respaldos locales.',
           accent: const Color(0xFF7C3AED),
           onTap: () => context.go(Routes.configuracionBackup),
         ),
+        _SettingsActionCard(
+          icon: Icons.workspace_premium_outlined,
+          title: 'Suscripcion',
+          description: 'Plan, limites, vigencia y estado de la licencia.',
+          accent: const Color(0xFFB45309),
+          onTap: () => context.go(Routes.licencias),
+        ),
+        const _KeyboardShortcutsLaunchCard(),
         const _DeleteAccountLaunchCard(),
       ],
+    );
+  }
+}
+
+bool get _showLegacyCompanyShortcut => false;
+
+class _KeyboardShortcutsLaunchCard extends StatelessWidget {
+  const _KeyboardShortcutsLaunchCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsActionCard(
+      icon: Icons.keyboard_alt_outlined,
+      title: 'Atajos de teclado',
+      description: 'Guia rapida para Facturacion en Windows.',
+      accent: const Color(0xFF1957E6),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (_) => const _KeyboardShortcutsDialog(),
+      ),
     );
   }
 }
@@ -291,10 +313,171 @@ class _DeleteAccountLaunchCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return _SettingsActionCard(
       icon: Icons.delete_forever_outlined,
-      title: 'Eliminar mi cuenta',
+      title: 'Eliminar cuenta',
       description: 'Requiere contraseña y confirmación del servidor.',
       accent: AppColors.error,
       onTap: () => showDeleteAccountDialog(context, ref),
+    );
+  }
+}
+
+class _KeyboardShortcutsDialog extends StatelessWidget {
+  const _KeyboardShortcutsDialog();
+
+  static const _items = <_KeyboardShortcutInfo>[
+    _KeyboardShortcutInfo('F1', 'Cobrar'),
+    _KeyboardShortcutInfo('F2', 'Buscar producto'),
+    _KeyboardShortcutInfo('F3', 'Seleccionar cliente'),
+    _KeyboardShortcutInfo('F4', 'Venta rapida'),
+    _KeyboardShortcutInfo('F5', 'Nueva venta'),
+    _KeyboardShortcutInfo('F6', 'Tickets / ventas pendientes'),
+    _KeyboardShortcutInfo('Esc', 'Cerrar o cancelar'),
+    _KeyboardShortcutInfo('Delete', 'Eliminar producto seleccionado'),
+    _KeyboardShortcutInfo('+', 'Aumentar cantidad'),
+    _KeyboardShortcutInfo('-', 'Disminuir cantidad'),
+    _KeyboardShortcutInfo('Enter', 'Confirmar accion contextual'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF1FF),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Icon(
+                      Icons.keyboard_alt_outlined,
+                      color: Color(0xFF1957E6),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Atajos de teclado',
+                      style: TextStyle(
+                        color: Color(0xFF132337),
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Usa estos atajos en Facturacion para trabajar mas rapido.',
+                style: TextStyle(
+                  color: Color(0xFF52677C),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final item in _items)
+                        _KeyboardShortcutInfoRow(item: item),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Los atajos funcionan en la aplicacion de Windows y respetan los permisos y confirmaciones configurados.',
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 11.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KeyboardShortcutInfo {
+  const _KeyboardShortcutInfo(this.keyLabel, this.description);
+
+  final String keyLabel;
+  final String description;
+}
+
+class _KeyboardShortcutInfoRow extends StatelessWidget {
+  const _KeyboardShortcutInfoRow({required this.item});
+
+  final _KeyboardShortcutInfo item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            constraints: const BoxConstraints(minWidth: 58),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FBFF),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: const Color(0xFFDDE7EE)),
+            ),
+            child: Text(
+              item.keyLabel,
+              style: const TextStyle(
+                color: Color(0xFF183548),
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              item.description,
+              style: const TextStyle(
+                color: Color(0xFF27364A),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -703,7 +886,7 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                   'Configura datos fiscales, dirección, representante, logo y datos comerciales.',
             ),
           ),
-          if (!kIsWeb)
+          if (_showLegacyCompanyShortcut && !kIsWeb)
             PopupMenuItem(
               enabled: false,
               padding: EdgeInsets.zero,
@@ -719,7 +902,8 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                     'Ajusta impresora, copias, papel, formato y datos visibles del ticket.',
               ),
             ),
-          PopupMenuItem(
+          if (_showLegacyCompanyShortcut)
+            PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
@@ -729,6 +913,31 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                   _activate(menuContext, context, Routes.configuracionBackup),
               helpText:
                   'Descarga respaldo local y valida ZIPs de backup para recuperación asistida.',
+            ),
+          ),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _SettingsCompanySubmenu(
+              showPrinter: !kIsWeb,
+              onPrinter: () =>
+                  _activate(menuContext, context, Routes.configuracionImpresora),
+              onBackup: () =>
+                  _activate(menuContext, context, Routes.configuracionBackup),
+              onDeleteAccount: () {
+                final authRepository = ref.read(authRepositoryProvider);
+                final authController = ref.read(authStateProvider.notifier);
+                Navigator.of(menuContext).pop();
+                Future<void>.delayed(const Duration(milliseconds: 80), () {
+                  if (context.mounted) {
+                    showDeleteAccountDialogWithDependencies(
+                      context,
+                      authRepository: authRepository,
+                      authController: authController,
+                    );
+                  }
+                });
+              },
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -744,7 +953,8 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
                   'Cierra la sesión actual en este equipo y vuelve al inicio.',
             ),
           ),
-          PopupMenuItem(
+          if (_showLegacyCompanyShortcut)
+            PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
             child: _SettingsCompanyMenuRow(
@@ -864,6 +1074,151 @@ class _SettingsCompanyLogo extends StatelessWidget {
       child: bytes == null
           ? const Icon(Icons.storefront_rounded, size: 15, color: Colors.white)
           : Image.memory(bytes, fit: BoxFit.cover),
+    );
+  }
+}
+
+class _SettingsCompanySubmenu extends StatefulWidget {
+  const _SettingsCompanySubmenu({
+    required this.showPrinter,
+    required this.onPrinter,
+    required this.onBackup,
+    required this.onDeleteAccount,
+  });
+
+  final bool showPrinter;
+  final VoidCallback onPrinter;
+  final VoidCallback onBackup;
+  final VoidCallback onDeleteAccount;
+
+  @override
+  State<_SettingsCompanySubmenu> createState() =>
+      _SettingsCompanySubmenuState();
+}
+
+class _SettingsCompanySubmenuState extends State<_SettingsCompanySubmenu> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F7FF),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: const Color(0xFFDDEAFF)),
+                    ),
+                    child: const Icon(
+                      Icons.settings_outlined,
+                      size: 17,
+                      color: Color(0xFF1957E6),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Configuracion',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Color(0xFF27364A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: const Color(0xFFB7C4D4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          if (widget.showPrinter)
+            _SettingsCompanySubmenuAction(
+              icon: Icons.print_outlined,
+              label: 'Impresora',
+              onTap: widget.onPrinter,
+            ),
+          _SettingsCompanySubmenuAction(
+            icon: Icons.cloud_sync_outlined,
+            label: 'Respaldo',
+            onTap: widget.onBackup,
+          ),
+          _SettingsCompanySubmenuAction(
+            icon: Icons.delete_forever_outlined,
+            label: 'Eliminar mi cuenta',
+            danger: true,
+            onTap: widget.onDeleteAccount,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SettingsCompanySubmenuAction extends StatelessWidget {
+  const _SettingsCompanySubmenuAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFB91C1C) : const Color(0xFF526377);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 34, right: 10),
+        child: SizedBox(
+          height: 38,
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2124,7 +2479,8 @@ class _CompanySettingsEditorState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SettingsOptionGrid(
+        if (_showLegacyCompanyShortcut)
+          _SettingsOptionGrid(
           items: [
             _SettingsOptionData(
               icon: Icons.storefront_rounded,
@@ -2148,7 +2504,7 @@ class _CompanySettingsEditorState
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        if (_showLegacyCompanyShortcut) const SizedBox(height: 12),
         _CompanyLogoUploader(
           logoBytes: _logoBytes,
           companyName: _name.text.trim(),

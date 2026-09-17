@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizaciones_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-void main() {
+Future<void> main() async {
+  await initializeDateFormatting('es_DO');
+
   test(
     'Facturacion muestra stock solo con inventario empresa y producto tracked',
     () {
@@ -56,14 +59,35 @@ void main() {
       expect(source, contains('if (widget.showStockState)'));
     },
   );
+
+  test('Facturacion ordena productos fijados primero sin reordenar el resto', () {
+    final agua = _product(id: 'agua', trackInventory: true);
+    final cafe = _product(id: 'cafe', trackInventory: true);
+    final pan = _product(id: 'pan', trackInventory: true);
+    final sorted = sortBillingProductsWithPinnedFirst(
+      [agua, cafe, pan],
+      {'pan'},
+    );
+
+    expect(sorted, [pan, agua, cafe]);
+  });
+
+  test('Ventas recientes muestra fecha en zona de negocio, no UTC futura', () {
+    final label = formatRecentSaleDateLabel(
+      DateTime.utc(2026, 9, 17, 2, 35),
+    );
+
+    expect(label, '16/09/2026 22:35');
+  });
 }
 
 ProductModel _product({
+  String? id,
   String itemType = 'PRODUCT',
   required bool trackInventory,
 }) {
   return ProductModel(
-    id: 'product-$itemType-$trackInventory',
+    id: id ?? 'product-$itemType-$trackInventory',
     nombre: 'Producto prueba',
     precio: 100,
     costo: 50,

@@ -42,6 +42,7 @@ import '../../core/routing/routes.dart';
 import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/build_phase.dart';
 import '../../core/utils/money_formatters.dart';
@@ -285,6 +286,38 @@ void submitMobileExternalItemDialog(BuildContext context) {
   Navigator.pop(context, true);
 }
 
+/// Envuelve el contenido de la pantalla con el scope de atajos de Windows.
+///
+/// Usa un [FocusScope] (y no un [Focus] simple) a propósito: `unfocus()` mueve
+/// el foco al scope envolvente más cercano, por lo que con un [Focus] el foco
+/// terminaba en el scope de la ruta — ancestro del [CallbackShortcuts] — y los
+/// atajos dejaban de entregarse por completo (Escape al salir de un campo de
+/// texto, cierre del diálogo de nota, etc.).
+@visibleForTesting
+Widget buildWindowsBillingShortcutScope({
+  required Map<ShortcutActivator, VoidCallback> bindings,
+  required Widget child,
+}) {
+  return CallbackShortcuts(
+    bindings: bindings,
+    child: FocusScope(autofocus: true, child: child),
+  );
+}
+
+/// Regla de habilitación de los atajos F1..F6.
+///
+/// Los F-keys no escriben texto, así que no deben depender de que el foco esté
+/// fuera de un campo de texto: bloquearlos ahí hacía que usar F2 (buscar)
+/// desactivara en silencio F1 y F3..F6. Las teclas que sí compiten con la
+/// edición (Enter, Delete, +, - y Escape) siguen usando la regla estricta.
+@visibleForTesting
+bool canRunBillingFunctionKeyShortcut({
+  required bool shortcutsEnabled,
+  required bool textInputFocused,
+}) {
+  return shortcutsEnabled;
+}
+
 typedef _CatalogProductAddCallback =
     void Function(ProductModel product, Offset? globalStart);
 
@@ -336,6 +369,30 @@ Map<String, ProductModel> indexProductsById(List<ProductModel> products) {
   };
 }
 
+@visibleForTesting
+String formatRecentSaleDateLabel(DateTime? date) {
+  if (date == null) return 'Sin fecha';
+  return formatBusinessDateTime(date);
+}
+
+@visibleForTesting
+List<ProductModel> sortBillingProductsWithPinnedFirst(
+  List<ProductModel> products,
+  Set<String> pinnedProductIds,
+) {
+  if (products.length < 2 || pinnedProductIds.isEmpty) {
+    return List<ProductModel>.of(products);
+  }
+  final indexed = products.asMap().entries.toList(growable: false);
+  indexed.sort((left, right) {
+    final leftPinned = pinnedProductIds.contains(left.value.id.trim());
+    final rightPinned = pinnedProductIds.contains(right.value.id.trim());
+    if (leftPinned == rightPinned) return left.key.compareTo(right.key);
+    return leftPinned ? -1 : 1;
+  });
+  return indexed.map((entry) => entry.value).toList(growable: false);
+}
+
 class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     with WidgetsBindingObserver, TickerProviderStateMixin
     implements RouteAware {
@@ -343,8 +400,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   static const double _mobileActionsSwipeEdgeWidth = 28;
   static const double _mobileActionsSwipeTriggerDistance = 54;
   static const String _editorDraftCachePrefix = 'cotizaciones:editorDraft:';
+  static const String _pinnedProductsCacheKey =
+      'cotizaciones:billingPinnedProducts:v1';
 
   final LocalJsonCache _editorDraftCache = LocalJsonCache();
+  final LocalJsonCache _pinnedProductsCache = LocalJsonCache();
   Timer? _persistEditorDraftTimer;
   Timer? _salesNoticeTimer;
   OverlayEntry? _salesNoticeEntry;
@@ -368,6 +428,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _mobileSearchFocusNode = FocusNode();
+  final FocusNode _desktopSearchFocusNode = FocusNode();
   final GlobalKey _desktopCartAnimationTargetKey = GlobalKey();
 
   final List<CotizacionItem> _items = [];
@@ -381,6 +442,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _loadingProducts = false;
   String? _error;
   final Set<String> _selectedCategories = <String>{};
+  Set<String> _pinnedProductIds = <String>{};
 
   bool _showDesktopManualItemForm = false;
   int? _desktopManualEditIndex;
@@ -405,8 +467,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   int _lifecycleGeneration = 0;
   bool _showDesktopCalculator = false;
   bool _showMobileTicketDropdown = false;
+  int? _desktopSelectedCartIndex;
   bool _openingBarcodeScanner = false;
   bool _finalizingCheckout = false;
+  bool _shortcutCheckoutOpening = false;
   bool _barcodeCatalogRefreshInFlight = false;
   DateTime? _lastBarcodeCatalogRefreshAt;
   double _mobileCartExtent = 0;
@@ -489,6 +553,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _subscribeRealtime();
     _applyInitialClient();
     _applyInitialQuotation();
+    unawaited(_loadPinnedProducts());
     unawaited(_bootstrapCatalog());
     _startLiveSync();
     if (!widget.returnSavedQuotation) {
@@ -662,6 +727,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       createdByUserName: _sessionUserName,
     );
     setState(() {
+      _pinnedProductIds = <String>{};
       _desktopTickets = [initialDraft];
       _activeDesktopTicketId = initialDraft.id;
       _resetEditorState();
@@ -670,6 +736,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     ref.invalidate(catalogControllerProvider);
     ref.invalidate(cotizacionesRepositoryProvider);
     ref.invalidate(ventasControllerProvider);
+    unawaited(_loadPinnedProducts(companyId: companyId));
     unawaited(_bootstrapCatalog());
     if (!widget.returnSavedQuotation && companyId.trim().isNotEmpty) {
       unawaited(_restorePersistedEditorDraftIfAny());
@@ -1055,6 +1122,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _realtimeSubscription?.cancel();
     _searchCtrl.dispose();
     _mobileSearchFocusNode.dispose();
+    _desktopSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -1071,6 +1139,58 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   String _activeCompanyId() => _sessionCompanyId.trim();
+
+  Future<void> _loadPinnedProducts({String? companyId}) async {
+    final requestCompanyId = (companyId ?? _activeCompanyId()).trim();
+    if (requestCompanyId.isEmpty) {
+      if (!mounted) return;
+      setState(() => _pinnedProductIds = <String>{});
+      return;
+    }
+
+    try {
+      final cached = await _pinnedProductsCache.readMap(
+        _pinnedProductsCacheKey,
+      );
+      if (!mounted || _activeCompanyId() != requestCompanyId) return;
+      final rawIds = cached?['productIds'];
+      final ids = rawIds is List
+          ? rawIds
+                .map((value) => value.toString().trim())
+                .where((value) => value.isNotEmpty)
+                .toSet()
+          : <String>{};
+      setState(() => _pinnedProductIds = ids);
+    } catch (_) {
+      if (!mounted || _activeCompanyId() != requestCompanyId) return;
+      setState(() => _pinnedProductIds = <String>{});
+    }
+  }
+
+  Future<void> _persistPinnedProducts() async {
+    final companyId = _activeCompanyId();
+    if (companyId.isEmpty) return;
+    final ids = _pinnedProductIds.toList(growable: false)..sort();
+    await _pinnedProductsCache.writeMap(_pinnedProductsCacheKey, {
+      'v': 1,
+      'companyId': companyId,
+      'productIds': ids,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  void _togglePinnedProduct(ProductModel product) {
+    final productId = product.id.trim();
+    if (productId.isEmpty) return;
+    setState(() {
+      final next = Set<String>.of(_pinnedProductIds);
+      if (!next.remove(productId)) {
+        next.add(productId);
+      }
+      _pinnedProductIds = next;
+    });
+    unawaited(_persistPinnedProducts());
+  }
 
   bool _belongsToActiveCompany(_DesktopTicketDraft ticket) {
     final companyId = _activeCompanyId();
@@ -1457,7 +1577,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   List<ProductModel> get _visibleProducts {
     final query = _searchCtrl.text.trim().toLowerCase();
-    return _productos.where((product) {
+    final filtered = _productos.where((product) {
       if (_selectedCategories.isNotEmpty &&
           !_selectedCategories.contains(product.categoriaLabel)) {
         return false;
@@ -1468,6 +1588,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           product.categoriaLabel.toLowerCase().contains(query) ||
           code.contains(query);
     }).toList();
+    return sortBillingProductsWithPinnedFirst(filtered, _pinnedProductIds);
   }
 
   bool get _companyInventoryEnabled =>
@@ -1604,6 +1725,147 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _addProduct(visible.first);
     _searchCtrl.clear();
     _commitEditorChange(() {});
+  }
+
+  bool get _billingShortcutsEnabled {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.windows;
+  }
+
+  bool get _isTextInputFocused {
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (context == null) return false;
+    if (context.widget is EditableText) return true;
+    return context.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
+  bool _canRunBillingShortcut() {
+    if (!_billingShortcutsEnabled) return false;
+    if (!mounted) return false;
+    if (_isTextInputFocused) return false;
+    return true;
+  }
+
+  bool _canRunBillingFunctionKeyShortcut() {
+    final enabled = canRunBillingFunctionKeyShortcut(
+      shortcutsEnabled: _billingShortcutsEnabled,
+      textInputFocused: _isTextInputFocused,
+    );
+    if (!enabled) return false;
+    return mounted;
+  }
+
+  int? get _validDesktopSelectedCartIndex {
+    final index = _desktopSelectedCartIndex;
+    if (index == null || index < 0 || index >= _items.length) return null;
+    return index;
+  }
+
+  void _requestDesktopSearchFocus() {
+    if (!_billingShortcutsEnabled || !mounted) return;
+    _desktopSearchFocusNode.requestFocus();
+  }
+
+  Future<void> _openCheckoutDialogFromShortcut() async {
+    if (!_canRunBillingFunctionKeyShortcut()) return;
+    if (_shortcutCheckoutOpening) return;
+    _shortcutCheckoutOpening = true;
+    try {
+      await _openCheckoutDialog();
+    } finally {
+      _shortcutCheckoutOpening = false;
+    }
+  }
+
+  void _handleBillingShortcutEscape() {
+    if (!_billingShortcutsEnabled || !mounted) return;
+    if (_isTextInputFocused) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      return;
+    }
+    if (_showDesktopCalculator ||
+        _showDesktopManualItemForm ||
+        _desktopSelectedCartIndex != null) {
+      setState(() {
+        _showDesktopCalculator = false;
+        _showDesktopManualItemForm = false;
+        _desktopManualEditIndex = null;
+        _desktopSelectedCartIndex = null;
+      });
+    }
+  }
+
+  void _removeSelectedCartLineFromShortcut() {
+    if (!_canRunBillingShortcut()) return;
+    final index = _validDesktopSelectedCartIndex;
+    if (index == null) return;
+    _commitEditorChange(() {
+      _items.removeAt(index);
+      if (_items.isEmpty) {
+        _desktopSelectedCartIndex = null;
+      } else if (index >= _items.length) {
+        _desktopSelectedCartIndex = _items.length - 1;
+      }
+    });
+  }
+
+  void _adjustSelectedCartLineFromShortcut(double delta) {
+    if (!_canRunBillingShortcut()) return;
+    final index = _validDesktopSelectedCartIndex;
+    if (index == null) return;
+    _setQty(index, _items[index].qty + delta);
+    if (_items.isEmpty || index >= _items.length) {
+      _desktopSelectedCartIndex = null;
+    }
+  }
+
+  void _submitSearchFromShortcut() {
+    if (!_billingShortcutsEnabled || !_desktopSearchFocusNode.hasFocus) return;
+    _submitSearchAndAddFirstVisibleProduct();
+  }
+
+  Map<ShortcutActivator, VoidCallback> _windowsBillingShortcutBindings() {
+    if (!_billingShortcutsEnabled) return const <ShortcutActivator, VoidCallback>{};
+    return <ShortcutActivator, VoidCallback>{
+      const SingleActivator(LogicalKeyboardKey.f1): () =>
+          unawaited(_openCheckoutDialogFromShortcut()),
+      const SingleActivator(LogicalKeyboardKey.f2): _requestDesktopSearchFocus,
+      const SingleActivator(LogicalKeyboardKey.f3): () {
+        if (_canRunBillingFunctionKeyShortcut()) {
+          unawaited(_openClientDialog());
+        }
+      },
+      const SingleActivator(LogicalKeyboardKey.f4): () {
+        if (_canRunBillingFunctionKeyShortcut()) {
+          unawaited(_openExternalItemDialog());
+        }
+      },
+      const SingleActivator(LogicalKeyboardKey.f5): () {
+        if (_canRunBillingFunctionKeyShortcut()) _createNewDesktopTicket();
+      },
+      const SingleActivator(LogicalKeyboardKey.f6): () {
+        if (_canRunBillingFunctionKeyShortcut()) {
+          unawaited(_openRecentSalesPanel());
+        }
+      },
+      const SingleActivator(LogicalKeyboardKey.escape):
+          _handleBillingShortcutEscape,
+      const SingleActivator(LogicalKeyboardKey.delete):
+          _removeSelectedCartLineFromShortcut,
+      const SingleActivator(LogicalKeyboardKey.equal):
+          () => _adjustSelectedCartLineFromShortcut(1),
+      const SingleActivator(LogicalKeyboardKey.add):
+          () => _adjustSelectedCartLineFromShortcut(1),
+      const SingleActivator(LogicalKeyboardKey.numpadAdd):
+          () => _adjustSelectedCartLineFromShortcut(1),
+      const SingleActivator(LogicalKeyboardKey.minus):
+          () => _adjustSelectedCartLineFromShortcut(-1),
+      const SingleActivator(LogicalKeyboardKey.numpadSubtract):
+          () => _adjustSelectedCartLineFromShortcut(-1),
+      const SingleActivator(LogicalKeyboardKey.enter): _submitSearchFromShortcut,
+      const SingleActivator(LogicalKeyboardKey.numpadEnter):
+          _submitSearchFromShortcut,
+    };
   }
 
   ProductTaxUiConfig? get _currentTaxConfig => _taxConfigCache;
@@ -5882,8 +6144,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   String _saleDateLabel(DateTime? date) {
-    if (date == null) return 'Sin fecha';
-    return DateFormat('dd/MM/yyyy HH:mm').format(date.toLocal());
+    return formatRecentSaleDateLabel(date);
   }
 
   String _saleShortId(SaleModel sale) {
@@ -7665,11 +7926,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         Expanded(
                           child: _DesktopCatalogPane(
                             searchController: _searchCtrl,
+                            searchFocusNode: _desktopSearchFocusNode,
                             selectedCategories: _selectedCategories,
                             categories: desktopCategories,
                             managedCategories: managedCategories,
                             allProducts: _productos,
                             visibleProducts: _visibleProducts,
+                            pinnedProductIds: _pinnedProductIds,
                             inventoryEnabled: inventoryEnabled,
                             loadingProducts: _loadingProducts,
                             error: _error,
@@ -7686,6 +7949,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             onClearCategories: () =>
                                 _commitEditorChange(_selectedCategories.clear),
                             onAddProduct: _addProductFromDesktopCatalog,
+                            onTogglePinnedProduct: _togglePinnedProduct,
                             onAddExternalItem: () => _openExternalItemDialog(),
                             onOpenNewProduct: _openInventoryCatalog,
                             onOpenStockAdjustments: _openStockAdjustments,
@@ -7697,6 +7961,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             key: _desktopCartAnimationTargetKey,
                             child: _DesktopQuotePanel(
                               items: _items,
+                              selectedCartIndex: _desktopSelectedCartIndex,
                               selectedClientName: _selectedClientName,
                               selectedClientPhone: _selectedClientPhone,
                               includeItbis: _shouldShowItbis,
@@ -7762,10 +8027,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 if (index < 0 || index >= _items.length) {
                                   return;
                                 }
-                                _commitEditorChange(
-                                  () => _items.removeAt(index),
-                                );
+                                _commitEditorChange(() {
+                                  _items.removeAt(index);
+                                  if (_items.isEmpty) {
+                                    _desktopSelectedCartIndex = null;
+                                  } else if (index >= _items.length) {
+                                    _desktopSelectedCartIndex = _items.length - 1;
+                                  }
+                                });
                               },
+                              onSelectItem: (index) =>
+                                  setState(() => _desktopSelectedCartIndex = index),
                             ),
                           ),
                         ),
@@ -7915,7 +8187,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
     final isDesktop = MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
 
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: isDesktop ? null : AppColors.background,
       appBar: isDesktop
           ? _buildDesktopAppBar(aiState, user)
@@ -7937,6 +8209,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 ),
               ),
       ),
+    );
+    final shortcuts = _windowsBillingShortcutBindings();
+    if (shortcuts.isEmpty) return scaffold;
+    return buildWindowsBillingShortcutScope(
+      bindings: shortcuts,
+      child: scaffold,
     );
   }
 }
@@ -9080,6 +9358,8 @@ class _MobileActionsButtonState extends State<_MobileActionsButton>
   }
 }
 
+bool get _showLegacyAccountMenuShortcuts => false;
+
 class _CompanyAccountMenu extends ConsumerWidget {
   const _CompanyAccountMenu({
     this.user,
@@ -9277,7 +9557,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
                   'Configura el nombre comercial, RNC, teléfonos, dirección, logo y datos principales usados por la empresa.',
             ),
           ),
-          if (!kIsWeb)
+          if (_showLegacyAccountMenuShortcuts && !kIsWeb)
             PopupMenuItem(
               enabled: false,
               padding: EdgeInsets.zero,
@@ -9298,18 +9578,36 @@ class _CompanyAccountMenu extends ConsumerWidget {
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.cloud_sync_outlined,
-              label: 'Backup',
-              onTap: () => _activateProtectedRoute(
+            child: _CompanySettingsSubmenu(
+              showPrinter: !kIsWeb,
+              onPrinter: () => _activateProtectedRoute(
+                context,
+                ref,
+                menuContext,
+                route: Routes.configuracionImpresora,
+                label: 'Impresora',
+              ),
+              onBackup: () => _activateProtectedRoute(
                 context,
                 ref,
                 menuContext,
                 route: Routes.configuracionBackup,
-                label: 'Backup',
+                label: 'Respaldo',
               ),
-              helpText:
-                  'Descarga un respaldo local de la empresa y valida archivos ZIP para recuperación asistida.',
+              onDeleteAccount: () {
+                final authRepository = ref.read(authRepositoryProvider);
+                final authController = ref.read(authStateProvider.notifier);
+                Navigator.of(menuContext).pop();
+                _runAfterMenuCloses(() {
+                  if (context.mounted) {
+                    showDeleteAccountDialogWithDependencies(
+                      context,
+                      authRepository: authRepository,
+                      authController: authController,
+                    );
+                  }
+                });
+              },
             ),
           ),
           const PopupMenuDivider(height: 8),
@@ -9328,7 +9626,8 @@ class _CompanyAccountMenu extends ConsumerWidget {
                   'Cierra la sesión del usuario actual en este equipo y vuelve a la pantalla de inicio para proteger el acceso de la empresa.',
             ),
           ),
-          PopupMenuItem(
+          if (_showLegacyAccountMenuShortcuts)
+            PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
@@ -10469,6 +10768,152 @@ String _companyUserInitials(String name) {
       .join();
   if (initials.isEmpty) return 'U';
   return initials.length > 1 ? initials.substring(0, 2) : initials;
+}
+
+class _CompanySettingsSubmenu extends StatefulWidget {
+  const _CompanySettingsSubmenu({
+    required this.showPrinter,
+    required this.onPrinter,
+    required this.onBackup,
+    required this.onDeleteAccount,
+  });
+
+  final bool showPrinter;
+  final VoidCallback onPrinter;
+  final VoidCallback onBackup;
+  final VoidCallback onDeleteAccount;
+
+  @override
+  State<_CompanySettingsSubmenu> createState() =>
+      _CompanySettingsSubmenuState();
+}
+
+class _CompanySettingsSubmenuState extends State<_CompanySettingsSubmenu> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F7FF),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: const Color(0xFFDDEAFF)),
+                    ),
+                    child: const Icon(
+                      Icons.settings_outlined,
+                      size: 17,
+                      color: Color(0xFF1957E6),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Configuracion',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Color(0xFF27364A),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: const Color(0xFFB7C4D4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          if (widget.showPrinter)
+            _CompanySettingsSubmenuAction(
+              icon: Icons.print_outlined,
+              label: 'Impresora',
+              onTap: widget.onPrinter,
+            ),
+          _CompanySettingsSubmenuAction(
+            icon: Icons.cloud_sync_outlined,
+            label: 'Respaldo',
+            onTap: widget.onBackup,
+          ),
+          _CompanySettingsSubmenuAction(
+            icon: Icons.delete_forever_outlined,
+            label: 'Eliminar mi cuenta',
+            danger: true,
+            onTap: widget.onDeleteAccount,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _CompanySettingsSubmenuAction extends StatelessWidget {
+  const _CompanySettingsSubmenuAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFB91C1C) : const Color(0xFF526377);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 34, right: 10),
+        child: SizedBox(
+          height: 38,
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+  }
 }
 
 class _CompanyMenuItem extends StatefulWidget {
@@ -12349,11 +12794,13 @@ const double _desktopCatalogToolbarRadius = 7.0;
 class _DesktopCatalogPane extends StatefulWidget {
   const _DesktopCatalogPane({
     required this.searchController,
+    required this.searchFocusNode,
     required this.selectedCategories,
     required this.categories,
     required this.managedCategories,
     required this.allProducts,
     required this.visibleProducts,
+    required this.pinnedProductIds,
     required this.inventoryEnabled,
     required this.loadingProducts,
     required this.error,
@@ -12363,17 +12810,20 @@ class _DesktopCatalogPane extends StatefulWidget {
     required this.onToggleCategory,
     required this.onClearCategories,
     required this.onAddProduct,
+    required this.onTogglePinnedProduct,
     required this.onAddExternalItem,
     required this.onOpenNewProduct,
     required this.onOpenStockAdjustments,
   });
 
   final TextEditingController searchController;
+  final FocusNode searchFocusNode;
   final Set<String> selectedCategories;
   final List<String> categories;
   final List<InventoryCategoryModel> managedCategories;
   final List<ProductModel> allProducts;
   final List<ProductModel> visibleProducts;
+  final Set<String> pinnedProductIds;
   final bool inventoryEnabled;
   final bool loadingProducts;
   final String? error;
@@ -12383,6 +12833,7 @@ class _DesktopCatalogPane extends StatefulWidget {
   final ValueChanged<String> onToggleCategory;
   final VoidCallback onClearCategories;
   final _CatalogProductAddCallback onAddProduct;
+  final ValueChanged<ProductModel> onTogglePinnedProduct;
   final VoidCallback onAddExternalItem;
   final VoidCallback onOpenNewProduct;
   final VoidCallback onOpenStockAdjustments;
@@ -12535,6 +12986,7 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                 ),
                 child: TextField(
                   controller: widget.searchController,
+                  focusNode: widget.searchFocusNode,
                   onChanged: (_) => widget.onSearchChanged(),
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => widget.onSearchSubmitted(),
@@ -12699,6 +13151,9 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                         child: _ModernDesktopProductCard(
                           product: widget.visibleProducts[index],
                           money: widget.money,
+                          pinned: widget.pinnedProductIds.contains(
+                            widget.visibleProducts[index].id.trim(),
+                          ),
                           showStockState: shouldShowBillingStockState(
                             companyInventoryEnabled: widget.inventoryEnabled,
                             product: widget.visibleProducts[index],
@@ -12706,6 +13161,9 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                           onTap: (globalStart) => widget.onAddProduct(
                             widget.visibleProducts[index],
                             globalStart,
+                          ),
+                          onTogglePinned: () => widget.onTogglePinnedProduct(
+                            widget.visibleProducts[index],
                           ),
                         ),
                       ),
@@ -14186,6 +14644,7 @@ class _DesktopSaleActionMenuRow extends StatelessWidget {
 class _DesktopQuotePanel extends StatelessWidget {
   const _DesktopQuotePanel({
     required this.items,
+    required this.selectedCartIndex,
     required this.selectedClientName,
     required this.selectedClientPhone,
     required this.includeItbis,
@@ -14218,9 +14677,11 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.isOutOfStock,
     required this.isItemExempt,
     required this.onRemoveItem,
+    required this.onSelectItem,
   });
 
   final List<CotizacionItem> items;
+  final int? selectedCartIndex;
   final String selectedClientName;
   final String? selectedClientPhone;
   final bool includeItbis;
@@ -14253,6 +14714,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final bool Function(CotizacionItem item) isOutOfStock;
   final bool Function(CotizacionItem item) isItemExempt;
   final ValueChanged<int> onRemoveItem;
+  final ValueChanged<int> onSelectItem;
 
   @override
   Widget build(BuildContext context) {
@@ -14326,6 +14788,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                         final item = items[index];
                         return _DesktopTicketItem(
                           item: item,
+                          selected: selectedCartIndex == index,
                           money: money,
                           outOfStock: isOutOfStock(item),
                           exempt: isItemExempt(item),
@@ -14337,6 +14800,7 @@ class _DesktopQuotePanel extends StatelessWidget {
                               ? () => onEditExternalItem(index)
                               : null,
                           onRemove: () => onRemoveItem(index),
+                          onSelect: () => onSelectItem(index),
                         );
                       },
                     ),
@@ -15192,6 +15656,7 @@ class _DesktopCategoryRail extends StatefulWidget {
 
   static const double collapsedWidth = 56.0;
   static const double expandedWidth = 216.0;
+  static const int defaultVisibleCount = 16;
 
   final List<String> categories;
   final List<ProductModel> allProducts;
@@ -15208,6 +15673,7 @@ class _DesktopCategoryRail extends StatefulWidget {
 class _DesktopCategoryRailState extends State<_DesktopCategoryRail> {
   bool _expanded = false;
   bool _labelsVisible = false;
+  bool _showAllCategories = false;
   Timer? _labelRevealTimer;
   Timer? _collapseTimer;
 
@@ -15323,12 +15789,21 @@ class _DesktopCategoryRailState extends State<_DesktopCategoryRail> {
                 ],
               );
             }
+            final hasMoreCategories =
+                widget.categories.length > _DesktopCategoryRail.defaultVisibleCount;
+            final visibleCategories = _showAllCategories || !hasMoreCategories
+                ? widget.categories.toList(growable: false)
+                : widget.categories
+                      .take(_DesktopCategoryRail.defaultVisibleCount)
+                      .toList(growable: false);
+            final hiddenCategoryCount =
+                widget.categories.length -
+                _DesktopCategoryRail.defaultVisibleCount;
             final maxVisible =
                 ((constraints.maxHeight - headerHeight - 12) / itemExtent)
                     .floor()
-                    .clamp(1, widget.categories.length);
-            final visibleCategories = widget.categories.toList(growable: false);
-            final canScroll = widget.categories.length > maxVisible;
+                    .clamp(1, visibleCategories.length);
+            final canScroll = visibleCategories.length > maxVisible;
 
             return Column(
               children: [
@@ -15372,10 +15847,98 @@ class _DesktopCategoryRailState extends State<_DesktopCategoryRail> {
                     ),
                   ),
                 ),
+                if (hasMoreCategories)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(3, 0, 5, 5),
+                    child: _DesktopCategoryRailMoreButton(
+                      expanded: _expanded,
+                      labelsVisible: _labelsVisible,
+                      showAll: _showAllCategories,
+                      hiddenCount: hiddenCategoryCount,
+                      onTap: () => setState(
+                        () => _showAllCategories = !_showAllCategories,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 4),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopCategoryRailMoreButton extends StatelessWidget {
+  const _DesktopCategoryRailMoreButton({
+    required this.expanded,
+    required this.labelsVisible,
+    required this.showAll,
+    required this.hiddenCount,
+    required this.onTap,
+  });
+
+  final bool expanded;
+  final bool labelsVisible;
+  final bool showAll;
+  final int hiddenCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = showAll ? 'Ver menos' : 'Ver $hiddenCount mas';
+    return SizedBox(
+      height: 42,
+      child: Material(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.symmetric(horizontal: expanded ? 10 : 5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCFE0FF)),
+            ),
+            child: Row(
+              mainAxisAlignment: expanded
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.center,
+              children: [
+                Icon(
+                  showAll
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  color: const Color(0xFF1957E6),
+                  size: 22,
+                ),
+                if (expanded) ...[
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: AnimatedOpacity(
+                      opacity: labelsVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 120),
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: const Color(0xFF123A75),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -16122,12 +16685,16 @@ class _ModernDesktopProductCard extends StatefulWidget {
     required this.product,
     required this.money,
     required this.onTap,
+    required this.onTogglePinned,
+    required this.pinned,
     required this.showStockState,
   });
 
   final ProductModel product;
   final String Function(double) money;
   final ValueChanged<Offset?> onTap;
+  final VoidCallback onTogglePinned;
+  final bool pinned;
   final bool showStockState;
 
   @override
@@ -16172,143 +16739,222 @@ class _ModernDesktopProductCardState extends State<_ModernDesktopProductCard> {
             onTapDown: (details) =>
                 _lastTapGlobalPosition = details.globalPosition,
             onTap: () => widget.onTap(_lastTapGlobalPosition),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _hovered
-                      ? const Color(0xFFD2DDF0)
-                      : const Color(0xFFEEF2F7),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(
-                      0xFF0F2440,
-                    ).withValues(alpha: _hovered ? 0.09 : 0.04),
-                    blurRadius: _hovered ? 16 : 10,
-                    offset: Offset(0, _hovered ? 7 : 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 6,
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.all(12),
-                      child: imageUrl.isEmpty
-                          ? const Icon(
-                              Icons.inventory_2_outlined,
-                              size: 36,
-                              color: Color(0xFF94A3B8),
-                            )
-                          : ProductNetworkImage(
-                              imageUrl: imageUrl,
-                              productId: product.id,
-                              productName: product.nombre,
-                              originalUrl: product.originalFotoUrl,
-                              fit: BoxFit.contain,
-                              loading: const Icon(
-                                Icons.inventory_2_outlined,
-                                size: 32,
-                                color: Color(0xFF94A3B8),
-                              ),
-                              fallback: const Icon(
-                                Icons.broken_image_outlined,
-                                size: 32,
-                                color: Color(0xFF94A3B8),
-                              ),
-                            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _hovered
+                          ? const Color(0xFFD2DDF0)
+                          : const Color(0xFFEEF2F7),
                     ),
-                  ),
-                  const SizedBox(height: 9),
-                  SizedBox(
-                    height: 34,
-                    child: Text(
-                      product.nombre.toUpperCase(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF243142),
-                        fontSize: 11,
-                        height: 1.18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.money(product.precio),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF243142),
-                      fontSize: 12.5,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      if (widget.showStockState)
-                        Flexible(
-                          child: Container(
-                            height: 22,
-                            padding: const EdgeInsets.symmetric(horizontal: 7),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: stockBackground,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _formatProductStock(product),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: stockColor,
-                                fontSize: 9.5,
-                                height: 1,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (widget.showStockState) const SizedBox(width: 8),
-                      if (!widget.showStockState) const Spacer(),
-                      Tooltip(
-                        message: 'Agregar producto',
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF1FF),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: _billingBorderColor),
-                          ),
-                          child: const Icon(
-                            Icons.add_rounded,
-                            color: Color(0xFF0D5EA6),
-                            size: 21,
-                          ),
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(
+                          0xFF0F2440,
+                        ).withValues(alpha: _hovered ? 0.09 : 0.04),
+                        blurRadius: _hovered ? 16 : 10,
+                        offset: Offset(0, _hovered ? 7 : 4),
                       ),
                     ],
                   ),
-                ],
-              ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 9,
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.all(2),
+                          child: imageUrl.isEmpty
+                              ? const Center(
+                                  child: Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 44,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                )
+                              : SizedBox.expand(
+                                  child: ProductNetworkImage(
+                                    imageUrl: imageUrl,
+                                    productId: product.id,
+                                    productName: product.nombre,
+                                    originalUrl: product.originalFotoUrl,
+                                    fit: BoxFit.contain,
+                                    loading: const Center(
+                                      child: Icon(
+                                        Icons.inventory_2_outlined,
+                                        size: 40,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                    fallback: const Center(
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 40,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      SizedBox(
+                        height: 34,
+                        child: Text(
+                          product.nombre.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF243142),
+                            fontSize: 11,
+                            height: 1.18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.money(product.precio),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF243142),
+                          fontSize: 12.5,
+                          height: 1,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          if (widget.showStockState)
+                            Flexible(
+                              child: Container(
+                                height: 22,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: stockBackground,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  _formatProductStock(product),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: stockColor,
+                                    fontSize: 9.5,
+                                    height: 1,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (widget.showStockState) const SizedBox(width: 8),
+                          if (!widget.showStockState) const Spacer(),
+                          Tooltip(
+                            message: 'Agregar producto',
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEAF1FF),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: _billingBorderColor),
+                              ),
+                              child: const Icon(
+                                Icons.add_rounded,
+                                color: Color(0xFF0D5EA6),
+                                size: 21,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 6,
+                  top: 6,
+                  child: _PinnedProductDot(
+                    pinned: widget.pinned,
+                    onTap: widget.onTogglePinned,
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PinnedProductDot extends StatelessWidget {
+  const _PinnedProductDot({required this.pinned, required this.onTap});
+
+  final bool pinned;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = pinned
+        ? const Color(0xFF1957E6)
+        : const Color(0xFF8EA4BD).withValues(alpha: 0.32);
+    final fillColor = pinned
+        ? const Color(0xFF1957E6)
+        : Colors.white.withValues(alpha: 0.38);
+
+    return Tooltip(
+      message: pinned ? 'Producto fijado' : 'Fijar producto',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: fillColor,
+              shape: BoxShape.circle,
+              border: Border.all(color: borderColor, width: pinned ? 1.4 : 1),
+              boxShadow: pinned
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF1957E6).withValues(alpha: 0.18),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: pinned
+                ? const Center(
+                    child: Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 8,
+                    ),
+                  )
+                : null,
           ),
         ),
       ),
@@ -17275,6 +17921,7 @@ class _LineEditIconButton extends StatelessWidget {
 class _DesktopTicketItem extends ConsumerStatefulWidget {
   const _DesktopTicketItem({
     required this.item,
+    required this.selected,
     required this.money,
     required this.outOfStock,
     required this.exempt,
@@ -17284,9 +17931,11 @@ class _DesktopTicketItem extends ConsumerStatefulWidget {
     required this.onChangePrice,
     required this.onEdit,
     required this.onRemove,
+    required this.onSelect,
   });
 
   final CotizacionItem item;
+  final bool selected;
   final String Function(double) money;
   final bool outOfStock;
   final bool exempt;
@@ -17296,6 +17945,7 @@ class _DesktopTicketItem extends ConsumerStatefulWidget {
   final ValueChanged<double> onChangePrice;
   final VoidCallback? onEdit;
   final VoidCallback onRemove;
+  final VoidCallback onSelect;
 
   @override
   ConsumerState<_DesktopTicketItem> createState() => _DesktopTicketItemState();
@@ -17363,13 +18013,20 @@ class _DesktopTicketItemState extends ConsumerState<_DesktopTicketItem> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        onTap: widget.onSelect,
         onDoubleTap: widget.onEditLine,
         child: Ink(
           padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: widget.selected ? const Color(0xFFF3F7FF) : Colors.white,
             border: Border(
-              bottom: BorderSide(color: _billingBorderColor, width: 1),
+              left: BorderSide(
+                color: widget.selected
+                    ? const Color(0xFF1957E6)
+                    : Colors.transparent,
+                width: 3,
+              ),
+              bottom: const BorderSide(color: _billingBorderColor, width: 1),
             ),
           ),
           child: Row(

@@ -91,15 +91,20 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
       const where = args?.where ?? {};
       const gte = where.saleDate?.gte as Date | undefined;
       const lt = where.saleDate?.lt as Date | undefined;
+      const deletedGte = where.deletedAt?.gte as Date | undefined;
+      const deletedLt = where.deletedAt?.lt as Date | undefined;
       return Promise.resolve(
         (options.sales ?? []).filter(
           (row) =>
             row.companyId === where.companyId &&
             row.kind === where.kind &&
-            row.isDeleted === where.isDeleted &&
+            (where.isDeleted === undefined ||
+              row.isDeleted === where.isDeleted) &&
             (!where.userId || row.userId === where.userId) &&
             (!gte || (row.saleDate as Date) >= gte) &&
-            (!lt || (row.saleDate as Date) < lt),
+            (!lt || (row.saleDate as Date) < lt) &&
+            (!deletedGte || (row.deletedAt as Date) >= deletedGte) &&
+            (!deletedLt || (row.deletedAt as Date) < deletedLt),
         ),
       );
     });
@@ -292,9 +297,28 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
 
   it("CASO 8: la devolución deja el devengado en 0 (nunca negativo) y no inyecta efectivo", async () => {
     // (a) Venta a crédito del período devuelta por completo: contribución 0.
+    const fullRefund = creditSale({
+      id: "refund-1",
+      kind: "refund",
+      refundedSaleId: "sale-1",
+      totalSold: dec(-1000),
+      totalCost: dec(-700),
+      totalProfit: dec(-300),
+      commissionAmount: dec(0),
+      paymentMethod: "credit",
+      paymentCashAmount: dec(0),
+      paymentTransferAmount: dec(0),
+      items: [
+        item({
+          id: "refund-item-1",
+          subtotalSold: dec(-1000),
+          subtotalCost: dec(-700),
+          profit: dec(-300),
+        }),
+      ],
+    });
     const fullyReturned = harness({
-      sales: [creditSale()],
-      returnedQty: { "item-1": 1 },
+      sales: [creditSale(), fullRefund],
     });
     const report = await fullyReturned.service.salesOverview(admin as never, {
       from: "2026-09-01",
@@ -303,7 +327,7 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
     expect(report.kpis.netSales).toBe(0);
     expect(report.kpis.returnedSales).toBeCloseTo(1000, 2);
     expect(report.kpis.totalReturns).toBe(1);
-    expect(report.kpis.totalSales).toBe(0);
+    expect(report.kpis.totalSales).toBe(1);
     // El carril de caja del reporte sigue siendo solo dinero COBRADO.
     expect(report.kpis.cashIncome).toBeCloseTo(0, 2);
     expect(report.audit.creditPaymentRows).toBe(0);

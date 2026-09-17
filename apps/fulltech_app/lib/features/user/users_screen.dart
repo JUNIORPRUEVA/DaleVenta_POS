@@ -12,8 +12,10 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
+import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -66,6 +68,19 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
 
   bool _isDesktop(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= _desktopBreakpoint;
+
+  void _showModuleNotification(
+    BuildContext context, {
+    required String title,
+    required String body,
+    AppFeedbackKind kind = AppFeedbackKind.success,
+  }) {
+    AppFeedback.showPersistentNotification(
+      context,
+      AppFeedbackNotification(title: title, body: body, kind: kind),
+      scope: 'users',
+    );
+  }
 
   List<UserModel> _filterUsers(List<UserModel> users, {required bool desktop}) {
     final filtered = users
@@ -373,7 +388,10 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 final user = filteredUsers[index];
                 return _UserCard(
                   user: user,
-                  onView: () => context.go(Routes.userPermissionsById(user.id)),
+                  onView: () => AppNavigator.go(
+                    context,
+                    Routes.userPermissionsById(user.id),
+                  ),
                   onEdit: () => _showUserDialog(context, ref, user),
                   onDelete: () => _showDeleteDialog(context, ref, user),
                   onToggleBlock:
@@ -593,7 +611,8 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                                     _managementRole(selectedUser) ==
                                         AppRole.admin
                                 ? null
-                                : () => context.go(
+                                : () => AppNavigator.go(
+                                    context,
                                     Routes.userPermissionsById(selectedUser.id),
                                   ),
                           ),
@@ -647,8 +666,11 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 if (!dialogContext.mounted) return;
                 Navigator.of(dialogContext).pop();
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PIN administrativo guardado.')),
+                _showModuleNotification(
+                  context,
+                  title: 'PIN administrativo guardado',
+                  body:
+                      'El código de autorización quedó actualizado y se usará para confirmar acciones sensibles del módulo.',
                 );
               } catch (error) {
                 if (!dialogContext.mounted) return;
@@ -753,9 +775,12 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
   ) async {
     final disabledReason = _blockDisabledReason(user, users, currentUser);
     if (disabledReason != null) {
-      ScaffoldMessenger.of(
+      _showModuleNotification(
         context,
-      ).showSnackBar(SnackBar(content: Text(disabledReason)));
+        title: 'Acción no disponible',
+        body: disabledReason,
+        kind: AppFeedbackKind.warning,
+      );
       return;
     }
     final allowed = await ensureAdminAuthorization(
@@ -770,27 +795,24 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
           .read(usersControllerProvider.notifier)
           .toggleBlock(user.id, !user.blocked);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              user.blocked ? 'Usuario desbloqueado' : 'Usuario bloqueado',
-            ),
-          ),
+        _showModuleNotification(
+          context,
+          title: user.blocked ? 'Usuario desbloqueado' : 'Usuario bloqueado',
+          body: user.blocked
+              ? '${user.nombreCompleto} puede iniciar sesión y trabajar nuevamente según sus permisos.'
+              : '${user.nombreCompleto} quedó bloqueado y no podrá acceder hasta que se reactive su cuenta.',
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
+        _showModuleNotification(
           context,
-        ).showSnackBar(
-          SnackBar(
-            content: Text(
-              userSafeErrorMessage(
-                e,
-                fallback: 'No se pudo actualizar. Inténtalo nuevamente.',
-              ),
-            ),
+          title: 'No se pudo actualizar el usuario',
+          body: userSafeErrorMessage(
+            e,
+            fallback: 'No se pudo actualizar. Inténtalo nuevamente.',
           ),
+          kind: AppFeedbackKind.error,
         );
       }
     }
@@ -1031,23 +1053,42 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       }
 
       try {
+        late final String successTitle;
+        late final String successBody;
         if (user == null) {
           await ref.read(usersControllerProvider.notifier).create(payload);
           if (!modalContext.mounted) return;
-          showSnack(const SnackBar(content: Text('Usuario creado')));
+          successTitle = 'Usuario creado';
+          successBody =
+              '$name fue agregado correctamente. Ya aparece en la lista de usuarios y permisos de la empresa.';
         } else {
           await ref
               .read(usersControllerProvider.notifier)
               .update(user.id, payload);
           if (!modalContext.mounted) return;
-          showSnack(const SnackBar(content: Text('Usuario actualizado')));
+          successTitle = 'Usuario editado correctamente';
+          successBody =
+              'Los cambios de $name fueron guardados y ya están disponibles en el módulo de usuarios y permisos.';
         }
         if (!modalContext.mounted) return;
         Navigator.of(modalContext).pop();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!scaffoldContext.mounted) return;
+          _showModuleNotification(
+            scaffoldContext,
+            title: successTitle,
+            body: successBody,
+          );
+        });
       } catch (e) {
         if (!modalContext.mounted) return;
         final message = e is ApiException ? e.message : e.toString();
-        showSnack(SnackBar(content: Text('No se pudo guardar: $message')));
+        _showModuleNotification(
+          scaffoldContext,
+          title: 'No se pudo guardar el usuario',
+          body: message,
+          kind: AppFeedbackKind.error,
+        );
       }
     }
 
@@ -1382,13 +1423,6 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     if (!allowed || !context.mounted) return;
     final scaffoldContext = context;
 
-    void showSnack(SnackBar snackBar) {
-      if (!scaffoldContext.mounted) return;
-      final messenger = ScaffoldMessenger.maybeOf(scaffoldContext);
-      if (messenger == null) return;
-      messenger.showSnackBar(snackBar);
-    }
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1410,19 +1444,22 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                     .delete(user.id);
                 if (!context.mounted) return;
                 Navigator.pop(context);
-                showSnack(const SnackBar(content: Text('Usuario eliminado')));
+                _showModuleNotification(
+                  scaffoldContext,
+                  title: 'Usuario eliminado',
+                  body:
+                      '${user.nombreCompleto} fue retirado de la lista de usuarios activos de la empresa.',
+                );
               } catch (e) {
                 if (!context.mounted) return;
-                showSnack(
-                  SnackBar(
-                    content: Text(
-                      userSafeErrorMessage(
-                        e,
-                        fallback:
-                            'No se pudo eliminar. Inténtalo nuevamente.',
-                      ),
-                    ),
+                _showModuleNotification(
+                  scaffoldContext,
+                  title: 'No se pudo eliminar el usuario',
+                  body: userSafeErrorMessage(
+                    e,
+                    fallback: 'No se pudo eliminar. Inténtalo nuevamente.',
                   ),
+                  kind: AppFeedbackKind.error,
                 );
               }
             },
@@ -1899,6 +1936,18 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
   Map<String, bool>? _draft;
   bool _saving = false;
 
+  void _showPermissionNotification({
+    required String title,
+    required String body,
+    AppFeedbackKind kind = AppFeedbackKind.success,
+  }) {
+    AppFeedback.showPersistentNotification(
+      context,
+      AppFeedbackNotification(title: title, body: body, kind: kind),
+      scope: 'user_permissions',
+    );
+  }
+
   UserModel? _findUser(List<UserModel> users) {
     for (final user in users) {
       if (user.id == widget.userId) return user;
@@ -1954,23 +2003,21 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
           .read(usersControllerProvider.notifier)
           .updatePermissions(user.id, draft);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Permisos actualizados')));
-      context.go(Routes.users);
+      _showPermissionNotification(
+        title: 'Permisos actualizados',
+        body:
+            'Los accesos de ${user.nombreCompleto} se guardaron correctamente y estarán disponibles en su próxima navegación.',
+      );
+      AppNavigator.go(context, Routes.users);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
-        SnackBar(
-          content: Text(
-            userSafeErrorMessage(
-              e,
-              fallback: 'No se pudo guardar. Inténtalo nuevamente.',
-            ),
-          ),
+      _showPermissionNotification(
+        title: 'No se pudieron guardar los permisos',
+        body: userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo guardar. Inténtalo nuevamente.',
         ),
+        kind: AppFeedbackKind.error,
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -2040,7 +2087,8 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
         showLogo: false,
         leading: IconButton(
           tooltip: 'Volver',
-          onPressed: () => context.go(Routes.users),
+          onPressed: () =>
+              AppNavigator.goBack(context, fallbackRoute: Routes.users),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         trailing: currentUser == null
@@ -2187,7 +2235,10 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
                         OutlinedButton.icon(
                           onPressed: _saving
                               ? null
-                              : () => context.go(Routes.users),
+                              : () => AppNavigator.goBack(
+                                  context,
+                                  fallbackRoute: Routes.users,
+                                ),
                           icon: const Icon(Icons.arrow_back_outlined),
                           label: const Text('Volver'),
                         ),

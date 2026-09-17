@@ -150,7 +150,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.configuracion,
             redirect: (context, state) =>
-                _isDesktopSettingsLayout(context) ? Routes.cotizaciones : null,
+                _isDesktopSettingsLayout() ? Routes.cotizaciones : null,
             builder: (context, state) => const AccountSettingsScreen(),
           ),
           GoRoute(
@@ -506,11 +506,13 @@ String? _passwordRecoveryLocationFromFragment(String fragment) {
   return null;
 }
 
-class _RouterRefreshNotifier extends ChangeNotifier {
-  void refresh() => notifyListeners();
+bool _isDesktopSettingsLayout() {
+  if (kIsWeb) return false;
+  return defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
 }
 
-bool _isDesktopSettingsLayout(BuildContext context) {
-  final size = MediaQuery.maybeSizeOf(context);
-  return size != null && size.width >= 900;
+class _RouterRefreshNotifier extends ChangeNotifier {
+  void refresh() => notifyListeners();
 }

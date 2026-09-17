@@ -64,6 +64,13 @@ class AppNavigator {
     if (!_isShellLocation(location)) return;
     final normalized = _normalizeLocation(location);
     if (normalized == _currentShellLocation) return;
+    if (normalized == Routes.users &&
+        _currentShellLocation != null &&
+        _isUsersSubRoutePath(_currentShellLocation!)) {
+      _previousShellLocation = null;
+      _currentShellLocation = normalized;
+      return;
+    }
     if (_currentShellLocation != null) {
       _previousShellLocation = _currentShellLocation;
     }
@@ -188,7 +195,8 @@ class AppNavigator {
   ) {
     final normalized = _normalizeLocation(location);
     final path = (Uri.tryParse(normalized)?.path ?? normalized).trim();
-    final isDesktopLayout = MediaQuery.maybeSizeOf(context)?.width != null &&
+    final isDesktopLayout =
+        MediaQuery.maybeSizeOf(context)?.width != null &&
         MediaQuery.maybeSizeOf(context)!.width >= 900;
     if (isDesktopLayout &&
         path.startsWith('${Routes.configuracion}/') &&
@@ -204,6 +212,7 @@ class AppNavigator {
 
     if (path.isEmpty) return Routes.profile;
 
+    if (path == Routes.users || path == Routes.user) return Routes.home;
     if (path == Routes.poncheHistorial) return Routes.ponche;
     if (path == Routes.registrarVenta) return Routes.ventas;
     if (path == Routes.compras) return Routes.cotizaciones;
@@ -285,6 +294,11 @@ class AppNavigator {
     final normalizedFrom = _normalizeLocation(from);
     final normalizedTo = _normalizeLocation(to);
     if (normalizedFrom == normalizedTo) return;
+    if (normalizedTo == Routes.users && _isUsersSubRoutePath(normalizedFrom)) {
+      _previousShellLocation = null;
+      _currentShellLocation = normalizedTo;
+      return;
+    }
     _previousShellLocation = normalizedFrom;
     _currentShellLocation = normalizedTo;
   }
@@ -320,10 +334,12 @@ class AppNavigator {
 
   static bool _mustPreferExplicitFallback(String location) {
     final path = (Uri.tryParse(location)?.path ?? location).trim();
-    return _isUsersSubRoute(path);
+    return path == Routes.users ||
+        path == Routes.user ||
+        _isUsersSubRoutePath(path);
   }
 
-  static bool _isUsersSubRoute(String path) {
+  static bool _isUsersSubRoutePath(String path) {
     return path == Routes.userPermissions ||
         path.startsWith('/users/') ||
         (path.startsWith('/users/') && path.endsWith('/permissions'));

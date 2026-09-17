@@ -118,11 +118,13 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: false
-  # Genera los mipmap del launcher de Android a partir del maestro cuadrado
+  ios: true
+  # Genera los launcher icons moviles a partir del maestro cuadrado
   # (1024x1024, con transparencia) producido por
   # scripts/branding/generate_app_icons.py
   image_path: "assets/image/logo_launcher.png"
+  remove_alpha_ios: true
+  background_color_ios: "#ffffff"
   min_sdk_android: 21
   # El icono de Windows es un .ico multi-resolucion (16/24/32/48/64/128/256)
   # generado por scripts/branding/generate_app_icons.py. flutter_launcher_icons

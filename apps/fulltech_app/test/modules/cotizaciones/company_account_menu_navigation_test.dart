@@ -106,6 +106,33 @@ void main() {
   });
 
   testWidgets(
+    'Cuenta y empresa > Configuracion despliega opciones compactas',
+    (tester) async {
+      await _pumpCompanyMenu(tester);
+
+      await tester.tap(find.byTooltip('Cuenta y empresa'));
+      await tester.pumpAndSettle();
+
+      expect(_companyMenuItem('Empresa'), findsOneWidget);
+      expect(_companyMenuItem('Licencias'), findsOneWidget);
+      expect(_companyMenuItem('Configuracion'), findsOneWidget);
+      expect(find.text('Impresora'), findsNothing);
+      expect(find.text('Respaldo'), findsNothing);
+      expect(find.text('Eliminar mi cuenta'), findsNothing);
+
+      await tester.tap(_companyMenuItem('Configuracion'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 140));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Impresora'), findsOneWidget);
+      expect(find.text('Respaldo'), findsOneWidget);
+      expect(find.text('Eliminar mi cuenta'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'Cuenta y empresa > Empresa soporta desmontaje rapido sin StateError',
     (tester) async {
       await _pumpCompanyMenu(tester);

@@ -4638,6 +4638,14 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             onTap: () => _goAfterMenu(context, Routes.users),
           ),
           PopupMenuItem(
+            value: 'licenses',
+            child: const _SalesCompanyMenuRow(
+              icon: Icons.verified_user_outlined,
+              label: 'Licencias',
+            ),
+            onTap: () => _goAfterMenu(context, Routes.licencias),
+          ),
+          PopupMenuItem(
             value: 'company_settings',
             child: const _SalesCompanyMenuRow(
               icon: Icons.business_center_outlined,
@@ -4645,22 +4653,28 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             ),
             onTap: () => _goAfterMenu(context, Routes.configuracionEmpresa),
           ),
-          if (!kIsWeb)
-            PopupMenuItem(
-              value: 'printer_settings',
-              child: const _SalesCompanyMenuRow(
-                icon: Icons.print_outlined,
-                label: 'Impresora',
-              ),
-              onTap: () => _goAfterMenu(context, Routes.configuracionImpresora),
-            ),
           PopupMenuItem(
-            value: 'backup_settings',
-            child: const _SalesCompanyMenuRow(
-              icon: Icons.cloud_sync_outlined,
-              label: 'Backup',
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _SalesSettingsSubmenu(
+              showPrinter: !kIsWeb,
+              onPrinter: () =>
+                  _goAfterMenu(context, Routes.configuracionImpresora),
+              onBackup: () => _goAfterMenu(context, Routes.configuracionBackup),
+              onDeleteAccount: () {
+                final authRepository = ref.read(authRepositoryProvider);
+                final authController = ref.read(authStateProvider.notifier);
+                Future<void>.delayed(Duration.zero, () {
+                  if (context.mounted) {
+                    showDeleteAccountDialogWithDependencies(
+                      context,
+                      authRepository: authRepository,
+                      authController: authController,
+                    );
+                  }
+                });
+              },
             ),
-            onTap: () => _goAfterMenu(context, Routes.configuracionBackup),
           ),
           const PopupMenuDivider(height: 8),
           PopupMenuItem(
@@ -4675,27 +4689,6 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
               Future<void>.delayed(Duration.zero, () async {
                 await authController.logout();
                 if (context.mounted) context.go(Routes.login);
-              });
-            },
-          ),
-          PopupMenuItem(
-            value: 'delete_account',
-            child: const _SalesCompanyMenuRow(
-              icon: Icons.delete_forever_outlined,
-              label: 'Eliminar mi cuenta',
-              danger: true,
-            ),
-            onTap: () {
-              final authRepository = ref.read(authRepositoryProvider);
-              final authController = ref.read(authStateProvider.notifier);
-              Future<void>.delayed(Duration.zero, () {
-                if (context.mounted) {
-                  showDeleteAccountDialogWithDependencies(
-                    context,
-                    authRepository: authRepository,
-                    authController: authController,
-                  );
-                }
               });
             },
           ),
@@ -4849,6 +4842,141 @@ class _SalesCompanyLogoBox extends StatelessWidget {
     } catch (_) {
       return null;
     }
+  }
+}
+
+class _SalesSettingsSubmenu extends StatefulWidget {
+  const _SalesSettingsSubmenu({
+    required this.showPrinter,
+    required this.onPrinter,
+    required this.onBackup,
+    required this.onDeleteAccount,
+  });
+
+  final bool showPrinter;
+  final VoidCallback onPrinter;
+  final VoidCallback onBackup;
+  final VoidCallback onDeleteAccount;
+
+  @override
+  State<_SalesSettingsSubmenu> createState() => _SalesSettingsSubmenuState();
+}
+
+class _SalesSettingsSubmenuState extends State<_SalesSettingsSubmenu> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              height: 44,
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.settings_outlined,
+                    color: Color(0xFF183548),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Configuracion',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Color(0xFF183548),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: const Color(0xFF6B7C90),
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          if (widget.showPrinter)
+            _SalesSettingsSubmenuAction(
+              icon: Icons.print_outlined,
+              label: 'Impresora',
+              onTap: widget.onPrinter,
+            ),
+          _SalesSettingsSubmenuAction(
+            icon: Icons.cloud_sync_outlined,
+            label: 'Respaldo',
+            onTap: widget.onBackup,
+          ),
+          _SalesSettingsSubmenuAction(
+            icon: Icons.delete_forever_outlined,
+            label: 'Eliminar mi cuenta',
+            danger: true,
+            onTap: widget.onDeleteAccount,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SalesSettingsSubmenuAction extends StatelessWidget {
+  const _SalesSettingsSubmenuAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? const Color(0xFFB91C1C) : const Color(0xFF526377);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 44, right: 16),
+        child: SizedBox(
+          height: 36,
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

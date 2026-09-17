@@ -14,18 +14,22 @@ Salidas
 -------
 * ``apps/fulltech_app/assets/image/logo_launcher.png``
   Maestro cuadrado 1024x1024 con transparencia. Es el ``image_path`` de
-  ``flutter_launcher_icons`` en ``pubspec.yaml`` (iconos launcher de Android).
+  ``flutter_launcher_icons`` en ``pubspec.yaml``.
 * ``apps/fulltech_app/windows/runner/resources/app_icon.ico``
   ICO multi-resolucion (16, 24, 32, 48, 64, 128, 256) en formato BMP 32bpp.
   Lo usan el ejecutable Windows, la barra de tareas, el acceso directo y el
   instalador Inno Setup.
+* ``apps/fulltech_app/android/app/src/main/res/mipmap-*/ic_launcher.png``
+  Iconos launcher Android.
+* ``apps/fulltech_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/*.png``
+  Iconos launcher iPhone/iPad sin canal alfa, requeridos por App Store.
 
 Notas
 -----
 * ``flutter_launcher_icons`` queda con ``windows.generate: false`` para que no
   sobrescriba este ICO con uno de una sola resolucion.
-* La regeneracion de los iconos de Android se hace aparte con
-  ``flutter_launcher_icons`` a partir del maestro.
+* La regeneracion de Android e iOS se hace aqui para mantener todas las
+  plataformas sincronizadas con el mismo logo maestro.
 
 Uso
 ---
@@ -37,6 +41,7 @@ Uso
 from __future__ import annotations
 
 import argparse
+import json
 import struct
 from pathlib import Path
 
@@ -48,9 +53,18 @@ APP_DIR = REPO_ROOT / "apps" / "fulltech_app"
 DEFAULT_SOURCE = APP_DIR / "assets" / "image" / "nuevologo.png"
 MASTER_OUTPUT = APP_DIR / "assets" / "image" / "logo_launcher.png"
 ICO_OUTPUT = APP_DIR / "windows" / "runner" / "resources" / "app_icon.ico"
+ANDROID_RES_DIR = APP_DIR / "android" / "app" / "src" / "main" / "res"
+IOS_APPICON_DIR = APP_DIR / "ios" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset"
 
 MASTER_SIZE = 1024
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
+ANDROID_MIPMAP_SIZES = {
+    "mipmap-mdpi": 48,
+    "mipmap-hdpi": 72,
+    "mipmap-xhdpi": 96,
+    "mipmap-xxhdpi": 144,
+    "mipmap-xxxhdpi": 192,
+}
 
 # Fraccion del lienzo cuadrado que ocupa el lado mayor del contenido.
 # Deja margen uniforme para que el logo no quede pegado al borde.
@@ -168,6 +182,44 @@ def write_ico(images: list[Image.Image], path: Path) -> None:
     path.write_bytes(header + bytes(directory) + bytes(payload))
 
 
+def flatten_rgba(image: Image.Image, background: tuple[int, int, int] = (255, 255, 255)) -> Image.Image:
+    """Compone RGBA sobre fondo solido y devuelve RGB, requerido por App Store."""
+    canvas = Image.new("RGBA", image.size, (*background, 255))
+    canvas.alpha_composite(image)
+    return canvas.convert("RGB")
+
+
+def write_android_icons(source: Image.Image, fill: float) -> None:
+    for mipmap_dir, size in ANDROID_MIPMAP_SIZES.items():
+        output = ANDROID_RES_DIR / mipmap_dir / "ic_launcher.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        build_square_icon(source, size, fill).save(output, "PNG", optimize=True)
+
+
+def _ios_icon_pixel_size(entry: dict[str, str]) -> int:
+    width = float(entry["size"].split("x", 1)[0])
+    scale = int(entry["scale"].removesuffix("x"))
+    return int(round(width * scale))
+
+
+def write_ios_icons(source: Image.Image, fill: float) -> list[str]:
+    contents_path = IOS_APPICON_DIR / "Contents.json"
+    data = json.loads(contents_path.read_text(encoding="utf-8"))
+    written: list[str] = []
+
+    for entry in data["images"]:
+        filename = entry.get("filename")
+        if not filename:
+            continue
+        size = _ios_icon_pixel_size(entry)
+        output = IOS_APPICON_DIR / filename
+        output.parent.mkdir(parents=True, exist_ok=True)
+        flatten_rgba(build_square_icon(source, size, fill)).save(output, "PNG", optimize=True)
+        written.append(filename)
+
+    return written
+
+
 def analyze(source: Image.Image) -> None:
     width, height = source.size
     alpha = source.getchannel("A")
@@ -204,6 +256,15 @@ def main() -> int:
 
     write_ico([build_square_icon(source, size, args.fill) for size in ICO_SIZES], ICO_OUTPUT)
     print(f"ico written        : {ICO_OUTPUT.relative_to(REPO_ROOT)} ({', '.join(str(s) for s in ICO_SIZES)})")
+
+    write_android_icons(source, args.fill)
+    print(
+        "android written    : "
+        + ", ".join(f"{name}/ic_launcher.png={size}x{size}" for name, size in ANDROID_MIPMAP_SIZES.items())
+    )
+
+    ios_files = write_ios_icons(source, args.fill)
+    print(f"ios written        : {IOS_APPICON_DIR.relative_to(REPO_ROOT)} ({len(ios_files)} png)")
     return 0
 
 

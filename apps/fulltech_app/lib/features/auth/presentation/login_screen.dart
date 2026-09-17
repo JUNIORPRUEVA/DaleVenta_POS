@@ -17,7 +17,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../data/remembered_login_storage.dart';
+import '../data/windows_login_users_storage.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -30,18 +30,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _passwordFocusNode = FocusNode();
   _LoginNoticeData? _notice;
-  bool _rememberMe = false;
   bool _obscurePassword = true;
 
-  final _rememberedLoginStorage = const RememberedLoginStorage();
+  final _windowsUsersStorage = const WindowsLoginUsersStorage();
+  final MenuController _savedUsersMenuController = MenuController();
+  List<String> _savedUsers = const <String>[];
+
+  /// The list of usernames used on this PC is a Windows-only convenience.
+  bool get _showsSavedUsers =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
   @override
   void initState() {
     super.initState();
     _emailCtrl.addListener(_clearNoticeOnInput);
     _passwordCtrl.addListener(_clearNoticeOnInput);
-    _loadRememberedCredentials();
+    _loadSavedUsers();
   }
 
   @override
@@ -50,6 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordCtrl.removeListener(_clearNoticeOnInput);
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -60,21 +67,74 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _notice = null);
   }
 
-  Future<void> _loadRememberedCredentials() async {
-    final remembered = await _rememberedLoginStorage.load();
+  Future<void> _loadSavedUsers() async {
+    if (!_showsSavedUsers) return;
+    final users = await _windowsUsersStorage.loadUsers();
     if (!mounted) return;
-    setState(() {
-      _rememberMe = remembered.remember;
-      if (remembered.remember) {
-        _emailCtrl.text = remembered.email;
-      }
-    });
+    setState(() => _savedUsers = users);
   }
 
-  Future<void> _persistRememberedCredentials() async {
-    await _rememberedLoginStorage.save(
-      remember: _rememberMe,
-      email: _emailCtrl.text,
+  /// Stores the username of a successful login. The password is never stored.
+  Future<void> _rememberUserAfterLogin() async {
+    if (!_showsSavedUsers) return;
+    final users = await _windowsUsersStorage.rememberUser(_emailCtrl.text);
+    if (!mounted) return;
+    setState(() => _savedUsers = users);
+  }
+
+  Future<void> _removeSavedUser(String user) async {
+    final users = await _windowsUsersStorage.removeUser(user);
+    if (!mounted) return;
+    setState(() => _savedUsers = users);
+  }
+
+  void _selectSavedUser(String user) {
+    _savedUsersMenuController.close();
+    _emailCtrl.text = user;
+    _passwordCtrl.clear();
+    _passwordFocusNode.requestFocus();
+  }
+
+  Widget _buildSavedUsersMenu() {
+    return MenuAnchor(
+      controller: _savedUsersMenuController,
+      alignmentOffset: const Offset(-8, 4),
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(Colors.white),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        maximumSize: const WidgetStatePropertyAll(Size(320, 320)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        side: const WidgetStatePropertyAll(
+          BorderSide(color: AppColors.border, width: 1),
+        ),
+      ),
+      menuChildren: _savedUsers.isEmpty
+          ? const <Widget>[_SavedUsersEmptyNotice()]
+          : <Widget>[
+              for (final user in _savedUsers)
+                _SavedUserMenuItem(
+                  key: ValueKey<String>(user.toLowerCase()),
+                  user: user,
+                  onSelected: _selectSavedUser,
+                  onRemoved: _removeSavedUser,
+                ),
+            ],
+      builder: (context, controller, child) {
+        return IconButton(
+          tooltip: 'Usuarios de esta PC',
+          visualDensity: VisualDensity.compact,
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          icon: const Icon(Icons.arrow_drop_down_rounded),
+        );
+      },
     );
   }
 
@@ -97,10 +157,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     switch (error.type) {
       case ApiErrorType.unauthorized:
         return _LoginNoticeData.error(
-          title: 'Datos de acceso incorrectos',
-          message: error.message,
+          title: 'Acceso no confirmado',
+          message: 'Revisa tu usuario y contrasena.',
           helpText:
-              'Revisa tu correo corporativo y tu contrasena antes de volver a intentar.',
+              'Intenta nuevamente o solicita ayuda al administrador.',
+          feedbackKind: AppFeedbackKind.warning,
+          showNotification: false,
         );
       case ApiErrorType.forbidden:
         return _LoginNoticeData.error(
@@ -182,7 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref
           .read(authStateProvider.notifier)
           .login(_emailCtrl.text, _passwordCtrl.text);
-      await _persistRememberedCredentials();
+      await _rememberUserAfterLogin();
       if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -197,11 +259,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         final notice = _buildErrorNotice(e);
         setState(() => _notice = notice);
-        await AppFeedback.showError(
-          context,
-          '${notice.title}. ${notice.message}',
-          scope: 'LoginScreen',
-        );
+        if (notice.showNotification) {
+          _showLoginFailureNotification(notice);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -213,13 +273,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               'Si el problema persiste, informa al area tecnica para revisar el sistema.',
         );
         setState(() => _notice = notice);
-        await AppFeedback.showError(
-          context,
-          '${notice.title}. ${notice.message}',
-          scope: 'LoginScreen',
-        );
+        _showLoginFailureNotification(notice);
       }
     }
+  }
+
+  void _showLoginFailureNotification(_LoginNoticeData notice) {
+    if (!mounted) return;
+    AppFeedback.showPersistentNotification(
+      context,
+      AppFeedbackNotification(
+        title: notice.title,
+        body: '${notice.message} ${notice.helpText}',
+        kind: notice.feedbackKind,
+      ),
+      scope: 'LoginScreen',
+    );
   }
 
   @override
@@ -238,6 +307,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       businessRegistrationDisabledProvider,
     );
     final theme = Theme.of(context);
+    final headerStyle = theme.textTheme.headlineSmall?.copyWith(
+      color: AppColors.textPrimary,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0,
+      height: 1.05,
+    );
     final inputBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
       borderSide: const BorderSide(color: AppColors.borderStrong, width: 1),
@@ -281,8 +356,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0),
+            TextStyle(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.2,
+            ),
           ),
+          shadowColor: WidgetStatePropertyAll(
+            AppColors.primary.withValues(alpha: 0.34),
+          ),
+          elevation: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return 0;
+            if (states.contains(WidgetState.pressed)) return 2;
+            return states.contains(WidgetState.hovered) ? 8 : 5;
+          }),
+          backgroundBuilder: (context, states, child) {
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: _loginPrimaryGradient(states),
+              ),
+              child: child,
+            );
+          },
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -357,15 +451,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'FULLPOS CLOUD',
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                            color: AppColors.textPrimary,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 0,
-                                            height: 1.05,
+                                    Text.rich(
+                                      TextSpan(
+                                        text: 'FULLPOS ',
+                                        style: headerStyle,
+                                        children: <InlineSpan>[
+                                          TextSpan(
+                                            text: 'CLOUD',
+                                            style: headerStyle?.copyWith(
+                                              color: AppColors.primary,
+                                            ),
                                           ),
+                                        ],
+                                      ),
                                     ),
                                     const SizedBox(height: 8),
                                     const Text(
@@ -381,9 +479,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 const SizedBox(height: 20),
                                 TextFormField(
                                   controller: _emailCtrl,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Usuario',
-                                    prefixIcon: Icon(Icons.alternate_email),
+                                    prefixIcon: const Icon(
+                                      Icons.alternate_email,
+                                    ),
+                                    suffixIcon: _showsSavedUsers
+                                        ? _buildSavedUsersMenu()
+                                        : null,
                                   ),
                                   keyboardType: TextInputType.emailAddress,
                                   textInputAction: TextInputAction.next,
@@ -403,6 +506,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 const SizedBox(height: 12),
                                 TextFormField(
                                   controller: _passwordCtrl,
+                                  focusNode: _passwordFocusNode,
                                   decoration: InputDecoration(
                                     labelText: 'Contraseña',
                                     prefixIcon: const Icon(Icons.lock_outline),
@@ -431,31 +535,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       ? 'Ingresa tu contrasena'
                                       : null,
                                 ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: [
-                                    Switch(
-                                      value: _rememberMe,
-                                      onChanged: (value) {
-                                        setState(() => _rememberMe = value);
-                                      },
-                                      activeThumbColor: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Expanded(
-                                      child: Text(
-                                        'Recordar usuario',
-                                        style: TextStyle(
-                                          color: AppColors.textPrimary,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
                                 if (_notice != null) ...[
                                   const SizedBox(height: 12),
                                   _LoginNoticeCard(data: _notice!),
@@ -479,16 +558,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     label: const Text('Crear mi negocio'),
                                     style: OutlinedButton.styleFrom(
                                       minimumSize: const Size.fromHeight(48),
-                                      foregroundColor: const Color(0xFF123A75),
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: AppColors.primaryDark,
+                                      iconColor: AppColors.primary,
+                                      iconSize: 20,
                                       side: const BorderSide(
-                                        color: Color(0xFFCFE0FF),
+                                        color: AppColors.secondaryBorder,
+                                        width: 1.2,
                                       ),
+                                      shadowColor: AppColors.primary
+                                          .withValues(alpha: 0.12),
+                                      elevation: 2,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       textStyle: const TextStyle(
                                         fontWeight: FontWeight.w900,
-                                        letterSpacing: 0,
+                                        letterSpacing: 0.2,
                                       ),
                                     ),
                                   ),
@@ -582,6 +668,8 @@ class _LoginNoticeData {
     required this.title,
     required this.message,
     required this.helpText,
+    this.feedbackKind = AppFeedbackKind.error,
+    this.showNotification = true,
     this.actionLabel,
     this.actionUri,
   }) : isError = true;
@@ -589,6 +677,8 @@ class _LoginNoticeData {
   final String title;
   final String message;
   final String helpText;
+  final AppFeedbackKind feedbackKind;
+  final bool showNotification;
   final bool isError;
   final String? actionLabel;
   final Uri? actionUri;
@@ -602,16 +692,9 @@ class _LoginNoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final backgroundColor = data.isError
-        ? colorScheme.errorContainer
-        : const Color(0xFFE8F7EE);
-    final foregroundColor = data.isError
-        ? colorScheme.onErrorContainer
-        : const Color(0xFF155724);
-    final accentColor = data.isError
-        ? colorScheme.error
-        : const Color(0xFF1F8F4D);
+    final backgroundColor = _loginNoticeBackground(data.feedbackKind);
+    final foregroundColor = _loginNoticeForeground(data.feedbackKind);
+    final accentColor = _loginNoticeAccent(data.feedbackKind);
 
     return Container(
       width: double.infinity,
@@ -703,6 +786,169 @@ class _LoginNoticeCard extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Color _loginNoticeBackground(AppFeedbackKind kind) {
+  switch (kind) {
+    case AppFeedbackKind.success:
+      return AppColors.successSoft;
+    case AppFeedbackKind.warning:
+      return AppColors.warningSoft;
+    case AppFeedbackKind.error:
+      return AppColors.errorSoft;
+    case AppFeedbackKind.info:
+      return AppColors.surfaceAlt;
+  }
+}
+
+Color _loginNoticeForeground(AppFeedbackKind kind) {
+  switch (kind) {
+    case AppFeedbackKind.success:
+      return const Color(0xFF14532D);
+    case AppFeedbackKind.warning:
+      return const Color(0xFF7C3E00);
+    case AppFeedbackKind.error:
+      return const Color(0xFF7F1D1D);
+    case AppFeedbackKind.info:
+      return AppColors.textPrimary;
+  }
+}
+
+Color _loginNoticeAccent(AppFeedbackKind kind) {
+  switch (kind) {
+    case AppFeedbackKind.success:
+      return AppColors.success;
+    case AppFeedbackKind.warning:
+      return AppColors.warning;
+    case AppFeedbackKind.error:
+      return AppColors.error;
+    case AppFeedbackKind.info:
+      return AppColors.secondary;
+  }
+}
+
+/// Premium brand-blue gradient used by the login action button.
+///
+/// Only brand tokens are used, and the state variations stay subtle so the
+/// pressed / hovered feedback is still visible over the opaque gradient.
+LinearGradient _loginPrimaryGradient(Set<WidgetState> states) {
+  if (states.contains(WidgetState.disabled)) {
+    return const LinearGradient(
+      colors: [AppColors.borderStrong, AppColors.borderStrong],
+    );
+  }
+  if (states.contains(WidgetState.pressed)) {
+    return const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [AppColors.primaryDark, AppColors.primaryDark],
+    );
+  }
+  if (states.contains(WidgetState.hovered) ||
+      states.contains(WidgetState.focused)) {
+    return const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [AppColors.primary, AppColors.primary],
+    );
+  }
+  return const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [AppColors.primary, AppColors.primaryDark],
+  );
+}
+
+/// Hint shown when this PC has no remembered username yet.
+class _SavedUsersEmptyNotice extends StatelessWidget {
+  const _SavedUsersEmptyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: const Text(
+          'Aún no hay usuarios guardados en esta PC',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            height: 1.3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A remembered username of this PC. The trailing "X" removes it from the PC.
+class _SavedUserMenuItem extends StatefulWidget {
+  const _SavedUserMenuItem({
+    super.key,
+    required this.user,
+    required this.onSelected,
+    required this.onRemoved,
+  });
+
+  final String user;
+  final ValueChanged<String> onSelected;
+  final Future<void> Function(String user) onRemoved;
+
+  @override
+  State<_SavedUserMenuItem> createState() => _SavedUserMenuItemState();
+}
+
+class _SavedUserMenuItemState extends State<_SavedUserMenuItem> {
+  bool _hidden = false;
+
+  Future<void> _remove() async {
+    // The row hides itself so an open menu stays consistent with the stored
+    // list even before the storage round trip finishes.
+    setState(() => _hidden = true);
+    await widget.onRemoved(widget.user);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hidden) return const SizedBox.shrink();
+
+    return MenuItemButton(
+      onPressed: () => widget.onSelected(widget.user),
+      style: MenuItemButton.styleFrom(
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsetsDirectional.only(start: 14, end: 4),
+      ),
+      child: Row(
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text(
+              widget.user,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Quitar usuario de esta PC',
+            onPressed: _remove,
+            padding: EdgeInsets.zero,
+            iconSize: 16,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            icon: const Icon(Icons.close_rounded),
           ),
         ],
       ),

@@ -105,6 +105,23 @@ void main() {
     );
   });
 
+  test('returning from user permissions clears the permissions back loop', () {
+    AppNavigator.recordShellLocation(Routes.users);
+    AppNavigator.recordShellLocation('/users/user-1/permissions');
+    AppNavigator.recordShellLocation(Routes.users);
+
+    expect(AppNavigator.debugCurrentShellLocation, Routes.users);
+    expect(AppNavigator.debugPreviousShellLocation, isNull);
+    expect(AppNavigator.effectiveFallbackRouteFor(Routes.users), Routes.home);
+  });
+
+  test('users list back prefers home instead of a stale permissions entry', () {
+    AppNavigator.recordShellLocation('/users/user-1/permissions');
+    AppNavigator.recordShellLocation(Routes.users);
+
+    expect(AppNavigator.effectiveFallbackRouteFor(Routes.users), Routes.home);
+  });
+
   testWidgets('returns to the source shell route after opening inventory', (
     tester,
   ) async {

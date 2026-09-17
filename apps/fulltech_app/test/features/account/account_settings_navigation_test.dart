@@ -655,9 +655,8 @@ void main() {
   });
 
   const targets = <String, String>{
-    'Empresa': 'Datos de empresa',
     'Impresora': 'Impresión y tickets',
-    'Backup': 'Backup y recuperación',
+    'Respaldo': 'Backup y recuperación',
   };
 
   for (final entry in targets.entries) {
@@ -674,10 +673,47 @@ void main() {
       await _settleSettingsFrame(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Empresa').hitTestable(), findsWidgets);
       expect(find.text('Impresora').hitTestable(), findsWidgets);
     });
   }
+
+  testWidgets('mobile settings hub documents implemented Windows shortcuts', (
+    tester,
+  ) async {
+    await _pumpSettingsRouter(tester);
+
+    await tester.tap(find.text('Atajos de teclado').hitTestable().first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Atajos de teclado'), findsWidgets);
+    expect(
+      find.text('Usa estos atajos en Facturacion para trabajar mas rapido.'),
+      findsOneWidget,
+    );
+    for (final keyLabel in [
+      'F1',
+      'F2',
+      'F3',
+      'F4',
+      'F5',
+      'F6',
+      'Esc',
+      'Delete',
+      '+',
+      '-',
+      'Enter',
+    ]) {
+      expect(find.text(keyLabel), findsOneWidget);
+    }
+    expect(find.text('F7'), findsNothing);
+    expect(find.text('Ctrl+P'), findsNothing);
+    expect(
+      find.text(
+        'Los atajos funcionan en la aplicacion de Windows y respetan los permisos y confirmaciones configurados.',
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('mobile settings hub uses drawer leading instead of back', (
     tester,
@@ -693,7 +729,7 @@ void main() {
   ) async {
     await _pumpSettingsRouter(tester);
 
-    await tester.tap(find.text('Empresa').hitTestable().first);
+    await tester.tap(find.text('Impresora').hitTestable().first);
     await _settleSettingsFrame(tester);
 
     final backButton = find.byTooltip('Volver').hitTestable().first;
@@ -707,16 +743,15 @@ void main() {
   ) async {
     await _pumpSettingsRouter(tester);
 
-    await tester.tap(find.text('Empresa').hitTestable().first);
+    await tester.tap(find.text('Impresora').hitTestable().first);
     await _settleSettingsFrame(tester);
 
     await tester.tap(find.byTooltip('Volver').hitTestable().first);
     await _settleSettingsFrame(tester);
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Empresa').hitTestable(), findsWidgets);
     expect(find.text('Impresora').hitTestable(), findsWidgets);
-    expect(find.text('Backup').hitTestable(), findsWidgets);
+    expect(find.text('Respaldo').hitTestable(), findsWidgets);
   });
 
   const desktopTargets = <String, String>{
