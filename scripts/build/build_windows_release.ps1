@@ -81,6 +81,7 @@ try {
 
     Write-Step 'Running flutter build windows --release'
     & flutter build windows --release `
+      --dart-define=FULLPOS_PRODUCTION_BUILD=true `
       --dart-define=API_BASE_URL=https://daleventapos-backend.gcdndd.easypanel.host `
       --dart-define=APP_BASE_URL=https://daleventapos-backend.gcdndd.easypanel.host
     $exitCode = $LASTEXITCODE

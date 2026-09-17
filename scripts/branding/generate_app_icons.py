@@ -16,7 +16,7 @@ Salidas
   Maestro cuadrado 1024x1024 con transparencia. Es el ``image_path`` de
   ``flutter_launcher_icons`` en ``pubspec.yaml``.
 * ``apps/fulltech_app/windows/runner/resources/app_icon.ico``
-  ICO multi-resolucion (16, 24, 32, 48, 64, 128, 256) en formato BMP 32bpp.
+  ICO multi-resolucion (16, 20, 24, 32, 40, 48, 64, 128, 256) en formato BMP 32bpp.
   Lo usan el ejecutable Windows, la barra de tareas, el acceso directo y el
   instalador Inno Setup.
 * ``apps/fulltech_app/android/app/src/main/res/mipmap-*/ic_launcher.png``
@@ -36,6 +36,7 @@ Uso
     python scripts/branding/generate_app_icons.py
     python scripts/branding/generate_app_icons.py --analyze
     python scripts/branding/generate_app_icons.py --source <ruta-al-png>
+    python scripts/branding/generate_app_icons.py --source <ruta-al-ico> --windows-only
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ ANDROID_RES_DIR = APP_DIR / "android" / "app" / "src" / "main" / "res"
 IOS_APPICON_DIR = APP_DIR / "ios" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset"
 
 MASTER_SIZE = 1024
-ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
+ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 ANDROID_MIPMAP_SIZES = {
     "mipmap-mdpi": 48,
     "mipmap-hdpi": 72,
@@ -67,8 +68,9 @@ ANDROID_MIPMAP_SIZES = {
 }
 
 # Fraccion del lienzo cuadrado que ocupa el lado mayor del contenido.
-# Deja margen uniforme para que el logo no quede pegado al borde.
-CONTENT_FILL = 0.88
+# El logo fuente ya se recorta a su bbox visible antes de escalarlo; este fill
+# deja solo un margen optico chico sin recortar contenido visible.
+CONTENT_FILL = 0.96
 
 # Alfa minima para considerar un pixel como parte del contenido.
 ALPHA_THRESHOLD = 12
@@ -242,6 +244,11 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="PNG del logo FullPOS.")
     parser.add_argument("--fill", type=float, default=CONTENT_FILL, help="Fraccion del lienzo ocupada por el logo.")
     parser.add_argument("--analyze", action="store_true", help="Solo imprime el analisis de la fuente.")
+    parser.add_argument(
+        "--windows-only",
+        action="store_true",
+        help="Genera solo el ICO Windows; no modifica logo_launcher.png, Android ni iOS.",
+    )
     args = parser.parse_args()
 
     source = load_rgba(args.source)
@@ -249,22 +256,24 @@ def main() -> int:
     if args.analyze:
         return 0
 
-    master = build_square_icon(source, MASTER_SIZE, args.fill)
-    MASTER_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    master.save(MASTER_OUTPUT, "PNG", optimize=True)
-    print(f"\nmaster written     : {MASTER_OUTPUT.relative_to(REPO_ROOT)} ({MASTER_SIZE}x{MASTER_SIZE})")
+    if not args.windows_only:
+        master = build_square_icon(source, MASTER_SIZE, args.fill)
+        MASTER_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        master.save(MASTER_OUTPUT, "PNG", optimize=True)
+        print(f"\nmaster written     : {MASTER_OUTPUT.relative_to(REPO_ROOT)} ({MASTER_SIZE}x{MASTER_SIZE})")
 
     write_ico([build_square_icon(source, size, args.fill) for size in ICO_SIZES], ICO_OUTPUT)
     print(f"ico written        : {ICO_OUTPUT.relative_to(REPO_ROOT)} ({', '.join(str(s) for s in ICO_SIZES)})")
 
-    write_android_icons(source, args.fill)
-    print(
-        "android written    : "
-        + ", ".join(f"{name}/ic_launcher.png={size}x{size}" for name, size in ANDROID_MIPMAP_SIZES.items())
-    )
+    if not args.windows_only:
+        write_android_icons(source, args.fill)
+        print(
+            "android written    : "
+            + ", ".join(f"{name}/ic_launcher.png={size}x{size}" for name, size in ANDROID_MIPMAP_SIZES.items())
+        )
 
-    ios_files = write_ios_icons(source, args.fill)
-    print(f"ios written        : {IOS_APPICON_DIR.relative_to(REPO_ROOT)} ({len(ios_files)} png)")
+        ios_files = write_ios_icons(source, args.fill)
+        print(f"ios written        : {IOS_APPICON_DIR.relative_to(REPO_ROOT)} ({len(ios_files)} png)")
     return 0
 
 

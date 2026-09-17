@@ -22,6 +22,13 @@ namespace {
 #define DWMWA_TEXT_COLOR 36
 #endif
 
+// Value of |WM_SETICON| used by Windows 7 and later for the small window icon
+// requested by the current DPI. Redefined in case the developer's machine has
+// an older Windows SDK.
+#ifndef ICON_SMALL2
+#define ICON_SMALL2 2
+#endif
+
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
 /// Registry key for app theme preference.
@@ -57,6 +64,18 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
+}
+
+// Loads the application icon for the requested square size, in physical pixels.
+// |LoadImage| resolves the closest frame of the multi-resolution
+// resources\app_icon.ico, so the taskbar, Alt+Tab and the title bar receive the
+// artwork drawn for that size instead of a rescaled copy of a smaller frame.
+HICON LoadAppIconForSize(HINSTANCE instance, int size) {
+  if (size <= 0) {
+    return nullptr;
+  }
+  return static_cast<HICON>(LoadImage(instance, MAKEINTRESOURCE(IDI_APP_ICON),
+                                      IMAGE_ICON, size, size, LR_DEFAULTCOLOR));
 }
 
 }  // namespace
@@ -150,6 +169,27 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  // Assign the window icons explicitly. Without an ICON_BIG icon the shell
+  // falls back to the small (16x16) window class icon for the taskbar button,
+  // which draws the logo smaller and blurrier than the installer does (the
+  // installer sets its icons). Using the metrics of the target monitor keeps
+  // the taskbar, Alt+Tab and the title bar on the native frames of
+  // resources\app_icon.ico, at the size that monitor really needs.
+  hicon_large_ =
+      LoadAppIconForSize(GetModuleHandle(nullptr),
+                         Scale(GetSystemMetrics(SM_CXICON), scale_factor));
+  hicon_small_ =
+      LoadAppIconForSize(GetModuleHandle(nullptr),
+                         Scale(GetSystemMetrics(SM_CXSMICON), scale_factor));
+  if (hicon_small_ != nullptr) {
+    SendMessage(window, WM_SETICON, ICON_SMALL2,
+                reinterpret_cast<LPARAM>(hicon_small_));
+  }
+  if (hicon_large_ != nullptr) {
+    SendMessage(window, WM_SETICON, ICON_BIG,
+                reinterpret_cast<LPARAM>(hicon_large_));
+  }
+
   UpdateTheme(window);
 
   return OnCreate();
@@ -233,6 +273,14 @@ void Win32Window::Destroy() {
   if (window_handle_) {
     DestroyWindow(window_handle_);
     window_handle_ = nullptr;
+  }
+  if (hicon_large_ != nullptr) {
+    DestroyIcon(hicon_large_);
+    hicon_large_ = nullptr;
+  }
+  if (hicon_small_ != nullptr) {
+    DestroyIcon(hicon_small_);
+    hicon_small_ = nullptr;
   }
   if (g_active_window_count == 0) {
     WindowClassRegistrar::GetInstance()->UnregisterWindowClass();

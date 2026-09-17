@@ -32,7 +32,7 @@ Los iconos de aplicacion se generan con:
 python scripts\branding\generate_app_icons.py
 ```
 
-Ese script produce el `.ico` multi-resolucion (16/24/32/48/64/128/256) usado por el
+Ese script produce el `.ico` multi-resolucion (16/20/24/32/40/48/64/128/256) usado por el
 ejecutable, el acceso directo y este instalador, ademas del maestro cuadrado
 (`apps/fulltech_app/assets/image/logo_launcher.png`) que consume `flutter_launcher_icons`
 para los iconos launcher de Android. No corras `flutter_launcher_icons` con

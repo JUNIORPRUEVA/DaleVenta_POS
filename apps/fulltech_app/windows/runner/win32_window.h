@@ -97,6 +97,11 @@ class Win32Window {
 
   // window handle for hosted content.
   HWND child_content_ = nullptr;
+
+  // Application icons installed on the window with WM_SETICON. They are kept
+  // alive for the lifetime of the window and released by Destroy.
+  HICON hicon_large_ = nullptr;
+  HICON hicon_small_ = nullptr;
 };
 
 #endif  // RUNNER_WIN32_WINDOW_H_
