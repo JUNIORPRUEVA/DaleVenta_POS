@@ -241,6 +241,16 @@ class AccountSettingsScreen extends ConsumerWidget {
         true;
     return _SettingsHubScaffold(
       children: [
+        // Empresa va primero: es la configuracion de mayor impacto del negocio
+        // (datos fiscales, logo, direccion y contacto) y debe estar disponible
+        // tambien en movil, no solo en escritorio.
+        _SettingsActionCard(
+          icon: Icons.business_center_outlined,
+          title: 'Empresa',
+          description: 'Datos fiscales, logo, dirección y contacto.',
+          accent: const Color(0xFF0F766E),
+          onTap: () => context.go(Routes.configuracionEmpresa),
+        ),
         if (!kIsWeb)
           _SettingsActionCard(
             icon: Icons.print_outlined,
@@ -249,14 +259,6 @@ class AccountSettingsScreen extends ConsumerWidget {
             accent: const Color(0xFF2563EB),
             onTap: () => context.go(Routes.configuracionImpresora),
           ),
-        if (_showLegacyCompanyShortcut)
-        _SettingsActionCard(
-          icon: Icons.business_center_outlined,
-          title: 'Empresa',
-          description: 'Datos fiscales, logo, dirección y contacto.',
-          accent: const Color(0xFF0F766E),
-          onTap: () => context.go(Routes.configuracionEmpresa),
-        ),
         if (multiWarehouseEnabled)
           _SettingsActionCard(
             icon: Icons.warehouse_outlined,
