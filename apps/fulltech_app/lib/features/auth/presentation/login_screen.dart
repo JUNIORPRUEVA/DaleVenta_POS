@@ -17,7 +17,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/safe_url_launcher.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../data/windows_login_users_storage.dart';
+import '../data/remembered_login_users_storage.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -34,13 +34,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   _LoginNoticeData? _notice;
   bool _obscurePassword = true;
 
-  final _windowsUsersStorage = const WindowsLoginUsersStorage();
+  final _rememberedUsersStorage = const RememberedLoginUsersStorage();
   final MenuController _savedUsersMenuController = MenuController();
   List<String> _savedUsers = const <String>[];
 
-  /// The list of usernames used on this PC is a Windows-only convenience.
+  /// The list of usernames used on this device is available on Windows, Android
+  /// and iOS (the web deployment has no local device list).
   bool get _showsSavedUsers =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   @override
   void initState() {
@@ -69,7 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _loadSavedUsers() async {
     if (!_showsSavedUsers) return;
-    final users = await _windowsUsersStorage.loadUsers();
+    final users = await _rememberedUsersStorage.loadUsers();
     if (!mounted) return;
     setState(() => _savedUsers = users);
   }
@@ -77,13 +81,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// Stores the username of a successful login. The password is never stored.
   Future<void> _rememberUserAfterLogin() async {
     if (!_showsSavedUsers) return;
-    final users = await _windowsUsersStorage.rememberUser(_emailCtrl.text);
+    final users = await _rememberedUsersStorage.rememberUser(_emailCtrl.text);
     if (!mounted) return;
     setState(() => _savedUsers = users);
   }
 
   Future<void> _removeSavedUser(String user) async {
-    final users = await _windowsUsersStorage.removeUser(user);
+    final users = await _rememberedUsersStorage.removeUser(user);
     if (!mounted) return;
     setState(() => _savedUsers = users);
   }
@@ -117,13 +121,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 _SavedUserMenuItem(
                   key: ValueKey<String>(user.toLowerCase()),
                   user: user,
+                  emailController: _emailCtrl,
                   onSelected: _selectSavedUser,
                   onRemoved: _removeSavedUser,
                 ),
             ],
       builder: (context, controller, child) {
         return IconButton(
-          tooltip: 'Usuarios de esta PC',
+          tooltip: 'Usuarios de este dispositivo',
           visualDensity: VisualDensity.compact,
           onPressed: () {
             if (controller.isOpen) {
@@ -875,7 +880,7 @@ class _SavedUsersEmptyNotice extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 220),
         child: const Text(
-          'Aún no hay usuarios guardados en esta PC',
+          'Aún no hay usuarios guardados en este dispositivo',
           style: TextStyle(
             color: AppColors.textSecondary,
             fontSize: 13,
@@ -888,16 +893,23 @@ class _SavedUsersEmptyNotice extends StatelessWidget {
   }
 }
 
-/// A remembered username of this PC. The trailing "X" removes it from the PC.
+/// A remembered username of this device. The trailing "X" removes it from the
+/// device.
 class _SavedUserMenuItem extends StatefulWidget {
   const _SavedUserMenuItem({
     super.key,
     required this.user,
+    required this.emailController,
     required this.onSelected,
     required this.onRemoved,
   });
 
   final String user;
+
+  /// Live text of the Usuario field: the row uses it to recognise itself as the
+  /// current user instead of offering a redundant selection.
+  final TextEditingController emailController;
+
   final ValueChanged<String> onSelected;
   final Future<void> Function(String user) onRemoved;
 
@@ -919,39 +931,62 @@ class _SavedUserMenuItemState extends State<_SavedUserMenuItem> {
   Widget build(BuildContext context) {
     if (_hidden) return const SizedBox.shrink();
 
-    return MenuItemButton(
-      onPressed: () => widget.onSelected(widget.user),
-      style: MenuItemButton.styleFrom(
-        minimumSize: const Size(0, 40),
-        padding: const EdgeInsetsDirectional.only(start: 14, end: 4),
-      ),
-      child: Row(
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Text(
-              widget.user,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+    // The row follows the Usuario field: the user already written there is the
+    // current one, so it is labelled as such and cannot be selected again (the
+    // X keeps working to forget it).
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: widget.emailController,
+      builder: (context, value, _) {
+        final isCurrent =
+            value.text.trim().toLowerCase() == widget.user.trim().toLowerCase();
+        return MenuItemButton(
+          onPressed: isCurrent ? null : () => widget.onSelected(widget.user),
+          style: MenuItemButton.styleFrom(
+            minimumSize: const Size(0, 40),
+            padding: const EdgeInsetsDirectional.only(start: 14, end: 4),
+          ),
+          child: Row(
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: Text(
+                  widget.user,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isCurrent
+                        ? AppColors.textSecondary
+                        : AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+              if (isCurrent) ...[
+                const SizedBox(width: 8),
+                const Text(
+                  'Actual',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              IconButton(
+                tooltip: 'Quitar usuario de este dispositivo',
+                onPressed: _remove,
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
           ),
-          const Spacer(),
-          IconButton(
-            tooltip: 'Quitar usuario de esta PC',
-            onPressed: _remove,
-            padding: EdgeInsets.zero,
-            iconSize: 16,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -1,6 +1,6 @@
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/auth/business_registration_policy.dart';
-import 'package:daleventa_pos/features/auth/data/windows_login_users_storage.dart';
+import 'package:daleventa_pos/features/auth/data/remembered_login_users_storage.dart';
 import 'package:daleventa_pos/features/auth/presentation/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -86,7 +86,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  const usersKey = WindowsLoginUsersStorage.usersKey;
+  const usersKey = RememberedLoginUsersStorage.usersKey;
 
   testWidgets(
     'en Windows el campo Usuario muestra el desplegable',
@@ -107,22 +107,29 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
 
-  testWidgets(
-    'en Android el campo Usuario no muestra el desplegable',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({
-        usersKey: <String>['guardado@example.test'],
-      });
+  for (final entry in const <String, TargetPlatform>{
+    'Android': TargetPlatform.android,
+    'iOS': TargetPlatform.iOS,
+  }.entries) {
+    testWidgets(
+      'en ${entry.key} el campo Usuario muestra el desplegable',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({
+          usersKey: <String>['guardado@example.test'],
+        });
 
-      await pumpLogin(tester);
+        await pumpLogin(tester);
 
-      expect(find.byIcon(Icons.arrow_drop_down_rounded), findsNothing);
-      expect(find.text('guardado@example.test'), findsNothing);
-      expect(find.text('Recordar usuario'), findsNothing);
-      expect(find.byType(Switch), findsNothing);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.android),
-  );
+        expect(find.byIcon(Icons.arrow_drop_down_rounded), findsOneWidget);
+        expect(find.text('Recordar usuario'), findsNothing);
+        expect(find.byType(Switch), findsNothing);
+
+        await openSavedUsersMenu(tester);
+        expect(find.text('guardado@example.test'), findsOneWidget);
+      },
+      variant: TargetPlatformVariant.only(entry.value),
+    );
+  }
 
   testWidgets(
     'seleccionar un usuario rellena Usuario y vacía Contraseña',
@@ -156,7 +163,7 @@ void main() {
   );
 
   testWidgets(
-    'la X quita el usuario recordado de esta PC',
+    'la X quita el usuario recordado de este dispositivo',
     (tester) async {
       SharedPreferences.setMockInitialValues({
         usersKey: <String>['uno@example.test', 'dos@example.test'],
@@ -186,7 +193,7 @@ void main() {
       await openSavedUsersMenu(tester);
 
       expect(
-        find.text('Aún no hay usuarios guardados en esta PC'),
+        find.text('Aún no hay usuarios guardados en este dispositivo'),
         findsOneWidget,
       );
     },
@@ -197,9 +204,9 @@ void main() {
     'un login exitoso guarda el usuario y nunca la contraseña',
     (tester) async {
       SharedPreferences.setMockInitialValues({
-        WindowsLoginUsersStorage.legacyRememberFlagKey: true,
-        WindowsLoginUsersStorage.legacyRememberEmailKey: 'viejo@example.test',
-        WindowsLoginUsersStorage.legacyRememberPasswordKey: 'heredada-123',
+        RememberedLoginUsersStorage.legacyRememberFlagKey: true,
+        RememberedLoginUsersStorage.legacyRememberEmailKey: 'viejo@example.test',
+        RememberedLoginUsersStorage.legacyRememberPasswordKey: 'heredada-123',
       });
 
       final auth = await pumpLogin(tester);
@@ -223,15 +230,15 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getStringList(usersKey), <String>['nuevo@example.test']);
       expect(
-        prefs.containsKey(WindowsLoginUsersStorage.legacyRememberPasswordKey),
+        prefs.containsKey(RememberedLoginUsersStorage.legacyRememberPasswordKey),
         isFalse,
       );
       expect(
-        prefs.containsKey(WindowsLoginUsersStorage.legacyRememberEmailKey),
+        prefs.containsKey(RememberedLoginUsersStorage.legacyRememberEmailKey),
         isFalse,
       );
       expect(
-        prefs.containsKey(WindowsLoginUsersStorage.legacyRememberFlagKey),
+        prefs.containsKey(RememberedLoginUsersStorage.legacyRememberFlagKey),
         isFalse,
       );
       final storedValues = prefs
@@ -247,36 +254,104 @@ void main() {
   );
 
   testWidgets(
-    'fuera de Windows un login exitoso no guarda nada',
+    'el usuario ya escrito se marca como Actual y no se puede reseleccionar',
     (tester) async {
-      final auth = await pumpLogin(tester);
+      SharedPreferences.setMockInitialValues({
+        usersKey: <String>['guardado@example.test'],
+      });
+
+      await pumpLogin(tester);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Usuario'),
-        'nuevo@example.test',
+        'guardado@example.test',
       );
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Contraseña'),
-        'SuperSecreta123',
+        'clave-anterior-123',
       );
       await tester.pump();
+      await openSavedUsersMenu(tester);
 
-      await tester.tap(find.text('Iniciar sesión'));
+      expect(find.text('Actual'), findsOneWidget);
+
+      // Pulsar la fila actual no hace nada: no se borra la contraseña escrita.
+      final currentRow = find.descendant(
+        of: find.byType(MenuItemButton),
+        matching: find.text('guardado@example.test'),
+      );
+      expect(currentRow, findsOneWidget);
+      await tester.tap(currentRow, warnIfMissed: false);
       await tester.pumpAndSettle();
 
-      expect(auth.lastEmail, 'nuevo@example.test');
+      final passwordField = tester.widget<TextFormField>(
+        find.widgetWithText(TextFormField, 'Contraseña'),
+      );
+      expect(passwordField.controller!.text, 'clave-anterior-123');
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'la X sigue quitando el usuario aunque sea el actual',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        usersKey: <String>['guardado@example.test'],
+      });
+
+      await pumpLogin(tester);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Usuario'),
+        'guardado@example.test',
+      );
+      await tester.pump();
+      await openSavedUsersMenu(tester);
+
+      await tester.tap(find.byIcon(Icons.close_rounded).first);
+      await tester.pumpAndSettle();
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getStringList(usersKey), isNull);
-      final storedValues = prefs
-          .getKeys()
-          .map((key) => prefs.get(key).toString())
-          .toList();
-      expect(
-        storedValues.any((value) => value.contains('SuperSecreta123')),
-        isFalse,
-      );
     },
-    variant: TargetPlatformVariant.only(TargetPlatform.android),
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
+
+  for (final entry in const <String, TargetPlatform>{
+    'Android': TargetPlatform.android,
+    'iOS': TargetPlatform.iOS,
+  }.entries) {
+    testWidgets(
+      'en ${entry.key} un login exitoso también guarda el usuario (nunca la contraseña)',
+      (tester) async {
+        final auth = await pumpLogin(tester);
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Usuario'),
+          'nuevo@example.test',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Contraseña'),
+          'SuperSecreta123',
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('Iniciar sesión'));
+        await tester.pumpAndSettle();
+
+        expect(auth.lastEmail, 'nuevo@example.test');
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getStringList(usersKey), <String>['nuevo@example.test']);
+        final storedValues = prefs
+            .getKeys()
+            .map((key) => prefs.get(key).toString())
+            .toList();
+        expect(
+          storedValues.any((value) => value.contains('SuperSecreta123')),
+          isFalse,
+        );
+      },
+      variant: TargetPlatformVariant.only(entry.value),
+    );
+  }
 }

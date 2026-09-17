@@ -1,11 +1,11 @@
-import 'package:daleventa_pos/features/auth/data/windows_login_users_storage.dart';
+import 'package:daleventa_pos/features/auth/data/remembered_login_users_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const storage = WindowsLoginUsersStorage();
+  const storage = RememberedLoginUsersStorage();
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -13,10 +13,10 @@ void main() {
 
   test('loadUsers purga las claves heredadas de recordar contraseña', () async {
     SharedPreferences.setMockInitialValues({
-      WindowsLoginUsersStorage.legacyRememberFlagKey: true,
-      WindowsLoginUsersStorage.legacyRememberEmailKey: 'user@example.test',
-      WindowsLoginUsersStorage.legacyRememberPasswordKey: 'do-not-keep',
-      WindowsLoginUsersStorage.usersKey: <String>['first@example.test'],
+      RememberedLoginUsersStorage.legacyRememberFlagKey: true,
+      RememberedLoginUsersStorage.legacyRememberEmailKey: 'user@example.test',
+      RememberedLoginUsersStorage.legacyRememberPasswordKey: 'do-not-keep',
+      RememberedLoginUsersStorage.usersKey: <String>['first@example.test'],
     });
 
     final users = await storage.loadUsers();
@@ -24,22 +24,22 @@ void main() {
 
     expect(users, <String>['first@example.test']);
     expect(
-      prefs.containsKey(WindowsLoginUsersStorage.legacyRememberFlagKey),
+      prefs.containsKey(RememberedLoginUsersStorage.legacyRememberFlagKey),
       isFalse,
     );
     expect(
-      prefs.containsKey(WindowsLoginUsersStorage.legacyRememberEmailKey),
+      prefs.containsKey(RememberedLoginUsersStorage.legacyRememberEmailKey),
       isFalse,
     );
     expect(
-      prefs.containsKey(WindowsLoginUsersStorage.legacyRememberPasswordKey),
+      prefs.containsKey(RememberedLoginUsersStorage.legacyRememberPasswordKey),
       isFalse,
     );
   });
 
   test('rememberUser guarda el usuario más reciente primero', () async {
     SharedPreferences.setMockInitialValues({
-      WindowsLoginUsersStorage.usersKey: <String>[
+      RememberedLoginUsersStorage.usersKey: <String>[
         'primero@example.test',
         'segundo@example.test',
       ],
@@ -53,14 +53,14 @@ void main() {
       'primero@example.test',
     ]);
     expect(
-      prefs.getStringList(WindowsLoginUsersStorage.usersKey),
+      prefs.getStringList(RememberedLoginUsersStorage.usersKey),
       <String>['segundo@example.test', 'primero@example.test'],
     );
   });
 
   test('rememberUser nunca persiste la contraseña', () async {
     SharedPreferences.setMockInitialValues({
-      WindowsLoginUsersStorage.legacyRememberPasswordKey: 'SuperSecreta123',
+      RememberedLoginUsersStorage.legacyRememberPasswordKey: 'SuperSecreta123',
     });
 
     await storage.rememberUser('usuario@example.test');
@@ -75,18 +75,18 @@ void main() {
       isFalse,
     );
     expect(
-      prefs.containsKey(WindowsLoginUsersStorage.legacyRememberPasswordKey),
+      prefs.containsKey(RememberedLoginUsersStorage.legacyRememberPasswordKey),
       isFalse,
     );
     expect(
-      prefs.getStringList(WindowsLoginUsersStorage.usersKey),
+      prefs.getStringList(RememberedLoginUsersStorage.usersKey),
       <String>['usuario@example.test'],
     );
   });
 
-  test('removeUser quita el usuario de esta PC', () async {
+  test('removeUser quita el usuario de este dispositivo', () async {
     SharedPreferences.setMockInitialValues({
-      WindowsLoginUsersStorage.usersKey: <String>[
+      RememberedLoginUsersStorage.usersKey: <String>[
         'primero@example.test',
         'segundo@example.test',
       ],
@@ -97,14 +97,14 @@ void main() {
 
     expect(users, <String>['segundo@example.test']);
     expect(
-      prefs.getStringList(WindowsLoginUsersStorage.usersKey),
+      prefs.getStringList(RememberedLoginUsersStorage.usersKey),
       <String>['segundo@example.test'],
     );
   });
 
   test('la lista se normaliza, deduplica y limita al máximo', () async {
     SharedPreferences.setMockInitialValues({
-      WindowsLoginUsersStorage.usersKey: <String>[
+      RememberedLoginUsersStorage.usersKey: <String>[
         '  ',
         'a@example.test',
         'B@example.test',
@@ -118,7 +118,7 @@ void main() {
 
     final users = await storage.loadUsers();
 
-    expect(users.length, WindowsLoginUsersStorage.maxUsers);
+    expect(users.length, RememberedLoginUsersStorage.maxUsers);
     expect(users.first, 'a@example.test');
     expect(users, contains('B@example.test'));
     expect(
@@ -129,14 +129,14 @@ void main() {
 
   test('quitar el último usuario borra la clave almacenada', () async {
     SharedPreferences.setMockInitialValues({
-      WindowsLoginUsersStorage.usersKey: <String>['unico@example.test'],
+      RememberedLoginUsersStorage.usersKey: <String>['unico@example.test'],
     });
 
     await storage.removeUser('unico@example.test');
     final prefs = await SharedPreferences.getInstance();
 
     expect(
-      prefs.containsKey(WindowsLoginUsersStorage.usersKey),
+      prefs.containsKey(RememberedLoginUsersStorage.usersKey),
       isFalse,
     );
   });

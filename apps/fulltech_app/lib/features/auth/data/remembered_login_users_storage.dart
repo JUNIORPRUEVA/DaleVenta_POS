@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Stores the list of usernames (emails) used to log in on this Windows PC.
+/// Stores the list of usernames (emails) used to log in from this device.
 ///
 /// Rules:
 /// - Only the username is ever stored. Passwords are never read, written or
@@ -10,8 +10,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - The list is capped at [maxUsers] entries.
 /// - Legacy keys of the removed "remember login/password" feature are purged so
 ///   no previous credential state survives on the device.
-class WindowsLoginUsersStorage {
-  const WindowsLoginUsersStorage();
+///
+/// Used by the login screen on Windows, Android and iOS. The SharedPreferences
+/// key keeps its original `windows_login_users` name on purpose: renaming it
+/// would drop the users already remembered on installed PCs.
+class RememberedLoginUsersStorage {
+  const RememberedLoginUsersStorage();
 
   static const usersKey = 'windows_login_users';
 
