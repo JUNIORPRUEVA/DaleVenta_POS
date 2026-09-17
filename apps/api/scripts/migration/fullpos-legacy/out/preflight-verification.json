@@ -1,0 +1,144 @@
+{
+  "generatedAt": "2026-09-16T20:06:58.565Z",
+  "mode": "VERIFY_PREFLIGHT_READ_ONLY",
+  "verdict": "GO",
+  "environment": {
+    "classification": "production",
+    "description": "daleventa_user@127.0.0.1:15432/daleventa",
+    "database": "daleventa",
+    "server": "172.18.0.7/32:5432",
+    "user": "daleventa_user"
+  },
+  "source": {
+    "path": "C:\\Users\\pc\\Documents\\fullpods.db",
+    "sha256": "A5F1F9BEE57A12E66D9E3C3BE594B147E1A835D68B69B5EA78F4BDE0438EFBDA",
+    "expectedSha256": "A5F1F9BEE57A12E66D9E3C3BE594B147E1A835D68B69B5EA78F4BDE0438EFBDA",
+    "matches": true
+  },
+  "classification": "FRESH",
+  "baseline": {
+    "products": 0,
+    "activeProducts": 0,
+    "archivedProducts": 0,
+    "shifts": 0,
+    "openShifts": 0,
+    "sales": 0,
+    "saleItems": 0,
+    "warehouseStocks": 0,
+    "inventoryMovements": 0,
+    "cashMovements": 0,
+    "cashboxDaily": 0,
+    "clients": 0,
+    "suppliers": 0,
+    "purchaseOrders": 0,
+    "taxes": 0,
+    "ncfSequences": 0
+  },
+  "license": {
+    "status": "ACTIVE",
+    "plan": "STANDARD",
+    "licenseStatus": "TRIAL",
+    "trialEndsAt": "2026-09-23T16:18:24.380Z",
+    "licenseExpiresAt": null,
+    "licenseBlockedAt": null,
+    "maxUsers": 2,
+    "maxProducts": 100,
+    "billableProducts": 0,
+    "activeUsers": 1,
+    "isUsable": true
+  },
+  "checks": [
+    {
+      "metric": "live_company_id",
+      "expected": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "actual": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "ok": true
+    },
+    {
+      "metric": "live_company_name",
+      "expected": "Cafeteria la bomba",
+      "actual": "Cafeteria la bomba",
+      "ok": true
+    },
+    {
+      "metric": "live_warehouse_belongs_to_company",
+      "expected": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "actual": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "ok": true
+    },
+    {
+      "metric": "live_terminal_belongs_to_company",
+      "expected": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "actual": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "ok": true
+    },
+    {
+      "metric": "live_owner_belongs_to_company",
+      "expected": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "actual": "f3651f62-be10-41aa-bde7-663cf990eae8",
+      "ok": true
+    },
+    {
+      "metric": "baseline_products",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "metric": "baseline_stocks",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "metric": "baseline_sales",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "metric": "baseline_sale_items",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "metric": "baseline_shifts",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "metric": "baseline_no_foreign_rows",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "metric": "company_status",
+      "expected": "ACTIVE",
+      "actual": "ACTIVE",
+      "ok": true
+    },
+    {
+      "metric": "baseline_is_fresh",
+      "expected": "FRESH",
+      "actual": "FRESH",
+      "ok": true
+    },
+    {
+      "metric": "license_usable",
+      "expected": "true",
+      "actual": "true",
+      "ok": true
+    },
+    {
+      "metric": "license_capacity",
+      "expected": "true",
+      "actual": "true",
+      "ok": true
+    }
+  ],
+  "failures": [],
+  "durationMs": 4587
+}

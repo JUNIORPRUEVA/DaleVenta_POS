@@ -1,0 +1,53 @@
+{
+    "notes": [
+        "Snapshot de solo lectura para la validacion del destino (Fase 3).",
+        "Baseline esperado: todo en 0 para el alcance de Fase 3."
+    ],
+    "source": "OFFLINE_READ_ONLY",
+    "company": {
+        "id": "f3651f62-be10-41aa-bde7-663cf990eae8",
+        "name": "Cafeteria la bomba",
+        "plan": "STANDARD",
+        "status": "ACTIVE",
+        "maxProducts": 100,
+        "licenseStatus": "TRIAL",
+        "productSource": null
+    },
+    "baseline": {
+        "sales": 0,
+        "taxes": 0,
+        "clients": 0,
+        "saleItems": 0,
+        "suppliers": 0,
+        "cashSessions": 0,
+        "cashboxDaily": 0,
+        "ncfSequences": 0,
+        "cashMovements": 0,
+        "productsTotal": 0,
+        "purchaseOrders": 0,
+        "warehouseStocks": 0,
+        "inventoryMovements": 0,
+        "productsNonArchived": 0
+    },
+    "terminal": {
+        "id": "00931697-e152-48bc-9e44-02023e14d465",
+        "code": "DEFAULT",
+        "name": "Default Terminal",
+        "isActive": true,
+        "companyId": "f3651f62-be10-41aa-bde7-663cf990eae8",
+        "defaultWarehouseId": "ffc9ef9b-9157-418d-8aa1-94112278bb68"
+    },
+    "ownerUser": {
+        "id": "adc4bf90-41b3-4e20-99eb-f37d398200f5",
+        "blocked": false,
+        "companyId": "f3651f62-be10-41aa-bde7-663cf990eae8"
+    },
+    "warehouse": {
+        "id": "ffc9ef9b-9157-418d-8aa1-94112278bb68",
+        "code": "MAIN",
+        "name": "Main Warehouse",
+        "isActive": true,
+        "companyId": "f3651f62-be10-41aa-bde7-663cf990eae8"
+    },
+    "capturedAt": "2026-09-16T18:53:14Z"
+}

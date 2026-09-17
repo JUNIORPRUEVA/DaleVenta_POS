@@ -1,0 +1,243 @@
+{
+  "generatedAt": "2026-09-16T20:23:23.915Z",
+  "mode": "VERIFY_READ_ONLY",
+  "verdict": "GO",
+  "environment": {
+    "classification": "production",
+    "description": "daleventa_user@127.0.0.1:15432/daleventa",
+    "database": "daleventa",
+    "server": "172.18.0.7/32:5432",
+    "user": "daleventa_user"
+  },
+  "state": {
+    "products": 91,
+    "activeProducts": 87,
+    "archivedProducts": 4,
+    "shifts": 50,
+    "openShifts": 0,
+    "sales": 7179,
+    "saleItems": 9746,
+    "warehouseStocks": 87,
+    "inventoryMovements": 0,
+    "cashMovements": 0,
+    "cashboxDaily": 0,
+    "clients": 0,
+    "suppliers": 0,
+    "purchaseOrders": 0,
+    "taxes": 0,
+    "ncfSequences": 0
+  },
+  "reconciliation": {
+    "generatedAt": "2026-09-16T20:23:21.926Z",
+    "checks": [
+      {
+        "metric": "db_products",
+        "expected": "91",
+        "actual": "91",
+        "ok": true
+      },
+      {
+        "metric": "db_active_products",
+        "expected": "87",
+        "actual": "87",
+        "ok": true
+      },
+      {
+        "metric": "db_archived_products",
+        "expected": "4",
+        "actual": "4",
+        "ok": true
+      },
+      {
+        "metric": "db_shifts",
+        "expected": "50",
+        "actual": "50",
+        "ok": true
+      },
+      {
+        "metric": "db_open_shifts",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_sales",
+        "expected": "7179",
+        "actual": "7179",
+        "ok": true
+      },
+      {
+        "metric": "db_sale_items",
+        "expected": "9746",
+        "actual": "9746",
+        "ok": true
+      },
+      {
+        "metric": "db_warehouse_stocks",
+        "expected": "87",
+        "actual": "87",
+        "ok": true
+      },
+      {
+        "metric": "db_linked_sales",
+        "expected": "3930",
+        "actual": "3930",
+        "ok": true
+      },
+      {
+        "metric": "db_unlinked_sales",
+        "expected": "3249",
+        "actual": "3249",
+        "ok": true
+      },
+      {
+        "metric": "db_revenue",
+        "expected": "1095535.00",
+        "actual": "1095535.00",
+        "ok": true
+      },
+      {
+        "metric": "db_cost",
+        "expected": "742332.88",
+        "actual": "742332.88",
+        "ok": true
+      },
+      {
+        "metric": "db_profit",
+        "expected": "353202.12",
+        "actual": "353202.12",
+        "ok": true
+      },
+      {
+        "metric": "db_item_revenue",
+        "expected": "1095535.00",
+        "actual": "1095535.00",
+        "ok": true
+      },
+      {
+        "metric": "db_item_cost",
+        "expected": "742332.88",
+        "actual": "742332.88",
+        "ok": true
+      },
+      {
+        "metric": "db_item_profit",
+        "expected": "353202.12",
+        "actual": "353202.12",
+        "ok": true
+      },
+      {
+        "metric": "db_stock_total",
+        "expected": "1557.00",
+        "actual": "1557.00",
+        "ok": true
+      },
+      {
+        "metric": "db_negative_stock",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_stock_reconciled_products",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_itbis",
+        "expected": "0.00",
+        "actual": "0.00",
+        "ok": true
+      },
+      {
+        "metric": "db_commission",
+        "expected": "0.00",
+        "actual": "0.00",
+        "ok": true
+      },
+      {
+        "metric": "db_ncf_sales",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_commission_sales",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_tracked_items",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_cash_movements",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_cashbox_daily",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_inventory_movements",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_clients",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_suppliers",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_purchase_orders",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_taxes",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_ncf_sequences",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      },
+      {
+        "metric": "db_demo_products",
+        "expected": "0",
+        "actual": "0",
+        "ok": true
+      }
+    ],
+    "failures": [],
+    "verdict": "GO"
+  },
+  "otherTenants": {
+    "companies": 27,
+    "productsTotal": 419,
+    "salesTotal": 8403,
+    "productsByOtherTenants": 328,
+    "salesByOtherTenants": 1224
+  },
+  "durationMs": 5114
+}
