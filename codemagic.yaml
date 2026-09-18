@@ -61,6 +61,29 @@ workflows:
 
           echo "Unsigned IPA created:"
           ls -lah Runner-no-codesign.ipa
+      - name: Verify packaged IPA version
+        script: |
+          cd "$APP_DIR"
+          set -euo pipefail
+
+          PYTHON_BIN=$(command -v python3 || command -v python)
+          if [ -z "$PYTHON_BIN" ]; then
+            echo "python3 is required to verify the packaged IPA"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          IPAS=(build/ios/iphoneos/*.ipa)
+          if [ ${#IPAS[@]} -eq 0 ]; then
+            echo "No IPA found in build/ios/iphoneos"
+            exit 1
+          fi
+
+          for IPA in "${IPAS[@]}"; do
+            echo "== Verifying $IPA =="
+            "$PYTHON_BIN" "$CM_BUILD_DIR/scripts/build/verify_ios_ipa.py" "$IPA" \
+              --bundle-id "$BUNDLE_ID"
+          done
     artifacts:
       - apps/fulltech_app/build/ios/iphoneos/Runner-no-codesign.ipa
       - apps/fulltech_app/build/ios/iphoneos/Runner.app
@@ -215,6 +238,48 @@ workflows:
 
           mkdir -p "$CM_BUILD_DIR/build/ios/ipa"
           cp build/ios/ipa/*.ipa "$CM_BUILD_DIR/build/ios/ipa/"
+      - name: Verify IPA before publish
+        script: |
+          cd "$APP_DIR"
+          set -euo pipefail
+
+          PYTHON_BIN=$(command -v python3 || command -v python)
+          if [ -z "$PYTHON_BIN" ]; then
+            echo "python3 is required to verify the IPA before publishing"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          IPAS=(build/ios/ipa/*.ipa)
+          if [ ${#IPAS[@]} -eq 0 ]; then
+            echo "No IPA found in build/ios/ipa"
+            exit 1
+          fi
+
+          for IPA in "${IPAS[@]}"; do
+            echo "== Verifying $IPA =="
+            # Reads Payload/Runner.app/Info.plist inside the IPA: publishing is blocked
+            # unless CFBundleShortVersionString equals the pubspec version, CFBundleVersion
+            # is >= IOS_MIN_BUILD_NUMBER and the bundle id is BUNDLE_ID.
+            "$PYTHON_BIN" "$CM_BUILD_DIR/scripts/build/verify_ios_ipa.py" "$IPA" \
+              --min-build-number "$IOS_MIN_BUILD_NUMBER" \
+              --bundle-id "$BUNDLE_ID"
+
+            CHECK_DIR="$CM_BUILD_DIR/build/ios/ipa-check"
+            rm -rf "$CHECK_DIR"
+            mkdir -p "$CHECK_DIR"
+            unzip -q "$IPA" -d "$CHECK_DIR"
+            APP_BUNDLE=$(ls -d "$CHECK_DIR"/Payload/*.app | head -n 1)
+            if ! codesign --verify --deep --verbose=2 "$APP_BUNDLE"; then
+              echo "Signing verification FAILED for $APP_BUNDLE - DO NOT UPLOAD"
+              exit 1
+            fi
+            echo "-- signing identity --"
+            codesign -dv --verbose=4 "$APP_BUNDLE" 2>&1 | grep -E "^(Identifier|TeamIdentifier|Authority|Signature)" || true
+            echo "-- entitlements --"
+            codesign -d --entitlements :- "$APP_BUNDLE" 2>/dev/null || echo "(no entitlements reported)"
+            rm -rf "$CHECK_DIR"
+          done
     artifacts:
       - build/ios/ipa/*.ipa
       - apps/fulltech_app/build/ios/archive/Runner.xcarchive

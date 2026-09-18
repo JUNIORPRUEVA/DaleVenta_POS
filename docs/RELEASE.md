@@ -57,6 +57,14 @@ iOS:
 - Build numbers: the workflow computes `$PROJECT_BUILD_NUMBER + 100` (Codemagic counter) and stops
   when it is not higher than what was already uploaded, so TestFlight never receives a duplicate.
   The marketing version comes from `version:` in `apps/fulltech_app/pubspec.yaml`.
+- Before publishing, `codemagic.yaml` runs `scripts/build/verify_ios_ipa.py` on the generated IPA:
+  it reads `Payload/Runner.app/Info.plist` and aborts (no upload) when `CFBundleShortVersionString`
+  differs from `pubspec.yaml`, when `CFBundleVersion` is below the workflow floor
+  (`IOS_MIN_BUILD_NUMBER`), or when the bundle id is not `com.fulltechrd.fullposcloud`. It then
+  verifies the signature with `codesign` and logs the identity and entitlements.
+  The same script runs manually on any IPA: `python3 scripts/build/verify_ios_ipa.py <ipa>`.
+  Never archive from Xcode without a prior Flutter build: `ios/Flutter/Generated.xcconfig` is
+  generated and Xcode reads it, so a stale file ships a stale version.
 - Runtime configuration: the workflow writes `apps/fulltech_app/.env` from `API_BASE_URL`
   (defaults to the DaleVentas production backend), optional `APP_BASE_URL`, `API_TIMEOUT_MS`,
   `RELEASES_API_BASE_URL` and `RELEASES_API_KEY`. Keep those in Codemagic, never in the repository.
