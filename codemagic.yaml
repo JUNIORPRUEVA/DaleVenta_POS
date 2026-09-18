@@ -28,7 +28,12 @@ workflows:
           set -euo pipefail
           cd "$APP_DIR"
 
+          # Marketing version always comes from pubspec.yaml (canonical source).
+          IOS_BUILD_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
           IOS_BUILD_NUMBER="$(date +%Y%m%d%H%M%S)"
+
+          echo "iOS marketing version (pubspec.yaml): $IOS_BUILD_NAME"
+          echo "iOS build number: $IOS_BUILD_NUMBER"
 
           # Export signing overrides so xcodebuild subprocess inherits them.
           # This overrides project-level "CODE_SIGN_IDENTITY[sdk=iphoneos*]" and
@@ -42,6 +47,7 @@ workflows:
           flutter build ios \
             --release \
             --no-codesign \
+            --build-name="$IOS_BUILD_NAME" \
             --build-number="$IOS_BUILD_NUMBER"
 
           echo "== Packaging unsigned IPA =="
@@ -75,6 +81,11 @@ workflows:
         APP_DIR: apps/fulltech_app
         BUNDLE_ID: com.fulltechrd.fullposcloud
         APPLE_TEAM_ID: M4WNZDXN2U
+        # App Store Connect floor. Version trains 1.0.3 and 1.0.5 are closed, so any
+        # build below these values is rejected on import ("Invalid Pre-Release Train" /
+        # "Invalid Version"). Raise these only together with the matching pubspec bump.
+        IOS_MIN_MARKETING_VERSION: 1.0.6
+        IOS_MIN_BUILD_NUMBER: 130
     scripts:
       - name: Create CI env file
         script: |
@@ -120,8 +131,42 @@ workflows:
       - name: Build IPA
         script: |
           cd "$APP_DIR"
+          set -euo pipefail
+
+          # Numeric-aware "a >= b" comparison for x.y.z (BSD awk on macOS, no sort -V).
+          version_ge() {
+            awk -v a="$1" -v b="$2" 'BEGIN {
+              na = split(a, A, ".");
+              nb = split(b, B, ".");
+              for (i = 1; i <= 3; i++) {
+                ai = (i <= na ? A[i] + 0 : 0);
+                bi = (i <= nb ? B[i] + 0 : 0);
+                if (ai > bi) exit 0;
+                if (ai < bi) exit 1;
+              }
+              exit 0;
+            }'
+          }
+
+          # Canonical version source: apps/fulltech_app/pubspec.yaml.
           BUILD_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //')
           BUILD_NAME=${BUILD_VERSION%+*}
+          PUBSPEC_BUILD_NUMBER=${BUILD_VERSION#*+}
+
+          case "$PUBSPEC_BUILD_NUMBER" in
+            ''|*[!0-9]*)
+              echo "pubspec.yaml build number must be numeric, got: $PUBSPEC_BUILD_NUMBER"
+              exit 1
+              ;;
+          esac
+
+          # Never regenerate a version train that App Store Connect already closed.
+          if ! version_ge "$BUILD_NAME" "$IOS_MIN_MARKETING_VERSION"; then
+            echo "iOS marketing version $BUILD_NAME is lower than IOS_MIN_MARKETING_VERSION=$IOS_MIN_MARKETING_VERSION."
+            echo "Raise 'version:' in apps/fulltech_app/pubspec.yaml before building."
+            exit 1
+          fi
+
           CODEMAGIC_PROJECT_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-0}"
           case "$CODEMAGIC_PROJECT_BUILD_NUMBER" in
             ''|*[!0-9]*)
@@ -129,15 +174,19 @@ workflows:
               exit 1
               ;;
           esac
+
           IOS_BUILD_NUMBER=$((CODEMAGIC_PROJECT_BUILD_NUMBER + 100))
-          if [ "$IOS_BUILD_NUMBER" -le 7 ]; then
-            echo "iOS build number must be higher than App Store Connect previousBundleVersion=7"
+          if [ "$PUBSPEC_BUILD_NUMBER" -gt "$IOS_BUILD_NUMBER" ]; then
+            IOS_BUILD_NUMBER="$PUBSPEC_BUILD_NUMBER"
+          fi
+          if [ "$IOS_BUILD_NUMBER" -lt "$IOS_MIN_BUILD_NUMBER" ]; then
+            echo "iOS build number $IOS_BUILD_NUMBER is lower than IOS_MIN_BUILD_NUMBER=$IOS_MIN_BUILD_NUMBER (App Store Connect floor)."
             exit 1
           fi
 
           echo "Codemagic BUILD_NUMBER: ${BUILD_NUMBER:-unset}"
           echo "Codemagic PROJECT_BUILD_NUMBER: ${PROJECT_BUILD_NUMBER:-unset}"
-          echo "iOS version: $BUILD_NAME"
+          echo "iOS version (pubspec.yaml): $BUILD_NAME"
           echo "iOS build number: $IOS_BUILD_NUMBER"
 
           flutter build ipa --release \
@@ -150,8 +199,17 @@ workflows:
           ARCHIVE_BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$ARCHIVE_INFO_PLIST")
           echo "Archive iOS version: $ARCHIVE_VERSION"
           echo "Archive iOS build number: $ARCHIVE_BUILD_NUMBER"
-          if [ "$ARCHIVE_BUILD_NUMBER" -le 7 ]; then
-            echo "Archive CFBundleVersion must be higher than App Store Connect previousBundleVersion=7"
+
+          if [ "$ARCHIVE_VERSION" != "$BUILD_NAME" ]; then
+            echo "Archive CFBundleShortVersionString ($ARCHIVE_VERSION) does not match pubspec.yaml version ($BUILD_NAME)"
+            exit 1
+          fi
+          if [ "$ARCHIVE_BUILD_NUMBER" != "$IOS_BUILD_NUMBER" ]; then
+            echo "Archive CFBundleVersion ($ARCHIVE_BUILD_NUMBER) does not match IOS_BUILD_NUMBER ($IOS_BUILD_NUMBER)"
+            exit 1
+          fi
+          if [ "$ARCHIVE_BUILD_NUMBER" -lt "$IOS_MIN_BUILD_NUMBER" ]; then
+            echo "Archive CFBundleVersion must be >= IOS_MIN_BUILD_NUMBER=$IOS_MIN_BUILD_NUMBER (App Store Connect floor)"
             exit 1
           fi
 

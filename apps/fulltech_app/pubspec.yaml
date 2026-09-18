@@ -16,7 +16,13 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.5+128
+#
+# CANONICAL VERSION SOURCE. On iOS this is the only input for the App Store
+# marketing version: flutter generates FLUTTER_BUILD_NAME from it, ios/Runner/Info.plist
+# maps CFBundleShortVersionString to $(FLUTTER_BUILD_NAME), and codemagic.yaml passes it
+# to `flutter build ipa --build-name`. App Store Connect closes version trains, so never
+# reuse or lower a version that was already uploaded (1.0.3 and 1.0.5 are closed).
+version: 1.0.6+130
 
 environment:
   sdk: ^3.10.1
