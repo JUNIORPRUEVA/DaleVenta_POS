@@ -583,7 +583,7 @@
           <a href="/support">Soporte</a>
           <a href="/contact">Contacto</a>
           <a href="/login">Iniciar sesión</a>
-          <a href="/register">Crear cuenta gratis</a>
+          <a href="/register" data-create-account-cta="Crear cuenta gratis - seo nav">Crear cuenta gratis</a>
         </div>
       </nav>
     </header>
@@ -595,7 +595,7 @@
           <h1 id="landing-title">Vende y controla tu negocio desde cualquier dispositivo</h1>
           <p class="seo-lead">Crea tu cuenta una vez y usa FullPOS en Windows, Android, iPhone o Web.</p>
           <div class="seo-actions">
-            <a class="seo-button" href="/register">Crear cuenta y probar gratis</a>
+            <a class="seo-button" href="/register" data-create-account-cta="Crear cuenta y probar gratis - seo hero">Crear cuenta y probar gratis</a>
             <a class="seo-button secondary" href="/login">Ya tengo cuenta</a>
           </div>
           <div class="seo-chip-row" aria-label="Plataformas soportadas">
@@ -683,6 +683,115 @@
   </div>
 
   <script src="env.js"></script>
+  <script>
+    (function () {
+      var initializedPixelId = '';
+      var pageViewSent = false;
+      var landingViewContentSent = false;
+
+      function log(debugEnabled, message, payload) {
+        if (!debugEnabled || !window.console) return;
+        window.console.debug('[marketing_analytics]', message, payload || '');
+      }
+
+      function validPixelId(pixelId) {
+        return typeof pixelId === 'string' && /^[0-9]{5,32}$/.test(pixelId);
+      }
+
+      function ensurePixel(pixelId, debugEnabled) {
+        if (!validPixelId(pixelId)) {
+          log(debugEnabled, 'META_PIXEL_ID missing or invalid');
+          return false;
+        }
+
+        if (!window.fbq) {
+          var n = window.fbq = function () {
+            n.callMethod
+              ? n.callMethod.apply(n, arguments)
+              : n.queue.push(arguments);
+          };
+          if (!window._fbq) window._fbq = n;
+          n.push = n;
+          n.loaded = true;
+          n.version = '2.0';
+          n.queue = [];
+
+          var script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+          var firstScript = document.getElementsByTagName('script')[0];
+          firstScript.parentNode.insertBefore(script, firstScript);
+        }
+
+        if (initializedPixelId !== pixelId) {
+          window.fbq('init', pixelId);
+          initializedPixelId = pixelId;
+          pageViewSent = false;
+        }
+
+        if (!pageViewSent) {
+          window.fbq('track', 'PageView');
+          pageViewSent = true;
+          log(debugEnabled, 'PageView', {});
+        }
+        return true;
+      }
+
+      window.fullposMetaPixelTrack = function (pixelId, eventName, parameters, debugEnabled) {
+        try {
+          if (!ensurePixel(pixelId, debugEnabled === true)) return false;
+          var params = parameters && typeof parameters === 'object' ? parameters : {};
+          if (eventName === 'ViewContent' && params.source_page === 'landing') {
+            if (landingViewContentSent) return true;
+            landingViewContentSent = true;
+          }
+          var standardEvents = {
+            PageView: true,
+            ViewContent: true,
+            CompleteRegistration: true,
+            Purchase: true
+          };
+          if (eventName === 'PageView') return true;
+          window.fbq(standardEvents[eventName] ? 'track' : 'trackCustom', eventName, params);
+          log(debugEnabled === true, eventName, params);
+          return true;
+        } catch (error) {
+          log(debugEnabled === true, 'Meta Pixel blocked or unavailable', error);
+          return false;
+        }
+      };
+
+      function analyticsDebugEnabled() {
+        var raw = String(window.MARKETING_ANALYTICS_DEBUG || '').toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+      }
+
+      if ((window.location.pathname || '/') === '/') {
+        window.fullposMetaPixelTrack(
+          window.META_PIXEL_ID,
+          'ViewContent',
+          { source_page: 'landing', content_name: 'FullPOS Cloud landing' },
+          analyticsDebugEnabled()
+        );
+      }
+
+      document.addEventListener('click', function (event) {
+        var target = event.target && event.target.closest
+          ? event.target.closest('[data-create-account-cta]')
+          : null;
+        if (!target) return;
+        window.fullposMetaPixelTrack(
+          window.META_PIXEL_ID,
+          'ClickCreateAccount',
+          {
+            source_page: 'landing',
+            cta_name: target.getAttribute('data-create-account-cta') || 'Crear cuenta'
+          },
+          analyticsDebugEnabled()
+        );
+      });
+    })();
+  </script>
   <script>
     (function () {
       var progress = 12;

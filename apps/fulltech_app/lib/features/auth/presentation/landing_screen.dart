@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/analytics/marketing_analytics.dart';
 import '../../../core/app_access/app_access_links.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/utils/safe_url_launcher.dart';
@@ -18,7 +19,7 @@ const _line = Color(0xFFDCE8EF);
 const _soft = Color(0xFFF3F7FA);
 const _maxContentWidth = 1220.0;
 
-class LandingScreen extends StatelessWidget {
+class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
 
   static final _topKey = GlobalKey();
@@ -32,19 +33,40 @@ class LandingScreen extends StatelessWidget {
     return _openWhatsApp(
       context,
       'Hola, quiero información sobre FullPOS Cloud y sus planes.',
+      ctaName: 'WhatsApp información',
     );
   }
 
   static Future<void> _openPlanWhatsApp(BuildContext context, _PlanInfo plan) {
-    return _openWhatsApp(context, _planWhatsAppMessage(plan));
+    return _openWhatsApp(
+      context,
+      _planWhatsAppMessage(plan),
+      ctaName: 'Comenzar prueba ${plan.name}',
+    );
   }
 
-  static Future<void> _openWhatsApp(BuildContext context, String text) {
+  static Future<void> _openWhatsApp(
+    BuildContext context,
+    String text, {
+    required String ctaName,
+  }) {
+    MarketingAnalytics.trackWhatsAppClicked(
+      sourcePage: 'landing',
+      ctaName: ctaName,
+    );
     return safeOpenWhatsApp(
       context,
       Uri.https('wa.me', '/$_supportWhatsappIntl', {'text': text}),
       copiedMessage: 'No se pudo abrir WhatsApp. Enlace copiado.',
     );
+  }
+
+  static void openRegistration(BuildContext context, String ctaName) {
+    MarketingAnalytics.trackCreateAccountClick(
+      sourcePage: 'landing',
+      ctaName: ctaName,
+    );
+    context.go(Routes.register);
   }
 
   static Future<void> openWindowsDownload(BuildContext context) {
@@ -97,6 +119,17 @@ class LandingScreen extends StatelessWidget {
   }
 
   @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    MarketingAnalytics.trackLandingViewed();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.sizeOf(context).width < 1180;
     final isNarrowPhone = MediaQuery.sizeOf(context).width < 560;
@@ -104,7 +137,9 @@ class LandingScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: _soft,
-      endDrawer: _LandingDrawer(onNav: (key) => scrollTo(context, key)),
+      endDrawer: _LandingDrawer(
+        onNav: (key) => LandingScreen.scrollTo(context, key),
+      ),
       floatingActionButton: const _FloatingWhatsAppButton(),
       body: SafeArea(
         child: Theme(
@@ -121,7 +156,7 @@ class LandingScreen extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: _TopBar(
                     isMobile: isMobile,
-                    onNav: (key) => scrollTo(context, key),
+                    onNav: (key) => LandingScreen.scrollTo(context, key),
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -149,29 +184,35 @@ class LandingScreen extends StatelessWidget {
                           isMobile ? 28 : 40,
                         ),
                         child: Column(
-                          key: _topKey,
+                          key: LandingScreen._topKey,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const _HeroSection(),
                             const SizedBox(height: 28),
                             _Anchor(
-                              key: _featuresKey,
+                              key: LandingScreen._featuresKey,
                               child: const _BenefitsSection(),
                             ),
                             const SizedBox(height: 34),
-                            _Anchor(key: _demoKey, child: const _DemoSection()),
+                            _Anchor(
+                              key: LandingScreen._demoKey,
+                              child: const _DemoSection(),
+                            ),
                             const SizedBox(height: 34),
                             _Anchor(
-                              key: _processKey,
+                              key: LandingScreen._processKey,
                               child: const _PurchaseProcessSection(),
                             ),
                             const SizedBox(height: 34),
                             _Anchor(
-                              key: _pricingKey,
+                              key: LandingScreen._pricingKey,
                               child: const _PricingSection(),
                             ),
                             const SizedBox(height: 34),
-                            _Anchor(key: _faqKey, child: const _FaqSection()),
+                            _Anchor(
+                              key: LandingScreen._faqKey,
+                              child: const _FaqSection(),
+                            ),
                             const SizedBox(height: 24),
                             const _Footer(),
                           ],
@@ -283,7 +324,10 @@ class _TopBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
-                    onPressed: () => context.go(Routes.register),
+                    onPressed: () => LandingScreen.openRegistration(
+                      context,
+                      'Crear cuenta gratis - topbar',
+                    ),
                     icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 42),
@@ -418,7 +462,7 @@ class _LandingDrawer extends StatelessWidget {
             }),
             _DrawerAction('Crear cuenta', Icons.person_add_alt_1_rounded, () {
               Navigator.of(context).maybePop();
-              context.go(Routes.register);
+              LandingScreen.openRegistration(context, 'Crear cuenta - drawer');
             }, emphasized: true),
           ],
         ),
@@ -509,7 +553,10 @@ class _HeroSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   FilledButton.icon(
-                    onPressed: () => context.go(Routes.register),
+                    onPressed: () => LandingScreen.openRegistration(
+                      context,
+                      'Crear cuenta y probar gratis - hero',
+                    ),
                     icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
                     label: const Text('Crear cuenta y probar gratis'),
                     style: FilledButton.styleFrom(
@@ -535,7 +582,10 @@ class _HeroSection extends StatelessWidget {
                 runSpacing: 12,
                 children: [
                   FilledButton.icon(
-                    onPressed: () => context.go(Routes.register),
+                    onPressed: () => LandingScreen.openRegistration(
+                      context,
+                      'Crear cuenta y probar gratis - hero',
+                    ),
                     icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
                     label: const Text('Crear cuenta y probar gratis'),
                     style: FilledButton.styleFrom(
@@ -729,7 +779,10 @@ class _DemoSection extends StatelessWidget {
                   description:
                       'Crea tu cuenta o usa FullPOS en el navegador como PWA.',
                   actionLabel: 'Crear cuenta',
-                  onPressed: () => context.go(Routes.register),
+                  onPressed: () => LandingScreen.openRegistration(
+                    context,
+                    'Crear cuenta - web pwa',
+                  ),
                   secondaryActionLabel: 'Usar FullPOS en la Web',
                   onSecondaryPressed: () => LandingScreen.installPwa(context),
                   actionIcon: Icons.person_add_alt_1_rounded,
@@ -906,6 +959,7 @@ class _PurchaseProcessSection extends StatelessWidget {
             onPressed: () => LandingScreen._openWhatsApp(
               context,
               'Hola, quiero activar mi licencia de FullPOS Cloud.',
+              ctaName: 'Activar por WhatsApp',
             ),
             icon: const Icon(Icons.chat_rounded, size: 18),
             label: const Text('Activar por WhatsApp'),
@@ -1206,6 +1260,7 @@ class _FloatingWhatsAppButton extends StatelessWidget {
         onPressed: () => LandingScreen._openWhatsApp(
           context,
           'Hola, necesito asistencia con FullPOS Cloud.',
+          ctaName: 'WhatsApp flotante',
         ),
         child: const Icon(Icons.chat_rounded),
       ),

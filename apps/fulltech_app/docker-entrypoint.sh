@@ -18,7 +18,7 @@ fi
 
 # If EasyPanel provides runtime env vars, write them into the asset env file.
 # This avoids rebuilding the image just to change API endpoints.
-if [ "${API_BASE_URL:-}" != "" ] || [ "${API_TIMEOUT_MS:-}" != "" ]; then
+if [ "${API_BASE_URL:-}" != "" ] || [ "${API_TIMEOUT_MS:-}" != "" ] || [ "${META_PIXEL_ID:-}" != "" ] || [ "${MARKETING_ANALYTICS_DEBUG:-}" != "" ]; then
   {
     echo "# Generated at container start"
     if [ "${API_BASE_URL:-}" != "" ]; then
@@ -27,6 +27,12 @@ if [ "${API_BASE_URL:-}" != "" ] || [ "${API_TIMEOUT_MS:-}" != "" ]; then
     if [ "${API_TIMEOUT_MS:-}" != "" ]; then
       echo "API_TIMEOUT_MS=${API_TIMEOUT_MS}"
     fi
+    if [ "${META_PIXEL_ID:-}" != "" ]; then
+      echo "META_PIXEL_ID=${META_PIXEL_ID}"
+    fi
+    if [ "${MARKETING_ANALYTICS_DEBUG:-}" != "" ]; then
+      echo "MARKETING_ANALYTICS_DEBUG=${MARKETING_ANALYTICS_DEBUG}"
+    fi
   } > "$ENV_FILE"
 fi
 
@@ -34,6 +40,8 @@ fi
 # This avoids stale config caused by PWA caching of assets.
 API_BASE_URL_ESC="$(js_escape "${API_BASE_URL:-}")"
 API_TIMEOUT_MS_ESC="$(js_escape "${API_TIMEOUT_MS:-}")"
+META_PIXEL_ID_ESC="$(js_escape "${META_PIXEL_ID:-}")"
+MARKETING_ANALYTICS_DEBUG_ESC="$(js_escape "${MARKETING_ANALYTICS_DEBUG:-false}")"
 SUPPORT_EMAIL_ESC="$(js_escape "${SUPPORT_EMAIL:-ventas@fulltechrd.com}")"
 SUPPORT_PHONE_ESC="$(js_escape "${SUPPORT_PHONE:-829-531-9442}")"
 SUPPORT_WHATSAPP_ESC="$(js_escape "${SUPPORT_WHATSAPP:-18295319442}")"
@@ -44,18 +52,26 @@ window.__ENV = window.__ENV || {};
 // Primary (string) values for current builds
 window.API_BASE_URL = "${API_BASE_URL_ESC}";
 window.API_TIMEOUT_MS = "${API_TIMEOUT_MS_ESC}";
+window.META_PIXEL_ID = "${META_PIXEL_ID_ESC}";
+window.MARKETING_ANALYTICS_DEBUG = "${MARKETING_ANALYTICS_DEBUG_ESC}";
 
 // Backwards compatibility for older cached builds that expect functions:
 //   __ENV.API_BASE_URL() / __ENV.API_TIMEOUT_MS()
 // Also keep value mirrors for any code that reads __ENV.* as strings.
 window.__ENV.API_BASE_URL_VALUE = window.API_BASE_URL;
 window.__ENV.API_TIMEOUT_MS_VALUE = window.API_TIMEOUT_MS;
+window.__ENV.META_PIXEL_ID_VALUE = window.META_PIXEL_ID;
+window.__ENV.MARKETING_ANALYTICS_DEBUG_VALUE = window.MARKETING_ANALYTICS_DEBUG;
 window.__ENV.API_BASE_URL = function () { return window.__ENV.API_BASE_URL_VALUE; };
 window.__ENV.API_TIMEOUT_MS = function () { return window.__ENV.API_TIMEOUT_MS_VALUE; };
+window.__ENV.META_PIXEL_ID = function () { return window.__ENV.META_PIXEL_ID_VALUE; };
+window.__ENV.MARKETING_ANALYTICS_DEBUG = function () { return window.__ENV.MARKETING_ANALYTICS_DEBUG_VALUE; };
 
 // Convenience aliases (string)
 window.__ENV.API_BASE_URL_STR = window.API_BASE_URL;
 window.__ENV.API_TIMEOUT_MS_STR = window.API_TIMEOUT_MS;
+window.__ENV.META_PIXEL_ID_STR = window.META_PIXEL_ID;
+window.__ENV.MARKETING_ANALYTICS_DEBUG_STR = window.MARKETING_ANALYTICS_DEBUG;
 EOF
 
 cat > "$WEB_ROOT/public-config.js" <<EOF

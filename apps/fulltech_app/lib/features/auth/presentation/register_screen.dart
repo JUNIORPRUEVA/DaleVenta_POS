@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/analytics/marketing_analytics.dart';
 import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/errors/api_exception.dart';
@@ -30,6 +31,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   void initState() {
     super.initState();
+    MarketingAnalytics.trackRegistrationStarted(sourcePage: 'register');
     _ownerName.addListener(_clearNoticeOnInput);
     _email.addListener(_clearNoticeOnInput);
     _phone.addListener(_clearNoticeOnInput);
@@ -188,6 +190,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (mounted) setState(() => _notice = null);
       await ref.read(authStateProvider.notifier).registerBusiness(payload);
       if (!mounted) return;
+      MarketingAnalytics.trackCompleteRegistration(sourcePage: 'register');
+      MarketingAnalytics.trackTrialStarted(sourcePage: 'register');
       context.go(
         RouteAccess.defaultHomeForRole(
           ref.read(authStateProvider).user?.appRole ?? AppRole.admin,

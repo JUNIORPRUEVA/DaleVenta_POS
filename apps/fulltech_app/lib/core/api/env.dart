@@ -15,6 +15,25 @@ class Env {
     return raw == '1' || raw == 'true' || raw == 'yes' || raw == 'on';
   }
 
+  static bool get marketingAnalyticsDebugEnabled {
+    if (!kDebugMode) return false;
+    final raw = (_readEnv('MARKETING_ANALYTICS_DEBUG') ?? '')
+        .trim()
+        .toLowerCase();
+    return raw == '1' || raw == 'true' || raw == 'yes' || raw == 'on';
+  }
+
+  static String? get metaPixelId {
+    final raw = (_readEnv('META_PIXEL_ID') ?? '').trim();
+    if (raw.isEmpty) return null;
+    final valid = RegExp(r'^[0-9]{5,32}$').hasMatch(raw);
+    if (!valid) {
+      debugPrint('Invalid META_PIXEL_ID. Meta Pixel will stay disabled.');
+      return null;
+    }
+    return raw;
+  }
+
   static String? _readEnv(String key) {
     // 1) Compile-time values (flutter build --dart-define=...)
     if (key == 'API_BASE_URL') {
@@ -27,6 +46,17 @@ class Env {
     }
     if (key == 'API_TIMEOUT_MS') {
       const v = String.fromEnvironment('API_TIMEOUT_MS', defaultValue: '');
+      if (v.trim().isNotEmpty) return v;
+    }
+    if (key == 'META_PIXEL_ID') {
+      const v = String.fromEnvironment('META_PIXEL_ID', defaultValue: '');
+      if (v.trim().isNotEmpty) return v;
+    }
+    if (key == 'MARKETING_ANALYTICS_DEBUG') {
+      const v = String.fromEnvironment(
+        'MARKETING_ANALYTICS_DEBUG',
+        defaultValue: '',
+      );
       if (v.trim().isNotEmpty) return v;
     }
 

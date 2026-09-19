@@ -1,4 +1,5 @@
 import 'package:daleventa_pos/features/auth/presentation/landing_screen.dart';
+import 'package:daleventa_pos/core/analytics/marketing_analytics.dart';
 import 'package:daleventa_pos/core/app_access/app_access_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,8 @@ import 'package:go_router/go_router.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(MarketingAnalytics.debugResetForTests);
 
   test('landing optimized image assets are bundled', () async {
     const assetPaths = [
@@ -122,9 +125,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      MarketingAnalytics.debugEventsForTests.where(
+        (event) => event.name == 'ViewContent',
+      ),
+      hasLength(1),
+    );
+
     await tester.tap(find.text('Crear cuenta y probar gratis').first);
     await tester.pumpAndSettle();
     expect(find.text('Register'), findsOneWidget);
+    expect(
+      MarketingAnalytics.debugEventsForTests.where(
+        (event) => event.name == 'ClickCreateAccount',
+      ),
+      hasLength(1),
+    );
+    expect(
+      MarketingAnalytics.debugEventsForTests.last.parameters,
+      containsPair('cta_name', 'Crear cuenta y probar gratis - hero'),
+    );
 
     router.go('/');
     await tester.pumpAndSettle();
