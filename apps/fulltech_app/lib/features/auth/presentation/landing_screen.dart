@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,12 +16,17 @@ const _supportWhatsappIntl = '18295319442';
 
 const _primary = Color(0xFF1957E6);
 const _primaryDark = Color(0xFF123A75);
-const _accent = Color(0xFF26B6A6);
+const _whatsapp = Color(0xFF0F8C7D);
 const _ink = Color(0xFF0D1B2A);
 const _muted = Color(0xFF5E7187);
 const _line = Color(0xFFDCE8EF);
 const _soft = Color(0xFFF3F7FA);
 const _maxContentWidth = 1220.0;
+const _phoneBreakpoint = 900.0;
+
+// Reserved space at the end of the mobile scroll so the sticky registration CTA
+// never covers the footer content.
+const _stickyCtaReservedSpace = 96.0;
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -28,6 +37,12 @@ class LandingScreen extends StatefulWidget {
   static final _pricingKey = GlobalKey();
   static final _processKey = GlobalKey();
   static final _faqKey = GlobalKey();
+
+  static const primaryCtaLabel = 'Regístrate gratis ahora';
+  static const compactCtaLabel = 'Regístrate gratis';
+
+  /// Phone-only sticky registration CTA (used by widget tests as well).
+  static const stickyCtaKey = ValueKey('landing-sticky-cta');
 
   static Future<void> openGenericWhatsApp(BuildContext context) {
     return _openWhatsApp(
@@ -41,7 +56,7 @@ class LandingScreen extends StatefulWidget {
     return _openWhatsApp(
       context,
       _planWhatsAppMessage(plan),
-      ctaName: 'Comenzar prueba ${plan.name}',
+      ctaName: 'Activar plan ${plan.name} - WhatsApp',
     );
   }
 
@@ -123,16 +138,102 @@ class LandingScreen extends StatefulWidget {
 }
 
 class _LandingScreenState extends State<LandingScreen> {
+  final _scrollController = ScrollController();
+  final _heroCtaKey = GlobalKey();
+  Timer? _pwaBannerWatch;
+  double? _heroCtaDocumentBottom;
+  bool _heroCtaOutOfView = false;
+  bool _pwaBannerVisible = false;
+
   @override
   void initState() {
     super.initState();
     MarketingAnalytics.trackLandingViewed();
+    _scrollController.addListener(_handleScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measureHeroCta();
+      _handleScroll();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncBannerWatch();
+  }
+
+  @override
+  void dispose() {
+    _pwaBannerWatch?.cancel();
+    _pwaBannerWatch = null;
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// True only while the phone sticky registration CTA is on screen.
+  bool get _stickyCtaVisible =>
+      _heroCtaOutOfView && !_pwaBannerVisible && _isPhoneLayout(context);
+
+  static bool _isPhoneLayout(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < _phoneBreakpoint;
+
+  void _handleScroll() {
+    if (!mounted) return;
+    if (_heroCtaDocumentBottom == null) _measureHeroCta();
+    final bottom = _heroCtaDocumentBottom;
+    if (bottom == null || !_scrollController.hasClients) return;
+    final outOfView = _scrollController.offset > bottom;
+    if (outOfView == _heroCtaOutOfView) return;
+    setState(() => _heroCtaOutOfView = outOfView);
+    _syncBannerWatch();
+  }
+
+  /// The hero CTA bottom is measured once, in document space, while the scroll
+  /// is still at the top: reading the render box on every scroll event is
+  /// unreliable because the listener runs before the viewport re-applies the
+  /// scroll transform.
+  void _measureHeroCta() {
+    final ctaContext = _heroCtaKey.currentContext;
+    if (ctaContext == null) return;
+    final box = ctaContext.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final scrollOffset = _scrollController.hasClients
+        ? _scrollController.offset
+        : 0.0;
+    if (scrollOffset != 0) return;
+    final bottom = box.localToGlobal(Offset.zero).dy + box.size.height;
+    if (bottom > 0) _heroCtaDocumentBottom = bottom;
+  }
+
+  /// The PWA install banner is a DOM overlay outside the Flutter canvas. It is
+  /// not shown automatically on the landing route, but it can appear when the
+  /// visitor taps "Usar FullPOS en la Web"; while it is visible the sticky CTA
+  /// stays hidden so only one floating action competes for the bottom edge.
+  void _syncBannerWatch() {
+    final needed = kIsWeb && _heroCtaOutOfView && _isPhoneLayout(context);
+    if (!needed) {
+      _pwaBannerWatch?.cancel();
+      _pwaBannerWatch = null;
+      return;
+    }
+    _pwaBannerWatch ??= Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _refreshPwaBannerVisibility(),
+    );
+  }
+
+  void _refreshPwaBannerVisibility() {
+    final visible = pwaInstallBannerVisible();
+    if (visible == _pwaBannerVisible || !mounted) return;
+    setState(() => _pwaBannerVisible = visible);
   }
 
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.sizeOf(context).width < 1180;
     final isNarrowPhone = MediaQuery.sizeOf(context).width < 560;
+    final isPhone = _isPhoneLayout(context);
     final baseTheme = Theme.of(context);
 
     return Scaffold(
@@ -140,7 +241,9 @@ class _LandingScreenState extends State<LandingScreen> {
       endDrawer: _LandingDrawer(
         onNav: (key) => LandingScreen.scrollTo(context, key),
       ),
-      floatingActionButton: const _FloatingWhatsAppButton(),
+      floatingActionButton: _stickyCtaVisible
+          ? null
+          : const _FloatingWhatsAppButton(),
       body: SafeArea(
         child: Theme(
           data: baseTheme.copyWith(
@@ -151,76 +254,112 @@ class _LandingScreenState extends State<LandingScreen> {
           ),
           child: DefaultTextStyle.merge(
             style: const TextStyle(fontFamily: 'Manrope'),
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _TopBar(
-                    isMobile: isMobile,
-                    onNav: (key) => LandingScreen.scrollTo(context, key),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Align(
-                    alignment: isNarrowPhone
-                        ? Alignment.centerLeft
-                        : Alignment.center,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: _maxContentWidth,
+            child: Stack(
+              children: [
+                CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _TopBar(
+                        isMobile: isMobile,
+                        onNav: (key) => LandingScreen.scrollTo(context, key),
                       ),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          isNarrowPhone
-                              ? 12
-                              : isMobile
-                              ? 18
-                              : 38,
-                          isMobile ? 20 : 38,
-                          isNarrowPhone
-                              ? 12
-                              : isMobile
-                              ? 18
-                              : 38,
-                          isMobile ? 28 : 40,
-                        ),
-                        child: Column(
-                          key: LandingScreen._topKey,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const _HeroSection(),
-                            const SizedBox(height: 28),
-                            _Anchor(
-                              key: LandingScreen._featuresKey,
-                              child: const _BenefitsSection(),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Align(
+                        alignment: isNarrowPhone
+                            ? Alignment.centerLeft
+                            : Alignment.center,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: _maxContentWidth,
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              isNarrowPhone
+                                  ? 12
+                                  : isMobile
+                                  ? 18
+                                  : 38,
+                              isMobile ? 20 : 38,
+                              isNarrowPhone
+                                  ? 12
+                                  : isMobile
+                                  ? 18
+                                  : 38,
+                              isMobile ? 28 : 40,
                             ),
-                            const SizedBox(height: 34),
-                            _Anchor(
-                              key: LandingScreen._demoKey,
-                              child: const _DemoSection(),
+                            child: Column(
+                              key: LandingScreen._topKey,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _HeroSection(
+                                  heroCtaKey: _heroCtaKey,
+                                  animateCta: !_heroCtaOutOfView,
+                                ),
+                                if (isPhone) ...[
+                                  const SizedBox(height: 18),
+                                  const _MobileSignupNote(),
+                                ],
+                                const SizedBox(height: 28),
+                                _Anchor(
+                                  key: LandingScreen._featuresKey,
+                                  child: const _BenefitsSection(),
+                                ),
+                                const SizedBox(height: 34),
+                                _Anchor(
+                                  key: LandingScreen._demoKey,
+                                  child: const _DemoSection(),
+                                ),
+                                const SizedBox(height: 34),
+                                _Anchor(
+                                  key: LandingScreen._processKey,
+                                  child: const _PurchaseProcessSection(),
+                                ),
+                                const SizedBox(height: 34),
+                                const _TrustSection(),
+                                const SizedBox(height: 34),
+                                _Anchor(
+                                  key: LandingScreen._pricingKey,
+                                  child: const _PricingSection(),
+                                ),
+                                const SizedBox(height: 34),
+                                _Anchor(
+                                  key: LandingScreen._faqKey,
+                                  child: const _FaqSection(),
+                                ),
+                                const SizedBox(height: 24),
+                                const _Footer(),
+                                if (isPhone)
+                                  const SizedBox(
+                                    height: _stickyCtaReservedSpace,
+                                  ),
+                              ],
                             ),
-                            const SizedBox(height: 34),
-                            _Anchor(
-                              key: LandingScreen._processKey,
-                              child: const _PurchaseProcessSection(),
-                            ),
-                            const SizedBox(height: 34),
-                            _Anchor(
-                              key: LandingScreen._pricingKey,
-                              child: const _PricingSection(),
-                            ),
-                            const SizedBox(height: 34),
-                            _Anchor(
-                              key: LandingScreen._faqKey,
-                              child: const _FaqSection(),
-                            ),
-                            const SizedBox(height: 24),
-                            const _Footer(),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
+                if (isPhone && _stickyCtaVisible)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _StickyRegistrationCta(
+                      key: LandingScreen.stickyCtaKey,
+                      onRegister: () => LandingScreen.openRegistration(
+                        context,
+                        'Regístrate gratis - CTA fijo móvil',
+                      ),
+                      onWhatsApp: () => LandingScreen._openWhatsApp(
+                        context,
+                        'Hola, necesito asistencia con FullPOS Cloud.',
+                        ctaName: 'WhatsApp CTA fijo móvil',
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -229,6 +368,260 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 }
+
+/// Phone-only reassurance block: the audit confirmed the account can be created
+/// from a mobile browser, so the landing states it explicitly.
+class _MobileSignupNote extends StatelessWidget {
+  const _MobileSignupNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF2FF),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.smartphone_rounded,
+                  color: _primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  '¿Estás desde tu celular?',
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Puedes crear tu cuenta ahora desde este navegador, sin instalar nada.',
+            style: TextStyle(
+              color: Color(0xFF31465C),
+              fontSize: 13.5,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Después usa la misma cuenta para acceder a FullPOS desde tus dispositivos compatibles.',
+            style: TextStyle(
+              color: Color(0xFF60748C),
+              fontSize: 12.5,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => LandingScreen.openRegistration(
+                context,
+                'Regístrate gratis ahora - bloque celular',
+              ),
+              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+              label: const Text(LandingScreen.primaryCtaLabel),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Phone-only sticky registration CTA. Mounted only while the hero CTA is out
+/// of view, so at most one floating action is ever on screen.
+class _StickyRegistrationCta extends StatelessWidget {
+  const _StickyRegistrationCta({
+    super.key,
+    required this.onRegister,
+    required this.onWhatsApp,
+  });
+
+  final VoidCallback onRegister;
+  final VoidCallback onWhatsApp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: _line)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x1F0B2744),
+            blurRadius: 22,
+            offset: Offset(0, -8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: onRegister,
+              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+              label: const Text(LandingScreen.compactCtaLabel),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Tooltip(
+            message: 'Escríbenos por WhatsApp',
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: onWhatsApp,
+                style: OutlinedButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  foregroundColor: _whatsapp,
+                  side: const BorderSide(color: _line),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Icon(Icons.chat_rounded, size: 20),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Subtle periodic attention animation for the primary registration CTA.
+///
+/// - Only transforms (no layout shift, no reflow).
+/// - Runs once every [_interval] for [_shakeDuration], then fully rests.
+/// - Disabled when the platform requests reduced motion.
+class _AttentionPulse extends StatefulWidget {
+  const _AttentionPulse({required this.child, this.enabled = true});
+
+  static const interval = Duration(seconds: 8);
+  static const shakeDuration = Duration(milliseconds: 560);
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<_AttentionPulse> createState() => _AttentionPulseState();
+}
+
+class _AttentionPulseState extends State<_AttentionPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  Timer? _timer;
+  bool _hovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: _AttentionPulse.shakeDuration,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (!widget.enabled || reduceMotion) {
+      _stop();
+      return;
+    }
+    _timer ??= Timer.periodic(_AttentionPulse.interval, (_) => _play());
+  }
+
+  @override
+  void didUpdateWidget(covariant _AttentionPulse oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) _stop();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _stop() {
+    _timer?.cancel();
+    _timer = null;
+    if (_controller.isAnimating) _controller.stop();
+    if (_controller.value != 0) _controller.value = 0;
+  }
+
+  void _play() {
+    if (!mounted || _controller.isAnimating) return;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final enableHover = !reduceMotion;
+    return MouseRegion(
+      onEnter: (_) {
+        if (enableHover) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: AnimatedBuilder(
+        animation: _controller,
+        child: widget.child,
+        builder: (context, child) {
+          final progress = _controller.value;
+          final wave = math.sin(progress * math.pi);
+          final shake = math.sin(progress * math.pi * 6) * 4.2 * wave;
+          final scale = 1 + (_hovered ? 0.018 : 0) + (0.02 * wave);
+          return Transform.translate(
+            offset: Offset(shake, 0),
+            child: Transform.scale(scale: scale, child: child),
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 String _planWhatsAppMessage(_PlanInfo plan) {
   return '''
@@ -259,94 +652,134 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isNarrowPhone = MediaQuery.sizeOf(context).width < 560;
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
-      child: Align(
-        alignment: isNarrowPhone ? Alignment.centerLeft : Alignment.center,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isNarrowPhone ? 370 : _maxContentWidth,
+    final width = MediaQuery.sizeOf(context).width;
+    final phone = width < 1180;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Inner decisions use the real layout width so the header never
+        // overflows when the box is narrower than the media query reports.
+        final layoutWidth = constraints.maxWidth;
+        final isNarrowPhone = layoutWidth < 560;
+        // Below 460px the wordmark is dropped so "Regístrate gratis" keeps its
+        // full label inside the header.
+        final showWordmark = !phone || layoutWidth >= 460;
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: _line)),
           ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: isNarrowPhone
-                  ? 12
-                  : isMobile
-                  ? 18
-                  : 38,
-              vertical: isMobile ? 10 : 12,
-            ),
-            child: Row(
-              children: [
-                if (isMobile)
-                  const Expanded(child: _BrandMark())
-                else
-                  const _BrandMark(),
-                if (!isMobile) const Spacer(),
-                if (isMobile)
-                  Builder(
-                    builder: (context) => IconButton.filledTonal(
-                      tooltip: 'Menu',
-                      onPressed: () => Scaffold.of(context).openEndDrawer(),
-                      icon: const Icon(Icons.menu_rounded),
-                    ),
-                  )
-                else ...[
-                  _NavButton(
-                    'Funciones',
-                    onTap: () => onNav(LandingScreen._featuresKey),
-                  ),
-                  _NavButton(
-                    'Empieza',
-                    onTap: () => onNav(LandingScreen._demoKey),
-                  ),
-                  _NavButton(
-                    'Planes',
-                    onTap: () => onNav(LandingScreen._pricingKey),
-                  ),
-                  _NavButton(
-                    'Cómo funciona',
-                    onTap: () => onNav(LandingScreen._processKey),
-                  ),
-                  _NavButton('FAQ', onTap: () => onNav(LandingScreen._faqKey)),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () => context.go(Routes.login),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF43566D),
-                      minimumSize: const Size(0, 42),
-                    ),
-                    child: const Text('Iniciar sesión'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: () => LandingScreen.openRegistration(
-                      context,
-                      'Crear cuenta gratis - topbar',
-                    ),
-                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 42),
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                    ),
-                    label: const Text('Crear cuenta gratis'),
-                  ),
-                ],
-              ],
+          child: Align(
+            alignment: isNarrowPhone ? Alignment.centerLeft : Alignment.center,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isNarrowPhone ? 370 : _maxContentWidth,
+              ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isNarrowPhone
+                      ? 12
+                      : phone
+                      ? 18
+                      : 38,
+                  vertical: phone ? 10 : 12,
+                ),
+                child: Row(
+                  children: [
+                    _BrandMark(showWordmark: showWordmark),
+                    const SizedBox(width: 8),
+                    if (phone) ...[
+                      Flexible(
+                        child: FilledButton(
+                          onPressed: () => LandingScreen.openRegistration(
+                            context,
+                            'Regístrate gratis - header móvil',
+                          ),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          child: const Text(
+                            LandingScreen.compactCtaLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Builder(
+                        builder: (context) => IconButton.filledTonal(
+                          tooltip: 'Menu',
+                          onPressed: () => Scaffold.of(context).openEndDrawer(),
+                          icon: const Icon(Icons.menu_rounded),
+                        ),
+                      ),
+                    ] else ...[
+                      const Spacer(),
+                      _NavButton(
+                        'Funciones',
+                        onTap: () => onNav(LandingScreen._featuresKey),
+                      ),
+                      _NavButton(
+                        'Empieza',
+                        onTap: () => onNav(LandingScreen._demoKey),
+                      ),
+                      _NavButton(
+                        'Planes',
+                        onTap: () => onNav(LandingScreen._pricingKey),
+                      ),
+                      _NavButton(
+                        'Cómo funciona',
+                        onTap: () => onNav(LandingScreen._processKey),
+                      ),
+                      _NavButton(
+                        'FAQ',
+                        onTap: () => onNav(LandingScreen._faqKey),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => context.go(Routes.login),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF43566D),
+                          minimumSize: const Size(0, 44),
+                        ),
+                        child: const Text('Iniciar sesión'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: () => LandingScreen.openRegistration(
+                          context,
+                          'Regístrate gratis - header',
+                        ),
+                        icon: const Icon(
+                          Icons.person_add_alt_1_rounded,
+                          size: 18,
+                        ),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                        ),
+                        label: const Text(LandingScreen.compactCtaLabel),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 class _BrandMark extends StatelessWidget {
-  const _BrandMark();
+  const _BrandMark({this.showWordmark = true});
+
+  final bool showWordmark;
 
   @override
   Widget build(BuildContext context) {
@@ -368,34 +801,40 @@ class _BrandMark extends StatelessWidget {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Image.asset('assets/image/logo-web.webp', fit: BoxFit.contain),
-        ),
-        const SizedBox(width: 12),
-        const Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'FullPOS Cloud',
-                style: TextStyle(
-                  color: _ink,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                'FULLTECH SRL',
-                style: TextStyle(
-                  color: _muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          child: Image.asset(
+            'assets/image/logo-web.webp',
+            fit: BoxFit.contain,
+            semanticLabel: showWordmark ? null : 'FullPOS Cloud',
           ),
         ),
+        if (showWordmark) ...[
+          const SizedBox(width: 12),
+          const Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FullPOS Cloud',
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'FULLTECH SRL',
+                  style: TextStyle(
+                    color: _muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -460,10 +899,18 @@ class _LandingDrawer extends StatelessWidget {
               Navigator.of(context).maybePop();
               context.go(Routes.login);
             }),
-            _DrawerAction('Crear cuenta', Icons.person_add_alt_1_rounded, () {
-              Navigator.of(context).maybePop();
-              LandingScreen.openRegistration(context, 'Crear cuenta - drawer');
-            }, emphasized: true),
+            _DrawerAction(
+              LandingScreen.compactCtaLabel,
+              Icons.person_add_alt_1_rounded,
+              () {
+                Navigator.of(context).maybePop();
+                LandingScreen.openRegistration(
+                  context,
+                  'Regístrate gratis - menú',
+                );
+              },
+              emphasized: true,
+            ),
           ],
         ),
       ),
@@ -504,7 +951,14 @@ class _DrawerAction extends StatelessWidget {
 }
 
 class _HeroSection extends StatelessWidget {
-  const _HeroSection();
+  const _HeroSection({required this.heroCtaKey, required this.animateCta});
+
+  final GlobalKey heroCtaKey;
+  final bool animateCta;
+
+  static const _title = 'Controla tus ventas, inventario y caja desde un solo lugar';
+  static const _subtitle =
+      'FullPOS Cloud te ayuda a manejar ventas, inventario, clientes, créditos y reportes desde tu computadora o celular.';
 
   @override
   Widget build(BuildContext context) {
@@ -513,10 +967,10 @@ class _HeroSection extends StatelessWidget {
         final compact = constraints.maxWidth < 820;
         final veryCompact = constraints.maxWidth < 380;
         final titleSize = veryCompact
-            ? 29.0
+            ? 27.0
             : compact
-            ? 32.0
-            : 52.0;
+            ? 30.0
+            : 50.0;
         final text = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -527,83 +981,78 @@ class _HeroSection extends StatelessWidget {
                 label: 'Prueba gratis por 7 días',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Text(
-              'Vende y controla tu negocio desde cualquier dispositivo',
+              _title,
               style: TextStyle(
                 color: _ink,
                 fontSize: titleSize,
-                height: 1.05,
+                height: 1.06,
                 fontWeight: FontWeight.w900,
               ),
             ),
-            SizedBox(height: compact ? 12 : 16),
+            SizedBox(height: compact ? 10 : 14),
             const Text(
-              'Crea tu cuenta una vez y usa FullPOS en Windows, Android, iPhone o Web.',
+              _subtitle,
               style: TextStyle(
                 color: Color(0xFF31465C),
-                fontSize: 16,
+                fontSize: 15.5,
                 height: 1.42,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            SizedBox(height: compact ? 18 : 22),
-            if (compact)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FilledButton.icon(
-                    onPressed: () => LandingScreen.openRegistration(
-                      context,
-                      'Crear cuenta y probar gratis - hero',
-                    ),
-                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
-                    label: const Text('Crear cuenta y probar gratis'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+            SizedBox(height: compact ? 16 : 20),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _AttentionPulse(
+                enabled: animateCta,
+                child: FilledButton.icon(
+                  key: heroCtaKey,
+                  onPressed: () => LandingScreen.openRegistration(
+                    context,
+                    'Regístrate gratis ahora - hero',
+                  ),
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
+                  label: const Text(LandingScreen.primaryCtaLabel),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 52),
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    textStyle: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: () => context.go(Routes.login),
-                    icon: const Icon(Icons.login_rounded, size: 19),
-                    label: const Text('Ya tengo cuenta'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                    ),
-                  ),
-                ],
-              )
-            else
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  FilledButton.icon(
-                    onPressed: () => LandingScreen.openRegistration(
-                      context,
-                      'Crear cuenta y probar gratis - hero',
-                    ),
-                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
-                    label: const Text('Crear cuenta y probar gratis'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => context.go(Routes.login),
-                    icon: const Icon(Icons.login_rounded, size: 19),
-                    label: const Text('Ya tengo cuenta'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                    ),
-                  ),
-                ],
+                ),
               ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Prueba FullPOS gratis por 7 días',
+              style: TextStyle(
+                color: _primaryDark,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Crea tu cuenta en pocos minutos.',
+              style: TextStyle(
+                color: Color(0xFF60748C),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: compact ? 12 : 16),
+            OutlinedButton.icon(
+              onPressed: () => context.go(Routes.login),
+              icon: const Icon(Icons.login_rounded, size: 19),
+              label: const Text('Ya tengo cuenta'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+              ),
+            ),
             SizedBox(height: compact ? 14 : 18),
             const _TrustPoints(),
           ],
@@ -678,23 +1127,33 @@ class _BenefitsSection extends StatelessWidget {
     const benefits = [
       _BenefitInfo(
         Icons.flash_on_rounded,
-        'Vende rápido',
-        'Agiliza el mostrador con facturación POS, búsqueda de productos, cobro y tickets listos para entregar.',
+        'Vende más rápido',
+        'Facturación POS con búsqueda de productos, cobro y ticket listo para entregar.',
       ),
       _BenefitInfo(
         Icons.inventory_2_rounded,
-        'Controla tu inventario',
-        'Mantén productos, categorías, existencias, almacenes y movimientos organizados en una sola operación.',
+        'Conoce tu inventario en tiempo real',
+        'Productos, existencias, almacenes y movimientos al día.',
       ),
       _BenefitInfo(
         Icons.account_balance_wallet_rounded,
-        'Maneja caja y operaciones',
-        'Administra turnos, ingresos, gastos, créditos, cotizaciones y compras con más orden diario.',
+        'Controla tu caja',
+        'Turnos, ingresos, gastos y arqueo del día con más orden.',
       ),
       _BenefitInfo(
-        Icons.analytics_rounded,
-        'Conoce cómo va tu negocio',
-        'Consulta reportes de ventas, utilidad, métodos de pago y resultados para tomar mejores decisiones.',
+        Icons.storefront_rounded,
+        'Administra clientes y créditos',
+        'Historial de compras, saldos y cobros pendientes en un solo lugar.',
+      ),
+      _BenefitInfo(
+        Icons.insights_rounded,
+        'Visualiza reportes claros',
+        'Ventas, utilidad y métodos de pago para decidir con datos.',
+      ),
+      _BenefitInfo(
+        Icons.cloud_done_rounded,
+        'Consulta tus ventas desde cualquier lugar',
+        'Usa la misma cuenta en Windows, Android, iPhone o Web.',
       ),
     ];
 
@@ -706,10 +1165,14 @@ class _BenefitsSection extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final columns = constraints.maxWidth > 900
-              ? 4
+              ? 3
               : constraints.maxWidth > 560
               ? 2
               : 1;
+          // Cards hold title + copy, so the row height follows the text scale.
+          final textScale = MediaQuery.textScalerOf(
+            context,
+          ).scale(1).clamp(1.0, 2.0);
           return GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -718,7 +1181,7 @@ class _BenefitsSection extends StatelessWidget {
               crossAxisCount: columns,
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
-              mainAxisExtent: 190,
+              mainAxisExtent: 210 * textScale,
             ),
             itemBuilder: (context, index) => _BenefitCard(benefits[index]),
           );
@@ -778,10 +1241,10 @@ class _DemoSection extends StatelessWidget {
                   title: 'Web / PWA',
                   description:
                       'Crea tu cuenta o usa FullPOS en el navegador como PWA.',
-                  actionLabel: 'Crear cuenta',
+                  actionLabel: LandingScreen.compactCtaLabel,
                   onPressed: () => LandingScreen.openRegistration(
                     context,
-                    'Crear cuenta - web pwa',
+                    'Regístrate gratis - web pwa',
                   ),
                   secondaryActionLabel: 'Usar FullPOS en la Web',
                   onSecondaryPressed: () => LandingScreen.installPwa(context),
@@ -934,37 +1397,41 @@ class _PurchaseProcessSection extends StatelessWidget {
   Widget build(BuildContext context) {
     const steps = [
       _StepInfo(
-        'Crea tu cuenta',
-        'Regístrate gratis desde la Web o FullPOS para Windows.',
+        'Crea tu cuenta gratis',
+        'Regístrate en pocos minutos desde este navegador o desde FullPOS para Windows.',
       ),
       _StepInfo(
-        'Prueba FullPOS por 7 días',
-        'Inicia sesión con la misma cuenta en Windows, Android, iPhone o Web y conoce FullPOS durante tu prueba.',
+        'Configura tu negocio',
+        'Carga tus productos, precios y datos del negocio para empezar a operar.',
       ),
       _StepInfo(
-        'Activa tu licencia',
-        'Cuando quieras continuar, escríbenos por WhatsApp y activamos tu licencia después de confirmar el pago.',
+        'Prueba FullPOS durante 7 días',
+        'Inicia sesión con la misma cuenta en tus dispositivos compatibles durante la prueba gratis.',
+      ),
+      _StepInfo(
+        'Si te funciona, activa el plan que necesites',
+        'Escríbenos por WhatsApp y activamos tu licencia después de confirmar el pago.',
       ),
     ];
 
     return _SectionShell(
       eyebrow: 'Cómo funciona',
-      title: 'Crea tu cuenta, prueba y activa sin complicarte',
+      title: 'Empieza en pocos minutos',
       copy:
           'Crea tu cuenta una sola vez y usa los mismos datos para iniciar sesión en tus dispositivos.',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
-          final whatsappButton = FilledButton.icon(
+          final whatsappButton = OutlinedButton.icon(
             onPressed: () => LandingScreen._openWhatsApp(
               context,
               'Hola, quiero activar mi licencia de FullPOS Cloud.',
-              ctaName: 'Activar por WhatsApp',
+              ctaName: 'Activar por WhatsApp - cómo funciona',
             ),
             icon: const Icon(Icons.chat_rounded, size: 18),
-            label: const Text('Activar por WhatsApp'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 46),
+            label: const Text('Hablar por WhatsApp'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
               padding: const EdgeInsets.symmetric(horizontal: 18),
             ),
           );
@@ -984,6 +1451,7 @@ class _PurchaseProcessSection extends StatelessWidget {
               ],
             );
           }
+          final columns = constraints.maxWidth >= 1040 ? 4 : 2;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -993,7 +1461,7 @@ class _PurchaseProcessSection extends StatelessWidget {
                 children: [
                   for (var index = 0; index < steps.length; index++)
                     SizedBox(
-                      width: constraints.maxWidth / 3,
+                      width: constraints.maxWidth / columns,
                       child: _TimelineStep(
                         number: index + 1,
                         step: steps[index],
@@ -1013,6 +1481,210 @@ class _PurchaseProcessSection extends StatelessWidget {
   }
 }
 
+/// Sober trust section. Only verifiable facts: legal name, real channels,
+/// real platforms and the real 7-day trial.
+class _TrustSection extends StatelessWidget {
+  const _TrustSection();
+
+  @override
+  Widget build(BuildContext context) {
+    const facts = [
+      _TrustFact(
+        Icons.verified_rounded,
+        'FULLTECH SRL',
+        'Producto desarrollado y operado por FULLTECH SRL.',
+      ),
+      _TrustFact(
+        Icons.chat_rounded,
+        'Soporte por WhatsApp',
+        'Asistencia directa por el canal comercial $_supportPhoneDisplay.',
+      ),
+      _TrustFact(
+        Icons.timer_rounded,
+        'Prueba de 7 días',
+        'Empieza gratis y decide con el sistema en uso.',
+      ),
+      _TrustFact(
+        Icons.devices_rounded,
+        'Windows, Android, iPhone y Web',
+        'Acceso web/PWA y aplicaciones para los dispositivos soportados.',
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionShell(
+          eyebrow: 'Confianza',
+          title:
+              'Un sistema desarrollado para negocios que necesitan control y simplicidad',
+          copy:
+              'Información verificable sobre quién desarrolla FullPOS Cloud y qué incluye la prueba.',
+          child: SizedBox.shrink(),
+        ),
+        const SizedBox(height: 4),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth > 900 ? 2 : 1;
+            final gap = 12.0;
+            final cardWidth =
+                (constraints.maxWidth - (gap * (columns - 1))) / columns;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final fact in facts)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _TrustFactCard(fact),
+                  ),
+              ],
+            );
+          },
+        ),
+        // TESTIMONIALS_PENDING_REAL_DATA
+        // The slot is prepared but nothing is published until the owner supplies
+        // real, verifiable testimonials. No invented customers, ratings or
+        // statistics are rendered.
+        if (_testimonials.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _TestimonialsSection(),
+        ],
+      ],
+    );
+  }
+}
+
+class _TrustFact {
+  const _TrustFact(this.icon, this.title, this.copy);
+
+  final IconData icon;
+  final String title;
+  final String copy;
+}
+
+class _TrustFactCard extends StatelessWidget {
+  const _TrustFactCard(this.fact);
+
+  final _TrustFact fact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _line),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF2FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(fact.icon, color: _primary, size: 20),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fact.title,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  fact.copy,
+                  style: const TextStyle(
+                    color: Color(0xFF60748C),
+                    fontSize: 12.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// TESTIMONIALS_PENDING_REAL_DATA
+/// Renders only when real testimonials are provided by the business owner.
+const List<_TestimonialInfo> _testimonials = <_TestimonialInfo>[];
+
+class _TestimonialInfo {
+  const _TestimonialInfo({
+    required this.quote,
+    required this.author,
+    required this.business,
+  });
+
+  final String quote;
+  final String author;
+  final String business;
+}
+
+class _TestimonialsSection extends StatelessWidget {
+  const _TestimonialsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final testimonial in _testimonials) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  testimonial.quote,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 14,
+                    height: 1.45,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${testimonial.author} · ${testimonial.business}',
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
 class _PricingSection extends StatelessWidget {
   const _PricingSection();
 
@@ -1022,7 +1694,7 @@ class _PricingSection extends StatelessWidget {
       eyebrow: 'Planes y precios',
       title: 'Elige el plan que mejor se adapte a tu negocio',
       copy:
-          'Todos los planes muestran su costo mensual para que puedas comparar fácilmente. La activación mínima es por 3 meses.',
+          'Primero crea tu cuenta y prueba FullPOS gratis 7 días. Cuando decidas continuar, activas el plan que necesites: la activación mínima es por 3 meses.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1053,6 +1725,37 @@ class _PricingSection extends StatelessWidget {
                 ),
               );
             },
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => LandingScreen.openRegistration(
+                context,
+                'Regístrate gratis ahora - planes',
+              ),
+              icon: const Icon(Icons.person_add_alt_1_rounded, size: 19),
+              label: const Text(LandingScreen.primaryCtaLabel),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                textStyle: const TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Prueba FullPOS gratis por 7 días. No necesitas elegir un plan para empezar.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF60748C),
+              fontSize: 12.5,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 14),
           const _PricingTerms(),
@@ -1094,43 +1797,47 @@ class _FaqSection extends StatelessWidget {
   Widget build(BuildContext context) {
     const faqs = [
       (
-        '¿Cómo empiezo mi prueba gratis?',
-        'Crea tu cuenta de FullPOS Cloud y comienza tu prueba gratis por 7 días sin contactar a soporte primero.',
-      ),
-      (
-        '¿Dónde creo mi cuenta?',
-        'Puedes crear tu cuenta desde la Web o desde FullPOS para Windows.',
+        '¿Puedo probar FullPOS antes de pagar?',
+        'Sí. Crea tu cuenta gratis y usa FullPOS Cloud durante 7 días antes de activar cualquier plan.',
       ),
       (
         '¿Cuánto dura la prueba?',
-        'FullPOS Cloud incluye una prueba gratis de 7 días.',
+        'La prueba gratis dura 7 días desde que creas tu cuenta.',
+      ),
+      (
+        '¿Necesito instalar algo para probarlo?',
+        'No. Puedes probarlo desde el navegador (Web/PWA). También puedes descargar FullPOS para Windows, Android o iPhone.',
+      ),
+      (
+        '¿Puedo utilizarlo desde mi celular?',
+        'Sí. Puedes crear tu cuenta desde el navegador de tu celular y usar FullPOS en la Web/PWA. En Android o iPhone inicia sesión en la app con la misma cuenta.',
+      ),
+      (
+        '¿Funciona en Windows?',
+        'Sí. FullPOS Cloud tiene instalador para Windows, además de acceso Web/PWA, Android y iPhone.',
+      ),
+      (
+        '¿Qué ocurre después de los 7 días?',
+        'Al terminar la prueba, para seguir usando FullPOS Cloud hay que activar un plan. Escríbenos por WhatsApp y activamos tu licencia después de confirmar el pago.',
       ),
       (
         '¿Puedo usar la misma cuenta en varios dispositivos?',
         'Sí. Crea tu cuenta una sola vez y usa los mismos datos para iniciar sesión en tus dispositivos.',
       ),
       (
-        '¿Cómo uso FullPOS en Android o iPhone?',
-        'Si vas a usar FullPOS en Android o iPhone, crea primero tu cuenta desde la Web o Windows y luego inicia sesión en la app con los mismos datos.',
-      ),
-      (
-        '¿Cómo activo mi licencia después de la prueba?',
-        'Durante la prueba o al finalizarla puedes escribirnos por WhatsApp para elegir tu plan y activar tu licencia después de confirmar el pago.',
-      ),
-      (
         '¿Cómo puedo pagar?',
         'Actualmente aceptamos transferencia bancaria. La contratación mínima es de 3 meses.',
       ),
       (
-        '¿Cómo solicito asistencia?',
-        'Si tienes dudas durante la prueba o necesitas activar tu licencia, escríbenos por WhatsApp.',
+        '¿Cómo recibo soporte?',
+        'El soporte es por WhatsApp ($_supportPhoneDisplay), tanto durante la prueba como para activar tu licencia.',
       ),
     ];
 
     return _SectionShell(
       eyebrow: 'Preguntas frecuentes',
       title: 'Respuestas rápidas para empezar',
-      copy: 'Lo esencial sobre descarga, prueba, pago, activación y soporte.',
+      copy: 'Lo esencial sobre prueba, dispositivos, pago, activación y soporte.',
       child: Column(
         children: [
           for (final faq in faqs) _FaqTile(question: faq.$1, answer: faq.$2),
@@ -1245,6 +1952,8 @@ class _Footer extends StatelessWidget {
   }
 }
 
+/// Secondary contact channel. Hidden while the phone sticky registration CTA is
+/// visible so two floating actions never compete at the bottom of the screen.
 class _FloatingWhatsAppButton extends StatelessWidget {
   const _FloatingWhatsAppButton();
 
@@ -1255,7 +1964,7 @@ class _FloatingWhatsAppButton extends StatelessWidget {
       child: FloatingActionButton.small(
         heroTag: 'landing-whatsapp',
         tooltip: 'Escríbenos por WhatsApp',
-        backgroundColor: _accent,
+        backgroundColor: _whatsapp,
         foregroundColor: Colors.white,
         onPressed: () => LandingScreen._openWhatsApp(
           context,
@@ -1281,7 +1990,7 @@ class _FooterLink extends StatelessWidget {
       style: TextButton.styleFrom(
         foregroundColor: _muted,
         padding: EdgeInsets.zero,
-        minimumSize: const Size(0, 36),
+        minimumSize: const Size(0, 44),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       child: Text(label),
@@ -1888,15 +2597,6 @@ class _PlanCard extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 5),
-          const Text(
-            'Facturación mínima de 3 meses',
-            style: TextStyle(
-              color: Color(0xFF42566D),
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
           const SizedBox(height: 8),
           Text(
             'Total trimestral: ${plan.total}',
@@ -1904,6 +2604,15 @@ class _PlanCard extends StatelessWidget {
               color: _primaryDark,
               fontSize: 15,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Facturación mínima de 3 meses',
+            style: TextStyle(
+              color: Color(0xFF60748C),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 16),
@@ -1924,13 +2633,14 @@ class _PlanCard extends StatelessWidget {
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
-            child: FilledButton.icon(
+            child: OutlinedButton.icon(
               onPressed: () => LandingScreen._openPlanWhatsApp(context, plan),
               icon: const Icon(Icons.chat_rounded, size: 18),
-              label: const Text('Comenzar prueba'),
-              style: FilledButton.styleFrom(
+              label: const Text('Activar este plan'),
+              style: OutlinedButton.styleFrom(
                 minimumSize: const Size(0, 48),
-                backgroundColor: highlighted ? _primary : _primaryDark,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                foregroundColor: highlighted ? _primary : _primaryDark,
               ),
             ),
           ),

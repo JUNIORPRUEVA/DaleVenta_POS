@@ -57,17 +57,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Vende y controla tu negocio desde cualquier dispositivo'),
+      find.text('Controla tus ventas, inventario y caja desde un solo lugar'),
       findsOneWidget,
     );
-    expect(find.text('Crear cuenta y probar gratis'), findsWidgets);
+    expect(
+      find.text(
+        'FullPOS Cloud te ayuda a manejar ventas, inventario, clientes, créditos y reportes desde tu computadora o celular.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(LandingScreen.primaryCtaLabel), findsWidgets);
+    expect(find.text(LandingScreen.compactCtaLabel), findsWidgets);
+    expect(find.text('Prueba FullPOS gratis por 7 días'), findsWidgets);
+    expect(find.text('Crea tu cuenta en pocos minutos.'), findsOneWidget);
     expect(find.text('Ya tengo cuenta'), findsWidgets);
     expect(find.text('Usa FullPOS donde quieras'), findsOneWidget);
     expect(find.text('Descargar para Windows'), findsOneWidget);
     expect(find.text('Descargar para Android'), findsOneWidget);
     expect(find.text('Descargar para iPhone'), findsOneWidget);
     expect(find.text('iPhone'), findsWidgets);
-    expect(find.text('Crear cuenta'), findsWidgets);
     expect(find.text('Usar FullPOS en la Web'), findsOneWidget);
     expect(
       find.text(
@@ -75,14 +83,20 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Crea tu cuenta'), findsWidgets);
-    expect(find.text('Prueba FullPOS por 7 días'), findsOneWidget);
-    expect(find.text('Activa tu licencia'), findsOneWidget);
+    expect(find.text('Crea tu cuenta gratis'), findsOneWidget);
+    expect(find.text('Configura tu negocio'), findsOneWidget);
+    expect(find.text('Prueba FullPOS durante 7 días'), findsOneWidget);
+    expect(
+      find.text('Si te funciona, activa el plan que necesites'),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('activamos tu licencia después de confirmar el pago'),
       findsOneWidget,
     );
-    expect(find.text('Activar por WhatsApp'), findsOneWidget);
+    expect(find.text('Hablar por WhatsApp'), findsOneWidget);
+    expect(find.text('Prueba de 7 días'), findsOneWidget);
+    expect(find.text('Soporte por WhatsApp'), findsOneWidget);
     expect(find.text('Prueba gratis por 7 días'), findsWidgets);
     expect(find.textContaining('5 días'), findsNothing);
     expect(find.textContaining('5 dias'), findsNothing);
@@ -105,8 +119,8 @@ void main() {
     expect(find.text('Crear mi cuenta'), findsNothing);
     expect(find.text('Ahorra RD\$ 2,000 anual'), findsNothing);
     expect(find.text('WhatsApp: 829-531-9442'), findsOneWidget);
-    expect(find.byTooltip('Escríbenos por WhatsApp'), findsOneWidget);
-    expect(find.text('Comenzar prueba'), findsNWidgets(3));
+    expect(find.byTooltip('Escríbenos por WhatsApp'), findsWidgets);
+    expect(find.text('Activar este plan'), findsNWidgets(3));
     expect(find.textContaining('Instalación remota incluida'), findsNothing);
     expect(find.textContaining('instalación remota incluida'), findsNothing);
     expect(find.textContaining('configuración remota'), findsNothing);
@@ -132,7 +146,7 @@ void main() {
       hasLength(1),
     );
 
-    await tester.tap(find.text('Crear cuenta y probar gratis').first);
+    await tester.tap(find.text(LandingScreen.primaryCtaLabel).first);
     await tester.pumpAndSettle();
     expect(find.text('Register'), findsOneWidget);
     expect(
@@ -143,7 +157,7 @@ void main() {
     );
     expect(
       MarketingAnalytics.debugEventsForTests.last.parameters,
-      containsPair('cta_name', 'Crear cuenta y probar gratis - hero'),
+      containsPair('cta_name', 'Regístrate gratis ahora - hero'),
     );
 
     router.go('/');
@@ -152,6 +166,31 @@ void main() {
     await tester.tap(find.text('Ya tengo cuenta').first);
     await tester.pumpAndSettle();
     expect(find.text('Login'), findsOneWidget);
+  });
+
+  testWidgets('landing pricing CTA routes to register with its own cta_name', (
+    tester,
+  ) async {
+    final router = _landingRouter();
+    addTearDown(router.dispose);
+    _setPhoneViewport(tester, const Size(1024, 900));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    final pricingCta = find.text(LandingScreen.primaryCtaLabel).last;
+    await tester.ensureVisible(pricingCta);
+    await tester.pumpAndSettle();
+    await tester.tap(pricingCta);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Register'), findsOneWidget);
+    expect(
+      MarketingAnalytics.debugEventsForTests.last.parameters,
+      containsPair('cta_name', 'Regístrate gratis ahora - planes'),
+    );
   });
 
   testWidgets('landing renders without layout errors on responsive widths', (
@@ -241,6 +280,287 @@ void main() {
 
     addTearDown(() => tester.binding.setSurfaceSize(null));
   });
+
+  testWidgets('hero CTA stays above the fold on phone viewports', (
+    tester,
+  ) async {
+    const phones = <Size>[
+      Size(360, 800),
+      Size(375, 812),
+      Size(390, 844),
+      Size(412, 915),
+      Size(430, 932),
+    ];
+
+    for (final size in phones) {
+      final router = _landingRouter();
+      addTearDown(router.dispose);
+      _setPhoneViewport(tester, size);
+
+      await tester.pumpWidget(
+        ProviderScope(child: MaterialApp.router(routerConfig: router)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull, reason: 'layout at $size');
+
+      final title = tester.getRect(
+        find.text('Controla tus ventas, inventario y caja desde un solo lugar'),
+      );
+      final heroCta = tester.getRect(
+        find
+            .ancestor(
+              of: find.text(LandingScreen.primaryCtaLabel).first,
+              matching: find.byType(FilledButton),
+            )
+            .first,
+      );
+      expect(
+        title.top,
+        greaterThanOrEqualTo(0),
+        reason: 'Headline must start inside the viewport at $size',
+      );
+      expect(
+        heroCta.bottom,
+        lessThanOrEqualTo(size.height),
+        reason: 'Register CTA must be visible without scrolling at $size',
+      );
+      expect(heroCta.height, greaterThanOrEqualTo(44));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+
+    addTearDown(tester.view.reset);
+  });
+
+  testWidgets('phone header exposes logo, register CTA and menu', (
+    tester,
+  ) async {
+    final router = _landingRouter();
+    addTearDown(router.dispose);
+    _setPhoneViewport(tester, const Size(360, 800));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    final headerCta = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(LandingScreen.compactCtaLabel).first,
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
+    expect(headerCta.top, lessThan(120));
+    expect(headerCta.bottom, lessThanOrEqualTo(800));
+    expect(headerCta.height, greaterThanOrEqualTo(44));
+    expect(find.byTooltip('Menu'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sticky register CTA appears only after the hero CTA leaves', (
+    tester,
+  ) async {
+    final router = _landingRouter();
+    addTearDown(router.dispose);
+    _setPhoneViewport(tester, const Size(390, 844));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    final sticky = find.byKey(LandingScreen.stickyCtaKey);
+    final heroCta = find
+        .ancestor(
+          of: find.text(LandingScreen.primaryCtaLabel).first,
+          matching: find.byType(FilledButton),
+        )
+        .first;
+    expect(tester.getRect(heroCta).bottom, lessThanOrEqualTo(844));
+    // Not mounted above the fold: the FAB is the only floating action there.
+    expect(sticky, findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
+    await tester.drag(
+      find.byType(CustomScrollView),
+      const Offset(0, -1200),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getRect(heroCta).bottom,
+      lessThanOrEqualTo(0),
+      reason: 'The hero CTA must scroll out of view to trigger the sticky CTA.',
+    );
+    // Diagnostic order: the FAB disappears as soon as the sticky CTA shows.
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    expect(sticky, findsOneWidget);
+    final barCta = find.descendant(
+      of: sticky,
+      matching: find.byType(FilledButton),
+    );
+    final stickyRect = tester.getRect(barCta);
+    expect(stickyRect.top, greaterThan(600));
+    expect(stickyRect.bottom, lessThanOrEqualTo(844));
+    expect(stickyRect.height, greaterThanOrEqualTo(44));
+
+    await tester.tap(barCta);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Register'), findsOneWidget);
+    expect(
+      MarketingAnalytics.debugEventsForTests.last.parameters,
+      containsPair('cta_name', 'Regístrate gratis - CTA fijo móvil'),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile registration note is shown only on phone widths', (
+    tester,
+  ) async {
+    final router = _landingRouter();
+    addTearDown(router.dispose);
+    _setPhoneViewport(tester, const Size(390, 844));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('¿Estás desde tu celular?'), findsOneWidget);
+    expect(
+      find.text(
+        'Puedes crear tu cuenta ahora desde este navegador, sin instalar nada.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    final wideRouter = _landingRouter();
+    addTearDown(wideRouter.dispose);
+    _setPhoneViewport(tester, const Size(1024, 900));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: wideRouter)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('¿Estás desde tu celular?'), findsNothing);
+    expect(find.byKey(LandingScreen.stickyCtaKey), findsNothing);
+
+    addTearDown(tester.view.reset);
+  });
+
+  testWidgets('CTA attention animation rests and honours reduced motion', (
+    tester,
+  ) async {
+    Future<void> pumpLanding({required bool reduceMotion}) async {
+      final router = _landingRouter();
+      addTearDown(router.dispose);
+      _setPhoneViewport(tester, const Size(390, 844));
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp.router(
+            routerConfig: router,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(disableAnimations: reduceMotion),
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // Motion allowed: the CTA shakes and then returns to rest.
+    await pumpLanding(reduceMotion: false);
+    final resting = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(LandingScreen.primaryCtaLabel).first,
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
+
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pump(const Duration(milliseconds: 300));
+    final shaking = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(LandingScreen.primaryCtaLabel).first,
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
+    expect(
+      (shaking.left - resting.left).abs(),
+      greaterThan(0.5),
+      reason: 'The CTA should shift during the attention animation.',
+    );
+
+    await tester.pump(const Duration(milliseconds: 900));
+    final recovered = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(LandingScreen.primaryCtaLabel).first,
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
+    expect((recovered.left - resting.left).abs(), lessThan(0.5));
+    expect(
+      (recovered.width - resting.width).abs(),
+      lessThan(0.5),
+      reason: 'The animation must not leave a layout shift behind.',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    // Reduced motion: no shake at all.
+    await pumpLanding(reduceMotion: true);
+    final reducedRest = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(LandingScreen.primaryCtaLabel).first,
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pump(const Duration(milliseconds: 300));
+    final reducedAfter = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(LandingScreen.primaryCtaLabel).first,
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
+    expect((reducedAfter.left - reducedRest.left).abs(), lessThan(0.5));
+    expect((reducedAfter.width - reducedRest.width).abs(), lessThan(0.5));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    addTearDown(tester.view.reset);
+  });
+}
+
+/// Sets a real phone viewport (setSurfaceSize alone does not resize the view).
+void _setPhoneViewport(WidgetTester tester, Size size) {
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = size;
 }
 
 GoRouter _landingRouter() {

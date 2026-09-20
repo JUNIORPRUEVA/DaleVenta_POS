@@ -268,6 +268,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               label: 'Nombre del negocio',
                               icon: Icons.storefront_rounded,
                               textInputAction: TextInputAction.next,
+                              autofillHints: const [AutofillHints.organizationName],
+                              textCapitalization: TextCapitalization.words,
                             ),
                             const SizedBox(height: 12),
                             _Field(
@@ -275,6 +277,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               label: 'Persona responsable',
                               icon: Icons.person_outline_rounded,
                               textInputAction: TextInputAction.next,
+                              keyboardType: TextInputType.name,
+                              autofillHints: const [AutofillHints.name],
+                              textCapitalization: TextCapitalization.words,
                             ),
                             const SizedBox(height: 12),
                             _Field(
@@ -283,6 +288,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               icon: Icons.alternate_email_rounded,
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
+                              autofillHints: const [AutofillHints.email],
+                              autocorrect: false,
                               validator: _emailValidator,
                             ),
                             const SizedBox(height: 12),
@@ -292,6 +299,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               icon: Icons.phone_outlined,
                               keyboardType: TextInputType.phone,
                               textInputAction: TextInputAction.next,
+                              autofillHints: const [
+                                AutofillHints.telephoneNumber,
+                              ],
+                              autocorrect: false,
                             ),
                             const SizedBox(height: 12),
                             _PasswordField(
@@ -430,7 +441,7 @@ class _Header extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                'Crea tu cuenta de FullPOS Cloud y comienza tu prueba gratis por 7 dias.',
+                'Crea tu cuenta de FullPOS Cloud y comienza tu prueba gratis por 7 días.',
                 style: TextStyle(
                   color: Color(0xFF52667C),
                   fontSize: 13,
@@ -532,6 +543,9 @@ class _Field extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.validator,
+    this.autofillHints,
+    this.textCapitalization = TextCapitalization.none,
+    this.autocorrect = true,
   });
 
   final TextEditingController controller;
@@ -540,6 +554,9 @@ class _Field extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final String? Function(String?)? validator;
+  final Iterable<String>? autofillHints;
+  final TextCapitalization textCapitalization;
+  final bool autocorrect;
 
   @override
   Widget build(BuildContext context) {
@@ -547,6 +564,10 @@ class _Field extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
+      autofillHints: autofillHints,
+      textCapitalization: textCapitalization,
+      autocorrect: autocorrect,
+      enableSuggestions: autocorrect,
       decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
       validator:
           validator ??
@@ -575,6 +596,7 @@ class _PasswordField extends StatelessWidget {
       controller: controller,
       obscureText: obscure,
       textInputAction: TextInputAction.done,
+      autofillHints: const [AutofillHints.newPassword],
       decoration: InputDecoration(
         labelText: 'Contraseña',
         prefixIcon: const Icon(Icons.lock_outline_rounded),

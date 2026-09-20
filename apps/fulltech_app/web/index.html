@@ -195,6 +195,15 @@
       font-weight: 600;
     }
 
+    .seo-lead-note {
+      max-width: 730px;
+      margin: 10px 0 0;
+      color: var(--primary-dark);
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 800;
+    }
+
     .seo-actions,
     .seo-chip-row {
       display: flex;
@@ -499,6 +508,7 @@
   <link rel="apple-touch-icon" href="icons/Icon-192.png?v=20260816">
   <link rel="icon" type="image/png" href="favicon.png?v=20260816">
   <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="preload" href="main.dart.js" as="script">
   <link rel="preload" href="assets/assets/image/logo-web.webp" as="image">
   <link rel="preload" href="assets/assets/image/fullpos-windows-ios-android.webp" as="image" media="(min-width: 821px)" type="image/webp">
@@ -583,7 +593,7 @@
           <a href="/support">Soporte</a>
           <a href="/contact">Contacto</a>
           <a href="/login">Iniciar sesión</a>
-          <a href="/register" data-create-account-cta="Crear cuenta gratis - seo nav">Crear cuenta gratis</a>
+          <a href="/register" data-create-account-cta="Regístrate gratis - seo nav">Regístrate gratis</a>
         </div>
       </nav>
     </header>
@@ -592,12 +602,13 @@
       <section class="seo-hero" aria-labelledby="landing-title">
         <div>
           <div class="seo-eyebrow">Prueba gratis por 7 días</div>
-          <h1 id="landing-title">Vende y controla tu negocio desde cualquier dispositivo</h1>
-          <p class="seo-lead">Crea tu cuenta una vez y usa FullPOS en Windows, Android, iPhone o Web.</p>
+          <h1 id="landing-title">Controla tus ventas, inventario y caja desde un solo lugar</h1>
+          <p class="seo-lead">FullPOS Cloud te ayuda a manejar ventas, inventario, clientes, créditos y reportes desde tu computadora o celular.</p>
           <div class="seo-actions">
-            <a class="seo-button" href="/register" data-create-account-cta="Crear cuenta y probar gratis - seo hero">Crear cuenta y probar gratis</a>
+            <a class="seo-button" href="/register" data-create-account-cta="Regístrate gratis ahora - seo hero">Regístrate gratis ahora</a>
             <a class="seo-button secondary" href="/login">Ya tengo cuenta</a>
           </div>
+          <p class="seo-lead-note">Prueba FullPOS gratis por 7 días. Crea tu cuenta en pocos minutos.</p>
           <div class="seo-chip-row" aria-label="Plataformas soportadas">
             <span class="seo-chip">Windows</span>
             <span class="seo-chip">Android</span>
@@ -1013,6 +1024,12 @@
         }
         showVariant('install');
         return false;
+      };
+
+      // Read by the Flutter landing screen so the in-app sticky registration CTA
+      // never overlaps this DOM banner.
+      window.fulltechPwaBannerVisible = function () {
+        return banner.classList.contains('is-visible');
       };
 
       primaryButton.addEventListener('click', function () {
