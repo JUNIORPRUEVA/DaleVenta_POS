@@ -1,0 +1,5 @@
+# Generated artifacts (baseline, plans, sanitized logs).
+# Kept out of git on purpose: they describe a live ad account and can change
+# between runs. Nothing in here contains credentials (redacted at write time).
+*
+!.gitignore
