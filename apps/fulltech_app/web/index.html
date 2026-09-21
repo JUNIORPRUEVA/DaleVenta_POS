@@ -39,9 +39,25 @@
     @font-face {
       font-family: "Manrope";
       font-style: normal;
-      font-weight: 400 900;
+      font-weight: 400;
       font-display: swap;
       src: url("assets/assets/fonts/manrope/Manrope-Regular.ttf") format("truetype");
+    }
+
+    @font-face {
+      font-family: "Manrope";
+      font-style: normal;
+      font-weight: 600;
+      font-display: swap;
+      src: url("assets/assets/fonts/manrope/Manrope-SemiBold.ttf") format("truetype");
+    }
+
+    @font-face {
+      font-family: "Manrope";
+      font-style: normal;
+      font-weight: 700 900;
+      font-display: swap;
+      src: url("assets/assets/fonts/manrope/Manrope-Bold.ttf") format("truetype");
     }
 
     :root {
@@ -201,6 +217,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 8px;
       padding: 0 18px;
       border-radius: 8px;
       background: var(--primary);
@@ -209,6 +226,17 @@
       font-weight: 900;
       text-decoration: none;
       white-space: nowrap;
+    }
+
+    .seo-header-cta::before,
+    .seo-button:not(.secondary)::before {
+      content: "+";
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
     }
 
     .seo-menu-button {
@@ -288,6 +316,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 8px;
       padding: 0 22px;
       border-radius: 8px;
       background: var(--primary);
@@ -598,9 +627,11 @@
       .seo-header-actions { display: none; }
 
       .seo-hero {
-        padding-top: 38px;
+        padding: 38px 0 28px;
         grid-template-columns: minmax(0, 0.9fr) minmax(300px, 1.02fr);
         gap: 36px;
+        transform: translateY(-78px);
+        margin-bottom: -78px;
       }
 
       .seo-hero h1 { font-size: clamp(30px, 5vw, 50px); }
@@ -612,6 +643,7 @@
 
       .seo-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+        padding-top: 28px;
       }
 
       .seo-plan-list {
