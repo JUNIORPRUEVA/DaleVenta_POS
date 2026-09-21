@@ -622,7 +622,6 @@ class _AttentionPulseState extends State<_AttentionPulse>
   }
 }
 
-
 String _planWhatsAppMessage(_PlanInfo plan) {
   return '''
 Hola, me interesa adquirir FullPOS Cloud.
@@ -686,8 +685,8 @@ class _TopBar extends StatelessWidget {
                 child: Row(
                   children: [
                     _BrandMark(showWordmark: showWordmark),
-                    const SizedBox(width: 8),
                     if (phone) ...[
+                      const Spacer(),
                       Flexible(
                         child: FilledButton(
                           onPressed: () => LandingScreen.openRegistration(
@@ -696,7 +695,9 @@ class _TopBar extends StatelessWidget {
                           ),
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 44),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isNarrowPhone ? 10 : 14,
+                            ),
                             textStyle: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w900,
@@ -709,10 +710,15 @@ class _TopBar extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Builder(
                         builder: (context) => IconButton.filledTonal(
                           tooltip: 'Menu',
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(44, 44),
+                            fixedSize: const Size(44, 44),
+                            padding: EdgeInsets.zero,
+                          ),
                           onPressed: () => Scaffold.of(context).openEndDrawer(),
                           icon: const Icon(Icons.menu_rounded),
                         ),
@@ -956,7 +962,8 @@ class _HeroSection extends StatelessWidget {
   final GlobalKey heroCtaKey;
   final bool animateCta;
 
-  static const _title = 'Controla tus ventas, inventario y caja desde un solo lugar';
+  static const _title =
+      'Controla tus ventas, inventario y caja desde un solo lugar';
   static const _subtitle =
       'FullPOS Cloud te ayuda a manejar ventas, inventario, clientes, créditos y reportes desde tu computadora o celular.';
 
@@ -1534,10 +1541,7 @@ class _TrustSection extends StatelessWidget {
               runSpacing: gap,
               children: [
                 for (final fact in facts)
-                  SizedBox(
-                    width: cardWidth,
-                    child: _TrustFactCard(fact),
-                  ),
+                  SizedBox(width: cardWidth, child: _TrustFactCard(fact)),
               ],
             );
           },
@@ -1837,7 +1841,8 @@ class _FaqSection extends StatelessWidget {
     return _SectionShell(
       eyebrow: 'Preguntas frecuentes',
       title: 'Respuestas rápidas para empezar',
-      copy: 'Lo esencial sobre prueba, dispositivos, pago, activación y soporte.',
+      copy:
+          'Lo esencial sobre prueba, dispositivos, pago, activación y soporte.',
       child: Column(
         children: [
           for (final faq in faqs) _FaqTile(question: faq.$1, answer: faq.$2),

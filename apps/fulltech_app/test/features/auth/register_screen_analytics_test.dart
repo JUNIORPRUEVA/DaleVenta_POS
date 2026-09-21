@@ -62,6 +62,7 @@ void main() {
   Future<void> pumpRegisterScreen(
     WidgetTester tester, {
     required _RegisterAnalyticsRepository repository,
+    Size size = const Size(1200, 1000),
   }) async {
     final router = GoRouter(
       initialLocation: Routes.register,
@@ -69,6 +70,10 @@ void main() {
         GoRoute(
           path: Routes.register,
           builder: (context, state) => const RegisterScreen(),
+        ),
+        GoRoute(
+          path: Routes.landing,
+          builder: (context, state) => const Scaffold(body: Text('Landing')),
         ),
         GoRoute(
           path: Routes.cotizaciones,
@@ -82,7 +87,7 @@ void main() {
     );
     addTearDown(router.dispose);
 
-    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -109,7 +114,7 @@ void main() {
       'Persona QA',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Correo corporativo'),
+      find.widgetWithText(TextFormField, 'Usuario'),
       'qa@example.test',
     );
     await tester.enterText(
@@ -200,4 +205,62 @@ void main() {
     expect(eventCount('CompleteRegistration'), 0);
     expect(eventCount('TrialStarted'), 0);
   });
+
+  testWidgets(
+    'mobile registration layout exposes optimized fields and actions',
+    (tester) async {
+      final repository = _RegisterAnalyticsRepository(shouldFail: false);
+
+      await pumpRegisterScreen(
+        tester,
+        repository: repository,
+        size: const Size(390, 844),
+      );
+
+      expect(find.text('Crear mi empresa'), findsOneWidget);
+      expect(find.text('Tu negocio'), findsOneWidget);
+      expect(find.text('Datos de acceso'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Usuario'), findsOneWidget);
+      expect(
+        find.text('Debe ser un correo electrónico válido.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Mínimo 8 caracteres. Ejemplo: MiNegocio26'),
+        findsOneWidget,
+      );
+
+      await tester.ensureVisible(find.text('Hablar por WhatsApp'));
+      expect(find.text('Crear mi negocio'), findsOneWidget);
+      expect(find.text('Hablar por WhatsApp'), findsOneWidget);
+      expect(
+        find.text('¿Ya tienes una cuenta? Iniciar sesión'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'close with draft offers WhatsApp help and can leave to landing',
+    (tester) async {
+      final repository = _RegisterAnalyticsRepository(shouldFail: false);
+
+      await pumpRegisterScreen(tester, repository: repository);
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nombre del negocio'),
+        'Negocio Demo QA',
+      );
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('¿Quieres que te contactemos?'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Tu WhatsApp'), findsOneWidget);
+
+      await tester.tap(find.text('Salir'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Landing'), findsOneWidget);
+    },
+  );
 }

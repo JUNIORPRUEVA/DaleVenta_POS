@@ -120,7 +120,7 @@ void main() {
     expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('¿Olvidaste tu contraseña?'), findsOneWidget);
     expect(find.text('Crear mi negocio'), findsNothing);
-    expect(find.text('Crear empresa'), findsNothing);
+    expect(find.text('Crear mi empresa'), findsNothing);
     expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
     expect(
       find.text('Solicita acceso al administrador de tu empresa.'),
@@ -140,7 +140,7 @@ void main() {
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('Crear mi negocio'), findsNothing);
-    expect(find.text('Crear empresa'), findsNothing);
+    expect(find.text('Crear mi empresa'), findsNothing);
     expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
     expect(
       find.text('Solicita acceso al administrador de tu empresa.'),
@@ -200,7 +200,7 @@ void main() {
 
     expect(router.routeInformationProvider.value.uri.path, Routes.register);
     expect(find.byType(RegisterScreen), findsOneWidget);
-    expect(find.text('Crear empresa'), findsOneWidget);
+    expect(find.text('Crear mi empresa'), findsOneWidget);
   });
 
   testWidgets('Windows root route opens login instead of public landing', (

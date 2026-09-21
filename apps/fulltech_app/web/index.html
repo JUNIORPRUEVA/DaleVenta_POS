@@ -2,7 +2,16 @@
 <html lang="es-DO">
 <head>
   <script>
-    document.documentElement.classList.add('js');
+    (function () {
+      var path = window.location.pathname || '/';
+      var hash = window.location.hash || '';
+      var isLanding = (path === '/' || path === '') &&
+        (hash === '' || hash === '#/' || hash === '#');
+      document.documentElement.classList.add('js');
+      document.documentElement.classList.add(
+        isLanding ? 'public-landing-route' : 'app-route-loading'
+      );
+    })();
   </script>
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
@@ -70,7 +79,7 @@
       transition: opacity 180ms ease, visibility 180ms ease;
     }
 
-    html.js #marketing-shell {
+    html.js.app-route-loading #marketing-shell {
       position: absolute;
       width: 1px;
       height: 1px;
@@ -89,6 +98,10 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+    }
+
+    html.js.public-landing-route #app-loader {
+      display: none;
     }
 
     .seo-header,
@@ -352,37 +365,38 @@
 
     #app-loader {
       position: fixed;
-      left: 16px;
-      right: 16px;
-      bottom: 16px;
+      inset: 0;
       z-index: 9999;
       display: flex;
+      align-items: center;
       justify-content: center;
       pointer-events: none;
+      background: linear-gradient(180deg, #f3f8fc 0%, #ffffff 100%);
       transition: opacity 180ms ease, visibility 180ms ease;
     }
 
     .loader-shell {
-      width: min(100%, 420px);
+      width: min(calc(100% - 32px), 360px);
       border: 1px solid rgba(220, 232, 239, 0.9);
       border-radius: 8px;
-      padding: 12px 14px;
-      background: rgba(255, 255, 255, 0.94);
-      box-shadow: 0 14px 36px rgba(13, 27, 42, 0.14);
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 18px 44px rgba(13, 27, 42, 0.14);
       pointer-events: auto;
+      text-align: center;
     }
 
     .loader-title {
       margin: 0;
       color: var(--ink);
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 900;
     }
 
     .loader-copy {
-      margin: 3px 0 8px;
+      margin: 6px 0 12px;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
     }
 
@@ -668,8 +682,8 @@
 
   <div id="app-loader" aria-live="polite">
     <div class="loader-shell">
-      <p class="loader-title">Cargando FullPOS Cloud</p>
-      <p class="loader-copy">Preparando la aplicación</p>
+      <p class="loader-title">Preparando FullPOS Cloud</p>
+      <p class="loader-copy">Un momento mientras abrimos tu acceso.</p>
       <div class="loader-bar">
         <div id="loader-progress" class="loader-progress"></div>
       </div>
