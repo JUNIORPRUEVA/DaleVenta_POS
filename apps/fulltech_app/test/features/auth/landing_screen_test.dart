@@ -358,6 +358,9 @@ void main() {
     expect(headerCta.bottom, lessThanOrEqualTo(800));
     expect(headerCta.height, greaterThanOrEqualTo(44));
     expect(find.byTooltip('Menu'), findsOneWidget);
+    final menuButton = tester.getRect(find.byTooltip('Menu'));
+    expect(menuButton.width, greaterThanOrEqualTo(42));
+    expect(menuButton.right, greaterThanOrEqualTo(348));
     expect(tester.takeException(), isNull);
   });
 
@@ -419,6 +422,47 @@ void main() {
       containsPair('cta_name', 'Regístrate gratis - CTA fijo móvil'),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sticky register CTA uses subtle attention animation', (
+    tester,
+  ) async {
+    final router = _landingRouter();
+    addTearDown(router.dispose);
+    _setPhoneViewport(tester, const Size(390, 844));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byType(CustomScrollView),
+      const Offset(0, -1200),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    final sticky = find.byKey(LandingScreen.stickyCtaKey);
+    expect(sticky, findsOneWidget);
+    final stickyButton = find.descendant(
+      of: sticky,
+      matching: find.byType(FilledButton),
+    );
+    final resting = tester.getRect(stickyButton);
+
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pump(const Duration(milliseconds: 300));
+    final shaking = tester.getRect(stickyButton);
+    expect((shaking.left - resting.left).abs(), greaterThan(0.5));
+
+    await tester.pump(const Duration(milliseconds: 900));
+    final recovered = tester.getRect(stickyButton);
+    expect((recovered.left - resting.left).abs(), lessThan(0.5));
+    expect((recovered.width - resting.width).abs(), lessThan(0.5));
+    expect(tester.takeException(), isNull);
+
+    addTearDown(tester.view.reset);
   });
 
   testWidgets('mobile registration note is shown only on phone widths', (

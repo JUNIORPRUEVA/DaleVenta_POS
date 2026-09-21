@@ -487,13 +487,15 @@ class _StickyRegistrationCta extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: FilledButton.icon(
-              onPressed: onRegister,
-              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-              label: const Text(LandingScreen.compactCtaLabel),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 48),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: _AttentionPulse(
+              child: FilledButton.icon(
+                onPressed: onRegister,
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                label: const Text(LandingScreen.compactCtaLabel),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
               ),
             ),
           ),
@@ -659,9 +661,9 @@ class _TopBar extends StatelessWidget {
         // overflows when the box is narrower than the media query reports.
         final layoutWidth = constraints.maxWidth;
         final isNarrowPhone = layoutWidth < 560;
-        // Below 460px the wordmark is dropped so "Regístrate gratis" keeps its
-        // full label inside the header.
-        final showWordmark = !phone || layoutWidth >= 460;
+        // Below 420px the wordmark is dropped so the registration action and
+        // drawer button keep comfortable touch targets.
+        final showWordmark = !phone || layoutWidth >= 420;
         return Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -670,13 +672,11 @@ class _TopBar extends StatelessWidget {
           child: Align(
             alignment: isNarrowPhone ? Alignment.centerLeft : Alignment.center,
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: isNarrowPhone ? 370 : _maxContentWidth,
-              ),
+              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: isNarrowPhone
-                      ? 12
+                      ? 8
                       : phone
                       ? 18
                       : 38,
@@ -710,13 +710,13 @@ class _TopBar extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Builder(
                         builder: (context) => IconButton.filledTonal(
                           tooltip: 'Menu',
                           style: IconButton.styleFrom(
-                            minimumSize: const Size(44, 44),
-                            fixedSize: const Size(44, 44),
+                            minimumSize: const Size(42, 42),
+                            fixedSize: const Size(42, 42),
                             padding: EdgeInsets.zero,
                           ),
                           onPressed: () => Scaffold.of(context).openEndDrawer(),
