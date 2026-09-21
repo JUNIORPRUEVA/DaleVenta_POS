@@ -1,18 +1,6 @@
 <!DOCTYPE html>
 <html lang="es-DO">
 <head>
-  <script>
-    (function () {
-      var path = window.location.pathname || '/';
-      var hash = window.location.hash || '';
-      var isLanding = (path === '/' || path === '') &&
-        (hash === '' || hash === '#/' || hash === '#');
-      document.documentElement.classList.add('js');
-      document.documentElement.classList.add(
-        isLanding ? 'public-landing-route' : 'app-route-loading'
-      );
-    })();
-  </script>
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -97,419 +85,100 @@
       outline-offset: 3px;
     }
 
-    #marketing-shell {
-      min-height: 100vh;
-      background: linear-gradient(180deg, #f3f8fc 0%, #ffffff 58%, #f8fafc 100%);
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 24px;
+      background: var(--soft);
+      pointer-events: none;
       transition: opacity 180ms ease, visibility 180ms ease;
     }
 
-    html.js.app-route-loading #marketing-shell {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      min-height: 0;
-      margin: -1px;
-      padding: 0;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      clip-path: inset(50%);
-      white-space: nowrap;
-      border: 0;
-    }
-
-    #marketing-shell.is-hidden,
     #app-loader.is-hidden {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
 
-    html.js.public-landing-route #app-loader {
-      display: none;
-    }
-
-    .seo-header,
-    .seo-main,
-    .seo-footer-inner {
-      width: min(1220px, calc(100% - 32px));
-      margin: 0 auto;
-    }
-
-    .seo-header-wrap {
-      border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.94);
-    }
-
-    .seo-header {
-      min-height: 72px;
+    .loader-brand {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 12px 0;
-    }
-
-    .seo-brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 12px;
-      color: var(--ink);
-      text-decoration: none;
-    }
-
-    .seo-brand-mark {
-      width: 44px;
-      height: 44px;
-      border-radius: 14px;
-      display: grid;
-      place-items: center;
-      background: #ffffff;
-      overflow: hidden;
-      box-shadow: 0 8px 18px rgba(11, 39, 68, 0.09);
-    }
-
-    .seo-brand-mark img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    .seo-brand-text {
-      display: grid;
-      line-height: 1.12;
-    }
-
-    .seo-brand-text strong { font-size: 17px; }
-
-    .seo-brand-text span {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    .seo-nav {
-      display: none;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+      flex-direction: column;
       align-items: center;
       gap: 4px;
-    }
-
-    .seo-nav a {
-      min-height: 40px;
-      display: inline-flex;
-      align-items: center;
-      padding: 0 8px;
-      color: #43566d;
-      font-size: 14px;
-      font-weight: 800;
-      text-decoration: none;
-    }
-
-    .seo-header-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .seo-header-cta {
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 0 18px;
-      border-radius: 8px;
-      background: var(--primary);
-      color: #ffffff;
-      font-size: 14px;
-      font-weight: 900;
-      text-decoration: none;
-      white-space: nowrap;
-    }
-
-    .seo-header-cta::before,
-    .seo-button:not(.secondary)::before {
-      content: "+";
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      font-weight: 900;
-      line-height: 1;
-    }
-
-    .seo-menu-button {
-      width: 42px;
-      height: 42px;
-      border: 0;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      background: #e7ebfb;
-      color: #5f6e87;
-      font: inherit;
-      font-size: 24px;
-      line-height: 1;
-    }
-
-    .seo-hero {
-      padding: 34px 0 24px;
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 16px;
-      align-items: center;
-    }
-
-    .seo-eyebrow {
-      width: max-content;
-      min-height: 36px;
-      display: inline-flex;
-      align-items: center;
-      padding: 0 12px;
-      border: 1px solid #cde2ff;
-      border-radius: 999px;
-      background: #edf6ff;
-      color: var(--primary-dark);
-      font-size: 13px;
-      font-weight: 900;
-    }
-
-    .seo-hero h1 {
-      max-width: 760px;
-      margin: 12px 0 14px;
-      font-size: clamp(27px, 7.4vw, 30px);
-      line-height: 1.06;
-      letter-spacing: 0;
-      font-weight: 900;
-    }
-
-    .seo-lead {
-      max-width: 730px;
-      margin: 0;
-      color: #31465c;
-      font-size: 15.5px;
-      line-height: 1.42;
-      font-weight: 600;
-    }
-
-    .seo-lead-note {
-      max-width: 730px;
-      margin: 10px 0 0;
-      color: var(--primary-dark);
-      font-size: 14px;
-      line-height: 1.5;
-      font-weight: 800;
-    }
-
-    .seo-actions,
-    .seo-chip-row {
-      display: grid;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 20px;
-      max-width: none;
-    }
-
-    .seo-button {
-      min-height: 52px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 0 22px;
-      border-radius: 8px;
-      background: var(--primary);
-      color: #ffffff;
-      font-size: 15.5px;
-      font-weight: 900;
-      text-decoration: none;
-    }
-
-    .seo-button.secondary {
-      border: 1px solid var(--line);
-      background: var(--surface);
-      color: var(--primary-dark);
-      min-height: 48px;
-      width: 100%;
-    }
-
-    .seo-chip {
-      display: flex;
-      align-items: center;
-      min-height: 24px;
-      padding: 0;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-      color: #20344c;
-      font-size: 13px;
-      font-weight: 900;
-    }
-
-    .seo-chip::before {
-      content: "✓";
-      width: 22px;
-      margin-right: 8px;
-      color: #0f8c7d;
-      font-weight: 900;
-    }
-
-    .seo-visual {
-      margin: 0;
-      border: 0;
-      border-radius: 8px;
-      overflow: hidden;
-      background: transparent;
-      box-shadow: none;
-    }
-
-    .seo-visual img {
-      width: 100%;
-      display: block;
-      aspect-ratio: 1.82;
-      object-fit: contain;
-    }
-
-    .seo-visual figcaption { display: none; }
-
-    .seo-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-      padding: 18px 0 44px;
-    }
-
-    .seo-card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      padding: 18px;
-    }
-
-    .seo-card h2,
-    .seo-card h3 {
-      margin: 0 0 8px;
-      font-size: 19px;
-      letter-spacing: 0;
-    }
-
-    .seo-card p,
-    .seo-card li {
-      color: #43566d;
-      font-size: 14px;
-      line-height: 1.48;
-      font-weight: 600;
-    }
-
-    .seo-card p { margin: 0; }
-
-    .seo-plans { grid-column: 1 / -1; }
-
-    .seo-plan-list {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 12px;
-    }
-
-    .seo-plan {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-      background: var(--surface-alt);
-    }
-
-    .seo-plan strong {
-      display: block;
-      color: var(--ink);
-      font-size: 16px;
-    }
-
-    .seo-plan small {
-      display: block;
-      margin-top: 6px;
-      color: #43566d;
-      font-size: 13px;
-      line-height: 1.35;
-      font-weight: 700;
-    }
-
-    .seo-plan span {
-      display: block;
-      margin-top: 4px;
-      color: var(--primary-dark);
-      font-weight: 900;
-    }
-
-    .seo-footer {
-      border-top: 1px solid var(--line);
-      background: #f8fafc;
-    }
-
-    .seo-footer-inner {
-      padding: 24px 0;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 14px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    #app-loader {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      background: linear-gradient(180deg, #f3f8fc 0%, #ffffff 100%);
-      transition: opacity 180ms ease, visibility 180ms ease;
-    }
-
-    .loader-shell {
-      width: min(calc(100% - 32px), 360px);
-      border: 1px solid rgba(220, 232, 239, 0.9);
-      border-radius: 8px;
-      padding: 18px;
-      background: rgba(255, 255, 255, 0.96);
-      box-shadow: 0 18px 44px rgba(13, 27, 42, 0.14);
-      pointer-events: auto;
       text-align: center;
     }
 
-    .loader-title {
-      margin: 0;
+    .loader-logo {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+    }
+
+    .loader-name {
+      margin: 10px 0 0;
       color: var(--ink);
-      font-size: 15px;
+      font-size: 20px;
       font-weight: 900;
     }
 
-    .loader-copy {
-      margin: 6px 0 12px;
+    .loader-company {
+      margin: 0;
       color: var(--muted);
-      font-size: 13px;
-      font-weight: 700;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
     }
 
     .loader-bar {
+      width: min(220px, 60vw);
       height: 4px;
       border-radius: 999px;
-      background: #e2e8f0;
+      background: #dfe8f2;
       overflow: hidden;
     }
 
     .loader-progress {
+      display: block;
+      width: 40%;
       height: 100%;
-      width: 38%;
       border-radius: inherit;
       background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
-      animation: loader-track 1.05s ease-in-out infinite;
+      animation: loader-track 1.15s ease-in-out infinite;
     }
 
-    .loader-meta { display: none; }
+    .loader-copy {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .no-js-seo {
+      width: min(760px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0;
+    }
+
+    .no-js-seo h1 {
+      margin: 0 0 16px;
+      color: var(--ink);
+      font-size: 30px;
+      line-height: 1.16;
+    }
+
+    .no-js-seo p {
+      margin: 0 0 12px;
+      color: #31465c;
+      font-size: 15.5px;
+      line-height: 1.5;
+      font-weight: 600;
+    }
 
     @keyframes loader-track {
       0% { transform: translateX(-120%); }
@@ -588,73 +257,12 @@
       background: rgba(255, 255, 255, 0.08);
       color: #f8fafc;
     }
-
-    .seo-header-wrap {
-      position: relative;
-    }
-
-    .seo-header {
-      width: min(1220px, calc(100% - 16px));
-      min-height: 64px;
-      align-items: center;
-      flex-direction: row;
-      padding: 10px 0;
-    }
-
-    .seo-header-actions { margin-left: auto; }
-
-    .seo-header-cta {
-      min-height: 44px;
-      padding: 0 14px;
-      font-size: 13px;
-    }
-
-    .seo-grid,
-    .seo-plan-list {
-      grid-template-columns: 1fr;
-    }
-
-    /* STATIC SHELL BREAKPOINT MUST MATCH FLUTTER LANDING BREAKPOINT = 1180px */
-    @media (min-width: 1180px) {
-      .seo-header {
-        width: min(1220px, calc(100% - 32px));
-        min-height: 72px;
-        padding: 12px 0;
-      }
-
-      .seo-nav { display: flex; }
-
-      .seo-header-actions { display: none; }
-
-      .seo-hero {
-        padding: 38px 0 28px;
-        grid-template-columns: minmax(0, 0.9fr) minmax(300px, 1.02fr);
-        gap: 36px;
-        transform: translateY(-78px);
-        margin-bottom: -78px;
-      }
-
-      .seo-hero h1 { font-size: clamp(30px, 5vw, 50px); }
-
-      .seo-actions {
-        display: flex;
-        max-width: 404px;
-      }
-
-      .seo-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        padding-top: 28px;
-      }
-
-      .seo-plan-list {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 419px) {
-      .seo-brand-text { display: none; }
-    }
   </style>
+  <noscript>
+    <style>
+      #app-loader { display: none !important; }
+    </style>
+  </noscript>
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -733,109 +341,34 @@
   </script>
 </head>
 <body>
-  <div id="marketing-shell">
-    <header class="seo-header-wrap">
-      <nav class="seo-header" aria-label="Principal">
-        <a class="seo-brand" href="/">
-          <span class="seo-brand-mark"><img src="assets/assets/image/logo-web.webp" alt="" width="42" height="42"></span>
-          <span class="seo-brand-text"><strong>FullPOS Cloud</strong><span>FULLTECH SRL</span></span>
-        </a>
-        <div class="seo-nav">
-          <a href="#beneficios">Funciones</a>
-          <a href="#demo">Empieza</a>
-          <a href="#planes">Planes</a>
-          <a href="#demo">Cómo funciona</a>
-          <a href="#beneficios">FAQ</a>
-          <a href="/login">Iniciar sesión</a>
-          <a href="/register" data-create-account-cta="Regístrate gratis - seo nav">Regístrate gratis</a>
-        </div>
-        <div class="seo-header-actions" aria-hidden="true">
-          <a class="seo-header-cta" href="/register" tabindex="-1">Regístrate gratis</a>
-          <button class="seo-menu-button" type="button" tabindex="-1" aria-label="Menú">≡</button>
-        </div>
-      </nav>
-    </header>
-
-    <main class="seo-main">
-      <section class="seo-hero" aria-labelledby="landing-title">
-        <div>
-          <div class="seo-eyebrow">Prueba gratis por 7 días</div>
-          <h1 id="landing-title">Controla tus ventas, inventario y caja desde un solo lugar</h1>
-          <p class="seo-lead">FullPOS Cloud te ayuda a manejar ventas, inventario, clientes, créditos y reportes desde tu computadora o celular.</p>
-          <div class="seo-actions">
-            <a class="seo-button" href="/register" data-create-account-cta="Regístrate gratis ahora - seo hero">Regístrate gratis ahora</a>
-            <a class="seo-button secondary" href="/login">Ya tengo cuenta</a>
-          </div>
-          <p class="seo-lead-note">Prueba FullPOS gratis por 7 días. Crea tu cuenta en pocos minutos.</p>
-          <div class="seo-chip-row" aria-label="Plataformas soportadas">
-            <span class="seo-chip">Windows</span>
-            <span class="seo-chip">Android</span>
-            <span class="seo-chip">iPhone</span>
-            <span class="seo-chip">Web/PWA</span>
-            <span class="seo-chip">Soporte vía WhatsApp</span>
-          </div>
-        </div>
-        <figure class="seo-visual">
-          <img src="assets/assets/image/fullpos-windows-ios-android.webp" alt="FullPOS Cloud funcionando en escritorio y móvil" width="1693" height="929">
-          <figcaption>FullPOS Cloud para mostrador, teléfono y navegador.</figcaption>
-        </figure>
-      </section>
-
-      <section id="beneficios" class="seo-grid" aria-label="Beneficios de FullPOS Cloud">
-        <article class="seo-card">
-          <h2>Opera tu negocio en una sola plataforma</h2>
-          <p>Controla ventas, inventario, caja, clientes, cotizaciones, créditos, reportes, códigos de barra e impresión térmica desde FullPOS Cloud.</p>
-        </article>
-        <article id="demo" class="seo-card">
-          <h2>Empieza tu prueba gratis</h2>
-          <p>Crea tu cuenta desde la Web o Windows, prueba FullPOS Cloud gratis durante 7 días y luego inicia sesión con los mismos datos en tus dispositivos.</p>
-        </article>
-        <article class="seo-card">
-          <h2>Soporte remoto vía WhatsApp</h2>
-          <p>Recibe asistencia para dudas e incidencias relacionadas con FullPOS Cloud.</p>
-        </article>
-        <article class="seo-card">
-          <h2>Crea, prueba y activa</h2>
-          <p>En Android o iPhone, crea primero tu cuenta desde la Web o Windows y luego entra en la app. WhatsApp queda disponible para asistencia y activación.</p>
-        </article>
-        <article id="planes" class="seo-card seo-plans">
-          <h2>Planes de FullPOS Cloud</h2>
-          <p>Todos los planes muestran su costo mensual para que puedas comparar fácilmente. La activación mínima es por 3 meses.</p>
-          <div class="seo-plan-list">
-            <div class="seo-plan"><strong>Básico</strong><span>RD$1,000 / mes</span><small>Facturación mínima: 3 meses. Total trimestral: RD$3,000</small></div>
-            <div class="seo-plan"><strong>Negocio</strong><span>RD$1,500 / mes</span><small>Facturación mínima: 3 meses. Total trimestral: RD$4,500</small></div>
-            <div class="seo-plan"><strong>Pro</strong><span>RD$2,500 / mes</span><small>Facturación mínima: 3 meses. Total trimestral: RD$7,500</small></div>
-          </div>
-        </article>
-      </section>
+  <noscript>
+    <main class="no-js-seo">
+      <h1>FullPOS Cloud: sistema POS en la nube para ventas, inventario y caja</h1>
+      <p>
+        FullPOS Cloud es el sistema POS en la nube de FULLTECH SRL para registrar ventas,
+        controlar inventario, caja, clientes, créditos y reportes desde Windows, Android,
+        iPhone o el navegador.
+      </p>
+      <p>
+        Prueba gratis por 7 días. Planes desde RD$1,000 / mes, con facturación mínima de 3 meses.
+      </p>
+      <p>
+        <a href="/register">Crear cuenta</a> ·
+        <a href="/login">Iniciar sesión</a> ·
+        <a href="/support">Soporte</a>
+      </p>
+      <p>Activa JavaScript en tu navegador para abrir la aplicación de FullPOS Cloud.</p>
     </main>
+  </noscript>
 
-    <footer class="seo-footer">
-      <div class="seo-footer-inner">
-        <span>© 2026 FULLTECH SRL. Todos los derechos reservados.</span>
-        <nav class="seo-nav" aria-label="Legal">
-          <a href="/support">Soporte</a>
-          <a href="/privacy">Privacidad</a>
-          <a href="/terms">Términos</a>
-          <a href="/account-deletion">Eliminación de cuenta</a>
-          <a href="/contact">Contacto</a>
-        </nav>
-      </div>
-    </footer>
-  </div>
-
-  <div id="app-loader" aria-live="polite">
-    <div class="loader-shell">
-      <p class="loader-title">Preparando FullPOS Cloud</p>
-      <p class="loader-copy">Un momento mientras abrimos tu acceso.</p>
-      <div class="loader-bar">
-        <div id="loader-progress" class="loader-progress"></div>
-      </div>
-      <div class="loader-meta">
-        <div id="loader-status"></div>
-        <div id="loader-percent"></div>
-      </div>
+  <div id="app-loader" role="status" aria-live="polite" aria-label="Cargando FullPOS Cloud">
+    <div class="loader-brand">
+      <img class="loader-logo" src="assets/assets/image/logo-web.webp" alt="" width="72" height="72">
+      <p class="loader-name">FullPOS Cloud</p>
+      <p class="loader-company">FULLTECH SRL</p>
     </div>
+    <div class="loader-bar"><span class="loader-progress"></span></div>
+    <p class="loader-copy">Cargando FullPOS Cloud…</p>
   </div>
 
   <div id="pwa-banner" aria-live="polite">
@@ -943,76 +476,15 @@
           analyticsDebugEnabled()
         );
       }
-
-      document.addEventListener('click', function (event) {
-        var target = event.target && event.target.closest
-          ? event.target.closest('[data-create-account-cta]')
-          : null;
-        if (!target) return;
-        window.fullposMetaPixelTrack(
-          window.META_PIXEL_ID,
-          'ClickCreateAccount',
-          {
-            source_page: 'landing',
-            cta_name: target.getAttribute('data-create-account-cta') || 'Crear cuenta'
-          },
-          analyticsDebugEnabled()
-        );
-      });
     })();
   </script>
   <script>
-    (function () {
-      var progress = 12;
-      var progressBar = document.getElementById('loader-progress');
-      var progressLabel = document.getElementById('loader-percent');
-      var statusLabel = document.getElementById('loader-status');
-      var milestones = [
-        { at: 18, text: 'Cargando configuración base...' },
-        { at: 34, text: 'Descargando motor de la app...' },
-        { at: 52, text: 'Inicializando interfaz...' },
-        { at: 72, text: 'Preparando módulos...' },
-        { at: 88, text: 'Abriendo FullPOS Cloud...' }
-      ];
-      var milestoneIndex = 0;
-
-      function renderProgress(value) {
-        progress = Math.max(12, Math.min(100, value));
-        if (progressBar) progressBar.style.width = progress + '%';
-        if (progressLabel) progressLabel.textContent = progress + '%';
-        while (milestoneIndex < milestones.length && progress >= milestones[milestoneIndex].at) {
-          if (statusLabel) statusLabel.textContent = milestones[milestoneIndex].text;
-          milestoneIndex += 1;
-        }
-      }
-
-      var timer = window.setInterval(function () {
-        if (progress >= 90) {
-          window.clearInterval(timer);
-          return;
-        }
-        renderProgress(progress + (progress < 50 ? 7 : progress < 80 ? 4 : 2));
-      }, 220);
-
-      window.__finishAppLoader = function () {
-        window.clearInterval(timer);
-        renderProgress(100);
-        if (statusLabel) statusLabel.textContent = 'Listo';
-      };
-    })();
-
     window.addEventListener('flutter-first-frame', function () {
       var loader = document.getElementById('app-loader');
-      var shell = document.getElementById('marketing-shell');
       document.body.classList.add('has-flutter');
-      if (typeof window.__finishAppLoader === 'function') window.__finishAppLoader();
       if (loader) {
         loader.classList.add('is-hidden');
         window.setTimeout(function () { loader.remove(); }, 220);
-      }
-      if (shell) {
-        shell.classList.add('is-hidden');
-        window.setTimeout(function () { shell.remove(); }, 220);
       }
     });
 
