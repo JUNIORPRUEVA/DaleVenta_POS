@@ -599,6 +599,43 @@ void main() {
     await tester.pumpAndSettle();
     addTearDown(tester.view.reset);
   });
+
+  testWidgets('landing header switches at the 1180px breakpoint', (
+    tester,
+  ) async {
+    final compactRouter = _landingRouter();
+    addTearDown(compactRouter.dispose);
+    _setPhoneViewport(tester, const Size(1179, 900));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: compactRouter)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Menu'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsNothing);
+    expect(find.text(LandingScreen.compactCtaLabel), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    final desktopRouter = _landingRouter();
+    addTearDown(desktopRouter.dispose);
+    _setPhoneViewport(tester, const Size(1180, 900));
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: desktopRouter)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Menu'), findsNothing);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
+    expect(find.text('FAQ'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    addTearDown(tester.view.reset);
+  });
 }
 
 /// Sets a real phone viewport (setSurfaceSize alone does not resize the view).

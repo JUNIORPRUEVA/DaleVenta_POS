@@ -661,6 +661,7 @@ class _TopBar extends StatelessWidget {
         // overflows when the box is narrower than the media query reports.
         final layoutWidth = constraints.maxWidth;
         final isNarrowPhone = layoutWidth < 560;
+        final compactDesktop = !phone && layoutWidth < 1280;
         // Below 420px the wordmark is dropped so the registration action and
         // drawer button keep comfortable touch targets.
         final showWordmark = !phone || layoutWidth >= 420;
@@ -679,6 +680,8 @@ class _TopBar extends StatelessWidget {
                       ? 8
                       : phone
                       ? 18
+                      : compactDesktop
+                      ? 16
                       : 38,
                   vertical: phone ? 10 : 12,
                 ),
@@ -733,14 +736,16 @@ class _TopBar extends StatelessWidget {
                         'Empieza',
                         onTap: () => onNav(LandingScreen._demoKey),
                       ),
-                      _NavButton(
-                        'Planes',
-                        onTap: () => onNav(LandingScreen._pricingKey),
-                      ),
-                      _NavButton(
-                        'Cómo funciona',
-                        onTap: () => onNav(LandingScreen._processKey),
-                      ),
+                      if (!compactDesktop) ...[
+                        _NavButton(
+                          'Planes',
+                          onTap: () => onNav(LandingScreen._pricingKey),
+                        ),
+                        _NavButton(
+                          'Cómo funciona',
+                          onTap: () => onNav(LandingScreen._processKey),
+                        ),
+                      ],
                       _NavButton(
                         'FAQ',
                         onTap: () => onNav(LandingScreen._faqKey),
