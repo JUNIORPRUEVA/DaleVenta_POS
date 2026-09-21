@@ -84,6 +84,11 @@ window.FULLPOS_PUBLIC_CONFIG = {
 };
 EOF
 
+# Brotli (brotli_static) serves pre-compressed files generated at build time.
+# The files above are rewritten on every container start, so any .br sibling
+# would be stale and must never be served instead of them.
+rm -f "$WEB_ROOT/env.js.br" "$WEB_ROOT/public-config.js.br" "$WEB_ROOT/assets/.env.br"
+
 # Optional: same-origin reverse proxy to avoid CORS/XHR issues in browsers.
 # Configure:
 # - API_BASE_URL=/api
@@ -125,6 +130,22 @@ server {
     text/javascript
     text/plain;
 
+  # Brotli: only pre-compressed variants generated at build time (no dynamic
+  # brotli CPU cost). Clients without "br" keep falling back to gzip.
+  brotli_static on;
+  brotli_types
+    application/javascript
+    application/json
+    application/manifest+json
+    application/octet-stream
+    application/wasm
+    font/otf
+    font/ttf
+    image/svg+xml
+    text/css
+    text/javascript
+    text/plain;
+
   root /usr/share/nginx/html;
   index index.html;
 
@@ -142,6 +163,14 @@ server {
   }
 
   location = /main.dart.js {
+    add_header Cache-Control $main_dart_js_cache;
+    try_files $uri =404;
+  }
+
+  # CanvasKit is served from this domain (built with --no-web-resources-cdn).
+  # Its path is not content-versioned, so it must stay revalidated to avoid
+  # serving a stale engine after an upgrade.
+  location ^~ /canvaskit/ {
     add_header Cache-Control "no-cache";
     try_files $uri =404;
   }

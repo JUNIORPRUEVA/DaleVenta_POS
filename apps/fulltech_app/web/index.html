@@ -390,6 +390,12 @@
       var initializedPixelId = '';
       var pageViewSent = false;
       var landingViewContentSent = false;
+      // The Meta Pixel is intentionally not loaded before Flutter's first frame:
+      // its ~0.19 MB used to compete with main.dart.js for bandwidth. Calls made
+      // before the deferred boot are queued and replayed, so no event is lost.
+      var pixelBooted = false;
+      var pendingPixelEvents = [];
+      var maxPendingPixelEvents = 100;
 
       function log(debugEnabled, message, payload) {
         if (!debugEnabled || !window.console) return;
@@ -441,6 +447,12 @@
 
       window.fullposMetaPixelTrack = function (pixelId, eventName, parameters, debugEnabled) {
         try {
+          if (!pixelBooted) {
+            if (pendingPixelEvents.length < maxPendingPixelEvents) {
+              pendingPixelEvents.push([pixelId, eventName, parameters, debugEnabled]);
+            }
+            return true;
+          }
           if (!ensurePixel(pixelId, debugEnabled === true)) return false;
           var params = parameters && typeof parameters === 'object' ? parameters : {};
           if (eventName === 'ViewContent' && params.source_page === 'landing') {
@@ -468,14 +480,34 @@
         return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
       }
 
-      if ((window.location.pathname || '/') === '/') {
-        window.fullposMetaPixelTrack(
-          window.META_PIXEL_ID,
-          'ViewContent',
-          { source_page: 'landing', content_name: 'FullPOS Cloud landing' },
-          analyticsDebugEnabled()
-        );
+      function flushPendingPixelEvents() {
+        if (!pendingPixelEvents.length) return;
+        var queued = pendingPixelEvents.slice();
+        pendingPixelEvents.length = 0;
+        for (var i = 0; i < queued.length; i += 1) {
+          window.fullposMetaPixelTrack(queued[i][0], queued[i][1], queued[i][2], queued[i][3]);
+        }
       }
+
+      function bootMetaPixel() {
+        if (pixelBooted) return;
+        pixelBooted = true;
+        if ((window.location.pathname || '/') === '/') {
+          window.fullposMetaPixelTrack(
+            window.META_PIXEL_ID,
+            'ViewContent',
+            { source_page: 'landing', content_name: 'FullPOS Cloud landing' },
+            analyticsDebugEnabled()
+          );
+        }
+        flushPendingPixelEvents();
+      }
+
+      // Load the pixel only after Flutter has painted, so it stops competing with
+      // main.dart.js. The timeout is a safety net: if the app never boots, the
+      // pixel still initializes and analytics is not silently lost.
+      window.addEventListener('flutter-first-frame', bootMetaPixel, { once: true });
+      window.setTimeout(bootMetaPixel, 30000);
     })();
   </script>
   <script>
