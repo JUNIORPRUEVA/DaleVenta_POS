@@ -33,6 +33,7 @@ release_artifacts/
 .codex-img-e2e/
 .codex-mobile-visual-audit/
 .codex-pwa-smoke/
+.tmp-playwright/
 
 # Agent-run backups and python bytecode caches (never source)
 .codex_backups/
