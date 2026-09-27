@@ -629,17 +629,17 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     }
   }
 
-  Future<void> _pickCustomRange() async {
+  Future<void> _pickCustomRange({
+    String? category,
+    bool applyCategory = false,
+  }) async {
     final initial = _range;
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      initialDateRange: initial,
-    );
+    final picked = await _showReportsDateRangePicker(context, initial);
     if (picked == null) return;
     setState(() {
-      _filters = _filters.withCustomRange(picked.start, picked.end);
+      var next = _filters.withCustomRange(picked.start, picked.end);
+      if (applyCategory) next = next.withCategory(category);
+      _filters = next;
     });
     _loadData();
   }
@@ -658,6 +658,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             selectedPeriod: _selectedPeriod,
             selectedRangeLabel:
                 '${_date.format(_range.start)} - ${_date.format(_range.end)}',
+            selectedDateRange: _range,
             categories: _categories,
             selectedCategory: _selectedCategory,
           ),
@@ -680,8 +681,23 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     );
     if (next == null || !mounted) return;
     if (next.period == DateRangePeriod.custom) {
-      _pickCustomRange();
-      if (next.category != _selectedCategory) _changeCategory(next.category);
+      if (next.requestCustomRange) {
+        await _pickCustomRange(category: next.category, applyCategory: true);
+        return;
+      }
+      final start = next.customStart;
+      final end = next.customEnd;
+      if (start == null || end == null) {
+        await _pickCustomRange();
+        if (next.category != _selectedCategory) _changeCategory(next.category);
+        return;
+      }
+      setState(() {
+        _filters = _filters
+            .withCustomRange(start, end)
+            .withCategory(next.category);
+      });
+      _loadData();
       return;
     }
     setState(() {
@@ -1012,15 +1028,56 @@ String _periodLabel(DateRangePeriod period) {
     DateRangePeriod.week => 'Semana',
     DateRangePeriod.month => 'Mes',
     DateRangePeriod.year => 'Año',
-    DateRangePeriod.custom => 'Personalizado',
+    DateRangePeriod.custom => 'Intervalo',
   };
 }
 
 class _ReportsFilterDraft {
-  const _ReportsFilterDraft({required this.period, required this.category});
+  const _ReportsFilterDraft({
+    required this.period,
+    required this.category,
+    this.customStart,
+    this.customEnd,
+    this.requestCustomRange = false,
+  });
 
   final DateRangePeriod period;
   final String? category;
+  final DateTime? customStart;
+  final DateTime? customEnd;
+  final bool requestCustomRange;
+}
+
+Future<DateTimeRange?> _showReportsDateRangePicker(
+  BuildContext context,
+  DateTimeRange initial,
+) {
+  final today = DateTime.now();
+  return showDateRangePicker(
+    context: context,
+    firstDate: DateTime(2020),
+    lastDate: DateTime(today.year, today.month, today.day + 1),
+    initialDateRange: initial,
+    helpText: 'Selecciona el intervalo',
+    saveText: 'Aplicar',
+    cancelText: 'Cancelar',
+    fieldStartLabelText: 'Desde',
+    fieldEndLabelText: 'Hasta',
+    builder: (context, child) {
+      final size = MediaQuery.sizeOf(context);
+      final maxWidth = math.min(size.width - 24, 560.0);
+      final maxHeight = math.min(size.height - 48, 620.0);
+      return Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: math.max(320.0, maxWidth),
+            maxHeight: math.max(420.0, maxHeight),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        ),
+      );
+    },
+  );
 }
 
 class _ReportsMobileAppBarAction extends StatelessWidget {
@@ -1080,12 +1137,14 @@ class ReportsFilterDrawer extends StatefulWidget {
     super.key,
     required this.selectedPeriod,
     required this.selectedRangeLabel,
+    required this.selectedDateRange,
     required this.categories,
     required this.selectedCategory,
   });
 
   final DateRangePeriod selectedPeriod;
   final String selectedRangeLabel;
+  final DateTimeRange selectedDateRange;
   final List<String> categories;
   final String? selectedCategory;
 
@@ -1096,11 +1155,19 @@ class ReportsFilterDrawer extends StatefulWidget {
 class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
   late DateRangePeriod _period = widget.selectedPeriod;
   late String? _category = widget.selectedCategory;
+  late final DateTimeRange _customRange = widget.selectedDateRange;
 
   void _apply() {
-    Navigator.of(
-      context,
-    ).pop(_ReportsFilterDraft(period: _period, category: _category));
+    Navigator.of(context).pop(
+      _ReportsFilterDraft(
+        period: _period,
+        category: _category,
+        customStart: _period == DateRangePeriod.custom
+            ? _customRange.start
+            : null,
+        customEnd: _period == DateRangePeriod.custom ? _customRange.end : null,
+      ),
+    );
   }
 
   /// Restablece el estado inicial (Hoy + Todas) y lo aplica de inmediato,
@@ -1112,13 +1179,27 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
   }
 
   String get _activeRangeLabel {
-    if (_period == widget.selectedPeriod) return widget.selectedRangeLabel;
-    if (_period == DateRangePeriod.custom) {
-      return 'Selecciona el rango al aplicar';
-    }
     final date = DateFormat('dd/MM/yyyy');
+    if (_period == DateRangePeriod.custom) {
+      return '${date.format(_customRange.start)} - ${date.format(_customRange.end)}';
+    }
+    if (_period == widget.selectedPeriod) return widget.selectedRangeLabel;
     final range = DateRangeHelper.getRangeForPeriod(_period);
     return '${date.format(range.start)} - ${date.format(range.end)}';
+  }
+
+  Future<void> _selectPeriod(DateRangePeriod period) async {
+    if (period != DateRangePeriod.custom) {
+      setState(() => _period = period);
+      return;
+    }
+    Navigator.of(context).pop(
+      _ReportsFilterDraft(
+        period: DateRangePeriod.custom,
+        category: _category,
+        requestCustomRange: true,
+      ),
+    );
   }
 
   @override
@@ -1197,7 +1278,7 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
                           _FilterChip(
                             label: _periodLabel(item),
                             selected: _period == item,
-                            onTap: () => setState(() => _period = item),
+                            onTap: () => _selectPeriod(item),
                           ),
                       ],
                     ),
@@ -1809,7 +1890,7 @@ class _FilterChip extends StatelessWidget {
               const SizedBox(width: 5),
               Text(
                 label,
-                // Nunca partir el texto (p. ej. "Personalizado").
+                // Nunca partir el texto (p. ej. "Intervalo").
                 maxLines: 1,
                 softWrap: false,
                 style: TextStyle(

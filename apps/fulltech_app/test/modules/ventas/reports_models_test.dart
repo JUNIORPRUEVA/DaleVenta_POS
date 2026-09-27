@@ -873,7 +873,7 @@ void main() {
       expect(find.text('Hoy'), findsOneWidget);
       expect(find.text('Semana'), findsOneWidget);
       expect(find.text('Mes'), findsOneWidget);
-      expect(find.text('Personalizado'), findsOneWidget);
+      expect(find.text('Intervalo'), findsOneWidget);
       expect(find.text('Todas las categorías'), findsOneWidget);
     });
   });
@@ -885,7 +885,7 @@ void main() {
       'Semana',
       'Mes',
       'Año',
-      'Personalizado',
+      'Intervalo',
     ];
     const allSizes = <Size>[
       Size(360, 800),
@@ -936,6 +936,10 @@ void main() {
             body: ReportsFilterDrawer(
               selectedPeriod: DateRangePeriod.today,
               selectedRangeLabel: '16/09/2026 - 16/09/2026',
+              selectedDateRange: DateTimeRange(
+                start: DateTime(2026, 9, 16),
+                end: DateTime(2026, 9, 16, 23, 59, 59, 999),
+              ),
               categories: const ['Accesorios', 'Celulares'],
               selectedCategory: null,
             ),
@@ -993,7 +997,7 @@ void main() {
             );
           }
 
-          // Ningun label se parte en dos lineas (incl. "Personalizado").
+          // Ningun label se parte en dos lineas (incl. "Intervalo").
           for (final label in periodLabels) {
             expect(_lineCount(tester, find.text(label)), 1, reason: label);
           }
@@ -1063,6 +1067,56 @@ void main() {
       expect(picked, DateRangePeriod.month);
     });
 
+    testWidgets('drawer cierra la columna al tocar Intervalo', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () {
+                  showGeneralDialog<Object?>(
+                    context: context,
+                    barrierDismissible: true,
+                    barrierLabel: 'Filtros de reportes',
+                    pageBuilder: (context, animation, secondaryAnimation) {
+                      return Align(
+                        alignment: Alignment.centerRight,
+                        child: ReportsFilterDrawer(
+                          selectedPeriod: DateRangePeriod.today,
+                          selectedRangeLabel: '16/09/2026 - 16/09/2026',
+                          selectedDateRange: DateTimeRange(
+                            start: DateTime(2026, 9, 16),
+                            end: DateTime(2026, 9, 16, 23, 59, 59, 999),
+                          ),
+                          categories: const ['Accesorios', 'Celulares'],
+                          selectedCategory: null,
+                        ),
+                      );
+                    },
+                  );
+                },
+                child: const Text('Abrir filtros'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Abrir filtros'));
+      await tester.pumpAndSettle();
+      expect(find.text('Filtros'), findsOneWidget);
+      await tester.tap(find.text('Intervalo'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Filtros'), findsNothing);
+      expect(find.text('Intervalo'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('drawer movil muestra el intervalo dentro de Rango', (
       tester,
     ) async {
@@ -1106,7 +1160,7 @@ void main() {
             'Semana',
             'Mes',
             'Año',
-            'Personalizado',
+            'Intervalo',
           ]) {
             expect(find.text(label), findsWidgets);
           }
@@ -1139,6 +1193,10 @@ void main() {
             body: ReportsFilterDrawer(
               selectedPeriod: DateRangePeriod.today,
               selectedRangeLabel: '16/09/2026 - 16/09/2026',
+              selectedDateRange: DateTimeRange(
+                start: DateTime(2026, 9, 16),
+                end: DateTime(2026, 9, 16, 23, 59, 59, 999),
+              ),
               categories: const <String>['Accesorios'],
               selectedCategory: null,
             ),
@@ -1358,7 +1416,7 @@ void main() {
       expect(week.start, DateTime(2026, 9, 4));
       expect(week.end, DateTime(2026, 9, 10, 23, 59, 59, 999));
 
-      // Personalizado respeta Desde/Hasta.
+      // Intervalo respeta Desde/Hasta.
       final custom = DateRangeHelper.getRangeForPeriod(
         DateRangePeriod.custom,
         customStart: DateTime(2026, 9, 5),
