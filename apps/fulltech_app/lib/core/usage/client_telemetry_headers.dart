@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'client_web_install_mode.dart';
+
 class ClientTelemetryHeaders {
   ClientTelemetryHeaders._();
 
@@ -16,12 +18,14 @@ class ClientTelemetryHeaders {
   Future<Map<String, String>> headers() {
     final cached = _cached;
     if (cached != null) return Future.value(cached);
-    _pending ??= _build().then((value) {
-      _cached = value;
-      return value;
-    }).whenComplete(() {
-      _pending = null;
-    });
+    _pending ??= _build()
+        .then((value) {
+          _cached = value;
+          return value;
+        })
+        .whenComplete(() {
+          _pending = null;
+        });
     return _pending!;
   }
 
@@ -38,7 +42,8 @@ class ClientTelemetryHeaders {
       'x-client-device-id': installId,
       'x-client-app-version':
           '${packageInfo.version}+${packageInfo.buildNumber}',
-      if (details.osVersion.isNotEmpty) 'x-client-os-version': details.osVersion,
+      if (details.osVersion.isNotEmpty)
+        'x-client-os-version': details.osVersion,
       if (details.model.isNotEmpty) 'x-client-device-model': details.model,
     };
   }
@@ -102,7 +107,7 @@ class ClientTelemetryHeaders {
   }
 
   String _platformCode() {
-    if (kIsWeb) return 'web';
+    if (kIsWeb) return clientWebInstallMode() == 'pwa' ? 'pwa' : 'web';
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return 'android';
@@ -121,7 +126,7 @@ class ClientTelemetryHeaders {
 
   String _deviceFamily(String platform) {
     if (platform == 'android' || platform == 'ios') return 'mobile';
-    if (platform == 'web') return 'web';
+    if (platform == 'web' || platform == 'pwa') return 'web';
     if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
       return 'desktop';
     }

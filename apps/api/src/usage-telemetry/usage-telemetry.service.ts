@@ -35,7 +35,10 @@ type TelemetryEventInput = {
   entityId?: string | null;
   feature?: string | null;
   deviceId?: string | null;
+  deviceName?: string | null;
+  deviceType?: string | null;
   platform?: string | null;
+  appVersion?: string | null;
   metadata?: Record<string, unknown>;
   dedupeKey?: string | null;
 };
@@ -152,13 +155,17 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
       actorUserId: (req.user as any)?.id ?? null,
       feature: featureCode.toUpperCase(),
       deviceId: client.deviceId,
+      deviceName: client.deviceName,
+      deviceType: client.deviceFamily,
       platform: client.platform,
+      appVersion: client.appVersion,
       metadata: {
         route: this.routeForMetrics(req.path || req.url || ''),
         method: req.method,
         device_family: client.deviceFamily,
-        app_version: this.headerValue(headers['x-client-app-version']) || this.appVersion,
-        os_version: this.headerValue(headers['x-client-os-version']),
+        device_name: client.deviceName,
+        app_version: client.appVersion,
+        os_version: client.osVersion,
         telemetry_reason: 'coarse_module_usage',
       },
       dedupeKey: throttleKey,
@@ -194,8 +201,10 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
       feature_code: input.feature ?? null,
       deviceId: input.deviceId ?? `daleventas-api-${input.companyId}`,
       device_id: input.deviceId ?? `daleventas-api-${input.companyId}`,
+      device_name: input.deviceName ?? null,
+      device_type: input.deviceType ?? null,
       platform: input.platform ?? 'api',
-      app_version: this.appVersion,
+      app_version: input.appVersion ?? this.appVersion,
       metadata: this.safeMetadata(input.metadata),
     };
 
@@ -630,7 +639,10 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     const deviceId = rawDeviceId
       ? `client-${this.sanitizeToken(rawDeviceId, 96)}`
       : `ua-${this.shortHash(`${platform}:${userAgent || 'unknown'}`)}`;
-    return { platform, deviceFamily, deviceId };
+    const appVersion = this.headerValue(headers['x-client-app-version']) || this.appVersion;
+    const osVersion = this.headerValue(headers['x-client-os-version']);
+    const deviceName = this.headerValue(headers['x-client-device-model']);
+    return { platform, deviceFamily, deviceId, appVersion, osVersion, deviceName };
   }
 
   private isRequestTelemetryThrottled(key: string) {
@@ -662,13 +674,13 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   private deviceFamilyForPlatform(platform: string) {
     if (platform === 'android' || platform === 'ios') return 'mobile';
     if (platform === 'windows' || platform === 'macos' || platform === 'linux') return 'desktop';
-    if (platform === 'web') return 'web';
+    if (platform === 'web' || platform === 'pwa') return 'web';
     return 'unknown';
   }
 
   private normalizePlatform(value: string) {
     const platform = this.sanitizeToken(value.toLowerCase(), 40);
-    const allowed = new Set(['windows', 'android', 'ios', 'web', 'macos', 'linux']);
+    const allowed = new Set(['windows', 'android', 'ios', 'web', 'pwa', 'macos', 'linux']);
     return allowed.has(platform) ? platform : '';
   }
 

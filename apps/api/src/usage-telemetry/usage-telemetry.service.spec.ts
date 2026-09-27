@@ -111,6 +111,53 @@ describe('UsageTelemetryService reliable outbox', () => {
     ).resolves.toBeNull();
   });
 
+  it('promotes client device headers into the Appyra payload', async () => {
+    const { service, prisma } = buildService();
+    prisma.telemetryOutbox.create.mockImplementation(async (args: any) => ({
+      id: 'outbox-client-1',
+      ...args.data,
+    }));
+
+    service.recordRequestUsage({
+      user: { id: 'user-1', companyId },
+      headers: {
+        'x-client-platform': 'pwa',
+        'x-client-device-family': 'web',
+        'x-client-device-id': 'install-123',
+        'x-client-device-model': 'Chrome',
+        'x-client-app-version': '1.0.5+124',
+        'x-client-os-version': 'Windows 11',
+      },
+      path: '/sales',
+      method: 'GET',
+    } as any);
+    await Promise.resolve();
+
+    expect(prisma.telemetryOutbox.create).toHaveBeenCalledTimes(1);
+    const payload = prisma.telemetryOutbox.create.mock.calls[0][0].data.payload;
+    expect(payload).toEqual(
+      expect.objectContaining({
+        business_id: companyId,
+        app_code: 'DALEVENTAS_POS',
+        event_type: 'MODULE_USED',
+        feature_code: 'SALES',
+        device_id: 'client-install-123',
+        device_name: 'Chrome',
+        device_type: 'web',
+        platform: 'pwa',
+        app_version: '1.0.5+124',
+      }),
+    );
+    expect(payload.metadata).toEqual(
+      expect.objectContaining({
+        device_family: 'web',
+        device_name: 'Chrome',
+        app_version: '1.0.5+124',
+        os_version: 'Windows 11',
+      }),
+    );
+  });
+
   it('claims pending events and delivers them through the Appyra batch endpoint', async () => {
     const fetchMock = jest.spyOn(global, 'fetch' as never).mockResolvedValue({
       ok: true,

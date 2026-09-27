@@ -79,6 +79,28 @@ export class PurchasesService {
     return this.inventoryMutations ?? new InventoryMutationService(this.prisma);
   }
 
+  private async enqueuePurchaseTelemetry(
+    tx: Prisma.TransactionClient,
+    input: {
+      companyId: string;
+      actorUserId?: string | null;
+      eventType: string;
+      entityType?: string;
+      entityId: string;
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    await this.telemetry?.enqueueBusinessEvent(tx, {
+      companyId: input.companyId,
+      actorUserId: input.actorUserId ?? null,
+      eventType: input.eventType,
+      entityType: input.entityType ?? "purchase_order",
+      entityId: input.entityId,
+      feature: "PURCHASES",
+      metadata: input.metadata,
+    });
+  }
+
   private isInventoryTrackedProduct(
     product?: { itemType?: ProductItemType | null; trackInventory?: boolean | null } | null,
   ) {
@@ -280,38 +302,64 @@ export class PurchasesService {
       throw new BadRequestException("El monto no puede ser negativo.");
     }
 
-    return this.prisma.purchaseInvoice.create({
-      data: {
-        companyId,
-        supplierId,
-        purchaseOrderId,
-        invoiceNumber: this.clean(dto.invoiceNumber),
-        invoiceDate: this.parseDate(dto.invoiceDate) ?? new Date(),
-        amount,
-        currency: (this.clean(dto.currency) ?? "DOP").slice(0, 8).toUpperCase(),
-        fileName: uploaded.fileName,
-        fileUrl: uploaded.fileUrl,
-        storageKey: uploaded.storageKey,
-        mimeType: uploaded.mimeType,
-        fileSize: uploaded.fileSize,
-        notes: this.clean(dto.notes),
-        uploadedById: user.id,
-      },
-      include: {
-        supplier: true,
-        purchaseOrder: {
-          select: { id: true, orderNumber: true, total: true, orderDate: true },
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.purchaseInvoice.create({
+        data: {
+          companyId,
+          supplierId,
+          purchaseOrderId,
+          invoiceNumber: this.clean(dto.invoiceNumber),
+          invoiceDate: this.parseDate(dto.invoiceDate) ?? new Date(),
+          amount,
+          currency: (this.clean(dto.currency) ?? "DOP").slice(0, 8).toUpperCase(),
+          fileName: uploaded.fileName,
+          fileUrl: uploaded.fileUrl,
+          storageKey: uploaded.storageKey,
+          mimeType: uploaded.mimeType,
+          fileSize: uploaded.fileSize,
+          notes: this.clean(dto.notes),
+          uploadedById: user.id,
         },
-        uploadedBy: { select: { id: true, nombreCompleto: true } },
-      },
-    });
+        include: {
+          supplier: true,
+          purchaseOrder: {
+            select: { id: true, orderNumber: true, total: true, orderDate: true },
+          },
+          uploadedBy: { select: { id: true, nombreCompleto: true } },
+        },
+      });
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_INVOICE_CREATED",
+        entityType: "purchase_invoice",
+        entityId: invoice.id,
+        metadata: {
+          purchase_order_id: purchaseOrderId,
+          amount: amount ? Number(amount.toFixed(2)) : null,
+        },
+      });
+      return invoice;
+    }, PURCHASE_TRANSACTION_OPTIONS);
   }
 
   async deleteInvoice(user: RequestUser, id: string) {
     const companyId = requireTenant(user);
-    const updated = await this.prisma.purchaseInvoice.updateMany({
-      where: { id, companyId },
-      data: { deletedAt: new Date() },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.purchaseInvoice.updateMany({
+        where: { id, companyId },
+        data: { deletedAt: new Date() },
+      });
+      if (result.count === 1) {
+        await this.enqueuePurchaseTelemetry(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "PURCHASE_INVOICE_DELETED",
+          entityType: "purchase_invoice",
+          entityId: id,
+        });
+      }
+      return result;
     });
     if (updated.count !== 1) {
       throw new NotFoundException("Factura de compra no encontrada.");
@@ -381,7 +429,7 @@ export class PurchasesService {
     return this.createOrderWithNumberRetry(async () =>
       this.prisma.$transaction(async (tx) => {
         const orderNumber = await this.nextOrderNumber(tx, companyId);
-        return tx.purchaseOrder.create({
+        const order = await tx.purchaseOrder.create({
           data: {
             companyId,
             orderNumber,
@@ -403,6 +451,17 @@ export class PurchasesService {
           },
           include: this.includeOrder(),
         });
+        await this.enqueuePurchaseTelemetry(tx, {
+          companyId,
+          actorUserId: user.id,
+          eventType: "PURCHASE_ORDER_CREATED",
+          entityId: order.id,
+          metadata: {
+            order_number: order.orderNumber,
+            total: this.num(order.total),
+          },
+        });
+        return order;
       }, PURCHASE_TRANSACTION_OPTIONS),
     );
   }
@@ -434,7 +493,7 @@ export class PurchasesService {
     if (supplierId) await this.assertSupplier(companyId, supplierId);
     return this.prisma.$transaction(async (tx) => {
       await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
-      return tx.purchaseOrder.update({
+      const order = await tx.purchaseOrder.update({
         where: { id },
         data: {
           supplierId,
@@ -454,6 +513,17 @@ export class PurchasesService {
         },
         include: this.includeOrder(),
       });
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_UPDATED",
+        entityId: order.id,
+        metadata: {
+          order_number: order.orderNumber,
+          total: this.num(order.total),
+        },
+      });
+      return order;
     });
   }
 
@@ -493,45 +563,84 @@ export class PurchasesService {
       throw new BadRequestException("Agrega al menos un producto.");
     if (!order.supplierId)
       throw new BadRequestException("Selecciona un suplidor para continuar.");
-    return this.prisma.purchaseOrder.update({
-      where: { id },
-      data: {
-        status: PurchaseOrderStatus.APPROVED,
-        approvedById: user.id,
-        approvedAt: new Date(),
-      },
-      include: this.includeOrder(),
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          status: PurchaseOrderStatus.APPROVED,
+          approvedById: user.id,
+          approvedAt: new Date(),
+        },
+        include: this.includeOrder(),
+      });
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId: order.companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_APPROVED",
+        entityId: updated.id,
+        metadata: { order_number: updated.orderNumber },
+      });
+      return updated;
+    }, PURCHASE_TRANSACTION_OPTIONS);
   }
 
   async markSent(user: RequestUser, id: string) {
-    await this.getOrder(user, id);
-    return this.prisma.purchaseOrder.update({
-      where: { id },
-      data: { status: PurchaseOrderStatus.SENT, sentAt: new Date() },
-      include: this.includeOrder(),
-    });
+    const order = await this.getOrder(user, id);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.purchaseOrder.update({
+        where: { id },
+        data: { status: PurchaseOrderStatus.SENT, sentAt: new Date() },
+        include: this.includeOrder(),
+      });
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId: order.companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_SENT",
+        entityId: updated.id,
+        metadata: { order_number: updated.orderNumber },
+      });
+      return updated;
+    }, PURCHASE_TRANSACTION_OPTIONS);
   }
 
   async cancelOrder(user: RequestUser, id: string, reason?: string) {
-    await this.getOrder(user, id);
-    return this.prisma.purchaseOrder.update({
-      where: { id },
-      data: {
-        status: PurchaseOrderStatus.CANCELLED,
-        cancelledAt: new Date(),
-        cancellationReason: this.clean(reason),
-      },
-      include: this.includeOrder(),
-    });
+    const order = await this.getOrder(user, id);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          status: PurchaseOrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancellationReason: this.clean(reason),
+        },
+        include: this.includeOrder(),
+      });
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId: order.companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_CANCELLED",
+        entityId: updated.id,
+        metadata: { order_number: updated.orderNumber },
+      });
+      return updated;
+    }, PURCHASE_TRANSACTION_OPTIONS);
   }
 
   async deleteDraft(user: RequestUser, id: string) {
-    await this.getOrder(user, id);
-    await this.prisma.purchaseOrder.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    const order = await this.getOrder(user, id);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.purchaseOrder.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId: order.companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_DELETED",
+        entityId: id,
+        metadata: { order_number: order.orderNumber },
+      });
+    }, PURCHASE_TRANSACTION_OPTIONS);
     return { ok: true };
   }
 
@@ -799,6 +908,17 @@ export class PurchasesService {
           feature: "PURCHASES",
         });
       }
+      await this.enqueuePurchaseTelemetry(tx, {
+        companyId: order.companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_RECEIVED",
+        entityId: updated.id,
+        metadata: {
+          receipt_id: receipt.id,
+          inventory_updated: hasInventoryUpdates,
+          status,
+        },
+      });
       return { receipt: refreshedReceipt, order: updated };
     }, PURCHASE_TRANSACTION_OPTIONS);
     } catch (error) {

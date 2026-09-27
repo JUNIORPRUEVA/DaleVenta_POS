@@ -12,12 +12,14 @@ describe("PurchasesService transaction product identity", () => {
   function serviceWith(
     prisma: Record<string, unknown>,
     inventory?: Record<string, unknown>,
+    telemetry?: Record<string, unknown>,
   ) {
     return new PurchasesService(
       prisma as never,
       { get: jest.fn().mockReturnValue("") } as never,
       {} as never,
       inventory as never,
+      telemetry as never,
     );
   }
 
@@ -218,6 +220,82 @@ describe("PurchasesService transaction product identity", () => {
       }),
     ).resolves.toMatchObject({ orderNumber: "OC-000002" });
     expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("emits purchase telemetry when an order is created", async () => {
+    const product = {
+      id: "11111111-1111-4111-8111-111111111111",
+      nombre: "Cable local",
+      codigo: "CAB",
+      descripcion: null,
+      imagen: null,
+      costo: 20,
+      unitOfMeasure: {
+        code: "UNIT",
+        name: "Unidad",
+        symbol: "u",
+        allowDecimals: false,
+        precision: 0,
+      },
+    };
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn((strings: TemplateStringsArray) => {
+        const sql = strings.join("");
+        if (sql.includes("SELECT next_value")) {
+          return Promise.resolve([{ next_value: 0 }]);
+        }
+        if (sql.includes("MAX(substring(order_number")) {
+          return Promise.resolve([{ highest: 0 }]);
+        }
+        return Promise.resolve([]);
+      }),
+      purchaseOrderSequence: { update: jest.fn().mockResolvedValue({}) },
+      purchaseOrder: {
+        create: jest.fn().mockResolvedValue({
+          id: "order-telemetry",
+          orderNumber: "OC-000001",
+          total: 20,
+        }),
+      },
+    };
+    const prisma = {
+      product: { findMany: jest.fn().mockResolvedValue([product]) },
+      supplier: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const telemetry = {
+      enqueueBusinessEvent: jest.fn().mockResolvedValue(null),
+    };
+    const service = serviceWith(prisma, undefined, telemetry);
+
+    await expect(
+      service.createOrder(user, {
+        items: [
+          {
+            productId: product.id,
+            productName: "Cable local",
+            quantity: 1,
+            unitCost: 20,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({ id: "order-telemetry" });
+    expect(telemetry.enqueueBusinessEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        companyId: user.companyId,
+        actorUserId: user.id,
+        eventType: "PURCHASE_ORDER_CREATED",
+        entityType: "purchase_order",
+        entityId: "order-telemetry",
+        feature: "PURCHASES",
+        metadata: expect.objectContaining({
+          order_number: "OC-000001",
+          total: 20,
+        }),
+      }),
+    );
   });
 
   it("preserves FULLPOS identity on purchase order lines", async () => {
