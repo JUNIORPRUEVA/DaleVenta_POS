@@ -29,7 +29,7 @@
     var visible = passwordInput.type === 'text';
     passwordInput.type = visible ? 'password' : 'text';
     togglePassword.textContent = visible ? 'Mostrar' : 'Ocultar';
-    togglePassword.setAttribute('aria-label', visible ? 'Mostrar clave' : 'Ocultar clave');
+    togglePassword.setAttribute('aria-label', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
   });
 
   form.addEventListener('submit', function (event) {
@@ -120,7 +120,7 @@
       result.errors.email = 'Escribe un correo válido.';
     }
     if (payload.password.length < 8) {
-      result.errors.password = 'La clave debe tener al menos 8 caracteres.';
+      result.errors.password = 'La contrasena debe tener al menos 8 caracteres.';
     }
     if (!fields.terms.checked) {
       result.errors.terms = 'Debes aceptar los términos para continuar.';
@@ -235,7 +235,7 @@
       return { field: 'email', message: 'Ya existe una cuenta con este correo.' };
     }
     if (lower.indexOf('password') !== -1 || lower.indexOf('clave') !== -1 || lower.indexOf('contraseña') !== -1) {
-      return { field: 'password', message: 'Revisa la clave. Debe tener al menos 8 caracteres.' };
+      return { field: 'password', message: 'Revisa la contrasena. Debe tener al menos 8 caracteres.' };
     }
     if (lower.indexOf('phone') !== -1 || lower.indexOf('tel') !== -1 || lower.indexOf('whatsapp') !== -1) {
       return { field: 'phone', message: 'Revisa el WhatsApp e intenta de nuevo.' };
@@ -311,7 +311,7 @@
 
   function setSubmitting(isSubmitting) {
     submitButton.disabled = isSubmitting;
-    submitButton.textContent = isSubmitting ? 'Creando cuenta...' : 'Crear cuenta';
+    submitButton.textContent = isSubmitting ? 'Creando cuenta...' : 'Comenzar gratis';
   }
 
   function parseJson(text) {
