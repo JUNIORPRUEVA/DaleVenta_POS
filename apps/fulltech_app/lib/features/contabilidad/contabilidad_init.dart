@@ -11,27 +11,35 @@ Future<void> ensureContabilidadLocale({String? locale}) {
 
 Future<void> _initializeContabilidadLocale(String? locale) async {
   final candidates = <String>{..._localeCandidates(locale), 'es_DO', 'es'};
+  Intl.defaultLocale = _preferredLocale(candidates);
 
   for (final candidate in candidates) {
-    await initializeDateFormatting(candidate);
+    try {
+      await initializeDateFormatting(candidate);
+    } on Object {
+      // Browser/headless environments may report non-Intl locales such as
+      // "C" or "C.UTF-8". Ignore them and keep the supported fallbacks.
+    }
   }
-
-  Intl.defaultLocale = _preferredLocale(candidates);
 }
 
 Iterable<String> _localeCandidates(String? rawLocale) sync* {
   final normalized = (rawLocale ?? '').trim().replaceAll('-', '_');
-  if (normalized.isEmpty) return;
+  if (!_isSupportedLocaleShape(normalized)) return;
 
   yield normalized;
 
   final separator = normalized.indexOf('_');
   if (separator > 0) {
     final languageCode = normalized.substring(0, separator).trim();
-    if (languageCode.isNotEmpty) {
+    if (_isSupportedLocaleShape(languageCode)) {
       yield languageCode;
     }
   }
+}
+
+bool _isSupportedLocaleShape(String value) {
+  return RegExp(r'^[A-Za-z]{2,3}(_[A-Za-z]{2})?$').hasMatch(value);
 }
 
 String _preferredLocale(Set<String> candidates) {

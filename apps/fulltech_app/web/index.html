@@ -511,6 +511,39 @@
     })();
   </script>
   <script>
+    (function () {
+      function isSupportedLocale(locale) {
+        return typeof locale === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z]{2})?$/.test(locale);
+      }
+
+      var rawLanguage = window.navigator && window.navigator.language;
+      var rawLanguages = window.navigator && window.navigator.languages;
+      var hasInvalidLanguage = !isSupportedLocale(rawLanguage);
+      var hasInvalidLanguages = !Array.isArray(rawLanguages) ||
+        rawLanguages.length === 0 ||
+        rawLanguages.some(function (locale) { return !isSupportedLocale(locale); });
+
+      if (!hasInvalidLanguage && !hasInvalidLanguages) {
+        return;
+      }
+
+      // Flutter web builds Locale objects from navigator.language/languages
+      // before the Dart app can sanitize Intl.defaultLocale. Chromium headless
+      // may expose POSIX values such as C.UTF-8, which are invalid Flutter
+      // locales and prevent the first frame from rendering.
+      try {
+        Object.defineProperty(window.navigator, 'language', {
+          configurable: true,
+          get: function () { return 'es-DO'; }
+        });
+        Object.defineProperty(window.navigator, 'languages', {
+          configurable: true,
+          get: function () { return ['es-DO', 'es']; }
+        });
+      } catch (_) {}
+    })();
+  </script>
+  <script>
     window.addEventListener('flutter-first-frame', function () {
       var loader = document.getElementById('app-loader');
       document.body.classList.add('has-flutter');

@@ -35,7 +35,9 @@ class AppStorageScopeGuard {
             : 'storage scope changed; clearing local auth session',
       );
 
-      await TokenStorage().clearTokens();
+      if (shouldClearAuthSessionForScope(previous: previous, current: current)) {
+        await TokenStorage().clearTokens();
+      }
       await prefs.setString(_scopeKey, current);
     } catch (error, stackTrace) {
       TraceLog.log(
@@ -45,6 +47,14 @@ class AppStorageScopeGuard {
         stackTrace: stackTrace,
       );
     }
+  }
+
+  @visibleForTesting
+  static bool shouldClearAuthSessionForScope({
+    required String? previous,
+    required String current,
+  }) {
+    return previous != null && previous != current;
   }
 
   static Future<String> _currentScope() async {

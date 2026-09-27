@@ -208,6 +208,23 @@ server {
     add_header Cache-Control "no-cache";
   }
 
+  # Ultralight registration page. Keep it out of the Flutter SPA fallback so
+  # campaigns do not download main.dart.js or CanvasKit before submitting.
+  location = /registro {
+    add_header Cache-Control "no-cache";
+    try_files /registro/index.html =404;
+  }
+
+  location = /registro/ {
+    absolute_redirect off;
+    return 308 /registro;
+  }
+
+  location ^~ /registro/ {
+    add_header Cache-Control "no-cache";
+    try_files $uri =404;
+  }
+
   location ~* \.(js|wasm|css|ttf|png|jpg|jpeg|webp|svg)$ {
     add_header Cache-Control "public, max-age=31536000, immutable";
     try_files $uri =404;
