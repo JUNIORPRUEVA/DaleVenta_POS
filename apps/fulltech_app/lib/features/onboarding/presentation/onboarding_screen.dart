@@ -141,6 +141,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _state = state;
         _step = completeFlow ? 5 : (_step + 1).clamp(1, 4);
       });
+      if (completeFlow) await _finishToApp(refreshUser: true);
     });
   }
 

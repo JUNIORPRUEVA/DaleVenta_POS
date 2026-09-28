@@ -65,8 +65,9 @@ export class OnboardingService {
     ]);
 
     return {
-      required: company.onboardingRequired,
-      shouldShowWelcome: shouldRequireOnboarding(company),
+      required: shouldRequireOnboarding(company),
+      shouldShowWelcome:
+        company.onboardingStatus === ONBOARDING_STATUS.WELCOME_PENDING,
       status: company.onboardingStatus,
       tutorialStatus: company.tutorialStatus,
       trial: {

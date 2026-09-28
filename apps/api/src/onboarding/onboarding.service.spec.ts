@@ -61,6 +61,82 @@ describe("OnboardingService", () => {
     expect(state.status).toBe("NOT_REQUIRED");
   });
 
+  it("shows welcome only for WELCOME_PENDING companies", async () => {
+    const { service } = buildService({
+      onboardingRequired: true,
+      onboardingStatus: "WELCOME_PENDING",
+    });
+
+    const state = await service.getState({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: "company-a",
+    });
+
+    expect(state.required).toBe(true);
+    expect(state.shouldShowWelcome).toBe(true);
+    expect(state.status).toBe("WELCOME_PENDING");
+  });
+
+  it("keeps IN_PROGRESS companies inside onboarding without returning to welcome", async () => {
+    const { service } = buildService({
+      onboardingRequired: true,
+      onboardingStatus: "IN_PROGRESS",
+    });
+
+    const state = await service.getState({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: "company-a",
+    });
+
+    expect(state.required).toBe(true);
+    expect(state.shouldShowWelcome).toBe(false);
+    expect(state.status).toBe("IN_PROGRESS");
+  });
+
+  it("does not require onboarding after completed or full skip states", async () => {
+    for (const status of ["COMPLETED", "SKIPPED", "NOT_REQUIRED"]) {
+      const { service } = buildService({
+        onboardingRequired: status !== "NOT_REQUIRED",
+        onboardingStatus: status,
+      });
+
+      const state = await service.getState({
+        id: "user-a",
+        role: "ADMIN",
+        companyId: "company-a",
+      });
+
+      expect(state.required).toBe(false);
+      expect(state.shouldShowWelcome).toBe(false);
+      expect(state.status).toBe(status);
+    }
+  });
+
+  it("starts onboarding without clearing the active onboarding requirement", async () => {
+    const { service, prisma } = buildService({
+      onboardingRequired: true,
+      onboardingStatus: "WELCOME_PENDING",
+    });
+
+    await service.start({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: "company-a",
+    });
+
+    expect(prisma.company.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "company-a", onboardingRequired: true },
+        data: expect.objectContaining({
+          onboardingStatus: "IN_PROGRESS",
+          onboardingStartedAt: expect.any(Date),
+        }),
+      }),
+    );
+  });
+
   it("scopes reads to the authenticated company", async () => {
     const { service, prisma } = buildService({
       onboardingRequired: true,

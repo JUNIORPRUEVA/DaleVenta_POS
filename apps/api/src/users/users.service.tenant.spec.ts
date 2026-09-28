@@ -21,6 +21,129 @@ function buildService(prisma: any) {
 }
 
 describe("UsersService tenant isolation", () => {
+  it("keeps requiresOnboarding true for IN_PROGRESS companies in user profile", async () => {
+    const prisma = {
+      user: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "user-a",
+          email: "admin@example.test",
+          nombreCompleto: "Admin",
+          telefono: "",
+          numeroFlota: null,
+          telefonoFamiliar: null,
+          cedula: null,
+          fotoCedulaUrl: null,
+          fotoLicenciaUrl: null,
+          fotoPersonalUrl: null,
+          workContractSignatureUrl: null,
+          workContractSignedAt: null,
+          workContractVersion: null,
+          workContractJobTitle: null,
+          workContractSalary: null,
+          workContractPaymentFrequency: null,
+          workContractPaymentMethod: null,
+          workContractWorkSchedule: null,
+          workContractWorkLocation: null,
+          workContractClauseOverrides: {},
+          workContractCustomClauses: null,
+          workContractStartDate: null,
+          edad: 0,
+          tieneHijos: false,
+          estaCasado: false,
+          casaPropia: false,
+          vehiculo: false,
+          licenciaConducir: false,
+          fechaIngreso: null,
+          fechaNacimiento: null,
+          cuentaNominaPreferencial: null,
+          habilidades: [],
+          userPermissions: {},
+          role: Role.ADMIN,
+          companyId: "company-a",
+          company: {
+            id: "company-a",
+            name: "Company A",
+            slug: "company-a",
+            onboardingRequired: true,
+            onboardingStatus: "IN_PROGRESS",
+          },
+          blocked: false,
+          createdAt: new Date("2026-09-27T00:00:00.000Z"),
+          updatedAt: new Date("2026-09-27T00:00:00.000Z"),
+        }),
+      },
+    };
+    const { service } = buildService(prisma);
+
+    const user = await service.findById("user-a");
+
+    expect(user.onboardingRequired).toBe(true);
+    expect(user.onboardingStatus).toBe("IN_PROGRESS");
+    expect(user.requiresOnboarding).toBe(true);
+  });
+
+  it("keeps requiresOnboarding false for completed or skipped companies in user profile", async () => {
+    for (const status of ["COMPLETED", "SKIPPED", "NOT_REQUIRED"]) {
+      const prisma = {
+        user: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: `user-${status}`,
+            email: `${status.toLowerCase()}@example.test`,
+            nombreCompleto: "Admin",
+            telefono: "",
+            numeroFlota: null,
+            telefonoFamiliar: null,
+            cedula: null,
+            fotoCedulaUrl: null,
+            fotoLicenciaUrl: null,
+            fotoPersonalUrl: null,
+            workContractSignatureUrl: null,
+            workContractSignedAt: null,
+            workContractVersion: null,
+            workContractJobTitle: null,
+            workContractSalary: null,
+            workContractPaymentFrequency: null,
+            workContractPaymentMethod: null,
+            workContractWorkSchedule: null,
+            workContractWorkLocation: null,
+            workContractClauseOverrides: {},
+            workContractCustomClauses: null,
+            workContractStartDate: null,
+            edad: 0,
+            tieneHijos: false,
+            estaCasado: false,
+            casaPropia: false,
+            vehiculo: false,
+            licenciaConducir: false,
+            fechaIngreso: null,
+            fechaNacimiento: null,
+            cuentaNominaPreferencial: null,
+            habilidades: [],
+            userPermissions: {},
+            role: Role.ADMIN,
+            companyId: "company-a",
+            company: {
+              id: "company-a",
+              name: "Company A",
+              slug: "company-a",
+              onboardingRequired: status !== "NOT_REQUIRED",
+              onboardingStatus: status,
+            },
+            blocked: false,
+            createdAt: new Date("2026-09-27T00:00:00.000Z"),
+            updatedAt: new Date("2026-09-27T00:00:00.000Z"),
+          }),
+        },
+      };
+      const { service } = buildService(prisma);
+
+      const user = await service.findById(`user-${status}`);
+
+      expect(user.onboardingStatus).toBe(status);
+      expect(user.requiresOnboarding).toBe(false);
+    }
+  });
+
   it("rejects updating a user that is not in the request tenant", async () => {
     const prisma = {
       user: { findFirst: jest.fn().mockResolvedValue(null) },
