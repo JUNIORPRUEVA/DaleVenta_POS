@@ -178,7 +178,7 @@
         return data.user || null;
       })
       .then(function (user) {
-        var normalizedUser = normalizeUser(user, accessToken);
+        var normalizedUser = normalizeUser(user, accessToken, data);
         saveFlutterString('accessToken', accessToken);
         if (refreshToken) {
           saveFlutterString('refreshToken', refreshToken);
@@ -193,7 +193,7 @@
       });
   }
 
-  function normalizeUser(user, accessToken) {
+  function normalizeUser(user, accessToken, sessionData) {
     if (!user || typeof user !== 'object') {
       return null;
     }
@@ -201,12 +201,28 @@
     Object.keys(user).forEach(function (key) {
       copy[key] = user[key];
     });
+    var sessionUser =
+      sessionData && sessionData.user && typeof sessionData.user === 'object'
+        ? sessionData.user
+        : {};
 
     if (!copy.companyId) {
       var identity = parseJwt(accessToken);
       if (identity && identity.companyId) {
         copy.companyId = identity.companyId;
       }
+    }
+    if (copy.requiresOnboarding !== true) {
+      copy.requiresOnboarding =
+        sessionData && sessionData.requiresOnboarding === true;
+    }
+    if (copy.onboardingRequired !== true) {
+      copy.onboardingRequired =
+        sessionUser.onboardingRequired === true ||
+        (sessionData && sessionData.onboardingRequired === true);
+    }
+    if (!copy.onboardingStatus && sessionUser.onboardingStatus) {
+      copy.onboardingStatus = sessionUser.onboardingStatus;
     }
 
     return copy;

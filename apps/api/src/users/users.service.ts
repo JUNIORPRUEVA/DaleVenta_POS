@@ -21,6 +21,10 @@ import { ConfigService } from "@nestjs/config";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { LicenseService } from "../license/license.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
+import {
+  ONBOARDING_STATUS,
+  shouldRequireOnboarding,
+} from "../onboarding/onboarding.constants";
 
 const ADMIN_MEMBER_ROLES = new Set<CompanyMemberRole>([
   CompanyMemberRole.OWNER,
@@ -807,6 +811,16 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
           habilidades: true,
           userPermissions: true,
           role: true,
+          companyId: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              onboardingRequired: true,
+              onboardingStatus: true,
+            },
+          },
           blocked: true,
           createdAt: true,
           updatedAt: true,
@@ -837,7 +851,18 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     }
 
     if (!user) throw new NotFoundException("User not found");
-    return user;
+    const company = user.company ?? null;
+    const onboardingStatus =
+      company?.onboardingStatus ?? ONBOARDING_STATUS.NOT_REQUIRED;
+    return {
+      ...user,
+      companyId: user.companyId ?? company?.id ?? null,
+      companyName: company?.name ?? null,
+      companySlug: company?.slug ?? null,
+      onboardingRequired: company?.onboardingRequired === true,
+      onboardingStatus,
+      requiresOnboarding: company ? shouldRequireOnboarding(company) : false,
+    };
   }
 
   async findByIdForTenant(requestUser: TenantUser, id: string) {

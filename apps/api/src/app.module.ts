@@ -29,6 +29,7 @@ import { TaxModule } from './tax/tax.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { BackupsModule } from './backups/backups.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 
 @Module({
   imports: [
@@ -38,7 +39,7 @@ import { BackupsModule } from './backups/backups.module';
         join(process.cwd(), '.env'),
         join(process.cwd(), '..', '.env'),
         join(process.cwd(), '..', '..', '.env'),
-      ]
+      ],
     }),
     ScheduleModule.forRoot(),
     RedisModule,
@@ -68,7 +69,7 @@ import { BackupsModule } from './backups/backups.module';
     InventoryModule,
     WarehousesModule,
     BackupsModule,
-  ]
+    OnboardingModule,
+  ],
 })
 export class AppModule {}
-

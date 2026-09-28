@@ -10,6 +10,11 @@ class ApiRoutes {
   static const accountDeletionPreview = '/auth/account/deletion-preview';
   static const accountDelete = '/auth/account';
   static const settings = '/settings';
+  static const onboarding = '/onboarding';
+  static const onboardingStart = '/onboarding/start';
+  static const onboardingSkipAll = '/onboarding/skip-all';
+  static String onboardingStep(String step) => '/onboarding/steps/$step';
+  static const onboardingTutorial = '/onboarding/tutorial';
   static const settingsCompanyName = '/settings/company-name';
   static const fiscalSettings = '/company/fiscal-settings';
   static const taxes = '/taxes';

@@ -25,6 +25,12 @@ import { LicenseService } from "../license/license.service";
 import { RedisService } from "../common/redis/redis.service";
 import { PasswordResetEmailService } from "./password-reset-email.service";
 import { provisionZeroConfigForNewCompany } from "../inventory/zero-config-inventory";
+import {
+  ONBOARDING_STATUS,
+  ONBOARDING_STEP_STATUS,
+  TUTORIAL_STATUS,
+  shouldRequireOnboarding,
+} from "../onboarding/onboarding.constants";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 
 const PASSWORD_RESET_GENERIC_MESSAGE =
@@ -649,6 +655,13 @@ export class AuthService {
           trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           maxUsers: 2,
           maxProducts: 100,
+          onboardingRequired: true,
+          onboardingStatus: ONBOARDING_STATUS.WELCOME_PENDING,
+          onboardingCompanyStep: ONBOARDING_STEP_STATUS.PENDING,
+          onboardingBillingStep: ONBOARDING_STEP_STATUS.PENDING,
+          onboardingProductStep: ONBOARDING_STEP_STATUS.PENDING,
+          onboardingReadyStep: ONBOARDING_STEP_STATUS.PENDING,
+          tutorialStatus: TUTORIAL_STATUS.PENDING,
         },
       });
 
@@ -1060,7 +1073,13 @@ export class AuthService {
     id: string;
     role: Role | string;
     companyId?: string | null;
-    company?: { id: string; name: string; slug: string } | null;
+    company?: {
+      id: string;
+      name: string;
+      slug: string;
+      onboardingRequired?: boolean | null;
+      onboardingStatus?: string | null;
+    } | null;
     companyMemberships?: Array<{
       id: string;
       role: CompanyMemberRole;
@@ -1072,6 +1091,8 @@ export class AuthService {
         status: string;
         plan: string;
         maxUsers: number;
+        onboardingRequired?: boolean | null;
+        onboardingStatus?: string | null;
       };
     }>;
   }) {
@@ -1091,7 +1112,15 @@ export class AuthService {
           slug: activeMembership.company.slug,
           status: activeMembership.company.status,
           plan: activeMembership.company.plan,
-          onboardingCompleted: true,
+          onboardingRequired:
+            activeMembership.company.onboardingRequired === true,
+          onboardingStatus:
+            activeMembership.company.onboardingStatus ??
+            ONBOARDING_STATUS.NOT_REQUIRED,
+          onboardingCompleted: !shouldRequireOnboarding(
+            activeMembership.company,
+          ),
+          requiresOnboarding: shouldRequireOnboarding(activeMembership.company),
         }
       : user.company
         ? {
@@ -1100,7 +1129,11 @@ export class AuthService {
             slug: user.company.slug,
             status: "ACTIVE",
             plan: "STANDARD",
-            onboardingCompleted: true,
+            onboardingRequired: user.company.onboardingRequired === true,
+            onboardingStatus:
+              user.company.onboardingStatus ?? ONBOARDING_STATUS.NOT_REQUIRED,
+            onboardingCompleted: !shouldRequireOnboarding(user.company),
+            requiresOnboarding: shouldRequireOnboarding(user.company),
           }
         : null;
     const companies = memberships.map((membership) => ({
@@ -1110,7 +1143,11 @@ export class AuthService {
       role: membership.role,
       status: membership.status,
       logoUrl: null,
-      onboardingCompleted: true,
+      onboardingRequired: membership.company.onboardingRequired === true,
+      onboardingStatus:
+        membership.company.onboardingStatus ?? ONBOARDING_STATUS.NOT_REQUIRED,
+      onboardingCompleted: !shouldRequireOnboarding(membership.company),
+      requiresOnboarding: shouldRequireOnboarding(membership.company),
     }));
 
     return {
@@ -1136,7 +1173,13 @@ export class AuthService {
       email: string;
       role: Role | string;
       companyId?: string | null;
-      company?: { id: string; name: string; slug: string } | null;
+      company?: {
+        id: string;
+        name: string;
+        slug: string;
+        onboardingRequired?: boolean | null;
+        onboardingStatus?: string | null;
+      } | null;
     },
     session = this.resolveCompanySession(user),
   ) {
@@ -1200,7 +1243,13 @@ export class AuthService {
           blocked: true,
           companyId: true,
           company: {
-            select: { id: true, name: true, slug: true },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              onboardingRequired: true,
+              onboardingStatus: true,
+            },
           },
           companyMemberships: {
             where: { status: CompanyMemberStatus.ACTIVE },
@@ -1213,6 +1262,8 @@ export class AuthService {
                   status: true,
                   plan: true,
                   maxUsers: true,
+                  onboardingRequired: true,
+                  onboardingStatus: true,
                 },
               },
             },
@@ -1281,7 +1332,13 @@ export class AuthService {
           role: true,
           companyId: true,
           company: {
-            select: { id: true, name: true, slug: true },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              onboardingRequired: true,
+              onboardingStatus: true,
+            },
           },
           companyMemberships: {
             where: { status: CompanyMemberStatus.ACTIVE },
@@ -1294,6 +1351,8 @@ export class AuthService {
                   status: true,
                   plan: true,
                   maxUsers: true,
+                  onboardingRequired: true,
+                  onboardingStatus: true,
                 },
               },
             },
@@ -1341,7 +1400,13 @@ export class AuthService {
           blocked: true,
           companyId: true,
           company: {
-            select: { id: true, name: true, slug: true },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              onboardingRequired: true,
+              onboardingStatus: true,
+            },
           },
           companyMemberships: {
             where: { status: CompanyMemberStatus.ACTIVE },
@@ -1354,6 +1419,8 @@ export class AuthService {
                   status: true,
                   plan: true,
                   maxUsers: true,
+                  onboardingRequired: true,
+                  onboardingStatus: true,
                 },
               },
             },

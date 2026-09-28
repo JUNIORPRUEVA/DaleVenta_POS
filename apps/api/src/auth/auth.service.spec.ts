@@ -87,6 +87,64 @@ describe("AuthService tenant role hydration", () => {
     expect(employeeSession.activeCompany.name).toBe("Nombre Nuevo");
     expect(employeeSession.effectiveRole).toBe(Role.VENDEDOR);
   });
+
+  it("does not require onboarding for existing companies without the new flag", () => {
+    const service = buildService();
+
+    const session = service.resolveCompanySession({
+      id: "existing-admin",
+      role: Role.ADMIN,
+      companyId: "company-existing",
+      companyMemberships: [
+        {
+          id: "membership-existing",
+          role: CompanyMemberRole.OWNER,
+          status: CompanyMemberStatus.ACTIVE,
+          company: {
+            id: "company-existing",
+            name: "Empresa Existente",
+            slug: "empresa-existente",
+            status: "ACTIVE",
+            plan: "STANDARD",
+            maxUsers: 10,
+          },
+        },
+      ],
+    });
+
+    expect(session.activeCompany.requiresOnboarding).toBe(false);
+    expect(session.activeCompany.onboardingCompleted).toBe(true);
+  });
+
+  it("requires onboarding only for explicitly marked new companies", () => {
+    const service = buildService();
+
+    const session = service.resolveCompanySession({
+      id: "new-admin",
+      role: Role.ADMIN,
+      companyId: "company-new",
+      companyMemberships: [
+        {
+          id: "membership-new",
+          role: CompanyMemberRole.OWNER,
+          status: CompanyMemberStatus.ACTIVE,
+          company: {
+            id: "company-new",
+            name: "Empresa Nueva",
+            slug: "empresa-nueva",
+            status: "ACTIVE",
+            plan: "STANDARD",
+            maxUsers: 2,
+            onboardingRequired: true,
+            onboardingStatus: "WELCOME_PENDING",
+          },
+        },
+      ],
+    });
+
+    expect(session.activeCompany.requiresOnboarding).toBe(true);
+    expect(session.activeCompany.onboardingCompleted).toBe(false);
+  });
 });
 
 describe("AuthService login errors", () => {

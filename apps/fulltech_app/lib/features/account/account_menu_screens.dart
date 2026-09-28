@@ -236,11 +236,23 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authStateProvider).user;
     final multiWarehouseEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
         true;
+    final showOnboardingResume =
+        user?.onboardingRequired == true &&
+        user?.onboardingStatus != 'COMPLETED';
     return _SettingsHubScaffold(
       children: [
+        if (showOnboardingResume)
+          _SettingsActionCard(
+            icon: Icons.checklist_rtl_rounded,
+            title: 'Termina de preparar FullPOS',
+            description: 'Continua la configuracion inicial cuando quieras.',
+            accent: AppColors.primary,
+            onTap: () => context.go(Routes.onboarding),
+          ),
         // Empresa va primero: es la configuracion de mayor impacto del negocio
         // (datos fiscales, logo, direccion y contacto) y debe estar disponible
         // tambien en movil, no solo en escritorio.
@@ -906,24 +918,27 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
             ),
           if (_showLegacyCompanyShortcut)
             PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _SettingsCompanyMenuRow(
-              icon: Icons.cloud_sync_outlined,
-              label: 'Backup',
-              onTap: () =>
-                  _activate(menuContext, context, Routes.configuracionBackup),
-              helpText:
-                  'Descarga respaldo local y valida ZIPs de backup para recuperación asistida.',
+              enabled: false,
+              padding: EdgeInsets.zero,
+              child: _SettingsCompanyMenuRow(
+                icon: Icons.cloud_sync_outlined,
+                label: 'Backup',
+                onTap: () =>
+                    _activate(menuContext, context, Routes.configuracionBackup),
+                helpText:
+                    'Descarga respaldo local y valida ZIPs de backup para recuperación asistida.',
+              ),
             ),
-          ),
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
             child: _SettingsCompanySubmenu(
               showPrinter: !kIsWeb,
-              onPrinter: () =>
-                  _activate(menuContext, context, Routes.configuracionImpresora),
+              onPrinter: () => _activate(
+                menuContext,
+                context,
+                Routes.configuracionImpresora,
+              ),
               onBackup: () =>
                   _activate(menuContext, context, Routes.configuracionBackup),
               onDeleteAccount: () {
@@ -957,30 +972,30 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
           ),
           if (_showLegacyCompanyShortcut)
             PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _SettingsCompanyMenuRow(
-              icon: Icons.delete_forever_outlined,
-              label: 'Eliminar mi cuenta',
-              danger: true,
-              onTap: () {
-                final authRepository = ref.read(authRepositoryProvider);
-                final authController = ref.read(authStateProvider.notifier);
-                Navigator.of(menuContext).pop();
-                Future<void>.delayed(const Duration(milliseconds: 80), () {
-                  if (context.mounted) {
-                    showDeleteAccountDialogWithDependencies(
-                      context,
-                      authRepository: authRepository,
-                      authController: authController,
-                    );
-                  }
-                });
-              },
-              helpText:
-                  'Abre la configuración donde se solicita contraseña y confirmación antes de eliminar una cuenta.',
+              enabled: false,
+              padding: EdgeInsets.zero,
+              child: _SettingsCompanyMenuRow(
+                icon: Icons.delete_forever_outlined,
+                label: 'Eliminar mi cuenta',
+                danger: true,
+                onTap: () {
+                  final authRepository = ref.read(authRepositoryProvider);
+                  final authController = ref.read(authStateProvider.notifier);
+                  Navigator.of(menuContext).pop();
+                  Future<void>.delayed(const Duration(milliseconds: 80), () {
+                    if (context.mounted) {
+                      showDeleteAccountDialogWithDependencies(
+                        context,
+                        authRepository: authRepository,
+                        authController: authController,
+                      );
+                    }
+                  });
+                },
+                helpText:
+                    'Abre la configuración donde se solicita contraseña y confirmación antes de eliminar una cuenta.',
+              ),
             ),
-          ),
         ],
         child: companyName.isEmpty
             ? const _SettingsCompanyButtonPlaceholder()
@@ -2483,29 +2498,29 @@ class _CompanySettingsEditorState
       children: [
         if (_showLegacyCompanyShortcut)
           _SettingsOptionGrid(
-          items: [
-            _SettingsOptionData(
-              icon: Icons.storefront_rounded,
-              title: 'Nombre comercial',
-              value: widget.settings.companyName,
-            ),
-            _SettingsOptionData(
-              icon: Icons.badge_outlined,
-              title: 'RNC',
-              value: widget.settings.rnc,
-            ),
-            _SettingsOptionData(
-              icon: Icons.phone_outlined,
-              title: 'Teléfono',
-              value: widget.settings.phone,
-            ),
-            _SettingsOptionData(
-              icon: Icons.schedule_rounded,
-              title: 'Horario',
-              value: widget.settings.businessHours,
-            ),
-          ],
-        ),
+            items: [
+              _SettingsOptionData(
+                icon: Icons.storefront_rounded,
+                title: 'Nombre comercial',
+                value: widget.settings.companyName,
+              ),
+              _SettingsOptionData(
+                icon: Icons.badge_outlined,
+                title: 'RNC',
+                value: widget.settings.rnc,
+              ),
+              _SettingsOptionData(
+                icon: Icons.phone_outlined,
+                title: 'Teléfono',
+                value: widget.settings.phone,
+              ),
+              _SettingsOptionData(
+                icon: Icons.schedule_rounded,
+                title: 'Horario',
+                value: widget.settings.businessHours,
+              ),
+            ],
+          ),
         if (_showLegacyCompanyShortcut) const SizedBox(height: 12),
         _CompanyLogoUploader(
           logoBytes: _logoBytes,
@@ -3100,8 +3115,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
           content: Text(
             userSafeErrorMessage(
               error,
-              fallback:
-                  'No se pudo crear el backup. Inténtalo nuevamente.',
+              fallback: 'No se pudo crear el backup. Inténtalo nuevamente.',
             ),
           ),
         ),

@@ -33,6 +33,9 @@ class UserModel {
   final String? companyId;
   final String? companyName;
   final String? companySlug;
+  final bool onboardingRequired;
+  final String? onboardingStatus;
+  final bool requiresOnboarding;
   final bool blocked;
   final int? edad;
   final bool tieneHijos;
@@ -75,6 +78,9 @@ class UserModel {
     this.companyId,
     this.companyName,
     this.companySlug,
+    this.onboardingRequired = false,
+    this.onboardingStatus,
+    this.requiresOnboarding = false,
     this.blocked = false,
     this.edad,
     this.tieneHijos = false,
@@ -128,6 +134,14 @@ class UserModel {
     final company = companyRaw is Map
         ? companyRaw.cast<String, dynamic>()
         : const <String, dynamic>{};
+    final requiresOnboarding =
+        json['requiresOnboarding'] == true ||
+        company['requiresOnboarding'] == true;
+    final onboardingRequired =
+        json['onboardingRequired'] == true ||
+        company['onboardingRequired'] == true;
+    final onboardingStatus =
+        (json['onboardingStatus'] ?? company['onboardingStatus'])?.toString();
 
     return UserModel(
       id: json['id'] ?? '',
@@ -176,6 +190,9 @@ class UserModel {
                   company['commercialName'])
               ?.toString(),
       companySlug: (json['companySlug'] ?? company['slug'])?.toString(),
+      onboardingRequired: onboardingRequired,
+      onboardingStatus: onboardingStatus,
+      requiresOnboarding: requiresOnboarding,
       blocked: json['blocked'] ?? false,
       edad: json['edad'],
       tieneHijos: json['tieneHijos'] ?? false,
@@ -236,6 +253,9 @@ class UserModel {
       'companyId': companyId,
       'companyName': companyName,
       'companySlug': companySlug,
+      'onboardingRequired': onboardingRequired,
+      'onboardingStatus': onboardingStatus,
+      'requiresOnboarding': requiresOnboarding,
       'blocked': blocked,
       'edad': edad,
       'tieneHijos': tieneHijos,

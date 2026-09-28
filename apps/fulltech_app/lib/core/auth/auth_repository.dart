@@ -451,7 +451,10 @@ class AuthRepository {
     final email = (normalized['email'] ?? '').toString().trim();
     if (id.isEmpty || email.isEmpty) return null;
 
-    return UserModel.fromJson(normalized);
+    return UserModel.fromJson({
+      ...normalized,
+      'requiresOnboarding': data['requiresOnboarding'] == true,
+    });
   }
 
   UserModel _ensureCompanyFromAccessToken(UserModel user, String? accessToken) {

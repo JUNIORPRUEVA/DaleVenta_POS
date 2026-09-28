@@ -34,6 +34,7 @@ release_artifacts/
 .codex-mobile-visual-audit/
 .codex-pwa-smoke/
 .tmp-playwright/
+docs/onboarding-phase2b-uat-evidence/*.png
 
 # Agent-run backups and python bytecode caches (never source)
 .codex_backups/
