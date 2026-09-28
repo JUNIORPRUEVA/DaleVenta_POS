@@ -27,9 +27,11 @@
 
   togglePassword.addEventListener('click', function () {
     var visible = passwordInput.type === 'text';
+    var label = visible ? 'Mostrar contraseña' : 'Ocultar contraseña';
     passwordInput.type = visible ? 'password' : 'text';
-    togglePassword.textContent = visible ? 'Mostrar' : 'Ocultar';
-    togglePassword.setAttribute('aria-label', visible ? 'Mostrar contrasena' : 'Ocultar contrasena');
+    togglePassword.setAttribute('aria-label', label);
+    var srOnly = togglePassword.querySelector('.sr-only');
+    if (srOnly) srOnly.textContent = label;
   });
 
   form.addEventListener('submit', function (event) {
@@ -120,7 +122,7 @@
       result.errors.email = 'Escribe un correo válido.';
     }
     if (payload.password.length < 8) {
-      result.errors.password = 'La contrasena debe tener al menos 8 caracteres.';
+      result.errors.password = 'La contraseña debe tener al menos 8 caracteres.';
     }
     if (!fields.terms.checked) {
       result.errors.terms = 'Debes aceptar los términos para continuar.';
@@ -251,13 +253,16 @@
       return { field: 'email', message: 'Ya existe una cuenta con este correo.' };
     }
     if (lower.indexOf('password') !== -1 || lower.indexOf('clave') !== -1 || lower.indexOf('contraseña') !== -1) {
-      return { field: 'password', message: 'Revisa la contrasena. Debe tener al menos 8 caracteres.' };
+      return { field: 'password', message: 'Revisa la contraseña. Debe tener al menos 8 caracteres.' };
     }
     if (lower.indexOf('phone') !== -1 || lower.indexOf('tel') !== -1 || lower.indexOf('whatsapp') !== -1) {
       return { field: 'phone', message: 'Revisa el WhatsApp e intenta de nuevo.' };
     }
     if (lower.indexOf('email') !== -1 || lower.indexOf('correo') !== -1) {
       return { field: 'email', message: 'Revisa el correo e intenta de nuevo.' };
+    }
+    if ((error && error.status >= 500) || lower.indexOf('internal server') !== -1 || lower.indexOf('error interno') !== -1) {
+      return { field: null, message: 'No pudimos crear la cuenta en este momento. Intenta de nuevo en unos minutos.' };
     }
     return { field: null, message: message || 'No pudimos crear la cuenta. Intenta de nuevo en unos minutos.' };
   }

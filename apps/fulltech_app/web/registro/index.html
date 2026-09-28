@@ -6,66 +6,113 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#1957E6">
   <title>Registro | FullPOS Cloud</title>
-  <link rel="preload" href="/registro/fullpos-logo.png?v=20260927b" as="image">
-  <link rel="stylesheet" href="/registro/registro.css?v=20260927b">
+  <link rel="preload" href="/registro/fullpos-logo.png?v=20260927c" as="image">
+  <link rel="stylesheet" href="/registro/registro.css?v=20260927c">
 </head>
 <body>
   <main class="page-shell">
     <section class="register-card" aria-labelledby="register-title">
       <div class="brand-header">
-        <img class="brand-logo" src="/registro/fullpos-logo.png?v=20260927b" alt="FullPOS Cloud" width="160" height="160">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M5 9.5h14l-.9 9.1a2 2 0 0 1-2 1.8H7.9a2 2 0 0 1-2-1.8L5 9.5Z"></path>
+            <path d="M8 9.5V6.8a4 4 0 0 1 8 0v2.7"></path>
+            <path d="M8.5 13.5h7"></path>
+          </svg>
+        </span>
         <div class="brand-copy">
-          <h1 id="register-title">Crea tu cuenta FullPOS Cloud</h1>
-          <p>Completa estos datos para activar tu prueba gratis y entrar a tu panel de ventas, caja e inventario.</p>
+          <h1 id="register-title">Crear mi empresa</h1>
+          <p>Crea tu cuenta y prueba FullPOS Cloud gratis por 7 días.</p>
         </div>
       </div>
-
-      <p class="support-line">Disponible en Windows, web, Android y iPhone.</p>
 
       <div id="formAlert" class="alert" role="alert" hidden></div>
 
       <form id="registerForm" novalidate>
         <div class="form-section">
-          <p class="section-title">Datos del negocio</p>
-        </div>
-
-        <div class="field">
-          <label for="firstName">Tu nombre</label>
-          <input id="firstName" name="firstName" autocomplete="given-name" maxlength="80" required>
-          <p class="field-error" id="firstNameError"></p>
+          <p class="section-title">Tu negocio</p>
         </div>
 
         <div class="field">
           <label for="commercialName">Nombre del negocio</label>
-          <input id="commercialName" name="commercialName" autocomplete="organization" maxlength="120" required>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 10h16l-1 9H5l-1-9Z"></path>
+                <path d="M7 10V6h10v4"></path>
+                <path d="M9 14h6"></path>
+              </svg>
+            </span>
+            <input id="commercialName" name="commercialName" autocomplete="organization" maxlength="120" placeholder="Nombre del negocio" required>
+          </div>
           <p class="field-error" id="commercialNameError"></p>
         </div>
 
         <div class="field">
+          <label for="firstName">Persona responsable</label>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+                <path d="M4 20a8 8 0 0 1 16 0"></path>
+              </svg>
+            </span>
+            <input id="firstName" name="firstName" autocomplete="given-name" maxlength="80" placeholder="Persona responsable" required>
+          </div>
+          <p class="field-error" id="firstNameError"></p>
+        </div>
+
+        <div class="field">
           <label for="phone">WhatsApp</label>
-          <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="809 000 0000" required>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M7 4h4l2 5-2.4 1.6a11 11 0 0 0 4.8 4.8L17 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 4a2 2 0 0 1 2-2Z"></path>
+              </svg>
+            </span>
+            <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="809 000 0000" required>
+          </div>
           <p class="field-error" id="phoneError"></p>
         </div>
 
         <div class="form-section access-section">
           <p class="section-title">Datos de acceso</p>
-          <p class="section-copy">Usaras estos datos para iniciar sesion en FullPOS Cloud.</p>
         </div>
 
         <div class="field">
-          <label for="email">Correo electronico</label>
-          <input id="email" name="email" type="email" inputmode="email" autocomplete="email" maxlength="120" placeholder="tu@negocio.com" required>
-          <p class="field-hint">Debe ser un correo valido. Este sera tu usuario para iniciar sesion.</p>
+          <label for="email">Correo electrónico</label>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 5h16v14H4V5Z"></path>
+                <path d="m4 7 8 6 8-6"></path>
+              </svg>
+            </span>
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" maxlength="120" placeholder="usuario@negocio.com" required>
+          </div>
+          <p class="field-hint">Debe ser un correo electrónico válido. Este será tu usuario para iniciar sesión.</p>
           <p class="field-error" id="emailError"></p>
         </div>
 
         <div class="field">
-          <label for="password">Contrasena</label>
-          <div class="password-row">
+          <label for="password">Contraseña</label>
+          <div class="input-shell password-row">
+            <span class="input-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 10h12v10H6V10Z"></path>
+                <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+              </svg>
+            </span>
             <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="80" placeholder="MiNegocio26" required>
-            <button class="ghost-button" type="button" id="togglePassword" aria-controls="password" aria-label="Mostrar contrasena">Mostrar</button>
+            <button class="ghost-button" type="button" id="togglePassword" aria-controls="password" aria-label="Mostrar contraseña">
+              <span class="sr-only">Mostrar contraseña</span>
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path>
+              </svg>
+            </button>
           </div>
-          <p class="field-hint">Minimo 8 caracteres. Ejemplo: MiNegocio26</p>
+          <p class="field-hint">Mínimo 8 caracteres. Ejemplo: MiNegocio26</p>
           <p class="field-error" id="passwordError"></p>
         </div>
 
@@ -78,13 +125,10 @@
         <button id="submitButton" class="primary-button" type="submit">
           Comenzar gratis
         </button>
-        <p class="form-note">Tu prueba se activa al crear la cuenta.</p>
       </form>
-
-      <p class="login-link">¿Ya tienes cuenta? <a href="/login">Inicia sesión</a></p>
     </section>
   </main>
 
-  <script src="/registro/registro.js?v=20260927b" defer></script>
+  <script src="/registro/registro.js?v=20260927c" defer></script>
 </body>
 </html>
