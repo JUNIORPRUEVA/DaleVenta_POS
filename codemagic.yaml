@@ -84,8 +84,8 @@ workflows:
         # App Store Connect floor. Version trains 1.0.3 and 1.0.5 are closed, so any
         # build below these values is rejected on import ("Invalid Pre-Release Train" /
         # "Invalid Version"). Raise these only together with the matching pubspec bump.
-        IOS_MIN_MARKETING_VERSION: 1.0.6
-        IOS_MIN_BUILD_NUMBER: 130
+        IOS_MIN_MARKETING_VERSION: 1.0.7
+        IOS_MIN_BUILD_NUMBER: 131
     scripts:
       - name: Create CI env file
         script: |
