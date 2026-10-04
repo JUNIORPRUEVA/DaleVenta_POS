@@ -23,13 +23,14 @@ describe("CashService multi-device consistency", () => {
   };
 
   const existingSession = {
-    id: "shift-1",
+    id: "1111aaaa-1111-4111-8111-111111111111",
     openedByUserId: user.id,
     cashboxDailyId: null,
     openedAt: new Date("2026-08-22T10:00:00Z"),
     status: "OPEN",
     userName: "Cajero",
     businessDate: "2026-08-22",
+    note: null,
   };
 
   function buildEmptyTx() {
@@ -87,7 +88,7 @@ describe("CashService multi-device consistency", () => {
 
     const result = await service.startSession(user, { openingAmount: 1000 });
 
-    expect(result.shiftId).toBe("shift-1");
+    expect(result.shiftId).toBe("1111aaaa-1111-4111-8111-111111111111");
     expect(tx.cashSession.create).not.toHaveBeenCalled();
     expect(tx.cashboxDaily.create).not.toHaveBeenCalled();
     expect(realtime.emitCompany).toHaveBeenCalledWith(
@@ -119,7 +120,7 @@ describe("CashService multi-device consistency", () => {
     const result = await service.startSession(user, { openingAmount: 1000 });
 
     expect(attempts).toBe(2);
-    expect(result.shiftId).toBe("shift-1");
+    expect(result.shiftId).toBe("1111aaaa-1111-4111-8111-111111111111");
   });
 
   it("abrir turno sin turno previo crea cashbox + cashSession", async () => {
@@ -146,11 +147,14 @@ describe("CashService multi-device consistency", () => {
 
   it("cerrar un turno que ya no existe lanza NotFound controlado (no 500)", async () => {
     const { prisma, service } = buildHarness();
-    // requireOpenSession: no hay turno abierto (ya lo cerró otro dispositivo).
+    // resolveCloseTargetById: la sesión identificada no existe.
     (prisma.cashSession.findFirst as jest.Mock).mockResolvedValue(null);
 
     await expect(
-      service.closeSession(user, { closingAmount: 1000 }),
+      service.closeSession(user, {
+        sessionId: "1111aaaa-1111-4111-8111-111111111111",
+        closingAmount: 1000,
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -166,7 +170,10 @@ describe("CashService multi-device consistency", () => {
     const { service } = buildHarness({ tx, prisma: prismaExtra });
 
     await expect(
-      service.closeSession(user, { closingAmount: 1000 }),
+      service.closeSession(user, {
+        sessionId: "1111aaaa-1111-4111-8111-111111111111",
+        closingAmount: 1000,
+      }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 

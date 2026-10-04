@@ -75,6 +75,7 @@ class _FakeCashRepository implements CashRepository {
   @override
   Future<void> closeSession({
     required double closingAmount,
+    required String sessionId,
     String? note,
   }) async {}
 
@@ -110,6 +111,7 @@ class _FakeCashRepository implements CashRepository {
     required String type,
     required double amount,
     required String reason,
+    String? sessionId,
     String movementType = 'expense',
     bool? affectsProfit,
   }) async {

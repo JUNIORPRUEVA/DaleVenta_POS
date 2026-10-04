@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -55,6 +57,7 @@ class CashRepository {
       final session = await _openSessionRemote(
         openingAmount: _asDouble(payload['openingAmount']),
         note: payload['note']?.toString(),
+        clientSessionId: payload['clientSessionId']?.toString(),
       );
       await _cache.writeMap(_activeSessionCacheKey, {
         'activeSession': _activeSessionToJson(session),
@@ -63,15 +66,43 @@ class CashRepository {
       });
     });
     _syncQueue.registerHandler(_closeSyncType, (payload) async {
+      final sessionId = (payload['sessionId'] ?? '').toString().trim();
+      if (sessionId.isEmpty) {
+        // Item antiguo/degradado sin identidad de turno. No existe forma segura
+        // de saber a qué turno pertenece, así que NO se ejecuta: ejecutarlo
+        // cerraría "el turno abierto actual" con un monto ajeno (incidente
+        // Asadero). Se marca obsoleto y se descarta.
+        TraceLog.log(
+          'cash',
+          'cash.close.replay.obsolete reason=missing_session_id',
+        );
+        throw const ObsoleteSyncOperationException(
+          'Cierre de turno sin identificación: descartado por seguridad.',
+        );
+      }
       await _closeSessionRemote(
+        sessionId: sessionId,
         closingAmount: _asDouble(payload['closingAmount']),
         note: payload['note']?.toString(),
       );
-      await _cache.remove(_activeSessionCacheKey);
-      await _cache.remove(_pendingMovementsCacheKey);
+      // Limpiar la caché SOLO si el turno cerrado coincide con el turno que la
+      // caché tiene como activo. Si no coinciden, borraríamos el turno actual
+      // (otro) y la UI mostraría caja cerrada por error.
+      await _clearCachedSessionIfMatches(sessionId);
     });
     _syncQueue.registerHandler(_movementSyncType, (payload) async {
+      final sessionId = (payload['sessionId'] ?? '').toString().trim();
+      if (sessionId.isEmpty) {
+        TraceLog.log(
+          'cash',
+          'cash.movement.replay.obsolete reason=missing_session_id',
+        );
+        throw const ObsoleteSyncOperationException(
+          'Movimiento de caja sin identificación de turno: descartado por seguridad.',
+        );
+      }
       await _addMovementRemote(
+        sessionId: sessionId,
         type: payload['type'].toString(),
         amount: _asDouble(payload['amount']),
         reason: payload['reason']?.toString() ?? '',
@@ -148,10 +179,16 @@ class CashRepository {
     required double openingAmount,
     String? note,
   }) async {
+    // Identidad generada por el cliente para el turno que se está abriendo.
+    // Permite que un turno abierto OFFLINE tenga una identidad real (UUID) que
+    // el cierre offline pueda referenciar, y hace la apertura idempotente si el
+    // servidor la creó pero la respuesta se perdió.
+    final clientSessionId = _newSessionUuid();
     try {
       final session = await _openSessionRemote(
         openingAmount: openingAmount,
         note: note,
+        clientSessionId: clientSessionId,
       );
       await _cache.writeMap(_activeSessionCacheKey, {
         'activeSession': _activeSessionToJson(session),
@@ -165,7 +202,7 @@ class CashRepository {
       }
       final local = ActiveCashSession(
         userId: 'offline',
-        shiftId: 'local_shift_${DateTime.now().microsecondsSinceEpoch}',
+        shiftId: clientSessionId,
         openedAt: DateTime.now(),
         status: 'OPEN',
         userName: 'Caja offline',
@@ -177,10 +214,17 @@ class CashRepository {
         'canOperate': true,
       });
       await _syncQueue.enqueue(
-        id: '$_openSyncType:${local.shiftId}',
+        id: '$_openSyncType:$clientSessionId',
         type: _openSyncType,
         scope: 'cash',
-        payload: {'openingAmount': openingAmount, 'note': note},
+        entityType: 'cash_session',
+        entityId: clientSessionId,
+        idempotencyKey: '$_openSyncType:$clientSessionId',
+        payload: {
+          'openingAmount': openingAmount,
+          'note': note,
+          'clientSessionId': clientSessionId,
+        },
       );
       return local;
     }
@@ -189,6 +233,7 @@ class CashRepository {
   Future<ActiveCashSession> _openSessionRemote({
     required double openingAmount,
     String? note,
+    String? clientSessionId,
   }) async {
     try {
       final res = await _dio.post(
@@ -196,6 +241,8 @@ class CashRepository {
         data: {
           'openingAmount': openingAmount,
           if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
+          if ((clientSessionId ?? '').trim().isNotEmpty)
+            'clientSessionId': clientSessionId!.trim(),
         },
       );
       return ActiveCashSession.fromJson(
@@ -206,25 +253,48 @@ class CashRepository {
     }
   }
 
+  /// Cierra el turno identificado por [sessionId].
+  ///
+  /// [sessionId] es OBLIGATORIO: es la identidad del turno que estaba abierto
+  /// cuando el usuario inició el cierre. Nunca se calcula "el turno actual"
+  /// durante un replay, de modo que un cierre offline antiguo jamás puede
+  /// cerrar un turno posterior.
   Future<void> closeSession({
     required double closingAmount,
+    required String sessionId,
     String? note,
   }) async {
+    final resolvedSessionId = sessionId.trim();
+    if (resolvedSessionId.isEmpty) {
+      // Sin identidad de turno no se puede cerrar de forma segura.
+      throw ApiException(
+        'No pudimos identificar el turno a cerrar. Actualiza Fullpos e inténtalo nuevamente.',
+      );
+    }
     try {
-      await _closeSessionRemote(closingAmount: closingAmount, note: note);
+      final closedId = await _closeSessionRemote(
+        sessionId: resolvedSessionId,
+        closingAmount: closingAmount,
+        note: note,
+      );
       lastStateFromCache = false;
-      await _cache.remove(_activeSessionCacheKey);
-      await _cache.remove(_pendingMovementsCacheKey);
+      if (closedId != resolvedSessionId) {
+        TraceLog.log(
+          'cash',
+          'cash.close.mismatch requested=$resolvedSessionId closed=$closedId',
+        );
+      }
+      await _clearCachedSessionIfMatches(resolvedSessionId);
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (status == 404 || status == 409) {
-        // El turno ya fue cerrado (por este dispositivo u otro dispositivo).
-        // No es un fallo: el estado real es CERRADO. La caché queda limpia y
-        // el llamador debe revalidar el estado.
+        // El turno ya fue cerrado (por este dispositivo u otro) o el servidor
+        // rechazó el cierre por conflicto de estado. NO es un fallo: el estado
+        // real es CERRADO y la UI debe revalidar. Nunca se reintenta contra otro
+        // turno.
         lastStateFromCache = false;
         TraceLog.log('cash', 'cash.conflict already_closed status=$status');
-        await _cache.remove(_activeSessionCacheKey);
-        await _cache.remove(_pendingMovementsCacheKey);
+        await _clearCachedSessionIfMatches(resolvedSessionId);
         throw const CashSessionAlreadyClosedException(
           'El turno ya estaba cerrado.',
         );
@@ -234,27 +304,48 @@ class CashRepository {
           _message(e.response?.data, 'No se pudo cerrar turno'),
         );
       }
+      // Fallo de red transitorio: se encola el cierre CON la identidad del turno
+      // original. El item es único por turno (id determinista), de modo que un
+      // reintento/doble clic no duplica la operación.
       await _syncQueue.enqueue(
-        id: '$_closeSyncType:${DateTime.now().microsecondsSinceEpoch}',
+        id: '$_closeSyncType:$resolvedSessionId',
         type: _closeSyncType,
         scope: 'cash',
-        payload: {'closingAmount': closingAmount, 'note': note},
+        entityType: 'cash_session',
+        entityId: resolvedSessionId,
+        idempotencyKey: '$_closeSyncType:$resolvedSessionId',
+        payload: {
+          'sessionId': resolvedSessionId,
+          'closingAmount': closingAmount,
+          if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
+        },
       );
-      await _cache.remove(_activeSessionCacheKey);
+      await _clearCachedSessionIfMatches(resolvedSessionId);
     }
   }
 
-  Future<void> _closeSessionRemote({
+  Future<String> _closeSessionRemote({
+    required String sessionId,
     required double closingAmount,
     String? note,
-  }) {
-    return _dio.post(
+  }) async {
+    final res = await _dio.post(
       ApiRoutes.cashCloseSession,
       data: {
+        'sessionId': sessionId,
         'closingAmount': closingAmount,
         if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
       },
     );
+    final data = res.data;
+    if (data is Map) {
+      final session = data['session'];
+      if (session is Map) {
+        final id = session['id']?.toString().trim();
+        if (id != null && id.isNotEmpty) return id;
+      }
+    }
+    return sessionId;
   }
 
   Future<CashSummaryModel> summary() async {
@@ -379,14 +470,17 @@ class CashRepository {
     required String type,
     required double amount,
     required String reason,
+    String? sessionId,
     String movementType = 'expense',
     bool? affectsProfit,
   }) async {
+    final resolvedSessionId = (sessionId ?? '').trim();
     try {
       await _addMovementRemote(
         type: type,
         amount: amount,
         reason: reason,
+        sessionId: resolvedSessionId.isEmpty ? null : resolvedSessionId,
         movementType: movementType,
         affectsProfit: affectsProfit,
       );
@@ -396,9 +490,17 @@ class CashRepository {
           _message(e.response?.data, 'No se pudo guardar movimiento'),
         );
       }
+      if (resolvedSessionId.isEmpty) {
+        // Sin identidad de turno no se puede garantizar el destino del
+        // movimiento: no se encola (evita aplicarlo a un turno posterior).
+        throw ApiException(
+          'No pudimos identificar el turno del movimiento. Actualiza Fullpos e inténtalo nuevamente.',
+        );
+      }
       final localId = 'local_cash_${DateTime.now().microsecondsSinceEpoch}';
       final payload = {
         'id': localId,
+        'sessionId': resolvedSessionId,
         'type': type,
         'amount': amount,
         'reason': reason,
@@ -411,6 +513,8 @@ class CashRepository {
         id: '$_movementSyncType:$localId',
         type: _movementSyncType,
         scope: 'cash',
+        entityType: 'cash_session',
+        entityId: resolvedSessionId,
         payload: payload,
       );
     }
@@ -420,6 +524,7 @@ class CashRepository {
     required String type,
     required double amount,
     required String reason,
+    String? sessionId,
     String movementType = 'expense',
     bool? affectsProfit,
   }) {
@@ -429,10 +534,37 @@ class CashRepository {
         'type': type,
         'amount': amount,
         'reason': reason,
+        if ((sessionId ?? '').trim().isNotEmpty) 'sessionId': sessionId!.trim(),
         'movementType': movementType,
         if (affectsProfit != null) 'affectsProfit': affectsProfit,
       },
     );
+  }
+
+  String? _cachedSessionId(Map<String, dynamic>? cached) {
+    final active = cached?['activeSession'];
+    if (active is Map) {
+      final id = (active['shiftId'] ?? active['id'])?.toString().trim();
+      if (id != null && id.isNotEmpty) return id;
+    }
+    return null;
+  }
+
+  /// Elimina la caché del turno activo SOLO cuando corresponde al turno
+  /// [sessionId] (o cuando no hay caché). Evita borrar el turno actual por
+  /// error si un replay cierra un turno distinto.
+  Future<void> _clearCachedSessionIfMatches(String sessionId) async {
+    final cached = await _cache.readMap(_activeSessionCacheKey);
+    final cachedId = _cachedSessionId(cached);
+    if (cachedId == null || cachedId == sessionId) {
+      await _cache.remove(_activeSessionCacheKey);
+      await _cache.remove(_pendingMovementsCacheKey);
+    } else {
+      TraceLog.log(
+        'cash',
+        'cash.cache_preserved active=$cachedId closed=$sessionId',
+      );
+    }
   }
 
   bool _shouldQueueNetworkFailure(DioException error) {
@@ -547,4 +679,20 @@ class CashRepository {
 double _asDouble(dynamic value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+/// Genera un UUID v4 local (sin dependencias) para identificar de forma
+/// inequívoca un turno de caja abierto offline. El backend lo acepta como
+/// `clientSessionId` y lo usa como `id` del turno, de modo que el cierre
+/// offline apunta a esa misma identidad.
+String _newSessionUuid() {
+  final random = Random.secure();
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // versión 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variante 10xx
+  String hex(int start, int end) => bytes
+      .sublist(start, end)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
 }

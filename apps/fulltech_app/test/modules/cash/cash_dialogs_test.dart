@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
 import 'package:daleventa_pos/modules/cash/cash_dialogs.dart';
 
@@ -22,6 +23,60 @@ void main() {
       expect(parseDominicanAmount('-1'), isNull);
       expect(parseDominicanAmount('NaN'), isNull);
       expect(parseDominicanAmount('Infinity'), isNull);
+    });
+  });
+
+  group('resolveCashError (sin exponer detalles técnicos en UI)', () {
+    test('quita el prefijo de clase y el sufijo (code:) de ApiException', () {
+      final text = resolveCashError(
+        const ApiException.detailed(
+          message: 'El turno indicado no existe.',
+          code: 404,
+          type: ApiErrorType.notFound,
+          displayCode: '404',
+        ),
+      );
+      expect(text, 'El turno indicado no existe.');
+    });
+
+    test('quita el prefijo de Exception simple', () {
+      expect(resolveCashError(Exception('Sin conexión')), 'Sin conexión');
+    });
+
+    test('ningún mensaje de cierre/cola expone términos técnicos', () {
+      final messages = <String>[
+        'Este turno ya fue cerrado.',
+        'El turno indicado no existe.',
+        'Necesitas actualizar Fullpos para cerrar el turno.',
+        'No pudimos identificar el turno a cerrar. Actualiza Fullpos e inténtalo nuevamente.',
+        'Una operación de caja pendiente no se aplicó porque ya no correspondía al turno actual. Revisa la caja.',
+      ];
+      for (final message in messages) {
+        final text = resolveCashError(
+          ApiException.detailed(message: message, displayCode: '409'),
+        );
+        expect(text, message);
+        for (final forbidden in <String>[
+          'code:',
+          'apiexception',
+          'sessionid',
+          'shiftid',
+          'replay',
+          'obsolete',
+          'obsoleta',
+          'queue',
+          'http',
+          'uuid',
+          'payload',
+          'exception',
+        ]) {
+          expect(
+            text.toLowerCase().contains(forbidden),
+            isFalse,
+            reason: 'no debe contener "$forbidden": $text',
+          );
+        }
+      }
     });
   });
 
@@ -149,6 +204,65 @@ void main() {
       expect(calls, 0);
       expect(result, isNull);
       expect(find.text('Cerrar turno'), findsNothing);
+    });
+
+    testWidgets('diferencia anormal pide confirmación antes de cerrar', (
+      tester,
+    ) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _DialogHost(
+          onCloseShift: (_) async {
+            calls += 1;
+            return const PrintTicketResult(success: true, message: 'Impreso');
+          },
+        ),
+      );
+
+      await tester.tap(find.text('Abrir cierre'));
+      await tester.pumpAndSettle();
+      // Esperado = 1,200; contado = 50,000 → diferencia anormal.
+      await tester.enterText(find.byType(TextFormField), '50,000');
+      await tester.tap(find.widgetWithText(FilledButton, 'Cerrar turno'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diferencia de efectivo elevada'), findsOneWidget);
+      expect(calls, 0);
+
+      // "Revisar" cancela la confirmación y no llama al backend.
+      await tester.tap(find.text('Revisar'));
+      await tester.pumpAndSettle();
+      expect(calls, 0);
+
+      // Volver a confirmar ejecuta el cierre UNA sola vez.
+      await tester.tap(find.widgetWithText(FilledButton, 'Cerrar turno'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(calls, 1);
+    });
+
+    testWidgets('diferencia pequeña NO pide confirmación', (tester) async {
+      var calls = 0;
+
+      await tester.pumpWidget(
+        _DialogHost(
+          onCloseShift: (_) async {
+            calls += 1;
+            return const PrintTicketResult(success: true, message: 'Impreso');
+          },
+        ),
+      );
+
+      await tester.tap(find.text('Abrir cierre'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), '1,100');
+      await tester.tap(find.widgetWithText(FilledButton, 'Cerrar turno'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diferencia de efectivo elevada'), findsNothing);
+      expect(calls, 1);
     });
   });
 }

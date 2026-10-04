@@ -1228,6 +1228,7 @@ class OfflineStore {
         case 'error':
         case 'failed':
         case 'auth_blocked':
+        case 'obsolete':
         case 'tenant_mismatch':
           error++;
           break;

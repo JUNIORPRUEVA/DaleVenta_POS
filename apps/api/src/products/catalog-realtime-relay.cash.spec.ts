@@ -16,6 +16,7 @@ const JWT_SECRET = "realtime-test-secret";
 const COMPANY_A = "11111111-1111-1111-1111-111111111111";
 const COMPANY_B = "22222222-2222-4222-8222-222222222222";
 const USER = { id: "user-a", role: "ADMIN", companyId: COMPANY_A };
+const SESSION_ID = "33333333-3333-4333-8333-333333333333";
 
 function tokenFor(companyId: string) {
   return jwt.sign(
@@ -139,7 +140,7 @@ describe("realtime cash multi-cliente (Socket.IO real en memoria)", () => {
       (tx.cashSession.findFirst as jest.Mock).mockResolvedValue(null);
       (tx.cashboxDaily.findFirst as jest.Mock).mockResolvedValue(null);
       (tx.cashboxDaily.create as jest.Mock).mockResolvedValue({ id: "cashbox-1" });
-      (tx.cashSession.create as jest.Mock).mockResolvedValue(makeSession("shift-1"));
+      (tx.cashSession.create as jest.Mock).mockResolvedValue(makeSession(SESSION_ID));
 
       const startedAt = performance.now();
       await service.startSession(USER, { openingAmount: 1000 });
@@ -174,17 +175,20 @@ describe("realtime cash multi-cliente (Socket.IO real en memoria)", () => {
     await waitFor(() => win.connected && and.connected);
 
     const { prisma, tx, service } = buildCashHarness(relay);
-    // requireOpenSession + buildSummary
+    // resolveCloseTargetById + buildSummary
     (prisma.cashSession.findFirst as jest.Mock).mockResolvedValue(
-      makeSession("shift-1"),
+      makeSession(SESSION_ID),
     );
     (tx.cashSession.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
     (tx.cashSession.findFirst as jest.Mock)
-      .mockResolvedValueOnce({ ...makeSession("shift-1"), status: "CLOSED" }) // closed
+      .mockResolvedValueOnce({ ...makeSession(SESSION_ID), status: "CLOSED" }) // closed
       .mockResolvedValueOnce(null); // otherOpen
     (tx.cashboxDaily.update as jest.Mock).mockResolvedValue({ id: "cashbox-1" });
 
-    await service.closeSession(USER, { closingAmount: 1000 });
+    await service.closeSession(USER, {
+      sessionId: SESSION_ID,
+      closingAmount: 1000,
+    });
 
     await waitFor(() => winEvents.length >= 1 && andEvents.length >= 1);
     expect(winEvents[0].type).toBe("cash.session.closed");

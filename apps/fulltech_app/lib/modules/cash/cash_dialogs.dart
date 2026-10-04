@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/debug/app_error_reporter.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 
 double? parseDominicanAmount(String raw) {
@@ -50,7 +51,13 @@ double? parseDominicanAmount(String raw) {
 }
 
 String resolveCashError(Object error) {
-  final text = error.toString().replaceFirst('Exception: ', '').trim();
+  // Nunca exponer detalles técnicos en UI: se quita el prefijo de la clase de
+  // excepción (`Exception:` / `ApiException:`) y cualquier sufijo interno como
+  // `(code: 409)`, dejando sólo el mensaje entendible para el cliente.
+  var text = error.toString();
+  text = text.replaceFirst(RegExp(r'^[A-Za-z_]*Exception: '), '');
+  text = text.replaceFirst(RegExp(r'\s*\(code: [^)]*\)\s*$'), '');
+  text = text.trim();
   if (text.isEmpty) return 'No se pudo completar la operación de caja.';
   return text;
 }
@@ -351,6 +358,21 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
   bool _isSubmitting = false;
   String? _inlineError;
 
+  /// Umbral de "diferencia anormal" para pedir confirmación extra. Es sólo una
+  /// segunda capa contra error humano (un dedazo): NUNCA bloquea un cierre con
+  /// sobrante/faltante legítimo. Se considera anormal cuando la diferencia es
+  /// a la vez >= RD$1,000 y >= 10% de lo esperado.
+  static const double _largeDifferenceFloor = 1000;
+  static const double _largeDifferenceRatio = 0.10;
+
+  bool _differenceLooksAnomalous(double countedAmount) {
+    final difference = (countedAmount - widget.expectedCash).abs();
+    if (difference < _largeDifferenceFloor) return false;
+    final base = widget.expectedCash.abs();
+    if (base == 0) return true;
+    return difference >= base * _largeDifferenceRatio;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -380,6 +402,33 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
 
     final countedAmount = parseDominicanAmount(_amountController.text)!;
     debugPrint('[CloseShiftDialog] amount=$countedAmount');
+
+    // Segunda capa contra error humano: si la diferencia es anormalmente
+    // grande, se pide una confirmación explícita. No sustituye al blindaje del
+    // backend ni bloquea diferencias legítimas.
+    if (_differenceLooksAnomalous(countedAmount)) {
+      final difference = (countedAmount - widget.expectedCash).abs();
+      final confirmed = await FullTechConfirmDialog.show(
+        context,
+        title: 'Diferencia de efectivo elevada',
+        message:
+            'El efectivo contado (${formatRdCurrencyAccounting(countedAmount)}) '
+            'difiere del esperado '
+            '(${formatRdCurrencyAccounting(widget.expectedCash)}) en '
+            '${formatRdCurrencyAccounting(difference)}.\n\n'
+            '¿Confirmas el cierre con esta diferencia?',
+        confirmText: 'Cerrar',
+        cancelText: 'Revisar',
+        icon: Icons.warning_amber_rounded,
+        isDestructive: true,
+      );
+      if (!mounted) return;
+      if (confirmed != true) {
+        debugPrint('[CloseShiftDialog] large difference not confirmed');
+        return;
+      }
+    }
+
     setState(() {
       _isSubmitting = true;
       _inlineError = null;

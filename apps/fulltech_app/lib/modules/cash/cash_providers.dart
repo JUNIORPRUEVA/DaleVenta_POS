@@ -167,6 +167,18 @@ class ActiveCashSessionController
       final stateBeforeClose = await repo.state();
       final summaryBeforeClose = await repo.summary();
       final movementsBeforeClose = await repo.movements();
+      // Identidad del turno que estaba abierto cuando el usuario inició el
+      // cierre. Se fija AQUÍ y se envía al backend, de modo que un replay
+      // offline nunca cierre un turno posterior.
+      final sessionId = stateBeforeClose.activeSession?.shiftId.trim() ?? '';
+      if (sessionId.isEmpty) {
+        // No hay un turno abierto identificable: no se cierra NADA (jamás un
+        // turno posterior) y la UI converge a CERRADO, igual que cuando el
+        // turno ya fue cerrado por otro dispositivo.
+        TraceLog.log('cash', 'cash.close.no_open_session');
+        if (mounted) await refresh(silent: true);
+        return null;
+      }
       final snapshot = CashCloseTicketSnapshot(
         state: stateBeforeClose,
         summary: summaryBeforeClose,
@@ -176,7 +188,11 @@ class ActiveCashSessionController
         capturedAt: DateTime.now(),
       );
 
-      await repo.closeSession(closingAmount: closingAmount, note: note);
+      await repo.closeSession(
+        closingAmount: closingAmount,
+        sessionId: sessionId,
+        note: note,
+      );
       // El cierre se confirmó contra el backend: estado verificado.
       ref.read(cashStateUnverifiedProvider.notifier).state = false;
       debugPrint(
@@ -233,6 +249,7 @@ class ActiveCashSessionController
       type: type,
       amount: amount,
       reason: reason,
+      sessionId: state.valueOrNull?.shiftId,
       movementType: movementType,
       affectsProfit: affectsProfit,
     );

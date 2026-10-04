@@ -15,6 +15,22 @@ import 'pending_sync_action.dart';
 typedef SyncQueueHandler = Future<void> Function(Map<String, dynamic> payload);
 typedef SyncScopeResolver = Future<OfflineSyncScope?> Function();
 
+/// Una acción de la cola que ya NO debe ejecutarse nunca (por ejemplo, un
+/// cierre de turno offline sin identidad de sesión, que no puede asociarse de
+/// forma segura al turno correcto). No se reintenta y no bloquea la cola.
+///
+/// Nunca se usa para ocultar un fallo transitorio: es exclusivamente para
+/// operaciones que serían peligrosas si se ejecutaran contra "el recurso
+/// actual" en lugar del recurso original.
+class ObsoleteSyncOperationException implements Exception {
+  const ObsoleteSyncOperationException(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => reason;
+}
+
 class OfflineSyncScope {
   final String? companyId;
   final String? userId;
@@ -272,6 +288,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
             action.status == 'conflict' ||
             action.status == 'requires_action' ||
             action.status == 'auth_blocked' ||
+            action.status == 'obsolete' ||
             action.status == 'tenant_mismatch') {
           continue;
         }
@@ -456,6 +473,9 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   }
 
   bool _isPermanentFailure(Object error) {
+    // Una operación obsoleta NUNCA se reintenta (no debe volver a evaluarse
+    // contra un recurso distinto al original).
+    if (error is ObsoleteSyncOperationException) return true;
     if (error is ApiException) {
       if (error.retryable || error.isNetworkError) return false;
       return error.type == ApiErrorType.badRequest ||
@@ -498,6 +518,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   }
 
   String _failureStatus(Object error, {required bool permanent}) {
+    if (error is ObsoleteSyncOperationException) return 'obsolete';
     if (_isProductHistoryDecisionRequired(error)) return 'requires_action';
     if (_isConflictFailure(error)) return 'conflict';
     if (error is ApiException &&
@@ -518,6 +539,9 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   }
 
   String _customerSyncMessage(Object error) {
+    if (error is ObsoleteSyncOperationException) {
+      return 'Una operación de caja pendiente no se aplicó porque ya no correspondía al turno actual. Revisa la caja.';
+    }
     if (error is ApiException) {
       if (error.type == ApiErrorType.unauthorized ||
           error.type == ApiErrorType.forbidden) {

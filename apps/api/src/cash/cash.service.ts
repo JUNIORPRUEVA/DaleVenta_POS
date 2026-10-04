@@ -124,6 +124,30 @@ export class CashService {
           });
           if (existing) return this.mapActiveSession(existing);
 
+          // Identidad de apertura provista por el cliente (turno abierto
+          // offline). Hace la apertura idempotente: si el turno ya existe con
+          // esa identidad y sigue abierto, se devuelve el mismo; si ya fue
+          // cerrado, se rechaza de forma controlada sin crear otro turno.
+          const clientSessionId = this.validUuidOrNull(dto.clientSessionId);
+          if (clientSessionId) {
+            const existingById = await tx.cashSession.findFirst({
+              where: { id: clientSessionId, companyId },
+            });
+            if (existingById) {
+              const isMineAndOpen =
+                existingById.openedByUserId === user.id &&
+                existingById.status === "OPEN" &&
+                existingById.closedAt == null;
+              if (isMineAndOpen) return this.mapActiveSession(existingById);
+              this.logger.warn(
+                `cash.open.rejected company=${companyId} clientSessionId=${clientSessionId} status=${existingById.status}`,
+              );
+              throw new ConflictException(
+                "Ese turno ya no está disponible para operar.",
+              );
+            }
+          }
+
           let cashbox = await tx.cashboxDaily.findFirst({
             where: { companyId, businessDate },
           });
@@ -149,20 +173,39 @@ export class CashService {
             });
           }
 
-          const session = await tx.cashSession.create({
-            data: {
-              companyId,
-              openedByUserId: user.id,
-              terminalId: terminalContext?.terminal.id ?? null,
-              terminalNameSnapshot: terminalContext?.terminal.name ?? null,
-              terminalCodeSnapshot: terminalContext?.terminal.code ?? null,
-              userName,
-              initialAmount: openingAmount,
-              cashboxDailyId: cashbox.id,
-              businessDate,
-              note: dto.note,
-            },
-          });
+          let session;
+          try {
+            session = await tx.cashSession.create({
+              data: {
+                ...(clientSessionId ? { id: clientSessionId } : {}),
+                companyId,
+                openedByUserId: user.id,
+                terminalId: terminalContext?.terminal.id ?? null,
+                terminalNameSnapshot: terminalContext?.terminal.name ?? null,
+                terminalCodeSnapshot: terminalContext?.terminal.code ?? null,
+                userName,
+                initialAmount: openingAmount,
+                cashboxDailyId: cashbox.id,
+                businessDate,
+                note: dto.note,
+              },
+            });
+          } catch (error) {
+            // Colisión de identidad (mismo id en otra empresa): se responde de
+            // forma controlada en lugar de propagar un error de Prisma.
+            if (
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === "P2002"
+            ) {
+              this.logger.warn(
+                `cash.open.rejected reason=client_session_id_conflict company=${companyId} clientSessionId=${clientSessionId}`,
+              );
+              throw new ConflictException(
+                "Ese turno ya no está disponible para operar.",
+              );
+            }
+            throw error;
+          }
 
           await this.telemetry?.enqueueBusinessEvent(tx, {
             companyId,
@@ -207,9 +250,30 @@ export class CashService {
     }
   }
 
+  /**
+   * Patrón de UUID (v4/v1/v7) para validar identificadores de turno antes de
+   * tocar una columna `@db.Uuid`. Un valor malformado se responde como
+   * "no existe" (404 controlado) en lugar de provocar un error de Prisma (P2023).
+   */
+  private static readonly UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  private validUuidOrNull(value?: string | null): string | null {
+    const text = (value ?? "").trim();
+    return CashService.UUID_PATTERN.test(text) ? text : null;
+  }
+
   async addMovement(user: RequestUser, dto: CreateCashMovementDto) {
     const companyId = requireTenant(user);
-    const session = await this.requireOpenSession(user.id, companyId);
+    // Un movimiento encolado offline se aplica EXACTAMENTE al turno que lo
+    // originó (dto.sessionId). Nunca a "el turno abierto actual". Si el turno
+    // original ya no está abierto, se rechaza de forma controlada en lugar de
+    // contaminar un turno posterior.
+    const session = await this.requireOpenSession(
+      user.id,
+      companyId,
+      dto.sessionId,
+    );
     const amount = new Prisma.Decimal(dto.amount);
     if (dto.type === "OUT") {
       const summary = await this.buildSummaryForSession(session.id, companyId);
@@ -244,15 +308,130 @@ export class CashService {
     return movement;
   }
 
+  /**
+   * Cierra un turno. El cierre SIEMPRE queda ligado inequívocamente a la sesión
+   * que lo originó:
+   *
+   * - Con `dto.sessionId`: se cierra EXACTAMENTE esa sesión (de la empresa y
+   *   del usuario del JWT). Si no está abierta se responde 409 y nunca se toca
+   *   otra sesión. Un replay offline de un cierre viejo no puede cerrar un
+   *   turno posterior.
+   * - Sin `dto.sessionId` (cliente legacy): se aplica la política controlada
+   *   `CASH_CLOSE_LEGACY_MODE` (por defecto RECHAZO 409), porque sin identidad
+   *   no hay forma segura de distinguir un cierre contemporáneo de un replay.
+   */
   async closeSession(user: RequestUser, dto: CloseCashSessionDto) {
     const companyId = requireTenant(user);
+    const requestedSessionId = (dto.sessionId ?? "").trim() || null;
+
+    const session = requestedSessionId
+      ? await this.resolveCloseTargetById(user, companyId, requestedSessionId)
+      : await this.resolveCloseTargetLegacy(user, companyId);
+
+    return this.performCloseSession(user, companyId, session, dto);
+  }
+
+  /**
+   * Resuelve la sesión a cerrar por identidad explícita. No hay fallback a
+   * "el turno abierto actual": si el id no corresponde a una sesión cerrable
+   * del usuario/empresa, la operación se rechaza.
+   */
+  private async resolveCloseTargetById(
+    user: RequestUser,
+    companyId: string,
+    sessionId: string,
+  ) {
+    if (!this.validUuidOrNull(sessionId)) {
+      this.logger.warn(
+        `cash.close.rejected reason=malformed_session_id company=${companyId} session=${sessionId}`,
+      );
+      throw new NotFoundException("El turno indicado no existe.");
+    }
+
+    const session = await this.prisma.cashSession.findFirst({
+      where: { id: sessionId, companyId, openedByUserId: user.id },
+    });
+    if (!session) {
+      // Cubre "no existe", "es de otra empresa" y "es de otro usuario" con la
+      // misma respuesta: no se filtra la existencia de turnos ajenos.
+      this.logger.warn(
+        `cash.close.rejected reason=session_not_found company=${companyId} session=${sessionId}`,
+      );
+      throw new NotFoundException("El turno indicado no existe.");
+    }
+
+    if (session.status !== "OPEN" || session.closedAt != null) {
+      // El cierre solicitado ya se aplicó (replay / doble request) o el turno
+      // no es cerrable. Se registra si además hay OTRO turno abierto, que es la
+      // firma exacta del incidente Asadero, y se rechaza sin tocarlo.
+      const otherOpen = await this.prisma.cashSession.findFirst({
+        where: {
+          openedByUserId: user.id,
+          companyId,
+          status: "OPEN",
+          closedAt: null,
+          id: { not: sessionId },
+        },
+        select: { id: true },
+      });
+      this.logger.warn(
+        `CLOSE_REPLAY_REJECTED_SESSION_MISMATCH company=${companyId} session=${sessionId} status=${session.status} otherOpen=${otherOpen?.id ?? "none"}`,
+      );
+      throw new ConflictException("Este turno ya fue cerrado.");
+    }
+
+    return session;
+  }
+
+  /**
+   * Política de compatibilidad para cierres sin `sessionId`.
+   *
+   * Sin identidad no existe una forma inequívocamente segura de distinguir un
+   * cierre contemporáneo (UI online) de un replay offline viejo, así que por
+   * defecto se RECHAZA de forma controlada. `CASH_CLOSE_LEGACY_MODE=current_open`
+   * restaura el comportamiento antiguo (cerrar el turno abierto actual) y sólo
+   * debe usarse en una ventana de transición coordinada, aceptando que el
+   * riesgo de replay permanece mientras esté activo.
+   */
+  private async resolveCloseTargetLegacy(
+    user: RequestUser,
+    companyId: string,
+  ) {
+    const mode = (process.env.CASH_CLOSE_LEGACY_MODE ?? "reject")
+      .trim()
+      .toLowerCase();
+    if (mode !== "current_open") {
+      this.logger.warn(
+        `CLOSE_LEGACY_REJECTED company=${companyId} userId=${user.id} mode=${mode}`,
+      );
+      throw new ConflictException({
+        code: "CASH_CLOSE_SESSION_ID_REQUIRED",
+        message: "Necesitas actualizar Fullpos para cerrar el turno.",
+      });
+    }
+
     const session = await this.requireOpenSession(user.id, companyId);
+    this.logger.warn(
+      `cash.close.legacy_current_open company=${companyId} session=${session.id}`,
+    );
+    return session;
+  }
+
+  private async performCloseSession(
+    user: RequestUser,
+    companyId: string,
+    session: { id: string; cashboxDailyId: string | null; note: string | null; businessDate: string | null },
+    dto: CloseCashSessionDto,
+  ) {
     const summary = await this.buildSummaryForSession(session.id, companyId);
     const closingAmount = new Prisma.Decimal(dto.closingAmount);
     const expectedAmount = new Prisma.Decimal(summary.expectedCash);
     const difference = closingAmount.minus(expectedAmount);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Transición atómica OPEN -> CLOSED condicionada por identidad. Sólo UNA
+      // solicitud (doble clic, dos dispositivos, replay + cierre manual) puede
+      // efectuar la transición; el resto obtiene count 0.
       const closeResult = await tx.cashSession.updateMany({
         where: {
           id: session.id,
@@ -272,6 +451,9 @@ export class CashService {
         },
       });
       if (closeResult.count !== 1) {
+        this.logger.warn(
+          `cash.close.conflict company=${companyId} session=${session.id}`,
+        );
         throw new ConflictException("Este turno ya fue cerrado.");
       }
 
@@ -320,6 +502,13 @@ export class CashService {
         difference: this.toNumber(difference),
       };
     });
+
+    this.logger.log(
+      `cash.close.ok company=${companyId} session=${session.id} source=${
+        (dto.sessionId ?? "").trim() ? "identified" : "legacy"
+      } expected=${expectedAmount.toFixed(2)} closing=${closingAmount.toFixed(2)} difference=${difference.toFixed(2)} cashbox=${session.cashboxDailyId ?? "none"}`,
+    );
+
     this.emitCashEvent(companyId, "cash.session.closed", session.id, {
       userId: user.id,
       businessDate: session.businessDate,
@@ -470,12 +659,34 @@ export class CashService {
     };
   }
 
-  async requireOpenSession(userId: string, companyId: string) {
+  async requireOpenSession(
+    userId: string,
+    companyId: string,
+    sessionId?: string,
+  ) {
+    const requested = (sessionId ?? "").trim();
+    // Con identidad explícita se exige ESA sesión abierta: un movimiento
+    // encolado nunca cae sobre "el turno abierto actual". Sin identidad se
+    // mantiene el comportamiento histórico (turno abierto del usuario).
+    const scope = requested
+      ? { id: this.validUuidOrNull(requested) ?? "__invalid__" }
+      : {};
     const session = await this.prisma.cashSession.findFirst({
-      where: { openedByUserId: userId, companyId, status: "OPEN", closedAt: null },
+      where: {
+        ...scope,
+        openedByUserId: userId,
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+      },
       orderBy: { openedAt: "desc" },
     });
     if (!session) {
+      if (requested) {
+        this.logger.warn(
+          `cash.session.not_open company=${companyId} userId=${userId} session=${requested}`,
+        );
+      }
       throw new NotFoundException(
         "No encontramos un turno abierto para operar.",
       );

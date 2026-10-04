@@ -45,6 +45,7 @@ class _FakeCashRepository implements CashRepository {
   @override
   Future<void> closeSession({
     required double closingAmount,
+    required String sessionId,
     String? note,
   }) {
     final override = closeSessionOverride;
@@ -71,6 +72,7 @@ class _FakeCashRepository implements CashRepository {
     required String type,
     required double amount,
     required String reason,
+    String? sessionId,
     String movementType = 'expense',
     bool? affectsProfit,
   }) async {}
@@ -102,6 +104,29 @@ class _FakeCashCloseTicketPrinter implements CashCloseTicketPrinter {
     bool automatic = true,
   }) async {
     return const PrintTicketResult(success: true, message: 'Impreso');
+  }
+
+  @override
+  Future<PrintTicketResult> printHistoryTicket(CashSessionHistoryModel row) {
+    throw UnimplementedError('printHistoryTicket');
+  }
+
+  @override
+  List<String> buildLines(CashCloseTicketSnapshot snapshot) => const [];
+
+  @override
+  List<String> buildHistoryLines(CashSessionHistoryModel row) => const [];
+}
+
+/// Impresora que falla SIEMPRE al imprimir el cierre. Sirve para verificar que
+/// un fallo de impresión posterior al cierre NO dispara un segundo cierre.
+class _ThrowingCashCloseTicketPrinter implements CashCloseTicketPrinter {
+  @override
+  Future<PrintTicketResult> printCloseTicket(
+    CashCloseTicketSnapshot snapshot, {
+    bool automatic = true,
+  }) async {
+    throw Exception('impresora sin papel');
   }
 
   @override
@@ -176,6 +201,12 @@ void main() {
 
     test('cerrar turno cierra y sigue estable', () async {
       final repo = _FakeCashRepository();
+      // Para cerrar un turno debe existir un turno abierto identificable.
+      repo.stateOverride = () async => CashGateState(
+            businessDate: '2026-08-20',
+            canOperate: true,
+            activeSession: _session,
+          );
       final container = _buildContainer(repo);
       addTearDown(container.dispose);
 
@@ -271,6 +302,11 @@ void main() {
 
     test('doble cierre simultáneo solo ejecuta uno', () async {
       final repo = _FakeCashRepository();
+      repo.stateOverride = () async => CashGateState(
+            businessDate: '2026-08-20',
+            canOperate: true,
+            activeSession: _session,
+          );
       var calls = 0;
       final closeCompleter = Completer<void>();
       repo.closeSessionOverride = () {
@@ -321,6 +357,11 @@ void main() {
 
     test('fallo en close() libera la guarda y permite reintentar', () async {
       final repo = _FakeCashRepository();
+      repo.stateOverride = () async => CashGateState(
+            businessDate: '2026-08-20',
+            canOperate: true,
+            activeSession: _session,
+          );
       var calls = 0;
       repo.closeSessionOverride = () {
         calls += 1;
@@ -343,6 +384,37 @@ void main() {
 
       expect(calls, 2);
       expect(result?.success, isTrue);
+    });
+
+    test('un fallo de impresión tras cerrar NO dispara un segundo cierre', () async {
+      final repo = _FakeCashRepository();
+      repo.stateOverride = () async => CashGateState(
+            businessDate: '2026-08-20',
+            canOperate: true,
+            activeSession: _session,
+          );
+      var closeCalls = 0;
+      repo.closeSessionOverride = () {
+        closeCalls += 1;
+        return Future.value();
+      };
+      final container = ProviderContainer(
+        overrides: [
+          cashRepositoryProvider.overrideWithValue(repo),
+          cashCloseTicketPrinterProvider.overrideWithValue(
+            _ThrowingCashCloseTicketPrinter(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      // El cierre ya se aplicó en backend; la impresión falla después.
+      await expectLater(controller.close(1000), throwsA(isA<Exception>()));
+      // El backend sólo se llamó UNA vez: imprimir no vuelve a cerrar.
+      expect(closeCalls, 1);
     });
 
     test('tras invalidar, la instancia vieja y la nueva no comparten estado',
