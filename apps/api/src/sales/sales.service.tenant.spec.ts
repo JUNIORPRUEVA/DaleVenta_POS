@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { SalesService } from "./sales.service";
 
@@ -220,6 +220,215 @@ describe("SalesService tenant isolation", () => {
       where: { companyId: user.companyId, clientRequestId: "sale-request-1" },
       include: expect.any(Object),
     });
+  });
+
+  it("rejects sales.create without originCashSessionId before using current cash session", async () => {
+    const prisma = { cashSession: { findFirst: jest.fn() } };
+    const service = serviceWith(prisma);
+
+    await expect(
+      (service as any).resolveOriginCashSessionForSale(
+        user,
+        user.companyId,
+        undefined,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("processes sales.create only against the original open session", async () => {
+    const sessionA = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const prisma = {
+      cashSession: { findFirst: jest.fn().mockResolvedValue(sessionA) },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      (service as any).resolveOriginCashSessionForSale(
+        user,
+        user.companyId,
+        sessionA.id,
+      ),
+    ).resolves.toBe(sessionA);
+
+    expect(prisma.cashSession.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: sessionA.id,
+        companyId: user.companyId,
+        openedByUserId: user.id,
+      },
+    });
+  });
+
+  it("reproduces La Bomba: sale from closed A is not assigned to open B", async () => {
+    const sessionA = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "CLOSED",
+      closedAt: new Date("2026-10-05T18:00:00Z"),
+    };
+    const sessionB = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const prisma = {
+      cashSession: {
+        findFirst: jest.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === sessionA.id ? sessionA : sessionB,
+        ),
+      },
+      sale: { create: jest.fn() },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      (service as any).resolveOriginCashSessionForSale(
+        user,
+        user.companyId,
+        sessionA.id,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.cashSession.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: sessionA.id,
+        companyId: user.companyId,
+        openedByUserId: user.id,
+      },
+    });
+    expect(prisma.sale.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects refund replay from closed operation session A without using open B", async () => {
+    const sessionA = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "CLOSED",
+      closedAt: new Date("2026-10-05T18:00:00Z"),
+    };
+    const sessionB = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const prisma = {
+      cashSession: {
+        findFirst: jest.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === sessionA.id ? sessionA : sessionB,
+        ),
+      },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      (service as any).resolveOperationCashSession(
+        user,
+        user.companyId,
+        sessionA.id,
+        "REFUND",
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "ORIGIN_SESSION_CLOSED" }),
+    });
+
+    expect(prisma.cashSession.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: sessionA.id,
+        companyId: user.companyId,
+        openedByUserId: user.id,
+      },
+    });
+  });
+
+  it("returns existing credit payment by operationId without duplicating money", async () => {
+    const existingPayment = {
+      id: "payment-1",
+      operationId: "credit.payment:duplicate",
+      sale: { id: "sale-credit", items: [] },
+    };
+    const prisma = {
+      saleCreditPayment: {
+        findFirst: jest.fn().mockResolvedValue(existingPayment),
+      },
+      sale: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.addCreditPayment(user as never, "sale-credit", {
+      operationId: "credit.payment:duplicate",
+      operationCashSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      paidAt: "2026-10-05T17:00:00.000Z",
+      cashAmount: 100,
+    });
+
+    expect(result.payment).toBe(existingPayment);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects credit payment replay from closed operation session A without using open B", async () => {
+    const sessionA = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "CLOSED",
+      closedAt: new Date("2026-10-05T18:00:00Z"),
+    };
+    const sessionB = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const prisma = {
+      saleCreditPayment: { findFirst: jest.fn().mockResolvedValue(null) },
+      sale: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "sale-credit",
+          isDeleted: false,
+          creditStatus: "open",
+          creditBalance: new Prisma.Decimal(100),
+          creditPaidAmount: new Prisma.Decimal(0),
+          paymentCashAmount: new Prisma.Decimal(0),
+          paymentTransferAmount: new Prisma.Decimal(0),
+        }),
+      },
+      cashSession: {
+        findFirst: jest.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === sessionA.id ? sessionA : sessionB,
+        ),
+      },
+      $transaction: jest.fn(),
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.addCreditPayment(user as never, "sale-credit", {
+        operationId: "credit.payment:closed",
+        operationCashSessionId: sessionA.id,
+        paidAt: "2026-10-05T17:00:00.000Z",
+        cashAmount: 100,
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "ORIGIN_SESSION_CLOSED" }),
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it("falls back to a compatible sale list instead of returning empty on schema mismatch", async () => {

@@ -125,6 +125,9 @@ class _TrackingCashRepository implements CashRepository {
   }
 
   @override
+  Future<ActiveCashSession?> cachedActiveSession() async => null;
+
+  @override
   Future<void> addMovement({
     required String type,
     required double amount,

@@ -354,7 +354,7 @@ void main() {
     service.dispose();
   });
 
-  test('marks HTTP 409 as permanent conflict and does not retry', () async {
+  test('marks stock HTTP 409 as requires action and does not retry', () async {
     const scope = OfflineSyncScope(
       companyId: 'company-conflict',
       userId: 'user-conflict',
@@ -395,7 +395,7 @@ void main() {
     );
     expect(attempts, 1);
     expect(actions, hasLength(1));
-    expect(actions.single.status, 'conflict');
+    expect(actions.single.status, 'requires_action');
     expect(actions.single.permanent, isTrue);
     expect(actions.single.nextAttemptAt, isNull);
     final stats = await store.pendingActionStats(

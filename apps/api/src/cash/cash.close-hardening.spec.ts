@@ -60,6 +60,7 @@ function makeSession(overrides: Partial<Session> & { id: string }): Session {
 function makeDb(initial: Session[]) {
   const sessions: Session[] = initial.map((session) => ({ ...session }));
   const cashboxUpdates: Array<Record<string, unknown>> = [];
+  const movements: Array<Record<string, any>> = [];
 
   function matches(where: Record<string, any>): Session[] {
     return sessions.filter((session) => {
@@ -141,14 +142,28 @@ function makeDb(initial: Session[]) {
       })),
     },
     sale: { findMany: jest.fn(async () => []) },
-    cashMovement: { findMany: jest.fn(async () => []), create: jest.fn() },
+    cashMovement: {
+      findMany: jest.fn(async () => []),
+      findFirst: jest.fn(async ({ where }: { where: Record<string, any> }) =>
+        movements.find(
+          (movement) =>
+            movement.companyId === where.companyId &&
+            movement.operationId === where.operationId,
+        ) ?? null,
+      ),
+      create: jest.fn(async ({ data }: { data: Record<string, any> }) => {
+        const created = { id: `movement-${movements.length + 1}`, ...data };
+        movements.push(created);
+        return created;
+      }),
+    },
     saleCreditPayment: { findMany: jest.fn(async () => []) },
     $transaction: jest.fn(async (callback: (t: unknown) => unknown) =>
       callback(tx),
     ),
   };
 
-  return { prisma, sessions, tx, cashboxUpdates };
+  return { prisma, sessions, tx, cashboxUpdates, movements };
 }
 
 function buildService(db: ReturnType<typeof makeDb>) {
@@ -456,6 +471,47 @@ describe("CashService.addMovement — el movimiento pertenece a su turno", () =>
         sessionId: SESSION_A,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(db.prisma.cashMovement.create).not.toHaveBeenCalled();
+    expect(db.sessions.find((s) => s.id === SESSION_B)!.status).toBe("OPEN");
+  });
+
+  it("TEST 13 · movimiento repetido con operationId aplica exactamente una vez", async () => {
+    const db = makeDb([makeSession({ id: SESSION_A, initialAmount: 500 })]);
+    const { service } = buildService(db);
+
+    const first = await service.addMovement(USER, {
+      operationId: "cash.movement:duplicate-1",
+      type: "IN",
+      amount: 25,
+      reason: "Entrada",
+      sessionId: SESSION_A,
+    });
+    const second = await service.addMovement(USER, {
+      operationId: "cash.movement:duplicate-1",
+      type: "IN",
+      amount: 25,
+      reason: "Entrada",
+      sessionId: SESSION_A,
+    });
+
+    expect(second).toBe(first);
+    expect(db.prisma.cashMovement.create).toHaveBeenCalledTimes(1);
+    expect(db.movements).toHaveLength(1);
+  });
+
+  it("TEST 14 · movimiento legacy sin sessionId se rechaza sin tocar el turno abierto", async () => {
+    const db = makeDb([makeSession({ id: SESSION_B, initialAmount: 100 })]);
+    const { service } = buildService(db);
+
+    await expect(
+      service.addMovement(USER, {
+        operationId: "cash.movement:legacy",
+        type: "OUT",
+        amount: 10,
+        reason: "Legacy",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
 
     expect(db.prisma.cashMovement.create).not.toHaveBeenCalled();
     expect(db.sessions.find((s) => s.id === SESSION_B)!.status).toBe("OPEN");

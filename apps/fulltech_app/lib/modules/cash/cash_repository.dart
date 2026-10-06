@@ -103,6 +103,7 @@ class CashRepository {
       }
       await _addMovementRemote(
         sessionId: sessionId,
+        operationId: payload['operationId']?.toString(),
         type: payload['type'].toString(),
         amount: _asDouble(payload['amount']),
         reason: payload['reason']?.toString() ?? '',
@@ -466,6 +467,15 @@ class CashRepository {
     }
   }
 
+  Future<ActiveCashSession?> cachedActiveSession() async {
+    final cached = await _cache.readMap(_activeSessionCacheKey);
+    final active = cached?['activeSession'];
+    if (active is Map) {
+      return ActiveCashSession.fromJson(active.cast<String, dynamic>());
+    }
+    return null;
+  }
+
   Future<void> addMovement({
     required String type,
     required double amount,
@@ -475,12 +485,15 @@ class CashRepository {
     bool? affectsProfit,
   }) async {
     final resolvedSessionId = (sessionId ?? '').trim();
+    final localId = 'local_cash_${DateTime.now().microsecondsSinceEpoch}';
+    final operationId = 'cash.movement:$localId';
     try {
       await _addMovementRemote(
         type: type,
         amount: amount,
         reason: reason,
         sessionId: resolvedSessionId.isEmpty ? null : resolvedSessionId,
+        operationId: operationId,
         movementType: movementType,
         affectsProfit: affectsProfit,
       );
@@ -497,9 +510,9 @@ class CashRepository {
           'No pudimos identificar el turno del movimiento. Actualiza Fullpos e inténtalo nuevamente.',
         );
       }
-      final localId = 'local_cash_${DateTime.now().microsecondsSinceEpoch}';
       final payload = {
         'id': localId,
+        'operationId': operationId,
         'sessionId': resolvedSessionId,
         'type': type,
         'amount': amount,
@@ -515,6 +528,7 @@ class CashRepository {
         scope: 'cash',
         entityType: 'cash_session',
         entityId: resolvedSessionId,
+        idempotencyKey: operationId,
         payload: payload,
       );
     }
@@ -525,12 +539,15 @@ class CashRepository {
     required double amount,
     required String reason,
     String? sessionId,
+    String? operationId,
     String movementType = 'expense',
     bool? affectsProfit,
   }) {
     return _dio.post(
       ApiRoutes.cashMovements,
       data: {
+        if ((operationId ?? '').trim().isNotEmpty)
+          'operationId': operationId!.trim(),
         'type': type,
         'amount': amount,
         'reason': reason,

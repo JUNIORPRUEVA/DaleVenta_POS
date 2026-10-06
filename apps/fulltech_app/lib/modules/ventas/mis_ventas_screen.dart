@@ -1046,7 +1046,12 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     if (ok != true) return;
 
     try {
-      await ref.read(ventasControllerProvider.notifier).returnSale(sale.id);
+      await ref
+          .read(ventasControllerProvider.notifier)
+          .returnSale(
+            sale.id,
+            originalSaleCashSessionId: sale.cashSessionId,
+          );
       if (!context.mounted) return;
       showCashToast(
         context,

@@ -16,7 +16,11 @@ import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import { SalesService } from "./sales.service";
-import { CreateSaleDto, CreateSaleReturnDto } from "./dto/create-sale.dto";
+import {
+  AddCreditPaymentDto,
+  CreateSaleDto,
+  CreateSaleReturnDto,
+} from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { SalesRangeQueryDto } from "./dto/sales-range-query.dto";
 
@@ -109,8 +113,7 @@ export class SalesController {
   addCreditPayment(
     @Req() req: Request,
     @Param("id") id: string,
-    @Body()
-    dto: { cashAmount?: number; transferAmount?: number; note?: string },
+    @Body() dto: AddCreditPaymentDto,
   ) {
     const user = req.user as TenantUser;
     return this.sales.addCreditPayment(user, id, dto);

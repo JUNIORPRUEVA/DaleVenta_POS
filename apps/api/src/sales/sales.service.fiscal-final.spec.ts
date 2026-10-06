@@ -38,7 +38,11 @@ describe("SalesService fiscal closure", () => {
       sale: { findFirst: jest.fn() },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       client: { findFirst: jest.fn().mockResolvedValue(customer) },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-a", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn(),
     };
     const ncf = {
@@ -90,6 +94,7 @@ describe("SalesService fiscal closure", () => {
   }
 
   const b01Dto = {
+    originCashSessionId: "cash-a",
     customerId: "55555555-5555-4555-8555-555555555555",
     fiscalVoucherType: "B01",
     expectedTotalSold: 1180,
@@ -205,7 +210,11 @@ describe("SalesService fiscal closure", () => {
           direccion: "Higuey",
         }),
       },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-a", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn((callback) => callback(tx)),
     };
     const ncf = {
@@ -242,6 +251,7 @@ describe("SalesService fiscal closure", () => {
     );
 
     await service.create(user as never, {
+      originCashSessionId: "cash-a",
       sourceQuotationId: "22222222-2222-4222-8222-222222222222",
       fiscalVoucherType: "B01",
       expectedTotalSold: 25700,
@@ -311,7 +321,11 @@ describe("SalesService fiscal closure", () => {
       sale: { findFirst: jest.fn() },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       client: { findFirst: jest.fn() },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-a", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn(),
     };
     const ncf = {
@@ -362,6 +376,7 @@ describe("SalesService fiscal closure", () => {
 
     await expect(
       service.create(user as never, {
+        originCashSessionId: "cash-a",
         fiscalVoucherType: "B01",
         fiscalCustomerTaxId: "101010101",
         fiscalCustomerName: "DTO ONLY SRL",
@@ -564,7 +579,11 @@ describe("SalesService fiscal closure", () => {
           items: [saleItem],
         }),
       },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-a", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn((callback) => callback(tx)),
     };
     const ncf = {
@@ -582,6 +601,9 @@ describe("SalesService fiscal closure", () => {
 
     await expect(
       service.returnSale(user as never, "sale-a", {
+        originalSaleCashSessionId: "cash-a",
+        operationCashSessionId: "cash-a",
+        operationOccurredAt: "2026-09-04T11:00:00.000Z",
         items: [{ saleItemId: "item-a", qty: 2 }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);

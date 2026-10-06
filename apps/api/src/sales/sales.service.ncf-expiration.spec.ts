@@ -56,7 +56,9 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
         }),
       },
       cashSession: {
-        findFirst: jest.fn().mockResolvedValue({ id: "cash-a" }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-a", status: "OPEN", closedAt: null }),
       },
       $transaction: jest.fn((callback) => callback(tx)),
     };
@@ -116,6 +118,7 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
     const { tx, ncf, service } = build();
 
     const result = await service.create(user as never, {
+      originCashSessionId: "cash-a",
       customerId: "55555555-5555-4555-8555-555555555555",
       fiscalVoucherType: "B01",
       items: [
@@ -161,6 +164,7 @@ describe("SalesService fiscal print data (cashier + NCF expiration)", () => {
     ncf.reserveNextNcf.mockResolvedValue(null);
 
     await service.create(user as never, {
+      originCashSessionId: "cash-a",
       items: [
         {
           productName: "Servicio",

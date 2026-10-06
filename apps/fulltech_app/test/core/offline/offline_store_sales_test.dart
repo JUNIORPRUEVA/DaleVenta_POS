@@ -62,9 +62,14 @@ void main() {
         expect(companyASales, hasLength(1));
         expect(companyASales.single['clientRequestId'], 'sale_req_a');
         expect(companyASales.single['status'], 'pending');
+        expect(
+          (companyASales.single['payload'] as Map)['originCashSessionId'],
+          'shift-a',
+        );
         expect(companyBSales, isEmpty);
         expect(actions, hasLength(1));
         expect(actions.single.idempotencyKey, 'sale_req_a');
+        expect(actions.single.payload['originCashSessionId'], 'shift-a');
       },
     );
 
@@ -433,6 +438,7 @@ PendingSyncAction _pendingSaleAction({
 Map<String, dynamic> _salePayload(String clientRequestId) {
   return {
     'clientRequestId': clientRequestId,
+    'originCashSessionId': 'shift-a',
     'paymentMethod': 'cash',
     'paymentCashAmount': 100,
     'items': [_item('product-a', 1)],

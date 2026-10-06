@@ -28,6 +28,7 @@ void main() {
       dio,
       SyncQueueService(OfflineStore.instance),
       WarehouseRepository(dio),
+      originCashSessionIdResolver: () async => 'cash-1',
     );
   }
 
@@ -45,6 +46,7 @@ void main() {
     return {
       'id': id,
       'userId': 'user-1',
+      'cashSessionId': 'cash-1',
       'totalSold': 100,
       'totalCost': 50,
       'totalProfit': 50,
@@ -100,13 +102,16 @@ void main() {
     final sale = await repository.returnSale(
       'sale-1',
       clientRequestId: 'return-request-1',
+      originalSaleCashSessionId: 'cash-original',
     );
 
     expect(sale.id, 'sale-1');
     expect(captured.last.path, '/sales/sale-1/return');
-    expect(captured.last.data, <String, dynamic>{
-      'clientRequestId': 'return-request-1',
-    });
+    final body = (captured.last.data as Map).cast<String, dynamic>();
+    expect(body['clientRequestId'], 'return-request-1');
+    expect(body['originalSaleCashSessionId'], 'cash-original');
+    expect(body['operationCashSessionId'], 'cash-1');
+    expect(body['operationOccurredAt'], isA<String>());
   });
 
   test(
@@ -114,14 +119,44 @@ void main() {
     () async {
       final repository = buildRepository((options) => jsonResponse(saleRow()));
 
-      await repository.returnSale('sale-2');
+      await repository.returnSale(
+        'sale-2',
+        originalSaleCashSessionId: 'cash-original',
+      );
 
       expect(captured.last.path, '/sales/sale-2/return');
       final body = (captured.last.data as Map).cast<String, dynamic>();
       expect(body['clientRequestId'], isA<String>());
       expect(body['clientRequestId'], contains('sale-2'));
+      expect(body['originalSaleCashSessionId'], 'cash-original');
+      expect(body['operationCashSessionId'], 'cash-1');
+      expect(body['operationOccurredAt'], isA<String>());
     },
   );
+
+  test('addCreditPayment envía operationId, turno operativo y paidAt', () async {
+    final repository = buildRepository(
+      (options) => jsonResponse({'sale': saleRow(id: 'sale-credit')}),
+    );
+
+    final sale = await repository.addCreditPayment(
+      saleId: 'sale-credit',
+      cashAmount: 75,
+      transferAmount: 25,
+      note: 'abono',
+    );
+
+    expect(sale.id, 'sale-credit');
+    expect(captured.last.path, '/sales/sale-credit/credit-payments');
+    final body = (captured.last.data as Map).cast<String, dynamic>();
+    expect(body['operationId'], isA<String>());
+    expect(body['operationId'], contains('credit.payment:'));
+    expect(body['operationCashSessionId'], 'cash-1');
+    expect(body['paidAt'], isA<String>());
+    expect(body['cashAmount'], 75);
+    expect(body['transferAmount'], 25);
+    expect(body['note'], 'abono');
+  });
 
   test('timeout en listSales termina en error (nunca cuelga)', () async {
     final repository = buildRepository(

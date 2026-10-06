@@ -176,11 +176,16 @@ class VentasController extends StateNotifier<VentasState> {
     }
   }
 
-  Future<void> returnSale(String id) async {
+  Future<void> returnSale(String id, {String? originalSaleCashSessionId}) async {
     if (!mounted) return;
     final previous = state.sales;
     try {
-      final returned = await ref.read(ventasRepositoryProvider).returnSale(id);
+      final returned = await ref
+          .read(ventasRepositoryProvider)
+          .returnSale(
+            id,
+            originalSaleCashSessionId: originalSaleCashSessionId,
+          );
       if (!mounted) return;
       state = state.copyWith(
         sales: [

@@ -101,6 +101,8 @@ void main() {
       dio,
       SyncQueueService(store),
       WarehouseRepository(dio),
+      originCashSessionIdResolver: () async =>
+          '11111111-1111-4111-8111-111111111111',
     );
   }
 
@@ -183,6 +185,8 @@ void main() {
         dio,
         SyncQueueService(store),
         WarehouseRepository(dio),
+        originCashSessionIdResolver: () async =>
+            '11111111-1111-4111-8111-111111111111',
       );
 
       await repository.createSale(

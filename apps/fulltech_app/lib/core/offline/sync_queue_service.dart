@@ -517,8 +517,28 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     return false;
   }
 
+  bool _requiresHumanAction(Object error) {
+    String? codeFrom(dynamic data) {
+      if (data is Map) {
+        return (data['code'] ?? data['errorCode'])?.toString().trim();
+      }
+      return null;
+    }
+
+    final code = error is DioException
+        ? codeFrom(error.response?.data)
+        : error is ApiException
+        ? error.displayCode
+        : null;
+    return code == 'ORIGIN_SESSION_CLOSED' ||
+        code == 'ORIGIN_SESSION_NOT_FOUND' ||
+        code == 'LEGACY_MISSING_SESSION' ||
+        code == 'INSUFFICIENT_WAREHOUSE_STOCK';
+  }
+
   String _failureStatus(Object error, {required bool permanent}) {
     if (error is ObsoleteSyncOperationException) return 'obsolete';
+    if (_requiresHumanAction(error)) return 'requires_action';
     if (_isProductHistoryDecisionRequired(error)) return 'requires_action';
     if (_isConflictFailure(error)) return 'conflict';
     if (error is ApiException &&

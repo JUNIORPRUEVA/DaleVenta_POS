@@ -129,6 +129,9 @@ class _FakeCashRepository implements CashRepository {
   }
 
   @override
+  Future<ActiveCashSession?> cachedActiveSession() async => null;
+
+  @override
   Future<List<CashMovementModel>> movementHistory({
     String? type,
     String? movementType,

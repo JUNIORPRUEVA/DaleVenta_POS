@@ -256,6 +256,7 @@ class SaleModel {
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
+  final String? cashSessionId;
   final DateTime? saleDate;
   final String? note;
   final double totalSold;
@@ -312,6 +313,7 @@ class SaleModel {
     required this.customerId,
     required this.customerName,
     required this.customerPhone,
+    this.cashSessionId,
     required this.saleDate,
     required this.note,
     required this.totalSold,
@@ -399,6 +401,7 @@ class SaleModel {
           json['customerTelefono']?.toString() ??
           json['telefono']?.toString() ??
           customerPhone,
+      cashSessionId: json['cashSessionId']?.toString(),
       saleDate: parseServerInstant(json['saleDate']),
       note: json['note']?.toString(),
       totalSold: _toDouble(json['totalSold']),

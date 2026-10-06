@@ -288,6 +288,12 @@ Future<void> _settle(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 160));
 }
 
+Finder _companySettingSwitch(String title) =>
+    find.byKey(ValueKey('company_setting_switch_$title'));
+
+bool _companySettingSwitchValue(WidgetTester tester, String title) =>
+    tester.widget<Switch>(_companySettingSwitch(title)).value;
+
 // ---- Tests ------------------------------------------------------------------
 
 void main() {
@@ -418,10 +424,7 @@ void main() {
           ),
         );
 
-        final unitsSwitch = find.widgetWithText(
-          SwitchListTile,
-          'Activar unidades de medida',
-        );
+        final unitsSwitch = _companySettingSwitch('Activar unidades de medida');
         await tester.ensureVisible(unitsSwitch);
         await tester.tap(unitsSwitch);
         await tester.pump();
@@ -441,9 +444,8 @@ void main() {
           find.byKey(const ValueKey('persistent_feedback_card')),
           findsOneWidget,
         );
-        final tile = tester.widget<SwitchListTile>(unitsSwitch);
         expect(
-          tile.value,
+          _companySettingSwitchValue(tester, 'Activar unidades de medida'),
           isTrue,
           reason: 'toggle restored to persisted state',
         );

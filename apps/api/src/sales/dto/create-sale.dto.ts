@@ -104,6 +104,14 @@ export class CreateSaleDto {
   terminalId?: string;
 
   @IsOptional()
+  @IsUUID()
+  originTerminalId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  originCashSessionId?: string;
+
+  @IsOptional()
   @IsString()
   deviceFingerprint?: string;
 
@@ -210,6 +218,18 @@ export class CreateSaleReturnDto {
   clientRequestId?: string;
 
   @IsOptional()
+  @IsUUID()
+  originalSaleCashSessionId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  operationCashSessionId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  operationOccurredAt?: string;
+
+  @IsOptional()
   @IsString()
   reason?: string;
 
@@ -223,4 +243,34 @@ export class CreateSaleReturnDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSaleReturnItemDto)
   items?: CreateSaleReturnItemDto[];
+}
+
+export class AddCreditPaymentDto {
+  @IsOptional()
+  @IsString()
+  operationId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  operationCashSessionId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  paidAt?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  cashAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  transferAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

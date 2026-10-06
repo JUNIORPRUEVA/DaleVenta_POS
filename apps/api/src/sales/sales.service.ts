@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -34,6 +35,7 @@ import {
   type TenantUser,
 } from "../auth/tenant-context";
 import {
+  AddCreditPaymentDto,
   CreateSaleDto,
   CreateSaleItemDto,
   CreateSaleReturnDto,
@@ -95,6 +97,8 @@ const SALE_RETURN_TRANSACTION_OPTIONS = {
 
 @Injectable()
 export class SalesService {
+  private readonly logger = new Logger(SalesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -1626,18 +1630,11 @@ export class SalesService {
     const commissionAmount = totalProfit.greaterThan(0)
       ? totalProfit.mul(commissionRate)
       : new Prisma.Decimal(0);
-    const activeSession = await this.prisma.cashSession.findFirst({
-      where: {
-        openedByUserId: user.id,
-        companyId,
-        status: "OPEN",
-        closedAt: null,
-      },
-      orderBy: { openedAt: "desc" },
-    });
-    if (!activeSession) {
-      throw new BadRequestException("Debes abrir caja antes de facturar.");
-    }
+    const originSession = await this.resolveOriginCashSessionForSale(
+      user,
+      companyId,
+      dto.originCashSessionId,
+    );
     perf?.mark("cash_gate");
 
     const requestedVoucherType = dto.fiscalVoucherType?.trim()
@@ -1721,7 +1718,7 @@ export class SalesService {
           shouldResolveOperationalContext
             ? await this.terminalResolutionService().resolveForSale(tx, {
                 companyId,
-                terminalId: dto.terminalId,
+                terminalId: dto.originTerminalId ?? dto.terminalId,
                 deviceFingerprint: dto.deviceFingerprint,
                 requestedWarehouseId: dto.warehouseId,
               })
@@ -1742,7 +1739,7 @@ export class SalesService {
             clientRequestId,
             sourceQuotationId,
             customerId,
-            cashSessionId: activeSession.id,
+            cashSessionId: originSession.id,
             terminalId: operationalContext?.terminal.id ?? null,
             terminalNameSnapshot: operationalContext?.terminal.name ?? null,
             terminalCodeSnapshot: operationalContext?.terminal.code ?? null,
@@ -2123,6 +2120,51 @@ export class SalesService {
     };
   }
 
+  private async resolveOriginCashSessionForSale(
+    user: TenantUser,
+    companyId: string,
+    originCashSessionId?: string,
+  ) {
+    const requested = originCashSessionId?.trim();
+    if (!requested) {
+      this.logger.warn(
+        `OFFLINE_SALE_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
+      );
+      throw new ConflictException({
+        code: "LEGACY_MISSING_SESSION",
+        errorCode: "LEGACY_MISSING_SESSION",
+        message: "Actualiza Fullpos para completar esta operación.",
+      });
+    }
+
+    const session = await this.prisma.cashSession.findFirst({
+      where: { id: requested, companyId, openedByUserId: user.id },
+    });
+    if (!session) {
+      this.logger.warn(
+        `OFFLINE_SALE_ORIGIN_SESSION_NOT_FOUND company=${companyId} userId=${user.id} originSessionId=${requested}`,
+      );
+      throw new ConflictException({
+        code: "ORIGIN_SESSION_NOT_FOUND",
+        errorCode: "ORIGIN_SESSION_NOT_FOUND",
+        message:
+          "Esta operación pertenece a un turno que necesita revisión antes de sincronizarse.",
+      });
+    }
+    if (session.status !== "OPEN" || session.closedAt != null) {
+      this.logger.warn(
+        `OFFLINE_SALE_ORIGIN_SESSION_CLOSED company=${companyId} userId=${user.id} originSessionId=${requested} status=${session.status}`,
+      );
+      throw new ConflictException({
+        code: "ORIGIN_SESSION_CLOSED",
+        errorCode: "ORIGIN_SESSION_CLOSED",
+        message:
+          "Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.",
+      });
+    }
+    return session;
+  }
+
   async remove(requestUser: TenantUser, saleId: string) {
     const companyId = requireTenant(requestUser);
     let sale: {
@@ -2328,20 +2370,15 @@ export class SalesService {
         if (existing) return existing;
       }
 
-      const activeSession = await this.prisma.cashSession.findFirst({
-        where: {
-          openedByUserId: requestUser.id,
-          companyId,
-          status: "OPEN",
-          closedAt: null,
-        },
-        orderBy: { openedAt: "desc" },
-      });
-      if (!activeSession) {
-        throw new BadRequestException(
-          "Debes abrir caja antes de registrar una devolución.",
-        );
-      }
+      const operationSession = await this.resolveOperationCashSession(
+        requestUser,
+        companyId,
+        dto.operationCashSessionId,
+        "REFUND",
+      );
+      const operationOccurredAt = this.resolveSaleOccurredAt(
+        dto.operationOccurredAt,
+      );
 
       const returned = await this.prisma.$transaction(async (tx) => {
         await this.lockReturnableSale(tx, companyId, saleId);
@@ -2354,6 +2391,29 @@ export class SalesService {
         });
         if (!sale || sale.isDeleted || sale.kind !== "invoice") {
           throw new NotFoundException("Venta no encontrada");
+        }
+        const originalSaleCashSessionId =
+          dto.originalSaleCashSessionId?.trim();
+        if (!originalSaleCashSessionId) {
+          this.logger.warn(
+            `OFFLINE_REFUND_LEGACY_MISSING_ORIGINAL_SESSION company=${companyId} userId=${requestUser.id} saleId=${saleId}`,
+          );
+          throw new ConflictException({
+            code: "LEGACY_MISSING_SESSION",
+            errorCode: "LEGACY_MISSING_SESSION",
+            message: "Actualiza Fullpos para completar esta operación.",
+          });
+        }
+        if (sale.cashSessionId !== originalSaleCashSessionId) {
+          this.logger.warn(
+            `OFFLINE_REFUND_ORIGINAL_SESSION_MISMATCH company=${companyId} userId=${requestUser.id} saleId=${saleId} expected=${sale.cashSessionId} received=${originalSaleCashSessionId}`,
+          );
+          throw new ConflictException({
+            code: "ORIGIN_SESSION_NOT_FOUND",
+            errorCode: "ORIGIN_SESSION_NOT_FOUND",
+            message:
+              "Esta operación pertenece a un turno que necesita revisión antes de sincronizarse.",
+          });
         }
         if (sale.cancelledAt || sale.inventoryRestoredAt) {
           throw new BadRequestException({
@@ -2607,8 +2667,8 @@ export class SalesService {
             clientRequestId,
             refundedSaleId: saleId,
             customerId: sale.customerId,
-            cashSessionId: activeSession.id,
-            saleDate: new Date(),
+            cashSessionId: operationSession.id,
+            saleDate: operationOccurredAt,
             note:
               dto.reason?.trim() ||
               (restoreInventory
@@ -2751,9 +2811,28 @@ export class SalesService {
   async addCreditPayment(
     user: TenantUser,
     saleId: string,
-    dto: { cashAmount?: number; transferAmount?: number; note?: string },
+    dto: AddCreditPaymentDto,
   ) {
     const companyId = requireTenant(user);
+    const operationId = (dto.operationId ?? "").trim();
+    if (!operationId) {
+      this.logger.warn(
+        `OFFLINE_CREDIT_PAYMENT_LEGACY_MISSING_OPERATION company=${companyId} userId=${user.id} saleId=${saleId}`,
+      );
+      throw new ConflictException({
+        code: "LEGACY_MISSING_SESSION",
+        errorCode: "LEGACY_MISSING_SESSION",
+        message: "Actualiza Fullpos para completar esta operación.",
+      });
+    }
+    const existingPayment = await this.prisma.saleCreditPayment.findFirst({
+      where: { companyId, operationId },
+      include: { sale: { include: this.saleInclude() } },
+    });
+    if (existingPayment) {
+      return { payment: existingPayment, sale: existingPayment.sale };
+    }
+
     const sale = await this.prisma.sale.findFirst({
       where: { id: saleId, companyId },
       include: { customer: true },
@@ -2762,20 +2841,13 @@ export class SalesService {
       throw new NotFoundException("Crédito no encontrado");
     }
 
-    const activeSession = await this.prisma.cashSession.findFirst({
-      where: {
-        openedByUserId: user.id,
-        companyId,
-        status: "OPEN",
-        closedAt: null,
-      },
-      orderBy: { openedAt: "desc" },
-    });
-    if (!activeSession) {
-      throw new BadRequestException(
-        "Debes abrir caja antes de registrar un abono.",
-      );
-    }
+    const operationSession = await this.resolveOperationCashSession(
+      user,
+      companyId,
+      dto.operationCashSessionId,
+      "CREDIT_PAYMENT",
+    );
+    const paidAt = this.resolveSaleOccurredAt(dto.paidAt);
 
     const cashAmount = new Prisma.Decimal(dto.cashAmount ?? 0);
     const transferAmount = new Prisma.Decimal(dto.transferAmount ?? 0);
@@ -2789,43 +2861,108 @@ export class SalesService {
       );
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      const payment = await tx.saleCreditPayment.create({
-        data: {
-          saleId,
-          companyId,
-          userId: user.id,
-          cashSessionId: activeSession.id,
-          amount,
-          cashAmount,
-          transferAmount,
-          note: dto.note?.trim() || null,
-        },
+    let result;
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        const payment = await tx.saleCreditPayment.create({
+          data: {
+            saleId,
+            companyId,
+            userId: user.id,
+            cashSessionId: operationSession.id,
+            operationId,
+            amount,
+            cashAmount,
+            transferAmount,
+            note: dto.note?.trim() || null,
+            paidAt,
+          },
+        });
+        const nextPaid = sale.creditPaidAmount.plus(amount);
+        const nextBalance = sale.creditBalance.minus(amount);
+        const nextStatus = nextBalance.lte(0) ? "paid" : "open";
+        const updatedSale = await tx.sale.update({
+          where: { id: saleId },
+          data: {
+            paymentCashAmount: sale.paymentCashAmount.plus(cashAmount),
+            paymentTransferAmount:
+              sale.paymentTransferAmount.plus(transferAmount),
+            creditPaidAmount: nextPaid,
+            creditBalance: nextBalance,
+            creditStatus: nextStatus,
+            status: nextStatus === "paid" ? "PAID" : "CREDIT",
+          },
+          include: this.saleInclude(),
+        });
+        return { payment, sale: updatedSale };
       });
-      const nextPaid = sale.creditPaidAmount.plus(amount);
-      const nextBalance = sale.creditBalance.minus(amount);
-      const nextStatus = nextBalance.lte(0) ? "paid" : "open";
-      const updatedSale = await tx.sale.update({
-        where: { id: saleId },
-        data: {
-          paymentCashAmount: sale.paymentCashAmount.plus(cashAmount),
-          paymentTransferAmount:
-            sale.paymentTransferAmount.plus(transferAmount),
-          creditPaidAmount: nextPaid,
-          creditBalance: nextBalance,
-          creditStatus: nextStatus,
-          status: nextStatus === "paid" ? "PAID" : "CREDIT",
-        },
-        include: this.saleInclude(),
-      });
-      return { payment, sale: updatedSale };
-    });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const existing = await this.prisma.saleCreditPayment.findFirst({
+          where: { companyId, operationId },
+          include: { sale: { include: this.saleInclude() } },
+        });
+        if (existing) {
+          return { payment: existing, sale: existing.sale };
+        }
+      }
+      throw error;
+    }
     this.emitSaleEvent(companyId, "sale.credit_payment.created", saleId, {
       userId: user.id,
-      cashSessionId: activeSession.id,
+      cashSessionId: operationSession.id,
       saleDate: result.sale.saleDate,
     });
     return result;
+  }
+
+  private async resolveOperationCashSession(
+    user: TenantUser,
+    companyId: string,
+    operationCashSessionId: string | undefined,
+    operationType: "REFUND" | "CREDIT_PAYMENT",
+  ) {
+    const requested = operationCashSessionId?.trim();
+    if (!requested) {
+      this.logger.warn(
+        `OFFLINE_${operationType}_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
+      );
+      throw new ConflictException({
+        code: "LEGACY_MISSING_SESSION",
+        errorCode: "LEGACY_MISSING_SESSION",
+        message: "Actualiza Fullpos para completar esta operación.",
+      });
+    }
+
+    const session = await this.prisma.cashSession.findFirst({
+      where: { id: requested, companyId, openedByUserId: user.id },
+    });
+    if (!session) {
+      this.logger.warn(
+        `OFFLINE_${operationType}_SESSION_NOT_FOUND company=${companyId} userId=${user.id} operationSessionId=${requested}`,
+      );
+      throw new ConflictException({
+        code: "ORIGIN_SESSION_NOT_FOUND",
+        errorCode: "ORIGIN_SESSION_NOT_FOUND",
+        message:
+          "Esta operación pertenece a un turno que necesita revisión antes de sincronizarse.",
+      });
+    }
+    if (session.status !== "OPEN" || session.closedAt != null) {
+      this.logger.warn(
+        `OFFLINE_${operationType}_SESSION_CLOSED company=${companyId} userId=${user.id} operationSessionId=${requested} status=${session.status}`,
+      );
+      throw new ConflictException({
+        code: "ORIGIN_SESSION_CLOSED",
+        errorCode: "ORIGIN_SESSION_CLOSED",
+        message:
+          "Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.",
+      });
+    }
+    return session;
   }
 
   async purgeAllForDebug(user: TenantUser) {

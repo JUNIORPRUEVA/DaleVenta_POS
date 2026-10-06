@@ -7,6 +7,15 @@ const otherCompanyId = "22222222-2222-2222-2222-222222222222";
 const user = { id: "user-a", role: "ADMIN", companyId };
 const foreignUser = { id: "user-b", role: "ADMIN", companyId: otherCompanyId };
 
+function returnDto(overrides: Record<string, unknown> = {}) {
+  return {
+    originalSaleCashSessionId: "cash-1",
+    operationCashSessionId: "cash-1",
+    operationOccurredAt: "2026-09-04T11:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function taxCalculator() {
   return {
     calculate: jest.fn((input: any) => ({
@@ -114,6 +123,7 @@ function quickSale(overrides: Record<string, unknown> = {}) {
     id: "sale-quick",
     companyId,
     userId: user.id,
+    cashSessionId: "cash-1",
     isDeleted: false,
     kind: "invoice",
     cancelledAt: null,
@@ -207,7 +217,11 @@ function buildReturnHarness(
         .mockResolvedValueOnce(options.existingRefund ?? null)
         .mockResolvedValue(null),
     },
-    cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }) },
+    cashSession: {
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
+    },
     client: { findFirst: jest.fn() },
     company: {
       findFirst: jest
@@ -265,7 +279,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
       },
       appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn((callback: any) =>
         callback({
           sale: {
@@ -298,6 +316,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     const service = serviceWith(prisma, inventory);
 
     await service.create(user as never, {
+      originCashSessionId: "cash-1",
       warehouseId: undefined,
       items: [
         {
@@ -360,7 +379,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
   it("returns a full quick sale without stock movement and reverses cash once", async () => {
     const { service, inventory, refundCreate } = buildReturnHarness(quickSale());
 
-    await service.returnSale(user as never, "sale-quick", {} as never);
+    await service.returnSale(user as never, "sale-quick", returnDto() as never);
 
     expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
     expect(refundCreate).toHaveBeenCalledTimes(1);
@@ -401,6 +420,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     const { service, inventory, refundCreate } = buildReturnHarness(sale);
 
     await service.returnSale(user as never, "sale-quick-3", {
+      ...returnDto(),
       items: [{ saleItemId: "item-quick", qty: 1 }],
     } as never);
 
@@ -576,7 +596,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     });
     const { service, refundCreate } = buildReturnHarness(sale);
 
-    await service.returnSale(user as never, "sale-quick-transfer", {} as never);
+    await service.returnSale(
+      user as never,
+      "sale-quick-transfer",
+      returnDto() as never,
+    );
 
     const data = refundCreate.mock.calls[0][0].data;
     expect(new Prisma.Decimal(data.paymentCashAmount).toString()).toBe("0");
@@ -595,6 +619,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     const { service, refundCreate } = buildReturnHarness(sale);
 
     await service.returnSale(user as never, "sale-quick-mixed", {
+      ...returnDto(),
       items: [{ saleItemId: "item-quick", qty: 1 }],
     } as never);
 
@@ -619,7 +644,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     });
     const { service, refundCreate, saleUpdate } = buildReturnHarness(sale);
 
-    await service.returnSale(user as never, "sale-quick-credit", {} as never);
+    await service.returnSale(
+      user as never,
+      "sale-quick-credit",
+      returnDto() as never,
+    );
 
     const data = refundCreate.mock.calls[0][0].data;
     // No fictitious cash-out: the receivable is reduced instead of going negative.
@@ -652,7 +681,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
   it("keeps tenant isolation when returning another company sale", async () => {
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(null) },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn((callback: any) =>
         callback({
           $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
@@ -667,7 +700,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     const service = serviceWith(prisma, inventory);
 
     await expect(
-      service.returnSale(foreignUser as never, "sale-quick", {} as never),
+      service.returnSale(
+        foreignUser as never,
+        "sale-quick",
+        returnDto() as never,
+      ),
     ).rejects.toThrow(NotFoundException);
     expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
   });
@@ -679,7 +716,11 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     });
     const { service, inventory } = buildReturnHarness(sale);
 
-    await service.returnSale(user as never, "sale-untracked-return", {} as never);
+    await service.returnSale(
+      user as never,
+      "sale-untracked-return",
+      returnDto() as never,
+    );
 
     expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
     expect(
@@ -709,6 +750,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
     const { service, inventory } = buildReturnHarness(sale);
 
     await service.returnSale(user as never, "sale-tracked-quick", {
+      ...returnDto(),
       items: [{ saleItemId: "item-tracked-quick", qty: 1 }],
     } as never);
 

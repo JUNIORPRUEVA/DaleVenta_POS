@@ -474,6 +474,18 @@ String friendlySyncStatusMessage(String? raw) {
   if (text.isEmpty) return '';
   final lower = text.toLowerCase();
 
+  if (lower.contains('origin_session_closed')) {
+    return 'Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.';
+  }
+  if (lower.contains('origin_session_not_found')) {
+    return 'Esta operación pertenece a un turno que necesita revisión antes de sincronizarse.';
+  }
+  if (lower.contains('insufficient_warehouse_stock')) {
+    return 'No hay existencia suficiente para completar esta venta.';
+  }
+  if (lower.contains('legacy_missing_session')) {
+    return 'Actualiza Fullpos para completar esta operación.';
+  }
   if (_containsTechnicalSyncDetail(lower)) {
     if (lower.contains('status code of 401') ||
         lower.contains('status code 401') ||
@@ -500,7 +512,33 @@ bool _containsTechnicalSyncDetail(String lower) {
       lower.contains('requestoptions') ||
       lower.contains('validatestatus') ||
       lower.contains('stack trace') ||
+      lower.contains('exception') ||
+      lower.contains('http') ||
+      lower.contains(' 409 ') ||
+      lower.contains('status code of 409') ||
+      lower.contains('status code 409') ||
+      lower.contains('uuid') ||
+      lower.contains('payload') ||
+      lower.contains('operationid') ||
+      lower.contains('sessionid') ||
+      lower.contains('origincashsessionid') ||
+      lower.contains('operationcashsessionid') ||
+      lower.contains('replay') ||
+      lower.contains('queue') ||
+      lower.contains('backend') ||
       lower.contains('statuscode:');
+}
+
+String customerSyncActionLabel(String type) {
+  return switch (type.trim()) {
+    'sales.create' => 'Venta pendiente',
+    'cash.close' => 'Cierre de turno pendiente',
+    'cash.movement' => 'Movimiento de caja pendiente',
+    'refund' || 'sales.return' || 'sale.return' => 'Devolución pendiente',
+    'sale.cancel' || 'sales.cancel' => 'Cancelación pendiente',
+    'credit.payment' || 'sales.credit_payment' => 'Abono pendiente',
+    _ => 'Acción por revisar',
+  };
 }
 
 class _OfflineConflictRow extends ConsumerWidget {
@@ -641,12 +679,13 @@ class _SyncAttentionItem {
     }
     final error = (action.error ?? '').toString().trim();
     final friendlyError = friendlySyncStatusMessage(error);
+    final label = customerSyncActionLabel(type);
     return _SyncAttentionItem(
-      title: 'Acción por revisar',
+      title: label,
       message: friendlyError.isEmpty
           ? 'La acción quedó detenida para proteger los datos.'
           : friendlyError,
-      detail: type,
+      detail: '',
     );
   }
 
@@ -668,9 +707,13 @@ class _SyncAttentionItem {
     final details = data['details'] is Map
         ? (data['details'] as Map).cast<String, dynamic>()
         : const <String, dynamic>{};
-    final message =
-        data['message']?.toString() ??
-        'Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.';
+    final code = (data['code'] ?? data['errorCode'] ?? '').toString();
+    final message = friendlySyncStatusMessage(
+      code.isNotEmpty
+          ? code
+          : (data['message']?.toString() ??
+                'Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.'),
+    );
     final product = (details['productName'] ?? 'Producto').toString();
     final requested = details['requestedQuantity']?.toString();
     final available = details['availableQuantity']?.toString();

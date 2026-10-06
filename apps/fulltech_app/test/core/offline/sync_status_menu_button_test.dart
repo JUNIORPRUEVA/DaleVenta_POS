@@ -66,4 +66,31 @@ void main() {
     expect(message, isNot(contains('DioException')));
     expect(message, isNot(contains('401')));
   });
+
+  test('friendly sync message maps business conflict codes', () {
+    expect(
+      friendlySyncStatusMessage('ORIGIN_SESSION_CLOSED'),
+      'Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.',
+    );
+    expect(
+      friendlySyncStatusMessage('INSUFFICIENT_WAREHOUSE_STOCK'),
+      'No hay existencia suficiente para completar esta venta.',
+    );
+    expect(
+      friendlySyncStatusMessage('LEGACY_MISSING_SESSION'),
+      'Actualiza Fullpos para completar esta operación.',
+    );
+  });
+
+  test('customer action labels hide internal sync types', () {
+    expect(customerSyncActionLabel('sales.create'), 'Venta pendiente');
+    expect(customerSyncActionLabel('cash.close'), 'Cierre de turno pendiente');
+    expect(
+      customerSyncActionLabel('cash.movement'),
+      'Movimiento de caja pendiente',
+    );
+    expect(customerSyncActionLabel('refund'), 'Devolución pendiente');
+    expect(customerSyncActionLabel('sale.cancel'), 'Cancelación pendiente');
+    expect(customerSyncActionLabel('credit.payment'), 'Abono pendiente');
+  });
 }

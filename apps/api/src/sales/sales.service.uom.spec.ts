@@ -108,7 +108,9 @@ describe("SalesService UoM decimal foundation", () => {
       company: { findFirst: jest.fn().mockResolvedValue({ name: "Empresa" }) },
       appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
       cashSession: {
-        findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
       },
       $transaction: jest.fn((callback) =>
         callback({
@@ -150,6 +152,7 @@ describe("SalesService UoM decimal foundation", () => {
     const service = serviceWith(prisma, inventory);
 
     const sale = await service.create(user as never, {
+      originCashSessionId: "cash-1",
       items: [
         {
           productId: "product-yard",
@@ -268,6 +271,7 @@ describe("SalesService UoM decimal foundation", () => {
         findFirst: jest.fn().mockResolvedValue({
           id: "sale-1",
           companyId: user.companyId,
+          cashSessionId: "cash-1",
           isDeleted: false,
           kind: "invoice",
           customerId: null,
@@ -296,7 +300,9 @@ describe("SalesService UoM decimal foundation", () => {
         create: refundCreate,
       },
       cashSession: {
-        findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
       },
       $transaction: jest.fn((callback) =>
         callback({
@@ -311,6 +317,7 @@ describe("SalesService UoM decimal foundation", () => {
             findFirst: jest.fn().mockResolvedValue({
               id: "sale-1",
               companyId: user.companyId,
+              cashSessionId: "cash-1",
               isDeleted: false,
               kind: "invoice",
               cancelledAt: null,
@@ -365,6 +372,9 @@ describe("SalesService UoM decimal foundation", () => {
     const service = serviceWith(prisma, inventory);
 
     const refund = await service.returnSale(user as never, "sale-1", {
+      originalSaleCashSessionId: "cash-1",
+      operationCashSessionId: "cash-1",
+      operationOccurredAt: "2026-08-30T12:05:00.000Z",
       items: [{ saleItemId: "item-1", qty: 1.25 }],
     });
 

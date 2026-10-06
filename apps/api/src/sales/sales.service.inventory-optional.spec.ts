@@ -5,6 +5,15 @@ import { SalesService } from "./sales.service";
 const companyId = "11111111-1111-1111-1111-111111111111";
 const user = { id: "user-a", role: "ADMIN", companyId };
 
+function returnDto(overrides: Record<string, unknown> = {}) {
+  return {
+    originalSaleCashSessionId: "cash-1",
+    operationCashSessionId: "cash-1",
+    operationOccurredAt: "2026-09-04T11:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function taxCalculator() {
   return {
     calculate: jest.fn((input: any) => ({
@@ -129,7 +138,11 @@ function buildCreateHarness(options: {
     },
     appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
     product: { findMany: jest.fn().mockResolvedValue(options.products) },
-    cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }) },
+    cashSession: {
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
+    },
     $transaction: jest.fn((callback) =>
       callback({
         terminal: {
@@ -177,6 +190,7 @@ describe("SalesService optional inventory tracking", () => {
     });
 
     const sale = await service.create(user as never, {
+      originCashSessionId: "cash-1",
       paymentMethod: "cash",
       paymentCashAmount: 100,
       cashReceived: 120,
@@ -206,6 +220,7 @@ describe("SalesService optional inventory tracking", () => {
     });
 
     await service.create(user as never, {
+      originCashSessionId: "cash-1",
       items: [
         {
           productId: "non-tracked-product",
@@ -230,6 +245,7 @@ describe("SalesService optional inventory tracking", () => {
       products: [product({ id: "install-service", itemType: "SERVICE" })],
     });
     await serviceHarness.service.create(user as never, {
+      originCashSessionId: "cash-1",
       items: [{ productId: "install-service", qty: 1, priceSoldUnit: 100 }],
     });
     expect(serviceHarness.createdItems[0].inventoryTrackedSnapshot).toBe(false);
@@ -242,6 +258,7 @@ describe("SalesService optional inventory tracking", () => {
       products: [product({ id: "tracked-while-off", stock: "0" })],
     });
     await offHarness.service.create(user as never, {
+      originCashSessionId: "cash-1",
       items: [{ productId: "tracked-while-off", qty: 99, priceSoldUnit: 1 }],
     });
     expect(offHarness.createdItems[0].inventoryTrackedSnapshot).toBe(false);
@@ -262,6 +279,7 @@ describe("SalesService optional inventory tracking", () => {
 
     await service.create(user as never, {
       clientRequestId: "offline-mixed-1",
+      originCashSessionId: "cash-1",
       items: [
         {
           productId: "tracked-yard",
@@ -555,6 +573,7 @@ describe("SalesService optional inventory tracking", () => {
     const saleFind = {
       id: "sale-refund",
       companyId,
+      cashSessionId: "cash-1",
       isDeleted: false,
       kind: "invoice",
       cancelledAt: null,
@@ -584,7 +603,11 @@ describe("SalesService optional inventory tracking", () => {
     };
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(saleFind) },
-      cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }) },
+      cashSession: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
+      },
       $transaction: jest.fn((callback) =>
         callback({
           saleItem: {
@@ -624,6 +647,7 @@ describe("SalesService optional inventory tracking", () => {
     const service = serviceWith(prisma, inventory);
 
     await service.returnSale(user as never, "sale-refund", {
+      ...returnDto(),
       items: [
         { saleItemId: "item-tracked", qty: 2 },
         { saleItemId: "item-untracked", qty: 2 },

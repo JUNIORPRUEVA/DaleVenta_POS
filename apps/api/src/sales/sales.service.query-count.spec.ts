@@ -154,7 +154,11 @@ function buildCountingHarness(products: ReturnType<typeof product>[]) {
     },
     appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
     product: { findMany: jest.fn().mockResolvedValue(products) },
-    cashSession: { findFirst: jest.fn().mockResolvedValue({ id: "cash-1" }) },
+    cashSession: {
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ id: "cash-1", status: "OPEN", closedAt: null }),
+    },
     $transaction: jest.fn((callback: any) => callback(tx)),
   };
 
@@ -187,6 +191,7 @@ describe("SalesService.create — huella de escrituras por venta (N+1)", () => {
     ]);
 
     await service.create(user as never, {
+      originCashSessionId: "cash-1",
       paymentMethod: "cash",
       paymentCashAmount: 230,
       items: trackedItems,
@@ -208,6 +213,7 @@ describe("SalesService.create — huella de escrituras por venta (N+1)", () => {
     ]);
 
     await service.create(user as never, {
+      originCashSessionId: "cash-1",
       paymentMethod: "cash",
       paymentCashAmount: 230,
       items: trackedItems,
@@ -241,6 +247,7 @@ describe("SalesService.create — huella de escrituras por venta (N+1)", () => {
     ]);
 
     await service.create(user as never, {
+      originCashSessionId: "cash-1",
       paymentMethod: "cash",
       paymentCashAmount: 200,
       items: [
@@ -265,6 +272,7 @@ describe("SalesService.create — huella de escrituras por venta (N+1)", () => {
     const { service, inventory, txCounters } = buildCountingHarness([]);
 
     await service.create(user as never, {
+      originCashSessionId: "cash-1",
       paymentMethod: "cash",
       paymentCashAmount: 200,
       items: [

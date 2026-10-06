@@ -265,6 +265,23 @@ export class CashService {
 
   async addMovement(user: RequestUser, dto: CreateCashMovementDto) {
     const companyId = requireTenant(user);
+    const operationId = (dto.operationId ?? "").trim() || null;
+    if (operationId) {
+      const existing = await this.prisma.cashMovement.findFirst({
+        where: { companyId, operationId },
+      });
+      if (existing) return existing;
+    }
+    if (!dto.sessionId?.trim()) {
+      this.logger.warn(
+        `OFFLINE_MOVEMENT_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
+      );
+      throw new ConflictException({
+        code: "LEGACY_MISSING_SESSION",
+        errorCode: "LEGACY_MISSING_SESSION",
+        message: "Actualiza Fullpos para completar esta operación.",
+      });
+    }
     // Un movimiento encolado offline se aplica EXACTAMENTE al turno que lo
     // originó (dto.sessionId). Nunca a "el turno abierto actual". Si el turno
     // original ya no está abierto, se rechaza de forma controlada en lugar de
@@ -288,18 +305,34 @@ export class CashService {
     const affectsProfit =
       dto.affectsProfit ?? (dto.type === "OUT" && movementType === "expense");
 
-    const movement = await this.prisma.cashMovement.create({
-      data: {
-        sessionId: session.id,
-        companyId,
-        type: dto.type,
-        amount,
-        reason: dto.reason,
-        movementType,
-        affectsProfit,
-        userId: user.id,
-      },
-    });
+    let movement;
+    try {
+      movement = await this.prisma.cashMovement.create({
+        data: {
+          sessionId: session.id,
+          companyId,
+          operationId,
+          type: dto.type,
+          amount,
+          reason: dto.reason,
+          movementType,
+          affectsProfit,
+          userId: user.id,
+        },
+      });
+    } catch (error) {
+      if (
+        operationId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const existing = await this.prisma.cashMovement.findFirst({
+          where: { companyId, operationId },
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
     this.emitCashEvent(companyId, "cash.movement.created", session.id, {
       userId: user.id,
       movementId: movement.id,

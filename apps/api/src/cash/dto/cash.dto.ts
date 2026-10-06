@@ -62,6 +62,11 @@ export class CloseCashSessionDto {
 }
 
 export class CreateCashMovementDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(96)
+  operationId?: string;
+
   @IsIn(['IN', 'OUT'])
   type!: 'IN' | 'OUT';
 

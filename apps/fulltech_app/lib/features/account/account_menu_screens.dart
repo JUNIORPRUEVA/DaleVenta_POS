@@ -497,7 +497,9 @@ class _KeyboardShortcutInfoRow extends StatelessWidget {
 }
 
 class AccountCompanySettingsScreen extends ConsumerWidget {
-  const AccountCompanySettingsScreen({super.key});
+  const AccountCompanySettingsScreen({super.key, this.previewContentScale = 1});
+
+  final double previewContentScale;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -506,6 +508,7 @@ class AccountCompanySettingsScreen extends ConsumerWidget {
     return _SettingsDetailScaffold(
       title: 'Empresa',
       subtitle: 'Datos usados en facturas, cotizaciones, tickets y reportes.',
+      contentScale: previewContentScale,
       action: OutlinedButton.icon(
         onPressed: () => ref.invalidate(companySettingsProvider),
         icon: const Icon(Icons.sync_rounded),
@@ -738,18 +741,25 @@ class _SettingsDetailScaffold extends ConsumerWidget {
     required this.subtitle,
     required this.child,
     this.action,
+    this.contentScale = 1,
   });
 
   final String title;
   final String subtitle;
   final Widget child;
   final Widget? action;
+  final double contentScale;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDesktopLayout = MediaQuery.sizeOf(context).width >= 900;
+    final size = MediaQuery.sizeOf(context);
+    final isDesktopLayout = size.width >= 900;
     final showInlineTitle = !isDesktopLayout;
-    final compact = MediaQuery.sizeOf(context).width < 640;
+    final compact = size.width < 640;
+    final compactDesktop = isDesktopLayout && size.height <= 820;
+    final shouldScaleContent =
+        isDesktopLayout && contentScale > 0 && contentScale < 1;
+    final previewMode = shouldScaleContent;
     final user = ref.watch(authStateProvider).user;
     final backButton = IconButton(
       tooltip: 'Volver',
@@ -762,15 +772,22 @@ class _SettingsDetailScaffold extends ConsumerWidget {
       ),
       icon: const Icon(Icons.arrow_back_rounded),
     );
+    final detailChild = shouldScaleContent
+        ? Transform.scale(
+            scale: contentScale,
+            alignment: Alignment.topCenter,
+            child: child,
+          )
+        : child;
     final content = Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1120),
+        constraints: const BoxConstraints(maxWidth: 1220),
         child: ListView(
           padding: EdgeInsets.fromLTRB(
-            compact ? 14 : 22,
-            compact ? 8 : 24,
-            compact ? 14 : 22,
-            28,
+            compact ? 14 : 18,
+            previewMode ? 4 : (compact ? 8 : (compactDesktop ? 10 : 18)),
+            compact ? 14 : 18,
+            compactDesktop ? 14 : 24,
           ),
           children: [
             Row(
@@ -782,8 +799,8 @@ class _SettingsDetailScaffold extends ConsumerWidget {
                 if (action != null) ...[const SizedBox(width: 12), action!],
               ],
             ),
-            const SizedBox(height: 20),
-            child,
+            SizedBox(height: previewMode ? 4 : (compactDesktop ? 10 : 16)),
+            detailChild,
           ],
         ),
       ),
@@ -2081,17 +2098,19 @@ class _SectionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 640;
+    final size = MediaQuery.sizeOf(context);
+    final mobile = size.width < 640;
+    final compactDesktop = size.width >= 900 && size.height <= 820;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: _titleStyle(16)),
-        const SizedBox(height: 12),
+        SizedBox(height: compactDesktop ? 8 : 12),
         ...children,
       ],
     );
     if (mobile) return content;
-    return _SurfacePanel(child: content);
+    return _SurfacePanel(compact: compactDesktop, child: content);
   }
 }
 
@@ -2493,6 +2512,10 @@ class _CompanySettingsEditorState
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compactDesktop = size.width >= 900 && size.height <= 820;
+    final sectionGap = compactDesktop ? 8.0 : 12.0;
+    final smallGap = compactDesktop ? 5.0 : 8.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2521,17 +2544,18 @@ class _CompanySettingsEditorState
               ),
             ],
           ),
-        if (_showLegacyCompanyShortcut) const SizedBox(height: 12),
+        if (_showLegacyCompanyShortcut) SizedBox(height: sectionGap),
         _CompanyLogoUploader(
           logoBytes: _logoBytes,
           companyName: _name.text.trim(),
           onPick: _pickLogo,
           onRemove: _logoBytes == null ? null : _removeLogo,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: sectionGap),
         Text('Datos principales', style: _titleStyle(15)),
-        const SizedBox(height: 8),
+        SizedBox(height: smallGap),
         _FormWrap(
+          compact: compactDesktop,
           children: [
             _field(_name, 'Nombre comercial', Icons.storefront_outlined),
             _field(_rnc, 'RNC / identificación fiscal', Icons.badge_outlined),
@@ -2556,8 +2580,9 @@ class _CompanySettingsEditorState
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: sectionGap),
         _FiscalSettingsPanel(
+          compact: compactDesktop,
           taxEnabled: _taxEnabled,
           pricesIncludeTax: _pricesIncludeTax,
           ncfEnabled: _ncfEnabled,
@@ -2572,8 +2597,9 @@ class _CompanySettingsEditorState
               setState(() => _pricesIncludeTax = value),
           onNcfEnabledChanged: (value) => setState(() => _ncfEnabled = value),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: compactDesktop ? 6 : 10),
         _InventorySettingsPanel(
+          compact: compactDesktop,
           inventoryEnabled: _inventoryEnabled,
           measurementUnitsEnabled: _measurementUnitsEnabled,
           multiWarehouseEnabled: _multiWarehouseEnabled,
@@ -2583,7 +2609,7 @@ class _CompanySettingsEditorState
           onMultiWarehouseEnabledChanged: (value) =>
               setState(() => _multiWarehouseEnabled = value),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: compactDesktop ? 4 : 10),
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
@@ -2598,10 +2624,14 @@ class _CompanySettingsEditorState
           ),
         ),
         if (_showAdvancedCompany) ...[
-          const Divider(height: 16, color: Color(0xFFDDE7EE)),
+          Divider(
+            height: compactDesktop ? 10 : 16,
+            color: const Color(0xFFDDE7EE),
+          ),
           Text('Canales y ubicación', style: _titleStyle(15)),
-          const SizedBox(height: 8),
+          SizedBox(height: smallGap),
           _FormWrap(
+            compact: compactDesktop,
             children: [
               _field(_website, 'Sitio web', Icons.language_outlined),
               _field(_instagram, 'Instagram', Icons.alternate_email_rounded),
@@ -2613,10 +2643,11 @@ class _CompanySettingsEditorState
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: sectionGap),
           Text('Representante legal', style: _titleStyle(15)),
-          const SizedBox(height: 8),
+          SizedBox(height: smallGap),
           _FormWrap(
+            compact: compactDesktop,
             children: [
               _field(
                 _legalName,
@@ -2637,10 +2668,11 @@ class _CompanySettingsEditorState
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: sectionGap),
           Text('Cuenta bancaria principal', style: _titleStyle(15)),
-          const SizedBox(height: 8),
+          SizedBox(height: smallGap),
           _FormWrap(
+            compact: compactDesktop,
             children: [
               _field(
                 _bankAlias,
@@ -2661,7 +2693,7 @@ class _CompanySettingsEditorState
             ],
           ),
         ],
-        const SizedBox(height: 14),
+        SizedBox(height: compactDesktop ? 8 : 14),
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.icon(
@@ -2687,14 +2719,91 @@ class _CompanySettingsEditorState
     IconData icon, {
     int maxLines = 1,
   }) {
+    final size = MediaQuery.sizeOf(context);
+    final compactDesktop = size.width >= 900 && size.height <= 820;
     return TextField(
       controller: controller,
       maxLines: maxLines,
+      style: TextStyle(
+        fontSize: compactDesktop ? 13.5 : null,
+        height: compactDesktop ? 1.05 : null,
+      ),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, size: 18),
+        prefixIcon: Icon(icon, size: compactDesktop ? 17 : 18),
+        prefixIconConstraints: BoxConstraints(
+          minWidth: compactDesktop ? 38 : 44,
+          minHeight: compactDesktop ? 38 : 44,
+        ),
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: compactDesktop ? 10 : 12,
+          vertical: compactDesktop ? (maxLines > 1 ? 8 : 7) : 10,
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactSwitchRow extends StatelessWidget {
+  const _CompactSwitchRow({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+    this.leading,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return MergeSemantics(
+      child: Semantics(
+        toggled: value,
+        label: title,
+        value: value ? 'Activado' : 'Desactivado',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => onChanged(!value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                if (leading != null) ...[
+                  SizedBox(width: 54, child: leading!),
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: _strongBodyStyle()),
+                      if ((subtitle ?? '').trim().isNotEmpty)
+                        Text(
+                          subtitle!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: _bodyStyle().copyWith(height: 1.18),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Switch.adaptive(
+                  key: ValueKey('company_setting_switch_$title'),
+                  value: value,
+                  onChanged: onChanged,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2702,6 +2811,7 @@ class _CompanySettingsEditorState
 
 class _FiscalSettingsPanel extends StatelessWidget {
   const _FiscalSettingsPanel({
+    this.compact = false,
     required this.taxEnabled,
     required this.pricesIncludeTax,
     required this.ncfEnabled,
@@ -2711,6 +2821,7 @@ class _FiscalSettingsPanel extends StatelessWidget {
     required this.onNcfEnabledChanged,
   });
 
+  final bool compact;
   final bool taxEnabled;
   final bool pricesIncludeTax;
   final bool ncfEnabled;
@@ -2730,25 +2841,31 @@ class _FiscalSettingsPanel extends StatelessWidget {
         side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(compact ? 9 : 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Impuestos y comprobantes', style: _titleStyle(15)),
-            const SizedBox(height: 6),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Utilizar impuestos'),
-              subtitle: const Text(
-                'Las ventas anteriores no serán modificadas.',
-              ),
+            SizedBox(height: compact ? 3 : 6),
+            _CompactSwitchRow(
+              title: 'Utilizar impuestos',
+              subtitle: 'Las ventas anteriores no serán modificadas.',
               value: taxEnabled,
               onChanged: onTaxEnabledChanged,
             ),
             if (taxEnabled) ...[
-              const Divider(height: 16),
-              Text('Impuesto predeterminado: ITBIS $rateLabel'),
-              const SizedBox(height: 10),
+              Divider(height: compact ? 10 : 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'ITBIS predeterminado: $rateLabel',
+                      style: _bodyStyle(),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: compact ? 6 : 10),
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment(
@@ -2761,9 +2878,8 @@ class _FiscalSettingsPanel extends StatelessWidget {
                 onSelectionChanged: (values) =>
                     onPricesIncludeTaxChanged(values.first),
               ),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Utilizar comprobantes fiscales'),
+              _CompactSwitchRow(
+                title: 'Utilizar comprobantes fiscales',
                 value: ncfEnabled,
                 onChanged: onNcfEnabledChanged,
               ),
@@ -2777,6 +2893,7 @@ class _FiscalSettingsPanel extends StatelessWidget {
 
 class _InventorySettingsPanel extends StatelessWidget {
   const _InventorySettingsPanel({
+    this.compact = false,
     required this.inventoryEnabled,
     required this.measurementUnitsEnabled,
     required this.multiWarehouseEnabled,
@@ -2785,6 +2902,7 @@ class _InventorySettingsPanel extends StatelessWidget {
     required this.onMultiWarehouseEnabledChanged,
   });
 
+  final bool compact;
   final bool inventoryEnabled;
   final bool measurementUnitsEnabled;
   final bool multiWarehouseEnabled;
@@ -2802,47 +2920,42 @@ class _InventorySettingsPanel extends StatelessWidget {
         side: const BorderSide(color: Color(0xFFDDE7EE)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(compact ? 9 : 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Inventario', style: _titleStyle(15)),
-            const SizedBox(height: 6),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Control de inventario'),
-              subtitle: const Text(
-                'Controla automáticamente las existencias de los productos inventariables al vender, comprar y realizar operaciones de inventario.',
-              ),
-              secondary: Text(
-                inventoryEnabled ? 'Activado' : 'Desactivado',
+            SizedBox(height: compact ? 3 : 6),
+            _CompactSwitchRow(
+              title: 'Control de inventario',
+              subtitle:
+                  'Controla existencias al vender, comprar y ajustar productos.',
+              leading: Text(
+                inventoryEnabled ? 'Activo' : 'Inactivo',
                 style: TextStyle(
                   color: inventoryEnabled
                       ? AppColors.success
                       : AppColors.textMuted,
                   fontWeight: FontWeight.w800,
+                  fontSize: 12,
                 ),
               ),
               value: inventoryEnabled,
               onChanged: onInventoryEnabledChanged,
             ),
-            const Divider(height: 16),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Activar unidades de medida'),
-              subtitle: const Text(
-                'Permite vender y manejar productos por unidad, yarda, libra, metro, kilogramo y otras medidas, incluyendo cantidades decimales.',
-              ),
+            Divider(height: compact ? 9 : 16),
+            _CompactSwitchRow(
+              title: 'Activar unidades de medida',
+              subtitle:
+                  'Permite vender y manejar productos por unidad, libra, metro y otras medidas.',
               value: measurementUnitsEnabled,
               onChanged: onMeasurementUnitsEnabledChanged,
             ),
-            const Divider(height: 16),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Activar múltiples almacenes'),
-              subtitle: const Text(
-                'Activa la gestión de inventario por varios almacenes, transferencias, terminales y Kardex por almacén.',
-              ),
+            Divider(height: compact ? 9 : 16),
+            _CompactSwitchRow(
+              title: 'Activar múltiples almacenes',
+              subtitle:
+                  'Activa inventario por almacenes, transferencias y Kardex por ubicación.',
               value: multiWarehouseEnabled,
               onChanged: onMultiWarehouseEnabledChanged,
             ),
@@ -2868,13 +2981,17 @@ class _CompanyLogoUploader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compactDesktop = size.width >= 900 && size.height <= 820;
     final displayName = companyName.trim().isEmpty
         ? 'Empresa'
         : companyName.trim();
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 640 ? 10 : 14),
+      padding: EdgeInsets.all(
+        size.width < 640 ? 10 : (compactDesktop ? 9 : 14),
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FBFF),
         borderRadius: BorderRadius.circular(7),
@@ -2885,8 +3002,8 @@ class _CompanyLogoUploader extends StatelessWidget {
           final mobile = constraints.maxWidth < 420;
           final stackActions = constraints.maxWidth < 560;
           final image = Container(
-            width: mobile ? 62 : 68,
-            height: mobile ? 62 : 68,
+            width: compactDesktop ? 48 : (mobile ? 62 : 68),
+            height: compactDesktop ? 48 : (mobile ? 62 : 68),
             decoration: BoxDecoration(
               color: const Color(0xFFEAF1FF),
               borderRadius: BorderRadius.circular(10),
@@ -2894,10 +3011,10 @@ class _CompanyLogoUploader extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: logoBytes == null
-                ? const Icon(
+                ? Icon(
                     Icons.storefront_rounded,
                     color: AppColors.secondary,
-                    size: 30,
+                    size: compactDesktop ? 24 : 30,
                   )
                 : Image.memory(logoBytes!, fit: BoxFit.cover),
           );
@@ -2906,7 +3023,7 @@ class _CompanyLogoUploader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Logo de la empresa', style: _strongBodyStyle()),
-                const SizedBox(height: 4),
+                SizedBox(height: compactDesktop ? 2 : 4),
                 Text(
                   'Se mostrará en el topbar, documentos y áreas de identidad de $displayName.',
                   maxLines: 2,
@@ -3503,9 +3620,10 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
 }
 
 class _FormWrap extends StatelessWidget {
-  const _FormWrap({required this.children});
+  const _FormWrap({required this.children, this.compact = false});
 
   final List<Widget> children;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -3514,10 +3632,10 @@ class _FormWrap extends StatelessWidget {
         final compact = constraints.maxWidth < 760;
         final width = compact
             ? constraints.maxWidth
-            : (constraints.maxWidth - 12) / 2;
+            : (constraints.maxWidth - (this.compact ? 8 : 12)) / 2;
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: this.compact ? 8 : 12,
+          runSpacing: this.compact ? 7 : 12,
           children: [
             for (final child in children) SizedBox(width: width, child: child),
           ],
@@ -3598,14 +3716,15 @@ class _DetailRow extends StatelessWidget {
 }
 
 class _SurfacePanel extends StatelessWidget {
-  const _SurfacePanel({required this.child});
+  const _SurfacePanel({required this.child, this.compact = false});
 
   final Widget child;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(compact ? 10 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),

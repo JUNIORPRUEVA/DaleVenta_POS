@@ -243,6 +243,12 @@ Future<void> _settleSettingsFrame(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 120));
 }
 
+Finder _companySettingSwitch(String title) =>
+    find.byKey(ValueKey('company_setting_switch_$title'));
+
+bool _companySettingSwitchValue(WidgetTester tester, String title) =>
+    tester.widget<Switch>(_companySettingSwitch(title)).value;
+
 void main() {
   test('settings error mapper hides technical ApiException formatting', () {
     final message = CompanySettingsFeedback.failure(
@@ -368,12 +374,9 @@ void main() {
         ),
       );
 
-      final inventorySwitch = find.widgetWithText(
-        SwitchListTile,
-        'Control de inventario',
-      );
+      final inventorySwitch = _companySettingSwitch('Control de inventario');
       await tester.ensureVisible(inventorySwitch);
-      await tester.tap(inventorySwitch);
+      await tester.tap(find.text('Control de inventario'));
       await tester.pumpAndSettle();
 
       expect(find.text('Desactivar control de inventario'), findsOneWidget);
@@ -383,14 +386,20 @@ void main() {
       );
       await tester.tap(find.text('Cancelar').last);
       await tester.pumpAndSettle();
-      expect(tester.widget<SwitchListTile>(inventorySwitch).value, isTrue);
+      expect(
+        _companySettingSwitchValue(tester, 'Control de inventario'),
+        isTrue,
+      );
       expect(repository.lastSavedSettings, isNull);
 
       await tester.tap(inventorySwitch);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Desactivar').last);
       await tester.pumpAndSettle();
-      expect(tester.widget<SwitchListTile>(inventorySwitch).value, isFalse);
+      expect(
+        _companySettingSwitchValue(tester, 'Control de inventario'),
+        isFalse,
+      );
 
       final save = find.text('Guardar empresa');
       await tester.ensureVisible(save);
@@ -508,10 +517,7 @@ void main() {
         ),
       );
 
-      final unitsSwitch = find.widgetWithText(
-        SwitchListTile,
-        'Activar unidades de medida',
-      );
+      final unitsSwitch = _companySettingSwitch('Activar unidades de medida');
       await tester.ensureVisible(unitsSwitch);
       await tester.tap(unitsSwitch);
       await tester.pump();
@@ -524,8 +530,10 @@ void main() {
       );
       expect(find.textContaining('ApiException'), findsNothing);
       expect(find.textContaining('code: 400'), findsNothing);
-      final tile = tester.widget<SwitchListTile>(unitsSwitch);
-      expect(tile.value, isTrue);
+      expect(
+        _companySettingSwitchValue(tester, 'Activar unidades de medida'),
+        isTrue,
+      );
     },
   );
 
@@ -546,10 +554,7 @@ void main() {
       ),
     );
 
-    final taxesSwitch = find.widgetWithText(
-      SwitchListTile,
-      'Utilizar impuestos',
-    );
+    final taxesSwitch = _companySettingSwitch('Utilizar impuestos');
     await tester.ensureVisible(taxesSwitch);
     await tester.tap(taxesSwitch);
     await tester.pump();

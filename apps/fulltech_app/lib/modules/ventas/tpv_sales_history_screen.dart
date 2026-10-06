@@ -326,7 +326,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     if (ok != true) return;
 
     try {
-      await ref.read(ventasRepositoryProvider).returnSale(sale.id);
+      await ref
+          .read(ventasRepositoryProvider)
+          .returnSale(
+            sale.id,
+            originalSaleCashSessionId: sale.cashSessionId,
+          );
       if (!mounted) return;
       await _load();
       if (!mounted) return;
