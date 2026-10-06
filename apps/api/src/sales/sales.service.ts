@@ -43,6 +43,14 @@ import {
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { deriveCashTenderChange } from "./cash-change.util";
 import { MONEY_EPSILON } from "../common/utils/sale-credit-payment.util";
+import {
+  classifyFinancialContract,
+  financialLegacyCompatEnabled,
+  legacyCompatRejected,
+  legacyFinancialLogPayload,
+  partialFinancialContractRejected,
+  type FinancialClientMetadata,
+} from "../common/financial-legacy-compat";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 import {
   TerminalResolutionService,
@@ -1253,7 +1261,11 @@ export class SalesService {
     });
   }
 
-  async create(user: TenantUser, dto: CreateSaleDto) {
+  async create(
+    user: TenantUser,
+    dto: CreateSaleDto,
+    requestMetadata?: FinancialClientMetadata,
+  ) {
     const companyId = requireTenant(user);
     if (!dto.items.length) {
       throw new BadRequestException("La venta requiere al menos 1 item");
@@ -1634,6 +1646,11 @@ export class SalesService {
       user,
       companyId,
       dto.originCashSessionId,
+      requestMetadata,
+      {
+        originTerminalId: dto.originTerminalId,
+        clientRequestId,
+      },
     );
     perf?.mark("cash_gate");
 
@@ -2124,19 +2141,47 @@ export class SalesService {
     user: TenantUser,
     companyId: string,
     originCashSessionId?: string,
+    requestMetadata?: FinancialClientMetadata,
+    context: {
+      originTerminalId?: string | null;
+      clientRequestId?: string | null;
+    } = {},
   ) {
-    const requested = originCashSessionId?.trim();
-    if (!requested) {
-      this.logger.warn(
-        `OFFLINE_SALE_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
+    const path = classifyFinancialContract(
+      {
+        originCashSessionId,
+        originTerminalId: context.originTerminalId,
+      },
+      ["originCashSessionId"],
+      ["originTerminalId"],
+    );
+    if (path === "INVALID_PARTIAL_REQUEST") {
+      throw partialFinancialContractRejected("sales.create");
+    }
+    if (path === "LEGACY_COMPAT_PATH") {
+      if (!financialLegacyCompatEnabled()) {
+        this.logger.warn(
+          `OFFLINE_SALE_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
+        );
+        throw legacyCompatRejected();
+      }
+      const legacySession = await this.resolveLegacyCurrentOpenSession(
+        user,
+        companyId,
+        "sales.create",
       );
-      throw new ConflictException({
-        code: "LEGACY_MISSING_SESSION",
-        errorCode: "LEGACY_MISSING_SESSION",
-        message: "Actualiza Fullpos para completar esta operación.",
+      this.logLegacyFinancialRequest({
+        operation: "sales.create",
+        companyId,
+        userId: user.id,
+        clientRequestId: context.clientRequestId,
+        resolvedCashSessionId: legacySession.id,
+        ...requestMetadata,
       });
+      return legacySession;
     }
 
+    const requested = originCashSessionId?.trim() ?? "";
     const session = await this.prisma.cashSession.findFirst({
       where: { id: requested, companyId, openedByUserId: user.id },
     });
@@ -2348,6 +2393,7 @@ export class SalesService {
     requestUser: TenantUser,
     saleId: string,
     dto: CreateSaleReturnDto = {},
+    requestMetadata?: FinancialClientMetadata,
   ) {
     const companyId = requireTenant(requestUser);
     const canReturn =
@@ -2370,12 +2416,56 @@ export class SalesService {
         if (existing) return existing;
       }
 
-      const operationSession = await this.resolveOperationCashSession(
-        requestUser,
-        companyId,
-        dto.operationCashSessionId,
-        "REFUND",
+      const refundPath = classifyFinancialContract(
+        {
+          originalSaleCashSessionId: dto.originalSaleCashSessionId,
+          operationCashSessionId: dto.operationCashSessionId,
+          operationOccurredAt: dto.operationOccurredAt,
+        },
+        [
+          "originalSaleCashSessionId",
+          "operationCashSessionId",
+          "operationOccurredAt",
+        ],
       );
+      if (refundPath === "INVALID_PARTIAL_REQUEST") {
+        throw partialFinancialContractRejected("refund");
+      }
+      if (
+        refundPath === "LEGACY_COMPAT_PATH" &&
+        !financialLegacyCompatEnabled()
+      ) {
+        this.logger.warn(
+          `OFFLINE_REFUND_LEGACY_MISSING_SESSION company=${companyId} userId=${requestUser.id} saleId=${saleId}`,
+        );
+        throw legacyCompatRejected();
+      }
+      const operationSession =
+        refundPath === "SAFE_NEW_PATH"
+          ? await this.resolveOperationCashSession(
+              requestUser,
+              companyId,
+              dto.operationCashSessionId,
+              "REFUND",
+            )
+          : await this.resolveLegacyCurrentOpenSession(
+              requestUser,
+              companyId,
+              "refund",
+            );
+      if (refundPath === "LEGACY_COMPAT_PATH") {
+        this.logLegacyFinancialRequest({
+          operation: "refund",
+          companyId,
+          userId: requestUser.id,
+          clientRequestId,
+          resolvedCashSessionId: operationSession.id,
+          ...requestMetadata,
+        });
+        this.logger.warn(
+          `LEGACY_REFUND_CONTEXT_RESOLUTION company=${companyId} userId=${requestUser.id} saleId=${saleId} operationSessionId=${operationSession.id}`,
+        );
+      }
       const operationOccurredAt = this.resolveSaleOccurredAt(
         dto.operationOccurredAt,
       );
@@ -2392,19 +2482,11 @@ export class SalesService {
         if (!sale || sale.isDeleted || sale.kind !== "invoice") {
           throw new NotFoundException("Venta no encontrada");
         }
-        const originalSaleCashSessionId =
-          dto.originalSaleCashSessionId?.trim();
-        if (!originalSaleCashSessionId) {
-          this.logger.warn(
-            `OFFLINE_REFUND_LEGACY_MISSING_ORIGINAL_SESSION company=${companyId} userId=${requestUser.id} saleId=${saleId}`,
-          );
-          throw new ConflictException({
-            code: "LEGACY_MISSING_SESSION",
-            errorCode: "LEGACY_MISSING_SESSION",
-            message: "Actualiza Fullpos para completar esta operación.",
-          });
-        }
-        if (sale.cashSessionId !== originalSaleCashSessionId) {
+        const originalSaleCashSessionId = dto.originalSaleCashSessionId?.trim();
+        if (
+          refundPath === "SAFE_NEW_PATH" &&
+          sale.cashSessionId !== originalSaleCashSessionId
+        ) {
           this.logger.warn(
             `OFFLINE_REFUND_ORIGINAL_SESSION_MISMATCH company=${companyId} userId=${requestUser.id} saleId=${saleId} expected=${sale.cashSessionId} received=${originalSaleCashSessionId}`,
           );
@@ -2812,25 +2894,38 @@ export class SalesService {
     user: TenantUser,
     saleId: string,
     dto: AddCreditPaymentDto,
+    requestMetadata?: FinancialClientMetadata,
   ) {
     const companyId = requireTenant(user);
-    const operationId = (dto.operationId ?? "").trim();
-    if (!operationId) {
+    const paymentPath = classifyFinancialContract(
+      {
+        operationId: dto.operationId,
+        operationCashSessionId: dto.operationCashSessionId,
+        paidAt: dto.paidAt,
+      },
+      ["operationId", "operationCashSessionId", "paidAt"],
+    );
+    if (paymentPath === "INVALID_PARTIAL_REQUEST") {
+      throw partialFinancialContractRejected("credit.payment");
+    }
+    if (
+      paymentPath === "LEGACY_COMPAT_PATH" &&
+      !financialLegacyCompatEnabled()
+    ) {
       this.logger.warn(
         `OFFLINE_CREDIT_PAYMENT_LEGACY_MISSING_OPERATION company=${companyId} userId=${user.id} saleId=${saleId}`,
       );
-      throw new ConflictException({
-        code: "LEGACY_MISSING_SESSION",
-        errorCode: "LEGACY_MISSING_SESSION",
-        message: "Actualiza Fullpos para completar esta operación.",
-      });
+      throw legacyCompatRejected();
     }
-    const existingPayment = await this.prisma.saleCreditPayment.findFirst({
-      where: { companyId, operationId },
-      include: { sale: { include: this.saleInclude() } },
-    });
-    if (existingPayment) {
-      return { payment: existingPayment, sale: existingPayment.sale };
+    const operationId = (dto.operationId ?? "").trim();
+    if (paymentPath === "SAFE_NEW_PATH") {
+      const existingPayment = await this.prisma.saleCreditPayment.findFirst({
+        where: { companyId, operationId },
+        include: { sale: { include: this.saleInclude() } },
+      });
+      if (existingPayment) {
+        return { payment: existingPayment, sale: existingPayment.sale };
+      }
     }
 
     const sale = await this.prisma.sale.findFirst({
@@ -2841,12 +2936,31 @@ export class SalesService {
       throw new NotFoundException("Crédito no encontrado");
     }
 
-    const operationSession = await this.resolveOperationCashSession(
-      user,
-      companyId,
-      dto.operationCashSessionId,
-      "CREDIT_PAYMENT",
-    );
+    const operationSession =
+      paymentPath === "SAFE_NEW_PATH"
+        ? await this.resolveOperationCashSession(
+            user,
+            companyId,
+            dto.operationCashSessionId,
+            "CREDIT_PAYMENT",
+          )
+        : await this.resolveLegacyCurrentOpenSession(
+            user,
+            companyId,
+            "credit.payment",
+          );
+    if (paymentPath === "LEGACY_COMPAT_PATH") {
+      this.logLegacyFinancialRequest({
+        operation: "credit.payment",
+        companyId,
+        userId: user.id,
+        resolvedCashSessionId: operationSession.id,
+        ...requestMetadata,
+      });
+      this.logger.warn(
+        `LEGACY_CREDIT_PAYMENT company=${companyId} userId=${user.id} saleId=${saleId} operationSessionId=${operationSession.id}`,
+      );
+    }
     const paidAt = this.resolveSaleOccurredAt(dto.paidAt);
 
     const cashAmount = new Prisma.Decimal(dto.cashAmount ?? 0);
@@ -2870,7 +2984,7 @@ export class SalesService {
             companyId,
             userId: user.id,
             cashSessionId: operationSession.id,
-            operationId,
+            operationId: operationId || null,
             amount,
             cashAmount,
             transferAmount,
@@ -2898,6 +3012,7 @@ export class SalesService {
       });
     } catch (error) {
       if (
+        operationId &&
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
@@ -2963,6 +3078,42 @@ export class SalesService {
       });
     }
     return session;
+  }
+
+  private async resolveLegacyCurrentOpenSession(
+    user: TenantUser,
+    companyId: string,
+    operation: string,
+  ) {
+    const session = await this.prisma.cashSession.findFirst({
+      where: {
+        openedByUserId: user.id,
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+      },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!session) {
+      throw new BadRequestException(
+        operation === "refund"
+          ? "Debes abrir caja antes de registrar una devolución."
+          : operation === "credit.payment"
+            ? "Debes abrir caja antes de registrar un abono."
+            : "Debes abrir caja antes de facturar.",
+      );
+    }
+    return session;
+  }
+
+  private logLegacyFinancialRequest(context: {
+    operation: string;
+    companyId: string;
+    userId: string;
+    clientRequestId?: string | null;
+    resolvedCashSessionId?: string | null;
+  } & FinancialClientMetadata) {
+    this.logger.warn(JSON.stringify(legacyFinancialLogPayload(context)));
   }
 
   async purgeAllForDebug(user: TenantUser) {

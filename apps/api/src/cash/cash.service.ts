@@ -13,6 +13,15 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
 import {
+  cashCloseLegacyCompatEnabled,
+  classifyFinancialContract,
+  financialLegacyCompatEnabled,
+  legacyCompatRejected,
+  legacyFinancialLogPayload,
+  partialFinancialContractRejected,
+  type FinancialClientMetadata,
+} from "../common/financial-legacy-compat";
+import {
   CloseCashSessionDto,
   CreateCashMovementDto,
   OpenCashSessionDto,
@@ -263,8 +272,23 @@ export class CashService {
     return CashService.UUID_PATTERN.test(text) ? text : null;
   }
 
-  async addMovement(user: RequestUser, dto: CreateCashMovementDto) {
+  async addMovement(
+    user: RequestUser,
+    dto: CreateCashMovementDto,
+    requestMetadata?: FinancialClientMetadata,
+  ) {
     const companyId = requireTenant(user);
+    const movementPath = classifyFinancialContract(
+      {
+        sessionId: dto.sessionId,
+        operationId: dto.operationId,
+      },
+      ["sessionId"],
+      ["operationId"],
+    );
+    if (movementPath === "INVALID_PARTIAL_REQUEST") {
+      throw partialFinancialContractRejected("cash.movement");
+    }
     const operationId = (dto.operationId ?? "").trim() || null;
     if (operationId) {
       const existing = await this.prisma.cashMovement.findFirst({
@@ -272,15 +296,11 @@ export class CashService {
       });
       if (existing) return existing;
     }
-    if (!dto.sessionId?.trim()) {
+    if (movementPath === "LEGACY_COMPAT_PATH" && !financialLegacyCompatEnabled()) {
       this.logger.warn(
         `OFFLINE_MOVEMENT_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
       );
-      throw new ConflictException({
-        code: "LEGACY_MISSING_SESSION",
-        errorCode: "LEGACY_MISSING_SESSION",
-        message: "Actualiza Fullpos para completar esta operación.",
-      });
+      throw legacyCompatRejected();
     }
     // Un movimiento encolado offline se aplica EXACTAMENTE al turno que lo
     // originó (dto.sessionId). Nunca a "el turno abierto actual". Si el turno
@@ -289,8 +309,24 @@ export class CashService {
     const session = await this.requireOpenSession(
       user.id,
       companyId,
-      dto.sessionId,
+      movementPath === "SAFE_NEW_PATH" ? dto.sessionId : undefined,
     );
+    if (movementPath === "LEGACY_COMPAT_PATH") {
+      this.logger.warn(
+        JSON.stringify(
+          legacyFinancialLogPayload({
+            operation: "cash.movement",
+            companyId,
+            userId: user.id,
+            resolvedCashSessionId: session.id,
+            ...requestMetadata,
+          }),
+        ),
+      );
+      this.logger.warn(
+        `LEGACY_CASH_MOVEMENT company=${companyId} userId=${user.id} session=${session.id}`,
+      );
+    }
     const amount = new Prisma.Decimal(dto.amount);
     if (dto.type === "OUT") {
       const summary = await this.buildSummaryForSession(session.id, companyId);
@@ -350,7 +386,7 @@ export class CashService {
    *   otra sesión. Un replay offline de un cierre viejo no puede cerrar un
    *   turno posterior.
    * - Sin `dto.sessionId` (cliente legacy): se aplica la política controlada
-   *   `CASH_CLOSE_LEGACY_MODE` (por defecto RECHAZO 409), porque sin identidad
+   *   `CASH_CLOSE_LEGACY_COMPAT` (por defecto RECHAZO 409), porque sin identidad
    *   no hay forma segura de distinguir un cierre contemporáneo de un replay.
    */
   async closeSession(user: RequestUser, dto: CloseCashSessionDto) {
@@ -421,33 +457,21 @@ export class CashService {
    *
    * Sin identidad no existe una forma inequívocamente segura de distinguir un
    * cierre contemporáneo (UI online) de un replay offline viejo, así que por
-   * defecto se RECHAZA de forma controlada. `CASH_CLOSE_LEGACY_MODE=current_open`
-   * restaura el comportamiento antiguo (cerrar el turno abierto actual) y sólo
-   * debe usarse en una ventana de transición coordinada, aceptando que el
-   * riesgo de replay permanece mientras esté activo.
+   * defecto se RECHAZA de forma controlada. `CASH_CLOSE_LEGACY_COMPAT=true`
+   * sólo deja evidencia explícita de que existe un cliente demasiado antiguo;
+   * no cierra "el turno abierto actual" porque eso reabre el riesgo Asadero.
    */
   private async resolveCloseTargetLegacy(
     user: RequestUser,
     companyId: string,
-  ) {
-    const mode = (process.env.CASH_CLOSE_LEGACY_MODE ?? "reject")
-      .trim()
-      .toLowerCase();
-    if (mode !== "current_open") {
-      this.logger.warn(
-        `CLOSE_LEGACY_REJECTED company=${companyId} userId=${user.id} mode=${mode}`,
-      );
-      throw new ConflictException({
-        code: "CASH_CLOSE_SESSION_ID_REQUIRED",
-        message: "Necesitas actualizar Fullpos para cerrar el turno.",
-      });
-    }
-
-    const session = await this.requireOpenSession(user.id, companyId);
+  ): Promise<never> {
     this.logger.warn(
-      `cash.close.legacy_current_open company=${companyId} session=${session.id}`,
+      `CLOSE_LEGACY_REJECTED company=${companyId} userId=${user.id} compat=${cashCloseLegacyCompatEnabled()}`,
     );
-    return session;
+    throw new ConflictException({
+      code: "CASH_CLOSE_SESSION_ID_REQUIRED",
+      message: "Necesitas actualizar Fullpos para cerrar el turno.",
+    });
   }
 
   private async performCloseSession(

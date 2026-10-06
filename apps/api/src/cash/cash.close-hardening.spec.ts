@@ -182,6 +182,8 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
   delete process.env.CASH_CLOSE_LEGACY_MODE;
+  delete process.env.CASH_CLOSE_LEGACY_COMPAT;
+  delete process.env.FINANCIAL_LEGACY_COMPAT;
 });
 
 describe("CashService.closeSession — identidad obligatoria del turno", () => {
@@ -433,17 +435,19 @@ describe("CashService.closeSession — compatibilidad legacy controlada", () => 
     expect(db.cashboxUpdates).toHaveLength(0);
   });
 
-  it("TEST 11b · modo compatibilidad explícito cierra el turno abierto actual (documentado inseguro)", async () => {
-    process.env.CASH_CLOSE_LEGACY_MODE = "current_open";
+  it("TEST 11b · CASH_CLOSE_LEGACY_COMPAT=true no reabre current_open", async () => {
+    process.env.CASH_CLOSE_LEGACY_COMPAT = "true";
     const db = makeDb([
       makeSession({ id: SESSION_B, initialAmount: 3731.8 }),
     ]);
     const { service } = buildService(db);
 
-    const result = await service.closeSession(USER, { closingAmount: 3731.8 });
+    await expect(
+      service.closeSession(USER, { closingAmount: 3731.8 }),
+    ).rejects.toBeInstanceOf(ConflictException);
 
-    expect(result.session.id).toBe(SESSION_B);
-    expect(db.sessions[0].status).toBe("CLOSED");
+    expect(db.sessions[0].status).toBe("OPEN");
+    expect(db.tx.cashSession.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -500,7 +504,23 @@ describe("CashService.addMovement — el movimiento pertenece a su turno", () =>
     expect(db.movements).toHaveLength(1);
   });
 
-  it("TEST 14 · movimiento legacy sin sessionId se rechaza sin tocar el turno abierto", async () => {
+  it("TEST 14 · movimiento legacy compat OFF sin sessionId se rechaza sin tocar el turno abierto", async () => {
+    const db = makeDb([makeSession({ id: SESSION_B, initialAmount: 100 })]);
+    const { service } = buildService(db);
+
+    await expect(
+      service.addMovement(USER, {
+        type: "IN",
+        amount: 10,
+        reason: "Legacy",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(db.prisma.cashMovement.create).not.toHaveBeenCalled();
+    expect(db.sessions.find((s) => s.id === SESSION_B)!.status).toBe("OPEN");
+  });
+
+  it("TEST 14b · movimiento parcial no cae a legacy", async () => {
     const db = makeDb([makeSession({ id: SESSION_B, initialAmount: 100 })]);
     const { service } = buildService(db);
 
@@ -511,9 +531,56 @@ describe("CashService.addMovement — el movimiento pertenece a su turno", () =>
         amount: 10,
         reason: "Legacy",
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "INVALID_PARTIAL_FINANCIAL_REQUEST",
+      }),
+    });
 
     expect(db.prisma.cashMovement.create).not.toHaveBeenCalled();
     expect(db.sessions.find((s) => s.id === SESSION_B)!.status).toBe("OPEN");
+  });
+
+  it("TEST 15 · movimiento legacy compat ON usa turno abierto actual sin fingir operationId", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const db = makeDb([makeSession({ id: SESSION_B, initialAmount: 100 })]);
+    const { service } = buildService(db);
+
+    const movement = await service.addMovement(
+      USER,
+      {
+        type: "IN",
+        amount: 10,
+        reason: "Legacy",
+      },
+      {
+        platform: "windows",
+        appVersion: "1.0.5+124",
+        deviceId: "device-a",
+      },
+    );
+
+    expect(movement.sessionId).toBe(SESSION_B);
+    expect(movement.operationId).toBeNull();
+    expect(db.prisma.cashMovement.create).toHaveBeenCalledTimes(1);
+    const logged = warnSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("LEGACY_FINANCIAL_REQUEST");
+    expect(logged).toContain("LEGACY_CASH_MOVEMENT");
+  });
+
+  it("TEST 16 · movimiento new path no genera log legacy", async () => {
+    const db = makeDb([makeSession({ id: SESSION_A, initialAmount: 100 })]);
+    const { service } = buildService(db);
+
+    await service.addMovement(USER, {
+      operationId: "cash.movement:new-path",
+      type: "IN",
+      amount: 10,
+      reason: "New",
+      sessionId: SESSION_A,
+    });
+
+    const logged = warnSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).not.toContain("LEGACY_FINANCIAL_REQUEST");
   });
 });

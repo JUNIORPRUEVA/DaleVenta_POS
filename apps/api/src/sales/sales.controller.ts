@@ -15,6 +15,7 @@ import { Request } from "express";
 import { Permissions, Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
+import { financialMetadataFromRequest } from "../common/financial-legacy-compat";
 import { SalesService } from "./sales.service";
 import {
   AddCreditPaymentDto,
@@ -71,7 +72,7 @@ export class SalesController {
   create(@Req() req: Request, @Body() dto: CreateSaleDto) {
     const user = req.user as TenantUser;
     dto.deviceFingerprint ??= this.headerValue(req, "x-client-device-id");
-    return this.sales.create(user, dto);
+    return this.sales.create(user, dto, financialMetadataFromRequest(req));
   }
 
   @Post("calculate")
@@ -116,7 +117,12 @@ export class SalesController {
     @Body() dto: AddCreditPaymentDto,
   ) {
     const user = req.user as TenantUser;
-    return this.sales.addCreditPayment(user, id, dto);
+    return this.sales.addCreditPayment(
+      user,
+      id,
+      dto,
+      financialMetadataFromRequest(req),
+    );
   }
 
   @Post(":id/return")
@@ -127,7 +133,7 @@ export class SalesController {
     @Body() dto: CreateSaleReturnDto,
   ) {
     const user = req.user as TenantUser;
-    return this.sales.returnSale(user, id, dto);
+    return this.sales.returnSale(user, id, dto, financialMetadataFromRequest(req));
   }
 
   private headerValue(req: Request, name: string) {

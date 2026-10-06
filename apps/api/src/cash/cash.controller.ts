@@ -13,6 +13,7 @@ import { Role } from '@prisma/client';
 import { Request } from 'express';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { financialMetadataFromRequest } from '../common/financial-legacy-compat';
 import { CashService } from './cash.service';
 import {
   CloseCashSessionDto,
@@ -69,7 +70,11 @@ export class CashController {
 
   @Post('movements')
   addMovement(@Req() req: Request, @Body() dto: CreateCashMovementDto) {
-    return this.cash.addMovement(req.user as { id: string; role: Role }, dto);
+    return this.cash.addMovement(
+      req.user as { id: string; role: Role },
+      dto,
+      financialMetadataFromRequest(req),
+    );
   }
 
   @Get('sessions/closed')

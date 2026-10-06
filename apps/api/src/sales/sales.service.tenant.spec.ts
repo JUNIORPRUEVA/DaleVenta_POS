@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { SalesService } from "./sales.service";
 
@@ -31,6 +35,17 @@ describe("SalesService tenant isolation", () => {
       } as never,
     );
   }
+
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env.FINANCIAL_LEGACY_COMPAT;
+  });
 
   it("rejects clientId from another company when creating a sale", async () => {
     const prisma = {
@@ -237,6 +252,66 @@ describe("SalesService tenant isolation", () => {
     expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
   });
 
+  it("bridges legacy sales.create with compat ON and logs legacy telemetry", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const sessionB = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const prisma = {
+      cashSession: { findFirst: jest.fn().mockResolvedValue(sessionB) },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      (service as any).resolveOriginCashSessionForSale(
+        user,
+        user.companyId,
+        undefined,
+        { platform: "windows", appVersion: "1.0.5+124", deviceId: "dev-a" },
+        { clientRequestId: "sale_req_legacy" },
+      ),
+    ).resolves.toBe(sessionB);
+
+    expect(prisma.cashSession.findFirst).toHaveBeenCalledWith({
+      where: {
+        openedByUserId: user.id,
+        companyId: user.companyId,
+        status: "OPEN",
+        closedAt: null,
+      },
+      orderBy: { openedAt: "desc" },
+    });
+    const logged = warnSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("LEGACY_FINANCIAL_REQUEST");
+    expect(logged).toContain("sales.create");
+    expect(logged).toContain("sale_req_legacy");
+  });
+
+  it("rejects partial sales.create contract instead of falling back to legacy", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const prisma = { cashSession: { findFirst: jest.fn() } };
+    const service = serviceWith(prisma);
+
+    await expect(
+      (service as any).resolveOriginCashSessionForSale(
+        user,
+        user.companyId,
+        undefined,
+        undefined,
+        { originTerminalId: "22222222-2222-4222-8222-222222222222" },
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "INVALID_PARTIAL_FINANCIAL_REQUEST",
+      }),
+    });
+    expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
+  });
+
   it("processes sales.create only against the original open session", async () => {
     const sessionA = {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -354,6 +429,128 @@ describe("SalesService tenant isolation", () => {
     });
   });
 
+  it("rejects partial refund contract", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const prisma = {
+      sale: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.returnSale(user as never, "sale-refund", {
+        operationCashSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "INVALID_PARTIAL_FINANCIAL_REQUEST",
+      }),
+    });
+    expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects legacy refund with compat OFF before resolving the current session", async () => {
+    const prisma = {
+      sale: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.returnSale(user as never, "sale-refund", {}),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "LEGACY_MISSING_SESSION",
+      }),
+    });
+    expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("bridges legacy refund with compat ON using current open operation session", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const sessionB = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const returned = {
+      id: "refund-legacy",
+      items: [],
+      cashSessionId: sessionB.id,
+      saleDate: new Date("2026-10-05T17:00:00.000Z"),
+    };
+    const originalSale = {
+      id: "sale-refund",
+      isDeleted: false,
+      kind: "invoice",
+      cancelledAt: null,
+      inventoryRestoredAt: null,
+      items: [],
+      creditPayments: [],
+      cashSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      customerId: null,
+      paymentCashAmount: new Prisma.Decimal(100),
+      paymentTransferAmount: new Prisma.Decimal(0),
+      paymentMethod: "cash",
+      totalSold: new Prisma.Decimal(100),
+      creditAmount: new Prisma.Decimal(0),
+      creditPaidAmount: new Prisma.Decimal(0),
+      creditBalance: new Prisma.Decimal(0),
+      fiscalTaxEnabled: false,
+      fiscalPriceMode: "NO_TAX",
+      fiscalVoucherType: null,
+      issuerNameSnapshot: null,
+      issuerTaxIdSnapshot: null,
+      issuerAddressSnapshot: null,
+      issuerPhoneSnapshot: null,
+      issuerEmailSnapshot: null,
+      fiscalCustomerTaxId: null,
+      fiscalCustomerName: null,
+      customerAddressSnapshot: null,
+      customerPhoneSnapshot: null,
+    };
+    const tx = {
+      sale: {
+        findFirst: jest.fn().mockResolvedValue(originalSale),
+        create: jest.fn().mockResolvedValue(returned),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(returned),
+      },
+    };
+    const prisma = {
+      sale: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn().mockResolvedValue(sessionB) },
+      $transaction: jest.fn(async (callback: (t: unknown) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.returnSale(
+      user as never,
+      "sale-refund",
+      {},
+      { platform: "windows", appVersion: "1.0.5+124", deviceId: "dev-a" },
+    );
+
+    expect(result).toBe(returned);
+    expect(tx.sale.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cashSessionId: sessionB.id,
+        kind: "refund",
+      }),
+      include: expect.any(Object),
+    });
+    const logged = warnSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("LEGACY_FINANCIAL_REQUEST");
+    expect(logged).toContain("LEGACY_REFUND_CONTEXT_RESOLUTION");
+  });
+
   it("returns existing credit payment by operationId without duplicating money", async () => {
     const existingPayment = {
       id: "payment-1",
@@ -379,6 +576,109 @@ describe("SalesService tenant isolation", () => {
 
     expect(result.payment).toBe(existingPayment);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects partial credit payment contract", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const prisma = {
+      saleCreditPayment: { findFirst: jest.fn() },
+      sale: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.addCreditPayment(user as never, "sale-credit", {
+        operationId: "credit.payment:partial",
+        cashAmount: 100,
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "INVALID_PARTIAL_FINANCIAL_REQUEST",
+      }),
+    });
+    expect(prisma.sale.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects legacy credit payment with compat OFF before loading the sale", async () => {
+    const prisma = {
+      saleCreditPayment: { findFirst: jest.fn() },
+      sale: { findFirst: jest.fn() },
+      cashSession: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.addCreditPayment(user as never, "sale-credit", {
+        cashAmount: 100,
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "LEGACY_MISSING_SESSION",
+      }),
+    });
+    expect(prisma.sale.findFirst).not.toHaveBeenCalled();
+    expect(prisma.cashSession.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("bridges legacy credit payment with compat ON without fake operationId", async () => {
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+    const sessionB = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      companyId: user.companyId,
+      openedByUserId: user.id,
+      status: "OPEN",
+      closedAt: null,
+    };
+    const updatedSale = { id: "sale-credit", items: [] };
+    const payment = { id: "payment-legacy", operationId: null };
+    const tx = {
+      saleCreditPayment: {
+        create: jest.fn().mockResolvedValue(payment),
+      },
+      sale: {
+        update: jest.fn().mockResolvedValue(updatedSale),
+      },
+    };
+    const prisma = {
+      sale: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "sale-credit",
+          isDeleted: false,
+          creditStatus: "open",
+          creditBalance: new Prisma.Decimal(100),
+          creditPaidAmount: new Prisma.Decimal(0),
+          paymentCashAmount: new Prisma.Decimal(0),
+          paymentTransferAmount: new Prisma.Decimal(0),
+        }),
+      },
+      cashSession: { findFirst: jest.fn().mockResolvedValue(sessionB) },
+      saleCreditPayment: { findFirst: jest.fn() },
+      $transaction: jest.fn(async (callback: (t: unknown) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.addCreditPayment(
+      user as never,
+      "sale-credit",
+      { cashAmount: 100 },
+      { platform: "pwa", appVersion: "1.0.5+124", deviceId: "dev-a" },
+    );
+
+    expect(result).toEqual({ payment, sale: updatedSale });
+    expect(tx.saleCreditPayment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        cashSessionId: sessionB.id,
+        operationId: null,
+      }),
+    });
+    const logged = warnSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("LEGACY_FINANCIAL_REQUEST");
+    expect(logged).toContain("LEGACY_CREDIT_PAYMENT");
   });
 
   it("rejects credit payment replay from closed operation session A without using open B", async () => {
