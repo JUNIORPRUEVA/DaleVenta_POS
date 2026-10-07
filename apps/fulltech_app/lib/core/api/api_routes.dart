@@ -1,6 +1,6 @@
 /// Centraliza rutas de API para fácil ajuste
 class ApiRoutes {
-  static const releaseCheckUpdate = '/api/v1/check-update';
+  static const releaseCheckUpdate = '/api/app-updates/check';
   static const login = '/auth/login';
   static const registerBusiness = '/auth/register-business';
   static const forgotPassword = '/auth/forgot-password';

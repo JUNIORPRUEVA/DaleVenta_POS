@@ -233,7 +233,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           ensureStartupReady: prepareAppFirstFrame,
           checkForUpdates: () async {
             if (!mounted) return;
-            await ref.read(appUpdateProvider.notifier).checkNow(force: true);
+            await ref.read(appUpdateProvider.notifier).scheduleInitialCheck();
           },
         ),
       );
@@ -254,14 +254,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           .read(operationsRealtimeServiceProvider)
           .licenseStream
           .listen(_handleLicenseRealtimeMessage);
-      _backupOpenSubscription ??=
-          BackupOpenIntentService.openedBackups.listen((_) {
-            if (!mounted) return;
-            final context = appRootNavigatorKey.currentContext;
-            if (context == null) return;
-            // ignore: use_build_context_synchronously
-            GoRouter.of(context).go(Routes.configuracionBackup);
-          });
+      _backupOpenSubscription ??= BackupOpenIntentService.openedBackups.listen((
+        _,
+      ) {
+        if (!mounted) return;
+        final context = appRootNavigatorKey.currentContext;
+        if (context == null) return;
+        // ignore: use_build_context_synchronously
+        GoRouter.of(context).go(Routes.configuracionBackup);
+      });
       unawaited(BackupOpenIntentService.primeInitialBackupPath());
     });
   }

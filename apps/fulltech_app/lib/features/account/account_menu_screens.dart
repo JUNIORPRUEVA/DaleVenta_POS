@@ -126,21 +126,13 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
     final controller = ref.read(appUpdateProvider.notifier);
     final installed = state.installedRelease;
     final update = state.updateInfo;
-    final progress = state.downloadProgress;
     final hasUpdate = update?.update == true;
-    final busy =
-        state.phase == AppUpdatePhase.checking ||
-        state.phase == AppUpdatePhase.downloadingUpdate ||
-        state.phase == AppUpdatePhase.installingUpdate;
+    final busy = state.phase == AppUpdatePhase.checking;
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
 
     Future<void> handlePendingAction() async {
-      if (hasUpdate && update?.hasDownloadUrl == true) {
-        await safeOpenUrl(context, Uri.parse(update!.downloadUrl!));
-        return;
-      }
-      if (hasUpdate) {
-        await controller.retryBlockedUpdate();
+      if (state.phase == AppUpdatePhase.readyToInstall) {
+        await controller.requestInstallPreparedUpdate();
         return;
       }
       await controller.checkNow(force: true);
@@ -186,7 +178,7 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                 title: 'Actualización pendiente',
                 accent: _updateAccent(state.phase),
                 message: state.message ?? _updateMessage(state),
-                progress: progress,
+                progress: null,
                 rows: [
                   _DetailRow(
                     'Estado',
@@ -216,7 +208,7 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                   label: Text(
                     busy
                         ? _busyUpdateLabel(state.phase)
-                        : hasUpdate
+                        : state.phase == AppUpdatePhase.readyToInstall
                         ? 'Actualizar ahora'
                         : 'Buscar actualización',
                   ),
@@ -3853,31 +3845,25 @@ String _updateMessage(AppUpdateState state) {
 
 String _pendingUpdateLabel(AppUpdatePhase phase) {
   return switch (phase) {
-    AppUpdatePhase.upToDate => 'No disponible',
-    AppUpdatePhase.disabled => 'No configurado',
     AppUpdatePhase.unsupported => 'No administrada',
-    AppUpdatePhase.error => 'No verificada',
+    AppUpdatePhase.installFailed => 'No verificada',
     AppUpdatePhase.idle => 'Pendiente de verificación',
+    AppUpdatePhase.available => 'Disponible',
+    AppUpdatePhase.readyToInstall => 'Lista',
     _ => 'Verificando',
   };
 }
 
 String _busyUpdateLabel(AppUpdatePhase phase) {
-  return switch (phase) {
-    AppUpdatePhase.downloadingUpdate => 'Descargando',
-    AppUpdatePhase.installingUpdate => 'Instalando',
-    _ => 'Buscando',
-  };
+  return 'Buscando';
 }
 
 IconData _updateIcon(AppUpdatePhase phase) {
   return switch (phase) {
-    AppUpdatePhase.upToDate => Icons.verified_rounded,
-    AppUpdatePhase.error => Icons.error_outline_rounded,
-    AppUpdatePhase.requiredUpdate => Icons.priority_high_rounded,
-    AppUpdatePhase.optionalUpdate => Icons.new_releases_outlined,
-    AppUpdatePhase.downloadingUpdate ||
-    AppUpdatePhase.installingUpdate ||
+    AppUpdatePhase.idle => Icons.verified_rounded,
+    AppUpdatePhase.installFailed => Icons.error_outline_rounded,
+    AppUpdatePhase.available ||
+    AppUpdatePhase.readyToInstall => Icons.new_releases_outlined,
     AppUpdatePhase.checking => Icons.sync_rounded,
     _ => Icons.system_update_alt_rounded,
   };
@@ -3885,9 +3871,8 @@ IconData _updateIcon(AppUpdatePhase phase) {
 
 Color _updateAccent(AppUpdatePhase phase) {
   return switch (phase) {
-    AppUpdatePhase.error ||
-    AppUpdatePhase.requiredUpdate => const Color(0xFFDC2626),
-    AppUpdatePhase.upToDate => const Color(0xFF16A34A),
+    AppUpdatePhase.installFailed => const Color(0xFFDC2626),
+    AppUpdatePhase.idle => const Color(0xFF16A34A),
     _ => AppColors.secondary,
   };
 }
