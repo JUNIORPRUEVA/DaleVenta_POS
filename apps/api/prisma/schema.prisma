@@ -71,6 +71,29 @@ enum BackupStatus {
   @@map("backup_status")
 }
 
+enum AppReleasePlatform {
+  WINDOWS
+  ANDROID
+  IOS
+
+  @@map("app_release_platform")
+}
+
+enum AppReleaseChannel {
+  STABLE
+  BETA
+
+  @@map("app_release_channel")
+}
+
+enum AppReleaseStatus {
+  DRAFT
+  PUBLISHED
+  REVOKED
+
+  @@map("app_release_status")
+}
+
 enum CompanyMemberRole {
   OWNER
   ADMIN
@@ -1019,6 +1042,32 @@ model BackupRecord {
   @@index([companyId, type, status, createdAt])
   @@index([companyId, deletedAt])
   @@map("backup_records")
+}
+
+model AppRelease {
+  id                    String             @id @default(uuid()) @db.Uuid
+  platform              AppReleasePlatform
+  channel               AppReleaseChannel  @default(STABLE)
+  version               String             @db.VarChar(32)
+  buildNumber           Int                @map("build_number")
+  status                AppReleaseStatus   @default(DRAFT)
+  mandatory             Boolean            @default(false)
+  minimumSupportedBuild Int?               @map("minimum_supported_build")
+  fileName              String             @map("file_name") @db.VarChar(255)
+  fileSize              BigInt             @map("file_size")
+  sha256                String             @db.VarChar(64)
+  downloadUrl           String             @map("download_url") @db.Text
+  releaseNotes          Json               @default("[]") @map("release_notes")
+  publishedAt           DateTime?          @map("published_at")
+  revokedAt             DateTime?          @map("revoked_at")
+  commitSha             String?            @map("commit_sha") @db.VarChar(64)
+  signed                Boolean            @default(false)
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  @@unique([platform, channel, buildNumber])
+  @@index([platform, channel, status, buildNumber])
+  @@map("app_releases")
 }
 
 model PasswordResetToken {
