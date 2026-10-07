@@ -30,6 +30,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { BackupsModule } from './backups/backups.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { AppUpdatesModule } from './app-updates/app-updates.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
     WarehousesModule,
     BackupsModule,
     OnboardingModule,
+    AppUpdatesModule,
   ],
 })
 export class AppModule {}
