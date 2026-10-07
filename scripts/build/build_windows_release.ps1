@@ -1,5 +1,8 @@
 param(
-  [switch]$SkipPubGet
+  [switch]$SkipPubGet,
+  [string]$ApiBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
+  [string]$AppBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
+  [int]$ApiTimeoutMs = 15000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,34 +17,48 @@ function Get-RepoRoot {
   return (Resolve-Path -LiteralPath (Join-Path $scriptDir '..\..')).Path
 }
 
-function Test-DriveLetterAvailable {
-  param([char]$Letter)
+function Assert-ShortRealWindowsBuildPath {
+  param([string]$AppRoot)
 
-  $driveRoot = "${Letter}:\"
-  $driveName = "${Letter}:"
-  if (Get-PSDrive -Name ([string]$Letter) -ErrorAction SilentlyContinue) {
-    return $false
+  $maxAppRootLength = 60
+  if ($AppRoot.Length -le $maxAppRootLength) {
+    return
   }
-  if (Test-Path -LiteralPath $driveRoot) {
-    return $false
-  }
-  $substLines = @(cmd /c subst 2>$null)
-  foreach ($line in $substLines) {
-    if ($line.TrimStart().StartsWith($driveName, [StringComparison]::OrdinalIgnoreCase)) {
-      return $false
-    }
-  }
-  return $true
+
+  throw @"
+Windows build path is too long for the native plugin toolchain.
+Current app path length: $($AppRoot.Length)
+Maximum supported app path length: $maxAppRootLength
+
+Create a real short Git worktree and run the build there, for example:
+  git worktree add C:\src\fullpos-release <branch-or-commit>
+
+Do not rely on subst for release builds; Flutter, CMake and MSBuild can mix
+physical and mapped paths in generated files.
+"@
 }
 
-function Get-AvailableDriveLetter {
-  $preferred = @('X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q', 'P', 'O', 'N', 'M', 'L', 'K')
-  foreach ($letter in $preferred) {
-    if (Test-DriveLetterAvailable -Letter $letter) {
-      return $letter
-    }
+function New-BuildEnvIfMissing {
+  param(
+    [string]$AppRoot,
+    [string]$ApiBaseUrl,
+    [string]$AppBaseUrl,
+    [int]$ApiTimeoutMs
+  )
+
+  $envPath = Join-Path $AppRoot '.env'
+  if (Test-Path -LiteralPath $envPath) {
+    Write-Step 'Using existing local .env asset.'
+    return $false
   }
-  throw 'No unused drive letter is available for the temporary short-path build mapping.'
+
+  Write-Step 'Creating temporary non-secret .env asset for Windows build.'
+  @(
+    "API_BASE_URL=$ApiBaseUrl",
+    "APP_BASE_URL=$AppBaseUrl",
+    "API_TIMEOUT_MS=$ApiTimeoutMs"
+  ) | Set-Content -LiteralPath $envPath -Encoding UTF8
+  return $true
 }
 
 $repoRoot = Get-RepoRoot
@@ -52,23 +69,20 @@ if (-not (Test-Path -LiteralPath (Join-Path $appRoot 'pubspec.yaml'))) {
   throw "Flutter app root not found: $appRoot"
 }
 
-$letter = Get-AvailableDriveLetter
-$driveName = "${letter}:"
-$driveRoot = "${driveName}\"
-$mappedAppRoot = "$driveRoot$appRelativePath"
-$createdMapping = $false
+$createdBuildEnv = $false
 $exitCode = 1
 
 try {
   Write-Step "Repo root: $repoRoot"
-  Write-Step "Creating temporary mapping $driveName => $repoRoot"
-  & subst $driveName $repoRoot
-  if ($LASTEXITCODE -ne 0) {
-    throw "subst failed with exit code $LASTEXITCODE"
-  }
-  $createdMapping = $true
+  Write-Step "Flutter app root: $appRoot"
+  Assert-ShortRealWindowsBuildPath -AppRoot $appRoot
+  $createdBuildEnv = New-BuildEnvIfMissing `
+    -AppRoot $appRoot `
+    -ApiBaseUrl $ApiBaseUrl `
+    -AppBaseUrl $AppBaseUrl `
+    -ApiTimeoutMs $ApiTimeoutMs
 
-  Push-Location -LiteralPath $mappedAppRoot
+  Push-Location -LiteralPath $appRoot
   try {
     if (-not $SkipPubGet) {
       Write-Step 'Running flutter pub get'
@@ -82,8 +96,9 @@ try {
     Write-Step 'Running flutter build windows --release'
     & flutter build windows --release `
       --dart-define=FULLPOS_PRODUCTION_BUILD=true `
-      --dart-define=API_BASE_URL=https://daleventapos-backend.gcdndd.easypanel.host `
-      --dart-define=APP_BASE_URL=https://daleventapos-backend.gcdndd.easypanel.host
+      --dart-define=API_BASE_URL=$ApiBaseUrl `
+      --dart-define=APP_BASE_URL=$AppBaseUrl `
+      --dart-define=API_TIMEOUT_MS=$ApiTimeoutMs
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
       throw "flutter build windows --release failed with exit code $exitCode"
@@ -97,15 +112,9 @@ try {
 } catch {
   Write-Error $_
 } finally {
-  if ($createdMapping) {
-    Write-Step "Removing temporary mapping $driveName"
-    & subst $driveName /D
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Could not remove temporary mapping $driveName; run 'subst $driveName /D' manually."
-      if ($exitCode -eq 0) {
-        $exitCode = 1
-      }
-    }
+  if ($createdBuildEnv) {
+    Write-Step 'Removing temporary .env asset.'
+    Remove-Item -LiteralPath (Join-Path $appRoot '.env') -Force
   }
 }
 

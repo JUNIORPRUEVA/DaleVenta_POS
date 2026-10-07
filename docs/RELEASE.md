@@ -83,9 +83,18 @@ Android:
 Windows:
 
 - Official DaleVentas Windows Release builds must be created with
-  `scripts/release/build_windows_release.ps1`. The script fixes the DaleVentas
+  `scripts/build/build_windows_release.ps1`. The script fixes the DaleVentas
   API host, rejects FullPOS Owner hosts, sets `FULLPOS_PRODUCTION_BUILD=true`,
   and verifies the generated runtime artifact before installer packaging.
+- Run Windows builds from a real short Git worktree, for example
+  `C:\src\fullpos-release`. Do not rely on `subst` for release builds: Flutter,
+  CMake and MSBuild can mix physical and mapped paths in generated files, and
+  native plugin targets can exceed the Windows 260-character path limit when the
+  checkout is under a deep path.
+- The Flutter app declares `.env` as a bundled asset. The Windows release script
+  creates a temporary non-secret `.env` with the DaleVentas API host when the
+  file is missing, so a clean short worktree can build without copying local
+  secrets.
 - Package with `installer/setup.iss` through `installer/find_and_build_inno.ps1`.
 - Official install root is `C:\Program Files\DaleVentas POS`.
 - The user-visible product name is `FullPOS` (`MyAppName`), but the install root
