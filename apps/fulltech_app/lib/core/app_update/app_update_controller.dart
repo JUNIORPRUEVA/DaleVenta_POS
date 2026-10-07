@@ -6,7 +6,9 @@ import '../debug/trace_log.dart';
 import 'app_update_models.dart';
 import 'app_update_persistence.dart';
 import 'app_update_repository.dart';
+import 'update_downloader.dart';
 import 'update_restart_guard.dart';
+import 'update_verifier.dart';
 
 final appUpdateProvider =
     StateNotifierProvider<AppUpdateController, AppUpdateState>((ref) {
@@ -14,18 +16,29 @@ final appUpdateProvider =
         ref.read(appUpdateRepositoryProvider),
         ref.read(updatePersistenceProvider),
         ref.read(updateRestartGuardProvider),
+        ref.read(updateDownloaderProvider),
+        ref.read(updateVerifierProvider),
       );
     });
 
 class AppUpdateController extends StateNotifier<AppUpdateState> {
-  AppUpdateController(this._repository, this._persistence, this._restartGuard)
-    : super(AppUpdateState.initial());
+  AppUpdateController(
+    this._repository,
+    this._persistence,
+    this._restartGuard,
+    this._downloader,
+    this._verifier,
+  ) : super(AppUpdateState.initial());
 
   final AppUpdateRepository _repository;
   final UpdatePersistence _persistence;
   final UpdateRestartGuard _restartGuard;
+  final UpdateDownloader _downloader;
+  final UpdateVerifier _verifier;
   Future<void>? _checkFuture;
+  Future<void>? _downloadFuture;
   Future<void>? _loadFuture;
+  bool _loaded = false;
   DateTime? _lastCheckedAt;
   static const Duration _minimumRecheckInterval = Duration(minutes: 1);
   static const Duration _initialCheckDelay = Duration(seconds: 3);
@@ -93,6 +106,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   Future<void> retryBlockedUpdate() => requestInstallPreparedUpdate();
 
   Future<void> _ensureLoaded() {
+    if (_loaded) return Future<void>.value();
     final existing = _loadFuture;
     if (existing != null) return existing;
 
@@ -102,8 +116,14 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         .then((persisted) {
           state = state.copyWith(phase: persisted.phase, persisted: persisted);
           if (persisted.lastErrorCode == 'RECOVERED_TRANSIENT_STATE') {
+            final targetBuild = persisted.targetBuild;
+            if (targetBuild != null) {
+              unawaited(_downloader.discardBuild(targetBuild));
+            }
+            _loaded = true;
             return _persistence.save(persisted);
           }
+          _loaded = true;
         })
         .whenComplete(() {
           if (identical(_loadFuture, future)) _loadFuture = null;
@@ -152,6 +172,10 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       _lastCheckedAt = DateTime.now();
 
       if (!manifest.isNewerThan(installedRelease.currentBuild)) {
+        final staleBuild = state.persisted.targetBuild;
+        if (staleBuild != null) {
+          await _downloader.discardBuild(staleBuild);
+        }
         await _setState(
           state.copyWith(
             phase: AppUpdatePhase.idle,
@@ -171,6 +195,11 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         return;
       }
 
+      final previousBuild = state.persisted.targetBuild;
+      if (previousBuild != null && previousBuild != manifest.buildNumber) {
+        await _downloader.discardBuild(previousBuild);
+      }
+
       final dismissed = manifest.isDismissedBy(state.persisted.dismissedBuild);
       const phase = AppUpdatePhase.available;
       await _setState(
@@ -184,12 +213,17 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             phase: phase,
             targetBuild: manifest.buildNumber,
             targetVersion: manifest.version,
+            fileSizeExpected: manifest.fileSize,
+            sha256Expected: manifest.sha256?.toLowerCase(),
+            bytesDownloaded: 0,
+            clearArtifact: true,
             lastUpdateCheckAt: _lastCheckedAt,
             lastUpdateResult: dismissed ? 'AVAILABLE_DISMISSED' : 'AVAILABLE',
             clearLastError: true,
           ),
         ),
       );
+      unawaited(_startBackgroundDownload(manifest));
     } catch (error, stackTrace) {
       TraceLog.log(
         'AppUpdate',
@@ -231,6 +265,153 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
           lastUpdateResult: result,
           clearTarget: clearTarget,
           clearLastError: true,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startBackgroundDownload(UpdateManifest manifest) async {
+    final existing = _downloadFuture;
+    if (existing != null) return existing;
+
+    late final Future<void> future;
+    future = _downloadAndVerify(manifest).whenComplete(() {
+      if (identical(_downloadFuture, future)) _downloadFuture = null;
+    });
+    _downloadFuture = future;
+    return future;
+  }
+
+  Future<void> _downloadAndVerify(UpdateManifest manifest) async {
+    final targetBuild = manifest.buildNumber;
+    if (targetBuild == null) return;
+
+    await _setState(
+      state.copyWith(
+        phase: AppUpdatePhase.downloading,
+        manifest: manifest,
+        clearMessage: true,
+        clearProgress: true,
+        persisted: state.persisted.copyWith(
+          phase: AppUpdatePhase.downloading,
+          targetBuild: targetBuild,
+          targetVersion: manifest.version,
+          fileSizeExpected: manifest.fileSize,
+          sha256Expected: manifest.sha256?.toLowerCase(),
+          attempts: state.persisted.attempts + 1,
+          clearArtifact: true,
+          clearLastError: true,
+        ),
+      ),
+    );
+
+    try {
+      final download = await _downloader.download(
+        manifest,
+        onProgress: (progress) {
+          final next = state.copyWith(
+            phase: AppUpdatePhase.downloading,
+            manifest: manifest,
+            progress: progress,
+            persisted: state.persisted.copyWith(
+              phase: AppUpdatePhase.downloading,
+              bytesDownloaded: progress.bytesDownloaded,
+              fileSizeExpected: progress.totalBytes,
+              sha256Expected: manifest.sha256?.toLowerCase(),
+            ),
+          );
+          state = next;
+          unawaited(_persistence.save(next.persisted));
+        },
+      );
+
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.verifying,
+          manifest: manifest,
+          progress: UpdateDownloadProgress(
+            bytesDownloaded: download.bytesDownloaded,
+            totalBytes: download.fileSizeExpected,
+          ),
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.verifying,
+            bytesDownloaded: download.bytesDownloaded,
+            fileSizeExpected: download.fileSizeExpected,
+            sha256Expected: manifest.sha256?.toLowerCase(),
+          ),
+        ),
+      );
+
+      await _verifier.verifySha256(
+        filePath: download.partPath,
+        expectedSha256: manifest.sha256 ?? '',
+      );
+      await _downloader.promoteToReady(download);
+
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.readyToInstall,
+          manifest: manifest,
+          progress: UpdateDownloadProgress(
+            bytesDownloaded: download.bytesDownloaded,
+            totalBytes: download.fileSizeExpected,
+          ),
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.readyToInstall,
+            artifactRelativePath: download.artifactRelativePath,
+            bytesDownloaded: download.bytesDownloaded,
+            fileSizeExpected: download.fileSizeExpected,
+            sha256Expected: manifest.sha256?.toLowerCase(),
+            lastUpdateResult: 'READY_TO_INSTALL',
+            clearLastError: true,
+          ),
+        ),
+      );
+    } on UpdateDownloadException catch (error, stackTrace) {
+      await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
+    } on UpdateVerificationException catch (error, stackTrace) {
+      await _downloader.discardBuild(targetBuild);
+      await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
+    } catch (error, stackTrace) {
+      await _downloader.discardBuild(targetBuild);
+      await _failDownload(
+        manifest,
+        targetBuild,
+        'DOWNLOAD_FAILED',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  Future<void> _failDownload(
+    UpdateManifest manifest,
+    int targetBuild,
+    String code,
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    TraceLog.log(
+      'AppUpdate',
+      'background download failed',
+      error: error,
+      stackTrace: stackTrace,
+    );
+    await _setState(
+      state.copyWith(
+        phase: AppUpdatePhase.installFailed,
+        manifest: manifest,
+        message: null,
+        clearProgress: true,
+        persisted: state.persisted.copyWith(
+          phase: AppUpdatePhase.installFailed,
+          targetBuild: targetBuild,
+          targetVersion: manifest.version,
+          fileSizeExpected: manifest.fileSize,
+          sha256Expected: manifest.sha256?.toLowerCase(),
+          clearArtifact: true,
+          lastUpdateResult: 'DOWNLOAD_FAILED',
+          lastErrorCode: code,
         ),
       ),
     );

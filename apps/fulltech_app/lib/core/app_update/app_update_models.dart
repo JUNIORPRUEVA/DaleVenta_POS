@@ -200,10 +200,29 @@ class UpdateManifest {
 
 typedef AppUpdateInfo = UpdateManifest;
 
+class UpdateDownloadProgress {
+  final int bytesDownloaded;
+  final int totalBytes;
+
+  const UpdateDownloadProgress({
+    required this.bytesDownloaded,
+    required this.totalBytes,
+  });
+
+  double get percentage {
+    if (totalBytes <= 0) return 0;
+    return (bytesDownloaded / totalBytes).clamp(0, 1).toDouble();
+  }
+}
+
 class PersistedUpdateState {
   final int? targetBuild;
   final String? targetVersion;
   final AppUpdatePhase phase;
+  final String? artifactRelativePath;
+  final int? bytesDownloaded;
+  final int? fileSizeExpected;
+  final String? sha256Expected;
   final int? dismissedBuild;
   final int attempts;
   final String? lastErrorCode;
@@ -216,6 +235,10 @@ class PersistedUpdateState {
     this.targetBuild,
     this.targetVersion,
     required this.phase,
+    this.artifactRelativePath,
+    this.bytesDownloaded,
+    this.fileSizeExpected,
+    this.sha256Expected,
     this.dismissedBuild,
     this.attempts = 0,
     this.lastErrorCode,
@@ -240,6 +263,12 @@ class PersistedUpdateState {
       targetBuild: UpdateManifest._asInt(json['targetBuild']),
       targetVersion: UpdateManifest._asTrimmedString(json['targetVersion']),
       phase: AppUpdatePhasePersistence.fromCode(json['state']?.toString()),
+      artifactRelativePath: UpdateManifest._asTrimmedString(
+        json['artifactRelativePath'],
+      ),
+      bytesDownloaded: UpdateManifest._asInt(json['bytesDownloaded']),
+      fileSizeExpected: UpdateManifest._asInt(json['fileSizeExpected']),
+      sha256Expected: UpdateManifest._asTrimmedString(json['sha256Expected']),
       dismissedBuild: UpdateManifest._asInt(json['dismissedBuild']),
       attempts: UpdateManifest._asInt(json['attempts']) ?? 0,
       lastErrorCode: UpdateManifest._asTrimmedString(json['lastErrorCode']),
@@ -264,6 +293,10 @@ class PersistedUpdateState {
     int? targetBuild,
     String? targetVersion,
     AppUpdatePhase? phase,
+    String? artifactRelativePath,
+    int? bytesDownloaded,
+    int? fileSizeExpected,
+    String? sha256Expected,
     int? dismissedBuild,
     int? attempts,
     String? lastErrorCode,
@@ -271,6 +304,7 @@ class PersistedUpdateState {
     String? lastUpdateResult,
     DateTime? updatedAt,
     bool clearTarget = false,
+    bool clearArtifact = false,
     bool clearLastError = false,
   }) {
     final timestamp = updatedAt ?? DateTime.now();
@@ -278,6 +312,20 @@ class PersistedUpdateState {
       targetBuild: clearTarget ? null : (targetBuild ?? this.targetBuild),
       targetVersion: clearTarget ? null : (targetVersion ?? this.targetVersion),
       phase: phase ?? this.phase,
+      artifactRelativePath: clearTarget
+          ? null
+          : (clearArtifact
+                ? null
+                : (artifactRelativePath ?? this.artifactRelativePath)),
+      bytesDownloaded: clearTarget
+          ? null
+          : (bytesDownloaded ?? this.bytesDownloaded),
+      fileSizeExpected: clearTarget
+          ? null
+          : (fileSizeExpected ?? this.fileSizeExpected),
+      sha256Expected: clearTarget
+          ? null
+          : (sha256Expected ?? this.sha256Expected),
       dismissedBuild: dismissedBuild ?? this.dismissedBuild,
       attempts: attempts ?? this.attempts,
       lastErrorCode: clearLastError
@@ -295,6 +343,10 @@ class PersistedUpdateState {
       'targetBuild': targetBuild,
       'targetVersion': targetVersion,
       'state': phase.code,
+      'artifactRelativePath': artifactRelativePath,
+      'bytesDownloaded': bytesDownloaded,
+      'fileSizeExpected': fileSizeExpected,
+      'sha256Expected': sha256Expected,
       'dismissedBuild': dismissedBuild,
       'attempts': attempts,
       'lastErrorCode': lastErrorCode,
@@ -318,6 +370,7 @@ class AppUpdateState {
   final PersistedUpdateState persisted;
   final String? message;
   final DateTime? checkedAt;
+  final UpdateDownloadProgress? progress;
 
   const AppUpdateState({
     required this.phase,
@@ -326,6 +379,7 @@ class AppUpdateState {
     required this.persisted,
     this.message,
     this.checkedAt,
+    this.progress,
   });
 
   factory AppUpdateState.initial() {
@@ -342,8 +396,10 @@ class AppUpdateState {
     PersistedUpdateState? persisted,
     String? message,
     DateTime? checkedAt,
+    UpdateDownloadProgress? progress,
     bool clearManifest = false,
     bool clearMessage = false,
+    bool clearProgress = false,
   }) {
     return AppUpdateState(
       phase: phase ?? this.phase,
@@ -352,12 +408,13 @@ class AppUpdateState {
       persisted: persisted ?? this.persisted,
       message: clearMessage ? null : (message ?? this.message),
       checkedAt: checkedAt ?? this.checkedAt,
+      progress: clearProgress ? null : (progress ?? this.progress),
     );
   }
 
   AppUpdateInfo? get updateInfo => manifest;
 
-  double? get downloadProgress => null;
+  double? get downloadProgress => progress?.percentage;
 
   bool get hasVisibleMainPrompt =>
       phase == AppUpdatePhase.readyToInstall &&
