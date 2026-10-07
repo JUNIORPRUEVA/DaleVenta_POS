@@ -23,7 +23,7 @@ function buildService(releases: ReturnType<typeof release>[]) {
   const findMany = jest.fn().mockResolvedValue(releases);
   const service = new AppUpdatesService({
     appRelease: { findMany },
-  } as any);
+  } as any, { get: jest.fn() } as any);
 
   jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
   jest.spyOn((service as any).logger, "error").mockImplementation(() => undefined);
