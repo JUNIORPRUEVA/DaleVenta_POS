@@ -64,11 +64,12 @@ Allowed fields are installed build number, update state, target build, last upda
 ## Phase 8 UAT Findings
 
 - Phase 7 implementation commit: `118f86246fee24745d557559e11aa84744ff31d6`.
+- Phase 8 documentation commit: `677ec93655b498a020a37cbf97c69a9d4fbca5ab`.
 - Source worktree: `C:\src\fullpos-update`.
 - App version currently declared by Flutter: `1.0.6+130`.
-- Local installer output compiled for validation: `installer\output\FullPOS-Setup-1.0.0-1.exe`.
-- Local installer SHA-256: `6490F72A1E575B24B0FC1792AD25C0ACDEE816991B53B9D8DB13B42D21ACA737`.
-- Local installer size: `40172668` bytes.
+- Local installer output compiled for Phase 8B pre-commit validation: `installer\output\FullPOS-Setup-1.0.6-130.exe`.
+- Local installer SHA-256: `2BEA6E2A5E1FAE4E7E64B8194A2FCBE06A98F38C6B51808A3816D655E2A9B4D0`.
+- Local installer size: `40165198` bytes.
 - Authenticode status: `NotSigned`.
 - Production Authenticode certificate: not available in this workspace.
 
@@ -85,3 +86,19 @@ The bootstrap release can be technically prepared only after:
 - the update package passes size, SHA-256, and signature policy validation in UAT.
 
 Production readiness additionally requires a production Authenticode certificate and a production-safe Inno Setup toolchain. Without those, production release remains NO-GO.
+
+## Phase 8B Versioning Preparation
+
+Windows release versioning is now prepared to use `apps/fulltech_app/pubspec.yaml`
+as the single source of truth. With `version: 1.0.6+130`, the official release
+script builds Flutter as `1.0.6+130`, passes `1.0.6` and `130` to Inno, and
+produces `FullPOS-Setup-1.0.6-130.exe`.
+
+For UAT N -> N+1, the bootstrap N must already include this updater. The next UAT
+candidate must increment the build number in `pubspec.yaml` before building, for
+example `1.0.6+131` or the next owner-approved marketing version. Do not reuse
+build `130` for the UAT release record.
+
+Unsigned packages are acceptable only when the UAT release policy explicitly
+allows unsigned Windows packages. Production must continue to require a trusted
+Authenticode signature and expected publisher validation.

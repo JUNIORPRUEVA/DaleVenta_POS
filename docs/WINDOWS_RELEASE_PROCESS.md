@@ -4,6 +4,22 @@ Last updated: 2026-10-07.
 
 This document defines the Windows release and UAT process for FullPOS Cloud. It complements `docs/RELEASE.md` and does not authorize production deployment.
 
+## Version Source Of Truth
+
+`apps/fulltech_app/pubspec.yaml` is the only release version source for Windows.
+The official release script reads the `version: x.y.z+build` value and passes it to:
+
+- Flutter `--build-name=x.y.z`;
+- Flutter `--build-number=build`;
+- Inno Setup `/DMyAppVersion=x.y.z`;
+- Inno Setup `/DMyAppBuildNumber=build`;
+- Inno Setup `/DMyAppVersionInfo=x.y.z.build`;
+- installer filename `FullPOS-Setup-x.y.z-build.exe`;
+- release metadata `version=x.y.z` and `buildNumber=build`.
+
+Do not edit `installer/setup.iss` manually for a release version. Change
+`pubspec.yaml` first, then run the official script.
+
 ## Required Worktree
 
 Use a real short worktree, for example:
@@ -22,7 +38,10 @@ The official Windows release build path is:
 powershell -ExecutionPolicy Bypass -File scripts/build/build_windows_release.ps1
 ```
 
-The script creates a temporary non-secret `.env` asset when the file is missing and removes it afterward. Do not commit `.env`.
+The script creates a temporary non-secret `.env` asset when the file is missing
+and removes it afterward. It compiles Flutter, packages the installer with Inno
+Setup, and prints version, build, commit SHA, installer path, size, SHA-256, and
+Authenticode status. Do not commit `.env`.
 
 Raw commands such as `flutter build windows --release` are useful validation steps, but they are not the official DaleVentas Windows release path.
 
@@ -37,10 +56,11 @@ Validated local toolchains on 2026-10-07:
 
 For production, prefer the current stable Inno Setup version approved by the release owner. If using Inno Setup 7, use a stable release, not a preview. If signing is configured through Inno, keep signing inside the Inno `SignTool` flow so uninstaller and temporary setup copies are handled consistently.
 
-Compile with the stable compiler explicitly:
+If manual installer compilation is required for diagnosis, compile with the
+stable compiler explicitly and pass values from `pubspec.yaml`:
 
 ```powershell
-& 'C:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISCC.exe' installer\setup.iss
+& 'C:\Users\pc\AppData\Local\Programs\Inno Setup 6\ISCC.exe' installer\setup.iss /DMyAppVersion=1.0.6 /DMyAppBuildNumber=130 /DMyAppVersionInfo=1.0.6.130
 ```
 
 ## Artifact Metadata
@@ -58,14 +78,14 @@ Every UAT or production candidate must record:
 - release notes;
 - whether the package is signed.
 
-Phase 8 local validation artifact:
+Phase 8B local pre-commit validation artifact:
 
 ```text
-Commit: 118f86246fee24745d557559e11aa84744ff31d6
+Commit: pre-versioning-commit validation run
 Flutter version: 1.0.6+130
-Installer: installer\output\FullPOS-Setup-1.0.0-1.exe
-Size: 40172668 bytes
-SHA-256: 6490F72A1E575B24B0FC1792AD25C0ACDEE816991B53B9D8DB13B42D21ACA737
+Installer: installer\output\FullPOS-Setup-1.0.6-130.exe
+Size: 40165198 bytes
+SHA-256: 2BEA6E2A5E1FAE4E7E64B8194A2FCBE06A98F38C6B51808A3816D655E2A9B4D0
 Authenticode: NotSigned
 Inno compiler: 6.7.3
 ```
@@ -133,3 +153,12 @@ Production remains NO-GO unless all are true:
 - no production database or infrastructure change is hidden inside the release.
 
 Phase 8 status: implementation can continue to UAT, but controlled production release is NO-GO because real UAT was not completed and the local installer is not Authenticode-signed.
+
+Phase 8B UAT preparation status:
+
+- versioning consistency is corrected in code and script;
+- local UAT Docker workflow exists, but Docker is not installed in this session;
+- `.env.uat.local` was not present in this worktree during the audit;
+- port `127.0.0.1:55432` responded, but DB identity was not proven from repository tooling;
+- no UAT migration, seed, AppRelease publication, or release revocation was executed;
+- no HTTPS UAT storage credentials or R2/S3 UAT variables were available in this shell.
