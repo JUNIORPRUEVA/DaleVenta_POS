@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -28,6 +29,7 @@ class UpdateDownloadResult {
   final String partPath;
   final String readyPath;
   final String artifactRelativePath;
+  final String updateRootPath;
   final int bytesDownloaded;
   final int fileSizeExpected;
 
@@ -35,8 +37,23 @@ class UpdateDownloadResult {
     required this.partPath,
     required this.readyPath,
     required this.artifactRelativePath,
+    required this.updateRootPath,
     required this.bytesDownloaded,
     required this.fileSizeExpected,
+  });
+}
+
+class UpdateInstallerResult {
+  final int targetBuild;
+  final String result;
+  final int? exitCode;
+  final DateTime? timestamp;
+
+  const UpdateInstallerResult({
+    required this.targetBuild,
+    required this.result,
+    this.exitCode,
+    this.timestamp,
   });
 }
 
@@ -68,6 +85,7 @@ class UpdateDownloader {
     }
 
     final buildDirectory = await _buildDirectory(build);
+    final updateRoot = buildDirectory.parent;
     await buildDirectory.create(recursive: true);
 
     final partFile = File(p.join(buildDirectory.path, '$fileName.part'));
@@ -121,6 +139,7 @@ class UpdateDownloader {
         partPath: partFile.path,
         readyPath: readyFile.path,
         artifactRelativePath: p.join(build.toString(), '$fileName.ready'),
+        updateRootPath: updateRoot.path,
         bytesDownloaded: bytesDownloaded,
         fileSizeExpected: expectedSize,
       );
@@ -171,6 +190,29 @@ class UpdateDownloader {
     final directory = await _buildDirectory(buildNumber);
     if (await directory.exists()) {
       await directory.delete(recursive: true);
+    }
+  }
+
+  Future<UpdateInstallerResult?> readInstallerResult(int buildNumber) async {
+    if (buildNumber <= 0) return null;
+    final directory = await _buildDirectory(buildNumber);
+    final file = File(p.join(directory.path, 'installer_result.json'));
+    if (!await file.exists()) return null;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, dynamic>) return null;
+      final result = decoded['result']?.toString().trim().toUpperCase();
+      if (result == null || result.isEmpty) return null;
+      return UpdateInstallerResult(
+        targetBuild:
+            int.tryParse(decoded['targetBuild']?.toString() ?? '') ??
+            buildNumber,
+        result: result,
+        exitCode: int.tryParse(decoded['exitCode']?.toString() ?? ''),
+        timestamp: DateTime.tryParse(decoded['timestamp']?.toString() ?? ''),
+      );
+    } catch (_) {
+      return null;
     }
   }
 

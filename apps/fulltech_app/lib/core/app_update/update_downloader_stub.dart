@@ -16,6 +16,7 @@ class UpdateDownloadResult {
   final String partPath;
   final String readyPath;
   final String artifactRelativePath;
+  final String updateRootPath;
   final int bytesDownloaded;
   final int fileSizeExpected;
 
@@ -23,8 +24,23 @@ class UpdateDownloadResult {
     required this.partPath,
     required this.readyPath,
     required this.artifactRelativePath,
+    required this.updateRootPath,
     required this.bytesDownloaded,
     required this.fileSizeExpected,
+  });
+}
+
+class UpdateInstallerResult {
+  final int targetBuild;
+  final String result;
+  final int? exitCode;
+  final DateTime? timestamp;
+
+  const UpdateInstallerResult({
+    required this.targetBuild,
+    required this.result,
+    this.exitCode,
+    this.timestamp,
   });
 }
 
@@ -43,4 +59,8 @@ class UpdateDownloader {
   }
 
   Future<void> discardBuild(int buildNumber) async {}
+
+  Future<UpdateInstallerResult?> readInstallerResult(int buildNumber) async {
+    return null;
+  }
 }

@@ -1,6 +1,10 @@
 import 'app_update_models.dart';
 
 abstract class AppUpdateInstaller {
+  Future<void> launchPreparedWindowsUpdate({
+    required PersistedUpdateState persisted,
+  });
+
   Future<void> downloadAndLaunchWindowsInstaller(
     AppUpdateInfo updateInfo, {
     required void Function(double progress) onProgress,

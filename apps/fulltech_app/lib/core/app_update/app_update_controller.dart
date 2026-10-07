@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../debug/trace_log.dart';
+import 'app_update_installer.dart';
+import 'app_update_installer_contract.dart';
 import 'app_update_models.dart';
 import 'app_update_persistence.dart';
 import 'app_update_repository.dart';
 import 'update_downloader.dart';
 import 'update_restart_guard.dart';
+import 'update_signature_verifier.dart';
 import 'update_verifier.dart';
 
 final appUpdateProvider =
@@ -18,6 +21,8 @@ final appUpdateProvider =
         ref.read(updateRestartGuardProvider),
         ref.read(updateDownloaderProvider),
         ref.read(updateVerifierProvider),
+        ref.read(updateSignatureVerifierProvider),
+        ref.read(appUpdateInstallerProvider),
       );
     });
 
@@ -28,6 +33,8 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     this._restartGuard,
     this._downloader,
     this._verifier,
+    this._signatureVerifier,
+    this._installer,
   ) : super(AppUpdateState.initial());
 
   final AppUpdateRepository _repository;
@@ -35,6 +42,8 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   final UpdateRestartGuard _restartGuard;
   final UpdateDownloader _downloader;
   final UpdateVerifier _verifier;
+  final UpdateSignatureVerifier _signatureVerifier;
+  final AppUpdateInstaller _installer;
   Future<void>? _checkFuture;
   Future<void>? _downloadFuture;
   Future<void>? _loadFuture;
@@ -88,7 +97,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     final nextPhase = readiness.safe
         ? AppUpdatePhase.installRequested
         : AppUpdatePhase.waitingSafeState;
-    final persisted = state.persisted.copyWith(
+    var persisted = state.persisted.copyWith(
       phase: nextPhase,
       lastErrorCode: readiness.safe ? null : readiness.reason,
       clearLastError: readiness.safe,
@@ -101,6 +110,41 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         clearMessage: readiness.safe,
       ),
     );
+
+    if (!readiness.safe) return;
+
+    try {
+      await _installer.launchPreparedWindowsUpdate(persisted: state.persisted);
+      persisted = state.persisted.copyWith(
+        phase: AppUpdatePhase.updaterStarted,
+        lastUpdateResult: 'UPDATER_STARTED',
+        clearLastError: true,
+      );
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.updaterStarted,
+          persisted: persisted,
+        ),
+      );
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'AppUpdate',
+        'secure updater launch failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      persisted = state.persisted.copyWith(
+        phase: AppUpdatePhase.installFailed,
+        lastUpdateResult: 'UPDATER_LAUNCH_FAILED',
+        lastErrorCode: 'UPDATER_LAUNCH_FAILED',
+      );
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.installFailed,
+          persisted: persisted,
+        ),
+      );
+    }
   }
 
   Future<void> retryBlockedUpdate() => requestInstallPreparedUpdate();
@@ -158,6 +202,10 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
           ),
         ),
       );
+      return;
+    }
+
+    if (await _reconcileInstallerResult(installedRelease)) {
       return;
     }
 
@@ -248,6 +296,88 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     }
   }
 
+  Future<bool> _reconcileInstallerResult(
+    InstalledReleaseInfo installedRelease,
+  ) async {
+    final targetBuild = state.persisted.targetBuild;
+    if (targetBuild == null) return false;
+    final result = await _downloader.readInstallerResult(targetBuild);
+    if (result == null || result.targetBuild != targetBuild) {
+      if (installedRelease.currentBuild >= targetBuild) {
+        await _setState(
+          state.copyWith(
+            phase: AppUpdatePhase.installedConfirmed,
+            installedRelease: installedRelease,
+            clearManifest: true,
+            clearMessage: true,
+            persisted: state.persisted.copyWith(
+              phase: AppUpdatePhase.installedConfirmed,
+              lastUpdateResult: 'INSTALLED_CONFIRMED',
+              clearTarget: true,
+              clearLastError: true,
+            ),
+          ),
+        );
+        return true;
+      }
+      return false;
+    }
+
+    if (result.result == 'SUCCESS' &&
+        installedRelease.currentBuild >= targetBuild) {
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.installedConfirmed,
+          installedRelease: installedRelease,
+          clearManifest: true,
+          clearMessage: true,
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.installedConfirmed,
+            lastUpdateResult: 'INSTALLED_CONFIRMED',
+            clearTarget: true,
+            clearLastError: true,
+          ),
+        ),
+      );
+      return true;
+    }
+
+    if (result.result == 'UAC_CANCELLED') {
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.readyToInstall,
+          installedRelease: installedRelease,
+          clearMessage: true,
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.readyToInstall,
+            lastUpdateResult: 'UAC_CANCELLED',
+            lastErrorCode: 'UAC_CANCELLED',
+          ),
+        ),
+      );
+      return true;
+    }
+
+    if (state.persisted.phase == AppUpdatePhase.updaterStarted ||
+        result.result == 'INSTALLER_FAILED' ||
+        result.result == 'UPDATER_ERROR') {
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.installFailed,
+          installedRelease: installedRelease,
+          clearMessage: true,
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.installFailed,
+            lastUpdateResult: result.result,
+            lastErrorCode: result.result,
+          ),
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _persistStable({
     required AppUpdatePhase phase,
     required String result,
@@ -327,14 +457,14 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
 
       await _setState(
         state.copyWith(
-          phase: AppUpdatePhase.verifying,
+          phase: AppUpdatePhase.verifyingSha,
           manifest: manifest,
           progress: UpdateDownloadProgress(
             bytesDownloaded: download.bytesDownloaded,
             totalBytes: download.fileSizeExpected,
           ),
           persisted: state.persisted.copyWith(
-            phase: AppUpdatePhase.verifying,
+            phase: AppUpdatePhase.verifyingSha,
             bytesDownloaded: download.bytesDownloaded,
             fileSizeExpected: download.fileSizeExpected,
             sha256Expected: manifest.sha256?.toLowerCase(),
@@ -344,6 +474,22 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
 
       await _verifier.verifySha256(
         filePath: download.partPath,
+        expectedSha256: manifest.sha256 ?? '',
+      );
+
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.verifyingSignature,
+          manifest: manifest,
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.verifyingSignature,
+          ),
+        ),
+      );
+
+      await _signatureVerifier.verifyPackage(
+        filePath: download.partPath,
+        updateRootPath: download.updateRootPath,
         expectedSha256: manifest.sha256 ?? '',
       );
       await _downloader.promoteToReady(download);
@@ -370,6 +516,9 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     } on UpdateDownloadException catch (error, stackTrace) {
       await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
     } on UpdateVerificationException catch (error, stackTrace) {
+      await _downloader.discardBuild(targetBuild);
+      await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
+    } on UpdateSignatureVerificationException catch (error, stackTrace) {
       await _downloader.discardBuild(targetBuild);
       await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
     } catch (error, stackTrace) {

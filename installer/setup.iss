@@ -61,6 +61,7 @@ UninstallDisplayIcon={app}\app\{#MyAppExeName}
 
 [Dirs]
 Name: "{app}\app"
+Name: "{app}\updater"
 Name: "{app}\databases"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\backups"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\media_cache"; Permissions: users-modify; Flags: uninsneveruninstall
@@ -68,7 +69,8 @@ Name: "{app}\logs"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\config"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Files]
-Source: "{#MyAppSourceDir}\*"; DestDir: "{app}\app"; Excludes: "*.pdb,*.ilk,*.exp,*.lib"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}\app"; Excludes: "*.pdb,*.ilk,*.exp,*.lib,updater\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\updater\FullposUpdater.exe"; DestDir: "{app}\updater"; Flags: ignoreversion
 #ifexist VcRedistPath
 Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 #endif

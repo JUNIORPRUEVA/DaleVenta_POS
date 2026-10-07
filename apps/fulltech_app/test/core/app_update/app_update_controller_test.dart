@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daleventa_pos/core/app_update/app_update_controller.dart';
+import 'package:daleventa_pos/core/app_update/app_update_installer_contract.dart';
 import 'package:daleventa_pos/core/app_update/app_update_models.dart';
 import 'package:daleventa_pos/core/app_update/app_update_persistence.dart';
 import 'package:daleventa_pos/core/app_update/app_update_persistence_store.dart';
 import 'package:daleventa_pos/core/app_update/app_update_repository.dart';
 import 'package:daleventa_pos/core/app_update/update_downloader.dart';
 import 'package:daleventa_pos/core/app_update/update_restart_guard.dart';
+import 'package:daleventa_pos/core/app_update/update_signature_verifier.dart';
 import 'package:daleventa_pos/core/app_update/update_verifier.dart';
 
 void main() {
@@ -192,6 +194,25 @@ void main() {
       expect(controller.installerLaunches, 0);
     });
 
+    test(
+      'request install launches prepared updater when restart is safe',
+      () async {
+        final installer = FakeAppUpdateInstaller();
+        final controller = _controller(
+          manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
+          installedBuild: 130,
+          installer: installer,
+        );
+
+        await controller.checkNow(force: true);
+        await _drainBackgroundUpdate();
+        await controller.requestInstallPreparedUpdate();
+
+        expect(installer.launches, 1);
+        expect(controller.state.phase, AppUpdatePhase.updaterStarted);
+      },
+    );
+
     test('does not report financial side effects', () async {
       final controller = _controller(
         manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
@@ -251,11 +272,55 @@ void main() {
       await controller.checkNow(force: true);
       await verifier.waitUntilCalled();
 
-      expect(controller.state.phase, AppUpdatePhase.verifying);
+      expect(controller.state.phase, AppUpdatePhase.verifyingSha);
       expect(controller.state.persisted.artifactRelativePath, isNull);
       expect(downloader.promoted, isFalse);
 
       verifier.complete();
+      await _drainBackgroundUpdate();
+
+      expect(controller.state.phase, AppUpdatePhase.readyToInstall);
+      expect(downloader.promoted, isTrue);
+    });
+
+    test('signature mismatch never reaches ready and discards build', () async {
+      final downloader = FakeUpdateDownloader();
+      final controller = _controller(
+        manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
+        installedBuild: 130,
+        downloader: downloader,
+        signatureVerifier: FakeUpdateSignatureVerifier(
+          failureCode: 'PUBLISHER_MISMATCH',
+        ),
+      );
+
+      await controller.checkNow(force: true);
+      await _drainBackgroundUpdate();
+
+      expect(controller.state.phase, AppUpdatePhase.installFailed);
+      expect(controller.state.persisted.lastErrorCode, 'PUBLISHER_MISMATCH');
+      expect(downloader.discardedBuilds, contains(131));
+      expect(downloader.promoted, isFalse);
+    });
+
+    test('ready is persisted only after signature verification', () async {
+      final downloader = FakeUpdateDownloader();
+      final signatureVerifier = DelayedFakeUpdateSignatureVerifier();
+      final controller = _controller(
+        manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
+        installedBuild: 130,
+        downloader: downloader,
+        signatureVerifier: signatureVerifier,
+      );
+
+      await controller.checkNow(force: true);
+      await signatureVerifier.waitUntilCalled();
+
+      expect(controller.state.phase, AppUpdatePhase.verifyingSignature);
+      expect(controller.state.persisted.artifactRelativePath, isNull);
+      expect(downloader.promoted, isFalse);
+
+      signatureVerifier.complete();
       await _drainBackgroundUpdate();
 
       expect(controller.state.phase, AppUpdatePhase.readyToInstall);
@@ -441,6 +506,62 @@ void main() {
       expect(controller.state.persisted.targetBuild, isNull);
     });
 
+    test(
+      'installer success confirms installed build on next startup',
+      () async {
+        final controller = _controller(
+          manifest: UpdateManifest.noUpdate(),
+          installedBuild: 131,
+          persistence: FakeUpdatePersistence(
+            initial: PersistedUpdateState.initial().copyWith(
+              phase: AppUpdatePhase.updaterStarted,
+              targetBuild: 131,
+              artifactRelativePath: '131/setup.exe.ready',
+            ),
+          ),
+          downloader: FakeUpdateDownloader(
+            installerResult: const UpdateInstallerResult(
+              targetBuild: 131,
+              result: 'SUCCESS',
+              exitCode: 0,
+            ),
+          ),
+        );
+
+        await controller.checkNow(force: true);
+
+        expect(controller.state.phase, AppUpdatePhase.installedConfirmed);
+        expect(controller.state.persisted.targetBuild, isNull);
+      },
+    );
+
+    test('uac cancelled keeps package ready without auto retry', () async {
+      final controller = _controller(
+        manifest: UpdateManifest.noUpdate(),
+        installedBuild: 130,
+        persistence: FakeUpdatePersistence(
+          initial: PersistedUpdateState.initial().copyWith(
+            phase: AppUpdatePhase.updaterStarted,
+            targetBuild: 131,
+            artifactRelativePath: '131/setup.exe.ready',
+          ),
+        ),
+        downloader: FakeUpdateDownloader(
+          installerResult: const UpdateInstallerResult(
+            targetBuild: 131,
+            result: 'UAC_CANCELLED',
+            exitCode: 1223,
+          ),
+        ),
+      );
+
+      await controller.checkNow(force: true);
+
+      expect(controller.state.phase, AppUpdatePhase.readyToInstall);
+      expect(controller.state.persisted.lastErrorCode, 'UAC_CANCELLED');
+      expect(controller.state.persisted.artifactRelativePath, isNotNull);
+    });
+
     test('progress is kept internally without overlay', () async {
       final controller = _controller(
         manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
@@ -495,6 +616,8 @@ TestAppUpdateController _controller({
   UpdateRestartGuard restartGuard = const FakeRestartGuard(true),
   FakeUpdateDownloader? downloader,
   UpdateVerifier verifier = const FakeUpdateVerifier(),
+  UpdateSignatureVerifier? signatureVerifier,
+  AppUpdateInstaller? installer,
 }) {
   final repo =
       repository ??
@@ -513,6 +636,8 @@ TestAppUpdateController _controller({
     restartGuard,
     downloader ?? FakeUpdateDownloader(),
     verifier,
+    signatureVerifier ?? FakeUpdateSignatureVerifier(),
+    installer ?? FakeAppUpdateInstaller(),
   );
 }
 
@@ -523,6 +648,8 @@ class TestAppUpdateController extends AppUpdateController {
     super.guard,
     super.downloader,
     super.verifier,
+    super.signatureVerifier,
+    super.installer,
   );
 
   int installerLaunches = 0;
@@ -586,9 +713,10 @@ class FakeRestartGuard implements UpdateRestartGuard {
 }
 
 class FakeUpdateDownloader extends UpdateDownloader {
-  FakeUpdateDownloader({this.failureCode});
+  FakeUpdateDownloader({this.failureCode, this.installerResult});
 
   final String? failureCode;
+  final UpdateInstallerResult? installerResult;
   final List<int> discardedBuilds = [];
   bool promoted = false;
 
@@ -616,6 +744,7 @@ class FakeUpdateDownloader extends UpdateDownloader {
       readyPath: r'C:\updates\file.exe.ready',
       artifactRelativePath:
           '${manifest.buildNumber}/${manifest.fileName}.ready',
+      updateRootPath: r'C:\updates',
       bytesDownloaded: manifest.fileSize ?? 0,
       fileSizeExpected: manifest.fileSize ?? 0,
     );
@@ -629,6 +758,11 @@ class FakeUpdateDownloader extends UpdateDownloader {
   @override
   Future<void> discardBuild(int buildNumber) async {
     discardedBuilds.add(buildNumber);
+  }
+
+  @override
+  Future<UpdateInstallerResult?> readInstallerResult(int buildNumber) async {
+    return installerResult;
   }
 }
 
@@ -662,5 +796,63 @@ class DelayedFakeUpdateVerifier extends UpdateVerifier {
   }) async {
     if (!_called.isCompleted) _called.complete();
     await _complete.future;
+  }
+}
+
+class FakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
+  FakeUpdateSignatureVerifier({this.failureCode});
+
+  final String? failureCode;
+
+  @override
+  Future<void> verifyPackage({
+    required String filePath,
+    required String updateRootPath,
+    String? expectedSha256,
+    String? expectedPublisher,
+    bool? allowUnsignedForUat,
+  }) async {
+    final code = failureCode;
+    if (code != null) throw UpdateSignatureVerificationException(code);
+  }
+}
+
+class DelayedFakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
+  final Completer<void> _called = Completer<void>();
+  final Completer<void> _complete = Completer<void>();
+
+  Future<void> waitUntilCalled() => _called.future;
+
+  void complete() => _complete.complete();
+
+  @override
+  Future<void> verifyPackage({
+    required String filePath,
+    required String updateRootPath,
+    String? expectedSha256,
+    String? expectedPublisher,
+    bool? allowUnsignedForUat,
+  }) async {
+    if (!_called.isCompleted) _called.complete();
+    await _complete.future;
+  }
+}
+
+class FakeAppUpdateInstaller implements AppUpdateInstaller {
+  int launches = 0;
+
+  @override
+  Future<void> launchPreparedWindowsUpdate({
+    required PersistedUpdateState persisted,
+  }) async {
+    launches += 1;
+  }
+
+  @override
+  Future<void> downloadAndLaunchWindowsInstaller(
+    AppUpdateInfo updateInfo, {
+    required void Function(double progress) onProgress,
+  }) async {
+    throw UnsupportedError('legacy direct installer is disabled in tests');
   }
 }

@@ -29,6 +29,8 @@ enum AppUpdatePhase {
   available,
   downloading,
   verifying,
+  verifyingSha,
+  verifyingSignature,
   readyToInstall,
   installRequested,
   waitingSafeState,
@@ -45,6 +47,8 @@ extension AppUpdatePhasePersistence on AppUpdatePhase {
     AppUpdatePhase.available => 'AVAILABLE',
     AppUpdatePhase.downloading => 'DOWNLOADING',
     AppUpdatePhase.verifying => 'VERIFYING',
+    AppUpdatePhase.verifyingSha => 'VERIFYING_SHA',
+    AppUpdatePhase.verifyingSignature => 'VERIFYING_SIGNATURE',
     AppUpdatePhase.readyToInstall => 'READY_TO_INSTALL',
     AppUpdatePhase.installRequested => 'INSTALL_REQUESTED',
     AppUpdatePhase.waitingSafeState => 'WAITING_SAFE_STATE',
@@ -66,9 +70,10 @@ extension AppUpdatePhasePersistence on AppUpdatePhase {
     AppUpdatePhase.available ||
     AppUpdatePhase.downloading ||
     AppUpdatePhase.verifying ||
+    AppUpdatePhase.verifyingSha ||
+    AppUpdatePhase.verifyingSignature ||
     AppUpdatePhase.installRequested ||
-    AppUpdatePhase.waitingSafeState ||
-    AppUpdatePhase.updaterStarted => true,
+    AppUpdatePhase.waitingSafeState => true,
     _ => false,
   };
 }
