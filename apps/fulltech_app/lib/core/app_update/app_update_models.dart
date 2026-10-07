@@ -311,6 +311,7 @@ class PersistedUpdateState {
     bool clearTarget = false,
     bool clearArtifact = false,
     bool clearLastError = false,
+    bool clearDismissedBuild = false,
   }) {
     final timestamp = updatedAt ?? DateTime.now();
     return PersistedUpdateState(
@@ -331,7 +332,9 @@ class PersistedUpdateState {
       sha256Expected: clearTarget
           ? null
           : (sha256Expected ?? this.sha256Expected),
-      dismissedBuild: dismissedBuild ?? this.dismissedBuild,
+      dismissedBuild: clearDismissedBuild
+          ? null
+          : (dismissedBuild ?? this.dismissedBuild),
       attempts: attempts ?? this.attempts,
       lastErrorCode: clearLastError
           ? null

@@ -1,19 +1,28 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:daleventa_pos/core/app_update/app_update_controller.dart';
 import 'package:daleventa_pos/core/app_update/app_update_installer_contract.dart';
+import 'package:daleventa_pos/core/app_update/app_update_mini_control.dart';
 import 'package:daleventa_pos/core/app_update/app_update_models.dart';
 import 'package:daleventa_pos/core/app_update/app_update_persistence.dart';
 import 'package:daleventa_pos/core/app_update/app_update_persistence_store.dart';
 import 'package:daleventa_pos/core/app_update/app_update_repository.dart';
+import 'package:daleventa_pos/features/account/account_menu_screens.dart';
 import 'package:daleventa_pos/core/app_update/update_downloader.dart';
 import 'package:daleventa_pos/core/app_update/update_restart_guard.dart';
 import 'package:daleventa_pos/core/app_update/update_signature_verifier.dart';
 import 'package:daleventa_pos/core/app_update/update_verifier.dart';
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('es_DO');
+  });
+
   group('UpdateManifest', () {
     test('parses a valid manifest', () {
       final manifest = UpdateManifest.fromJson(_manifestJson(build: 131));
@@ -210,6 +219,46 @@ void main() {
 
         expect(installer.launches, 1);
         expect(controller.state.phase, AppUpdatePhase.updaterStarted);
+      },
+    );
+
+    test('waiting install auto-continues when restart becomes safe', () async {
+      final installer = FakeAppUpdateInstaller();
+      final controller = _controller(
+        manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
+        installedBuild: 130,
+        restartGuard: FakeSequencedRestartGuard([false, true]),
+        installer: installer,
+      );
+
+      await controller.checkNow(force: true);
+      await _drainBackgroundUpdate();
+      await controller.requestInstallPreparedUpdate();
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+
+      expect(installer.launches, 1);
+      expect(controller.state.phase, AppUpdatePhase.updaterStarted);
+    });
+
+    test(
+      'updater launch failure keeps package ready for manual retry',
+      () async {
+        final controller = _controller(
+          manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
+          installedBuild: 130,
+          installer: FakeAppUpdateInstaller(failLaunch: true),
+        );
+
+        await controller.checkNow(force: true);
+        await _drainBackgroundUpdate();
+        await controller.requestInstallPreparedUpdate();
+
+        expect(controller.state.phase, AppUpdatePhase.installFailed);
+        expect(
+          controller.state.persisted.lastErrorCode,
+          'UPDATER_LAUNCH_FAILED',
+        );
+        expect(controller.state.persisted.artifactRelativePath, isNotNull);
       },
     );
 
@@ -562,6 +611,69 @@ void main() {
       expect(controller.state.persisted.artifactRelativePath, isNotNull);
     });
 
+    test('installer failure keeps package without auto retry', () async {
+      final installer = FakeAppUpdateInstaller();
+      final controller = _controller(
+        manifest: UpdateManifest.noUpdate(),
+        installedBuild: 130,
+        persistence: FakeUpdatePersistence(
+          initial: PersistedUpdateState.initial().copyWith(
+            phase: AppUpdatePhase.updaterStarted,
+            targetBuild: 131,
+            artifactRelativePath: '131/setup.exe.ready',
+          ),
+        ),
+        downloader: FakeUpdateDownloader(
+          installerResult: const UpdateInstallerResult(
+            targetBuild: 131,
+            result: 'INSTALLER_FAILED',
+            exitCode: 1603,
+          ),
+        ),
+        installer: installer,
+      );
+
+      await controller.checkNow(force: true);
+
+      expect(controller.state.phase, AppUpdatePhase.installFailed);
+      expect(controller.state.persisted.lastErrorCode, 'INSTALLER_FAILED');
+      expect(controller.state.persisted.artifactRelativePath, isNotNull);
+      expect(installer.launches, 0);
+    });
+
+    test(
+      'installer success with lower installed build becomes mismatch',
+      () async {
+        final controller = _controller(
+          manifest: UpdateManifest.noUpdate(),
+          installedBuild: 130,
+          persistence: FakeUpdatePersistence(
+            initial: PersistedUpdateState.initial().copyWith(
+              phase: AppUpdatePhase.updaterStarted,
+              targetBuild: 131,
+              artifactRelativePath: '131/setup.exe.ready',
+            ),
+          ),
+          downloader: FakeUpdateDownloader(
+            installerResult: const UpdateInstallerResult(
+              targetBuild: 131,
+              result: 'SUCCESS',
+              exitCode: 0,
+            ),
+          ),
+        );
+
+        await controller.checkNow(force: true);
+
+        expect(controller.state.phase, AppUpdatePhase.installFailed);
+        expect(
+          controller.state.persisted.lastErrorCode,
+          'POST_UPDATE_MISMATCH',
+        );
+        expect(controller.state.persisted.artifactRelativePath, isNotNull);
+      },
+    );
+
     test('progress is kept internally without overlay', () async {
       final controller = _controller(
         manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
@@ -575,6 +687,106 @@ void main() {
       expect(controller.state.downloadProgress, 1);
       expect(controller.state.blocksUsage, isFalse);
       expect(controller.installerLaunches, 0);
+    });
+  });
+
+  group('AppUpdateMiniControl widget', () {
+    testWidgets('READY shows update and dismiss controls', (tester) async {
+      final controller = WidgetAppUpdateController(_readyWidgetState());
+
+      await tester.pumpWidget(_updateWidget(controller));
+
+      expect(find.text('Actualizar'), findsOneWidget);
+      expect(find.byTooltip('Instalar actualización'), findsOneWidget);
+      expect(find.byTooltip('Ocultar actualización'), findsOneWidget);
+    });
+
+    testWidgets('DOWNLOADING and VERIFYING stay hidden', (tester) async {
+      final downloading = WidgetAppUpdateController(
+        _readyWidgetState().copyWith(phase: AppUpdatePhase.downloading),
+      );
+      await tester.pumpWidget(_updateWidget(downloading));
+      expect(find.text('Actualizar'), findsNothing);
+
+      final verifying = WidgetAppUpdateController(
+        _readyWidgetState().copyWith(phase: AppUpdatePhase.verifyingSha),
+      );
+      await tester.pumpWidget(_updateWidget(verifying));
+      expect(find.text('Actualizar'), findsNothing);
+    });
+
+    testWidgets('dismiss hides current build prompt', (tester) async {
+      final controller = WidgetAppUpdateController(_readyWidgetState());
+
+      await tester.pumpWidget(_updateWidget(controller));
+      await tester.tap(find.byTooltip('Ocultar actualización'));
+      await tester.pump();
+
+      expect(controller.dismissRequests, 1);
+      expect(find.text('Actualizar'), findsNothing);
+    });
+
+    testWidgets('waiting safe state shows discreet progress text', (
+      tester,
+    ) async {
+      final controller = WidgetAppUpdateController(
+        _readyWidgetState().copyWith(phase: AppUpdatePhase.waitingSafeState),
+      );
+
+      await tester.pumpWidget(_updateWidget(controller));
+
+      expect(find.text('Terminando operación actual...'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byTooltip('Ocultar actualización'), findsNothing);
+    });
+  });
+
+  group('AccountUpdatesScreen widget', () {
+    testWidgets('READY shows safe user-facing update details', (tester) async {
+      final controller = WidgetAppUpdateController(_readyWidgetState());
+
+      await tester.pumpWidget(_settingsWidget(controller));
+      await tester.pump();
+
+      expect(find.text('FullPOS Cloud'), findsOneWidget);
+      expect(find.text('Actualización lista'), findsOneWidget);
+      expect(find.text('1.0.7+131'), findsOneWidget);
+      expect(find.text('Mejoras'), findsOneWidget);
+      expect(find.text('Actualizar ahora'), findsOneWidget);
+      expect(find.textContaining('SHA'), findsNothing);
+    });
+
+    testWidgets('download and failure states use human labels', (tester) async {
+      final downloading = WidgetAppUpdateController(
+        _readyWidgetState().copyWith(
+          phase: AppUpdatePhase.downloading,
+          progress: const UpdateDownloadProgress(
+            bytesDownloaded: 47,
+            totalBytes: 100,
+          ),
+        ),
+      );
+      await tester.pumpWidget(_settingsWidget(downloading));
+      await tester.pump();
+      expect(find.text('Descargando'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+      final failed = WidgetAppUpdateController(
+        _readyWidgetState().copyWith(
+          phase: AppUpdatePhase.installFailed,
+          persisted: _readyWidgetState().persisted.copyWith(
+            phase: AppUpdatePhase.installFailed,
+            lastErrorCode: 'INSTALLER_FAILED',
+          ),
+        ),
+      );
+      await tester.pumpWidget(_settingsWidget(failed));
+      await tester.pump();
+      expect(
+        find.text('No pudimos completar la actualización.'),
+        findsOneWidget,
+      );
+      expect(find.text('Reintentar'), findsOneWidget);
     });
   });
 }
@@ -605,6 +817,45 @@ Map<String, dynamic> _manifestJson({
     'releaseNotes': ['Mejoras'],
     'publishedAt': '2026-10-06T12:00:00.000Z',
   };
+}
+
+Widget _updateWidget(WidgetAppUpdateController controller) {
+  return ProviderScope(
+    key: UniqueKey(),
+    overrides: [appUpdateProvider.overrideWith((ref) => controller)],
+    child: const MaterialApp(
+      home: Scaffold(body: Center(child: AppUpdateMiniControl())),
+    ),
+  );
+}
+
+Widget _settingsWidget(WidgetAppUpdateController controller) {
+  return ProviderScope(
+    key: UniqueKey(),
+    overrides: [appUpdateProvider.overrideWith((ref) => controller)],
+    child: const MaterialApp(home: AccountUpdatesScreen()),
+  );
+}
+
+AppUpdateState _readyWidgetState() {
+  final manifest = UpdateManifest.fromJson(_manifestJson(build: 131));
+  return AppUpdateState.initial().copyWith(
+    phase: AppUpdatePhase.readyToInstall,
+    installedRelease: const InstalledReleaseInfo(
+      currentVersion: '1.0.5',
+      currentBuild: 130,
+      platform: ReleasePlatform.windows,
+    ),
+    manifest: manifest,
+    persisted: PersistedUpdateState.initial().copyWith(
+      phase: AppUpdatePhase.readyToInstall,
+      targetBuild: 131,
+      targetVersion: '1.0.6',
+      artifactRelativePath: '131/fullpos.exe.ready',
+      sha256Expected: _sha,
+      lastUpdateCheckAt: DateTime(2026, 10, 7, 12),
+    ),
+  );
 }
 
 TestAppUpdateController _controller({
@@ -654,6 +905,46 @@ class TestAppUpdateController extends AppUpdateController {
 
   int installerLaunches = 0;
   final List<String> financialSideEffects = [];
+}
+
+class WidgetAppUpdateController extends AppUpdateController {
+  WidgetAppUpdateController(AppUpdateState initial)
+    : super(
+        FakeAppUpdateRepository(),
+        FakeUpdatePersistence(),
+        const FakeRestartGuard(true),
+        FakeUpdateDownloader(),
+        const FakeUpdateVerifier(),
+        FakeUpdateSignatureVerifier(),
+        FakeAppUpdateInstaller(),
+      ) {
+    state = initial;
+  }
+
+  int checkRequests = 0;
+  int installRequests = 0;
+  int dismissRequests = 0;
+
+  @override
+  Future<void> checkNow({bool force = false}) async {
+    checkRequests += 1;
+  }
+
+  @override
+  Future<void> requestInstallPreparedUpdate() async {
+    installRequests += 1;
+    state = state.copyWith(phase: AppUpdatePhase.installRequested);
+  }
+
+  @override
+  Future<void> dismissCurrentBuild() async {
+    dismissRequests += 1;
+    state = state.copyWith(
+      persisted: state.persisted.copyWith(
+        dismissedBuild: state.manifest?.buildNumber,
+      ),
+    );
+  }
 }
 
 class FakeAppUpdateRepository extends AppUpdateRepository {
@@ -709,6 +1000,36 @@ class FakeRestartGuard implements UpdateRestartGuard {
     return safe
         ? const UpdateRestartReadiness.safe()
         : const UpdateRestartReadiness.blocked('CRITICAL_OPERATION');
+  }
+
+  @override
+  Future<UpdateRestartReadiness> prepareForRestart() {
+    return canSafelyRestartForUpdate();
+  }
+}
+
+class FakeSequencedRestartGuard implements UpdateRestartGuard {
+  FakeSequencedRestartGuard(this._values);
+
+  final List<bool> _values;
+  int _index = 0;
+
+  bool _next() {
+    final value = _values[_index.clamp(0, _values.length - 1)];
+    _index += 1;
+    return value;
+  }
+
+  @override
+  Future<UpdateRestartReadiness> canSafelyRestartForUpdate() async {
+    return _next()
+        ? const UpdateRestartReadiness.safe()
+        : const UpdateRestartReadiness.blocked('CRITICAL_OPERATION');
+  }
+
+  @override
+  Future<UpdateRestartReadiness> prepareForRestart() async {
+    return const UpdateRestartReadiness.safe();
   }
 }
 
@@ -839,6 +1160,9 @@ class DelayedFakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
 }
 
 class FakeAppUpdateInstaller implements AppUpdateInstaller {
+  FakeAppUpdateInstaller({this.failLaunch = false});
+
+  final bool failLaunch;
   int launches = 0;
 
   @override
@@ -846,6 +1170,9 @@ class FakeAppUpdateInstaller implements AppUpdateInstaller {
     required PersistedUpdateState persisted,
   }) async {
     launches += 1;
+    if (failLaunch) {
+      throw const AppUpdateInstallException('launch failed');
+    }
   }
 
   @override

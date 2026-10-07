@@ -9,6 +9,7 @@ import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
 import '../auth/admin_authorization.dart';
 import '../auth/admin_authorization_session.dart';
+import '../app_update/app_update_mini_control.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../company/company_settings_model.dart';
@@ -469,6 +470,8 @@ class DesktopShellAppBar extends ConsumerWidget {
                 _DesktopShellActionGroup(actions: extraActions),
               ],
               const SizedBox(width: 10),
+              const AppUpdateMiniControl(),
+              const SizedBox(width: 2),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: showUserMeta ? 260 : 56),
                 child: Container(

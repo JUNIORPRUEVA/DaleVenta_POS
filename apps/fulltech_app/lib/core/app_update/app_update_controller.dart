@@ -8,6 +8,7 @@ import 'app_update_installer_contract.dart';
 import 'app_update_models.dart';
 import 'app_update_persistence.dart';
 import 'app_update_repository.dart';
+import 'app_update_telemetry.dart';
 import 'update_downloader.dart';
 import 'update_restart_guard.dart';
 import 'update_signature_verifier.dart';
@@ -47,8 +48,10 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   Future<void>? _checkFuture;
   Future<void>? _downloadFuture;
   Future<void>? _loadFuture;
+  Future<void>? _installContinuationFuture;
   bool _loaded = false;
   DateTime? _lastCheckedAt;
+  final AppUpdateTelemetry _telemetry = const AppUpdateTelemetry();
   static const Duration _minimumRecheckInterval = Duration(minutes: 1);
   static const Duration _initialCheckDelay = Duration(seconds: 3);
 
@@ -87,33 +90,87 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     if (build == null) return;
     final persisted = state.persisted.copyWith(dismissedBuild: build);
     await _setState(state.copyWith(persisted: persisted));
+    _telemetry.event(
+      'UPDATE_DISMISSED',
+      installedRelease: state.installedRelease,
+      persisted: persisted,
+      targetBuild: build,
+    );
   }
 
   Future<void> requestInstallPreparedUpdate() async {
     await _ensureLoaded();
     if (state.phase != AppUpdatePhase.readyToInstall) return;
+    _telemetry.event(
+      'UPDATE_INSTALL_REQUESTED',
+      installedRelease: state.installedRelease,
+      persisted: state.persisted,
+    );
 
     final readiness = await _restartGuard.canSafelyRestartForUpdate();
-    final nextPhase = readiness.safe
-        ? AppUpdatePhase.installRequested
-        : AppUpdatePhase.waitingSafeState;
-    var persisted = state.persisted.copyWith(
-      phase: nextPhase,
-      lastErrorCode: readiness.safe ? null : readiness.reason,
-      clearLastError: readiness.safe,
+    if (!readiness.safe) {
+      unawaited(_waitForSafeState(readiness.reason));
+      return;
+    }
+
+    await _launchPreparedUpdate();
+  }
+
+  Future<void> _waitForSafeState(String? reason) async {
+    final persisted = state.persisted.copyWith(
+      phase: AppUpdatePhase.waitingSafeState,
+      lastErrorCode: reason ?? 'CRITICAL_OPERATION',
     );
     await _setState(
       state.copyWith(
-        phase: nextPhase,
+        phase: AppUpdatePhase.waitingSafeState,
         persisted: persisted,
-        message: readiness.reason,
-        clearMessage: readiness.safe,
+        message: 'Terminando operación actual...',
       ),
     );
 
-    if (!readiness.safe) return;
+    final existing = _installContinuationFuture;
+    if (existing != null) return existing;
+
+    late final Future<void> future;
+    future = _continueWhenSafe().whenComplete(() {
+      if (identical(_installContinuationFuture, future)) {
+        _installContinuationFuture = null;
+      }
+    });
+    _installContinuationFuture = future;
+    return future;
+  }
+
+  Future<void> _continueWhenSafe() async {
+    while (mounted && state.phase == AppUpdatePhase.waitingSafeState) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final readiness = await _restartGuard.canSafelyRestartForUpdate();
+      if (!readiness.safe) continue;
+      await _launchPreparedUpdate();
+      return;
+    }
+  }
+
+  Future<void> _launchPreparedUpdate() async {
+    var persisted = state.persisted.copyWith(
+      phase: AppUpdatePhase.installRequested,
+      clearLastError: true,
+    );
+    await _setState(
+      state.copyWith(
+        phase: AppUpdatePhase.installRequested,
+        persisted: persisted,
+        clearMessage: true,
+      ),
+    );
 
     try {
+      final readiness = await _restartGuard.prepareForRestart();
+      if (!readiness.safe) {
+        unawaited(_waitForSafeState(readiness.reason));
+        return;
+      }
       await _installer.launchPreparedWindowsUpdate(persisted: state.persisted);
       persisted = state.persisted.copyWith(
         phase: AppUpdatePhase.updaterStarted,
@@ -143,6 +200,12 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
           phase: AppUpdatePhase.installFailed,
           persisted: persisted,
         ),
+      );
+      _telemetry.event(
+        'UPDATE_INSTALL_FAILED',
+        installedRelease: state.installedRelease,
+        persisted: persisted,
+        result: 'UPDATER_LAUNCH_FAILED',
       );
     }
   }
@@ -314,9 +377,39 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
               phase: AppUpdatePhase.installedConfirmed,
               lastUpdateResult: 'INSTALLED_CONFIRMED',
               clearTarget: true,
+              clearDismissedBuild: true,
               clearLastError: true,
             ),
           ),
+        );
+        await _downloader.discardBuild(targetBuild);
+        _telemetry.event(
+          'UPDATE_INSTALL_SUCCESS',
+          installedRelease: installedRelease,
+          persisted: state.persisted,
+          targetBuild: targetBuild,
+          result: 'INSTALLED_CONFIRMED',
+        );
+        return true;
+      }
+      if (state.persisted.phase == AppUpdatePhase.updaterStarted) {
+        await _setState(
+          state.copyWith(
+            phase: AppUpdatePhase.installFailed,
+            installedRelease: installedRelease,
+            clearMessage: true,
+            persisted: state.persisted.copyWith(
+              phase: AppUpdatePhase.installFailed,
+              lastUpdateResult: 'UPDATER_RESULT_MISSING',
+              lastErrorCode: 'UPDATER_RESULT_MISSING',
+            ),
+          ),
+        );
+        _telemetry.event(
+          'UPDATE_INSTALL_FAILED',
+          installedRelease: installedRelease,
+          persisted: state.persisted,
+          result: 'UPDATER_RESULT_MISSING',
         );
         return true;
       }
@@ -335,9 +428,18 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             phase: AppUpdatePhase.installedConfirmed,
             lastUpdateResult: 'INSTALLED_CONFIRMED',
             clearTarget: true,
+            clearDismissedBuild: true,
             clearLastError: true,
           ),
         ),
+      );
+      await _downloader.discardBuild(targetBuild);
+      _telemetry.event(
+        'UPDATE_INSTALL_SUCCESS',
+        installedRelease: installedRelease,
+        persisted: state.persisted,
+        targetBuild: targetBuild,
+        result: 'INSTALLED_CONFIRMED',
       );
       return true;
     }
@@ -354,6 +456,35 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             lastErrorCode: 'UAC_CANCELLED',
           ),
         ),
+      );
+      _telemetry.event(
+        'UPDATE_UAC_CANCELLED',
+        installedRelease: installedRelease,
+        persisted: state.persisted,
+        result: 'UAC_CANCELLED',
+      );
+      return true;
+    }
+
+    if (result.result == 'SUCCESS' &&
+        installedRelease.currentBuild < targetBuild) {
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.installFailed,
+          installedRelease: installedRelease,
+          clearMessage: true,
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.installFailed,
+            lastUpdateResult: 'POST_UPDATE_MISMATCH',
+            lastErrorCode: 'POST_UPDATE_MISMATCH',
+          ),
+        ),
+      );
+      _telemetry.event(
+        'UPDATE_INSTALL_FAILED',
+        installedRelease: installedRelease,
+        persisted: state.persisted,
+        result: 'POST_UPDATE_MISMATCH',
       );
       return true;
     }
@@ -372,6 +503,12 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             lastErrorCode: result.result,
           ),
         ),
+      );
+      _telemetry.event(
+        'UPDATE_INSTALL_FAILED',
+        installedRelease: installedRelease,
+        persisted: state.persisted,
+        result: result.result,
       );
       return true;
     }
@@ -512,6 +649,13 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             clearLastError: true,
           ),
         ),
+      );
+      _telemetry.event(
+        'UPDATE_READY',
+        installedRelease: state.installedRelease,
+        persisted: state.persisted,
+        targetBuild: targetBuild,
+        result: 'READY_TO_INSTALL',
       );
     } on UpdateDownloadException catch (error, stackTrace) {
       await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
