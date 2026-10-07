@@ -90,6 +90,7 @@ enum AppReleaseStatus {
   DRAFT
   PUBLISHED
   REVOKED
+  ARCHIVED
 
   @@map("app_release_status")
 }
@@ -1057,9 +1058,11 @@ model AppRelease {
   fileSize              BigInt             @map("file_size")
   sha256                String             @db.VarChar(64)
   downloadUrl           String             @map("download_url") @db.Text
+  storageKey            String?            @map("storage_key") @db.Text
   releaseNotes          Json               @default("[]") @map("release_notes")
   publishedAt           DateTime?          @map("published_at")
   revokedAt             DateTime?          @map("revoked_at")
+  storageDeletedAt      DateTime?          @map("storage_deleted_at")
   commitSha             String?            @map("commit_sha") @db.VarChar(64)
   signed                Boolean            @default(false)
   createdAt             DateTime           @default(now()) @map("created_at")

@@ -7,6 +7,7 @@ import { AppUpdatesService } from "./app-updates.service";
 import {
   AppReleaseListQueryDto,
   CreateAppReleaseDto,
+  PublishAppReleaseDto,
   UpdateAppReleaseDto,
 } from "./dto/app-release-admin.dto";
 
@@ -36,9 +37,18 @@ export class AppUpdateReleasesController {
     return this.appUpdates.updateRelease(id, dto);
   }
 
+  @Post("retention/windows-stable")
+  applyWindowsStableRetention(@Body() dto: PublishAppReleaseDto) {
+    return this.appUpdates.applyWindowsStableRetention({
+      dryRun: dto?.retentionDryRun ?? true,
+    });
+  }
+
   @Post(":id/publish")
-  publish(@Param("id") id: string) {
-    return this.appUpdates.publishRelease(id);
+  publish(@Param("id") id: string, @Body() dto: PublishAppReleaseDto) {
+    return this.appUpdates.publishRelease(id, {
+      retentionDryRun: dto?.retentionDryRun ?? false,
+    });
   }
 
   @Post(":id/revoke")

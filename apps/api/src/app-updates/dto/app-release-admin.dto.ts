@@ -19,6 +19,11 @@ import {
 
 export const publicAppReleaseStatuses = ["draft", "published", "revoked"] as const;
 export type PublicAppReleaseStatus = (typeof publicAppReleaseStatuses)[number];
+export const publicAppReleaseListStatuses = [
+  ...publicAppReleaseStatuses,
+  "archived",
+] as const;
+export type PublicAppReleaseListStatus = (typeof publicAppReleaseListStatuses)[number];
 
 const normalizeToken = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : value;
@@ -73,6 +78,11 @@ export class CreateAppReleaseDto {
   @Transform(({ value }) => trimString(value))
   @IsString()
   downloadUrl!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  storageKey?: string | null;
 
   @IsOptional()
   @IsArray()
@@ -146,6 +156,11 @@ export class UpdateAppReleaseDto {
   downloadUrl?: string;
 
   @IsOptional()
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  storageKey?: string | null;
+
+  @IsOptional()
   @IsArray()
   releaseNotes?: unknown[];
 
@@ -173,6 +188,12 @@ export class AppReleaseListQueryDto {
 
   @IsOptional()
   @Transform(({ value }) => normalizeToken(value))
-  @IsIn(publicAppReleaseStatuses)
-  status?: PublicAppReleaseStatus;
+  @IsIn(publicAppReleaseListStatuses)
+  status?: PublicAppReleaseListStatus;
+}
+
+export class PublishAppReleaseDto {
+  @IsOptional()
+  @IsBoolean()
+  retentionDryRun?: boolean;
 }

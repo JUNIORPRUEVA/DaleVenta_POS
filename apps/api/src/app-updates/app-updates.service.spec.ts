@@ -11,6 +11,7 @@ function release(overrides: Record<string, unknown> = {}) {
     fileSize: BigInt(123456789),
     sha256: validSha,
     downloadUrl: "https://downloads.example.com/Fullpos-Setup-1.0.7+131.exe",
+    storageDeletedAt: null,
     mandatory: false,
     minimumSupportedBuild: null,
     releaseNotes: [],
@@ -23,7 +24,7 @@ function buildService(releases: ReturnType<typeof release>[]) {
   const findMany = jest.fn().mockResolvedValue(releases);
   const service = new AppUpdatesService({
     appRelease: { findMany },
-  } as any, { get: jest.fn() } as any);
+  } as any, { get: jest.fn() } as any, { deleteObject: jest.fn() } as any);
 
   jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
   jest.spyOn((service as any).logger, "error").mockImplementation(() => undefined);
@@ -58,9 +59,18 @@ describe("AppUpdatesService", () => {
           platform: AppReleasePlatform.WINDOWS,
           channel: AppReleaseChannel.STABLE,
           status: AppReleaseStatus.PUBLISHED,
+          storageDeletedAt: null,
         },
       }),
     );
+  });
+
+  it("does not return an archived artifact even if it is greater", async () => {
+    const { service } = buildService([release({ buildNumber: 131, storageDeletedAt: new Date() })]);
+
+    await expect(service.check(query, "test-archived-artifact")).resolves.toEqual({
+      updateAvailable: false,
+    });
   });
 
   it("returns false when only DRAFT exists outside the query result", async () => {

@@ -28,9 +28,11 @@ function draft(overrides: Record<string, unknown> = {}) {
     fileSize: BigInt(123456789),
     sha256: validSha,
     downloadUrl: "https://downloads.example.com/Fullpos-Setup-1.0.7+131.exe",
+    storageKey: "releases/windows/stable/1.0.7-131/Fullpos-Setup-1.0.7+131.exe",
     releaseNotes: [],
     publishedAt: null,
     revokedAt: null,
+    storageDeletedAt: null,
     commitSha: "abcdef1",
     signed: true,
     createdAt: now,
@@ -49,6 +51,7 @@ function createDto(overrides: Record<string, unknown> = {}) {
     fileSize: 123456789,
     sha256: validSha,
     downloadUrl: "https://downloads.example.com/Fullpos-Setup-1.0.7+131.exe",
+    storageKey: "releases/windows/stable/1.0.7-131/Fullpos-Setup-1.0.7+131.exe",
     releaseNotes: [],
     commitSha: "abcdef1",
     signed: true,
@@ -65,8 +68,12 @@ function buildService(initial: ReturnType<typeof draft>[] = [], env: Record<stri
     if (where.id?.not && row.id === where.id.not) return false;
     if (where.platform && row.platform !== where.platform) return false;
     if (where.channel && row.channel !== where.channel) return false;
-    if (where.status && row.status !== where.status) return false;
+    if (where.status?.in && !where.status.in.includes(row.status)) return false;
+    if (where.status && !where.status.in && row.status !== where.status) return false;
     if (where.buildNumber && row.buildNumber !== where.buildNumber) return false;
+    if (Object.prototype.hasOwnProperty.call(where, "storageDeletedAt")) {
+      if (row.storageDeletedAt !== where.storageDeletedAt) return false;
+    }
     return true;
   };
 
@@ -112,14 +119,15 @@ function buildService(initial: ReturnType<typeof draft>[] = [], env: Record<stri
     appRelease,
     $transaction: jest.fn(async (callback: (tx: unknown) => unknown) => callback(prisma)),
   };
+  const r2 = { deleteObject: jest.fn(async () => ({ ok: true })) };
   const service = new AppUpdatesService(prisma as any, {
     get: jest.fn((key: string) => env[key]),
-  } as any);
+  } as any, r2 as any);
 
   jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
   jest.spyOn((service as any).logger, "error").mockImplementation(() => undefined);
 
-  return { service, prisma, rows };
+  return { service, prisma, rows, r2 };
 }
 
 describe("App release administration", () => {
@@ -291,6 +299,173 @@ describe("App release administration", () => {
         "revoked-check",
       ),
     ).resolves.toEqual({ updateAvailable: false });
+  });
+
+  it("publish retention keeps current and previous, deletes only the third-oldest exact key", async () => {
+    const { service, rows, r2 } = buildService([
+      draft({
+        id: "release-133",
+        buildNumber: 133,
+        status: AppReleaseStatus.DRAFT,
+        fileName: "Fullpos-Setup-1.0.7+133.exe",
+        storageKey: "releases/windows/stable/1.0.7-133/Fullpos-Setup-1.0.7+133.exe",
+      }),
+      draft({
+        id: "release-132",
+        buildNumber: 132,
+        status: AppReleaseStatus.PUBLISHED,
+        publishedAt: now,
+        fileName: "Fullpos-Setup-1.0.7+132.exe",
+        storageKey: "releases/windows/stable/1.0.7-132/Fullpos-Setup-1.0.7+132.exe",
+      }),
+      draft({
+        id: "release-131",
+        buildNumber: 131,
+        status: AppReleaseStatus.PUBLISHED,
+        publishedAt: now,
+        fileName: "Fullpos-Setup-1.0.7+131.exe",
+        storageKey: "releases/windows/stable/1.0.7-131/Fullpos-Setup-1.0.7+131.exe",
+      }),
+    ]);
+
+    const result = await service.publishRelease("release-133");
+
+    expect(result).toMatchObject({
+      id: "release-133",
+      status: "published",
+      retention: {
+        dryRun: false,
+        status: "COMPLETE",
+        keep: [
+          expect.objectContaining({ buildNumber: 133, action: "keep" }),
+          expect.objectContaining({ buildNumber: 132, action: "keep" }),
+        ],
+        candidates: [expect.objectContaining({ buildNumber: 131, action: "deleted" })],
+      },
+    });
+    expect(r2.deleteObject).toHaveBeenCalledWith(
+      "releases/windows/stable/1.0.7-131/Fullpos-Setup-1.0.7+131.exe",
+    );
+    expect(r2.deleteObject).toHaveBeenCalledTimes(1);
+    expect(rows.find((row) => row.id === "release-131")).toMatchObject({
+      status: AppReleaseStatus.ARCHIVED,
+      storageDeletedAt: expect.any(Date),
+    });
+    expect(rows.find((row) => row.id === "release-132")?.status).toBe(
+      AppReleaseStatus.PUBLISHED,
+    );
+    expect(rows.find((row) => row.id === "release-133")?.status).toBe(
+      AppReleaseStatus.PUBLISHED,
+    );
+  });
+
+  it("retention dry-run reports delete candidates without deleting or archiving", async () => {
+    const { service, rows, r2 } = buildService([
+      draft({ id: "release-133", buildNumber: 133, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({ id: "release-132", buildNumber: 132, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({ id: "release-131", buildNumber: 131, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+    ]);
+
+    const result = await service.applyWindowsStableRetention({ dryRun: true });
+
+    expect(result).toMatchObject({
+      dryRun: true,
+      status: "DRY_RUN",
+      candidates: [expect.objectContaining({ buildNumber: 131, action: "delete-candidate" })],
+    });
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+    expect(rows.find((row) => row.id === "release-131")?.status).toBe(
+      AppReleaseStatus.PUBLISHED,
+    );
+  });
+
+  it("publish failure does not run retention cleanup", async () => {
+    const { service, r2 } = buildService([
+      draft({ id: "published-1", status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+    ]);
+
+    await expect(service.publishRelease("published-1")).rejects.toThrow("ya fue publicado");
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+  });
+
+  it("storage delete failure keeps the new current published and reports partial cleanup", async () => {
+    const { service, rows, r2 } = buildService([
+      draft({
+        id: "release-133",
+        buildNumber: 133,
+        status: AppReleaseStatus.DRAFT,
+        fileName: "Fullpos-Setup-1.0.7+133.exe",
+        storageKey: "releases/windows/stable/1.0.7-133/Fullpos-Setup-1.0.7+133.exe",
+      }),
+      draft({ id: "release-132", buildNumber: 132, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({ id: "release-131", buildNumber: 131, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+    ]);
+    r2.deleteObject.mockRejectedValueOnce(new Error("R2 down"));
+
+    const result = await service.publishRelease("release-133");
+
+    expect(result).toMatchObject({
+      status: "published",
+      retention: {
+        status: "PARTIAL",
+        candidates: [expect.objectContaining({ buildNumber: 131, action: "failed" })],
+      },
+    });
+    expect(rows.find((row) => row.id === "release-133")?.status).toBe(
+      AppReleaseStatus.PUBLISHED,
+    );
+    expect(rows.find((row) => row.id === "release-131")?.status).toBe(
+      AppReleaseStatus.PUBLISHED,
+    );
+  });
+
+  it("retention never deletes DRAFT, other platform, other channel, current or previous", async () => {
+    const { service, r2 } = buildService([
+      draft({ id: "win-134", buildNumber: 134, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({ id: "win-133", buildNumber: 133, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({ id: "win-draft", buildNumber: 132, status: AppReleaseStatus.DRAFT }),
+      draft({
+        id: "android-130",
+        platform: AppReleasePlatform.ANDROID,
+        buildNumber: 130,
+        status: AppReleaseStatus.PUBLISHED,
+        publishedAt: now,
+      }),
+      draft({
+        id: "beta-129",
+        channel: AppReleaseChannel.BETA,
+        buildNumber: 129,
+        status: AppReleaseStatus.PUBLISHED,
+        publishedAt: now,
+      }),
+    ]);
+
+    const result = await service.applyWindowsStableRetention({ dryRun: false });
+
+    expect(result).toMatchObject({ status: "COMPLETE", candidates: [] });
+    expect(r2.deleteObject).not.toHaveBeenCalled();
+  });
+
+  it("retention skips unsafe or missing storage keys instead of deleting by prefix", async () => {
+    const { service, r2 } = buildService([
+      draft({ id: "release-133", buildNumber: 133, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({ id: "release-132", buildNumber: 132, status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
+      draft({
+        id: "release-131",
+        buildNumber: 131,
+        status: AppReleaseStatus.PUBLISHED,
+        publishedAt: now,
+        storageKey: "uploads/companies/company-a/not-a-release.exe",
+      }),
+    ]);
+
+    const result = await service.applyWindowsStableRetention({ dryRun: false });
+
+    expect(result).toMatchObject({
+      status: "PARTIAL",
+      candidates: [expect.objectContaining({ buildNumber: 131, action: "skipped" })],
+    });
+    expect(r2.deleteObject).not.toHaveBeenCalled();
   });
 
   it("protects admin release routes with JWT roles", () => {

@@ -45,6 +45,99 @@ Authenticode status. Do not commit `.env`.
 
 Raw commands such as `flutter build windows --release` are useful validation steps, but they are not the official DaleVentas Windows release path.
 
+## Prepare / Publish Automation
+
+Windows release automation is intentionally split into two explicit steps.
+Preparing a release must never publish it to clients.
+
+Prepare a Windows release candidate:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/release/prepare_windows_release.ps1 `
+  -ApiBaseUrl https://<uat-or-admin-api> `
+  -PublicBaseUrl https://<artifact-public-base> `
+  -StorageMode Local `
+  -StorageRoot C:\fullpos-uat-storage `
+  -AllowUnsignedUat
+```
+
+The prepare script reads `apps/fulltech_app/pubspec.yaml`, runs the official
+Windows builder unless `-SkipBuild` is supplied, computes size and SHA-256,
+checks Authenticode status, uploads the installer without overwriting an
+existing object, verifies HTTPS download size/hash, and creates an AppRelease
+`DRAFT`. The script prints `READY_TO_PUBLISH=YES` only after all of those
+checks pass.
+
+Publish a prepared release:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/release/publish_windows_release.ps1 `
+  -ReleaseId <draft-release-id> `
+  -ApiBaseUrl https://<uat-or-admin-api> `
+  -ConfirmPublish `
+  -RetentionDryRun `
+  -AllowUnsignedUat
+```
+
+Remove `-RetentionDryRun` only after reviewing the dry-run report. Publishing
+validates the draft, re-downloads the artifact over HTTPS, verifies SHA-256 and
+size, applies the signature policy, publishes the AppRelease, confirms
+`GET /api/app-updates/check`, and then applies Windows/STABLE retention.
+`-ConfirmPublish` is required so a release cannot be published accidentally by
+running the publish script without an explicit publish intent.
+
+Both scripts read the admin bearer token from `FULLPOS_RELEASE_API_TOKEN` or
+`-ApiToken`. Do not place tokens, access keys, or storage secrets in the
+repository or in command transcripts.
+
+## Windows/STABLE Retention
+
+After a Windows/STABLE release is successfully published, FullPOS keeps only:
+
+1. current release: newest published build;
+2. previous release: immediate prior published build.
+
+Older Windows/STABLE published releases are archived by deleting only their
+exact storage object and preserving the AppRelease row for audit. `REVOKED`
+remains reserved for untrusted/revoked releases; retention uses `ARCHIVED` and
+`storageDeletedAt`.
+
+Safe deletion rules:
+
+- retention runs only after publish succeeds;
+- dry-run is available and should be executed first;
+- current and previous are never deleted;
+- DRAFT releases are never deleted;
+- other platforms and channels are ignored;
+- deletion requires an exact `storageKey`;
+- the key must be under `releases/windows/stable/` and end with the exact
+  installer filename;
+- no prefix, wildcard, recursive, or folder delete is used;
+- storage delete failure does not roll back the newly published release and is
+  reported as partial cleanup.
+
+Storage provider:
+
+- Production/default deletion uses `R2Service.deleteObject(storageKey)`, which
+  calls the configured S3/R2 bucket with an exact object key.
+- Local UAT may set `FULLPOS_RELEASE_STORAGE_MODE=local` and
+  `FULLPOS_RELEASE_STORAGE_ROOT=<isolated-root>`; in that mode the release
+  storage adapter deletes only the exact resolved file under that root.
+- Production must not use the local UAT provider.
+
+Example rotation:
+
+```text
+Before publish: 131, 132
+Publish:        133
+Keep:           133, 132
+Archive/delete: 131 artifact only
+
+Next publish:   134
+Keep:           134, 133
+Archive/delete: 132 artifact only
+```
+
 ## Inno Setup Requirement
 
 Do not build production installers with Inno Setup preview builds.

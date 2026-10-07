@@ -15,6 +15,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { AppReleaseStorageService } from "./app-release-storage.service";
 import { AppUpdateManifestDto } from "./dto/app-update-manifest.dto";
 import {
   CheckAppUpdateQueryDto,
@@ -24,7 +25,7 @@ import {
 import {
   AppReleaseListQueryDto,
   CreateAppReleaseDto,
-  PublicAppReleaseStatus,
+  PublicAppReleaseListStatus,
   UpdateAppReleaseDto,
 } from "./dto/app-release-admin.dto";
 
@@ -35,6 +36,7 @@ type AppReleaseForManifest = {
   fileSize: bigint | number;
   sha256: string;
   downloadUrl: string;
+  storageDeletedAt: Date | null;
   mandatory: boolean;
   minimumSupportedBuild: number | null;
   releaseNotes: Prisma.JsonValue;
@@ -54,9 +56,11 @@ type AppReleaseForAdmin = {
   fileSize: bigint | number;
   sha256: string;
   downloadUrl: string;
+  storageKey: string | null;
   releaseNotes: Prisma.JsonValue;
   publishedAt: Date | null;
   revokedAt: Date | null;
+  storageDeletedAt: Date | null;
   commitSha: string | null;
   signed: boolean;
   createdAt: Date;
@@ -74,10 +78,23 @@ type NormalizedAppReleaseInput = {
   fileSize: bigint;
   sha256: string;
   downloadUrl: string;
+  storageKey: string | null;
   releaseNotes: Prisma.InputJsonValue;
   commitSha: string | null;
   signed: boolean;
   status: AppReleaseStatus;
+};
+
+type RetentionRelease = AppReleaseForAdmin;
+
+type AppReleaseRetentionItem = {
+  id: string;
+  version: string;
+  buildNumber: number;
+  status: string;
+  storageKey: string | null;
+  action: "keep" | "delete-candidate" | "deleted" | "skipped" | "failed";
+  reason?: string;
 };
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -93,6 +110,7 @@ export class AppUpdatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly releaseStorage: AppReleaseStorageService,
   ) {}
 
   async createRelease(dto: CreateAppReleaseDto) {
@@ -147,7 +165,10 @@ export class AppUpdatesService {
     return this.toAdminDto(release);
   }
 
-  async publishRelease(id: string) {
+  async publishRelease(
+    id: string,
+    options: { retentionDryRun?: boolean } = {},
+  ) {
     const release = await this.prisma.$transaction(async (tx) => {
       const current = await tx.appRelease.findUnique({ where: { id } });
       if (!current) throw new NotFoundException("Release de actualización no encontrado.");
@@ -180,7 +201,28 @@ export class AppUpdatesService {
     this.logger.log(
       `app_release_published id=${release.id} platform=${release.platform} channel=${release.channel} build=${release.buildNumber}`,
     );
-    return this.toAdminDto(release);
+    const response = this.toAdminDto(release);
+    if (
+      release.platform !== AppReleasePlatform.WINDOWS ||
+      release.channel !== AppReleaseChannel.STABLE
+    ) {
+      return {
+        ...response,
+        retention: {
+          dryRun: options.retentionDryRun ?? false,
+          status: "SKIPPED",
+          reason: "Retention applies only to WINDOWS/STABLE.",
+          keep: [],
+          candidates: [],
+        },
+      };
+    }
+
+    const retention = await this.applyWindowsStableRetention({
+      dryRun: options.retentionDryRun ?? false,
+      publishedReleaseId: release.id,
+    });
+    return { ...response, retention };
   }
 
   async revokeRelease(id: string) {
@@ -214,6 +256,97 @@ export class AppUpdatesService {
     return this.toAdminDto(release);
   }
 
+  async applyWindowsStableRetention(options: {
+    dryRun?: boolean;
+    publishedReleaseId?: string;
+  } = {}) {
+    const dryRun = options.dryRun ?? true;
+    const releases = await this.prisma.appRelease.findMany({
+      where: {
+        platform: AppReleasePlatform.WINDOWS,
+        channel: AppReleaseChannel.STABLE,
+        status: { in: [AppReleaseStatus.PUBLISHED, AppReleaseStatus.DRAFT] },
+      },
+      orderBy: [{ buildNumber: "desc" }, { createdAt: "desc" }],
+    });
+
+    const published = releases.filter(
+      (release) => release.status === AppReleaseStatus.PUBLISHED,
+    ) as RetentionRelease[];
+    const drafts = releases.filter(
+      (release) => release.status === AppReleaseStatus.DRAFT,
+    ) as RetentionRelease[];
+    const keep = published.slice(0, 2);
+    const candidates = published.slice(2);
+    const keepIds = new Set(keep.map((release) => release.id));
+    const draftStorageKeys = new Set(
+      drafts.map((release) => release.storageKey).filter((key): key is string => !!key),
+    );
+    const results: AppReleaseRetentionItem[] = keep.map((release) =>
+      this.toRetentionItem(release, "keep"),
+    );
+
+    for (const release of candidates) {
+      const reason = this.retentionSkipReason(release, {
+        keepIds,
+        draftStorageKeys,
+        publishedReleaseId: options.publishedReleaseId,
+      });
+      if (reason) {
+        results.push(this.toRetentionItem(release, "skipped", reason));
+        continue;
+      }
+
+      if (dryRun) {
+        results.push(this.toRetentionItem(release, "delete-candidate"));
+        continue;
+      }
+
+      try {
+        await this.releaseStorage.deleteObject(release.storageKey!);
+        await this.prisma.appRelease.update({
+          where: { id: release.id },
+          data: {
+            status: AppReleaseStatus.ARCHIVED,
+            storageDeletedAt: new Date(),
+          },
+        });
+        results.push(this.toRetentionItem(release, "deleted"));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `app_release_retention_delete_failed id=${release.id} build=${release.buildNumber} key=${release.storageKey} error=${message}`,
+        );
+        results.push(this.toRetentionItem(release, "failed", "Storage delete failed."));
+      }
+    }
+
+    const failed = results.some((item) => item.action === "failed");
+    const skippedCandidates = results.some(
+      (item) => item.action === "skipped" && !keepIds.has(item.id),
+    );
+    const deleted = results.some((item) => item.action === "deleted");
+    const deleteCandidates = results.some((item) => item.action === "delete-candidate");
+    const status = failed
+      ? "PARTIAL"
+      : skippedCandidates
+        ? "PARTIAL"
+        : dryRun
+          ? "DRY_RUN"
+          : deleted || candidates.length === 0 || deleteCandidates
+            ? "COMPLETE"
+            : "COMPLETE";
+
+    return {
+      dryRun,
+      status,
+      platform: "windows",
+      channel: "stable",
+      keep: results.filter((item) => item.action === "keep"),
+      candidates: results.filter((item) => item.action !== "keep"),
+    };
+  }
+
   async check(
     query: CheckAppUpdateQueryDto,
     clientKey = "unknown",
@@ -228,6 +361,7 @@ export class AppUpdatesService {
         platform,
         channel,
         status: AppReleaseStatus.PUBLISHED,
+        storageDeletedAt: null,
       },
       orderBy: { buildNumber: "desc" },
       select: {
@@ -237,6 +371,7 @@ export class AppUpdatesService {
         fileSize: true,
         sha256: true,
         downloadUrl: true,
+        storageDeletedAt: true,
         mandatory: true,
         minimumSupportedBuild: true,
         releaseNotes: true,
@@ -305,7 +440,8 @@ export class AppUpdatesService {
       Number.isSafeInteger(fileSize) &&
       fileSize > 0 &&
       release.fileName.trim().length > 0 &&
-      release.publishedAt !== null;
+      release.publishedAt !== null &&
+      release.storageDeletedAt === null;
 
     if (!valid) {
       this.logger.error(
@@ -315,7 +451,7 @@ export class AppUpdatesService {
           release.fileSize,
         )} fileNamePresent=${release.fileName.trim().length > 0} publishedAtPresent=${
           release.publishedAt !== null
-        }`,
+        } storageAvailable=${release.storageDeletedAt === null}`,
       );
     }
 
@@ -339,11 +475,12 @@ export class AppUpdatesService {
     return map[channel];
   }
 
-  private toStatus(status: PublicAppReleaseStatus) {
-    const map: Record<PublicAppReleaseStatus, AppReleaseStatus> = {
+  private toStatus(status: PublicAppReleaseListStatus) {
+    const map: Record<PublicAppReleaseListStatus, AppReleaseStatus> = {
       draft: AppReleaseStatus.DRAFT,
       published: AppReleaseStatus.PUBLISHED,
       revoked: AppReleaseStatus.REVOKED,
+      archived: AppReleaseStatus.ARCHIVED,
     };
     return map[status];
   }
@@ -365,11 +502,12 @@ export class AppUpdatesService {
     return map[channel];
   }
 
-  private toPublicStatus(status: AppReleaseStatus): PublicAppReleaseStatus {
-    const map: Record<AppReleaseStatus, PublicAppReleaseStatus> = {
+  private toPublicStatus(status: AppReleaseStatus): PublicAppReleaseListStatus {
+    const map: Record<AppReleaseStatus, PublicAppReleaseListStatus> = {
       DRAFT: "draft",
       PUBLISHED: "published",
       REVOKED: "revoked",
+      ARCHIVED: "archived",
     };
     return map[status];
   }
@@ -386,6 +524,7 @@ export class AppUpdatesService {
       fileSize: BigInt(dto.fileSize),
       sha256: dto.sha256,
       downloadUrl: dto.downloadUrl,
+      storageKey: dto.storageKey || null,
       releaseNotes: (dto.releaseNotes ?? []) as Prisma.InputJsonValue,
       commitSha: dto.commitSha || null,
       signed: dto.signed ?? false,
@@ -407,6 +546,7 @@ export class AppUpdatesService {
     if (dto.fileSize !== undefined) data.fileSize = BigInt(dto.fileSize);
     if (dto.sha256 !== undefined) data.sha256 = dto.sha256;
     if (dto.downloadUrl !== undefined) data.downloadUrl = dto.downloadUrl;
+    if (dto.storageKey !== undefined) data.storageKey = dto.storageKey || null;
     if (dto.releaseNotes !== undefined) data.releaseNotes = dto.releaseNotes as Prisma.InputJsonValue;
     if (dto.commitSha !== undefined) data.commitSha = dto.commitSha || null;
     if (dto.signed !== undefined) data.signed = dto.signed;
@@ -429,6 +569,7 @@ export class AppUpdatesService {
       fileSize: dto.fileSize === undefined ? current.fileSize : BigInt(dto.fileSize),
       sha256: dto.sha256 ?? current.sha256,
       downloadUrl: dto.downloadUrl ?? current.downloadUrl,
+      storageKey: dto.storageKey === undefined ? current.storageKey : dto.storageKey || null,
       releaseNotes: dto.releaseNotes ?? current.releaseNotes,
       commitSha: dto.commitSha === undefined ? current.commitSha : dto.commitSha || null,
       signed: dto.signed ?? current.signed,
@@ -461,6 +602,7 @@ export class AppUpdatesService {
       fileSize: bigint | number;
       sha256: string;
       downloadUrl: string;
+      storageKey?: string | null;
       fileName: string;
       version: string;
       commitSha?: string | null;
@@ -491,6 +633,9 @@ export class AppUpdatesService {
     }
     if (release.commitSha && !/^[a-fA-F0-9]{7,64}$/.test(release.commitSha)) {
       throw new BadRequestException("commitSha no es válido.");
+    }
+    if (release.storageKey && !this.isSafeReleaseStorageKey(release.storageKey, release.fileName)) {
+      throw new BadRequestException("storageKey no es seguro para releases Windows.");
     }
     if (options.requireSigned && !release.signed) {
       throw new BadRequestException("La política actual exige releases firmados.");
@@ -541,14 +686,69 @@ export class AppUpdatesService {
       fileSize: Number(release.fileSize),
       sha256: release.sha256,
       downloadUrl: release.downloadUrl,
+      storageKey: release.storageKey,
       releaseNotes: Array.isArray(release.releaseNotes) ? release.releaseNotes : [],
       publishedAt: release.publishedAt?.toISOString() ?? null,
       revokedAt: release.revokedAt?.toISOString() ?? null,
+      storageDeletedAt: release.storageDeletedAt?.toISOString() ?? null,
       commitSha: release.commitSha,
       signed: release.signed,
       createdAt: release.createdAt.toISOString(),
       updatedAt: release.updatedAt.toISOString(),
     };
+  }
+
+  private retentionSkipReason(
+    release: RetentionRelease,
+    context: {
+      keepIds: Set<string>;
+      draftStorageKeys: Set<string>;
+      publishedReleaseId?: string;
+    },
+  ) {
+    if (context.keepIds.has(release.id)) return "Release is CURRENT or PREVIOUS.";
+    if (context.publishedReleaseId && release.id === context.publishedReleaseId) {
+      return "Release was just published.";
+    }
+    if (release.status !== AppReleaseStatus.PUBLISHED) return "Release is not PUBLISHED.";
+    if (release.storageDeletedAt !== null) return "Artifact already deleted.";
+    if (!release.storageKey) return "Release has no exact storageKey.";
+    if (context.draftStorageKeys.has(release.storageKey)) {
+      return "Storage key is referenced by an active DRAFT.";
+    }
+    if (!this.isSafeReleaseStorageKey(release.storageKey, release.fileName)) {
+      return "Storage key is outside the Windows stable release namespace.";
+    }
+    return null;
+  }
+
+  private toRetentionItem(
+    release: RetentionRelease,
+    action: AppReleaseRetentionItem["action"],
+    reason?: string,
+  ): AppReleaseRetentionItem {
+    return {
+      id: release.id,
+      version: release.version,
+      buildNumber: release.buildNumber,
+      status: this.toPublicStatus(release.status),
+      storageKey: release.storageKey,
+      action,
+      ...(reason ? { reason } : {}),
+    };
+  }
+
+  private isSafeReleaseStorageKey(value: string, fileName: string) {
+    const storageKey = value.trim();
+    const expectedSuffix = `/${fileName.trim()}`;
+    return (
+      storageKey.startsWith("releases/windows/stable/") &&
+      storageKey.endsWith(expectedSuffix) &&
+      !storageKey.includes("..") &&
+      !storageKey.includes("\\") &&
+      !storageKey.startsWith("/") &&
+      !/^[A-Za-z]:/.test(storageKey)
+    );
   }
 
   private logResult(

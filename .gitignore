@@ -14,6 +14,7 @@ apps/fulltech_app/.env
 .env.uat.local
 
 # local/generated artifacts
+artifacts/
 fulltech-pwa/
 apps/fulltech_app/release_artifacts/
 apps/fulltech_app/emulator-*.png
@@ -25,6 +26,8 @@ apps/fulltech_app/build_w14_validation/
 
 # Release artifact outputs (large installers)
 release/
+!scripts/release/
+!scripts/release/*.ps1
 evidence/
 installer/inno-build-report.txt
 
