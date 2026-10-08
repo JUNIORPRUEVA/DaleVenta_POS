@@ -280,13 +280,14 @@ class CashTurnMenuButton extends ConsumerWidget {
                 () => _openCash(context, ref),
               ),
             ),
-          )
-        // El detalle y el corte solo se ofrecen cuando existe un turno abierto
-        // identificable y el estado NO está en revisión. Sin turno abierto no
-        // se presenta ninguna acción sobre un turno inexistente: antes se
-        // ofrecía "Turno actual" sobre un estado no confirmado (caché local) y
-        // pedía el corte de un turno que el servidor ya no tenía (404).
-        else if (active != null && !requiresReview) ...[
+          ),
+        // El detalle del turno está SIEMPRE disponible como información: con
+        // turno abierto muestra su corte, y sin turno abierto informa con UI
+        // normal ("No tienes un turno abierto actualmente."), nunca con el
+        // sistema global de errores. Antes pedía el corte de un turno
+        // inexistente (GET /cash/summary -> 404) sobre un estado no confirmado
+        // (caché local) y el error quedaba sin capturar.
+        if (!requiresReview)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -300,6 +301,9 @@ class CashTurnMenuButton extends ConsumerWidget {
               }),
             ),
           ),
+        // "Hacer corte de turno" solo cuando existe un turno abierto
+        // identificable: no se cierra un turno que no existe.
+        if (active != null && !requiresReview)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -315,7 +319,6 @@ class CashTurnMenuButton extends ConsumerWidget {
               ),
             ),
           ),
-        ],
         PopupMenuItem(
           enabled: false,
           padding: EdgeInsets.zero,

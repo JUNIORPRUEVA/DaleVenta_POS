@@ -199,16 +199,31 @@ void main() {
     await tester.pump(const Duration(seconds: 11));
   }
 
-  testWidgets('sin turno abierto el menú NO ofrece "Turno actual" ni corte', (
-    tester,
-  ) async {
+  testWidgets('sin turno abierto "Turno actual" informa sin error y no se '
+      'ofrece cerrar un turno inexistente', (tester) async {
     await pumpTurnMenu(tester, noOpenShiftRepository());
     await openTurnMenu(tester);
 
     expect(find.text('Abrir caja'), findsOneWidget);
-    expect(find.text('Turno actual'), findsNothing);
+    // El detalle del turno sigue accesible como información...
+    expect(find.text('Turno actual'), findsOneWidget);
+    // ...pero no se ofrece cerrar un turno que no existe.
     expect(find.text('Hacer corte de turno'), findsNothing);
-    expect(AppErrorReporter.instance.lastError.value, isNull);
+
+    await tester.tap(find.text('Turno actual'));
+    await tester.pump();
+    // `_runAfterNavigatorSettles` espera a que el menú se cierre.
+    await tester.pump(const Duration(milliseconds: 300));
+    await settleAsync(tester);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(
+      AppErrorReporter.instance.lastError.value,
+      isNull,
+      reason: 'no hay turno abierto: es un estado de negocio, no un error del '
+          'sistema global',
+    );
+    expect(find.text('No tienes un turno abierto actualmente.'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await unmountTree(tester);
   });
@@ -226,7 +241,7 @@ void main() {
     await openTurnMenu(tester);
 
     expect(find.text('Estado no sincronizado'), findsOneWidget);
-    expect(find.text('Turno actual'), findsNothing);
+    expect(find.text('Turno actual'), findsOneWidget);
     expect(find.text('Hacer corte de turno'), findsNothing);
     expect(find.text('Abrir caja'), findsNothing);
     expect(AppErrorReporter.instance.lastError.value, isNull);
