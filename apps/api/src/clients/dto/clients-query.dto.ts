@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 const toSafePositiveIntOrUndefined = (value: unknown) => {
   if (value === undefined || value === null) return undefined;
@@ -36,7 +36,15 @@ export class ClientsQueryDto {
   @Transform(({ value }) => toSafePositiveIntOrUndefined(value))
   @IsInt()
   @Min(1)
+  @Max(200)
   pageSize?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => toSafePositiveIntOrUndefined(value))
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
 
   @IsOptional()
   @Transform(({ value }) => toBooleanOrUndefined(value))

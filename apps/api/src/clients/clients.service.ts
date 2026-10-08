@@ -12,6 +12,10 @@ import { Prisma, Role, type Client } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhone } from '../common/utils/normalize-phone';
 import { normalizeTaxId } from '../common/utils/normalize-tax-id';
+import {
+  normalizePagePagination,
+  toPageResult,
+} from '../common/pagination/page-pagination';
 import { ClientLocationFieldsDto } from './dto/client-location-fields.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { ClientsQueryDto } from './dto/clients-query.dto';
@@ -392,9 +396,12 @@ export class ClientsService {
 
   async findAll(user: AuthUser, query: ClientsQueryDto) {
     const companyId = requireTenant(user);
-    const page = query.page && query.page > 0 ? query.page : 1;
-    const pageSize = query.pageSize && query.pageSize > 0 ? query.pageSize : 20;
-    const skip = (page - 1) * pageSize;
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+      pageSize: query.pageSize,
+      defaultLimit: 20,
+    });
 
     const search = query.search?.trim();
     const phone = query.phone?.trim();
@@ -444,19 +451,26 @@ export class ClientsService {
     const [items, total] = await Promise.all([
       this.prisma.client.findMany({
         where,
-        orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
-        skip,
-        take: pageSize,
+        orderBy: [
+          { lastActivityAt: 'desc' },
+          { createdAt: 'desc' },
+          { id: 'desc' },
+        ],
+        skip: pagination.skip,
+        take: pagination.take,
       }),
       this.prisma.client.count({ where }),
     ]);
 
+    const pageResult = toPageResult(
+      this.serializeClientCollection(items),
+      pagination,
+    );
     return {
-      items: this.serializeClientCollection(items),
+      ...pageResult,
       total,
-      page,
-      pageSize,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      pageSize: pageResult.limit,
+      totalPages: Math.max(1, Math.ceil(total / pageResult.limit)),
     };
   }
 

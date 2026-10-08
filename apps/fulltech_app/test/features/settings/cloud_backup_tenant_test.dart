@@ -110,6 +110,104 @@ void main() {
     }
   });
 
+  test('createCloudBackup captures clientes across multiple pages', () async {
+    final backupRoot = await Directory.systemTemp.createTemp(
+      'fullpos_backup_root_',
+    );
+    addTearDown(() => backupRoot.delete(recursive: true));
+
+    final clientPages = <int>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://backup.test'))
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        if (options.path == ApiRoutes.clients) {
+          final page = options.queryParameters['page'] as int;
+          clientPages.add(page);
+          return _jsonBody({
+            'items': [
+              {'id': 'client-$page', 'nombre': 'Cliente $page'},
+            ],
+            'page': page,
+            'limit': 200,
+            'hasMore': page == 1,
+            'nextPage': page == 1 ? 2 : null,
+          });
+        }
+        return _jsonBody({
+          'items': <Object?>[],
+          'page': 1,
+          'limit': 200,
+          'hasMore': false,
+          'nextPage': null,
+        });
+      });
+
+    final container = _backupContainer(
+      dio: dio,
+      backupRoot: backupRoot,
+    );
+    addTearDown(container.dispose);
+
+    final result = await container
+        .read(cloudBackupServiceProvider)
+        .createCloudBackup();
+
+    expect(result.status, CloudBackupStatus.complete);
+    expect(clientPages, [1, 2]);
+    final clientes = await _moduleItems(result.zipPath, 'clientes');
+    expect(clientes.map((item) => item['id']), ['client-1', 'client-2']);
+    expect(result.moduleStatus['clientes']?.records, 2);
+  });
+
+  test('page N failure keeps strict required-module validation', () async {
+    final backupRoot = await Directory.systemTemp.createTemp(
+      'fullpos_backup_root_',
+    );
+    addTearDown(() => backupRoot.delete(recursive: true));
+
+    final dio = Dio(BaseOptions(baseUrl: 'https://backup.test'))
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        if (options.path == ApiRoutes.clients &&
+            options.queryParameters['page'] == 2) {
+          return _jsonBody({'message': 'temporary failure'}, statusCode: 503);
+        }
+        if (options.path == ApiRoutes.clients) {
+          return _jsonBody({
+            'items': [
+              {'id': 'client-1', 'nombre': 'Cliente 1'},
+            ],
+            'page': 1,
+            'limit': 200,
+            'hasMore': true,
+            'nextPage': 2,
+          });
+        }
+        return _jsonBody({
+          'items': <Object?>[],
+          'page': 1,
+          'limit': 200,
+          'hasMore': false,
+          'nextPage': null,
+        });
+      });
+
+    final container = _backupContainer(
+      dio: dio,
+      backupRoot: backupRoot,
+    );
+    addTearDown(container.dispose);
+
+    await expectLater(
+      container.read(cloudBackupServiceProvider).createCloudBackup(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('clientes'),
+        ),
+      ),
+    );
+  });
+
   test(
     'accepts matching backup manifests and rejects another company',
     () async {
@@ -392,6 +490,53 @@ Future<String> _canonicalZipForCompany(String companyId) async {
   final zipFile = File('${dir.path}/backup.dvbackup');
   await zipFile.writeAsBytes(zipBytes, flush: true);
   return zipFile.path;
+}
+
+ProviderContainer _backupContainer({
+  required Dio dio,
+  required Directory backupRoot,
+}) {
+  return ProviderContainer(
+    overrides: [
+      authStateProvider.overrideWith(_TestAuthController.new),
+      dioProvider.overrideWithValue(dio),
+      companySettingsRepositoryProvider.overrideWithValue(
+        _FakeCompanySettingsRepository(),
+      ),
+      printerSettingsRepositoryProvider.overrideWithValue(
+        _FakePrinterSettingsRepository(),
+      ),
+      cloudBackupServiceProvider.overrideWith(
+        (ref) => CloudBackupService(ref, dio, backupRootOverride: backupRoot),
+      ),
+    ],
+  );
+}
+
+ResponseBody _jsonBody(Object? data, {int statusCode = 200}) {
+  return ResponseBody.fromString(
+    jsonEncode(data),
+    statusCode,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
+}
+
+Future<List<Map<String, dynamic>>> _moduleItems(
+  String zipPath,
+  String module,
+) async {
+  final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
+  final entry = archive.files.firstWhere(
+    (file) => file.name.replaceAll('\\', '/').endsWith('/$module.json'),
+  );
+  final decoded = jsonDecode(utf8.decode(entry.content));
+  final items = decoded is Map ? decoded['items'] : decoded;
+  return (items as List)
+      .whereType<Map>()
+      .map((item) => item.cast<String, dynamic>())
+      .toList(growable: false);
 }
 
 Map<String, Object?> _manifestForCompany(
