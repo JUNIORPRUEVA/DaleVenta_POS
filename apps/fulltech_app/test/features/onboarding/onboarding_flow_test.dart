@@ -6,14 +6,15 @@ import 'package:daleventa_pos/core/routing/app_router.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
 import 'package:daleventa_pos/features/onboarding/data/onboarding_repository.dart';
 import 'package:daleventa_pos/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _FakeOnboardingRepository implements OnboardingRepository {
-  _FakeOnboardingRepository(this.state);
+class _FakeOnboardingRepository extends OnboardingRepository {
+  _FakeOnboardingRepository(this.state) : super(Dio());
 
   OnboardingStateModel state;
   int startCalls = 0;
@@ -25,32 +26,6 @@ class _FakeOnboardingRepository implements OnboardingRepository {
   Future<OnboardingStateModel> start() async {
     startCalls += 1;
     state = _state(status: 'IN_PROGRESS', shouldShowWelcome: false);
-    return state;
-  }
-
-  @override
-  Future<OnboardingStateModel> setStep(
-    String step,
-    String status, {
-    bool completeFlow = false,
-  }) async {
-    state = state.copyWith(
-      required: !completeFlow,
-      status: completeFlow ? 'COMPLETED' : state.status,
-      steps: {...state.steps, step: status},
-    );
-    return state;
-  }
-
-  @override
-  Future<OnboardingStateModel> setTutorial(String status) async {
-    state = state.copyWith(tutorialStatus: status);
-    return state;
-  }
-
-  @override
-  Future<OnboardingStateModel> skipAll() async {
-    state = state.copyWith(required: false, status: 'SKIPPED');
     return state;
   }
 }

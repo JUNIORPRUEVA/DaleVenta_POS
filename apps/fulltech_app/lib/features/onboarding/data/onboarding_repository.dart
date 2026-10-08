@@ -8,32 +8,15 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
 
 final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
-  return RealOnboardingRepository(ref.watch(dioProvider));
+  return OnboardingRepository(ref.watch(dioProvider));
 });
 
-abstract class OnboardingRepository {
-  Future<OnboardingStateModel> getState();
-
-  Future<OnboardingStateModel> start();
-
-  Future<OnboardingStateModel> skipAll();
-
-  Future<OnboardingStateModel> setStep(
-    String step,
-    String status, {
-    bool completeFlow = false,
-  });
-
-  Future<OnboardingStateModel> setTutorial(String status);
-}
-
-class RealOnboardingRepository implements OnboardingRepository {
-  RealOnboardingRepository(this._dio);
+class OnboardingRepository {
+  OnboardingRepository(this._dio);
 
   final Dio _dio;
   static const _timeout = Duration(seconds: 18);
 
-  @override
   Future<OnboardingStateModel> getState() async {
     try {
       final res = await _dio
@@ -55,13 +38,10 @@ class RealOnboardingRepository implements OnboardingRepository {
     }
   }
 
-  @override
   Future<OnboardingStateModel> start() => _post(ApiRoutes.onboardingStart);
 
-  @override
   Future<OnboardingStateModel> skipAll() => _post(ApiRoutes.onboardingSkipAll);
 
-  @override
   Future<OnboardingStateModel> setStep(
     String step,
     String status, {
@@ -73,7 +53,6 @@ class RealOnboardingRepository implements OnboardingRepository {
     });
   }
 
-  @override
   Future<OnboardingStateModel> setTutorial(String status) {
     return _patch(ApiRoutes.onboardingTutorial, {'status': status});
   }
@@ -153,28 +132,6 @@ class OnboardingStateModel {
 
   bool get allReviewed => reviewedSteps >= 4;
 
-  OnboardingStateModel copyWith({
-    bool? required,
-    bool? shouldShowWelcome,
-    String? status,
-    String? tutorialStatus,
-    Map<String, String>? steps,
-    OnboardingCompanyModel? company,
-    int? productCount,
-    DateTime? trialEndsAt,
-  }) {
-    return OnboardingStateModel(
-      required: required ?? this.required,
-      shouldShowWelcome: shouldShowWelcome ?? this.shouldShowWelcome,
-      status: status ?? this.status,
-      tutorialStatus: tutorialStatus ?? this.tutorialStatus,
-      steps: steps ?? this.steps,
-      company: company ?? this.company,
-      productCount: productCount ?? this.productCount,
-      trialEndsAt: trialEndsAt ?? this.trialEndsAt,
-    );
-  }
-
   factory OnboardingStateModel.fromJson(Map<String, dynamic> json) {
     final stepsRaw = json['steps'];
     final trialRaw = json['trial'];
@@ -225,28 +182,6 @@ class OnboardingCompanyModel {
   final bool taxEnabled;
   final bool pricesIncludeTax;
   final bool ncfEnabled;
-
-  OnboardingCompanyModel copyWith({
-    String? name,
-    String? commercialName,
-    String? rnc,
-    String? phone,
-    String? address,
-    bool? taxEnabled,
-    bool? pricesIncludeTax,
-    bool? ncfEnabled,
-  }) {
-    return OnboardingCompanyModel(
-      name: name ?? this.name,
-      commercialName: commercialName ?? this.commercialName,
-      rnc: rnc ?? this.rnc,
-      phone: phone ?? this.phone,
-      address: address ?? this.address,
-      taxEnabled: taxEnabled ?? this.taxEnabled,
-      pricesIncludeTax: pricesIncludeTax ?? this.pricesIncludeTax,
-      ncfEnabled: ncfEnabled ?? this.ncfEnabled,
-    );
-  }
 
   factory OnboardingCompanyModel.fromJson(Map<String, dynamic> json) {
     return OnboardingCompanyModel(

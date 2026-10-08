@@ -19,11 +19,6 @@ class ProductConfig {
     defaultValue: false,
   );
 
-  static const enableOnboardingLab = bool.fromEnvironment(
-    'ENABLE_ONBOARDING_LAB',
-    defaultValue: false,
-  );
-
   static ApiException? validateApiBaseUrl(String rawBaseUrl) {
     final value = rawBaseUrl.trim();
     final uri = Uri.tryParse(value);
