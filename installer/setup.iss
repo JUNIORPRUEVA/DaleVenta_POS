@@ -3,7 +3,7 @@
 #define MyAppName "FullPOS"
 #endif
 ; Carpeta de instalacion. Se mantiene "DaleVentas POS" por compatibilidad: el
-; cliente resuelve la base de datos, backups, media_cache, logs y config en
+; cliente resuelve la base de datos, media_cache, logs y config en
 ; %ProgramFiles%\DaleVentas POS (ver lib/core/storage/windows_product_paths.dart).
 #ifndef MyAppFolderName
 #define MyAppFolderName "DaleVentas POS"
@@ -62,7 +62,6 @@ UninstallDisplayIcon={app}\app\{#MyAppExeName}
 [Dirs]
 Name: "{app}\app"
 Name: "{app}\databases"; Permissions: users-modify; Flags: uninsneveruninstall
-Name: "{app}\backups"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\media_cache"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\logs"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\config"; Permissions: users-modify; Flags: uninsneveruninstall
