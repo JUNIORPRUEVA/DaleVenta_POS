@@ -18,6 +18,7 @@ describe("SalesRangeQueryDto (limit compatibility / version skew)", () => {
       to: "2026-08-20T00:00:00.000Z",
       includeDeleted: "true",
       limit: 20,
+      page: 2,
     });
     const errors = await validate(dto, options);
     expect(errors).toHaveLength(0);

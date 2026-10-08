@@ -764,7 +764,7 @@ describe("SalesService tenant isolation", () => {
     };
     const service = serviceWith(prisma);
 
-    const rows = await service.listInvoices(
+    const result = await service.listInvoices(
       user as never,
       "2026-08-01",
       "2026-08-20",
@@ -772,7 +772,7 @@ describe("SalesService tenant isolation", () => {
       true,
     );
 
-    expect(rows).toEqual([
+    expect(result).toEqual([
       expect.objectContaining({
         ...fallbackSale,
         returnStatus: "ACTIVE",
@@ -790,7 +790,9 @@ describe("SalesService tenant isolation", () => {
           lt: new Date("2026-08-21T04:00:00.000Z"),
         },
       },
-      orderBy: { saleDate: "desc" },
+      orderBy: [{ saleDate: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 51,
       select: expect.objectContaining({
         id: true,
         totalSold: true,
@@ -824,8 +826,9 @@ describe("SalesService tenant isolation", () => {
           lt: new Date("2026-08-21T04:00:00.000Z"),
         },
       },
-      orderBy: { saleDate: "desc" },
-      take: 20,
+      orderBy: [{ saleDate: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 21,
       include: expect.any(Object),
     });
   });
@@ -854,19 +857,20 @@ describe("SalesService tenant isolation", () => {
           lt: new Date("2026-08-21T04:00:00.000Z"),
         },
       },
-      orderBy: { saleDate: "desc" },
-      take: 20,
+      orderBy: [{ saleDate: "desc" }, { id: "desc" }],
+      skip: 0,
+      take: 21,
       include: expect.any(Object),
     });
   });
 
-  it("listInvoices without limit does not add take", async () => {
+  it("listInvoices without limit preserves legacy list response and applies the default bounded page", async () => {
     const prisma = {
       sale: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const service = serviceWith(prisma);
 
-    await service.listInvoices(
+    const result = await service.listInvoices(
       user as never,
       "2026-08-01",
       "2026-08-20",
@@ -874,9 +878,40 @@ describe("SalesService tenant isolation", () => {
       false,
     );
 
+    expect(result).toEqual([]);
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: undefined }),
+      expect.objectContaining({ skip: 0, take: 51 }),
     );
+  });
+
+  it("listInvoices with explicit pagination returns page metadata for new clients", async () => {
+    const prisma = {
+      sale: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: "invoice-a", kind: "invoice", isDeleted: false, items: [], refunds: [] },
+          { id: "invoice-b", kind: "invoice", isDeleted: false, items: [], refunds: [] },
+        ]),
+      },
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.listInvoices(
+      user as never,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      1,
+      2,
+    );
+
+    expect(result).toMatchObject({
+      items: [expect.objectContaining({ id: "invoice-a" })],
+      page: 2,
+      limit: 1,
+      hasMore: true,
+      nextPage: 3,
+    });
   });
 
   it("derives return summary for invoices without exposing refund documents", async () => {
@@ -916,7 +951,7 @@ describe("SalesService tenant isolation", () => {
     };
     const service = serviceWith(prisma);
 
-    const rows = await service.listInvoices(user as never);
+    const result = await service.listInvoices(user as never);
 
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -927,15 +962,15 @@ describe("SalesService tenant isolation", () => {
         }),
       }),
     );
-    expect(rows).toEqual([
+    expect(result).toEqual([
       expect.objectContaining({
         id: "invoice-1",
         returnStatus: "PARTIALLY_RETURNED",
         canReturn: true,
       }),
     ]);
-    expect(rows[0].returnedAmount.toString()).toBe("50");
-    expect(rows[0].returnableAmount.toString()).toBe("50");
+    expect(result[0].returnedAmount.toString()).toBe("50");
+    expect(result[0].returnableAmount.toString()).toBe("50");
   });
 
   it("marks effective invoice count contribution from derived return status", async () => {
@@ -1184,7 +1219,40 @@ describe("SalesService tenant isolation", () => {
           .mockResolvedValueOnce(aggregate(1000, 700, 300, 30))
           .mockResolvedValueOnce(aggregate(-200, -140, -60, 0))
           .mockResolvedValueOnce(aggregate(100, 70, 30, 3)),
-        groupBy: jest.fn().mockResolvedValue([]),
+        groupBy: jest
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              userId: user.id,
+              _count: { _all: 1 },
+              _sum: {
+                totalSold: new Prisma.Decimal(1000),
+                totalProfit: new Prisma.Decimal(300),
+                commissionAmount: new Prisma.Decimal(30),
+              },
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              userId: user.id,
+              _sum: {
+                totalSold: new Prisma.Decimal(-200),
+                totalProfit: new Prisma.Decimal(-60),
+                commissionAmount: new Prisma.Decimal(0),
+              },
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              userId: user.id,
+              _sum: {
+                totalSold: new Prisma.Decimal(100),
+                totalProfit: new Prisma.Decimal(30),
+                commissionAmount: new Prisma.Decimal(3),
+              },
+            },
+          ])
+          .mockResolvedValueOnce([]),
         findMany: jest
           .fn()
           .mockResolvedValueOnce([
@@ -1236,7 +1304,7 @@ describe("SalesService tenant isolation", () => {
       expect(byUser.totals.totalSold).toBeCloseTo(mine.totalSold);
       expect(byUser.totals.totalProfit).toBeCloseTo(mine.totalProfit);
       expect(byUser.totals.totalCommission).toBeCloseTo(mine.totalCommission);
-      expect(saleApi.findMany.mock.calls[2][0].where).toMatchObject({
+      expect(saleApi.groupBy.mock.calls[0][0].where).toMatchObject({
         companyId: user.companyId,
         userId: user.id,
         kind: "invoice",

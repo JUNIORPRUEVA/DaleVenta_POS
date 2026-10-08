@@ -57,6 +57,11 @@ import {
   type OperationalTerminalContext,
 } from "../terminals/terminal-resolution.service";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import {
+  normalizePagePagination,
+  type PagePagination,
+  type PageResult,
+} from "../common/pagination/page-pagination";
 
 type NormalizedSaleItem = {
   productId: string | null;
@@ -330,9 +335,13 @@ export class SalesService {
   private async countEffectiveInvoices(
     where: Prisma.SaleWhereInput,
   ): Promise<number> {
+    if (typeof this.prisma.sale.count === "function") {
+      return this.prisma.sale.count({ where });
+    }
     const rows = await this.prisma.sale.findMany({
       where,
       select: this.effectiveInvoiceCountSelect(),
+      take: 1001,
     });
     return this.withReturnSummaries(rows as Array<Record<string, any>>).filter(
       (sale) => sale.contributesToInvoiceCount,
@@ -467,13 +476,19 @@ export class SalesService {
   private async findManySalesWithFallback(
     where: Prisma.SaleWhereInput,
     include: Prisma.SaleInclude,
-    limit?: number,
+    pagination?: PagePagination,
   ) {
-    const take = limit && limit > 0 ? limit : undefined;
+    const take = pagination?.take;
+    const skip = pagination?.skip;
+    const orderBy: Prisma.SaleOrderByWithRelationInput[] = [
+      { saleDate: "desc" },
+      { id: "desc" },
+    ];
     try {
       return await this.prisma.sale.findMany({
         where,
-        orderBy: { saleDate: "desc" },
+        orderBy,
+        skip,
         take,
         include,
       });
@@ -481,11 +496,28 @@ export class SalesService {
       if (!this.isSchemaMismatch(error)) throw error;
       return this.prisma.sale.findMany({
         where,
-        orderBy: { saleDate: "desc" },
+        orderBy,
+        skip,
         take,
         select: this.compatibleSaleListSelect(),
       });
     }
+  }
+
+  private async salesListPage(
+    rows: Array<Record<string, any>>,
+    pagination: PagePagination,
+  ): Promise<PageResult<Record<string, any>>> {
+    const pageRows = rows.slice(0, pagination.limit);
+    const items = await this.withReturnSummaries(pageRows);
+    const hasMore = rows.length > pagination.limit;
+    return {
+      items,
+      page: pagination.page,
+      limit: pagination.limit,
+      hasMore,
+      nextPage: hasMore ? pagination.page + 1 : null,
+    };
   }
 
   private isSchemaMismatch(error: unknown) {
@@ -765,8 +797,11 @@ export class SalesService {
     customerId?: string,
     includeDeleted = false,
     limit?: number,
+    page?: number,
   ) {
     const companyId = requireTenant(user);
+    const pagination = normalizePagePagination({ limit, page });
+    const expectsPageEnvelope = limit !== undefined || page !== undefined;
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       companyId,
@@ -784,9 +819,13 @@ export class SalesService {
         items: include.items,
         refunds: include.refunds,
       },
-      limit,
+      pagination,
     );
-    return this.withReturnSummaries(rows as Array<Record<string, any>>);
+    const result = await this.salesListPage(
+      rows as Array<Record<string, any>>,
+      pagination,
+    );
+    return expectsPageEnvelope ? result : result.items;
   }
 
   async listInvoices(
@@ -796,8 +835,11 @@ export class SalesService {
     customerId?: string,
     includeDeleted = false,
     limit?: number,
+    page?: number,
   ) {
     const companyId = requireTenant(user);
+    const pagination = normalizePagePagination({ limit, page });
+    const expectsPageEnvelope = limit !== undefined || page !== undefined;
     const normalizedCustomerId = customerId?.trim();
     const where: Prisma.SaleWhereInput = {
       companyId,
@@ -810,9 +852,13 @@ export class SalesService {
     const rows = await this.findManySalesWithFallback(
       where,
       this.saleInclude(),
-      limit,
+      pagination,
     );
-    return this.withReturnSummaries(rows as Array<Record<string, any>>);
+    const result = await this.salesListPage(
+      rows as Array<Record<string, any>>,
+      pagination,
+    );
+    return expectsPageEnvelope ? result : result.items;
   }
 
   async listByUser(
@@ -836,8 +882,9 @@ export class SalesService {
 
     const rows = await this.prisma.sale.findMany({
       where,
-      orderBy: { saleDate: "desc" },
+      orderBy: [{ saleDate: "desc" }, { id: "desc" }],
       include: this.saleInclude(),
+      take: 200,
     });
     return this.withReturnSummaries(rows as Array<Record<string, any>>);
   }
@@ -976,14 +1023,16 @@ export class SalesService {
     const range = dateRange.saleDate;
     if (!range) return [];
 
-    const cancelledSales = await this.prisma.sale.findMany({
-      where: {
+    const cancelledWhere = {
         ...baseWhere,
         kind: "invoice",
         isDeleted: true,
         deletedAt: { gte: range.gte, lt: range.lt },
-      },
+      } satisfies Prisma.SaleWhereInput;
+    const cancelledSales = await this.prisma.sale.findMany({
+      where: cancelledWhere,
       select: { id: true, userId: true },
+      take: 1000,
     });
     if (cancelledSales.length === 0) return [];
 
@@ -1139,52 +1188,30 @@ export class SalesService {
       dateRange,
     );
     const [active, refund, cancelled, refundOffsets] = await Promise.all([
-      this.prisma.sale.findMany({
+      this.prisma.sale.groupBy({
+        by: ["userId"],
         where: this.activeInvoiceWhere(baseWhere, dateRange),
-        select: {
-          userId: true,
+        _count: { _all: true },
+        _sum: {
           totalSold: true,
           totalProfit: true,
           commissionAmount: true,
-          kind: true,
-          status: true,
-          isDeleted: true,
-          cancelledAt: true,
-          items: {
-            select: {
-              id: true,
-              qty: true,
-            },
-          },
-          refunds: {
-            where: { kind: "refund", isDeleted: false },
-            select: {
-              totalSold: true,
-              items: {
-                select: {
-                  refundedSaleItemId: true,
-                  qty: true,
-                  subtotalSold: true,
-                },
-              },
-            },
-          },
         },
       }),
-      this.prisma.sale.findMany({
+      this.prisma.sale.groupBy({
+        by: ["userId"],
         where: this.refundWhere(baseWhere, dateRange),
-        select: {
-          userId: true,
+        _sum: {
           totalSold: true,
           totalProfit: true,
           commissionAmount: true,
         },
       }),
       cancellationWhere
-        ? this.prisma.sale.findMany({
+        ? this.prisma.sale.groupBy({
+            by: ["userId"],
             where: cancellationWhere,
-            select: {
-              userId: true,
+            _sum: {
               totalSold: true,
               totalProfit: true,
               commissionAmount: true,
@@ -1205,7 +1232,11 @@ export class SalesService {
         totalCommission: number;
       }
     >();
-    const apply = (row: SalesSummaryRow, sign: 1 | -1, countSales: boolean) => {
+    const apply = (
+      row: SalesSummaryRow,
+      sign: 1 | -1,
+      countSales: number,
+    ) => {
       const current = rows.get(row.userId) ?? {
         userId: row.userId,
         totalSales: 0,
@@ -1213,18 +1244,48 @@ export class SalesService {
         totalProfit: 0,
         totalCommission: 0,
       };
-      if (countSales) current.totalSales += 1;
+      current.totalSales += countSales;
       current.totalSold += sign * this.toNumber(row.totalSold);
       current.totalProfit += sign * this.toNumber(row.totalProfit);
       current.totalCommission += sign * this.toNumber(row.commissionAmount);
       rows.set(row.userId, current);
     };
     active.forEach((row) => {
-      const summary = this.withReturnSummary(row as Record<string, any>);
-      apply(row, 1, summary.contributesToInvoiceCount === true);
+      apply(
+        {
+          userId: row.userId,
+          totalSold: row._sum.totalSold ?? new Prisma.Decimal(0),
+          totalProfit: row._sum.totalProfit ?? new Prisma.Decimal(0),
+          commissionAmount: row._sum.commissionAmount ?? new Prisma.Decimal(0),
+        },
+        1,
+        row._count._all,
+      );
     });
-    refund.forEach((row) => apply(row, 1, false));
-    cancelled.forEach((row) => apply(row, -1, false));
+    refund.forEach((row) =>
+      apply(
+        {
+          userId: row.userId,
+          totalSold: row._sum.totalSold ?? new Prisma.Decimal(0),
+          totalProfit: row._sum.totalProfit ?? new Prisma.Decimal(0),
+          commissionAmount: row._sum.commissionAmount ?? new Prisma.Decimal(0),
+        },
+        1,
+        0,
+      ),
+    );
+    cancelled.forEach((row) =>
+      apply(
+        {
+          userId: row.userId,
+          totalSold: row._sum.totalSold ?? new Prisma.Decimal(0),
+          totalProfit: row._sum.totalProfit ?? new Prisma.Decimal(0),
+          commissionAmount: row._sum.commissionAmount ?? new Prisma.Decimal(0),
+        },
+        -1,
+        0,
+      ),
+    );
     // Refunds of a cancelled sale were already consumed by that sale's
     // reversal, so they must not be subtracted a second time.
     refundOffsets.forEach((offset) => {

@@ -40,6 +40,7 @@ export class SalesController {
       query.customerId,
       query.includeDeleted === "true",
       query.limit,
+      query.page,
     );
   }
 
@@ -53,6 +54,7 @@ export class SalesController {
       query.customerId,
       query.includeDeleted === "true",
       query.limit,
+      query.page,
     );
   }
 
