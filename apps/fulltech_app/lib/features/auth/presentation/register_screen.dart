@@ -198,15 +198,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     try {
       if (mounted) setState(() => _notice = null);
-      await ref.read(authStateProvider.notifier).registerBusiness(payload);
+      final user = await ref
+          .read(authStateProvider.notifier)
+          .registerBusiness(payload);
       if (!mounted) return;
       _submitted = true;
       MarketingAnalytics.trackCompleteRegistration(sourcePage: 'register');
       MarketingAnalytics.trackTrialStarted(sourcePage: 'register');
       context.go(
-        RouteAccess.defaultHomeForRole(
-          ref.read(authStateProvider).user?.appRole ?? AppRole.admin,
-        ),
+        RouteAccess.defaultHomeForRole(user?.appRole ?? AppRole.admin),
       );
     } on ApiException catch (error) {
       if (!mounted) return;

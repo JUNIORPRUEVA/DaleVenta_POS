@@ -22,6 +22,10 @@ import {
   type FinancialClientMetadata,
 } from "../common/financial-legacy-compat";
 import {
+  normalizePagePagination,
+  toPageResult,
+} from "../common/pagination/page-pagination";
+import {
   CloseCashSessionDto,
   CreateCashMovementDto,
   OpenCashSessionDto,
@@ -87,6 +91,14 @@ export class CashService {
         orderBy: { openedAt: "desc" },
       }),
     ]);
+    if (userOpenShift) {
+      await this.rejectAmbiguousLegacyOpenSession(
+        user.id,
+        companyId,
+        userOpenShift,
+        "cash.state",
+      );
+    }
 
     return {
       businessDate,
@@ -131,7 +143,16 @@ export class CashService {
             },
             orderBy: { openedAt: "desc" },
           });
-          if (existing) return this.mapActiveSession(existing);
+          if (existing) {
+            await this.rejectAmbiguousLegacyOpenSession(
+              user.id,
+              companyId,
+              existing,
+              "cash.open.existing",
+              tx,
+            );
+            return this.mapActiveSession(existing);
+          }
 
           // Identidad de apertura provista por el cliente (turno abierto
           // offline). Hace la apertura idempotente: si el turno ya existe con
@@ -590,10 +611,13 @@ export class CashService {
 
   async movementHistory(user: RequestUser, query: Record<string, string> = {}) {
     const companyId = requireTenant(user);
-    const takeParam = Number(query.take ?? 160);
-    const take = Number.isFinite(takeParam)
-      ? Math.min(Math.max(takeParam, 1), 250)
-      : 160;
+    const pageParam = Number(query.page);
+    const limitParam = Number(query.limit ?? query.take);
+    const pagination = normalizePagePagination({
+      page: Number.isFinite(pageParam) ? pageParam : undefined,
+      limit: Number.isFinite(limitParam) ? limitParam : undefined,
+      defaultLimit: 50,
+    });
     const type = ["IN", "OUT"].includes(query.type ?? "")
       ? query.type
       : undefined;
@@ -623,11 +647,12 @@ export class CashService {
           },
         },
       },
-      orderBy: { createdAt: "desc" },
-      take,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
     });
 
-    return rows.map(({ session, ...movement }) => ({
+    const items = rows.map(({ session, ...movement }) => ({
       ...movement,
       userName: session.userName ?? "Usuario",
       businessDate: session.businessDate,
@@ -635,6 +660,7 @@ export class CashService {
       sessionOpenedAt: session.openedAt,
       sessionClosedAt: session.closedAt,
     }));
+    return toPageResult(items, pagination);
   }
 
   private movementDateRange(
@@ -665,20 +691,40 @@ export class CashService {
     return startOfDay ? range.gte : range.lt;
   }
 
-  async closedSessions(user: RequestUser) {
+  async closedSessions(user: RequestUser, query: Record<string, string> = {}) {
     const companyId = requireTenant(user);
-    return this.prisma.cashSession.findMany({
+    const pageParam = Number(query.page);
+    const limitParam = Number(query.limit ?? query.take);
+    const pagination = normalizePagePagination({
+      page: Number.isFinite(pageParam) ? pageParam : undefined,
+      limit: Number.isFinite(limitParam) ? limitParam : undefined,
+      defaultLimit: 50,
+    });
+    const rows = await this.prisma.cashSession.findMany({
       where:
         isAdminLike(user)
           ? { companyId, status: "CLOSED" }
           : { companyId, status: "CLOSED", openedByUserId: user.id },
-      orderBy: { closedAt: "desc" },
-      take: 60,
+      orderBy: [{ closedAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
     });
+    return toPageResult(rows, pagination);
   }
 
-  async sessionDetail(user: RequestUser, sessionId: string) {
+  async sessionDetail(
+    user: RequestUser,
+    sessionId: string,
+    query: Record<string, string> = {},
+  ) {
     const companyId = requireTenant(user);
+    const pageParam = Number(query.movementsPage ?? query.page);
+    const limitParam = Number(query.movementsLimit ?? query.limit ?? query.take);
+    const pagination = normalizePagePagination({
+      page: Number.isFinite(pageParam) ? pageParam : undefined,
+      limit: Number.isFinite(limitParam) ? limitParam : undefined,
+      defaultLimit: 50,
+    });
     const session = await this.prisma.cashSession.findFirst({
       where: {
         id: sessionId,
@@ -694,8 +740,11 @@ export class CashService {
       this.prisma.cashMovement.findMany({
         where: { sessionId, companyId },
         orderBy: { createdAt: "asc" },
+        skip: pagination.skip,
+        take: pagination.take,
       }),
     ]);
+    const movementPage = toPageResult(movements, pagination);
     return {
       id: session.id,
       userName: session.userName ?? "Usuario",
@@ -712,7 +761,8 @@ export class CashService {
       difference: this.toNumber(session.difference),
       note: session.note,
       summary,
-      movements,
+      movements: movementPage.items,
+      movementsPage: movementPage,
     };
   }
 
@@ -748,6 +798,12 @@ export class CashService {
         "No encontramos un turno abierto para operar.",
       );
     }
+    await this.rejectAmbiguousLegacyOpenSession(
+      userId,
+      companyId,
+      session,
+      requested ? "cash.operation.identified" : "cash.operation.current",
+    );
     return session;
   }
 
@@ -759,6 +815,280 @@ export class CashService {
       throw new NotFoundException("No encontramos el turno solicitado.");
     }
 
+    if (this.canUseAggregatedCashSummary()) {
+      return this.buildSummaryForSessionAggregated(session, sessionId, companyId);
+    }
+
+    return this.buildSummaryForSessionLegacy(session, sessionId, companyId);
+  }
+
+  private canUseAggregatedCashSummary() {
+    return (
+      typeof (this.prisma.sale as { groupBy?: unknown }).groupBy ===
+        "function" &&
+      typeof (this.prisma.saleCreditPayment as { aggregate?: unknown })
+        .aggregate === "function" &&
+      typeof (this.prisma.cashMovement as { groupBy?: unknown }).groupBy ===
+        "function" &&
+      typeof (this.prisma as { $queryRaw?: unknown }).$queryRaw === "function"
+    );
+  }
+
+  private async buildSummaryForSessionAggregated(
+    session: { initialAmount: Prisma.Decimal | number | null },
+    sessionId: string,
+    companyId: string,
+  ) {
+    const activeSaleWhere: Prisma.SaleWhereInput = {
+      cashSessionId: sessionId,
+      companyId,
+      isDeleted: false,
+      kind: { not: "refund" },
+    };
+    const creditSaleWhere: Prisma.SaleWhereInput = {
+      ...activeSaleWhere,
+      paymentMethod: "credit",
+    };
+
+    const [
+      saleGroups,
+      creditLedgerTotals,
+      turnCreditPayments,
+      movementGroups,
+      categorySummary,
+      paymentBreakdownViolations,
+    ] = await Promise.all([
+      this.prisma.sale.groupBy({
+        by: ["isDeleted", "kind", "paymentMethod"],
+        where: { cashSessionId: sessionId, companyId },
+        _count: { id: true },
+        _sum: {
+          totalSold: true,
+          paymentCashAmount: true,
+          paymentTransferAmount: true,
+          creditBalance: true,
+        },
+      }),
+      this.prisma.saleCreditPayment.aggregate({
+        where: {
+          companyId,
+          sale: { is: creditSaleWhere },
+        },
+        _sum: {
+          cashAmount: true,
+          transferAmount: true,
+        },
+      }),
+      this.prisma.saleCreditPayment.aggregate({
+        where: { cashSessionId: sessionId, companyId },
+        _sum: {
+          amount: true,
+          cashAmount: true,
+          transferAmount: true,
+        },
+      }),
+      this.prisma.cashMovement.groupBy({
+        by: ["type", "movementType", "affectsProfit"],
+        where: { sessionId, companyId },
+        _sum: { amount: true },
+      }),
+      this.cashSessionCategorySummary(sessionId, companyId),
+      this.cashSessionPaymentBreakdownViolations(sessionId, companyId),
+    ]);
+
+    let salesCashTotal = 0;
+    let salesTransferTotal = 0;
+    let totalSales = 0;
+    let refundsCash = 0;
+    let totalTickets = 0;
+    let totalRefunds = 0;
+    let creditSalesTotal = 0;
+    let creditInitialCash = 0;
+    let creditInitialTransfer = 0;
+    let creditBalanceTotal = 0;
+
+    for (const group of saleGroups) {
+      const cash = this.toNumber(group._sum.paymentCashAmount);
+      const transfer = this.toNumber(group._sum.paymentTransferAmount);
+      const sold = this.toNumber(group._sum.totalSold);
+      const count = group._count.id;
+      const isRefund = group.isDeleted || group.kind === "refund";
+      if (isRefund) {
+        refundsCash += Math.abs(cash);
+        totalRefunds += count;
+        continue;
+      }
+
+      totalTickets += count;
+      totalSales += sold;
+      salesCashTotal += cash;
+      salesTransferTotal += transfer;
+      if (group.paymentMethod === "credit") {
+        creditSalesTotal += sold;
+        creditInitialCash += cash;
+        creditInitialTransfer += transfer;
+        creditBalanceTotal += this.toNumber(group._sum.creditBalance);
+      }
+    }
+
+    const creditLedgerCash = this.toNumber(
+      creditLedgerTotals._sum.cashAmount,
+    );
+    const creditLedgerTransfer = this.toNumber(
+      creditLedgerTotals._sum.transferAmount,
+    );
+    salesCashTotal -= creditLedgerCash;
+    salesTransferTotal -= creditLedgerTransfer;
+    creditInitialCash -= creditLedgerCash;
+    creditInitialTransfer -= creditLedgerTransfer;
+
+    const creditAbonos = this.toNumber(turnCreditPayments._sum.amount);
+    const creditPaymentCash = this.toNumber(
+      turnCreditPayments._sum.cashAmount,
+    );
+    const creditPaymentTransfer = this.toNumber(
+      turnCreditPayments._sum.transferAmount,
+    );
+    const creditPaymentsCashTotal = creditPaymentCash;
+
+    let cashInManual = 0;
+    let cashOutManual = 0;
+    let totalExpenses = 0;
+    let totalWithdrawals = 0;
+    for (const group of movementGroups) {
+      const amount = this.toNumber(group._sum.amount);
+      if (group.type === "IN") cashInManual += amount;
+      if (group.type === "OUT") {
+        cashOutManual += amount;
+        if (group.movementType === "expense" && group.affectsProfit) {
+          totalExpenses += amount;
+        } else {
+          totalWithdrawals += amount;
+        }
+      }
+    }
+
+    const openingAmount = this.toNumber(session.initialAmount);
+    if (paymentBreakdownViolations > 0) {
+      this.logger.warn(
+        `cash.session.payment_breakdown_invariant_violation companyId=${companyId} ` +
+          `sessionId=${sessionId} sales=${paymentBreakdownViolations}`,
+      );
+    }
+    const expectedCash =
+      openingAmount +
+      salesCashTotal +
+      creditPaymentsCashTotal -
+      refundsCash +
+      cashInManual -
+      cashOutManual;
+
+    return {
+      sessionId,
+      openingAmount,
+      totalSales,
+      totalExpenses,
+      totalWithdrawals,
+      cashInManual,
+      cashOutManual,
+      creditAbonos,
+      creditSalesTotal,
+      creditInitialCash,
+      creditInitialTransfer,
+      creditBalanceTotal,
+      creditPaymentCash,
+      creditPaymentTransfer,
+      creditPaymentsCashTotal,
+      paymentBreakdownViolations,
+      layawayAbonos: 0,
+      salesCashTotal,
+      salesCardTotal: 0,
+      salesTransferTotal,
+      salesCreditTotal:
+        creditSalesTotal - creditInitialCash - creditInitialTransfer,
+      refundsCash,
+      expectedCash,
+      totalTickets,
+      totalRefunds,
+      categorySummary,
+    };
+  }
+
+  private async cashSessionCategorySummary(
+    sessionId: string,
+    companyId: string,
+  ) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        category: string | null;
+        totalSold: Prisma.Decimal | number | null;
+        totalProfit: Prisma.Decimal | number | null;
+        items: bigint | number | string;
+      }>
+    >(Prisma.sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(p.categoria), ''), 'Sin categoria') AS "category",
+        COALESCE(SUM(si."subtotalSold"), 0) AS "totalSold",
+        COALESCE(SUM(si.profit), 0) AS "totalProfit",
+        COUNT(*) AS "items"
+      FROM "SaleItem" si
+      INNER JOIN "Sale" s ON s.id = si."saleId"
+      LEFT JOIN "Product" p ON p.id = si."productId"
+      WHERE s."cashSessionId" = ${sessionId}::uuid
+        AND s.company_id = ${companyId}::uuid
+        AND s."isDeleted" = false
+        AND s.kind <> 'refund'
+      GROUP BY 1
+      ORDER BY SUM(si."subtotalSold") DESC
+    `);
+
+    return rows.map((row) => ({
+      category: row.category?.trim() || "Sin categoria",
+      totalSold: this.toNumber(row.totalSold),
+      totalProfit: this.toNumber(row.totalProfit),
+      items: Number(row.items ?? 0),
+    }));
+  }
+
+  private async cashSessionPaymentBreakdownViolations(
+    sessionId: string,
+    companyId: string,
+  ) {
+    const rows = await this.prisma.$queryRaw<Array<{ count: bigint | number | string }>>(
+      Prisma.sql`
+        SELECT COUNT(*) AS "count"
+        FROM (
+          SELECT
+            s.id,
+            s."paymentCashAmount",
+            s."paymentTransferAmount",
+            COALESCE(SUM(p."cashAmount"), 0) AS "ledgerCash",
+            COALESCE(SUM(p."transferAmount"), 0) AS "ledgerTransfer"
+          FROM "Sale" s
+          LEFT JOIN sale_credit_payments p
+            ON p."saleId" = s.id
+           AND p.company_id = s.company_id
+          WHERE s."cashSessionId" = ${sessionId}::uuid
+            AND s.company_id = ${companyId}::uuid
+            AND s."paymentMethod" = 'credit'
+            AND s."isDeleted" = false
+            AND s.kind <> 'refund'
+          GROUP BY s.id, s."paymentCashAmount", s."paymentTransferAmount"
+          HAVING
+            COALESCE(SUM(p."cashAmount"), 0) - s."paymentCashAmount" > 0.005
+            OR
+            COALESCE(SUM(p."transferAmount"), 0) - s."paymentTransferAmount" > 0.005
+        ) violations
+      `,
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  private async buildSummaryForSessionLegacy(
+    session: { initialAmount: Prisma.Decimal | number | null },
+    sessionId: string,
+    companyId: string,
+  ) {
     // Las ventas del turno se leen primero porque sus ids alimentan UNA query
     // batched del ledger de abonos (nunca una consulta por venta).
     const sales = await this.prisma.sale.findMany({
@@ -1000,6 +1330,47 @@ export class CashService {
       terminalName: session.terminalNameSnapshot ?? null,
       terminalCode: session.terminalCodeSnapshot ?? null,
     };
+  }
+
+  private async rejectAmbiguousLegacyOpenSession(
+    userId: string,
+    companyId: string,
+    session: {
+      id: string;
+      openedAt: Date;
+      businessDate: string | null;
+    },
+    context: string,
+    client: Pick<Prisma.TransactionClient, "cashSession"> = this.prisma,
+  ) {
+    const businessDate = this.businessDate();
+    if (session.businessDate === businessDate) return;
+
+    const newerCurrentOpen = await client.cashSession.findFirst({
+      where: {
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+        businessDate,
+        id: { not: session.id },
+        openedAt: { gt: session.openedAt },
+      },
+      select: { id: true, openedByUserId: true, openedAt: true },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!newerCurrentOpen) return;
+
+    this.logger.warn(
+      `cash.session.legacy_open_requires_review company=${companyId} userId=${userId} ` +
+        `session=${session.id} sessionBusinessDate=${session.businessDate ?? "null"} ` +
+        `currentBusinessDate=${businessDate} newerOpen=${newerCurrentOpen.id} context=${context}`,
+    );
+    throw new ConflictException({
+      code: "CASH_SESSION_REQUIRES_REVIEW",
+      errorCode: "CASH_SESSION_REQUIRES_REVIEW",
+      message:
+        "Este turno abierto necesita revisión antes de operar. Contacta a un administrador.",
+    });
   }
 
   private emitCashEvent(

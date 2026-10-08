@@ -78,13 +78,24 @@ export class CashController {
   }
 
   @Get('sessions/closed')
-  closedSessions(@Req() req: Request) {
-    return this.cash.closedSessions(req.user as { id: string; role: Role });
+  closedSessions(@Req() req: Request, @Query() query: Record<string, string>) {
+    return this.cash.closedSessions(
+      req.user as { id: string; role: Role },
+      query,
+    );
   }
 
   @Get('sessions/:id')
-  sessionDetail(@Req() req: Request, @Param('id') id: string) {
-    return this.cash.sessionDetail(req.user as { id: string; role: Role }, id);
+  sessionDetail(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Query() query: Record<string, string>,
+  ) {
+    return this.cash.sessionDetail(
+      req.user as { id: string; role: Role },
+      id,
+      query,
+    );
   }
 
   private headerValue(req: Request, name: string) {

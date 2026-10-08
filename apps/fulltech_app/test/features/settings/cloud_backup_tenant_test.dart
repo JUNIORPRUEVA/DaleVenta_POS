@@ -33,11 +33,18 @@ void main() {
     );
     addTearDown(() => backupRoot.delete(recursive: true));
 
+    final capturedRequests = <RequestOptions>[];
     final dio = Dio(BaseOptions(baseUrl: 'https://backup.test'))
       ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
-        expect(options.queryParameters, isEmpty);
+        capturedRequests.add(options);
         return ResponseBody.fromString(
-          jsonEncode({'items': <Object?>[], 'data': <Object?>[]}),
+          jsonEncode({
+            'items': <Object?>[],
+            'page': 1,
+            'limit': 200,
+            'hasMore': false,
+            'nextPage': null,
+          }),
           200,
           headers: {
             Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -91,6 +98,114 @@ void main() {
     expect(inspection.companyId, '165e3fca-6225-479b-8805-d2205f10536c');
     expect(inspection.companyName, 'FULLTECH, SRL');
     expect(await Directory(result.folderPath).exists(), isFalse);
+    final salesRequests = capturedRequests
+        .where((options) =>
+            options.path == ApiRoutes.sales ||
+            options.path == ApiRoutes.salesInvoices)
+        .toList();
+    expect(salesRequests, hasLength(2));
+    for (final request in salesRequests) {
+      expect(request.queryParameters['page'], 1);
+      expect(request.queryParameters['limit'], 200);
+    }
+  });
+
+  test('createCloudBackup captures clientes across multiple pages', () async {
+    final backupRoot = await Directory.systemTemp.createTemp(
+      'fullpos_backup_root_',
+    );
+    addTearDown(() => backupRoot.delete(recursive: true));
+
+    final clientPages = <int>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://backup.test'))
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        if (options.path == ApiRoutes.clients) {
+          final page = options.queryParameters['page'] as int;
+          clientPages.add(page);
+          return _jsonBody({
+            'items': [
+              {'id': 'client-$page', 'nombre': 'Cliente $page'},
+            ],
+            'page': page,
+            'limit': 200,
+            'hasMore': page == 1,
+            'nextPage': page == 1 ? 2 : null,
+          });
+        }
+        return _jsonBody({
+          'items': <Object?>[],
+          'page': 1,
+          'limit': 200,
+          'hasMore': false,
+          'nextPage': null,
+        });
+      });
+
+    final container = _backupContainer(
+      dio: dio,
+      backupRoot: backupRoot,
+    );
+    addTearDown(container.dispose);
+
+    final result = await container
+        .read(cloudBackupServiceProvider)
+        .createCloudBackup();
+
+    expect(result.status, CloudBackupStatus.complete);
+    expect(clientPages, [1, 2]);
+    final clientes = await _moduleItems(result.zipPath, 'clientes');
+    expect(clientes.map((item) => item['id']), ['client-1', 'client-2']);
+    expect(result.moduleStatus['clientes']?.records, 2);
+  });
+
+  test('page N failure keeps strict required-module validation', () async {
+    final backupRoot = await Directory.systemTemp.createTemp(
+      'fullpos_backup_root_',
+    );
+    addTearDown(() => backupRoot.delete(recursive: true));
+
+    final dio = Dio(BaseOptions(baseUrl: 'https://backup.test'))
+      ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+        if (options.path == ApiRoutes.clients &&
+            options.queryParameters['page'] == 2) {
+          return _jsonBody({'message': 'temporary failure'}, statusCode: 503);
+        }
+        if (options.path == ApiRoutes.clients) {
+          return _jsonBody({
+            'items': [
+              {'id': 'client-1', 'nombre': 'Cliente 1'},
+            ],
+            'page': 1,
+            'limit': 200,
+            'hasMore': true,
+            'nextPage': 2,
+          });
+        }
+        return _jsonBody({
+          'items': <Object?>[],
+          'page': 1,
+          'limit': 200,
+          'hasMore': false,
+          'nextPage': null,
+        });
+      });
+
+    final container = _backupContainer(
+      dio: dio,
+      backupRoot: backupRoot,
+    );
+    addTearDown(container.dispose);
+
+    await expectLater(
+      container.read(cloudBackupServiceProvider).createCloudBackup(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('clientes'),
+        ),
+      ),
+    );
   });
 
   test(
@@ -377,6 +492,53 @@ Future<String> _canonicalZipForCompany(String companyId) async {
   return zipFile.path;
 }
 
+ProviderContainer _backupContainer({
+  required Dio dio,
+  required Directory backupRoot,
+}) {
+  return ProviderContainer(
+    overrides: [
+      authStateProvider.overrideWith(_TestAuthController.new),
+      dioProvider.overrideWithValue(dio),
+      companySettingsRepositoryProvider.overrideWithValue(
+        _FakeCompanySettingsRepository(),
+      ),
+      printerSettingsRepositoryProvider.overrideWithValue(
+        _FakePrinterSettingsRepository(),
+      ),
+      cloudBackupServiceProvider.overrideWith(
+        (ref) => CloudBackupService(ref, dio, backupRootOverride: backupRoot),
+      ),
+    ],
+  );
+}
+
+ResponseBody _jsonBody(Object? data, {int statusCode = 200}) {
+  return ResponseBody.fromString(
+    jsonEncode(data),
+    statusCode,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
+}
+
+Future<List<Map<String, dynamic>>> _moduleItems(
+  String zipPath,
+  String module,
+) async {
+  final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
+  final entry = archive.files.firstWhere(
+    (file) => file.name.replaceAll('\\', '/').endsWith('/$module.json'),
+  );
+  final decoded = jsonDecode(utf8.decode(entry.content));
+  final items = decoded is Map ? decoded['items'] : decoded;
+  return (items as List)
+      .whereType<Map>()
+      .map((item) => item.cast<String, dynamic>())
+      .toList(growable: false);
+}
+
 Map<String, Object?> _manifestForCompany(
   String companyId, {
   String? backupId,
@@ -415,6 +577,7 @@ const _requiredModuleNamesForTest = [
   'impresora_local',
   'usuarios',
   'clientes',
+  'cotizaciones',
   'productos',
   'ventas',
   'facturas_ventas',

@@ -31,8 +31,8 @@ export class SalesRangeQueryDto {
   includeDeleted?: string;
 
   /**
-   * Límite opcional de filas (p. ej. "Ventas recientes" usa 20).
-   * Si no se envía, se devuelve el rango completo (comportamiento histórico).
+   * Listados grandes son paginados por defecto. Si no se envia `limit`,
+   * el servicio aplica el limite seguro definido para ventas/facturas.
    */
   @IsOptional()
   @Type(() => Number)
@@ -40,4 +40,10 @@ export class SalesRangeQueryDto {
   @Min(1)
   @Max(200)
   limit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
 }

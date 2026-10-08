@@ -3,6 +3,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { currentBusinessDay } from "../common/utils/business-time.util";
 import { CashService } from "./cash.service";
 
 /**
@@ -29,7 +30,7 @@ describe("CashService multi-device consistency", () => {
     openedAt: new Date("2026-08-22T10:00:00Z"),
     status: "OPEN",
     userName: "Cajero",
-    businessDate: "2026-08-22",
+    businessDate: currentBusinessDay(),
     note: null,
   };
 
@@ -96,6 +97,31 @@ describe("CashService multi-device consistency", () => {
       "cash.event",
       expect.objectContaining({ type: "cash.session.opened" }),
     );
+  });
+
+  it("abrir turno no reutiliza un turno legacy ambiguo como turno actual", async () => {
+    const legacyOpen = {
+      ...existingSession,
+      id: "6666aaaa-6666-4666-8666-666666666666",
+      openedAt: new Date("2026-09-17T02:31:17.443Z"),
+      businessDate: "2026-09-16",
+    };
+    const operativeOpen = {
+      id: "7777aaaa-7777-4777-8777-777777777777",
+      openedByUserId: "user-b",
+      openedAt: new Date("2026-10-08T13:42:33.109Z"),
+    };
+    const tx = buildEmptyTx();
+    (tx.cashSession.findFirst as jest.Mock)
+      .mockResolvedValueOnce(legacyOpen)
+      .mockResolvedValueOnce(operativeOpen);
+    const { service } = buildHarness({ tx });
+
+    await expect(
+      service.startSession(user, { openingAmount: 1000 }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.cashSession.create).not.toHaveBeenCalled();
+    expect(tx.cashboxDaily.create).not.toHaveBeenCalled();
   });
 
   it("doble apertura concurrente: conflicto P2034 se reintenta y devuelve el existente", async () => {
@@ -184,5 +210,64 @@ describe("CashService multi-device consistency", () => {
         openingAmount: 1000,
       }),
     ).rejects.toThrow(/sin empresa/i);
+  });
+
+  it("no presenta como actual un turno legacy si existe otro OPEN operativo del día", async () => {
+    const legacyOpen = {
+      ...existingSession,
+      id: "2222aaaa-2222-4222-8222-222222222222",
+      openedAt: new Date("2026-09-17T02:31:17.443Z"),
+      businessDate: "2026-09-16",
+    };
+    const operativeOpen = {
+      id: "3333aaaa-3333-4333-8333-333333333333",
+      openedByUserId: "user-b",
+      openedAt: new Date("2026-10-08T13:42:33.109Z"),
+    };
+    const { prisma, service } = buildHarness();
+    (prisma.cashboxDaily.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.cashSession.findFirst as jest.Mock)
+      .mockResolvedValueOnce(legacyOpen)
+      .mockResolvedValueOnce(operativeOpen);
+
+    await expect(service.gateState(user)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.cashSession.findFirst).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: user.companyId,
+          status: "OPEN",
+          closedAt: null,
+          businessDate: currentBusinessDay(),
+          id: { not: legacyOpen.id },
+          openedAt: { gt: legacyOpen.openedAt },
+        }),
+      }),
+    );
+  });
+
+  it("no resume silenciosamente un turno legacy para calcular resumen actual", async () => {
+    const legacyOpen = {
+      ...existingSession,
+      id: "4444aaaa-4444-4444-8444-444444444444",
+      openedAt: new Date("2026-09-17T02:31:17.443Z"),
+      businessDate: "2026-09-16",
+    };
+    const operativeOpen = {
+      id: "5555aaaa-5555-4555-8555-555555555555",
+      openedByUserId: "user-b",
+      openedAt: new Date("2026-10-08T13:42:33.109Z"),
+    };
+    const { prisma, service } = buildHarness();
+    (prisma.cashSession.findFirst as jest.Mock)
+      .mockResolvedValueOnce(legacyOpen)
+      .mockResolvedValueOnce(operativeOpen);
+
+    await expect(service.summary(user)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.sale.findMany).not.toHaveBeenCalled();
   });
 });

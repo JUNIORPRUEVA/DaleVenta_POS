@@ -169,15 +169,17 @@ describe('historical shift window', () => {
     );
   });
 
-  it('15. does not modify the existing Cloud shift-history code', () => {
+  it('15. keeps Cloud shift-history bounded and paginated by tenant', () => {
     const servicePath = join(__dirname, '..', '..', '..', 'src', 'cash', 'cash.service.ts');
     const source = readFileSync(servicePath, 'utf8');
-    // closedSessions() must still be the untouched take:60 window over CLOSED sessions.
     expect(source).toContain('async closedSessions(');
-    expect(source).toContain('take: 60');
+    expect(source).toContain('normalizePagePagination');
+    expect(source).toContain('skip: pagination.skip');
+    expect(source).toContain('take: pagination.take');
+    expect(source).toContain('const companyId = requireTenant(user)');
+    expect(source).toContain('{ companyId, status: "CLOSED" }');
     expect(source).toContain('status: "CLOSED"');
-    expect(source).not.toContain('skip:');
-    expect(source).not.toMatch(/paginat/i);
+    expect(source).toContain('orderBy: [{ closedAt: "desc" }, { id: "desc" }]');
   });
 
   it('imports all available sessions when fewer than the window exist', () => {

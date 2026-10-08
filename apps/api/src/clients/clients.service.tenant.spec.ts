@@ -155,6 +155,40 @@ describe("ClientsService multi-tenant isolation", () => {
     expect(prisma.client.count).toHaveBeenCalledWith({ where });
   });
 
+  it("accepts backup page-limit pagination and returns a bounded envelope", async () => {
+    const rows = [
+      clientRow(companyA),
+      { ...clientRow(companyA), id: "44444444-4444-4444-8444-444444444444" },
+      { ...clientRow(companyA), id: "55555555-5555-4555-8555-555555555555" },
+    ];
+    const prisma = {
+      client: {
+        findMany: jest.fn().mockResolvedValue(rows),
+        count: jest.fn().mockResolvedValue(3),
+      },
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.findAll(userA as never, {
+      page: 2,
+      limit: 2,
+    } as never);
+
+    expect(prisma.client.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 2,
+        take: 3,
+      }),
+    );
+    expect(result.items).toHaveLength(2);
+    expect(result.page).toBe(2);
+    expect(result.limit).toBe(2);
+    expect(result.pageSize).toBe(2);
+    expect(result.hasMore).toBe(true);
+    expect(result.nextPage).toBe(3);
+    expect(result.total).toBe(3);
+  });
+
   it("rejects update of a client that belongs to another company", async () => {
     const prisma = {
       client: {

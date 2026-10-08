@@ -134,29 +134,32 @@ void main() {
     },
   );
 
-  test('addCreditPayment envía operationId, turno operativo y paidAt', () async {
-    final repository = buildRepository(
-      (options) => jsonResponse({'sale': saleRow(id: 'sale-credit')}),
-    );
+  test(
+    'addCreditPayment envía operationId, turno operativo y paidAt',
+    () async {
+      final repository = buildRepository(
+        (options) => jsonResponse({'sale': saleRow(id: 'sale-credit')}),
+      );
 
-    final sale = await repository.addCreditPayment(
-      saleId: 'sale-credit',
-      cashAmount: 75,
-      transferAmount: 25,
-      note: 'abono',
-    );
+      final sale = await repository.addCreditPayment(
+        saleId: 'sale-credit',
+        cashAmount: 75,
+        transferAmount: 25,
+        note: 'abono',
+      );
 
-    expect(sale.id, 'sale-credit');
-    expect(captured.last.path, '/sales/sale-credit/credit-payments');
-    final body = (captured.last.data as Map).cast<String, dynamic>();
-    expect(body['operationId'], isA<String>());
-    expect(body['operationId'], contains('credit.payment:'));
-    expect(body['operationCashSessionId'], 'cash-1');
-    expect(body['paidAt'], isA<String>());
-    expect(body['cashAmount'], 75);
-    expect(body['transferAmount'], 25);
-    expect(body['note'], 'abono');
-  });
+      expect(sale.id, 'sale-credit');
+      expect(captured.last.path, '/sales/sale-credit/credit-payments');
+      final body = (captured.last.data as Map).cast<String, dynamic>();
+      expect(body['operationId'], isA<String>());
+      expect(body['operationId'], contains('credit.payment:'));
+      expect(body['operationCashSessionId'], 'cash-1');
+      expect(body['paidAt'], isA<String>());
+      expect(body['cashAmount'], 75);
+      expect(body['transferAmount'], 25);
+      expect(body['note'], 'abono');
+    },
+  );
 
   test('timeout en listSales termina en error (nunca cuelga)', () async {
     final repository = buildRepository(
@@ -175,11 +178,46 @@ void main() {
     );
   });
 
-  test('respuesta que no es lista no cuelga y devuelve vacío', () async {
+  test(
+    'listInvoices sin cache clasifica timeout como red, no UNKNOWN',
+    () async {
+      final repository = buildRepository(
+        (options) => throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.receiveTimeout,
+        ),
+      );
+
+      await expectLater(
+        repository.listInvoices(
+          from: DateTime(2031, 1, 1),
+          to: DateTime(2031, 1, 2),
+        ),
+        throwsA(
+          isA<ApiException>()
+              .having(
+                (error) => error.displayCode,
+                'displayCode',
+                'NETWORK_TIMEOUT',
+              )
+              .having(
+                (error) => error.toString(),
+                'toString',
+                isNot(contains('UNKNOWN')),
+              ),
+        ),
+      );
+    },
+  );
+
+  test('respuesta paginada con items se mapea sin colgarse', () async {
     final repository = buildRepository(
       (options) => jsonResponse({
         'message': 'ok',
         'items': [saleRow()],
+        'page': 1,
+        'limit': 50,
+        'hasMore': false,
       }),
     );
 
@@ -188,8 +226,35 @@ void main() {
       to: DateTime(2026, 8, 20),
     );
 
-    // La respuesta es un Map (no List): se trata como vacía sin colgarse.
-    expect(rows, isEmpty);
+    expect(rows, hasLength(1));
+    expect(rows.single.id, 'sale-1');
+  });
+
+  test('listInvoicesPage envía page/limit y conserva metadata', () async {
+    final repository = buildRepository(
+      (options) => jsonResponse({
+        'items': [saleRow(id: 'invoice-page-1')],
+        'page': 2,
+        'limit': 50,
+        'hasMore': true,
+        'nextPage': 3,
+      }),
+    );
+
+    final page = await repository.listInvoicesPage(
+      from: DateTime(2026, 8, 1),
+      to: DateTime(2026, 8, 20),
+      includeDeleted: true,
+      page: 2,
+      limit: 50,
+    );
+
+    expect(captured.last.path, '/sales/invoices');
+    expect(captured.last.queryParameters['page'], 2);
+    expect(captured.last.queryParameters['limit'], 50);
+    expect(page.items.single.id, 'invoice-page-1');
+    expect(page.hasMore, isTrue);
+    expect(page.nextPage, 3);
   });
 
   test(

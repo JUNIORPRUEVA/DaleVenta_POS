@@ -34,6 +34,22 @@ final ventasRepositoryProvider = Provider<VentasRepository>((ref) {
   return repository;
 });
 
+class SalesPageResult {
+  const SalesPageResult({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.hasMore,
+    required this.nextPage,
+  });
+
+  final List<SaleModel> items;
+  final int page;
+  final int limit;
+  final bool hasMore;
+  final int? nextPage;
+}
+
 class VentasRepository {
   final Dio _dio;
   final SyncQueueService _syncQueue;
@@ -199,6 +215,7 @@ class VentasRepository {
           customerId: customerId,
           includeDeleted: includeDeleted,
           limit: requestedLimit,
+          page: null,
         ),
       );
     } on DioException catch (e, stackTrace) {
@@ -223,6 +240,7 @@ class VentasRepository {
               customerId: customerId,
               includeDeleted: includeDeleted,
               limit: null,
+              page: null,
             ),
           );
           return compatRows.take(requestedLimit).toList(growable: false);
@@ -257,6 +275,7 @@ class VentasRepository {
         customerId: customerId,
         includeDeleted: includeDeleted,
         limit: limit,
+        page: null,
       ),
     );
     final rows = _extractRows(data);
@@ -288,6 +307,7 @@ class VentasRepository {
           customerId: customerId,
           includeDeleted: includeDeleted,
           limit: requestedLimit,
+          page: null,
         ),
       );
     } on DioException catch (e, stackTrace) {
@@ -307,6 +327,7 @@ class VentasRepository {
               customerId: customerId,
               includeDeleted: includeDeleted,
               limit: null,
+              page: null,
             ),
           );
           return compatRows.take(requestedLimit).toList(growable: false);
@@ -326,9 +347,57 @@ class VentasRepository {
         limit: limit,
       );
       if (cached.isNotEmpty) return cached;
-      throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudieron cargar las facturas'),
-        e.response?.statusCode,
+      throw ApiErrorMapper.fromDio(
+        e,
+        fallbackMessage: 'No se pudieron cargar las facturas',
+        dio: _dio,
+      );
+    }
+  }
+
+  Future<SalesPageResult> listInvoicesPage({
+    required DateTime from,
+    required DateTime to,
+    String? customerId,
+    bool includeDeleted = true,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final requestedLimit = limit > 0 ? limit : 50;
+    final requestedPage = page > 0 ? page : 1;
+    try {
+      return await _requestSalesPage(
+        path: ApiRoutes.salesInvoices,
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+        limit: requestedLimit,
+        page: requestedPage,
+        cacheKey: _salesInvoicesCacheKey(
+          from: from,
+          to: to,
+          customerId: customerId,
+          includeDeleted: includeDeleted,
+          limit: requestedLimit,
+          page: requestedPage,
+        ),
+      );
+    } on DioException catch (e, stackTrace) {
+      _logRecentSalesError('GET ${ApiRoutes.salesInvoices}', e, stackTrace);
+      final cached = await cachedInvoicesPage(
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+        limit: requestedLimit,
+        page: requestedPage,
+      );
+      if (cached.items.isNotEmpty) return cached;
+      throw ApiErrorMapper.fromDio(
+        e,
+        fallbackMessage: 'No se pudieron cargar las facturas',
+        dio: _dio,
       );
     }
   }
@@ -347,6 +416,7 @@ class VentasRepository {
         customerId: customerId,
         includeDeleted: includeDeleted,
         limit: limit,
+        page: null,
       ),
     );
     final rows = _extractRows(data);
@@ -354,6 +424,29 @@ class VentasRepository {
         .whereType<Map>()
         .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
         .toList(growable: false);
+  }
+
+  Future<SalesPageResult> cachedInvoicesPage({
+    required DateTime from,
+    required DateTime to,
+    String? customerId,
+    bool includeDeleted = true,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final requestedLimit = limit > 0 ? limit : 50;
+    final requestedPage = page > 0 ? page : 1;
+    final data = await _cache.readMap(
+      _salesInvoicesCacheKey(
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+        limit: requestedLimit,
+        page: requestedPage,
+      ),
+    );
+    return _mapSalesPage(data, requestedPage, requestedLimit);
   }
 
   Future<SalesSummaryModel> summary({
@@ -539,6 +632,7 @@ class VentasRepository {
     required DateTime from,
     required DateTime to,
     String? category,
+
     /// Ruta liviana: devuelve SOLO los KPIs de desempeño del periodo con la
     /// misma semantica state-aware del reporte (se usa en las comparativas para
     /// no mostrar dos numeros distintos del mismo KPI).
@@ -1445,11 +1539,13 @@ class VentasRepository {
     String? customerId,
     required bool includeDeleted,
     int? limit,
+    int? page,
   }) {
     final user = _cacheKeyPart(userId);
     final customer = _cacheKeyPart(customerId);
     final capped = limit != null && limit > 0 ? 'l$limit' : 'all';
-    return 'sales.list.v1.${_dateOnly(from)}.${_dateOnly(to)}.$user.$customer.$includeDeleted.$capped';
+    final pagePart = page != null && page > 0 ? 'p$page' : 'p1';
+    return 'sales.list.v2.${_dateOnly(from)}.${_dateOnly(to)}.$user.$customer.$includeDeleted.$capped.$pagePart';
   }
 
   String _salesSummaryCacheKey({
@@ -1469,10 +1565,12 @@ class VentasRepository {
     String? customerId,
     required bool includeDeleted,
     int? limit,
+    int? page,
   }) {
     final customer = _cacheKeyPart(customerId);
     final capped = limit != null && limit > 0 ? 'l$limit' : 'all';
-    return 'sales.invoices.v1.${_dateOnly(from)}.${_dateOnly(to)}.$customer.$includeDeleted.$capped';
+    final pagePart = page != null && page > 0 ? 'p$page' : 'p1';
+    return 'sales.invoices.v2.${_dateOnly(from)}.${_dateOnly(to)}.$customer.$includeDeleted.$capped.$pagePart';
   }
 
   /// Escribe en caché sin bloquear/fallar la respuesta de red: un problema
@@ -1503,7 +1601,33 @@ class VentasRepository {
     int? limit,
     required String cacheKey,
   }) async {
+    final page = await _requestSalesPage(
+      path: path,
+      from: from,
+      to: to,
+      userId: userId,
+      customerId: customerId,
+      includeDeleted: includeDeleted,
+      limit: limit,
+      page: null,
+      cacheKey: cacheKey,
+    );
+    return page.items;
+  }
+
+  Future<SalesPageResult> _requestSalesPage({
+    required String path,
+    required DateTime from,
+    required DateTime to,
+    String? userId,
+    String? customerId,
+    required bool includeDeleted,
+    int? limit,
+    int? page,
+    required String cacheKey,
+  }) async {
     final requestedLimit = (limit != null && limit > 0) ? limit : null;
+    final requestedPage = (page != null && page > 0) ? page : null;
     final query = <String, dynamic>{
       'from': _dateOnly(from),
       'to': _dateOnly(to),
@@ -1512,6 +1636,7 @@ class VentasRepository {
         'customerId': customerId!.trim(),
       if (includeDeleted) 'includeDeleted': 'true',
       if (requestedLimit != null) 'limit': requestedLimit,
+      if (requestedPage != null) 'page': requestedPage,
     };
     TraceLog.log('RECENT_SALES', 'request GET $path params=$query');
     final res = await _dio.get(
@@ -1519,17 +1644,60 @@ class VentasRepository {
       queryParameters: query,
       options: Options(extra: const {'skipLoader': true}),
     );
-    final rows = res.data is List ? (res.data as List) : const [];
-    await _tryWriteCache(cacheKey, {'items': rows});
+    final rows = _extractRows(res.data);
+    final pageResult = _mapSalesPage(
+      res.data,
+      requestedPage ?? 1,
+      requestedLimit ?? rows.length,
+    );
+    await _tryWriteCache(cacheKey, {
+      'items': rows,
+      'page': pageResult.page,
+      'limit': pageResult.limit,
+      'hasMore': pageResult.hasMore,
+      'nextPage': pageResult.nextPage,
+    });
+    final mapped = pageResult.items;
+    TraceLog.log(
+      'RECENT_SALES',
+      'response GET $path status=${res.statusCode} items=${mapped.length} '
+          'page=${pageResult.page} hasMore=${pageResult.hasMore}',
+    );
+    return pageResult;
+  }
+
+  SalesPageResult _mapSalesPage(dynamic data, int fallbackPage, int fallbackLimit) {
+    final rows = _extractRows(data);
     final mapped = rows
         .whereType<Map>()
         .map((e) => SaleModel.fromJson(e.cast<String, dynamic>()))
         .toList(growable: false);
-    TraceLog.log(
-      'RECENT_SALES',
-      'response GET $path status=${res.statusCode} items=${mapped.length}',
+    if (data is Map) {
+      final page = _readInt(data['page']) ?? fallbackPage;
+      final limit = _readInt(data['limit']) ?? fallbackLimit;
+      final hasMore = data['hasMore'] == true;
+      final nextPage = _readInt(data['nextPage']);
+      return SalesPageResult(
+        items: mapped,
+        page: page,
+        limit: limit,
+        hasMore: hasMore,
+        nextPage: nextPage,
+      );
+    }
+    return SalesPageResult(
+      items: mapped,
+      page: fallbackPage,
+      limit: fallbackLimit,
+      hasMore: false,
+      nextPage: null,
     );
-    return mapped;
+  }
+
+  int? _readInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value');
   }
 
   /// Detecta SOLO el rechazo específico de la validación NestJS por
