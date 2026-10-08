@@ -91,6 +91,14 @@ export class CashService {
         orderBy: { openedAt: "desc" },
       }),
     ]);
+    if (userOpenShift) {
+      await this.rejectAmbiguousLegacyOpenSession(
+        user.id,
+        companyId,
+        userOpenShift,
+        "cash.state",
+      );
+    }
 
     return {
       businessDate,
@@ -781,6 +789,12 @@ export class CashService {
         "No encontramos un turno abierto para operar.",
       );
     }
+    await this.rejectAmbiguousLegacyOpenSession(
+      userId,
+      companyId,
+      session,
+      requested ? "cash.operation.identified" : "cash.operation.current",
+    );
     return session;
   }
 
@@ -1307,6 +1321,46 @@ export class CashService {
       terminalName: session.terminalNameSnapshot ?? null,
       terminalCode: session.terminalCodeSnapshot ?? null,
     };
+  }
+
+  private async rejectAmbiguousLegacyOpenSession(
+    userId: string,
+    companyId: string,
+    session: {
+      id: string;
+      openedAt: Date;
+      businessDate: string | null;
+    },
+    context: string,
+  ) {
+    const businessDate = this.businessDate();
+    if (session.businessDate === businessDate) return;
+
+    const newerCurrentOpen = await this.prisma.cashSession.findFirst({
+      where: {
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+        businessDate,
+        id: { not: session.id },
+        openedAt: { gt: session.openedAt },
+      },
+      select: { id: true, openedByUserId: true, openedAt: true },
+      orderBy: { openedAt: "desc" },
+    });
+    if (!newerCurrentOpen) return;
+
+    this.logger.warn(
+      `cash.session.legacy_open_requires_review company=${companyId} userId=${userId} ` +
+        `session=${session.id} sessionBusinessDate=${session.businessDate ?? "null"} ` +
+        `currentBusinessDate=${businessDate} newerOpen=${newerCurrentOpen.id} context=${context}`,
+    );
+    throw new ConflictException({
+      code: "CASH_SESSION_REQUIRES_REVIEW",
+      errorCode: "CASH_SESSION_REQUIRES_REVIEW",
+      message:
+        "Este turno abierto necesita revisión antes de operar. Contacta a un administrador.",
+    });
   }
 
   private emitCashEvent(
