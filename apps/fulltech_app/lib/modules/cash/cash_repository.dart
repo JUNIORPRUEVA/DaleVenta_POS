@@ -33,6 +33,18 @@ class CashClosePendingSyncException implements Exception {
   String toString() => message;
 }
 
+/// `true` cuando el backend confirma que NO hay turno abierto.
+///
+/// `GET /cash/summary` (y el resto de lecturas operativas) exige un turno
+/// abierto y responde 404 cuando no existe. Es un estado de negocio esperado
+/// (p. ej. justo después de cerrar el turno), NO un fallo: la UI debe informar
+/// y revalidar el estado, nunca tratarlo como error técnico ni escalarlo al
+/// sistema global de errores.
+bool isCashNoOpenSessionError(Object? error) {
+  if (error is! ApiException) return false;
+  return error.code == 404 || error.type == ApiErrorType.notFound;
+}
+
 final cashRepositoryProvider = Provider<CashRepository>((ref) {
   final repository = CashRepository(
     ref.watch(dioProvider),
@@ -402,7 +414,18 @@ class CashRepository {
           );
         }
       }
-      throw ApiException(_message(e.response?.data, 'No se pudo cargar corte'));
+      final status = e.response?.statusCode;
+      if (status == 404) {
+        // `GET /cash/summary` exige un turno abierto (`requireOpenSession`). Un
+        // 404 aquí es un ESTADO DE NEGOCIO ("no hay turno abierto"), no un
+        // fallo técnico: los llamadores deben informar y revalidar, nunca
+        // escalarlo al sistema global de errores.
+        TraceLog.log('cash', 'cash.summary.no_open_session');
+      }
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo cargar corte'),
+        status,
+      );
     }
   }
 
