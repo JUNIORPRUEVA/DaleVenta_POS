@@ -38,6 +38,13 @@ final cashMovementsProvider = FutureProvider<List<CashMovementModel>>((
 /// un turno abierto/cerrado garantizado.
 final cashStateUnverifiedProvider = StateProvider<bool>((ref) => false);
 
+/// `true` cuando el backend rechazó el estado de caja porque existe un turno
+/// abierto legacy/ambiguo que necesita revisión (409
+/// `CASH_SESSION_REQUIRES_REVIEW`). Es una decisión del servidor, NO un fallo de
+/// red: la UI debe decirlo así y bloquear "Abrir caja".
+final cashStateRequiresReviewProvider = StateProvider<bool>((ref) => false);
+final cashStateReviewMessageProvider = StateProvider<String?>((ref) => null);
+
 class ActiveCashSessionController
     extends StateNotifier<AsyncValue<ActiveCashSession?>> {
   ActiveCashSessionController(this.ref) : super(const AsyncLoading()) {
@@ -83,6 +90,14 @@ class ActiveCashSessionController
     ref.read(cashStateUnverifiedProvider.notifier).state = value;
   }
 
+  void _markCashStateRequiresReview(bool value, String? message) {
+    if (!mounted) return;
+    ref.read(cashStateRequiresReviewProvider.notifier).state = value;
+    ref.read(cashStateReviewMessageProvider.notifier).state = value
+        ? message
+        : null;
+  }
+
   void _invalidateCashReadsAfterRefresh() {
     if (!mounted) return;
     ref.invalidate(cashGateStateProvider);
@@ -117,6 +132,8 @@ class ActiveCashSessionController
       // Estado verificado contra el backend (o snapshot local marcado como
       // no verificado si vino de caché por fallo de red).
       _markCashStateUnverified(gate.fromCache);
+      if (!_canApplyRefresh(generation)) return;
+      _markCashStateRequiresReview(gate.requiresReview, gate.reviewMessage);
       if (!_canApplyRefresh(generation)) return;
       _invalidateCashReadsAfterRefresh();
       debugPrint('[CashController] refresh complete');

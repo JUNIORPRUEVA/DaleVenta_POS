@@ -812,4 +812,48 @@ void main() {
       },
     );
   });
+
+  // Regresión UAT Cafetería La Bomba (caja): el backend respondió 409
+  // CASH_SESSION_REQUIRES_REVIEW (turno legacy/ambiguo) porque SÍ contestó, así
+  // que la UI no debe decir "Sin conexión" ni marcar el estado como no
+  // sincronizado por red.
+  group('cash controller: estado que requiere revisión', () {
+    test(
+      'un gate requiresReview se expone como revisión y NO como "no '
+      'sincronizado"',
+      () async {
+        final repo = _FakeCashRepository();
+        repo.stateOverride = () async => const CashGateState(
+          businessDate: '2026-10-03',
+          canOperate: false,
+          requiresReview: true,
+          reviewMessage:
+              'Este turno abierto necesita revisión antes de operar. '
+              'Contacta a un administrador.',
+        );
+        final container = _buildContainer(repo);
+        addTearDown(container.dispose);
+
+        final controller = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+        await controller.refresh();
+
+        expect(container.read(cashStateRequiresReviewProvider), isTrue);
+        expect(
+          container.read(cashStateReviewMessageProvider),
+          contains('revisión'),
+        );
+        expect(
+          container.read(cashStateUnverifiedProvider),
+          isFalse,
+          reason: 'fue una decisión del servidor, no un fallo de red',
+        );
+        expect(
+          container.read(activeCashSessionControllerProvider).valueOrNull,
+          isNull,
+        );
+      },
+    );
+  });
 }

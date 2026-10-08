@@ -175,6 +175,8 @@ class CashTurnMenuButton extends ConsumerWidget {
     final session = ref.watch(activeCashSessionControllerProvider);
     final active = session.valueOrNull;
     final unverified = ref.watch(cashStateUnverifiedProvider);
+    final requiresReview = ref.watch(cashStateRequiresReviewProvider);
+    final reviewMessage = ref.watch(cashStateReviewMessageProvider);
 
     return PopupMenuButton<String>(
       tooltip: 'Estado del turno',
@@ -188,7 +190,20 @@ class CashTurnMenuButton extends ConsumerWidget {
         side: const BorderSide(color: Color(0xFF9FB6C8)),
       ),
       itemBuilder: (menuContext) => [
-        if (unverified)
+        if (requiresReview)
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _TurnMenuNotice(
+              icon: Icons.report_gmailerrorred_rounded,
+              label: 'Requiere revisión de caja',
+              helpText:
+                  reviewMessage ??
+                  'El servidor detectó un estado de turno que necesita '
+                      'revisión. No abras una caja nueva hasta resolverlo.',
+            ),
+          )
+        else if (unverified)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -200,7 +215,9 @@ class CashTurnMenuButton extends ConsumerWidget {
                   'el servidor y se actualizará al recuperar conexión.',
             ),
           ),
-        if (active == null)
+        // Abrir otra caja mientras el estado del servidor no está confirmado
+        // podría crear un segundo turno sobre un estado ambiguo/legacy.
+        if (active == null && !unverified && !requiresReview)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,

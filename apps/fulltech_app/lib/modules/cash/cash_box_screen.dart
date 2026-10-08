@@ -147,6 +147,8 @@ class CashBoxScreen extends ConsumerWidget {
     final summary = ref.watch(cashSummaryProvider);
     final movements = ref.watch(cashMovementsProvider);
     final unverified = ref.watch(cashStateUnverifiedProvider);
+    final requiresReview = ref.watch(cashStateRequiresReviewProvider);
+    final reviewMessage = ref.watch(cashStateReviewMessageProvider);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
@@ -198,7 +200,10 @@ class CashBoxScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          if (unverified) const _CashUnverifiedBanner(),
+          if (requiresReview)
+            _CashReviewRequiredBanner(message: reviewMessage)
+          else if (unverified)
+            const _CashUnverifiedBanner(),
           Expanded(
             child: Padding(
               padding: isMobile
@@ -218,7 +223,23 @@ class CashBoxScreen extends ConsumerWidget {
                 ),
                 data: (active) {
                   if (active == null) {
-                    return _ClosedCashView(onOpen: () => _openCash(context, ref));
+                    // Nunca abrir un turno sobre un estado no confirmado: si el
+                    // servidor pidió revisión (409) o no pudimos confirmar el
+                    // estado, la acción queda bloqueada con su motivo visible.
+                    final blocked = unverified || requiresReview;
+                    final blockedMessage = requiresReview
+                        ? (reviewMessage ??
+                            'El servidor detectó un estado de turno que '
+                                'necesita revisión. No abras una caja nueva '
+                                'hasta resolverlo.')
+                        : (blocked
+                            ? 'No se puede abrir caja mientras el estado del '
+                                  'turno no esté confirmado con el servidor.'
+                            : null);
+                    return _ClosedCashView(
+                      onOpen: blocked ? null : () => _openCash(context, ref),
+                      blockedMessage: blockedMessage,
+                    );
                   }
                   return LayoutBuilder(
                     builder: (context, constraints) {
@@ -304,10 +325,51 @@ class _CashUnverifiedBanner extends StatelessWidget {
   }
 }
 
-class _ClosedCashView extends StatelessWidget {
-  const _ClosedCashView({required this.onOpen});
+class _CashReviewRequiredBanner extends StatelessWidget {
+  const _CashReviewRequiredBanner({this.message});
 
-  final VoidCallback onOpen;
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFDECEC),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.report_gmailerrorred_rounded,
+            size: 16,
+            color: Color(0xFFB42318),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Requiere revisión de caja — '
+              '${message ?? 'el servidor detectó un estado de turno que necesita revisión.'}',
+              style: const TextStyle(
+                color: Color(0xFF7A271A),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClosedCashView extends StatelessWidget {
+  const _ClosedCashView({required this.onOpen, this.blockedMessage});
+
+  /// `null` bloquea la acción: el estado del servidor no está confirmado o
+  /// requiere revisión, y abrir un turno sobre un estado ambiguo/legacy
+  /// agravaría el problema.
+  final VoidCallback? onOpen;
+  final String? blockedMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -336,6 +398,18 @@ class _ClosedCashView extends StatelessWidget {
                 style: TextStyle(color: Color(0xFF5D7085)),
               ),
               const SizedBox(height: 20),
+              if (blockedMessage != null) ...[
+                Text(
+                  blockedMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFB54708),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               FilledButton.icon(
                 onPressed: onOpen,
                 icon: const Icon(Icons.lock_open_rounded),
