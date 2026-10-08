@@ -51,9 +51,11 @@ class ActiveCashSessionController
 
   bool _opening = false;
   bool _closing = false;
+  int _refreshGeneration = 0;
 
   @override
   void dispose() {
+    _refreshGeneration++;
     debugPrint(
       '[CASH_LIFECYCLE] controller DISPOSE id=${identityHashCode(this)}',
     );
@@ -72,6 +74,22 @@ class ActiveCashSessionController
     state = value;
   }
 
+  bool _canApplyRefresh(int generation) {
+    return mounted && generation == _refreshGeneration;
+  }
+
+  void _markCashStateUnverified(bool value) {
+    if (!mounted) return;
+    ref.read(cashStateUnverifiedProvider.notifier).state = value;
+  }
+
+  void _invalidateCashReadsAfterRefresh() {
+    if (!mounted) return;
+    ref.invalidate(cashGateStateProvider);
+    ref.invalidate(cashSummaryProvider);
+    ref.invalidate(cashMovementsProvider);
+  }
+
   /// Revalida el turno contra el backend (fuente de verdad).
   ///
   /// - `silent: false` (acciones explícitas): muestra loading mientras consulta.
@@ -82,6 +100,9 @@ class ActiveCashSessionController
   /// Regla #39: un error de red/API nunca se traduce a "turno cerrado", y un
   /// snapshot de caché se marca como "no sincronizado" ([cashStateUnverifiedProvider]).
   Future<void> refresh({bool silent = false}) async {
+    if (!mounted) return;
+    final generation = ++_refreshGeneration;
+    final previousState = state;
     debugPrint('[CASH_LIFECYCLE] REFRESH START id=${identityHashCode(this)}');
     TraceLog.log('cash', 'cash.refresh silent=$silent');
     if (!silent) _setState(const AsyncLoading());
@@ -89,35 +110,37 @@ class ActiveCashSessionController
     AsyncValue<ActiveCashSession?> nextState;
     try {
       final gate = await ref.read(cashRepositoryProvider).state();
+      if (!_canApplyRefresh(generation)) return;
       debugPrint(
         '[CashController] currentShift=${gate.activeSession?.shiftId}',
       );
       // Estado verificado contra el backend (o snapshot local marcado como
       // no verificado si vino de caché por fallo de red).
-      ref.read(cashStateUnverifiedProvider.notifier).state = gate.fromCache;
-      if (!mounted) return;
-      ref.invalidate(cashGateStateProvider);
-      ref.invalidate(cashSummaryProvider);
-      ref.invalidate(cashMovementsProvider);
+      _markCashStateUnverified(gate.fromCache);
+      if (!_canApplyRefresh(generation)) return;
+      _invalidateCashReadsAfterRefresh();
       debugPrint('[CashController] refresh complete');
       nextState = AsyncValue.data(gate.activeSession);
     } catch (error, stack) {
+      if (!_canApplyRefresh(generation)) return;
       // Un fallo de red/API NO debe convertir un turno abierto conocido en
       // "cerrado" ni viceversa: se conserva el último snapshot y se marca como
       // no sincronizado. Solo si nunca hubo dato se expone el error.
-      ref.read(cashStateUnverifiedProvider.notifier).state = true;
-      final previous = state;
-      if (previous.hasValue) {
-        nextState = previous;
+      _markCashStateUnverified(true);
+      if (!_canApplyRefresh(generation)) return;
+      if (previousState.hasValue) {
+        nextState = previousState;
       } else {
         nextState = AsyncValue.error(error, stack);
       }
     }
+    if (!_canApplyRefresh(generation)) return;
     _setState(nextState);
     debugPrint('[CASH_LIFECYCLE] REFRESH END id=${identityHashCode(this)}');
   }
 
   Future<void> open(double openingAmount, {String? note}) async {
+    if (!mounted) return;
     // Guarda anti doble-apertura: evita ejecutar dos aperturas simultáneas.
     if (_opening) return;
     _opening = true;
@@ -130,14 +153,14 @@ class ActiveCashSessionController
             .read(cashRepositoryProvider)
             .openSession(openingAmount: openingAmount, note: note);
         if (!mounted) return session;
-        ref.invalidate(cashGateStateProvider);
-        ref.invalidate(cashSummaryProvider);
+        _invalidateCashReadsAfterRefresh();
         // La apertura se confirmó contra el backend: el estado ya no es un
         // snapshot no verificado.
-        ref.read(cashStateUnverifiedProvider.notifier).state = false;
+        _markCashStateUnverified(false);
         TraceLog.log('cash', 'cash.open.done shiftId=${session.shiftId}');
         return session;
       });
+      if (!mounted) return;
       _setState(nextState);
       debugPrint('[CASH_LIFECYCLE] OPEN END id=${identityHashCode(this)}');
     } finally {
@@ -146,6 +169,7 @@ class ActiveCashSessionController
   }
 
   Future<PrintTicketResult?> close(double closingAmount, {String? note}) async {
+    if (!mounted) return null;
     // Guarda anti doble-cierre: evita ejecutar dos cierres simultáneos.
     if (_closing) return null;
     _closing = true;
@@ -155,8 +179,11 @@ class ActiveCashSessionController
       final repo = ref.read(cashRepositoryProvider);
       final printer = ref.read(cashCloseTicketPrinterProvider);
       final stateBeforeClose = await repo.state();
+      if (!mounted) return null;
       final summaryBeforeClose = await repo.summary();
+      if (!mounted) return null;
       final movementsBeforeClose = await repo.movements();
+      if (!mounted) return null;
       // Identidad del turno que estaba abierto cuando el usuario inició el
       // cierre. Se fija AQUÍ y se envía al backend, de modo que un replay
       // offline nunca cierre un turno posterior.
@@ -183,8 +210,9 @@ class ActiveCashSessionController
         sessionId: sessionId,
         note: note,
       );
+      if (!mounted) return null;
       // El cierre se confirmó contra el backend: estado verificado.
-      ref.read(cashStateUnverifiedProvider.notifier).state = false;
+      _markCashStateUnverified(false);
       debugPrint(
         '[CASH_LIFECYCLE] CLOSE API SUCCESS id=${identityHashCode(this)}',
       );
@@ -199,6 +227,7 @@ class ActiveCashSessionController
         '[CASH_LIFECYCLE] CLOSE ALREADY CLOSED id=${identityHashCode(this)}',
       );
       TraceLog.log('cash', 'cash.conflict already_closed');
+      if (!mounted) return null;
       await refresh(silent: true);
       if (!mounted) return null;
       return null;
@@ -210,7 +239,8 @@ class ActiveCashSessionController
         '[CASH_LIFECYCLE] CLOSE PENDING SYNC id=${identityHashCode(this)}',
       );
       TraceLog.log('cash', 'cash.close.pending_sync');
-      ref.read(cashStateUnverifiedProvider.notifier).state = true;
+      _markCashStateUnverified(true);
+      if (!mounted) return null;
       await refresh(silent: true);
       if (!mounted) return null;
       return null;
@@ -220,11 +250,15 @@ class ActiveCashSessionController
   }
 
   Future<PrintTicketResult> printCurrent() async {
+    if (!mounted) return _disposedPrintResult;
     final repo = ref.read(cashRepositoryProvider);
     final printer = ref.read(cashCloseTicketPrinterProvider);
     final state = await repo.state();
+    if (!mounted) return _disposedPrintResult;
     final summary = await repo.summary();
+    if (!mounted) return _disposedPrintResult;
     final movements = await repo.movements();
+    if (!mounted) return _disposedPrintResult;
     final snapshot = CashCloseTicketSnapshot(
       state: state,
       summary: summary,
@@ -260,6 +294,11 @@ class ActiveCashSessionController
     ref.invalidate(cashMovementsProvider);
   }
 }
+
+const _disposedPrintResult = PrintTicketResult(
+  success: false,
+  message: 'El turno cambió mientras se preparaba la impresión.',
+);
 
 final activeCashSessionControllerProvider =
     StateNotifierProvider<

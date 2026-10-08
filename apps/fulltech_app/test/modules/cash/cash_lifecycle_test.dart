@@ -280,6 +280,29 @@ void main() {
       },
     );
 
+    test(
+      'refresh en vuelo que falla después de dispose no toca state/ref muerto',
+      () async {
+        final repo = _FakeCashRepository();
+        final stateCompleter = Completer<CashGateState>();
+        repo.stateOverride = () => stateCompleter.future;
+        final container = _buildContainer(repo);
+        addTearDown(container.dispose);
+
+        final controller = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+        final refreshFuture = controller.refresh(silent: true);
+
+        container.invalidate(activeCashSessionControllerProvider);
+        expect(controller.mounted, isFalse);
+
+        stateCompleter.completeError(Exception('red caida tardia'));
+
+        await refreshFuture;
+      },
+    );
+
     test('doble apertura simultánea solo ejecuta una', () async {
       final repo = _FakeCashRepository();
       var calls = 0;
