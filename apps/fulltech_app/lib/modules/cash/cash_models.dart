@@ -49,6 +49,7 @@ class CashGateState {
     required this.canOperate,
     this.activeSession,
     this.fromCache = false,
+    this.pendingClose = false,
   });
 
   final String businessDate;
@@ -59,6 +60,7 @@ class CashGateState {
   /// el backend, p. ej. fallo de red transitorio). La UI debe mostrarlo como
   /// "estado no sincronizado", NUNCA como un turno confirmado.
   final bool fromCache;
+  final bool pendingClose;
 
   factory CashGateState.fromJson(Map<String, dynamic> json) {
     final active = json['activeSession'];
@@ -69,6 +71,7 @@ class CashGateState {
           ? ActiveCashSession.fromJson(active.cast<String, dynamic>())
           : null,
       fromCache: json['fromCache'] == true,
+      pendingClose: json['pendingClose'] == true,
     );
   }
 }

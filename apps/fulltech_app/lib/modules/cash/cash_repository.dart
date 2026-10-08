@@ -22,6 +22,17 @@ class CashSessionAlreadyClosedException implements Exception {
   String toString() => message;
 }
 
+/// El cierre quedó guardado localmente y pendiente de sincronizar. No equivale
+/// a un cierre confirmado contra el backend.
+class CashClosePendingSyncException implements Exception {
+  const CashClosePendingSyncException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 final cashRepositoryProvider = Provider<CashRepository>((ref) {
   final repository = CashRepository(
     ref.watch(dioProvider),
@@ -169,6 +180,7 @@ class CashRepository {
             canOperate: gate.canOperate,
             activeSession: gate.activeSession,
             fromCache: true,
+            pendingClose: gate.pendingClose,
           );
         }
       }
@@ -180,6 +192,11 @@ class CashRepository {
     required double openingAmount,
     String? note,
   }) async {
+    if (await _hasPendingClose()) {
+      throw ApiException(
+        'Hay un cierre de turno pendiente de sincronizar. Espera a que se confirme antes de abrir otro turno.',
+      );
+    }
     // Identidad generada por el cliente para el turno que se está abriendo.
     // Permite que un turno abierto OFFLINE tenga una identidad real (UUID) que
     // el cierre offline pueda referenciar, y hace la apertura idempotente si el
@@ -321,7 +338,10 @@ class CashRepository {
           if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
         },
       );
-      await _clearCachedSessionIfMatches(resolvedSessionId);
+      await _markCachedSessionPendingClose(resolvedSessionId);
+      throw const CashClosePendingSyncException(
+        'El cierre quedó pendiente de sincronizar.',
+      );
     }
   }
 
@@ -458,7 +478,9 @@ class CashRepository {
         ApiRoutes.cashSessionDetail(id),
         options: Options(extra: const {'skipLoader': true}),
       );
-      final data = res.data is Map ? res.data as Map : const <String, dynamic>{};
+      final data = res.data is Map
+          ? res.data as Map
+          : const <String, dynamic>{};
       return CashSessionDetailModel.fromJson(data.cast<String, dynamic>());
     } on DioException catch (e) {
       throw ApiException(
@@ -582,6 +604,23 @@ class CashRepository {
         'cash.cache_preserved active=$cachedId closed=$sessionId',
       );
     }
+  }
+
+  Future<bool> _hasPendingClose() async {
+    final cached = await _cache.readMap(_activeSessionCacheKey);
+    return cached?['pendingClose'] == true;
+  }
+
+  Future<void> _markCachedSessionPendingClose(String sessionId) async {
+    final cached = await _cache.readMap(_activeSessionCacheKey);
+    final cachedId = _cachedSessionId(cached);
+    if (cached == null || cachedId != sessionId) return;
+    await _cache.writeMap(_activeSessionCacheKey, {
+      ...cached,
+      'pendingClose': true,
+      'canOperate': false,
+      'fromCache': true,
+    });
   }
 
   bool _shouldQueueNetworkFailure(DioException error) {
