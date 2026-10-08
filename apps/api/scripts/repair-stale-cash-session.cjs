@@ -3,8 +3,8 @@
 const crypto = require("node:crypto");
 const { Client } = require("pg");
 
-function usage() {
-  console.log(`Usage:
+function usage(stdout = console.log) {
+  stdout(`Usage:
   node apps/api/scripts/repair-stale-cash-session.cjs --dry-run --company-id <uuid> --session-id <uuid> [guards]
 
 Required:
@@ -114,11 +114,16 @@ function compareGuard(guards, key, actual, failures) {
   }
 }
 
-async function main() {
-  const args = parseArgs(process.argv);
+async function main({
+  argv = process.argv,
+  env = process.env,
+  PgClient = Client,
+  stdout = console.log,
+} = {}) {
+  const args = parseArgs(argv);
   if (args.help) {
-    usage();
-    return;
+    usage(stdout);
+    return { exitCode: 0, report: null };
   }
   if (args.apply) {
     throw new Error("--apply is not implemented in this dry-run-only tool");
@@ -126,11 +131,11 @@ async function main() {
   if (!args.dryRun) throw new Error("--dry-run is required");
   assertUuid("--company-id", args.companyId);
   assertUuid("--session-id", args.sessionId);
-  if (!process.env.DATABASE_URL) {
+  if (!env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required");
   }
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const client = new PgClient({ connectionString: env.DATABASE_URL });
   await client.connect();
   try {
     await client.query("BEGIN READ ONLY");
@@ -306,6 +311,8 @@ async function main() {
       closedAtNull: session.closedAt == null,
       guardFailures,
       canProceedInFutureWriteTool:
+        session.companyId === args.companyId &&
+        session.id === args.sessionId &&
         session.status === "OPEN" &&
         session.closedAt == null &&
         guardFailures.length === 0,
@@ -338,9 +345,10 @@ async function main() {
       ],
     };
 
-    console.log(JSON.stringify(report, null, 2));
+    const exitCode = preconditions.canProceedInFutureWriteTool ? 0 : 3;
+    stdout(JSON.stringify(report, null, 2));
     await client.query("ROLLBACK");
-    if (guardFailures.length > 0) process.exitCode = 3;
+    return { exitCode, report };
   } catch (error) {
     try {
       await client.query("ROLLBACK");
@@ -351,7 +359,19 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`ERROR: ${error.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main()
+    .then((result) => {
+      if (result?.exitCode) process.exitCode = result.exitCode;
+    })
+    .catch((error) => {
+      console.error(`ERROR: ${error.message}`);
+      process.exit(1);
+    });
+}
+
+module.exports = {
+  main,
+  parseArgs,
+  digest,
+};
