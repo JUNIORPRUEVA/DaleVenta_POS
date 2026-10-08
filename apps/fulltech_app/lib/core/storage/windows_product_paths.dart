@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-enum WindowsProductFolder { app, databases, backups, mediaCache, logs, config }
+enum WindowsProductFolder { app, databases, mediaCache, logs, config }
 
 class WindowsProductPaths {
   WindowsProductPaths._();
@@ -47,7 +47,6 @@ class WindowsProductPaths {
     return switch (folder) {
       WindowsProductFolder.app => 'app',
       WindowsProductFolder.databases => 'databases',
-      WindowsProductFolder.backups => 'backups',
       WindowsProductFolder.mediaCache => 'media_cache',
       WindowsProductFolder.logs => 'logs',
       WindowsProductFolder.config => 'config',

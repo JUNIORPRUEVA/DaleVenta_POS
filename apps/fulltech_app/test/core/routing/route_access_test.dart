@@ -11,7 +11,6 @@ void main() {
         Routes.configuracion,
         Routes.configuracionEmpresa,
         Routes.configuracionImpresora,
-        Routes.configuracionBackup,
         Routes.configuracionParametros,
         Routes.configuracionDocumentos,
         Routes.apps,

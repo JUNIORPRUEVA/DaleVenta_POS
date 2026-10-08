@@ -87,11 +87,6 @@ Type: files; Name: "{commondesktop}\DaleVentas POS.lnk"
 Name: "{group}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"; Tasks: desktopicon
 
-[Registry]
-Root: HKCR; Subkey: ".dvbackup"; ValueType: string; ValueName: ""; ValueData: "DaleVentasBackup"; Flags: uninsdeletevalue
-Root: HKCR; Subkey: "DaleVentasBackup"; ValueType: string; ValueName: ""; ValueData: "FullPOS Backup"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "DaleVentasBackup\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\app\{#MyAppExeName},0"
-Root: HKCR; Subkey: "DaleVentasBackup\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\app\{#MyAppExeName}"" ""%1"""
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear icono en el escritorio"; GroupDescription: "Opciones adicionales:"; Flags: unchecked

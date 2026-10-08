@@ -330,7 +330,6 @@ bool desktopShellShouldShowOwnAppBar(String location) {
     Routes.configuracion,
     Routes.configuracionEmpresa,
     Routes.configuracionImpresora,
-    Routes.configuracionBackup,
     Routes.configuracionParametros,
     Routes.configuracionDocumentos,
     Routes.configuracionAlmacenes,

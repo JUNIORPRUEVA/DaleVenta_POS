@@ -9587,13 +9587,6 @@ class _CompanyAccountMenu extends ConsumerWidget {
                 route: Routes.configuracionImpresora,
                 label: 'Impresora',
               ),
-              onBackup: () => _activateProtectedRoute(
-                context,
-                ref,
-                menuContext,
-                route: Routes.configuracionBackup,
-                label: 'Respaldo',
-              ),
               onDeleteAccount: () {
                 final authRepository = ref.read(authRepositoryProvider);
                 final authController = ref.read(authStateProvider.notifier);
@@ -10774,13 +10767,11 @@ class _CompanySettingsSubmenu extends StatefulWidget {
   const _CompanySettingsSubmenu({
     required this.showPrinter,
     required this.onPrinter,
-    required this.onBackup,
     required this.onDeleteAccount,
   });
 
   final bool showPrinter;
   final VoidCallback onPrinter;
-  final VoidCallback onBackup;
   final VoidCallback onDeleteAccount;
 
   @override
@@ -10851,11 +10842,6 @@ class _CompanySettingsSubmenuState extends State<_CompanySettingsSubmenu> {
               label: 'Impresora',
               onTap: widget.onPrinter,
             ),
-          _CompanySettingsSubmenuAction(
-            icon: Icons.cloud_sync_outlined,
-            label: 'Respaldo',
-            onTap: widget.onBackup,
-          ),
           _CompanySettingsSubmenuAction(
             icon: Icons.delete_forever_outlined,
             label: 'Eliminar mi cuenta',

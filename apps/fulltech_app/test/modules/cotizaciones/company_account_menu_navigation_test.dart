@@ -117,7 +117,6 @@ void main() {
       expect(_companyMenuItem('Licencias'), findsOneWidget);
       expect(_companyMenuItem('Configuracion'), findsOneWidget);
       expect(find.text('Impresora'), findsNothing);
-      expect(find.text('Respaldo'), findsNothing);
       expect(find.text('Eliminar mi cuenta'), findsNothing);
 
       await tester.tap(_companyMenuItem('Configuracion'));
@@ -126,7 +125,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Impresora'), findsOneWidget);
-      expect(find.text('Respaldo'), findsOneWidget);
       expect(find.text('Eliminar mi cuenta'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

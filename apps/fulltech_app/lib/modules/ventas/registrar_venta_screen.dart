@@ -4660,7 +4660,6 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
               showPrinter: !kIsWeb,
               onPrinter: () =>
                   _goAfterMenu(context, Routes.configuracionImpresora),
-              onBackup: () => _goAfterMenu(context, Routes.configuracionBackup),
               onDeleteAccount: () {
                 final authRepository = ref.read(authRepositoryProvider);
                 final authController = ref.read(authStateProvider.notifier);
@@ -4849,13 +4848,11 @@ class _SalesSettingsSubmenu extends StatefulWidget {
   const _SalesSettingsSubmenu({
     required this.showPrinter,
     required this.onPrinter,
-    required this.onBackup,
     required this.onDeleteAccount,
   });
 
   final bool showPrinter;
   final VoidCallback onPrinter;
-  final VoidCallback onBackup;
   final VoidCallback onDeleteAccount;
 
   @override
@@ -4916,11 +4913,6 @@ class _SalesSettingsSubmenuState extends State<_SalesSettingsSubmenu> {
               label: 'Impresora',
               onTap: widget.onPrinter,
             ),
-          _SalesSettingsSubmenuAction(
-            icon: Icons.cloud_sync_outlined,
-            label: 'Respaldo',
-            onTap: widget.onBackup,
-          ),
           _SalesSettingsSubmenuAction(
             icon: Icons.delete_forever_outlined,
             label: 'Eliminar mi cuenta',
