@@ -47,7 +47,10 @@ class TpvSalesHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
+  static const _invoicePageSize = 50;
+
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   final _dateFmt = DateFormat('dd/MM/yy HH:mm', 'es_DO');
 
   List<SaleModel> _sales = const [];
@@ -58,6 +61,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   late DateTime _fromDate;
   late DateTime _toDate;
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMoreInvoices = false;
+  int _nextInvoicePage = 1;
   bool _searchOpen = false;
   String? _error;
   ProviderSubscription<int>? _salesRefreshSubscription;
@@ -74,6 +80,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     ).subtract(const Duration(days: 14));
     _toDate = DateTime(now.year, now.month, now.day);
     _searchController.addListener(() => setState(() {}));
+    _scrollController.addListener(_maybeLoadMoreInvoices);
     _salesRefreshSubscription = ref.listenManual<int>(
       salesDataRefreshTickProvider,
       (previous, next) => _scheduleRealtimeReload(),
@@ -85,6 +92,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   void dispose() {
     _realtimeReloadDebounce?.cancel();
     _salesRefreshSubscription?.close();
+    _scrollController
+      ..removeListener(_maybeLoadMoreInvoices)
+      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -100,48 +110,106 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
   Future<void> _load() async {
     final repo = ref.read(ventasRepositoryProvider);
-    final cached = await repo.cachedInvoices(
+    const page = 1;
+    final cached = await repo.cachedInvoicesPage(
       from: _fromDate,
       to: _toDate,
       includeDeleted: true,
+      page: page,
+      limit: _invoicePageSize,
     );
     if (!mounted) return;
     setState(() {
-      _loading = cached.isEmpty;
+      _loading = cached.items.isEmpty;
       _error = null;
-      if (cached.isNotEmpty) {
-        _applyRows(cached);
+      _loadingMore = false;
+      if (cached.items.isNotEmpty) {
+        _applyRows(cached.items, append: false);
+        _hasMoreInvoices = cached.hasMore;
+        _nextInvoicePage = cached.nextPage ?? 2;
       }
     });
 
     try {
-      final rows = await repo.listInvoices(
+      final result = await repo.listInvoicesPage(
         from: _fromDate,
         to: _toDate,
         includeDeleted: true,
+        page: page,
+        limit: _invoicePageSize,
       );
       if (!mounted) return;
       setState(() {
-        _applyRows(rows);
+        _applyRows(result.items, append: false);
+        _hasMoreInvoices = result.hasMore;
+        _nextInvoicePage = result.nextPage ?? 2;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = invoiceListErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _applyRows(List<SaleModel> rows) {
-    _sales = rows;
-    final invoiceRows = rows.where((sale) => !sale.isRefundDocument).toList();
+  Future<void> _loadMoreInvoices() async {
+    if (_loading || _loadingMore || !_hasMoreInvoices) return;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final result = await ref
+          .read(ventasRepositoryProvider)
+          .listInvoicesPage(
+            from: _fromDate,
+            to: _toDate,
+            includeDeleted: true,
+            page: _nextInvoicePage,
+            limit: _invoicePageSize,
+          );
+      if (!mounted) return;
+      setState(() {
+        _applyRows(result.items, append: true);
+        _hasMoreInvoices = result.hasMore;
+        _nextInvoicePage = result.nextPage ?? (_nextInvoicePage + 1);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = invoiceListErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _maybeLoadMoreInvoices() {
+    if (!_scrollController.hasClients || !_hasMoreInvoices || _loadingMore) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.extentAfter < 420) {
+      unawaited(_loadMoreInvoices());
+    }
+  }
+
+  void _applyRows(List<SaleModel> rows, {required bool append}) {
+    if (append) {
+      final byId = {for (final sale in _sales) sale.id: sale};
+      for (final sale in rows) {
+        byId[sale.id] = sale;
+      }
+      _sales = byId.values.toList(growable: false);
+    } else {
+      _sales = rows;
+    }
+    final invoiceRows = _sales.where((sale) => !sale.isRefundDocument).toList();
     if (_selected == null && invoiceRows.isNotEmpty) {
-      _selected = rows.firstWhere(
+      _selected = _sales.firstWhere(
         (sale) => !sale.isRefundDocument && sale.isCommerciallyActive,
         orElse: () => invoiceRows.first,
       );
     } else if (_selected != null) {
-      _selected = rows.cast<SaleModel?>().firstWhere(
+      _selected = _sales.cast<SaleModel?>().firstWhere(
         (sale) => sale?.id == _selected!.id,
         orElse: () => invoiceRows.isEmpty ? null : invoiceRows.first,
       );
@@ -328,10 +396,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     try {
       await ref
           .read(ventasRepositoryProvider)
-          .returnSale(
-            sale.id,
-            originalSaleCashSessionId: sale.cashSessionId,
-          );
+          .returnSale(sale.id, originalSaleCashSessionId: sale.cashSessionId);
       if (!mounted) return;
       await _load();
       if (!mounted) return;
@@ -643,6 +708,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
               child: isMobile
                   ? _InvoiceListCard(
                       loading: _loading,
+                      loadingMore: _loadingMore,
+                      scrollController: _scrollController,
                       error: _error,
                       sales: visibleSales,
                       selectedId: null,
@@ -662,6 +729,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                           flex: 62,
                           child: _InvoiceListCard(
                             loading: _loading,
+                            loadingMore: _loadingMore,
+                            scrollController: _scrollController,
                             error: _error,
                             sales: visibleSales,
                             selectedId: selected?.id,
@@ -996,9 +1065,70 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
+String invoiceListErrorMessage(Object error) {
+  return userSafeErrorMessage(
+    error,
+    fallback:
+        'Estás sin conexión. Algunas facturas podrían no estar disponibles hasta recuperar Internet.',
+  );
+}
+
+bool invoiceListShowsBlockingError({
+  required String? error,
+  required bool hasVisibleInvoices,
+}) {
+  return error != null && !hasVisibleInvoices;
+}
+
+String? invoiceListRefreshWarning({
+  required String? error,
+  required bool hasVisibleInvoices,
+}) {
+  return error != null && hasVisibleInvoices ? error : null;
+}
+
+class _InvoiceRefreshWarning extends StatelessWidget {
+  const _InvoiceRefreshWarning({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFF8E1),
+        border: Border(bottom: BorderSide(color: Color(0xFFFFECB3))),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            size: 18,
+            color: Color(0xFF8A6D1D),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF6F5717), fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InvoiceListCard extends StatelessWidget {
   const _InvoiceListCard({
     required this.loading,
+    required this.loadingMore,
+    required this.scrollController,
     required this.error,
     required this.sales,
     required this.selectedId,
@@ -1013,6 +1143,8 @@ class _InvoiceListCard extends StatelessWidget {
   });
 
   final bool loading;
+  final bool loadingMore;
+  final ScrollController scrollController;
   final String? error;
   final List<SaleModel> sales;
   final String? selectedId;
@@ -1028,6 +1160,14 @@ class _InvoiceListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 760;
+    final blockingError = invoiceListShowsBlockingError(
+      error: error,
+      hasVisibleInvoices: sales.isNotEmpty,
+    );
+    final refreshWarning = invoiceListRefreshWarning(
+      error: error,
+      hasVisibleInvoices: sales.isNotEmpty,
+    );
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -1072,7 +1212,7 @@ class _InvoiceListCard extends StatelessWidget {
           Expanded(
             child: Builder(
               builder: (context) {
-                if (error != null) {
+                if (blockingError) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -1156,28 +1296,53 @@ class _InvoiceListCard extends StatelessWidget {
                   );
                 }
 
-                return RefreshIndicator(
-                  onRefresh: () async => onReload(),
-                  child: ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.all(mobile ? 10 : 0),
-                    itemCount: sales.length,
-                    separatorBuilder: (_, __) =>
-                        SizedBox(height: mobile ? 8 : 0),
-                    itemBuilder: (context, index) {
-                      final sale = sales[index];
-                      return _InvoiceRow(
-                        sale: sale,
-                        selected: sale.id == selectedId,
-                        dateFmt: dateFmt,
-                        invoiceNumber: invoiceNumber,
-                        onTap: () => onSelect(sale),
-                        onPdf: () => onPdf(sale),
-                        onPrint: () => onPrint(sale),
-                        onReturn: sale.canReturn ? () => onReturn(sale) : null,
-                      );
-                    },
-                  ),
+                return Column(
+                  children: [
+                    if (refreshWarning != null)
+                      _InvoiceRefreshWarning(message: refreshWarning),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async => onReload(),
+                        child: ListView.separated(
+                          controller: scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.all(mobile ? 10 : 0),
+                          itemCount: sales.length + (loadingMore ? 1 : 0),
+                          separatorBuilder: (_, __) =>
+                              SizedBox(height: mobile ? 8 : 0),
+                          itemBuilder: (context, index) {
+                            if (index >= sales.length) {
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.4,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            final sale = sales[index];
+                            return _InvoiceRow(
+                              sale: sale,
+                              selected: sale.id == selectedId,
+                              dateFmt: dateFmt,
+                              invoiceNumber: invoiceNumber,
+                              onTap: () => onSelect(sale),
+                              onPdf: () => onPdf(sale),
+                              onPrint: () => onPrint(sale),
+                              onReturn: sale.canReturn
+                                  ? () => onReturn(sale)
+                                  : null,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

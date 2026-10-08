@@ -1,4 +1,5 @@
 import 'package:daleventa_pos/core/errors/api_exception.dart';
+import 'package:daleventa_pos/modules/ventas/tpv_sales_history_screen.dart';
 import 'package:daleventa_pos/modules/ventas/sales_user_messages.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +11,7 @@ void main() {
     'StackTrace',
     'Prisma',
     'HTTP 400',
+    'UNKNOWN',
   ];
 
   void expectClean(SalesUserMessage message) {
@@ -102,5 +104,62 @@ void main() {
       'No se pudo completar la operacion. Intentalo nuevamente.',
     );
     expectClean(message);
+  });
+
+  test('invoice list error hides ApiException UNKNOWN from customers', () {
+    final message = invoiceListErrorMessage(
+      const ApiException.detailed(
+        message: 'No se pudieron cargar las facturas',
+        displayCode: 'UNKNOWN',
+      ),
+    );
+
+    expect(message, 'No se pudieron cargar las facturas');
+    expect(message, isNot(contains('ApiException')));
+    expect(message, isNot(contains('UNKNOWN')));
+  });
+
+  test('invoice list error falls back for raw technical exceptions', () {
+    final message = invoiceListErrorMessage(
+      Exception('DioException SocketException code: UNKNOWN'),
+    );
+
+    expect(message, contains('Algunas facturas podrían no estar disponibles'));
+    expect(message, isNot(contains('DioException')));
+    expect(message, isNot(contains('UNKNOWN')));
+  });
+
+  test('invoice list error only blocks when there are no local rows', () {
+    expect(
+      invoiceListShowsBlockingError(
+        error: 'Estás sin conexión',
+        hasVisibleInvoices: false,
+      ),
+      isTrue,
+    );
+    expect(
+      invoiceListShowsBlockingError(
+        error: 'Estás sin conexión',
+        hasVisibleInvoices: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('invoice list refresh warning is non-blocking with local rows', () {
+    expect(
+      invoiceListRefreshWarning(
+        error: 'Estás sin conexión',
+        hasVisibleInvoices: true,
+      ),
+      'Estás sin conexión',
+    );
+    expect(
+      invoiceListRefreshWarning(
+        error: 'Estás sin conexión',
+        hasVisibleInvoices: false,
+      ),
+      isNull,
+    );
   });
 }
