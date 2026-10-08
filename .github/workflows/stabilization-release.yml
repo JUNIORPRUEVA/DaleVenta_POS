@@ -1,0 +1,215 @@
+name: Stabilization release images
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: "Exact commit SHA to build"
+        required: true
+        default: "a1b40dd8a4c5b38e37e0d290d8a683eb3122fa3f"
+      image_tag:
+        description: "Immutable image tag"
+        required: true
+        default: "stabilization-a1b40dd8"
+  push:
+    branches:
+      - agent/stabilization-la-bomba-clean
+    paths:
+      - ".github/workflows/stabilization-release.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DEFAULT_TARGET_SHA: a1b40dd8a4c5b38e37e0d290d8a683eb3122fa3f
+  DEFAULT_IMAGE_TAG: stabilization-a1b40dd8
+
+jobs:
+  build-and-push:
+    name: Validate, build, smoke, push
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Resolve release inputs
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_sha="${{ github.event.inputs.target_sha || env.DEFAULT_TARGET_SHA }}"
+          image_tag="${{ github.event.inputs.image_tag || env.DEFAULT_IMAGE_TAG }}"
+          if [ "$target_sha" != "$DEFAULT_TARGET_SHA" ]; then
+            echo "Unexpected target_sha: $target_sha" >&2
+            exit 1
+          fi
+          if [ "$image_tag" != "$DEFAULT_IMAGE_TAG" ]; then
+            echo "Unexpected image_tag: $image_tag" >&2
+            exit 1
+          fi
+          repo_lc="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          backend_image="ghcr.io/${repo_lc}/backend"
+          pwa_image="ghcr.io/${repo_lc}/pwa"
+          {
+            echo "target_sha=$target_sha"
+            echo "image_tag=$image_tag"
+            echo "backend_image=$backend_image"
+            echo "pwa_image=$pwa_image"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact release candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.target_sha }}
+
+      - name: Verify checked out SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ steps.release.outputs.target_sha }}"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+        run: npx prisma validate
+
+      - name: Backend tests
+        run: npm --workspace apps/api test
+
+      - name: Backend build
+        run: npm run api:build
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter dependencies
+        working-directory: apps/fulltech_app
+        run: |
+          cp .env.example .env
+          flutter pub get
+
+      - name: Flutter analyze
+        working-directory: apps/fulltech_app
+        run: flutter analyze
+
+      - name: Flutter tests
+        working-directory: apps/fulltech_app
+        run: flutter test
+
+      - name: Build backend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --label "org.opencontainers.image.revision=${{ steps.release.outputs.target_sha }}" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "com.fullpos.release.tag=${{ steps.release.outputs.image_tag }}" \
+            -t "${{ steps.release.outputs.backend_image }}:${{ steps.release.outputs.image_tag }}" \
+            apps/api
+
+      - name: Smoke backend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.release.outputs.backend_image }}:${{ steps.release.outputs.image_tag }}"
+          container="$(docker run -d \
+            -e RUN_MIGRATIONS=false \
+            -e RUN_SEED=false \
+            -e DATABASE_URL=postgresql://user:pass@127.0.0.1:5432/db \
+            -p 4000:4000 \
+            "$image")"
+          trap 'docker logs "$container" || true; docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4000/health | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Build PWA image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --label "org.opencontainers.image.revision=${{ steps.release.outputs.target_sha }}" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "com.fullpos.release.tag=${{ steps.release.outputs.image_tag }}" \
+            -t "${{ steps.release.outputs.pwa_image }}:${{ steps.release.outputs.image_tag }}" \
+            apps/fulltech_app
+
+      - name: Smoke PWA image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.release.outputs.pwa_image }}:${{ steps.release.outputs.image_tag }}"
+          docker run --rm --entrypoint nginx "$image" -t
+          container="$(docker run -d \
+            -e API_BASE_URL=/api \
+            -e API_UPSTREAM_URL=https://daleventapos-backend.gcdndd.easypanel.host \
+            -p 8080:80 \
+            "$image")"
+          trap 'docker logs "$container" || true; docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/ | grep -qi '<html'; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8080/flutter_bootstrap.js >/dev/null
+          curl -fsS http://127.0.0.1:8080/env.js | grep -q 'window.API_BASE_URL'
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.release.outputs.backend_image }}:${{ steps.release.outputs.image_tag }}"
+          docker push "${{ steps.release.outputs.pwa_image }}:${{ steps.release.outputs.image_tag }}"
+
+      - name: Record image digests
+        id: digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_ref="${{ steps.release.outputs.backend_image }}:${{ steps.release.outputs.image_tag }}"
+          pwa_ref="${{ steps.release.outputs.pwa_image }}:${{ steps.release.outputs.image_tag }}"
+          backend_digest="$(docker buildx imagetools inspect "$backend_ref" | awk '/Digest:/ {print $2; exit}')"
+          pwa_digest="$(docker buildx imagetools inspect "$pwa_ref" | awk '/Digest:/ {print $2; exit}')"
+          backend_size="$(docker image inspect "$backend_ref" --format '{{.Size}}')"
+          pwa_size="$(docker image inspect "$pwa_ref" --format '{{.Size}}')"
+          {
+            echo "backend_digest=$backend_digest"
+            echo "pwa_digest=$pwa_digest"
+            echo "backend_size=$backend_size"
+            echo "pwa_size=$pwa_size"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Stabilization Release Images"
+            echo ""
+            echo "- Target SHA: \`${{ steps.release.outputs.target_sha }}\`"
+            echo "- Tag: \`${{ steps.release.outputs.image_tag }}\`"
+            echo "- Backend: \`${backend_ref}@${backend_digest}\`"
+            echo "- Backend size bytes: \`${backend_size}\`"
+            echo "- PWA: \`${pwa_ref}@${pwa_digest}\`"
+            echo "- PWA size bytes: \`${pwa_size}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
