@@ -9,9 +9,19 @@ import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../catalogo/data/catalog_repository.dart';
 import '../data/onboarding_repository.dart';
+import '../lab/lab_onboarding_repository.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({
+    super.key,
+    this.labMode = false,
+    this.initialLabStep,
+    this.labOverlay,
+  });
+
+  final bool labMode;
+  final int? initialLabStep;
+  final Widget? labOverlay;
 
   @override
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -61,7 +71,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _hydrate(state);
       setState(() {
         _state = state;
-        _step = state.shouldShowWelcome ? 0 : _firstPendingStep(state);
+        _step =
+            widget.initialLabStep ??
+            (state.shouldShowWelcome ? 0 : _firstPendingStep(state));
         _loading = false;
       });
     } catch (error) {
@@ -102,6 +114,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _skipAll() async {
     await _run(() async {
       await ref.read(onboardingRepositoryProvider).skipAll();
+      if (widget.labMode) {
+        setState(() => _step = 5);
+        return;
+      }
       await _finishToApp(refreshUser: true);
     });
   }
@@ -118,7 +134,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _state = state;
         _step = completeFlow ? 5 : (_step + 1).clamp(1, 4);
       });
-      if (completeFlow) await _finishToApp(refreshUser: true);
+      if (completeFlow && !widget.labMode) {
+        await _finishToApp(refreshUser: true);
+      }
     });
   }
 
@@ -127,11 +145,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (stepKey == null) return;
     await _run(() async {
       if (stepKey == 'company') {
-        await _saveCompany();
+        if (widget.labMode) {
+          ref
+              .read(labOnboardingControllerProvider)
+              .updateCompany(
+                name: _name.text.trim(),
+                phone: _phone.text.trim(),
+                address: _address.text.trim(),
+                rnc: _rnc.text.trim(),
+              );
+        } else {
+          await _saveCompany();
+        }
       } else if (stepKey == 'billing') {
-        await _saveBilling();
+        if (widget.labMode) {
+          ref
+              .read(labOnboardingControllerProvider)
+              .updateBilling(taxEnabled: _taxEnabled, ncfEnabled: _ncfEnabled);
+        } else {
+          await _saveBilling();
+        }
       } else if (stepKey == 'product') {
-        await _saveProductIfNeeded();
+        if (!widget.labMode) {
+          await _saveProductIfNeeded();
+        }
       }
       final completeFlow = stepKey == 'ready';
       final state = await ref
@@ -141,7 +178,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _state = state;
         _step = completeFlow ? 5 : (_step + 1).clamp(1, 4);
       });
-      if (completeFlow) await _finishToApp(refreshUser: true);
+      if (completeFlow && !widget.labMode) {
+        await _finishToApp(refreshUser: true);
+      }
     });
   }
 
@@ -190,6 +229,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _finishToApp({bool refreshUser = false}) async {
+    if (widget.labMode) {
+      context.go(Routes.onboardingLab);
+      return;
+    }
     if (refreshUser) {
       await ref.read(authStateProvider.notifier).refreshCurrentUser();
     }
@@ -206,14 +249,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         builder: (context) => const _TutorialDialog(),
       );
       await ref.read(onboardingRepositoryProvider).setTutorial('COMPLETED');
-      await _finishToApp(refreshUser: true);
+      if (widget.labMode) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Simulacion completada: aqui comenzaria la primera venta.',
+            ),
+          ),
+        );
+      } else {
+        await _finishToApp(refreshUser: true);
+      }
     });
   }
 
   Future<void> _skipTutorial() async {
     await _run(() async {
       await ref.read(onboardingRepositoryProvider).setTutorial('SKIPPED');
-      await _finishToApp(refreshUser: true);
+      if (widget.labMode) {
+        if (!mounted) return;
+        context.go(Routes.onboardingLab);
+      } else {
+        await _finishToApp(refreshUser: true);
+      }
     });
   }
 
@@ -252,7 +311,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 840;
-    return Scaffold(
+    final content = Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
@@ -265,6 +324,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ),
       ),
     );
+    if (widget.labOverlay == null) return content;
+    return Stack(children: [content, widget.labOverlay!]);
   }
 
   Widget _buildContent(bool isWide) {

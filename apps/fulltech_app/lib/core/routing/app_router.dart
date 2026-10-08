@@ -9,6 +9,8 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
+import '../../features/onboarding/presentation/onboarding_lab_screen.dart';
+import '../../features/onboarding/lab/onboarding_lab_access.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
 import '../../features/user/users_screen.dart';
@@ -116,6 +118,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: Routes.onboardingLab,
+        builder: (context, state) => const OnboardingLabScreen(),
       ),
       GoRoute(
         path: Routes.registrarVenta,
@@ -418,6 +424,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isAuth) {
         if (isAuthRoute) return null;
         return unauthenticatedEntryRoute();
+      }
+
+      final labAllowed = canAccessOnboardingLab(
+        auth.user,
+        enabled: ref.read(onboardingLabEnabledProvider),
+      );
+      if (path == Routes.onboardingLab) {
+        return labAllowed ? null : defaultAuthedRoute();
       }
 
       if (auth.user?.requiresOnboarding == true && path != Routes.onboarding) {
