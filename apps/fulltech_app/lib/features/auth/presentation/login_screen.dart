@@ -246,18 +246,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _notice = null);
     try {
-      await ref
+      final user = await ref
           .read(authStateProvider.notifier)
           .login(_emailCtrl.text, _passwordCtrl.text);
       await _rememberUserAfterLogin();
       if (!mounted) return;
+      final destination = RouteAccess.defaultHomeForRole(
+        user?.appRole ?? AppRole.unknown,
+      );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        context.go(
-          RouteAccess.defaultHomeForRole(
-            ref.read(authStateProvider).user?.appRole ?? AppRole.unknown,
-          ),
-        );
+        context.go(destination);
       });
       return;
     } on ApiException catch (e) {

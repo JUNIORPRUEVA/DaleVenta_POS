@@ -1,5 +1,10 @@
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/auth/business_registration_policy.dart';
+import 'package:daleventa_pos/core/company/company_settings_model.dart';
+import 'package:daleventa_pos/core/company/company_settings_repository.dart';
+import 'package:daleventa_pos/core/models/user_model.dart';
+import 'package:daleventa_pos/core/routing/app_router.dart';
+import 'package:daleventa_pos/core/routing/routes.dart';
 import 'package:daleventa_pos/features/auth/data/remembered_login_users_storage.dart';
 import 'package:daleventa_pos/features/auth/presentation/login_screen.dart';
 import 'package:flutter/material.dart';
@@ -24,17 +29,27 @@ class _FakeAuthController extends AuthController {
   String? lastPassword;
 
   @override
-  Future<bool> login(String email, String password) async {
+  Future<UserModel?> login(String email, String password) async {
     lastEmail = email;
     lastPassword = password;
+    final user = UserModel(
+      id: 'user-test',
+      email: email,
+      nombreCompleto: 'Usuario Test',
+      telefono: '',
+      role: 'ADMIN',
+      companyId: 'company-test',
+      requiresOnboarding: true,
+    );
     state = AuthState(
       initialized: true,
       isAuthenticated: true,
+      user: user,
       loading: false,
       restoringSession: false,
       hasSessionHint: true,
     );
-    return true;
+    return user;
   }
 }
 
@@ -205,7 +220,8 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({
         RememberedLoginUsersStorage.legacyRememberFlagKey: true,
-        RememberedLoginUsersStorage.legacyRememberEmailKey: 'viejo@example.test',
+        RememberedLoginUsersStorage.legacyRememberEmailKey:
+            'viejo@example.test',
         RememberedLoginUsersStorage.legacyRememberPasswordKey: 'heredada-123',
       });
 
@@ -230,7 +246,9 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getStringList(usersKey), <String>['nuevo@example.test']);
       expect(
-        prefs.containsKey(RememberedLoginUsersStorage.legacyRememberPasswordKey),
+        prefs.containsKey(
+          RememberedLoginUsersStorage.legacyRememberPasswordKey,
+        ),
         isFalse,
       );
       expect(
@@ -248,6 +266,58 @@ void main() {
       expect(
         storedValues.any((value) => value.contains('SuperSecreta123')),
         isFalse,
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'login con router real no usa ref en ventana invalida de Riverpod',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith(_FakeAuthController.new),
+            businessRegistrationDisabledProvider.overrideWithValue(false),
+            companySettingsProvider.overrideWith(
+              (ref) async =>
+                  CompanySettings.empty().copyWith(companyName: 'Test Co'),
+            ),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(routerProvider);
+              return MaterialApp.router(routerConfig: router);
+            },
+          ),
+        ),
+      );
+      addTearDown(() => router.dispose());
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Usuario'),
+        'nuevo@example.test',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña'),
+        'SuperSecreta123',
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Iniciar sesión'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        Routes.cotizaciones,
       );
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),

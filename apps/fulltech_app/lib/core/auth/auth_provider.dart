@@ -257,8 +257,8 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> login(String email, String password) async {
-    if (state.loading) return false;
+  Future<UserModel?> login(String email, String password) async {
+    if (state.loading) return null;
     state = state.copyWith(loading: true);
     final repo = ref.read(authRepositoryProvider);
     try {
@@ -276,7 +276,7 @@ class AuthController extends StateNotifier<AuthState> {
         restoringSession: false,
         hasSessionHint: true,
       );
-      return true;
+      return user;
     } catch (_) {
       await ref.read(tokenStorageProvider).clearTokens();
       state = AuthState(
@@ -291,8 +291,8 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> registerBusiness(Map<String, dynamic> payload) async {
-    if (state.loading) return false;
+  Future<UserModel?> registerBusiness(Map<String, dynamic> payload) async {
+    if (state.loading) return null;
     if (ref.read(businessRegistrationDisabledProvider)) {
       throw const ApiException.detailed(
         message:
@@ -315,7 +315,7 @@ class AuthController extends StateNotifier<AuthState> {
         restoringSession: false,
         hasSessionHint: true,
       );
-      return true;
+      return user;
     } catch (_) {
       await ref.read(tokenStorageProvider).clearTokens();
       state = AuthState(

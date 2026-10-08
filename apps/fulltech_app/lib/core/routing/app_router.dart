@@ -43,6 +43,7 @@ import '../auth/app_bootstrap_status.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
 import '../auth/business_registration_policy.dart';
+import '../company/company_settings_model.dart';
 import '../company/company_settings_repository.dart';
 import 'app_route_observer.dart';
 import 'route_access.dart';
@@ -52,18 +53,33 @@ final GlobalKey<NavigatorState> appRootNavigatorKey =
     GlobalKey<NavigatorState>();
 
 final _routerRefreshProvider = Provider<_RouterRefreshNotifier>((ref) {
-  final notifier = _RouterRefreshNotifier();
+  final notifier = _RouterRefreshNotifier(
+    auth: ref.read(authStateProvider),
+    bootstrap: ref.read(appBootstrapStatusProvider),
+    adminAuthorization: ref.read(adminAuthorizationProvider),
+    adminAuthorizationController: ref.read(adminAuthorizationProvider.notifier),
+    registrationDisabled: ref.read(businessRegistrationDisabledProvider),
+    companySettings: ref.read(companySettingsProvider),
+  );
   ref.listen<AuthState>(
     authStateProvider,
-    (previous, next) => notifier.refresh(),
+    (previous, next) => notifier.updateAuth(next),
   );
   ref.listen<AppBootstrapStatus>(
     appBootstrapStatusProvider,
-    (previous, next) => notifier.refresh(),
+    (previous, next) => notifier.updateBootstrap(next),
   );
   ref.listen<AdminAuthorizationState>(
     adminAuthorizationProvider,
-    (previous, next) => notifier.refresh(),
+    (previous, next) => notifier.updateAdminAuthorization(next),
+  );
+  ref.listen<bool>(
+    businessRegistrationDisabledProvider,
+    (previous, next) => notifier.updateRegistrationDisabled(next),
+  );
+  ref.listen<AsyncValue<CompanySettings>>(
+    companySettingsProvider,
+    (previous, next) => notifier.updateCompanySettings(next),
   );
   ref.onDispose(notifier.dispose);
   return notifier;
@@ -108,7 +124,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.home,
         redirect: (context, state) {
-          final auth = ref.read(authStateProvider);
+          final auth = refresh.auth;
           if (!auth.isAuthenticated) return Routes.login;
           return RouteAccess.defaultHomeForUser(auth.user);
         },
@@ -351,16 +367,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     redirect: (context, state) {
-      final auth = ref.read(authStateProvider);
+      final auth = refresh.auth;
       final isAuth = auth.isAuthenticated;
       final loc = state.uri.toString();
       final path = state.uri.path;
-      ref
-          .read(adminAuthorizationProvider.notifier)
-          .clearIfInvalidForLocation(loc);
-      final registrationDisabled = ref.read(
-        businessRegistrationDisabledProvider,
-      );
+      refresh.adminAuthorizationController.clearIfInvalidForLocation(loc);
+      final registrationDisabled = refresh.registrationDisabled;
       final recoveryLocation = _passwordRecoveryLocationFrom(state.uri);
       if (recoveryLocation != null && recoveryLocation != loc) {
         return recoveryLocation;
@@ -376,7 +388,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      final bootstrap = ref.read(appBootstrapStatusProvider);
+      final bootstrap = refresh.bootstrap;
       final publicLandingEnabled = _isPublicLandingEnabled(
         registrationDisabled,
       );
@@ -434,11 +446,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final multiWarehouseEnabled =
-          ref
-              .read(companySettingsProvider)
-              .valueOrNull
-              ?.multiWarehouseEnabled ==
-          true;
+          refresh.companySettings.valueOrNull?.multiWarehouseEnabled == true;
       if (RouteAccess.requiresMultiWarehouseFeature(loc) &&
           !multiWarehouseEnabled) {
         final fallback = RouteAccess.defaultHomeForUser(auth.user);
@@ -447,9 +455,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final required = RouteAccess.permissionForLocation(loc);
       if (required != null && !hasUserPermission(auth.user, required)) {
-        final adminOverride = ref
-            .read(adminAuthorizationProvider.notifier)
-            .isAuthorizedForRoute(loc);
+        final adminOverride = refresh.adminAuthorization.isAuthorizedForRoute(
+          loc,
+        );
         if (adminOverride) return null;
         final fallback = RouteAccess.defaultHomeForUser(auth.user);
         if (path != fallback) {
@@ -523,5 +531,46 @@ bool _isDesktopSettingsLayout() {
 }
 
 class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier({
+    required this.auth,
+    required this.bootstrap,
+    required this.adminAuthorization,
+    required this.adminAuthorizationController,
+    required this.registrationDisabled,
+    required this.companySettings,
+  });
+
+  AuthState auth;
+  AppBootstrapStatus bootstrap;
+  AdminAuthorizationState adminAuthorization;
+  final AdminAuthorizationController adminAuthorizationController;
+  bool registrationDisabled;
+  AsyncValue<CompanySettings> companySettings;
+
+  void updateAuth(AuthState value) {
+    auth = value;
+    refresh();
+  }
+
+  void updateBootstrap(AppBootstrapStatus value) {
+    bootstrap = value;
+    refresh();
+  }
+
+  void updateAdminAuthorization(AdminAuthorizationState value) {
+    adminAuthorization = value;
+    refresh();
+  }
+
+  void updateRegistrationDisabled(bool value) {
+    registrationDisabled = value;
+    refresh();
+  }
+
+  void updateCompanySettings(AsyncValue<CompanySettings> value) {
+    companySettings = value;
+    refresh();
+  }
+
   void refresh() => notifyListeners();
 }
