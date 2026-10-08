@@ -190,14 +190,27 @@ class AuthInterceptor extends Interceptor {
         errorMessage?.contains('licencia expirada') == true ||
         errorMessage?.contains('licencia bloqueada') == true;
     final publicAuthPath = _isPublicAuthPath(err.requestOptions.path);
-    if ((statusCode == 401 || statusCode == 403) && licenseInactive) {
+    // Un 401/403 solo puede significar "la sesión dejó de ser válida" cuando la
+    // petición llevaba credenciales. Sin cabecera Authorization no hay sesión
+    // que invalidar, y escalar aquí a un logout encadenaba un bucle infinito:
+    //   401 -> clearTokens -> recreación de companySettingsRepositoryProvider
+    //   (que hace watch(authStateProvider)) -> nuevo GET /settings -> 401 -> ...
+    // Verificado en UAT: 967 respuestas 401 de /settings en 5 minutos y login
+    // imposible (el bucle borraba la sesión recién creada).
+    final hadAuthHeader = err.requestOptions.headers.containsKey(
+      'Authorization',
+    );
+    if (hadAuthHeader &&
+        (statusCode == 401 || statusCode == 403) &&
+        licenseInactive) {
       if (!publicAuthPath) {
         sessionEvents.requestUnauthorizedLogout(reason: 'license_expired');
       }
       return handler.next(err);
     }
 
-    if (statusCode == 403 &&
+    if (hadAuthHeader &&
+        statusCode == 403 &&
         (licenseInactive ||
             errorCode == 'LICENSE_PRODUCT_LIMIT_REACHED' ||
             errorCode == 'LICENSE_USER_LIMIT_REACHED')) {
@@ -209,6 +222,7 @@ class AuthInterceptor extends Interceptor {
 
     final alreadyRetried = err.requestOptions.extra[_retryFlagKey] == true;
     if (statusCode == 401 &&
+        hadAuthHeader &&
         !publicAuthPath &&
         !_isAuthRefreshPath(err.requestOptions.path) &&
         !alreadyRetried) {
@@ -236,7 +250,7 @@ class AuthInterceptor extends Interceptor {
           final retryResponse = await dio.fetch(opts);
           return handler.resolve(retryResponse);
         }
-        if (refreshed.shouldLogout) {
+        if (refreshed.shouldLogout && hadAuthHeader) {
           sessionEvents.requestUnauthorizedLogout(
             reason: licenseInactive ? 'license_expired' : null,
           );
