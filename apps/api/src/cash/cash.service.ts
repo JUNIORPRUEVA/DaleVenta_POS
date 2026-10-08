@@ -143,7 +143,16 @@ export class CashService {
             },
             orderBy: { openedAt: "desc" },
           });
-          if (existing) return this.mapActiveSession(existing);
+          if (existing) {
+            await this.rejectAmbiguousLegacyOpenSession(
+              user.id,
+              companyId,
+              existing,
+              "cash.open.existing",
+              tx,
+            );
+            return this.mapActiveSession(existing);
+          }
 
           // Identidad de apertura provista por el cliente (turno abierto
           // offline). Hace la apertura idempotente: si el turno ya existe con
@@ -1332,11 +1341,12 @@ export class CashService {
       businessDate: string | null;
     },
     context: string,
+    client: Pick<Prisma.TransactionClient, "cashSession"> = this.prisma,
   ) {
     const businessDate = this.businessDate();
     if (session.businessDate === businessDate) return;
 
-    const newerCurrentOpen = await this.prisma.cashSession.findFirst({
+    const newerCurrentOpen = await client.cashSession.findFirst({
       where: {
         companyId,
         status: "OPEN",
