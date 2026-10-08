@@ -1,35 +1,47 @@
 # DaleVentas Backup Architecture
 
-Last updated: 2026-09-06.
+Last updated: 2026-10-08.
 
 This document is the canonical backup and restore contract for DaleVentas POS /
-FullPOS Cloud. It separates the production-grade cloud architecture from the
-current Windows local export implementation.
+FullPOS Cloud. Backups are a **server-side / FULLTECH responsibility only**.
 
 ## Authority Boundary
 
-The backend is the authority for cloud backup creation, retention, validation,
-and restore.
+The backend is the sole authority for backup creation, retention, validation,
+download and restore.
 
-Clients may request backup creation, download backup files, upload or open
-backup files, display validation results, and request restore operations. Clients
-must not connect to PostgreSQL directly, manipulate database files, replay a full
-tenant restore through ordinary CRUD calls, or decide cross-tenant ownership from
-local paths.
+The POS client does **not** create, inspect, download, upload, open, import or
+restore enterprise backups. The former client-side local export/restore flow was
+**removed** from Flutter, Android, iOS and Windows: local ZIP export, per-module
+capture, versioned manifest, tenant ownership validation, required-module
+validation, automatic backup interval, canonical upload/import/restore and the
+`.dvbackup`/`.zip` platform file association no longer exist in the client.
 
-## Current Phase A State
+Clients must not connect to PostgreSQL directly, manipulate database files,
+replay a full tenant restore through ordinary CRUD calls, or decide cross-tenant
+ownership from local paths.
 
-The Windows app has a local backup exporter with:
+Removing the client backup feature does **not** affect the operational local data
+layer: the on-device SQLite database, offline mode, the sync queue, pending cash
+close, `operationId`/`sessionId`, local caches and device settings are preserved.
 
-- a versioned manifest
-- tenant ownership validation
-- required-module validation
-- module status and checksums
-- automatic backup interval and local retention policy
-- restore blocked until a backend transactional restore engine exists
+A client that needs a restore or a backup must request it from FULLTECH.
+Automatic server-side backup with retention and separate storage is a future
+phase and will be implemented on the server, not in the client.
 
-This is a compatibility and safety foundation. It is not the final canonical
-cloud backup engine.
+## Client-Side Backup (removed)
+
+The Windows local backup exporter and the client restore flow were **removed**.
+The following no longer exist in the client:
+
+- local `.dvbackup`/ZIP generation and per-module capture
+- the versioned client manifest and required-module validation
+- module status/checksum reporting from the client
+- the automatic backup interval and client-side retention policy
+- canonical upload/import and the client restore screen
+- the `.dvbackup`/`.zip` file association and open-intent handling
+
+The canonical backup engine continues to live in the backend (see below).
 
 ## Current Phase B State
 
@@ -156,21 +168,14 @@ automatic retention.
 
 ## Platform Responsibilities
 
-Windows:
+All platforms (Windows, Android, iOS and Web):
 
-- request cloud backup creation
-- download or save `.dvbackup`
-- associate `.dvbackup` with DaleVentas POS in a later installer phase
-- upload/open `.dvbackup` and submit restore requests to the backend
+- do **not** create, export, download, open, import or restore enterprise backups
+- do **not** associate `.dvbackup`/`.zip` files or handle backup open intents
+- must not perform database restore logic locally
 
-Android, iOS, and Web:
-
-- export/download `.dvbackup`
-- import/upload `.dvbackup`
-- request backend validation and restore
-
-All platforms must show backend validation results and must not perform database
-restore logic locally.
+Enterprise backup creation, validation, download and restore are performed from
+the server side (FULLTECH) only. Clients must not bypass the backend engine.
 
 ## Production Gate
 
@@ -186,10 +191,9 @@ canary backup are validated.
 
 ## Deferred After Current Release
 
-- Android ACTION_SEND share-sheet runtime validation.
-- Web runtime restore validation.
-- iOS runtime validation.
+- Server-side automatic backup with retention and separate storage.
+- Server-side restore/recovery validation.
 - Emergency restore/recovery mode when normal login is unavailable.
 
-These items are future validation/work and must not be reported as PASS in the
+These items are future server-side work and must not be reported as PASS in the
 current release.

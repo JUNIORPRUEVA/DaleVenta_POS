@@ -61,21 +61,23 @@ Official installed Release layout:
 - Product root: `C:\Program Files\DaleVentas POS`
 - Runtime app files: `C:\Program Files\DaleVentas POS\app`
 - Local databases: `C:\Program Files\DaleVentas POS\databases`
-- Company backups: `C:\Program Files\DaleVentas POS\backups`
 - App-owned media cache: `C:\Program Files\DaleVentas POS\media_cache`
 - Reserved logs/config folders: `C:\Program Files\DaleVentas POS\logs` and `C:\Program Files\DaleVentas POS\config`
 
 The installer must grant standard users modify permissions only on mutable folders
-(`databases`, `backups`, `media_cache`, `logs`, `config`) and preserve those folders on uninstall.
+(`databases`, `media_cache`, `logs`, `config`) and preserve those folders on uninstall.
 Legacy local databases are copied into the official `databases` folder when
 the target database file does not already exist. Legacy locations are not deleted
 by migration.
 
-Backup ownership, manifest validation, restore blocking rules, automatic
-retention, manual-backup preservation, and staging cleanup are documented in
-`docs/BACKUP_RESTORE_RETENTION.md`. The production-grade backend authority
-boundary, `.dvbackup` target format, platform responsibilities, and restore gate
-are documented in `docs/BACKUP_ARCHITECTURE.md`.
+The POS client no longer creates, imports or restores enterprise backups, and no
+longer resolves a local `backups` folder; backups are a server-side/FULLTECH
+responsibility only. The on-device SQLite database, offline mode and sync queue
+are unaffected. Server-side backup ownership, manifest validation, restore
+blocking rules, automatic retention, manual-backup preservation, and staging
+cleanup are documented in `docs/BACKUP_RESTORE_RETENTION.md`. The backend
+authority boundary, `.dvbackup` target format, server-side responsibilities, and
+restore gate are documented in `docs/BACKUP_ARCHITECTURE.md`.
 
 ## Local UAT
 
