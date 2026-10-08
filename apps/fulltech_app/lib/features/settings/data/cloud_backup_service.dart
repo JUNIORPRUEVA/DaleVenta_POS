@@ -458,10 +458,79 @@ class CloudBackupService {
       return result;
     }
 
+    Future<CloudBackupModuleResult> writePagedJsonModule(
+      String name,
+      String path,
+    ) async {
+      const pageSize = 200;
+      var page = 1;
+      var totalItems = 0;
+      var first = true;
+      final file = File(p.join(folder.path, '$name.json'));
+      final sink = file.openWrite(encoding: utf8);
+      try {
+        sink.write('{"items":[');
+        while (true) {
+          final response = await _dio
+              .get(
+                path,
+                queryParameters: {'page': page, 'limit': pageSize},
+                options: Options(extra: const {'skipLoader': true}),
+              )
+              .timeout(_timeout);
+          final rows = _extractRows(response.data);
+          for (final row in rows) {
+            if (!first) sink.write(',');
+            sink.write(jsonEncode(row));
+            first = false;
+            totalItems += 1;
+          }
+
+          final hasMore = _readBool(response.data, 'hasMore');
+          final nextPage = _readIntFromMap(response.data, 'nextPage');
+          if (hasMore == true && nextPage != null && nextPage > page) {
+            page = nextPage;
+            continue;
+          }
+          if (hasMore == true && rows.length == pageSize) {
+            page += 1;
+            continue;
+          }
+          break;
+        }
+        sink.write(
+          '],"pagination":${jsonEncode({'strategy': 'page-limit', 'pageSize': pageSize, 'pagesRead': page, 'totalItems': totalItems, 'memoryBounded': true})}}',
+        );
+        await sink.flush();
+        await sink.close();
+        final checksum = await _sha256File(file);
+        final result = CloudBackupModuleResult(
+          name: name,
+          status: CloudBackupStatus.complete,
+          records: totalItems,
+          file: '$name.json',
+          checksum: checksum,
+        );
+        moduleStatus[name] = result;
+        modules.add(name);
+        return result;
+      } catch (_) {
+        await sink.close();
+        if (await file.exists()) {
+          await file.delete();
+        }
+        rethrow;
+      }
+    }
+
     Future<void> captureRemote(String name, String path) async {
       try {
-        final data = await _captureModuleData(path);
-        await writeJson(name, data);
+        if (_pagedRemoteModuleNames.contains(name)) {
+          await writePagedJsonModule(name, path);
+        } else {
+          final data = await _captureModuleData(path);
+          await writeJson(name, data);
+        }
       } catch (error) {
         final friendly = _friendlyError(error);
         failures[name] = friendly;
@@ -795,6 +864,30 @@ class CloudBackupService {
     return data == null ? 0 : 1;
   }
 
+  List<Object?> _extractRows(Object? data) {
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['items', 'data', 'rows']) {
+        final candidate = data[key];
+        if (candidate is List) return candidate;
+      }
+    }
+    return const [];
+  }
+
+  bool? _readBool(Object? data, String key) {
+    if (data is! Map) return null;
+    final value = data[key];
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return null;
+  }
+
+  int? _readIntFromMap(Object? data, String key) {
+    if (data is! Map) return null;
+    return _readInt(data[key]);
+  }
+
   String _stamp(DateTime value) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${value.year}${two(value.month)}${two(value.day)}_'
@@ -984,6 +1077,7 @@ const Set<String> _requiredModuleNames = {
   'impresora_local',
   'usuarios',
   'clientes',
+  'cotizaciones',
   'productos',
   'ventas',
   'facturas_ventas',
@@ -1003,6 +1097,7 @@ const Set<String> _requiredModuleNames = {
 const Map<String, String> _remoteModules = {
   'usuarios': ApiRoutes.users,
   'clientes': ApiRoutes.clients,
+  'cotizaciones': ApiRoutes.cotizaciones,
   'productos': ApiRoutes.products,
   'ventas': ApiRoutes.sales,
   'facturas_ventas': ApiRoutes.salesInvoices,
@@ -1017,4 +1112,16 @@ const Map<String, String> _remoteModules = {
   'depositos_contabilidad': ApiRoutes.contabilidadDepositOrders,
   'pagos_pendientes': ApiRoutes.contabilidadPayableServices,
   'pagos_realizados': ApiRoutes.contabilidadPayablePayments,
+};
+
+const Set<String> _pagedRemoteModuleNames = {
+  'clientes',
+  'cotizaciones',
+  'productos',
+  'ventas',
+  'facturas_ventas',
+  'movimientos_caja',
+  'suplidores',
+  'compras',
+  'facturas_compras',
 };

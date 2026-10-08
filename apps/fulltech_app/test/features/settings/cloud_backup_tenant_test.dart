@@ -33,11 +33,18 @@ void main() {
     );
     addTearDown(() => backupRoot.delete(recursive: true));
 
+    final capturedRequests = <RequestOptions>[];
     final dio = Dio(BaseOptions(baseUrl: 'https://backup.test'))
       ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
-        expect(options.queryParameters, isEmpty);
+        capturedRequests.add(options);
         return ResponseBody.fromString(
-          jsonEncode({'items': <Object?>[], 'data': <Object?>[]}),
+          jsonEncode({
+            'items': <Object?>[],
+            'page': 1,
+            'limit': 200,
+            'hasMore': false,
+            'nextPage': null,
+          }),
           200,
           headers: {
             Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -91,6 +98,16 @@ void main() {
     expect(inspection.companyId, '165e3fca-6225-479b-8805-d2205f10536c');
     expect(inspection.companyName, 'FULLTECH, SRL');
     expect(await Directory(result.folderPath).exists(), isFalse);
+    final salesRequests = capturedRequests
+        .where((options) =>
+            options.path == ApiRoutes.sales ||
+            options.path == ApiRoutes.salesInvoices)
+        .toList();
+    expect(salesRequests, hasLength(2));
+    for (final request in salesRequests) {
+      expect(request.queryParameters['page'], 1);
+      expect(request.queryParameters['limit'], 200);
+    }
   });
 
   test(
@@ -415,6 +432,7 @@ const _requiredModuleNamesForTest = [
   'impresora_local',
   'usuarios',
   'clientes',
+  'cotizaciones',
   'productos',
   'ventas',
   'facturas_ventas',
