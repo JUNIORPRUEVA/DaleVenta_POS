@@ -469,7 +469,7 @@ class CashRepository {
         },
         options: Options(extra: const {'skipLoader': true}),
       );
-      final rows = res.data is List ? res.data as List : const [];
+      final rows = _extractRows(res.data);
       return rows
           .whereType<Map>()
           .map((row) => CashMovementModel.fromJson(row.cast<String, dynamic>()))
