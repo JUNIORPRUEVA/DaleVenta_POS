@@ -39,6 +39,10 @@ import {
 } from "./dto/purchases.dto";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import {
+  normalizePagePagination,
+  toPageResult,
+} from "../common/pagination/page-pagination";
 
 type RequestUser = { id: string; role: Role; companyId?: string | null };
 type ResolvedPurchaseWarehouse = { id: string; name: string; code: string };
@@ -169,9 +173,16 @@ export class PurchasesService {
     });
   }
 
-  async listSuppliers(user: RequestUser, q?: string, includeInactive = false) {
+  async listSuppliers(
+    user: RequestUser,
+    q?: string,
+    includeInactive = false,
+    page?: string,
+    limit?: string,
+  ) {
     const companyId = requireTenant(user);
     const query = (q ?? "").trim();
+    const pagination = normalizePagePagination({ page, limit });
     const rows = await this.prisma.supplier.findMany({
       where: {
         companyId,
@@ -189,9 +200,12 @@ export class PurchasesService {
             }
           : {}),
       },
-      orderBy: { commercialName: "asc" },
+      orderBy: [{ commercialName: "asc" }, { id: "asc" }],
+      skip: pagination.skip,
+      take: pagination.take,
     });
-    return this.suppliersWithStats(companyId, rows);
+    const items = await this.suppliersWithStats(companyId, rows);
+    return toPageResult(items, pagination);
   }
 
   async createSupplier(user: RequestUser, dto: UpsertSupplierDto) {
@@ -224,10 +238,16 @@ export class PurchasesService {
     q?: string;
     supplierId?: string;
     purchaseOrderId?: string;
+    page?: string;
+    limit?: string;
   }) {
     const companyId = requireTenant(user);
     const q = (filters.q ?? "").trim();
-    return this.prisma.purchaseInvoice.findMany({
+    const pagination = normalizePagePagination({
+      page: filters.page,
+      limit: filters.limit,
+    });
+    const rows = await this.prisma.purchaseInvoice.findMany({
       where: {
         companyId,
         deletedAt: null,
@@ -257,7 +277,9 @@ export class PurchasesService {
             }
           : {}),
       },
-      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
       include: {
         supplier: true,
         purchaseOrder: {
@@ -266,6 +288,7 @@ export class PurchasesService {
         uploadedBy: { select: { id: true, nombreCompleto: true } },
       },
     });
+    return toPageResult(rows, pagination);
   }
 
   async createInvoice(
@@ -369,12 +392,22 @@ export class PurchasesService {
 
   async listOrders(
     user: RequestUser,
-    filters: { q?: string; status?: string; supplierId?: string },
+    filters: {
+      q?: string;
+      status?: string;
+      supplierId?: string;
+      page?: string;
+      limit?: string;
+    },
   ) {
     const companyId = requireTenant(user);
     const q = (filters.q ?? "").trim();
     const status = this.parseStatus(filters.status, false);
-    return this.prisma.purchaseOrder.findMany({
+    const pagination = normalizePagePagination({
+      page: filters.page,
+      limit: filters.limit,
+    });
+    const rows = await this.prisma.purchaseOrder.findMany({
       where: {
         companyId,
         deletedAt: null,
@@ -401,9 +434,12 @@ export class PurchasesService {
             }
           : {}),
       },
-      orderBy: { orderDate: "desc" },
+      orderBy: [{ orderDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      skip: pagination.skip,
+      take: pagination.take,
       include: this.includeOrder(),
     });
+    return toPageResult(rows, pagination);
   }
 
   async getOrder(user: RequestUser, id: string) {
@@ -940,14 +976,23 @@ export class PurchasesService {
 
   async recommendations(user: RequestUser) {
     const companyId = requireTenant(user);
+    const minStock = 5;
     const products = await this.prisma.product.findMany({
-      where: { companyId },
-      orderBy: { nombre: "asc" },
+      where: {
+        companyId,
+        stock: { lt: minStock * 2 },
+      },
+      orderBy: [{ stock: "asc" }, { nombre: "asc" }, { id: "asc" }],
+      take: 200,
     });
+    const productIds = products.map((product) => product.id);
+    if (productIds.length === 0) {
+      return [];
+    }
     const pending = await this.prisma.purchaseOrderItem.groupBy({
       by: ["productId"],
       where: {
-        productId: { not: null },
+        productId: { in: productIds },
         purchaseOrder: {
           companyId,
           deletedAt: null,
@@ -967,7 +1012,6 @@ export class PurchasesService {
     );
     return products.map((product) => {
       const stock = this.num(product.stock);
-      const minStock = 5;
       const alreadyOrdered = ordered.get(product.id) ?? 0;
       const suggested = Math.max(0, minStock * 2 - stock - alreadyOrdered);
       const reason =

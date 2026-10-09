@@ -44,11 +44,15 @@ export class PurchasesController {
     @Req() req: Request,
     @Query("q") q?: string,
     @Query("includeInactive") includeInactive?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
     return this.purchases.listSuppliers(
       req.user as RequestUser,
       q,
       includeInactive === "true",
+      page,
+      limit,
     );
   }
 
@@ -83,11 +87,15 @@ export class PurchasesController {
     @Query("q") q?: string,
     @Query("status") status?: string,
     @Query("supplierId") supplierId?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
     return this.purchases.listOrders(req.user as RequestUser, {
       q,
       status,
       supplierId,
+      page,
+      limit,
     });
   }
 
@@ -97,11 +105,15 @@ export class PurchasesController {
     @Query("q") q?: string,
     @Query("supplierId") supplierId?: string,
     @Query("purchaseOrderId") purchaseOrderId?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
     return this.purchases.listInvoices(req.user as RequestUser, {
       q,
       supplierId,
       purchaseOrderId,
+      page,
+      limit,
     });
   }
 
