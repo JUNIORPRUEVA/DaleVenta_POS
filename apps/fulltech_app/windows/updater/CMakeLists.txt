@@ -9,11 +9,19 @@ target_compile_definitions(FullposUpdater PRIVATE UNICODE _UNICODE NOMINMAX)
 target_compile_options(FullposUpdater PRIVATE /W4 /WX /EHsc)
 target_link_libraries(FullposUpdater PRIVATE wintrust.lib crypt32.lib shell32.lib bcrypt.lib shlwapi.lib)
 
-# El destino debe ser RELATIVO al prefijo de instalacion. Con
-# "${CMAKE_INSTALL_PREFIX}/updater" el prefijo (un generator expression del
-# proyecto Flutter) se resolvia como ruta absoluta y el paso INSTALL fallaba
-# intentando escribir en "C:/Program Files/fullpos_cloud/updater" sin permisos.
-# Relativo => <prefijo>/updater, que es donde setup.iss espera
-# "Release\updater\FullposUpdater.exe".
-install(TARGETS FullposUpdater RUNTIME DESTINATION "updater"
+# El destino debe ser una ruta ABSOLUTA expresada con un generator expression,
+# igual que hace el runner en windows/CMakeLists.txt:
+#   install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}")
+# donde CMAKE_INSTALL_PREFIX = $<TARGET_FILE_DIR:fullpos_cloud>.
+#
+# Un DESTINATION relativo ("updater") NO sirve: CMake lo antepone al
+# CMAKE_INSTALL_PREFIX *sin evaluar*, generando
+#   .../x64/$<TARGET_FILE_DIR:fullpos_cloud>/updater
+# y el paso INSTALL falla con "file cannot create directory ... Maybe need
+# administrative privileges" (MSB3073 en INSTALL.vcxproj).
+#
+# Con el genex, el instalador va a <dir de fullpos_cloud.exe>/updater, que es
+# "runner\Release\updater\FullposUpdater.exe" tal como lo empaqueta setup.iss.
+install(TARGETS FullposUpdater RUNTIME
+  DESTINATION "$<TARGET_FILE_DIR:fullpos_cloud>/updater"
   COMPONENT Runtime)
