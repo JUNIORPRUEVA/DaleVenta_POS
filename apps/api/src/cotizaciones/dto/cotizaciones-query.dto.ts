@@ -9,6 +9,17 @@ export class CotizacionesQueryDto {
   @IsOptional()
   @Type(() => Number)
   @Min(1)
-  @Max(500)
+  @Max(200)
   take?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(200)
+  limit?: number;
 }

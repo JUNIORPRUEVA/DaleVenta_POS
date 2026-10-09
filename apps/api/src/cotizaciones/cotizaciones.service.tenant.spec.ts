@@ -41,6 +41,49 @@ describe("CotizacionesService tenant isolation", () => {
     });
   });
 
+  it("lists quotes with tenant scope, stable pagination and max 200 rows", async () => {
+    const prisma = {
+      cotizacion: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const redis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn(),
+      delByPattern: jest.fn(),
+      isEnabled: jest.fn().mockReturnValue(false),
+    };
+    const service = new CotizacionesService(
+      prisma as never,
+      { get: jest.fn().mockReturnValue("") } as never,
+      redis as never,
+      { normalizeWhatsAppNumber: jest.fn() } as never,
+      {
+        getCompanyFiscalSettings: jest.fn(),
+        resolvePriceMode: jest.fn(),
+        calculatorService: { calculate: jest.fn() },
+      } as never,
+    );
+
+    const result = await service.list(user as never, {
+      page: 3,
+      limit: 999,
+    });
+
+    expect(result).toMatchObject({
+      items: [],
+      page: 3,
+      limit: 200,
+      hasMore: false,
+      nextPage: null,
+    });
+    expect(prisma.cotizacion.findMany).toHaveBeenCalledWith({
+      where: { companyId: user.companyId },
+      skip: 400,
+      take: 201,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: expect.any(Object),
+    });
+  });
+
   it("rejects clientId from another company when creating a quote", async () => {
     const transactionClient = {
       client: { findFirst: jest.fn().mockResolvedValue(null) },

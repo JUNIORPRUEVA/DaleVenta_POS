@@ -28,6 +28,10 @@ import { RedisService } from "../common/redis/redis.service";
 import { EvolutionWhatsAppService } from "../notifications/evolution-whatsapp.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { isAdminLike, requireTenant, TenantUser } from "../auth/tenant-context";
+import {
+  normalizePagePagination,
+  toPageResult,
+} from "../common/pagination/page-pagination";
 import { normalizePhone } from "../common/utils/normalize-phone";
 import { AnalyzeCotizacionAiDto } from "./dto/analyze-cotizacion-ai.dto";
 import { ChatCotizacionAiDto } from "./dto/chat-cotizacion-ai.dto";
@@ -69,6 +73,7 @@ type BusinessRuleRecord = {
 
 const QUOTES_LIST_CACHE_PATTERN = "quotes:list:*";
 const QUOTES_DETAIL_CACHE_PATTERN = "quotes:detail:*";
+const DEBUG_PURGE_MAX_IDS = 10000;
 
 @Injectable()
 export class CotizacionesService {
@@ -445,14 +450,25 @@ export class CotizacionesService {
 
   private buildQuotesListCacheKey(
     user: TenantUser,
-    query: { customerPhone?: string; take?: number },
+    query: {
+      customerPhone?: string;
+      page?: number;
+      limit?: number;
+      take?: number;
+    },
   ) {
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit ?? query.take,
+      defaultLimit: 50,
+    });
     const scope = {
       companyId: user.companyId?.trim() ?? null,
       userId: user.id,
       role: user.role,
       customerPhone: query.customerPhone?.trim() ?? null,
-      take: Math.min(Math.max(query.take ?? 80, 1), 500),
+      page: pagination.page,
+      limit: pagination.limit,
     };
     const hash = createHash("sha1").update(JSON.stringify(scope)).digest("hex");
     return `quotes:list:${hash}`;
@@ -568,12 +584,27 @@ export class CotizacionesService {
 
   async list(
     user: TenantUser,
-    query: { customerPhone?: string; take?: number },
+    query: {
+      customerPhone?: string;
+      page?: number;
+      limit?: number;
+      take?: number;
+    },
   ) {
     const companyId = requireTenant(user);
-    const take = Math.min(Math.max(query.take ?? 80, 1), 500);
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit ?? query.take,
+      defaultLimit: 50,
+    });
     const cacheKey = this.buildQuotesListCacheKey(user, query);
-    const cached = await this.redis.get<{ items: any[] }>(cacheKey);
+    const cached = await this.redis.get<{
+      items: any[];
+      page: number;
+      limit: number;
+      hasMore: boolean;
+      nextPage: number | null;
+    }>(cacheKey);
     if (cached) {
       if (this.redis.isEnabled()) this.logger.log(`Redis HIT ${cacheKey}`);
       return cached;
@@ -593,12 +624,13 @@ export class CotizacionesService {
 
     const items = await this.prisma.cotizacion.findMany({
       where,
-      take,
-      orderBy: { createdAt: "desc" },
+      skip: pagination.skip,
+      take: pagination.take,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: this.buildQuoteInclude(),
     });
 
-    const response = { items };
+    const response = toPageResult(items, pagination);
     await this.redis.set(cacheKey, response);
     return response;
   }
@@ -1209,7 +1241,13 @@ export class CotizacionesService {
     const quotes = await this.prisma.cotizacion.findMany({
       where: { companyId },
       select: { id: true },
+      take: DEBUG_PURGE_MAX_IDS + 1,
     });
+    if (quotes.length > DEBUG_PURGE_MAX_IDS) {
+      throw new BadRequestException(
+        `La limpieza debug excede ${DEBUG_PURGE_MAX_IDS} cotizaciones; use un proceso por lotes.`,
+      );
+    }
     const quoteIds = quotes.map((item) => item.id);
 
     if (quoteIds.length === 0) {

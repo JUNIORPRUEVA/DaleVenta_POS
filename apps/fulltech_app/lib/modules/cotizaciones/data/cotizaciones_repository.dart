@@ -205,7 +205,7 @@ class CotizacionesRepository {
   }) async {
     final companyId = _currentCompanyId();
     if (companyId == null) return const [];
-    final items = await _local.listAll(companyId: companyId);
+    final items = await _local.listAll(companyId: companyId, limit: take);
     final phone = (customerPhone ?? '').trim();
     final normalizedUserId = (userId ?? '').trim();
     final filteredByPhone = phone.isEmpty
