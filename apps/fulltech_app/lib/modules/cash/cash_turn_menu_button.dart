@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/debug/app_error_reporter.dart';
+import '../../core/debug/trace_log.dart';
 import '../../core/time/business_time.dart';
 import '../../core/utils/money_formatters.dart';
 import 'cash_close_ticket_printer.dart';
@@ -17,6 +18,10 @@ class CashTurnMenuButton extends ConsumerWidget {
   const CashTurnMenuButton({super.key, this.compact = false});
 
   static const _navigatorSettleDelay = Duration(milliseconds: 220);
+
+  /// Copy única para el estado válido "sin turno abierto" (no es un error).
+  static const _noOpenTurnMessage =
+      'No tienes un turno abierto actualmente.';
 
   final bool compact;
 
@@ -111,28 +116,71 @@ class CashTurnMenuButton extends ConsumerWidget {
 
   Future<void> _showCurrentTurn(BuildContext context, WidgetRef ref) async {
     final repository = ref.read(cashRepositoryProvider);
-    final active = ref.read(activeCashSessionControllerProvider).valueOrNull;
-    final summary = await repository.summary();
-    if (!context.mounted) return;
-    final action = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => _CurrentTurnDialog(
-        active: active,
-        summary: summary,
-        onCloseTurn: () {
-          Navigator.of(dialogContext).pop('close');
-        },
-        onOpenHistory: () {
-          Navigator.of(dialogContext).pop('history');
-        },
-      ),
-    );
+    try {
+      var active = ref.read(activeCashSessionControllerProvider).valueOrNull;
+      if (active == null) {
+        // Estado válido y esperado: NO hay turno abierto.
+        //
+        // Se revalida contra el backend (el snapshot local pudo quedar
+        // desactualizado) y se informa con UI normal. Nunca se pide el corte de
+        // un turno inexistente: `GET /cash/summary` exige turno abierto y
+        // responde 404, que antes se propagaba como error no capturado.
+        await ref
+            .read(activeCashSessionControllerProvider.notifier)
+            .refresh(silent: true);
+        if (!context.mounted) return;
+        active = ref.read(activeCashSessionControllerProvider).valueOrNull;
+        if (active == null) {
+          showCashToast(context, _noOpenTurnMessage);
+          return;
+        }
+      }
+      final summary = await repository.summary();
+      if (!context.mounted) return;
+      final action = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => _CurrentTurnDialog(
+          active: active,
+          summary: summary,
+          onCloseTurn: () {
+            Navigator.of(dialogContext).pop('close');
+          },
+          onOpenHistory: () {
+            Navigator.of(dialogContext).pop('history');
+          },
+        ),
+      );
 
-    if (!context.mounted) return;
-    if (action == 'close') {
-      _runAfterNavigatorSettles(context, () => _closeCash(context, ref));
-    } else if (action == 'history') {
-      _runAfterNavigatorSettles(context, () => _showHistory(context, ref));
+      if (!context.mounted) return;
+      if (action == 'close') {
+        _runAfterNavigatorSettles(context, () => _closeCash(context, ref));
+      } else if (action == 'history') {
+        _runAfterNavigatorSettles(context, () => _showHistory(context, ref));
+      }
+    } catch (error, stack) {
+      // Acción recuperable: el error se comunica en la UI de caja y NUNCA se
+      // escala al sistema global de errores (que mostraría el banner general).
+      if (isCashNoOpenSessionError(error)) {
+        // Carrera con caché/otro dispositivo: el servidor confirma que no hay
+        // turno abierto. Converger el estado local y avisar sin lenguaje de
+        // error técnico.
+        TraceLog.log('cash', 'cash.turn_view.no_open_session');
+        if (!context.mounted) return;
+        await ref
+            .read(activeCashSessionControllerProvider.notifier)
+            .refresh(silent: true);
+        if (!context.mounted) return;
+        showCashToast(context, _noOpenTurnMessage);
+        return;
+      }
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Ver turno actual desde menu de turno',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
     }
   }
 
@@ -175,6 +223,8 @@ class CashTurnMenuButton extends ConsumerWidget {
     final session = ref.watch(activeCashSessionControllerProvider);
     final active = session.valueOrNull;
     final unverified = ref.watch(cashStateUnverifiedProvider);
+    final requiresReview = ref.watch(cashStateRequiresReviewProvider);
+    final reviewMessage = ref.watch(cashStateReviewMessageProvider);
 
     return PopupMenuButton<String>(
       tooltip: 'Estado del turno',
@@ -188,7 +238,20 @@ class CashTurnMenuButton extends ConsumerWidget {
         side: const BorderSide(color: Color(0xFF9FB6C8)),
       ),
       itemBuilder: (menuContext) => [
-        if (unverified)
+        if (requiresReview)
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _TurnMenuNotice(
+              icon: Icons.report_gmailerrorred_rounded,
+              label: 'Requiere revisión de caja',
+              helpText:
+                  reviewMessage ??
+                  'El servidor detectó un estado de turno que necesita '
+                      'revisión. No abras una caja nueva hasta resolverlo.',
+            ),
+          )
+        else if (unverified)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -200,7 +263,9 @@ class CashTurnMenuButton extends ConsumerWidget {
                   'el servidor y se actualizará al recuperar conexión.',
             ),
           ),
-        if (active == null)
+        // Abrir otra caja mientras el estado del servidor no está confirmado
+        // podría crear un segundo turno sobre un estado ambiguo/legacy.
+        if (active == null && !unverified && !requiresReview)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -215,8 +280,14 @@ class CashTurnMenuButton extends ConsumerWidget {
                 () => _openCash(context, ref),
               ),
             ),
-          )
-        else ...[
+          ),
+        // El detalle del turno está SIEMPRE disponible como información: con
+        // turno abierto muestra su corte, y sin turno abierto informa con UI
+        // normal ("No tienes un turno abierto actualmente."), nunca con el
+        // sistema global de errores. Antes pedía el corte de un turno
+        // inexistente (GET /cash/summary -> 404) sobre un estado no confirmado
+        // (caché local) y el error quedaba sin capturar.
+        if (!requiresReview)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -230,6 +301,9 @@ class CashTurnMenuButton extends ConsumerWidget {
               }),
             ),
           ),
+        // "Hacer corte de turno" solo cuando existe un turno abierto
+        // identificable: no se cierra un turno que no existe.
+        if (active != null && !requiresReview)
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -245,7 +319,6 @@ class CashTurnMenuButton extends ConsumerWidget {
               ),
             ),
           ),
-        ],
         PopupMenuItem(
           enabled: false,
           padding: EdgeInsets.zero,

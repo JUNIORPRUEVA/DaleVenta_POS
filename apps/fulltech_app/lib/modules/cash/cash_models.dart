@@ -50,6 +50,8 @@ class CashGateState {
     this.activeSession,
     this.fromCache = false,
     this.pendingClose = false,
+    this.requiresReview = false,
+    this.reviewMessage,
   });
 
   final String businessDate;
@@ -61,6 +63,15 @@ class CashGateState {
   /// "estado no sincronizado", NUNCA como un turno confirmado.
   final bool fromCache;
   final bool pendingClose;
+
+  /// `true` cuando el backend RESPONDIÓ rechazando el estado (409
+  /// `CASH_SESSION_REQUIRES_REVIEW`): existe un turno abierto legacy/ambiguo
+  /// que exige revisión humana antes de operar. NO es un problema de conexión y
+  /// no debe presentarse como "sin conexión".
+  final bool requiresReview;
+
+  /// Mensaje seguro enviado por el servidor para el caso [requiresReview].
+  final String? reviewMessage;
 
   factory CashGateState.fromJson(Map<String, dynamic> json) {
     final active = json['activeSession'];

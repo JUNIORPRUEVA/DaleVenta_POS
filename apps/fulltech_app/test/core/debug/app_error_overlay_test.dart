@@ -98,7 +98,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(find.byTooltip('Cerrar'));
+    // Sin `Tooltip`: el botón cerrar del banner usa Semantics (el banner vive
+    // por encima del Navigator, donde no hay Overlay para RawTooltip).
+    await tester.tap(find.byIcon(Icons.close_rounded));
     await tester.pump();
     await tester.pump();
 

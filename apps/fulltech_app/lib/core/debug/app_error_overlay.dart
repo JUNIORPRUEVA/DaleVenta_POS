@@ -261,13 +261,24 @@ class _NotificationBanner extends StatelessWidget {
                             ],
                           ),
                         ),
+                        // SIN `tooltip:` a propósito.
+                        //
+                        // Este banner vive en el `builder` de MaterialApp, es
+                        // decir POR ENCIMA del Navigator, donde no existe ningún
+                        // Overlay. `Tooltip`/`RawTooltip` exige un Overlay
+                        // ancestro y, al mostrarse (hover/tap), lanza un
+                        // FlutterError duro (también en release) que taparía el
+                        // error original con un segundo error del propio sistema
+                        // de errores. La accesibilidad se conserva etiquetando
+                        // el icono (`Icon.semanticLabel`), que no necesita
+                        // Overlay.
                         IconButton(
                           onPressed: onDismiss,
-                          tooltip: 'Cerrar',
                           visualDensity: VisualDensity.compact,
                           iconSize: 18,
                           icon: Icon(
                             Icons.close_rounded,
+                            semanticLabel: 'Cerrar',
                             color: scheme.onSurfaceVariant,
                           ),
                         ),

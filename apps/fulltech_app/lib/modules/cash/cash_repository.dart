@@ -33,6 +33,18 @@ class CashClosePendingSyncException implements Exception {
   String toString() => message;
 }
 
+/// `true` cuando el backend confirma que NO hay turno abierto.
+///
+/// `GET /cash/summary` (y el resto de lecturas operativas) exige un turno
+/// abierto y responde 404 cuando no existe. Es un estado de negocio esperado
+/// (p. ej. justo después de cerrar el turno), NO un fallo: la UI debe informar
+/// y revalidar el estado, nunca tratarlo como error técnico ni escalarlo al
+/// sistema global de errores.
+bool isCashNoOpenSessionError(Object? error) {
+  if (error is! ApiException) return false;
+  return error.code == 404 || error.type == ApiErrorType.notFound;
+}
+
 final cashRepositoryProvider = Provider<CashRepository>((ref) {
   final repository = CashRepository(
     ref.watch(dioProvider),
@@ -166,6 +178,20 @@ class CashRepository {
       }
       return state;
     } on DioException catch (e) {
+      final reviewMessage = _requiresReviewMessage(e);
+      if (reviewMessage != null) {
+        // El servidor SÍ respondió: detectó un turno abierto ambiguo/legacy
+        // (409 CASH_SESSION_REQUIRES_REVIEW). Esto NO es un fallo de red, así
+        // que no se cae a caché ni se etiqueta como "sin conexión".
+        TraceLog.log('cash', 'cash.fetch.requires_review');
+        return CashGateState(
+          businessDate: '',
+          canOperate: false,
+          activeSession: null,
+          requiresReview: true,
+          reviewMessage: reviewMessage,
+        );
+      }
       if (_shouldQueueNetworkFailure(e)) {
         final cached = await _cache.readMap(_activeSessionCacheKey);
         if (cached != null) {
@@ -388,7 +414,18 @@ class CashRepository {
           );
         }
       }
-      throw ApiException(_message(e.response?.data, 'No se pudo cargar corte'));
+      final status = e.response?.statusCode;
+      if (status == 404) {
+        // `GET /cash/summary` exige un turno abierto (`requireOpenSession`). Un
+        // 404 aquí es un ESTADO DE NEGOCIO ("no hay turno abierto"), no un
+        // fallo técnico: los llamadores deben informar y revalidar, nunca
+        // escalarlo al sistema global de errores.
+        TraceLog.log('cash', 'cash.summary.no_open_session');
+      }
+      throw ApiException(
+        _message(e.response?.data, 'No se pudo cargar corte'),
+        status,
+      );
     }
   }
 
@@ -626,6 +663,21 @@ class CashRepository {
   bool _shouldQueueNetworkFailure(DioException error) {
     final status = error.response?.statusCode;
     return status == null || status >= 500;
+  }
+
+  /// Devuelve el mensaje cuando el backend rechazó el estado de caja con
+  /// 409 `CASH_SESSION_REQUIRES_REVIEW` (turno legacy/ambiguo). Si no aplica,
+  /// retorna `null`.
+  static String? _requiresReviewMessage(DioException error) {
+    if (error.response?.statusCode != 409) return null;
+    final data = error.response?.data;
+    if (data is! Map) return null;
+    final code = (data['errorCode'] ?? data['code'])?.toString();
+    if (code != 'CASH_SESSION_REQUIRES_REVIEW') return null;
+    final message = data['message']?.toString().trim() ?? '';
+    return message.isEmpty
+        ? 'Este turno abierto necesita revisión antes de operar. Contacta a un administrador.'
+        : message;
   }
 
   Future<void> _appendPendingMovement(Map<String, dynamic> payload) async {

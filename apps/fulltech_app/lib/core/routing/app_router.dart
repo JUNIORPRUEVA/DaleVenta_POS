@@ -18,7 +18,6 @@ import '../../features/contabilidad/cierres_diarios_screen.dart';
 import '../../features/contabilidad/depositos_bancarios_screen.dart';
 import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
-import '../../features/settings/data/backup_open_intent_service.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../../features/reports/ui/reports_page.dart';
 import '../../features/warehouses/ui/inventory_kardex_screen.dart';
@@ -182,10 +181,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: Routes.configuracionImpresora,
             redirect: (context, state) => kIsWeb ? Routes.cotizaciones : null,
             builder: (context, state) => const AccountPrinterSettingsScreen(),
-          ),
-          GoRoute(
-            path: Routes.configuracionBackup,
-            builder: (context, state) => const AccountBackupSettingsScreen(),
           ),
           GoRoute(
             path: Routes.configuracionParametros,
@@ -438,11 +433,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isAuth && isAuthRoute) {
         return defaultAuthedRoute();
-      }
-
-      if (BackupOpenIntentService.hasStartupBackupPath &&
-          path != Routes.configuracionBackup) {
-        return Routes.configuracionBackup;
       }
 
       final multiWarehouseEnabled =

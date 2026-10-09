@@ -499,7 +499,6 @@ void main() {
           expect(find.text('Configuración'), findsOneWidget);
           expect(find.text('Impresora'), findsOneWidget);
           expect(find.text('Almacenes'), findsOneWidget);
-          expect(find.text('Respaldo'), findsOneWidget);
           expect(find.text('Atajos de teclado'), findsOneWidget);
 
           await _openHubDrawer(tester);

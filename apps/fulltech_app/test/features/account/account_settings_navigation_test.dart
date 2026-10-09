@@ -196,10 +196,6 @@ Future<GoRouter> _pumpSettingsRouter(
         builder: (_, __) => const AccountPrinterSettingsScreen(),
       ),
       GoRoute(
-        path: Routes.configuracionBackup,
-        builder: (_, __) => const AccountBackupSettingsScreen(),
-      ),
-      GoRoute(
         path: Routes.configuracionParametros,
         builder: (_, __) => const AccountParametersScreen(),
       ),
@@ -659,10 +655,7 @@ void main() {
     expect(popIndex, greaterThan(mountedGuardIndex));
   });
 
-  const targets = <String, String>{
-    'Impresora': 'Impresión y tickets',
-    'Respaldo': 'Backup y recuperación',
-  };
+  const targets = <String, String>{'Impresora': 'Impresión y tickets'};
 
   for (final entry in targets.entries) {
     testWidgets('mobile settings card opens ${entry.key}', (tester) async {
@@ -756,14 +749,12 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Impresora').hitTestable(), findsWidgets);
-    expect(find.text('Respaldo').hitTestable(), findsWidgets);
   });
 
   const desktopTargets = <String, String>{
     Routes.configuracionEmpresa: 'Datos de empresa',
     Routes.configuracionDocumentos: 'Datos para documentos',
     Routes.configuracionImpresora: 'Impresión y tickets',
-    Routes.configuracionBackup: 'Backup y recuperación',
     Routes.configuracionParametros: 'Parámetros importantes',
   };
 

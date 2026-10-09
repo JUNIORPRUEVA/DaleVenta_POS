@@ -64,7 +64,6 @@ class Routes {
   static const configuracion = '/configuracion';
   static const configuracionEmpresa = '/configuracion/empresa';
   static const configuracionImpresora = '/configuracion/impresora';
-  static const configuracionBackup = '/configuracion/backup';
   static const configuracionParametros = '/configuracion/parametros';
   static const configuracionDocumentos = '/configuracion/documentos';
   static const configuracionAlmacenes = '/configuracion/almacenes';

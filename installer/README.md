@@ -10,14 +10,14 @@ Esta carpeta empaqueta la aplicacion Windows con Inno Setup desde archivos del r
 - Release Flutter esperado: `apps/fulltech_app/build/windows/x64/runner/Release`
 - Raiz oficial instalada: `C:\Program Files\DaleVentas POS` (define `MyAppFolderName`)
 - Runtime Flutter instalado en: `C:\Program Files\DaleVentas POS\app`
-- Datos locales preservados: `databases`, `backups`, `media_cache`, `logs`, `config`
+- Datos locales preservados: `databases`, `media_cache`, `logs`, `config`
 - Redistributables opcionales: `installer/redist/VC_redist.x64.exe` y `installer/redist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`
 
 ### Por que el nombre visible y la carpeta difieren
 
 El producto se muestra como `FullPOS`, pero la carpeta de instalacion sigue siendo
 `C:\Program Files\DaleVentas POS`. Es intencional: el cliente resuelve la base de datos,
-backups, `media_cache`, logs y config en `%ProgramFiles%\DaleVentas POS`
+`media_cache`, logs y config en `%ProgramFiles%\DaleVentas POS`
 (ver `apps/fulltech_app/lib/core/storage/windows_product_paths.dart`). Renombrar la
 carpeta dejaria sin acceso los datos de instalaciones existentes. Por la misma razon
 el `AppId` del instalador no cambia: asi la actualizacion reemplaza la version previa

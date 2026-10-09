@@ -92,6 +92,18 @@ class AuthController extends StateNotifier<AuthState> {
     final storage = ref.read(tokenStorageProvider);
     await storage.clearTokens();
     if (!mounted) return;
+    // Evitar churn de estado: si ya estamos desautenticados y asentados, volver
+    // a asignar AuthState notifica a los listeners y recrea providers que hacen
+    // watch(authStateProvider) (p.ej. companySettingsRepositoryProvider), lo que
+    // relanza GET /settings y realimenta el ciclo 401 -> logout. Sin cambio de
+    // estado el ciclo se corta.
+    final alreadySignedOut =
+        state.initialized &&
+        !state.isAuthenticated &&
+        !state.loading &&
+        !state.restoringSession &&
+        !state.hasSessionHint;
+    if (alreadySignedOut) return;
     state = AuthState(
       initialized: true,
       isAuthenticated: false,

@@ -3,7 +3,7 @@
 #define MyAppName "FullPOS"
 #endif
 ; Carpeta de instalacion. Se mantiene "DaleVentas POS" por compatibilidad: el
-; cliente resuelve la base de datos, backups, media_cache, logs y config en
+; cliente resuelve la base de datos, media_cache, logs y config en
 ; %ProgramFiles%\DaleVentas POS (ver lib/core/storage/windows_product_paths.dart).
 #ifndef MyAppFolderName
 #define MyAppFolderName "DaleVentas POS"
@@ -62,7 +62,6 @@ UninstallDisplayIcon={app}\app\{#MyAppExeName}
 [Dirs]
 Name: "{app}\app"
 Name: "{app}\databases"; Permissions: users-modify; Flags: uninsneveruninstall
-Name: "{app}\backups"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\media_cache"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\logs"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\config"; Permissions: users-modify; Flags: uninsneveruninstall
@@ -87,11 +86,6 @@ Type: files; Name: "{commondesktop}\DaleVentas POS.lnk"
 Name: "{group}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"; Tasks: desktopicon
 
-[Registry]
-Root: HKCR; Subkey: ".dvbackup"; ValueType: string; ValueName: ""; ValueData: "DaleVentasBackup"; Flags: uninsdeletevalue
-Root: HKCR; Subkey: "DaleVentasBackup"; ValueType: string; ValueName: ""; ValueData: "FullPOS Backup"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "DaleVentasBackup\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\app\{#MyAppExeName},0"
-Root: HKCR; Subkey: "DaleVentasBackup\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\app\{#MyAppExeName}"" ""%1"""
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear icono en el escritorio"; GroupDescription: "Opciones adicionales:"; Flags: unchecked

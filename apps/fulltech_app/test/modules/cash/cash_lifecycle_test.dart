@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:daleventa_pos/core/printing/unified_ticket_printer.dart';
 import 'package:daleventa_pos/modules/cash/cash_close_ticket_printer.dart';
@@ -277,6 +278,29 @@ void main() {
 
         // NO debe lanzar 'Bad state: Tried to use ... after dispose'.
         await openFuture;
+      },
+    );
+
+    test(
+      'refresh en vuelo que falla después de dispose no toca state/ref muerto',
+      () async {
+        final repo = _FakeCashRepository();
+        final stateCompleter = Completer<CashGateState>();
+        repo.stateOverride = () => stateCompleter.future;
+        final container = _buildContainer(repo);
+        addTearDown(container.dispose);
+
+        final controller = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+        final refreshFuture = controller.refresh(silent: true);
+
+        container.invalidate(activeCashSessionControllerProvider);
+        expect(controller.mounted, isFalse);
+
+        stateCompleter.completeError(Exception('red caida tardia'));
+
+        await refreshFuture;
       },
     );
 
@@ -660,6 +684,175 @@ void main() {
         expect(identical(first, second), isFalse);
         expect(container.read(activeCashSessionControllerProvider)
             .valueOrNull, isNull);
+      },
+    );
+  });
+
+  // Regresión del bug REAL de login (UAT Windows):
+  //   StateError: Bad state: Tried to use ActiveCashSessionController after
+  //   'dispose' was called. Consider checking `mounted`.
+  //
+  // Disparador real: `OperationsDataRefreshService._resetCashState()` invalida
+  // `activeCashSessionControllerProvider` cuando `authStateProvider` pasa de
+  // autenticado → no autenticado (login/logout/re-bootstrap). Si en ese momento
+  // había un `refresh()` en vuelo y el camino de error volvía a leer `state`
+  // después de escribir `cashStateUnverifiedProvider`, el notifier ya estaba
+  // dispuesto y la lectura lanzaba StateError.
+  group('cash controller login dispose race (regression)', () {
+    test(
+      'login: dispose por cambio de auth durante el refresh inicial no vuelve '
+      'a leer ni escribir state (no StateError)',
+      () async {
+        final repo = _FakeCashRepository();
+        final gateCompleter = Completer<CashGateState>();
+        repo.stateOverride = () => gateCompleter.future;
+        final container = _buildContainer(repo);
+        addTearDown(container.dispose);
+
+        // El constructor del controller ya disparó refresh(); sigue en vuelo.
+        final controller = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+
+        // Equivale a OperationsDataRefreshService._resetCashState() cuando auth
+        // pasa de autenticado → no autenticado durante el bootstrap de login.
+        container.invalidate(activeCashSessionControllerProvider);
+        expect(controller.mounted, isFalse);
+
+        // El backend responde tarde y con error (red caída durante el login).
+        // Este es el camino que en el código antiguo hacía
+        // `... .state = true; final previous = state;` sobre un notifier muerto.
+        gateCompleter.completeError(Exception('red caida durante login'));
+
+        // NO debe lanzar 'Bad state: Tried to use ActiveCashSessionController
+        // after dispose was called.'
+        await pumpEventQueue();
+
+        expect(controller.mounted, isFalse);
+        // La instancia muerta tampoco debe haber escrito el flag de estado no
+        // sincronizado (lo compartiría con la sesión/empresa siguiente).
+        expect(container.read(cashStateUnverifiedProvider), isFalse);
+      },
+    );
+
+    test('login: open en vuelo + dispose no escribe el flag desde la instancia '
+        'muerta', () async {
+      final repo = _FakeCashRepository();
+      final openCompleter = Completer<ActiveCashSession>();
+      repo.openSessionOverride = () => openCompleter.future;
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
+
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      final openFuture = controller.open(1000);
+
+      // Dispose mientras la apertura está en el backend.
+      container.invalidate(activeCashSessionControllerProvider);
+      openCompleter.complete(_session);
+
+      await openFuture;
+      expect(container.read(cashStateUnverifiedProvider), isFalse);
+    });
+
+    test(
+      'invariante estructural: refresh() captura el snapshot antes de mutar y '
+      'no re-lee state después',
+      () {
+        final source = File(
+          'lib/modules/cash/cash_providers.dart',
+        ).readAsStringSync();
+        final start = source.indexOf(
+          'Future<void> refresh({bool silent = false})',
+        );
+        expect(start, greaterThanOrEqualTo(0));
+        final end = source.indexOf('Future<void> open(', start);
+        expect(end, greaterThan(start));
+        final body = source.substring(start, end);
+
+        // Marcador agnóstico a la implementación: tanto el helper
+        // `_markCashStateUnverified(...)` como una escritura directa
+        // `ref.read(cashStateUnverifiedProvider.notifier).state = ...` cuentan
+        // como mutación de otro provider dentro de refresh().
+        final mutationIndexes = <int>[
+          body.indexOf('_markCashStateUnverified('),
+          body.indexOf('cashStateUnverifiedProvider'),
+        ].where((index) => index >= 0).toList();
+        final snapshot = body.indexOf('= state;');
+        final mountedGuard = body.indexOf('if (!mounted) return;');
+        final firstMutation = mutationIndexes.isEmpty
+            ? -1
+            : mutationIndexes.reduce((a, b) => a < b ? a : b);
+
+        expect(
+          snapshot,
+          greaterThanOrEqualTo(0),
+          reason: 'refresh() debe capturar un snapshot local de state',
+        );
+        expect(
+          mountedGuard,
+          lessThan(snapshot),
+          reason: 'mounted debe comprobarse antes de leer state',
+        );
+        expect(
+          snapshot,
+          lessThan(firstMutation),
+          reason:
+              'el snapshot debe capturarse ANTES de escribir en '
+              'cashStateUnverifiedProvider: mutar otro provider puede '
+              'invalidar/dispose este controller (login/logout) y leer state '
+              'después lanza "Tried to use ... after dispose".',
+        );
+        expect(
+          body.indexOf('= state;', snapshot + 1),
+          -1,
+          reason: 'refresh() no debe volver a leer state tras mutar',
+        );
+      },
+    );
+  });
+
+  // Regresión UAT Cafetería La Bomba (caja): el backend respondió 409
+  // CASH_SESSION_REQUIRES_REVIEW (turno legacy/ambiguo) porque SÍ contestó, así
+  // que la UI no debe decir "Sin conexión" ni marcar el estado como no
+  // sincronizado por red.
+  group('cash controller: estado que requiere revisión', () {
+    test(
+      'un gate requiresReview se expone como revisión y NO como "no '
+      'sincronizado"',
+      () async {
+        final repo = _FakeCashRepository();
+        repo.stateOverride = () async => const CashGateState(
+          businessDate: '2026-10-03',
+          canOperate: false,
+          requiresReview: true,
+          reviewMessage:
+              'Este turno abierto necesita revisión antes de operar. '
+              'Contacta a un administrador.',
+        );
+        final container = _buildContainer(repo);
+        addTearDown(container.dispose);
+
+        final controller = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+        await controller.refresh();
+
+        expect(container.read(cashStateRequiresReviewProvider), isTrue);
+        expect(
+          container.read(cashStateReviewMessageProvider),
+          contains('revisión'),
+        );
+        expect(
+          container.read(cashStateUnverifiedProvider),
+          isFalse,
+          reason: 'fue una decisión del servidor, no un fallo de red',
+        );
+        expect(
+          container.read(activeCashSessionControllerProvider).valueOrNull,
+          isNull,
+        );
       },
     );
   });

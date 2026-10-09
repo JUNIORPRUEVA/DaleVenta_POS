@@ -15,10 +15,6 @@ void main() {
       p.join(root, 'databases'),
     );
     expect(
-      WindowsProductPaths.pathForRoot(root, WindowsProductFolder.backups),
-      p.join(root, 'backups'),
-    );
-    expect(
       WindowsProductPaths.pathForRoot(root, WindowsProductFolder.mediaCache),
       p.join(root, 'media_cache'),
     );
