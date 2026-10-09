@@ -83,11 +83,13 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     // La consulta SIEMPRE filtra por la empresa del usuario autenticado.
     expect(findMany).toHaveBeenCalledWith({
       where: { companyId: companyA, archivedAt: null },
-      orderBy: { nombre: "asc" },
+      orderBy: [{ nombre: "asc" }, { id: "asc" }],
+      skip: 0,
+      take: 51,
       select: expect.any(Object),
     });
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("p-1");
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].id).toBe("p-1");
   });
 
   it("does NOT reuse the where filter across companies (A nunca ve B)", async () => {
@@ -147,8 +149,8 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       companyId: companyB,
     } as never);
 
-    expect(forA[0].id).toBe("pA");
-    expect(forB[0].id).toBe("pB");
+    expect(forA.items[0].id).toBe("pA");
+    expect(forB.items[0].id).toBe("pB");
     expect(findMany).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -239,7 +241,7 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     expect(findMany.mock.calls[0][0].select.unitOfMeasureId).toBe(true);
     expect(findMany.mock.calls[1][0].select.unitOfMeasureId).toBeUndefined();
     expect(findMany.mock.calls[1][0].select.unitOfMeasure).toBeUndefined();
-    expect(result[0]).toMatchObject({
+    expect(result.items[0]).toMatchObject({
       id: "legacy-product",
       unitOfMeasureId: "UNIT",
       unitOfMeasure: expect.objectContaining({ code: "UNIT", precision: 0 }),
@@ -281,7 +283,9 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       fullposCompanyId: "fullpos-company-a",
     });
     expect(findMany).not.toHaveBeenCalled();
-    expect(result).toEqual([{ id: "external-1", nombre: "Producto externo" }]);
+    expect(result.items).toEqual([
+      { id: "external-1", nombre: "Producto externo" },
+    ]);
     await expect(
       service.getSource({
         id: "user-a",
@@ -363,8 +367,8 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
       companyId: companyB,
     } as never);
 
-    expect(local[0].id).toBe("local-a");
-    expect(external[0].id).toBe("external-b");
+    expect(local.items[0].id).toBe("local-a");
+    expect(external.items[0].id).toBe("external-b");
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
