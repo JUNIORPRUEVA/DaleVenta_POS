@@ -26,6 +26,7 @@ import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-cont
 import { UsageTelemetryService } from '../usage-telemetry/usage-telemetry.service';
 
 type AuthUser = TenantUser & { role: Role };
+const DEBUG_PURGE_MAX_IDS = 10000;
 
 @Injectable()
 export class ClientsService {
@@ -594,7 +595,13 @@ export class ClientsService {
     const clients = await this.prisma.client.findMany({
       where: { companyId },
       select: { id: true },
+      take: DEBUG_PURGE_MAX_IDS + 1,
     });
+    if (clients.length > DEBUG_PURGE_MAX_IDS) {
+      throw new BadRequestException(
+        `La limpieza debug excede ${DEBUG_PURGE_MAX_IDS} clientes; use un proceso por lotes.`,
+      );
+    }
     const clientIds = clients.map((item) => item.id);
 
     if (clientIds.length === 0) {
@@ -610,7 +617,13 @@ export class ClientsService {
     const quotations = await this.prisma.cotizacion.findMany({
       where: { customerId: { in: clientIds }, companyId },
       select: { id: true },
+      take: DEBUG_PURGE_MAX_IDS + 1,
     });
+    if (quotations.length > DEBUG_PURGE_MAX_IDS) {
+      throw new BadRequestException(
+        `La limpieza debug excede ${DEBUG_PURGE_MAX_IDS} cotizaciones asociadas; use un proceso por lotes.`,
+      );
+    }
     const quotationIds = quotations.map((item) => item.id);
     const serviceOrderWhere: Prisma.ServiceOrderWhereInput =
       quotationIds.length > 0
