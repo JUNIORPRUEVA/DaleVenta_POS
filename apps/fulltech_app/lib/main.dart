@@ -227,7 +227,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           ensureStartupReady: prepareAppFirstFrame,
           checkForUpdates: () async {
             if (!mounted) return;
-            await ref.read(appUpdateProvider.notifier).checkNow(force: true);
+            await ref.read(appUpdateProvider.notifier).scheduleInitialCheck();
           },
         ),
       );

@@ -59,6 +59,20 @@ class Env {
       );
       if (v.trim().isNotEmpty) return v;
     }
+    if (key == 'EXPECTED_UPDATE_PUBLISHER') {
+      const v = String.fromEnvironment(
+        'EXPECTED_UPDATE_PUBLISHER',
+        defaultValue: '',
+      );
+      if (v.trim().isNotEmpty) return v;
+    }
+    if (key == 'ALLOW_UNSIGNED_UPDATES_FOR_UAT') {
+      const v = String.fromEnvironment(
+        'ALLOW_UNSIGNED_UPDATES_FOR_UAT',
+        defaultValue: '',
+      );
+      if (v.trim().isNotEmpty) return v;
+    }
 
     // 2) Runtime values for Web (injected via env.js)
     if (kIsWeb) {
@@ -203,6 +217,17 @@ class Env {
 
   static String get releasesApiKey {
     return (_readEnv('RELEASES_API_KEY') ?? '').trim();
+  }
+
+  static String get expectedUpdatePublisher {
+    return (_readEnv('EXPECTED_UPDATE_PUBLISHER') ?? '').trim();
+  }
+
+  static bool get allowUnsignedUpdatesForUat {
+    final raw = (_readEnv('ALLOW_UNSIGNED_UPDATES_FOR_UAT') ?? '')
+        .trim()
+        .toLowerCase();
+    return raw == '1' || raw == 'true' || raw == 'yes' || raw == 'on';
   }
 
   static bool get releasesEnabled {

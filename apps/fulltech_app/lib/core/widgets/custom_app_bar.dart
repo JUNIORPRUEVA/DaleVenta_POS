@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../app_update/app_update_mini_control.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
 import '../routing/routes.dart';
@@ -88,6 +89,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
     final resolvedActions = <Widget>[
       ...?actions,
+      AppUpdateMiniControl(compact: isMobileLayout),
       if (primaryPendingAction != null) primaryPendingAction,
       if (trailing != null)
         trailing!

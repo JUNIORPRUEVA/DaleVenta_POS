@@ -21,10 +21,13 @@
 #define MyAppExeName "fullpos_cloud.exe"
 #endif
 #ifndef MyAppVersion
-#define MyAppVersion "1.0.0+1"
+#define MyAppVersion "0.0.0"
+#endif
+#ifndef MyAppBuildNumber
+#define MyAppBuildNumber "0"
 #endif
 #ifndef MyAppVersionInfo
-#define MyAppVersionInfo "1.0.0.1"
+#define MyAppVersionInfo "0.0.0.0"
 #endif
 
 #ifndef MyAppSourceDir
@@ -38,7 +41,7 @@
 AppId={{0ED49D5E-6E78-4F11-8E78-6D37FDE2078A}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppVerName={#MyAppName} {#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion} (build {#MyAppBuildNumber})
 VersionInfoVersion={#MyAppVersionInfo}
 VersionInfoProductVersion={#MyAppVersionInfo}
 AppPublisher={#MyAppPublisher}
@@ -49,7 +52,7 @@ UsePreviousAppDir=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=FullPOS-Setup-{#StringChange(MyAppVersion, "+", "-")}
+OutputBaseFilename=FullPOS-Setup-{#MyAppVersion}-{#MyAppBuildNumber}
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -61,13 +64,15 @@ UninstallDisplayIcon={app}\app\{#MyAppExeName}
 
 [Dirs]
 Name: "{app}\app"
+Name: "{app}\updater"
 Name: "{app}\databases"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\media_cache"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\logs"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\config"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Files]
-Source: "{#MyAppSourceDir}\*"; DestDir: "{app}\app"; Excludes: "*.pdb,*.ilk,*.exp,*.lib"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}\app"; Excludes: "*.pdb,*.ilk,*.exp,*.lib,updater\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\updater\FullposUpdater.exe"; DestDir: "{app}\updater"; Flags: ignoreversion
 #ifexist VcRedistPath
 Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 #endif

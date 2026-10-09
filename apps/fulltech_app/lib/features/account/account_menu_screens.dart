@@ -25,6 +25,7 @@ import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/utils/app_feedback.dart';
+import '../../core/utils/date_time_formatters.dart';
 import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -124,21 +125,20 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
     final controller = ref.read(appUpdateProvider.notifier);
     final installed = state.installedRelease;
     final update = state.updateInfo;
-    final progress = state.downloadProgress;
     final hasUpdate = update?.update == true;
     final busy =
         state.phase == AppUpdatePhase.checking ||
-        state.phase == AppUpdatePhase.downloadingUpdate ||
-        state.phase == AppUpdatePhase.installingUpdate;
+        state.phase == AppUpdatePhase.downloading ||
+        state.phase == AppUpdatePhase.verifyingSha ||
+        state.phase == AppUpdatePhase.verifyingSignature ||
+        state.phase == AppUpdatePhase.installRequested ||
+        state.phase == AppUpdatePhase.waitingSafeState;
+    final recoverable = state.phase == AppUpdatePhase.installFailed;
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
 
     Future<void> handlePendingAction() async {
-      if (hasUpdate && update?.hasDownloadUrl == true) {
-        await safeOpenUrl(context, Uri.parse(update!.downloadUrl!));
-        return;
-      }
-      if (hasUpdate) {
-        await controller.retryBlockedUpdate();
+      if (state.phase == AppUpdatePhase.readyToInstall) {
+        await controller.requestInstallPreparedUpdate();
         return;
       }
       await controller.checkNow(force: true);
@@ -166,6 +166,7 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                 title: 'Actualización actual',
                 accent: AppColors.secondary,
                 rows: [
+                  const _DetailRow('Aplicación', 'FullPOS Cloud'),
                   _DetailRow(
                     'Versión instalada',
                     installed == null
@@ -173,8 +174,8 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                         : '${installed.currentVersion}+${installed.currentBuild}',
                   ),
                   _DetailRow(
-                    'Plataforma',
-                    installed?.platform.displayName ?? 'No detectada',
+                    'Última revisión',
+                    _formatUpdateCheck(state.persisted.lastUpdateCheckAt),
                   ),
                 ],
               ),
@@ -184,12 +185,9 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                 title: 'Actualización pendiente',
                 accent: _updateAccent(state.phase),
                 message: state.message ?? _updateMessage(state),
-                progress: progress,
+                progress: state.downloadProgress,
                 rows: [
-                  _DetailRow(
-                    'Estado',
-                    hasUpdate ? 'Disponible' : _pendingUpdateLabel(state.phase),
-                  ),
+                  _DetailRow('Estado', _pendingUpdateLabel(state.phase)),
                   _DetailRow(
                     'Nueva versión',
                     hasUpdate
@@ -197,28 +195,14 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                               '${update?.latestBuild == null ? '' : '+${update!.latestBuild}'}'
                         : 'Sin actualización pendiente',
                   ),
+                  if ((update?.releaseNotesText ?? '').trim().isNotEmpty)
+                    _DetailRow('Novedades', update!.releaseNotesText),
                 ],
-                action: FilledButton.icon(
+                action: _UpdateActionButton(
+                  busy: busy,
+                  recoverable: recoverable,
+                  ready: state.phase == AppUpdatePhase.readyToInstall,
                   onPressed: busy ? null : handlePendingAction,
-                  icon: busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          hasUpdate
-                              ? Icons.system_update_alt_rounded
-                              : Icons.refresh_rounded,
-                        ),
-                  label: Text(
-                    busy
-                        ? _busyUpdateLabel(state.phase)
-                        : hasUpdate
-                        ? 'Actualizar ahora'
-                        : 'Buscar actualización',
-                  ),
-                  style: _filledButtonStyle(),
                 ),
               ),
             ],
@@ -277,6 +261,14 @@ class AccountSettingsScreen extends ConsumerWidget {
             accent: const Color(0xFF0F6170),
             onTap: () => context.go(Routes.configuracionAlmacenes),
           ),
+        _SettingsActionCard(
+          icon: Icons.system_update_alt_rounded,
+          title: 'App',
+          description: 'Versión instalada y actualizaciones de Windows.',
+          accent: const Color(0xFF1957E6),
+          onTap: () => context.go(Routes.actualizaciones),
+        ),
+
         _SettingsActionCard(
           icon: Icons.workspace_premium_outlined,
           title: 'Suscripcion',
@@ -3334,6 +3326,12 @@ TextStyle _strongBodyStyle() {
 
 String _updateMessage(AppUpdateState state) {
   final update = state.updateInfo;
+  if (state.phase == AppUpdatePhase.installFailed) {
+    return 'No pudimos completar la actualización.';
+  }
+  if (state.phase == AppUpdatePhase.readyToInstall) {
+    return 'La actualización está lista para instalarse.';
+  }
   if (update?.update == true) {
     return 'Hay una versión nueva disponible para este dispositivo.';
   }
@@ -3342,31 +3340,34 @@ String _updateMessage(AppUpdateState state) {
 
 String _pendingUpdateLabel(AppUpdatePhase phase) {
   return switch (phase) {
-    AppUpdatePhase.upToDate => 'No disponible',
-    AppUpdatePhase.disabled => 'No configurado',
     AppUpdatePhase.unsupported => 'No administrada',
-    AppUpdatePhase.error => 'No verificada',
+    AppUpdatePhase.installFailed => 'Requiere reintento',
     AppUpdatePhase.idle => 'Pendiente de verificación',
-    _ => 'Verificando',
+    AppUpdatePhase.available => 'Disponible',
+    AppUpdatePhase.downloading => 'Descargando',
+    AppUpdatePhase.verifying ||
+    AppUpdatePhase.verifyingSha ||
+    AppUpdatePhase.verifyingSignature => 'Verificando',
+    AppUpdatePhase.readyToInstall => 'Actualización lista',
+    AppUpdatePhase.installRequested => 'Preparando',
+    AppUpdatePhase.waitingSafeState => 'Terminando operación actual',
+    AppUpdatePhase.updaterStarted => 'Instalador iniciado',
+    AppUpdatePhase.installedConfirmed => 'Instalada',
+    AppUpdatePhase.checking => 'Buscando',
   };
 }
 
-String _busyUpdateLabel(AppUpdatePhase phase) {
-  return switch (phase) {
-    AppUpdatePhase.downloadingUpdate => 'Descargando',
-    AppUpdatePhase.installingUpdate => 'Instalando',
-    _ => 'Buscando',
-  };
+String _formatUpdateCheck(DateTime? value) {
+  if (value == null) return 'Sin revisión reciente';
+  return formatRdDateTime(value.toLocal());
 }
 
 IconData _updateIcon(AppUpdatePhase phase) {
   return switch (phase) {
-    AppUpdatePhase.upToDate => Icons.verified_rounded,
-    AppUpdatePhase.error => Icons.error_outline_rounded,
-    AppUpdatePhase.requiredUpdate => Icons.priority_high_rounded,
-    AppUpdatePhase.optionalUpdate => Icons.new_releases_outlined,
-    AppUpdatePhase.downloadingUpdate ||
-    AppUpdatePhase.installingUpdate ||
+    AppUpdatePhase.idle => Icons.verified_rounded,
+    AppUpdatePhase.installFailed => Icons.error_outline_rounded,
+    AppUpdatePhase.available ||
+    AppUpdatePhase.readyToInstall => Icons.new_releases_outlined,
     AppUpdatePhase.checking => Icons.sync_rounded,
     _ => Icons.system_update_alt_rounded,
   };
@@ -3374,9 +3375,51 @@ IconData _updateIcon(AppUpdatePhase phase) {
 
 Color _updateAccent(AppUpdatePhase phase) {
   return switch (phase) {
-    AppUpdatePhase.error ||
-    AppUpdatePhase.requiredUpdate => const Color(0xFFDC2626),
-    AppUpdatePhase.upToDate => const Color(0xFF16A34A),
+    AppUpdatePhase.installFailed => const Color(0xFFDC2626),
+    AppUpdatePhase.idle => const Color(0xFF16A34A),
     _ => AppColors.secondary,
   };
+}
+
+class _UpdateActionButton extends StatelessWidget {
+  const _UpdateActionButton({
+    required this.busy,
+    required this.recoverable,
+    required this.ready,
+    required this.onPressed,
+  });
+
+  final bool busy;
+  final bool recoverable;
+  final bool ready;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = busy
+        ? 'Procesando'
+        : ready
+        ? 'Actualizar ahora'
+        : recoverable
+        ? 'Reintentar'
+        : 'Buscar actualizaciones';
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              ready
+                  ? Icons.system_update_alt_rounded
+                  : recoverable
+                  ? Icons.refresh_rounded
+                  : Icons.search_rounded,
+            ),
+      label: Text(label, overflow: TextOverflow.ellipsis),
+      style: _filledButtonStyle(),
+    );
+  }
 }

@@ -50,28 +50,35 @@ No copies binarios desde carpetas historicas de otra maquina/proyecto. Descargal
 ## Generar el setup
 
 ```powershell
-.\scripts\release\build_windows_release.ps1
+powershell -ExecutionPolicy Bypass -File scripts\build\build_windows_release.ps1
 ```
 
-Despues compila el instalador desde `installer`:
+El script lee `apps/fulltech_app/pubspec.yaml`, compila Flutter con
+`--build-name` y `--build-number`, empaqueta con Inno Setup y emite metadata del
+artefacto. `pubspec.yaml` es la fuente canonica: no edites la version en
+`setup.iss` para un release.
+
+Si necesitas compilar el instalador manualmente desde `installer`, debe coincidir
+con la version de `pubspec.yaml`:
 
 ```powershell
 Set-Location ..\..\installer
-.\find_and_build_inno.ps1 -Version '1.0.3+120' -VersionInfo '1.0.3.120'
+.\find_and_build_inno.ps1 -Version '1.0.6' -BuildNumber 130 -VersionInfo '1.0.6.130'
 ```
 
 Tambien puedes llamar directamente a Inno Setup si ya conoces la ruta de `ISCC.exe`:
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\setup.iss /DMyAppVersion=1.0.3+120 /DMyAppVersionInfo=1.0.3.120
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\setup.iss /DMyAppVersion=1.0.6 /DMyAppBuildNumber=130 /DMyAppVersionInfo=1.0.6.130
 ```
 
-El ejecutable final queda en `installer/output/FullPOS-Setup-<version>.exe`.
+El ejecutable final queda en `installer/output/FullPOS-Setup-<version>-<build>.exe`.
 
-Si quieres forzar otra version puntual:
+Si quieres publicar otra version puntual, cambia primero `version:` en
+`apps/fulltech_app/pubspec.yaml` y luego ejecuta el script oficial:
 
 ```powershell
-.\find_and_build_inno.ps1 -Version '1.2.0+5' -VersionInfo '1.2.0.5'
+powershell -ExecutionPolicy Bypass -File scripts\build\build_windows_release.ps1
 ```
 
 ## Overrides opcionales en setup.iss

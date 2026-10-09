@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../api/env.dart';
 import '../debug/trace_log.dart';
@@ -16,146 +14,139 @@ AppUpdateInstaller createAppUpdateInstaller() =>
 class WindowsAppUpdateInstaller implements AppUpdateInstaller {
   const WindowsAppUpdateInstaller();
 
-  static const Duration _downloadTimeout = Duration(minutes: 10);
-
   @override
-  Future<void> downloadAndLaunchWindowsInstaller(
-    AppUpdateInfo updateInfo, {
-    required void Function(double progress) onProgress,
+  Future<void> launchPreparedWindowsUpdate({
+    required PersistedUpdateState persisted,
   }) async {
     if (!Platform.isWindows) {
       throw const AppUpdateInstallException(
         'La instalación automática solo está disponible en Windows.',
       );
     }
-
-    final downloadUrl = (updateInfo.downloadUrl ?? '').trim();
-    if (downloadUrl.isEmpty) {
+    final targetBuild = persisted.targetBuild;
+    final artifactRelativePath = persisted.artifactRelativePath;
+    final expectedSha256 = persisted.sha256Expected;
+    if (targetBuild == null ||
+        artifactRelativePath == null ||
+        expectedSha256 == null) {
       throw const AppUpdateInstallException(
-        'El release de Windows no tiene un enlace de descarga válido.',
+        'La actualización no está lista para instalar.',
       );
     }
 
-    final seq = TraceLog.nextSeq();
-    TraceLog.log('AppUpdate', 'windows auto-update download start', seq: seq);
+    final publisher = Env.expectedUpdatePublisher;
+    final allowUnsigned = Env.allowUnsignedUpdatesForUat;
+    if (!allowUnsigned && publisher.isEmpty) {
+      throw const AppUpdateInstallException(
+        'Falta configurar el publisher esperado para validar la actualización.',
+      );
+    }
 
-    final targetFile = await _resolveTargetFile(updateInfo);
-    final dio = Dio(
-      BaseOptions(
-        connectTimeout: Duration(milliseconds: Env.apiTimeoutMs),
-        sendTimeout: _downloadTimeout,
-        receiveTimeout: _downloadTimeout,
-        followRedirects: true,
-        responseType: ResponseType.bytes,
-      ),
+    final updateRoot = _defaultUpdateRoot();
+    final packagePath = p.normalize(
+      p.join(updateRoot.path, artifactRelativePath),
+    );
+    final updater = _resolveUpdaterExecutable();
+    if (!await updater.exists()) {
+      throw const AppUpdateInstallException(
+        'No se encontró el actualizador seguro de Windows.',
+      );
+    }
+
+    final logPath = _updateLogPath(targetBuild);
+    await File(logPath).parent.create(recursive: true);
+
+    final args = <String>[
+      '--package',
+      packagePath,
+      '--parent-pid',
+      pid.toString(),
+      '--target-build',
+      targetBuild.toString(),
+      '--restart-exe',
+      Platform.resolvedExecutable,
+      '--log-path',
+      logPath,
+      '--update-root',
+      updateRoot.path,
+      '--expected-sha256',
+      expectedSha256,
+      '--expected-publisher',
+      publisher,
+      if (allowUnsigned) '--allow-unsigned',
+    ];
+
+    TraceLog.log('AppUpdate', 'launching FullposUpdater.exe');
+    await Process.start(
+      updater.path,
+      args,
+      mode: ProcessStartMode.detached,
+      runInShell: false,
     );
 
-    try {
-      await dio.download(
-        downloadUrl,
-        targetFile.path,
-        deleteOnError: true,
-        onReceiveProgress: (received, total) {
-          if (total <= 0) return;
-          onProgress((received / total).clamp(0, 1).toDouble());
-        },
-      );
-
-      onProgress(1);
-      await _launchInstaller(targetFile.path);
-
-      TraceLog.log(
-        'AppUpdate',
-        'windows auto-update installer launched',
-        seq: seq,
-      );
-      unawaited(
-        Future<void>.delayed(const Duration(milliseconds: 900), () {
-          exit(0);
-        }),
-      );
-    } on DioException catch (error, stackTrace) {
-      TraceLog.log(
-        'AppUpdate',
-        'windows auto-update download failed',
-        seq: seq,
-        error: error,
-        stackTrace: stackTrace,
-      );
-      throw AppUpdateInstallException(
-        'No se pudo descargar el instalador de Windows. Verifica la URL del release y la conectividad.',
-      );
-    } catch (error, stackTrace) {
-      TraceLog.log(
-        'AppUpdate',
-        'windows auto-update launch failed',
-        seq: seq,
-        error: error,
-        stackTrace: stackTrace,
-      );
-      throw AppUpdateInstallException(
-        'No se pudo iniciar el instalador automático de Windows.',
-      );
-    } finally {
-      dio.close(force: true);
-    }
+    unawaited(
+      Future<void>.delayed(const Duration(milliseconds: 900), () {
+        exit(0);
+      }),
+    );
   }
 
-  Future<File> _resolveTargetFile(AppUpdateInfo updateInfo) async {
-    final tempDir = await getTemporaryDirectory();
-    final targetDir = Directory(p.join(tempDir.path, 'fulltech_updates'));
-    if (!await targetDir.exists()) {
-      await targetDir.create(recursive: true);
-    }
-
-    final fileName = _buildFileName(updateInfo);
-    return File(p.join(targetDir.path, fileName));
+  @override
+  Future<void> downloadAndLaunchWindowsInstaller(
+    AppUpdateInfo updateInfo, {
+    required void Function(double progress) onProgress,
+  }) async {
+    throw const AppUpdateInstallException(
+      'La descarga directa fue reemplazada por el flujo seguro de actualización preparada.',
+    );
   }
 
-  String _buildFileName(AppUpdateInfo updateInfo) {
-    final uri = Uri.tryParse(updateInfo.downloadUrl ?? '');
-    final candidate = uri != null && uri.pathSegments.isNotEmpty
-        ? Uri.decodeComponent(uri.pathSegments.last)
-        : '';
-    final sanitized = candidate.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    if (sanitized.isNotEmpty) {
-      return sanitized;
+  Directory _defaultUpdateRoot() {
+    final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
+    if (localAppData.isNotEmpty) {
+      return Directory(p.join(localAppData, 'DaleVentas POS', 'updates'));
     }
-
-    final buildSuffix =
-        updateInfo.latestBuild?.toString() ??
-        DateTime.now().millisecondsSinceEpoch.toString();
-    return 'fulltech_update_$buildSuffix.exe';
+    return Directory(
+      p.join(
+        Platform.environment['USERPROFILE'] ?? '.',
+        'AppData',
+        'Local',
+        'DaleVentas POS',
+        'updates',
+      ),
+    );
   }
 
-  Future<void> _launchInstaller(String filePath) async {
-    final extension = p.extension(filePath).toLowerCase();
+  File _resolveUpdaterExecutable() {
+    final exeDir = p.dirname(Platform.resolvedExecutable);
+    final installedRoot = p.dirname(exeDir);
+    final candidates = <String>[
+      p.join(installedRoot, 'updater', 'FullposUpdater.exe'),
+      p.join(exeDir, 'updater', 'FullposUpdater.exe'),
+    ];
+    return File(
+      candidates.firstWhere(
+        (path) => File(path).existsSync(),
+        orElse: () => candidates.first,
+      ),
+    );
+  }
 
-    if (extension == '.msi') {
-      await Process.start(
-        'msiexec',
-        ['/i', filePath, '/quiet', '/norestart'],
-        mode: ProcessStartMode.detached,
-        runInShell: true,
-      );
-      return;
-    }
-
-    if (extension == '.exe') {
-      await Process.start(
-        filePath,
-        const ['/VERYSILENT', '/NORESTART', '/SP-'],
-        mode: ProcessStartMode.detached,
-        runInShell: true,
-      );
-      return;
-    }
-
-    await Process.start(
-      'explorer.exe',
-      [filePath],
-      mode: ProcessStartMode.detached,
-      runInShell: true,
+  String _updateLogPath(int targetBuild) {
+    final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
+    final root = localAppData.isNotEmpty
+        ? localAppData
+        : p.join(
+            Platform.environment['USERPROFILE'] ?? '.',
+            'AppData',
+            'Local',
+          );
+    return p.join(
+      root,
+      'DaleVentas POS',
+      'logs',
+      'updates',
+      'update-$targetBuild.log',
     );
   }
 }

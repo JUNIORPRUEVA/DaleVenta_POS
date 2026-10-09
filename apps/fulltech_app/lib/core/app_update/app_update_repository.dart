@@ -13,21 +13,17 @@ final appUpdateRepositoryProvider = Provider<AppUpdateRepository>((ref) {
 });
 
 class AppUpdateRepository {
-  const AppUpdateRepository();
+  AppUpdateRepository({Dio? dio}) : _dio = dio;
 
-  bool get isConfigured => Env.releasesEnabled;
+  final Dio? _dio;
+
+  bool get isConfigured => Env.apiBaseUrl.trim().isNotEmpty;
 
   ReleasePlatform? getSupportedPlatform() {
     if (kIsWeb) return null;
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return ReleasePlatform.android;
-      case TargetPlatform.windows:
-        return ReleasePlatform.windows;
-      default:
-        return null;
-    }
+    return defaultTargetPlatform == TargetPlatform.windows
+        ? ReleasePlatform.windows
+        : null;
   }
 
   Future<InstalledReleaseInfo?> readInstalledRelease() async {
@@ -47,15 +43,11 @@ class AppUpdateRepository {
     );
   }
 
-  Future<AppUpdateInfo> checkForUpdate(
+  Future<UpdateManifest> checkForUpdate(
     InstalledReleaseInfo installedRelease,
   ) async {
-    final baseUrl = Env.releasesApiBaseUrl;
-    final apiKey = Env.releasesApiKey;
-    if (baseUrl == null || apiKey.isEmpty) {
-      throw const AppUpdateConfigurationException(
-        'La configuración de releases no está completa.',
-      );
+    if (installedRelease.platform != ReleasePlatform.windows) {
+      return UpdateManifest.noUpdate();
     }
 
     final seq = TraceLog.nextSeq();
@@ -65,34 +57,41 @@ class AppUpdateRepository {
       seq: seq,
     );
 
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: baseUrl,
-        connectTimeout: Duration(milliseconds: Env.apiTimeoutMs),
-        sendTimeout: Duration(milliseconds: Env.apiTimeoutMs),
-        receiveTimeout: Duration(milliseconds: Env.apiTimeoutMs),
-        headers: {'Accept': 'application/json', 'x-api-key': apiKey},
-      ),
-    );
+    final ownsDio = _dio == null;
+    final dio =
+        _dio ??
+        Dio(
+          BaseOptions(
+            baseUrl: Env.apiBaseUrl,
+            connectTimeout: Duration(milliseconds: Env.apiTimeoutMs),
+            sendTimeout: Duration(milliseconds: Env.apiTimeoutMs),
+            receiveTimeout: Duration(milliseconds: Env.apiTimeoutMs),
+            headers: {'Accept': 'application/json'},
+          ),
+        );
 
     try {
       final response = await dio.get<Map<String, dynamic>>(
         ApiRoutes.releaseCheckUpdate,
         queryParameters: {
           'platform': installedRelease.platform.apiValue,
-          'current_build': installedRelease.currentBuild,
-          'current_version': installedRelease.currentVersion,
+          'channel': 'stable',
+          'version': installedRelease.currentVersion,
+          'build': installedRelease.currentBuild,
         },
       );
 
       final data = response.data ?? const <String, dynamic>{};
-      final parsed = AppUpdateInfo.fromJson(data);
+      final parsed = UpdateManifest.fromJson(data);
+      final safe = parsed.isNewerThan(installedRelease.currentBuild)
+          ? parsed
+          : UpdateManifest.noUpdate();
       TraceLog.log(
         'AppUpdate',
-        'check done update=${parsed.update} required=${parsed.required}',
+        'check done update=${safe.updateAvailable} build=${safe.buildNumber ?? 'none'}',
         seq: seq,
       );
-      return parsed;
+      return safe;
     } catch (error, stackTrace) {
       TraceLog.log(
         'AppUpdate',
@@ -103,16 +102,9 @@ class AppUpdateRepository {
       );
       rethrow;
     } finally {
-      dio.close(force: true);
+      if (ownsDio) dio.close(force: true);
     }
   }
 }
 
-class AppUpdateConfigurationException implements Exception {
-  final String message;
-
-  const AppUpdateConfigurationException(this.message);
-
-  @override
-  String toString() => message;
-}
+typedef UpdateCheckService = AppUpdateRepository;
