@@ -93,9 +93,11 @@ export class ContabilidadController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.contabilidadService.getCloses(
-      { date, from, to, type },
+      { date, from, to, type, page, limit },
       (req.user ?? {}) as RequestActor,
     );
   }
