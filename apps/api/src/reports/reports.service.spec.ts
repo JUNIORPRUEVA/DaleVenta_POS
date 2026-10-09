@@ -356,6 +356,10 @@ describe("ReportsService", () => {
       .fn()
       .mockResolvedValueOnce([invoice])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
     const service = serviceWith({
       ...emptyPrisma(findMany),
@@ -376,6 +380,457 @@ describe("ReportsService", () => {
     expect(result.kpis.totalProfit).toBeCloseTo(1228);
     expect(result.kpis.totalExpenses).toBeCloseTo(700);
     expect(result.kpis.netProfit).toBeCloseTo(528);
+  });
+
+  it("agrega movimientos de caja en base de datos sin materializar cada fila", async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([sale()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const cashGroupBy = jest.fn().mockResolvedValue([
+      {
+        type: "IN",
+        movementType: "income",
+        affectsProfit: true,
+        _sum: { amount: decimal(125) },
+        _count: { _all: 5 },
+      },
+      {
+        type: "OUT",
+        movementType: "expense",
+        affectsProfit: true,
+        _sum: { amount: decimal(70) },
+        _count: { _all: 2 },
+      },
+      {
+        type: "OUT",
+        movementType: "expense",
+        affectsProfit: false,
+        _sum: { amount: decimal(30) },
+        _count: { _all: 1 },
+      },
+    ]);
+    const cashFindMany = jest.fn();
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      cashMovement: {
+        groupBy: cashGroupBy,
+        findMany: cashFindMany,
+      },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(cashGroupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ["type", "movementType", "affectsProfit"],
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+    );
+    expect(cashFindMany).not.toHaveBeenCalled();
+    expect(result.kpis.cashIncome).toBeCloseTo(225);
+    expect(result.kpis.cashExpense).toBeCloseTo(100);
+    expect(result.kpis.totalExpenses).toBeCloseTo(70);
+    expect(result.audit.cashMovementRows).toBe(8);
+  });
+
+  it("agrega inventario/categorias en base de datos sin materializar productos", async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([sale()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const productFindMany = jest.fn();
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          category: "Bebidas",
+          unitCode: "UNIT",
+          unitName: "Unidad",
+          unitSymbol: "u",
+          unitPrecision: 0,
+          products: 2,
+          units: decimal(5),
+          costValue: decimal(175),
+          saleValue: decimal(300),
+          outOfStock: 1,
+          lowStock: 1,
+          productsWithoutCost: 0,
+        },
+      ])
+      .mockResolvedValueOnce([{ category: "Bebidas" }])
+      .mockResolvedValueOnce([
+        {
+          cash: decimal(0),
+          transfer: decimal(0),
+          cashOperations: 0,
+          transferOperations: 0,
+          rowCount: 0,
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      $queryRaw: queryRaw,
+      product: { findMany: productFindMany },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(queryRaw).toHaveBeenCalledTimes(7);
+    expect(productFindMany).not.toHaveBeenCalled();
+    expect(result.categories).toEqual(["Bebidas"]);
+    expect(result.inventory).toEqual(
+      expect.objectContaining({
+        products: 2,
+        units: 5,
+        costValue: 175,
+        saleValue: 300,
+        outOfStock: 1,
+        lowStock: 1,
+        productsWithoutCost: 0,
+      }),
+    );
+    expect(result.inventory.unitsByUnit).toEqual([
+      expect.objectContaining({ unitCode: "UNIT", quantity: 5 }),
+    ]);
+  });
+
+  it("agrega abonos de credito del periodo en base de datos sin materializarlos", async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([sale()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const creditFindMany = jest.fn();
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          cash: decimal(75),
+          transfer: decimal(25),
+          cashOperations: 2,
+          transferOperations: 1,
+          rowCount: 3,
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      $queryRaw: queryRaw,
+      saleCreditPayment: {
+        findMany: creditFindMany,
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(creditFindMany).not.toHaveBeenCalled();
+    expect(result.kpis.creditPaymentsCash).toBeCloseTo(75);
+    expect(result.kpis.creditPaymentsTransfer).toBeCloseTo(25);
+    expect(result.kpis.creditPaymentsCount).toBe(3);
+    expect(result.audit.creditPaymentRows).toBe(3);
+    expect(
+      result.paymentMethods.find((row) => row.method === "Efectivo"),
+    ).toEqual(expect.objectContaining({ amount: 175, count: 3 }));
+    expect(
+      result.paymentMethods.find((row) => row.method === "Transferencia"),
+    ).toEqual(expect.objectContaining({ amount: 25, count: 1 }));
+  });
+
+  it("agrega series, top clients, top products y categorias en base de datos cuando no hay filtro de categoria", async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([
+        sale({
+          id: "sale-1",
+          customerId: "client-1",
+          customer: { id: "client-1", nombre: "Cliente legacy" },
+        }),
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          cash: decimal(0),
+          transfer: decimal(0),
+          cashOperations: 0,
+          transferOperations: 0,
+          rowCount: 0,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          clientName: "Cliente DB",
+          totalSpent: decimal(450),
+          purchaseCount: 3,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          productName: "Producto DB",
+          totalSales: decimal(300),
+          totalQty: decimal(2),
+          unitCode: "UNIT",
+          unitName: "Unidad",
+          unitSymbol: "u",
+          unitPrecision: 0,
+          totalProfit: decimal(120),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          label: "2026-08-10",
+          sales: decimal(450),
+          profit: decimal(180),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          category: "Bebidas",
+          totalSales: decimal(450),
+          totalCost: decimal(270),
+          totalProfit: decimal(180),
+          totalQty: decimal(2),
+          salesCount: 3,
+          unitCode: "UNIT",
+          unitName: "Unidad",
+          unitSymbol: "u",
+          unitPrecision: 0,
+          unitQuantity: decimal(2),
+        },
+      ]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      $queryRaw: queryRaw,
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(queryRaw).toHaveBeenCalledTimes(7);
+    expect(result.topClients).toEqual([
+      { clientName: "Cliente DB", totalSpent: 450, purchaseCount: 3 },
+    ]);
+    expect(result.topProducts).toEqual([
+      {
+        productName: "Producto DB",
+        totalSales: 300,
+        totalQty: 2,
+        unitCode: "UNIT",
+        unitName: "Unidad",
+        unitSymbol: "u",
+        unitPrecision: 0,
+        totalQtyLabel: "2 u",
+        totalProfit: 120,
+      },
+    ]);
+    expect(result.salesSeries).toEqual([
+      { label: "2026-08-10", value: 450 },
+    ]);
+    expect(result.profitSeries).toEqual([
+      { label: "2026-08-10", value: 180 },
+    ]);
+    expect(result.categoryProfits).toEqual([
+      {
+        category: "Bebidas",
+        totalSales: 450,
+        totalCost: 270,
+        totalProfit: 180,
+        totalQty: 2,
+        quantityBuckets: [
+          {
+            unitCode: "UNIT",
+            unitName: "Unidad",
+            unitSymbol: "u",
+            unitPrecision: 0,
+            quantity: 2,
+            label: "2 u",
+          },
+        ],
+        totalQtyLabel: "2 u",
+        salesCount: 3,
+      },
+    ]);
+  });
+
+  it("usa ruta agregada completa sin materializar ventas/items cuando no hay filtro de categoria", async () => {
+    const saleFindMany = jest.fn();
+    const productFindMany = jest.fn();
+    const queryRaw = (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join(" ") ?? "";
+      if (sql.includes("invoice_sales AS")) {
+        return Promise.resolve([
+          {
+            totalSales: 3,
+            saleItemRows: 4,
+            totalSold: decimal(650),
+            totalCost: decimal(390),
+            totalProfit: decimal(260),
+            totalCommission: decimal(26),
+            taxableBase: decimal(250),
+            taxAmount: decimal(45),
+            exemptAmount: decimal(380),
+            discountAmount: decimal(25),
+            initialCash: decimal(350),
+            initialTransfer: decimal(125),
+            initialCashOperations: 2,
+            initialTransferOperations: 1,
+            paymentBreakdownViolations: 1,
+            zeroCostItems: 0,
+            zeroCostSoldAmount: decimal(0),
+            returnCount: 1,
+            returnedAmount: decimal(40),
+            returnedCost: decimal(16),
+            returnedProfit: decimal(24),
+            refundDocumentRows: 1,
+          },
+        ]);
+      }
+      if (sql.includes("FROM \"Product\"") && sql.includes("GROUP BY")) {
+        return Promise.resolve([
+          {
+            category: "Bebidas",
+            unitCode: "UNIT",
+            unitName: "Unidad",
+            unitSymbol: "u",
+            unitPrecision: 0,
+            products: 2,
+            units: decimal(5),
+            costValue: decimal(175),
+            saleValue: decimal(300),
+            outOfStock: 1,
+            lowStock: 1,
+            productsWithoutCost: 0,
+          },
+        ]);
+      }
+      if (sql.includes("SELECT DISTINCT")) {
+        return Promise.resolve([{ category: "Bebidas" }]);
+      }
+      if (sql.includes("FROM \"sale_credit_payments\" cp")) {
+        return Promise.resolve([
+          {
+            cash: decimal(75),
+            transfer: decimal(25),
+            cashOperations: 2,
+            transferOperations: 1,
+            rowCount: 3,
+          },
+        ]);
+      }
+      if (sql.includes("per_sale") && sql.includes("\"clientName\"")) {
+        return Promise.resolve([
+          { clientName: "Cliente DB", totalSpent: decimal(450), purchaseCount: 3 },
+        ]);
+      }
+      if (sql.includes("FROM \"SaleItem\" si") && sql.includes("\"productName\"")) {
+        return Promise.resolve([
+          {
+            productName: "Producto DB",
+            totalSales: decimal(300),
+            totalQty: decimal(2),
+            unitCode: "UNIT",
+            unitName: "Unidad",
+            unitSymbol: "u",
+            unitPrecision: 0,
+            totalProfit: decimal(120),
+          },
+        ]);
+      }
+      if (sql.includes("to_char")) {
+        return Promise.resolve([
+          { label: "2026-08-10", sales: decimal(650), profit: decimal(260) },
+        ]);
+      }
+      if (sql.includes("item_rows AS")) {
+        return Promise.resolve([
+          {
+            category: "Bebidas",
+            totalSales: decimal(650),
+            totalCost: decimal(390),
+            totalProfit: decimal(260),
+            totalQty: decimal(4),
+            salesCount: 3,
+            unitCode: "UNIT",
+            unitName: "Unidad",
+            unitSymbol: "u",
+            unitPrecision: 0,
+            unitQuantity: decimal(4),
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    };
+    const service = serviceWith({
+      sale: { findMany: saleFindMany },
+      product: { findMany: productFindMany },
+      company: { findUnique: jest.fn().mockResolvedValue({ inventoryEnabled: true }) },
+      cashMovement: {
+        groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn(),
+      },
+      saleCreditPayment: {
+        findMany: jest.fn(),
+        groupBy: jest.fn(),
+      },
+      $queryRaw: queryRaw,
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(saleFindMany).not.toHaveBeenCalled();
+    expect(productFindMany).not.toHaveBeenCalled();
+    expect(result.kpis.totalSales).toBe(3);
+    expect(result.kpis.grossSales).toBeCloseTo(650);
+    expect(result.kpis.returnedSales).toBeCloseTo(40);
+    expect(result.kpis.netSales).toBeCloseTo(610);
+    expect(result.kpis.creditPaymentsCash).toBeCloseTo(75);
+    expect(result.kpis.creditPaymentsTransfer).toBeCloseTo(25);
+    expect(result.audit).toEqual(
+      expect.objectContaining({
+        source: "database",
+        saleRows: 3,
+        saleItemRows: 4,
+        returnedRows: 1,
+        refundDocumentRows: 1,
+        creditPaymentRows: 3,
+        paymentBreakdownViolations: 1,
+        categoryFiltered: false,
+      }),
+    );
   });
 
   it("no descuenta de utilidad los movimientos OUT con affectsProfit=false", async () => {
@@ -611,6 +1066,7 @@ describe("ReportsService", () => {
     expect(productFindMany).toHaveBeenCalledWith({
       where: expect.objectContaining({ companyId: user.companyId }),
       select: expect.anything(),
+      take: expect.any(Number),
     });
     expect(cashFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -771,6 +1227,280 @@ describe("ReportsService", () => {
           expect.objectContaining({ unitCode: "YARD", quantity: 1.5 }),
           expect.objectContaining({ unitCode: "POUND", quantity: 2.375 }),
         ]),
+      }),
+    );
+  });
+
+  it("caracteriza ventas mixtas, credito, impuestos, descuentos, categorias, tops e inventario", async () => {
+    const saleCash = sale({
+      id: "sale-cash",
+      customerId: "client-1",
+      customer: { id: "client-1", nombre: "Cliente Uno" },
+      saleDate: new Date("2026-08-10T12:00:00.000Z"),
+      totalSold: decimal(200),
+      totalCost: decimal(120),
+      totalProfit: decimal(80),
+      commissionAmount: decimal(8),
+      discountAmount: decimal(25),
+      paymentMethod: "cash",
+      paymentCashAmount: decimal(200),
+      paymentTransferAmount: decimal(0),
+      items: [
+        item({
+          id: "cash-a",
+          productId: "prod-a",
+          productNameSnapshot: "Cafe",
+          qty: decimal(2),
+          subtotalSold: decimal(120),
+          subtotalCost: decimal(70),
+          profit: decimal(50),
+          taxableBase: decimal(100),
+          taxAmount: decimal(18),
+          exemptAmount: decimal(0),
+          lineDiscountAmount: decimal(10),
+          product: { categoria: "Bebidas" },
+        }),
+        item({
+          id: "cash-b",
+          productId: "prod-b",
+          productNameSnapshot: "Pan",
+          qty: decimal(1),
+          subtotalSold: decimal(80),
+          subtotalCost: decimal(50),
+          profit: decimal(30),
+          taxableBase: decimal(0),
+          taxAmount: decimal(0),
+          exemptAmount: decimal(80),
+          lineDiscountAmount: decimal(5),
+          product: { categoria: "Panaderia" },
+        }),
+      ],
+    });
+    const saleCard = sale({
+      id: "sale-card",
+      customerId: "client-2",
+      customer: { id: "client-2", nombre: "Cliente Dos" },
+      saleDate: new Date("2026-08-11T12:00:00.000Z"),
+      totalSold: decimal(150),
+      totalCost: decimal(90),
+      totalProfit: decimal(60),
+      commissionAmount: decimal(6),
+      paymentMethod: "card",
+      paymentCashAmount: decimal(0),
+      paymentTransferAmount: decimal(150),
+      items: [
+        item({
+          id: "card-a",
+          productId: "prod-c",
+          productNameSnapshot: "Bizcocho",
+          qty: decimal(1),
+          subtotalSold: decimal(150),
+          subtotalCost: decimal(90),
+          profit: decimal(60),
+          taxableBase: decimal(150),
+          taxAmount: decimal(27),
+          exemptAmount: decimal(0),
+          product: { categoria: "Panaderia" },
+        }),
+      ],
+    });
+    const saleCredit = sale({
+      id: "sale-credit",
+      customerId: "client-1",
+      customer: { id: "client-1", nombre: "Cliente Uno" },
+      saleDate: new Date("2026-08-12T12:00:00.000Z"),
+      totalSold: decimal(300),
+      totalCost: decimal(180),
+      totalProfit: decimal(120),
+      commissionAmount: decimal(12),
+      paymentMethod: "credit",
+      paymentCashAmount: decimal(200),
+      paymentTransferAmount: decimal(0),
+      items: [
+        item({
+          id: "credit-a",
+          productId: "prod-d",
+          productNameSnapshot: "Producto sin categoria",
+          qty: decimal(3),
+          subtotalSold: decimal(300),
+          subtotalCost: decimal(180),
+          profit: decimal(120),
+          taxableBase: decimal(0),
+          taxAmount: decimal(0),
+          exemptAmount: decimal(300),
+          product: null,
+        }),
+      ],
+    });
+    const products = [
+      {
+        id: "prod-a",
+        nombre: "Cafe",
+        categoria: "Bebidas",
+        costo: decimal(35),
+        precio: decimal(60),
+        stock: decimal(2),
+        unitOfMeasure: {
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          precision: 0,
+        },
+      },
+      {
+        id: "prod-b",
+        nombre: "Pan",
+        categoria: "Panaderia",
+        costo: decimal(50),
+        precio: decimal(80),
+        stock: decimal(0),
+        unitOfMeasure: {
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          precision: 0,
+        },
+      },
+      {
+        id: "prod-d",
+        nombre: "Producto sin categoria",
+        categoria: "",
+        costo: decimal(60),
+        precio: decimal(100),
+        stock: decimal(5),
+        unitOfMeasure: {
+          code: "UNIT",
+          name: "Unidad",
+          symbol: "u",
+          precision: 0,
+        },
+      },
+    ];
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([saleCash, saleCard, saleCredit])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const service = serviceWith({
+      ...emptyPrisma(findMany),
+      product: { findMany: jest.fn().mockResolvedValue(products) },
+      saleCreditPayment: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            saleId: "sale-credit",
+            cashAmount: decimal(50),
+            transferAmount: decimal(25),
+            amount: decimal(75),
+            sale: {
+              items: [
+                {
+                  subtotalSold: decimal(300),
+                  product: null,
+                },
+              ],
+            },
+          },
+        ]),
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            saleId: "sale-credit",
+            _sum: {
+              cashAmount: decimal(50),
+              transferAmount: decimal(25),
+              amount: decimal(75),
+            },
+          },
+        ]),
+      },
+    });
+
+    const result = await service.salesOverview(user as never, {
+      from: "2026-08-01",
+      to: "2026-08-22",
+    });
+
+    expect(result.kpis.totalSales).toBe(3);
+    expect(result.kpis.grossSales).toBeCloseTo(650);
+    expect(result.kpis.netSales).toBeCloseTo(650);
+    expect(result.kpis.totalCost).toBeCloseTo(390);
+    expect(result.kpis.totalProfit).toBeCloseTo(260);
+    expect(result.kpis.netProfit).toBeCloseTo(260);
+    expect(result.kpis.cashIncome).toBeCloseTo(400);
+    expect(
+      result.paymentMethods.find((row) => row.method === "Efectivo")?.amount,
+    ).toBeCloseTo(400);
+    // Caracterizacion actual: paymentTransferAmount es acumulado; si el ledger
+    // trae una transferencia que no esta en el acumulado de la venta, el pago
+    // inicial queda negativo y el abono del periodo lo compensa.
+    expect(
+      result.paymentMethods.find((row) => row.method === "Transferencia")
+        ?.amount,
+    ).toBeCloseTo(150);
+    expect(result.kpis.creditPaymentsCash).toBeCloseTo(50);
+    expect(result.kpis.creditPaymentsTransfer).toBeCloseTo(25);
+    expect(result.kpis.creditPaymentsCount).toBe(1);
+    expect(result.kpis.taxableBase).toBeCloseTo(250);
+    expect(result.kpis.taxAmount).toBeCloseTo(45);
+    expect(result.kpis.exemptAmount).toBeCloseTo(380);
+    expect(result.kpis.discountAmount).toBeCloseTo(25);
+    expect(result.salesSeries).toEqual([
+      { label: "2026-08-10", value: 200 },
+      { label: "2026-08-11", value: 150 },
+      { label: "2026-08-12", value: 300 },
+    ]);
+    expect(result.topClients).toEqual([
+      { clientName: "Cliente Uno", totalSpent: 500, purchaseCount: 2 },
+      { clientName: "Cliente Dos", totalSpent: 150, purchaseCount: 1 },
+    ]);
+    expect(result.topProducts[0]).toEqual(
+      expect.objectContaining({
+        productName: "Producto sin categoria",
+        totalSales: 300,
+        totalQty: 3,
+      }),
+    );
+    expect(result.categoryProfits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "Sin categoria",
+          totalSales: 300,
+          totalProfit: 120,
+          salesCount: 1,
+        }),
+        expect.objectContaining({
+          category: "Panaderia",
+          totalSales: 230,
+          totalProfit: 90,
+          salesCount: 2,
+        }),
+        expect.objectContaining({
+          category: "Bebidas",
+          totalSales: 120,
+          totalProfit: 50,
+          salesCount: 1,
+        }),
+      ]),
+    );
+    expect(result.categories).toEqual(["Bebidas", "Panaderia", "Sin categoria"]);
+    expect(result.inventory).toEqual(
+      expect.objectContaining({
+        products: 3,
+        units: 7,
+        costValue: 370,
+        saleValue: 620,
+        outOfStock: 1,
+        lowStock: 1,
+        productsWithoutCost: 0,
+      }),
+    );
+    expect(result.audit).toEqual(
+      expect.objectContaining({
+        source: "database",
+        saleRows: 3,
+        saleItemRows: 4,
+        returnedRows: 0,
+        creditPaymentRows: 1,
+        categoryFiltered: false,
       }),
     );
   });
