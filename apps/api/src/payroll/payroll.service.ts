@@ -19,6 +19,12 @@ import { SchedulePayrollWhatsappDto, SendPayrollWhatsappDto } from './dto/send-p
 import { UpsertPayrollConfigDto } from './dto/upsert-payroll-config.dto';
 import { UpsertPayrollEmployeeDto } from './dto/upsert-payroll-employee.dto';
 
+const PAYROLL_PERIOD_LIST_LIMIT = 120;
+const PAYROLL_EMPLOYEE_LIST_LIMIT = 500;
+const PAYROLL_ENTRY_LIST_LIMIT = 500;
+const PAYROLL_PENDING_COMMISSION_LIMIT = 200;
+const PAYROLL_PAYMENT_STATUS_LIMIT = 500;
+
 @Injectable()
 export class PayrollService {
   private readonly logger = new Logger(PayrollService.name);
@@ -59,6 +65,7 @@ export class PayrollService {
     return this.prisma.payrollPeriod.findMany({
       where: { ownerId },
       orderBy: { startDate: 'desc' },
+      take: PAYROLL_PERIOD_LIST_LIMIT,
     });
   }
 
@@ -110,6 +117,7 @@ export class PayrollService {
     const openPeriods = await this.prisma.payrollPeriod.findMany({
       where: { ownerId, status: PayrollPeriodStatus.OPEN },
       orderBy: { startDate: 'desc' },
+      take: PAYROLL_PERIOD_LIST_LIMIT,
     });
 
     for (const period of openPeriods) {
@@ -192,6 +200,7 @@ export class PayrollService {
         ...(activeOnly ? { activo: true } : {}),
       },
       orderBy: { nombre: 'asc' },
+      take: PAYROLL_EMPLOYEE_LIST_LIMIT,
     });
   }
 
@@ -336,6 +345,7 @@ export class PayrollService {
     return this.prisma.payrollEntry.findMany({
       where: { ownerId, periodId, employeeId },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take: PAYROLL_ENTRY_LIST_LIMIT,
     });
   }
 
@@ -550,6 +560,7 @@ export class PayrollService {
         },
       },
       orderBy: [{ finalizedAt: 'desc' }, { createdAt: 'desc' }],
+      take: PAYROLL_PENDING_COMMISSION_LIMIT,
     });
   }
 
@@ -836,6 +847,7 @@ export class PayrollService {
         ...(employeeId ? { employeeId } : {}),
       },
       orderBy: [{ paidAt: 'desc' }, { updatedAt: 'desc' }],
+      take: PAYROLL_PAYMENT_STATUS_LIMIT,
     });
   }
 
@@ -1240,6 +1252,7 @@ export class PayrollService {
         OR: [{ id: user.id }, { userId: user.id }],
       },
       select: { id: true },
+      take: 10,
     });
 
     const fallback = await this.prisma.payrollEmployee.findMany({
@@ -1249,6 +1262,7 @@ export class PayrollService {
         ...(user.telefono.trim().length > 0 ? { telefono: user.telefono } : {}),
       },
       select: { id: true },
+      take: 10,
     });
 
     const employeeIds = new Set<string>([user.id]);

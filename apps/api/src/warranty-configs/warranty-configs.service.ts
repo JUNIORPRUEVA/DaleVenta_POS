@@ -7,6 +7,8 @@ import { UpsertWarrantyProductConfigDto } from './dto/upsert-warranty-product-co
 
 type AuthUser = { id: string; role: Role; companyId?: string | null };
 type WarrantyConfigRow = Prisma.WarrantyProductConfigGetPayload<{ include: { category: true } }>;
+const WARRANTY_CONFIG_LIST_LIMIT = 200;
+const WARRANTY_CONFIG_RESOLUTION_LIMIT = 100;
 
 export type WarrantyConfigResolution = {
   id: string;
@@ -49,6 +51,7 @@ export class WarrantyConfigsService {
         { categoryName: 'asc' },
         { updatedAt: 'desc' },
       ],
+      take: WARRANTY_CONFIG_LIST_LIMIT,
     });
     return { items: items.map((item) => this.mapConfig(item)) };
   }
@@ -143,6 +146,7 @@ export class WarrantyConfigsService {
       where,
       include: { category: true },
       orderBy: [{ updatedAt: 'desc' }],
+      take: WARRANTY_CONFIG_RESOLUTION_LIMIT,
     });
 
     const byProduct = productKeys
