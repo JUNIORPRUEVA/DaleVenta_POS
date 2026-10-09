@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../../core/storage/resilient_local_database.dart';
 import '../../../core/models/user_model.dart';
 import '../../clientes/cliente_model.dart';
+import 'service_orders_api.dart';
 import '../service_order_models.dart';
 
 final serviceOrdersLocalRepositoryProvider =
@@ -31,21 +32,28 @@ class ServiceOrdersLocalSnapshot {
 class ServiceOrdersLocalRepository {
   static const _dbName = 'operations_local.db';
   static const _dbVersion = 2;
+  static const _defaultSnapshotLimit = 200;
+  static const _maxSnapshotLimit = 200;
   static const _ordersTable = 'operations_orders';
   static const _clientsTable = 'operations_clients';
   static const _usersTable = 'operations_users';
   static const _metaTable = 'operations_meta';
   static const _lastSyncedAtKey = 'last_synced_at';
+  static const _syncCursorKey = 'sync_cursor';
   static const _viewerUserIdKey = 'viewer_user_id';
 
   Database? _database;
   ServiceOrdersLocalSnapshot? _memorySnapshot;
   String _activeViewerUserId = '';
+  final String _databaseFileName;
+
+  ServiceOrdersLocalRepository({String databaseFileName = _dbName})
+    : _databaseFileName = databaseFileName;
 
   Future<Database> get _db async {
     if (_database != null) return _database!;
     _database = await openResilientLocalDatabase(
-      fileName: _dbName,
+      fileName: _databaseFileName,
       version: _dbVersion,
       onCreate: (db, version) async => _createSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -82,12 +90,29 @@ class ServiceOrdersLocalRepository {
         value TEXT
       )
     ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_operations_orders_created_at
+      ON $_ordersTable(created_at DESC, id DESC)
+    ''');
   }
 
-  Future<ServiceOrdersLocalSnapshot> readSnapshot() async {
+  Future<ServiceOrdersLocalSnapshot> readSnapshot({
+    int limit = _defaultSnapshotLimit,
+    int offset = 0,
+  }) async {
+    final effectiveLimit = limit.clamp(1, _maxSnapshotLimit).toInt();
+    final effectiveOffset = offset < 0 ? 0 : offset;
     final memorySnapshot = _memorySnapshot;
-    if (memorySnapshot != null) {
-      return memorySnapshot;
+    if (kIsWeb && memorySnapshot != null) {
+      return ServiceOrdersLocalSnapshot(
+        orders: memorySnapshot.orders
+            .skip(effectiveOffset)
+            .take(effectiveLimit)
+            .toList(growable: false),
+        clientsById: memorySnapshot.clientsById,
+        usersById: memorySnapshot.usersById,
+        lastSyncedAt: memorySnapshot.lastSyncedAt,
+      );
     }
 
     if (kIsWeb) {
@@ -99,9 +124,12 @@ class ServiceOrdersLocalRepository {
     }
 
     final db = await _db;
-    final orderRows = await db.query(_ordersTable, orderBy: 'created_at DESC');
-    final clientRows = await db.query(_clientsTable);
-    final userRows = await db.query(_usersTable);
+    final orderRows = await db.query(
+      _ordersTable,
+      orderBy: 'created_at DESC, id DESC',
+      limit: effectiveLimit,
+      offset: effectiveOffset,
+    );
     final metaRows = await db.query(
       _metaTable,
       where: 'key = ?',
@@ -109,12 +137,23 @@ class ServiceOrdersLocalRepository {
       limit: 1,
     );
 
+    final orders = orderRows
+        .map((row) => _decodeMap(row['payload']))
+        .whereType<Map<String, dynamic>>()
+        .map(ServiceOrderModel.fromJson)
+        .toList(growable: false);
+    final clientIds = {
+      for (final order in orders)
+        if (order.clientId.trim().isNotEmpty) order.clientId,
+      for (final order in orders)
+        if (order.client != null) order.client!.id,
+    };
+    final userIds = _collectUserIds(orders);
+    final clientRows = await _queryRowsByIds(db, _clientsTable, clientIds);
+    final userRows = await _queryRowsByIds(db, _usersTable, userIds);
+
     final snapshot = ServiceOrdersLocalSnapshot(
-      orders: orderRows
-          .map((row) => _decodeMap(row['payload']))
-          .whereType<Map<String, dynamic>>()
-          .map(ServiceOrderModel.fromJson)
-          .toList(growable: false),
+      orders: orders,
       clientsById: {
         for (final row in clientRows)
           if (((row['id'] ?? '').toString()).isNotEmpty)
@@ -133,8 +172,100 @@ class ServiceOrdersLocalRepository {
           ? null
           : DateTime.tryParse((metaRows.first['value'] ?? '').toString()),
     );
-    _memorySnapshot = snapshot;
     return snapshot;
+  }
+
+  Future<String?> readSyncCursor() async {
+    if (kIsWeb) return null;
+    final db = await _db;
+    final rows = await db.query(
+      _metaTable,
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [_syncCursorKey],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final value = (rows.first['value'] ?? '').toString().trim();
+    return value.isEmpty ? null : value;
+  }
+
+  Future<void> applySyncPage({
+    required List<ServiceOrderModel> items,
+    required List<ServiceOrdersSyncTombstone> tombstones,
+    required String? nextCursor,
+  }) async {
+    if (kIsWeb) {
+      final snapshot = await readSnapshot();
+      final nextOrders = [
+        ...snapshot.orders.where(
+          (order) => !tombstones.any((item) => item.id == order.id),
+        ),
+      ];
+      for (final item in items) {
+        final index = nextOrders.indexWhere((order) => order.id == item.id);
+        if (index >= 0) {
+          nextOrders[index] = item;
+        } else {
+          nextOrders.add(item);
+        }
+      }
+      _memorySnapshot = ServiceOrdersLocalSnapshot(
+        orders: nextOrders,
+        clientsById: {
+          ...snapshot.clientsById,
+          for (final item in items)
+            if (item.client != null) item.client!.id: item.client!,
+        },
+        usersById: snapshot.usersById,
+        lastSyncedAt: DateTime.now(),
+      );
+      return;
+    }
+
+    final db = await _db;
+    _memorySnapshot = null;
+    await db.transaction((txn) async {
+      for (final tombstone in tombstones) {
+        await txn.delete(
+          _ordersTable,
+          where: 'id = ?',
+          whereArgs: [tombstone.id],
+        );
+      }
+
+      for (final order in items) {
+        await txn.insert(_ordersTable, {
+          'id': order.id,
+          'created_at': order.createdAt.toIso8601String(),
+          'updated_at': order.updatedAt.toIso8601String(),
+          'payload': jsonEncode(order.toJson()),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+        final client = order.client;
+        if (client != null) {
+          await txn.insert(_clientsTable, {
+            'id': client.id,
+            'payload': jsonEncode(client.toJson()),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+
+      if ((nextCursor ?? '').trim().isNotEmpty) {
+        await txn.insert(_metaTable, {
+          'key': _syncCursorKey,
+          'value': nextCursor!.trim(),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await txn.insert(_metaTable, {
+        'key': _lastSyncedAtKey,
+        'value': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert(_metaTable, {
+        'key': _viewerUserIdKey,
+        'value': _activeViewerUserId,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
   }
 
   Future<void> prepareForViewer(String viewerUserId) async {
@@ -196,17 +327,17 @@ class ServiceOrdersLocalRepository {
     required Map<String, ClienteModel> clientsById,
     required Map<String, UserModel> usersById,
   }) async {
-    _memorySnapshot = ServiceOrdersLocalSnapshot(
-      orders: orders.toList(growable: false),
-      clientsById: Map<String, ClienteModel>.from(clientsById),
-      usersById: Map<String, UserModel>.from(usersById),
-      lastSyncedAt: DateTime.now(),
-    );
-
     if (kIsWeb) {
+      _memorySnapshot = ServiceOrdersLocalSnapshot(
+        orders: orders.toList(growable: false),
+        clientsById: Map<String, ClienteModel>.from(clientsById),
+        usersById: Map<String, UserModel>.from(usersById),
+        lastSyncedAt: DateTime.now(),
+      );
       return;
     }
 
+    _memorySnapshot = null;
     final db = await _db;
     await db.transaction((txn) async {
       await txn.delete(_ordersTable);
@@ -277,6 +408,7 @@ class ServiceOrdersLocalRepository {
     }
 
     final db = await _db;
+    _memorySnapshot = null;
     await db.transaction((txn) async {
       await txn.insert(_ordersTable, {
         'id': order.id,
@@ -322,6 +454,7 @@ class ServiceOrdersLocalRepository {
     }
 
     final db = await _db;
+    _memorySnapshot = null;
     await db.delete(_ordersTable, where: 'id = ?', whereArgs: [id]);
   }
 
@@ -351,6 +484,11 @@ class ServiceOrdersLocalRepository {
         where: 'key = ?',
         whereArgs: [_viewerUserIdKey],
       );
+      await txn.delete(
+        _metaTable,
+        where: 'key = ?',
+        whereArgs: [_syncCursorKey],
+      );
     });
   }
 
@@ -368,6 +506,45 @@ class ServiceOrdersLocalRepository {
             _decodeMap(row['payload']) ?? const <String, dynamic>{},
           ),
     };
+  }
+
+  Set<String> _collectUserIds(List<ServiceOrderModel> orders) {
+    final ids = <String>{};
+    void add(String? id) {
+      final normalized = (id ?? '').trim();
+      if (normalized.isNotEmpty) ids.add(normalized);
+    }
+
+    for (final order in orders) {
+      add(order.createdById);
+      add(order.assignedToId);
+      add(order.technicianConfirmedById);
+      add(order.lastStatusChangedByUserId);
+      for (final entry in order.statusHistory) {
+        add(entry.changedByUserId);
+      }
+      for (final evidence in order.evidences) {
+        add(evidence.createdById);
+      }
+      for (final report in order.reports) {
+        add(report.createdById);
+      }
+    }
+    return ids;
+  }
+
+  Future<List<Map<String, Object?>>> _queryRowsByIds(
+    Database db,
+    String table,
+    Set<String> ids,
+  ) async {
+    if (ids.isEmpty) return const <Map<String, Object?>>[];
+    final placeholders = List.filled(ids.length, '?').join(',');
+    return db.query(
+      table,
+      where: 'id IN ($placeholders)',
+      whereArgs: ids.toList(growable: false),
+    );
   }
 
   Future<ClienteModel?> readClientById(String id) async {

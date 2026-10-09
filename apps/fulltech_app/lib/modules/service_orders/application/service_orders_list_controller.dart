@@ -70,6 +70,7 @@ class ServiceOrdersListController
 
   final Ref ref;
   Future<void>? _inFlightLoad;
+  Future<void>? _inFlightDeltaSync;
 
   Map<String, ClienteModel> _clientMapFromOrders(
     List<ServiceOrderModel> orders,
@@ -98,6 +99,51 @@ class ServiceOrdersListController
         );
   }
 
+  Future<void> _runIncrementalSync({
+    required ServiceOrdersLocalRepository localRepository,
+  }) {
+    if (_inFlightDeltaSync != null) return _inFlightDeltaSync!;
+    _inFlightDeltaSync =
+        () async {
+          var cursor = await localRepository.readSyncCursor();
+          var hasMore = true;
+          while (hasMore && mounted) {
+            final page = await ref
+                .read(serviceOrdersApiProvider)
+                .syncOrders(cursor: cursor, limit: 200);
+            await localRepository.applySyncPage(
+              items: page.items,
+              tombstones: page.tombstones,
+              nextCursor: page.nextCursor,
+            );
+            cursor = page.nextCursor;
+            hasMore = page.hasMore && (cursor ?? '').trim().isNotEmpty;
+            final snapshot = await localRepository.readSnapshot(limit: 200);
+            if (!mounted) return;
+            final syncedOrders = [...snapshot.orders]
+              ..sort(
+                (a, b) => _orderActivityAt(b).compareTo(_orderActivityAt(a)),
+              );
+            state = state.copyWith(
+              items: syncedOrders,
+              clientsById: {
+                ...snapshot.clientsById,
+                ..._clientMapFromOrders(syncedOrders),
+              },
+              usersById: {...state.usersById, ...snapshot.usersById},
+              refreshing: hasMore,
+              clearError: true,
+            );
+          }
+        }().whenComplete(() {
+          _inFlightDeltaSync = null;
+          if (mounted) {
+            state = state.copyWith(refreshing: false);
+          }
+        });
+    return _inFlightDeltaSync!;
+  }
+
   String _friendlyListMessage(Object error) {
     if (error is ApiException) {
       if (error.type == ApiErrorType.forbidden || error.code == 403) {
@@ -119,7 +165,7 @@ class ServiceOrdersListController
     if (!refresh && state.items.isEmpty) {
       final localRepository = ref.read(serviceOrdersLocalRepositoryProvider);
       await localRepository.prepareForViewer(_viewerUserId);
-      final snapshot = await localRepository.readSnapshot();
+      final snapshot = await localRepository.readSnapshot(limit: 200);
       if (!mounted) return;
       if (snapshot.orders.isNotEmpty ||
           snapshot.clientsById.isNotEmpty ||
@@ -183,6 +229,13 @@ class ServiceOrdersListController
           items: orders,
           clientsById: clientMap,
           usersById: userMap,
+        );
+        unawaited(
+          _runIncrementalSync(localRepository: localRepository).catchError((
+            Object _,
+          ) {
+            return null;
+          }),
         );
         if (!mounted) return;
         state = state.copyWith(

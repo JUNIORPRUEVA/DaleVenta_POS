@@ -12,8 +12,49 @@ final serviceOrdersApiProvider = Provider<ServiceOrdersApi>((ref) {
   return ServiceOrdersApi(ref.watch(dioProvider));
 });
 
+class ServiceOrdersSyncTombstone {
+  const ServiceOrdersSyncTombstone({
+    required this.id,
+    required this.reason,
+    this.deletedAt,
+    this.version,
+  });
+
+  final String id;
+  final String reason;
+  final DateTime? deletedAt;
+  final DateTime? version;
+
+  factory ServiceOrdersSyncTombstone.fromJson(Map<String, dynamic> json) {
+    return ServiceOrdersSyncTombstone(
+      id: (json['id'] ?? '').toString(),
+      reason: (json['reason'] ?? '').toString(),
+      deletedAt: DateTime.tryParse((json['deletedAt'] ?? '').toString()),
+      version: DateTime.tryParse((json['version'] ?? '').toString()),
+    );
+  }
+}
+
+class ServiceOrdersSyncResult {
+  const ServiceOrdersSyncResult({
+    required this.items,
+    required this.tombstones,
+    required this.hasMore,
+    this.nextCursor,
+    this.serverTime,
+  });
+
+  final List<ServiceOrderModel> items;
+  final List<ServiceOrdersSyncTombstone> tombstones;
+  final bool hasMore;
+  final String? nextCursor;
+  final DateTime? serverTime;
+}
+
 class ServiceOrdersApi {
   final Dio _dio;
+  static const _defaultListLimit = 200;
+  static const _maxListLimit = 200;
   static final _backgroundOptions = Options(extra: {'skipLoader': true});
 
   ServiceOrdersApi(this._dio);
@@ -49,8 +90,13 @@ class ServiceOrdersApi {
     );
   }
 
-  Future<List<ServiceOrderModel>> listOrders() async {
+  Future<List<ServiceOrderModel>> listOrders({
+    int page = 1,
+    int limit = _defaultListLimit,
+  }) async {
     const path = ApiRoutes.serviceOrders;
+    final effectivePage = page < 1 ? 1 : page;
+    final effectiveLimit = limit.clamp(1, _maxListLimit).toInt();
     final allStatuses = ServiceOrderStatus.values
         .map((status) => status.apiValue)
         .toList(growable: false);
@@ -58,7 +104,11 @@ class ServiceOrdersApi {
     try {
       final res = await _dio.get(
         path,
-        queryParameters: {'statuses': allStatuses.join(',')},
+        queryParameters: {
+          'statuses': allStatuses.join(','),
+          'page': effectivePage,
+          'limit': effectiveLimit,
+        },
         options: _backgroundOptions,
       );
       _logResponse('GET', path, res.statusCode);
@@ -70,6 +120,7 @@ class ServiceOrdersApi {
           : const <dynamic>[];
       return rows
           .whereType<Map>()
+          .take(effectiveLimit)
           .map((row) => ServiceOrderModel.fromJson(row.cast<String, dynamic>()))
           .toList(growable: false);
     } on DioException catch (error) {
@@ -80,6 +131,65 @@ class ServiceOrdersApi {
       throw ApiException.detailed(
         message:
             'No se pudieron cargar las órdenes. El servidor respondió con un formato inválido.',
+        type: ApiErrorType.parse,
+        displayCode: 'PARSE_ERROR',
+        technicalDetails: error.toString(),
+        retryable: false,
+      );
+    }
+  }
+
+  Future<ServiceOrdersSyncResult> syncOrders({
+    String? cursor,
+    int limit = _defaultListLimit,
+  }) async {
+    const path = ApiRoutes.serviceOrdersSync;
+    final effectiveLimit = limit.clamp(1, _maxListLimit).toInt();
+    _logRequest('GET', path);
+    try {
+      final res = await _dio.get(
+        path,
+        queryParameters: {
+          'limit': effectiveLimit,
+          if ((cursor ?? '').trim().isNotEmpty) 'cursor': cursor!.trim(),
+        },
+        options: _backgroundOptions,
+      );
+      _logResponse('GET', path, res.statusCode);
+      final raw =
+          (res.data as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{};
+      final items = (raw['items'] is List ? raw['items'] as List : const [])
+          .whereType<Map>()
+          .map((row) => ServiceOrderModel.fromJson(row.cast<String, dynamic>()))
+          .toList(growable: false);
+      final tombstones =
+          (raw['tombstones'] is List ? raw['tombstones'] as List : const [])
+              .whereType<Map>()
+              .map(
+                (row) => ServiceOrdersSyncTombstone.fromJson(
+                  row.cast<String, dynamic>(),
+                ),
+              )
+              .where((row) => row.id.trim().isNotEmpty)
+              .toList(growable: false);
+      return ServiceOrdersSyncResult(
+        items: items,
+        tombstones: tombstones,
+        hasMore: raw['hasMore'] == true,
+        nextCursor: (raw['nextCursor'] ?? '').toString().trim().isEmpty
+            ? null
+            : (raw['nextCursor'] ?? '').toString().trim(),
+        serverTime: DateTime.tryParse((raw['serverTime'] ?? '').toString()),
+      );
+    } on DioException catch (error) {
+      _logError('GET', path, error);
+      _rethrow(error, 'No se pudieron sincronizar las órdenes');
+    } catch (error) {
+      _logError('GET', path, error);
+      throw ApiException.detailed(
+        message:
+            'No se pudieron sincronizar las órdenes. El servidor respondió con un formato inválido.',
         type: ApiErrorType.parse,
         displayCode: 'PARSE_ERROR',
         technicalDetails: error.toString(),

@@ -3789,6 +3789,7 @@ model ServiceOrder {
   assignedToId              String?              @map("assigned_to") @db.Uuid
   lastStatusChangedAt       DateTime             @default(now()) @map("last_status_changed_at")
   lastStatusChangedByUserId String?              @map("last_status_changed_by_user_id") @db.Uuid
+  deletedAt                 DateTime?            @map("deleted_at")
   createdAt                 DateTime             @default(now()) @map("created_at")
   updatedAt                 DateTime             @updatedAt @map("updated_at")
 
@@ -3817,6 +3818,7 @@ model ServiceOrder {
   @@index([assignedToId])
   @@index([lastStatusChangedAt])
   @@index([lastStatusChangedByUserId])
+  @@index([deletedAt])
   @@index([technicianConfirmedById])
   @@index([parentOrderId])
   @@index([status, assignedToId])
