@@ -1,6 +1,7 @@
 import 'package:daleventa_pos/core/debug/app_error_reporter.dart';
 import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/errors/app_error_policy.dart';
+import 'package:daleventa_pos/core/errors/user_safe_error_text.dart';
 import 'package:daleventa_pos/core/errors/user_facing_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,22 +77,14 @@ void main() {
       ];
 
       final cases = <ApiException, String>{
-        ApiException.detailed(
-          message: 'boom',
-          type: ApiErrorType.forbidden,
-        ): 'No tienes permiso para realizar esta acción.',
-        ApiException.detailed(
-          message: 'boom',
-          type: ApiErrorType.unauthorized,
-        ): 'Tu sesión expiró. Inicia sesión nuevamente.',
-        ApiException.detailed(
-          message: 'boom',
-          type: ApiErrorType.server,
-        ): 'Ocurrió un problema en el servidor. Inténtalo nuevamente.',
-        ApiException.detailed(
-          message: 'boom',
-          type: ApiErrorType.network,
-        ): 'No pudimos conectarnos al servidor. Revisa tu conexión.',
+        ApiException.detailed(message: 'boom', type: ApiErrorType.forbidden):
+            'No tienes permiso para realizar esta acción.',
+        ApiException.detailed(message: 'boom', type: ApiErrorType.unauthorized):
+            'Tu sesión expiró. Inicia sesión nuevamente.',
+        ApiException.detailed(message: 'boom', type: ApiErrorType.server):
+            'Ocurrió un problema en el servidor. Inténtalo nuevamente.',
+        ApiException.detailed(message: 'boom', type: ApiErrorType.network):
+            'No pudimos conectarnos al servidor. Revisa tu conexión.',
       };
 
       for (final entry in cases.entries) {
@@ -108,6 +101,42 @@ void main() {
     test('media copy is marked as silent', () {
       expect(UserFacingError.media().silent, isTrue);
       expect(UserFacingError.media().kind, AppErrorKind.media);
+    });
+
+    test('userSafeErrorMessage blocks infrastructure markers', () {
+      const fallback = 'No pudimos actualizar esta información.';
+      final cases = <ApiException>[
+        const ApiException.detailed(
+          message: 'ApiException: No se pudo cargar (code: UNKNOWN)',
+          displayCode: 'UNKNOWN',
+        ),
+        const ApiException.detailed(
+          message: 'DioException statusCode: 500 RequestOptions',
+        ),
+        const ApiException.detailed(
+          message: 'operationId=sale_req_1 cashSessionId=session-a',
+        ),
+        const ApiException.detailed(
+          message: r'DatabaseException database_closed C:\FullPOS\db.sqlite',
+        ),
+      ];
+
+      for (final error in cases) {
+        expect(userSafeErrorMessage(error, fallback: fallback), fallback);
+      }
+    });
+
+    test('userSafeErrorMessage keeps clean business messages', () {
+      expect(
+        userSafeErrorMessage(
+          const ApiException.detailed(
+            message: 'No hay existencia suficiente para completar la venta.',
+            type: ApiErrorType.badRequest,
+          ),
+          fallback: 'No pudimos completar esta operación.',
+        ),
+        'No hay existencia suficiente para completar la venta.',
+      );
     });
   });
 
