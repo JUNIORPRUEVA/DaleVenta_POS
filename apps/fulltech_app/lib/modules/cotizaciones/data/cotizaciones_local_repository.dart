@@ -289,9 +289,15 @@ class CotizacionesLocalRepository {
     );
   }
 
-  Future<List<CotizacionModel>> listAll({required String companyId}) async {
+  Future<List<CotizacionModel>> listAll({
+    required String companyId,
+    int limit = 200,
+    int offset = 0,
+  }) async {
     final scope = _normalizeCompanyId(companyId);
     if (scope.isEmpty) return const [];
+    final boundedLimit = limit.clamp(1, 200).toInt();
+    final boundedOffset = offset < 0 ? 0 : offset;
     if (kIsWeb) {
       final draft = _memoryDraftByCompany[scope];
       final items =
@@ -299,7 +305,10 @@ class CotizacionesLocalRepository {
               .where((item) => draft?.id != item.id)
               .toList(growable: false)
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return items;
+      return items
+          .skip(boundedOffset)
+          .take(boundedLimit)
+          .toList(growable: false);
     }
 
     final db = await _db;
@@ -308,6 +317,8 @@ class CotizacionesLocalRepository {
       where: 'company_id = ? AND legacy_quarantined = ? AND is_draft = ?',
       whereArgs: [scope, 0, 0],
       orderBy: 'created_at DESC',
+      limit: boundedLimit,
+      offset: boundedOffset,
     );
 
     final itemsByQuote = await _loadItemsGrouped(

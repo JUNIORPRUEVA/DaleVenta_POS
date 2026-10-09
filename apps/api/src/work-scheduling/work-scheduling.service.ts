@@ -20,6 +20,9 @@ type JwtActor = {
 };
 
 type CoverageRuleMap = Map<string, Map<Weekday, number>>; // role -> weekday -> min
+const WORK_SCHEDULING_EMPLOYEE_LIMIT = 500;
+const WORK_SCHEDULING_PROFILE_LIMIT = 100;
+const WORK_SCHEDULING_EXCEPTION_LIMIT = 500;
 
 type ValidationWarning =
   | {
@@ -207,6 +210,7 @@ export class WorkSchedulingService {
         role: true,
         blocked: true,
       },
+      take: WORK_SCHEDULING_EMPLOYEE_LIMIT,
     });
 
     await this.ensureEmployeeConfigs(companyId, users.map((u) => u.id));
@@ -346,6 +350,7 @@ export class WorkSchedulingService {
       where: { companyId },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
       include: { days: { orderBy: { weekday: 'asc' } } },
+      take: WORK_SCHEDULING_PROFILE_LIMIT,
     });
 
     return profiles.map((p) => ({
@@ -551,6 +556,7 @@ export class WorkSchedulingService {
     const list = await this.prisma.workScheduleException.findMany({
       where,
       orderBy: [{ dateFrom: 'desc' }, { createdAt: 'desc' }],
+      take: WORK_SCHEDULING_EXCEPTION_LIMIT,
     });
 
     return list.map((x) => ({
@@ -762,6 +768,7 @@ export class WorkSchedulingService {
       },
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
       select: { id: true, nombreCompleto: true, role: true, blocked: true },
+      take: WORK_SCHEDULING_EMPLOYEE_LIMIT,
     });
 
     await this.ensureEmployeeConfigs(companyId, users.map((u) => u.id));
@@ -1157,6 +1164,7 @@ export class WorkSchedulingService {
       },
       orderBy: [{ userId: 'asc' }, { dateFrom: 'asc' }],
       select: { id: true, userId: true, type: true, dateFrom: true, dateTo: true, note: true },
+      take: WORK_SCHEDULING_EXCEPTION_LIMIT,
     });
 
     const globalExceptions = exceptions.filter((x) => x.userId == null);

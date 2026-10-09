@@ -29,6 +29,7 @@ import { AdjustProductStockDto } from "./dto/adjust-product-stock.dto";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { ImportProductImageUrlDto } from "./dto/import-product-image-url.dto";
+import { ProductsQueryDto } from "./dto/products-query.dto";
 import { ProductCostInterceptor } from "./product-cost.interceptor";
 import { ProductsService } from "./products.service";
 import { FileInterceptor } from "@nestjs/platform-express";
@@ -92,8 +93,8 @@ export class ProductsController {
   @Header("Expires", "0")
   @Header("Surrogate-Control", "no-store")
   @Get()
-  findAll(@Req() req: Request) {
-    return this.products.findAll(req.user as TenantUser);
+  findAll(@Req() req: Request, @Query() query: ProductsQueryDto) {
+    return this.products.findAll(req.user as TenantUser, query);
   }
 
   @UseGuards(AuthGuard("jwt"))

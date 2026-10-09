@@ -18,6 +18,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { R2Service } from '../storage/r2.service';
 import { requireTenant } from '../auth/tenant-context';
 import {
+  normalizePagePagination,
+  toPageResult,
+} from '../common/pagination/page-pagination';
+import {
   CloseFinancialSummaryQueryDto,
   CloseStatus,
   CloseTransferEntryDto,
@@ -945,8 +949,16 @@ export class ContabilidadService {
     return this.afterCloseSubmitted(close.id);
   }
 
-  async getCloses(query: GetClosesQuery, actor?: Actor) {
+  async getCloses(
+    query: GetClosesQuery & { page?: string; limit?: string; take?: string },
+    actor?: Actor,
+  ) {
     const companyId = requireTenant(actor as any);
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit ?? query.take,
+      defaultLimit: 50,
+    });
     const where: Prisma.CloseWhereInput = { companyId };
     if (!this.canReadAllCloses(actor ?? {})) {
       this.normalizeRoleGuard(actor ?? {});
@@ -978,7 +990,7 @@ export class ContabilidadService {
       where.type = type;
     }
 
-    return this.prisma.close.findMany({
+    const rows = await this.prisma.close.findMany({
       where,
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       include: {
@@ -987,7 +999,10 @@ export class ContabilidadService {
           orderBy: { createdAt: 'asc' },
         },
       },
+      skip: pagination.skip,
+      take: pagination.take,
     });
+    return toPageResult(rows, pagination);
   }
 
   async getCloseFinancialSummary(
@@ -1031,15 +1046,18 @@ export class ContabilidadService {
       ...(businessType != null ? { type: businessType } : {}),
     };
 
-    const closes = await this.prisma.close.findMany({
+    const closeTotals = await this.prisma.close.aggregate({
       where,
-      include: {
-        transfers: {
-          select: {
-            bankName: true,
-            amount: true,
-          },
-        },
+      _count: { _all: true },
+      _sum: {
+        cash: true,
+        cashDelivered: true,
+        transfer: true,
+        card: true,
+        otherIncome: true,
+        expenses: true,
+        netTotal: true,
+        difference: true,
       },
     });
 
@@ -1064,72 +1082,76 @@ export class ContabilidadService {
       return 'Otros bancos';
     };
 
-    let cashDeclared = 0;
-    let cashDelivered = 0;
-    let transfers = 0;
-    let cardPayments = 0;
-    let otherIncome = 0;
-    let expenses = 0;
-    let netTotal = 0;
-    let difference = 0;
+    const cashDeclared = toNumber(closeTotals._sum.cash);
+    const cashDelivered = toNumber(closeTotals._sum.cashDelivered);
+    const transfers = toNumber(closeTotals._sum.transfer);
+    const cardPayments = toNumber(closeTotals._sum.card);
+    const otherIncome = toNumber(closeTotals._sum.otherIncome);
+    const expenses = toNumber(closeTotals._sum.expenses);
+    const netTotal = toNumber(closeTotals._sum.netTotal);
+    const difference = toNumber(closeTotals._sum.difference);
 
-    for (const close of closes) {
-      cashDeclared += toNumber(close.cash);
-      cashDelivered += toNumber(close.cashDelivered);
-      transfers += toNumber(close.transfer);
-      cardPayments += toNumber(close.card);
-      otherIncome += toNumber(close.otherIncome);
-      expenses += toNumber(close.expenses);
-      netTotal += toNumber(close.netTotal);
-      difference += toNumber(close.difference);
+    const transferRows = await this.prisma.closeTransfer.groupBy({
+      by: ['bankName'],
+      where: {
+        close: where,
+      },
+      _sum: { amount: true },
+    });
 
-      for (const transfer of close.transfers) {
-        const key = classifyBank(transfer.bankName);
-        bankTotals.set(
-          key,
-          (bankTotals.get(key) ?? 0) + toNumber(transfer.amount),
-        );
-      }
+    for (const transfer of transferRows) {
+      const key = classifyBank(transfer.bankName);
+      bankTotals.set(
+        key,
+        (bankTotals.get(key) ?? 0) + toNumber(transfer._sum.amount),
+      );
     }
 
-    const deposits = await this.prisma.depositOrder.findMany({
-      where: {
-        companyId,
-        status: DepositOrderStatus.EXECUTED,
-        windowFrom: { lte: end },
-        windowTo: { gte: start },
+    const depositWhere: Prisma.DepositOrderWhereInput = {
+      companyId,
+      status: DepositOrderStatus.EXECUTED,
+      windowFrom: { lte: end },
+      windowTo: { gte: start },
+    };
+    const depositAggregate =
+      businessType == null
+        ? await this.prisma.depositOrder.aggregate({
+            where: depositWhere,
+            _sum: { depositTotal: true },
+          })
+        : null;
+    const depositByTypeRows =
+      businessType == null
+        ? []
+        : await this.prisma.$queryRaw<Array<{ deposited: Prisma.Decimal | number | string | null }>>`
+            SELECT SUM(COALESCE(("depositByType"->>${businessType})::numeric, 0)) AS deposited
+            FROM "DepositOrder"
+            WHERE "company_id" = ${companyId}::uuid
+              AND "status" = ${DepositOrderStatus.EXECUTED}::"DepositOrderStatus"
+              AND "windowFrom" <= ${end}
+              AND "windowTo" >= ${start}
+          `;
+    const latestDeposit = await this.prisma.depositOrder.findFirst({
+      where: depositWhere,
+      select: {
+        executedAt: true,
+        createdAt: true,
+        bankName: true,
       },
       orderBy: [{ executedAt: 'desc' }, { createdAt: 'desc' }],
     });
 
-    const depositFromOrder = (order: {
-      depositTotal: Prisma.Decimal;
-      depositByType: Prisma.JsonValue;
-    }) => {
-      if (businessType == null) {
-        return toNumber(order.depositTotal);
-      }
-
-      const payload =
-        order.depositByType && typeof order.depositByType === 'object'
-          ? (order.depositByType as Record<string, unknown>)
-          : null;
-      if (!payload) return 0;
-      return toNumber(payload[businessType]);
-    };
-
-    let deposited = 0;
-    let lastDepositDate: string | null = null;
-    let destinationBank: string | null = null;
-    for (const order of deposits) {
-      const amount = depositFromOrder(order);
-      if (amount <= 0) continue;
-      deposited += amount;
-      if (lastDepositDate == null) {
-        lastDepositDate = (order.executedAt ?? order.createdAt).toISOString();
-        destinationBank = (order.bankName ?? '').trim() || null;
-      }
-    }
+    const deposited =
+      businessType == null
+        ? toNumber(depositAggregate?._sum.depositTotal)
+        : toNumber(depositByTypeRows[0]?.deposited);
+    const lastDepositDate = latestDeposit
+      ? (latestDeposit.executedAt ?? latestDeposit.createdAt).toISOString()
+      : null;
+    const destinationBank =
+      latestDeposit != null
+        ? (latestDeposit.bankName ?? '').trim() || null
+        : null;
 
     const cashBase = cashDelivered > 0 ? cashDelivered : cashDeclared;
     const depositedToCash = Math.min(deposited, cashBase);
@@ -1167,7 +1189,7 @@ export class ContabilidadService {
         businessType,
         companyId,
       },
-      count: closes.length,
+      count: closeTotals._count._all,
       totals: {
         cashDeclared: toMoney(cashDeclared),
         cashDelivered: toMoney(cashDelivered),
@@ -3100,6 +3122,14 @@ export class ContabilidadService {
   async getPayablePayments(query: PayablePaymentsQueryDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
     const companyId = requireTenant(actor as any);
+    const pagination = normalizePagePagination({
+      page: (query as PayablePaymentsQueryDto & { page?: string }).page,
+      limit:
+        (query as PayablePaymentsQueryDto & { limit?: string; take?: string })
+          .limit ??
+        (query as PayablePaymentsQueryDto & { take?: string }).take,
+      defaultLimit: 50,
+    });
     const where: Prisma.PayablePaymentWhereInput = { companyId };
 
     if (query.serviceId) {
@@ -3115,13 +3145,16 @@ export class ContabilidadService {
       };
     }
 
-    return this.prisma.payablePayment.findMany({
+    const rows = await this.prisma.payablePayment.findMany({
       where,
       include: {
         service: true,
       },
       orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+      skip: pagination.skip,
+      take: pagination.take,
     });
+    return toPageResult(rows, pagination);
   }
 
   async deletePayableService(id: string, actor: Actor) {

@@ -20,6 +20,8 @@ type ModuleSpec = {
   sensitiveFieldsToExclude: string[];
 };
 
+const BACKUP_EXTRACT_PAGE_SIZE = 1000;
+
 function byId() {
   return { orderBy: { id: "asc" as const } };
 }
@@ -37,11 +39,32 @@ function direct(delegateName: string, name = delegateName): ModuleSpec {
     dependencies: ["Company"],
     sensitiveFieldsToExclude: [],
     extract: async (tx, companyId) =>
-      ((tx as unknown as Record<string, { findMany(args: unknown): Promise<unknown[]> }>)[delegateName]).findMany({
-        where: { companyId },
-        ...byId(),
-      }),
+      findManyPagedById(
+        (tx as unknown as Record<string, { findMany(args: unknown): Promise<unknown[]> }>)[delegateName],
+        { companyId },
+      ),
   };
+}
+
+async function findManyPagedById(
+  delegate: { findMany(args: any): Promise<unknown[]> },
+  where: Record<string, unknown>,
+) {
+  const output: unknown[] = [];
+  let lastId: string | null = null;
+  for (;;) {
+    const page = (await delegate.findMany({
+      where: lastId ? { AND: [where, { id: { gt: lastId } }] } : where,
+      orderBy: { id: "asc" },
+      take: BACKUP_EXTRACT_PAGE_SIZE,
+    })) as Array<Record<string, unknown>>;
+    output.push(...page);
+    if (page.length < BACKUP_EXTRACT_PAGE_SIZE) break;
+    const nextId = page[page.length - 1]?.id;
+    if (typeof nextId !== "string" || nextId === lastId) break;
+    lastId = nextId;
+  }
+  return output;
 }
 
 export class BackupExtractor {
@@ -176,7 +199,7 @@ export class BackupExtractor {
       ownership: "INDIRECT",
       dependencies: ["PurchaseOrder", "Product"],
       extract: async (tx, companyId) =>
-        tx.purchaseOrderItem.findMany({ where: { purchaseOrder: { companyId } }, ...byId() }),
+        findManyPagedById(tx.purchaseOrderItem, { purchaseOrder: { companyId } }),
     },
     {
       ...direct("purchaseReceipt", "purchase_receipts"),
@@ -184,7 +207,7 @@ export class BackupExtractor {
       ownership: "INDIRECT",
       dependencies: ["PurchaseOrder"],
       extract: async (tx, companyId) =>
-        tx.purchaseReceipt.findMany({ where: { purchaseOrder: { companyId } }, ...byId() }),
+        findManyPagedById(tx.purchaseReceipt, { purchaseOrder: { companyId } }),
     },
     {
       ...direct("purchaseReceiptItem", "purchase_receipt_items"),
@@ -192,10 +215,7 @@ export class BackupExtractor {
       ownership: "INDIRECT",
       dependencies: ["PurchaseReceipt", "PurchaseOrderItem"],
       extract: async (tx, companyId) =>
-        tx.purchaseReceiptItem.findMany({
-          where: { receipt: { purchaseOrder: { companyId } } },
-          ...byId(),
-        }),
+        findManyPagedById(tx.purchaseReceiptItem, { receipt: { purchaseOrder: { companyId } } }),
     },
     direct("client", "clients"),
     direct("sale", "sales"),
@@ -204,7 +224,7 @@ export class BackupExtractor {
       tenantKey: "sale.companyId",
       ownership: "INDIRECT",
       dependencies: ["Sale", "Product"],
-      extract: async (tx, companyId) => tx.saleItem.findMany({ where: { sale: { companyId } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.saleItem, { sale: { companyId } }),
     },
     direct("saleCreditPayment", "sale_credit_payments"),
     direct("cashboxDaily", "cashbox_dailies"),
@@ -218,14 +238,14 @@ export class BackupExtractor {
       tenantKey: "close.companyId",
       ownership: "INDIRECT",
       dependencies: ["Close"],
-      extract: async (tx, companyId) => tx.closeTransfer.findMany({ where: { close: { companyId } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.closeTransfer, { close: { companyId } }),
     },
     {
       ...direct("closeTransferVoucher", "close_transfer_vouchers"),
       tenantKey: "transfer.close.companyId",
       ownership: "INDIRECT",
       dependencies: ["CloseTransfer"],
-      extract: async (tx, companyId) => tx.closeTransferVoucher.findMany({ where: { transfer: { close: { companyId } } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.closeTransferVoucher, { transfer: { close: { companyId } } }),
     },
     direct("depositOrder", "deposit_orders"),
     direct("depositBank", "deposit_banks"),
@@ -234,7 +254,7 @@ export class BackupExtractor {
       tenantKey: "bank.companyId",
       ownership: "INDIRECT",
       dependencies: ["DepositBank"],
-      extract: async (tx, companyId) => tx.depositBankAccount.findMany({ where: { bank: { companyId } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.depositBankAccount, { bank: { companyId } }),
     },
     direct("fiscalInvoice", "fiscal_invoices"),
     direct("payableService", "payable_services"),
@@ -252,7 +272,7 @@ export class BackupExtractor {
       tenantKey: "cotizacion.companyId",
       ownership: "INDIRECT",
       dependencies: ["Cotizacion", "Product"],
-      extract: async (tx, companyId) => tx.cotizacionItem.findMany({ where: { cotizacion: { companyId } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.cotizacionItem, { cotizacion: { companyId } }),
     },
     direct("workScheduleProfile", "work_schedule_profiles"),
     {
@@ -260,7 +280,7 @@ export class BackupExtractor {
       tenantKey: "profile.companyId",
       ownership: "INDIRECT",
       dependencies: ["WorkScheduleProfile"],
-      extract: async (tx, companyId) => tx.workScheduleProfileDay.findMany({ where: { profile: { companyId } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.workScheduleProfileDay, { profile: { companyId } }),
     },
     direct("workCoverageRule", "work_coverage_rules"),
     direct("workEmployeeConfig", "work_employee_configs"),
@@ -271,7 +291,7 @@ export class BackupExtractor {
       tenantKey: "weekSchedule.companyId",
       ownership: "INDIRECT",
       dependencies: ["WorkWeekSchedule", "User"],
-      extract: async (tx, companyId) => tx.workDayAssignment.findMany({ where: { weekSchedule: { companyId } }, ...byId() }),
+      extract: async (tx, companyId) => findManyPagedById(tx.workDayAssignment, { weekSchedule: { companyId } }),
     },
     direct("workScheduleAuditLog", "work_schedule_audit_logs"),
     direct("aiAssistantConversationTurn", "ai_assistant_conversation_turns"),

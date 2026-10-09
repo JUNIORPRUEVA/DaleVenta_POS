@@ -25,6 +25,7 @@ import {
   type ProductSource,
 } from "./product-source.resolver";
 import { UpdateProductDto } from "./dto/update-product.dto";
+import { ProductsQueryDto } from "./dto/products-query.dto";
 import {
   DEFAULT_UNIT_OF_MEASURE,
   DEFAULT_UNIT_OF_MEASURE_ID,
@@ -33,6 +34,10 @@ import {
 } from "./unit-of-measure.util";
 import { InventoryMutationService } from "../inventory/inventory-mutation.service";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import {
+  normalizePagePagination,
+  toPageResult,
+} from "../common/pagination/page-pagination";
 
 type ResolvedProductWarehouse = { id: string; name: string; code: string };
 const PRODUCT_HAS_HISTORY_CODE = "PRODUCT_HAS_HISTORY";
@@ -1139,8 +1144,14 @@ export class ProductsService {
     }
   }
 
-  async findAll(user: TenantUser): Promise<any[]> {
+  async findAll(user: TenantUser, query: ProductsQueryDto = {}): Promise<any> {
     const companyId = requireTenant(user);
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+    });
+    const search = query.search?.trim();
+    const category = query.category?.trim();
     const sourceContext =
       await this.productSourceResolver.resolveForCompany(companyId);
     if (
@@ -1153,7 +1164,15 @@ export class ProductsService {
           source: sourceContext.source,
           fullposCompanyId: sourceContext.fullposCompanyId,
         });
-        return response.items;
+        const filtered = this.filterCatalogProducts(response.items, {
+          search,
+          category,
+          includeArchived: query.includeArchived === "true",
+        });
+        return toPageResult(
+          filtered.slice(pagination.skip, pagination.skip + pagination.take),
+          pagination,
+        );
       } catch (error) {
         if (!this.allowLocalFallback) {
           throw error;
@@ -1168,21 +1187,75 @@ export class ProductsService {
     }
 
     try {
+      const where: Prisma.ProductWhereInput = {
+        companyId,
+        ...(query.includeArchived === "true" ? {} : { archivedAt: null }),
+        ...(category ? { categoria: category } : {}),
+        ...(search
+          ? {
+              OR: [
+                { nombre: { contains: search, mode: "insensitive" } },
+                { codigo: { contains: search, mode: "insensitive" } },
+                { categoria: { contains: search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+        ...(query.warehouseId
+          ? { warehouseStocks: { some: { warehouseId: query.warehouseId } } }
+          : {}),
+      };
       const products = await this.prisma.product.findMany({
-        where: { companyId, archivedAt: null },
-        orderBy: { nombre: "asc" },
+        where,
+        orderBy: [{ nombre: "asc" }, { id: "asc" }],
+        skip: pagination.skip,
+        take: pagination.take,
         select: this.catalogProductSelect(),
       });
-      return products.map((p) => this.mapProduct(p));
+      return toPageResult(products.map((p) => this.mapProduct(p)), pagination);
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       const products = await this.prisma.product.findMany({
         where: { companyId },
-        orderBy: { nombre: "asc" },
+        orderBy: [{ nombre: "asc" }, { id: "asc" }],
+        skip: pagination.skip,
+        take: pagination.take,
         select: this.legacyCatalogProductSelect(),
       });
-      return products.map((p) => this.mapProduct({ ...p, archivedAt: null }));
+      return toPageResult(
+        products.map((p) => this.mapProduct({ ...p, archivedAt: null })),
+        pagination,
+      );
     }
+  }
+
+  private filterCatalogProducts(
+    items: any[],
+    filters: { search?: string; category?: string; includeArchived: boolean },
+  ) {
+    const search = filters.search?.toLowerCase();
+    const category = filters.category?.toLowerCase();
+    return items.filter((item) => {
+      if (!filters.includeArchived && (item.archived || item.archivedAt)) {
+        return false;
+      }
+      if (
+        category &&
+        `${item.categoria ?? item.categoriaNombre ?? ""}`.toLowerCase() !==
+          category
+      ) {
+        return false;
+      }
+      if (!search) return true;
+      return [
+        item.nombre,
+        item.codigo,
+        item.categoria,
+        item.categoriaNombre,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
   }
 
   async findOne(user: TenantUser, id: string): Promise<any> {

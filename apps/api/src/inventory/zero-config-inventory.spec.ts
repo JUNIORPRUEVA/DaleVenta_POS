@@ -34,7 +34,12 @@ function buildFakePrisma(seed: {
 
   const tx: any = {
     company: {
-      findMany: jest.fn(async () => [...db.companies].sort((a, b) => a.id.localeCompare(b.id))),
+      findMany: jest.fn(async ({ where, take } = {}) =>
+        [...db.companies]
+          .filter((row) => !where?.id?.gt || row.id > where.id.gt)
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, take ?? db.companies.length),
+      ),
       findUnique: jest.fn(async ({ where }) =>
         db.companies.find((row) => row.id === where.id) ?? null,
       ),
@@ -94,10 +99,15 @@ function buildFakePrisma(seed: {
       }),
     },
     product: {
-      findMany: jest.fn(async ({ where }) =>
+      findMany: jest.fn(async ({ where, take }) =>
         db.products
-          .filter((row) => row.companyId === where.companyId)
+          .filter(
+            (row) =>
+              row.companyId === where.companyId &&
+              (!where.id?.gt || row.id > where.id.gt),
+          )
           .sort((a, b) => a.id.localeCompare(b.id))
+          .slice(0, take ?? db.products.length)
           .map((row) => ({ id: row.id, stock: row.stock })),
       ),
     },

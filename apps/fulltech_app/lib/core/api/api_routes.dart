@@ -347,6 +347,7 @@ class ApiRoutes {
 
   // Service orders
   static const serviceOrders = '/service-orders';
+  static const serviceOrdersSync = '/service-orders/sync';
   static const serviceOrdersDebugPurge = '/service-orders/debug/purge';
   static const serviceOrderSalesSummary = '/service-orders/sales-summary';
   static const serviceOrderCommissions = '/service-orders/commissions';

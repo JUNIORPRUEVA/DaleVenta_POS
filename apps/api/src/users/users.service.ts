@@ -33,6 +33,7 @@ const ADMIN_MEMBER_ROLES = new Set<CompanyMemberRole>([
 ]);
 
 const ADMIN_LEGACY_ROLES = new Set<Role>([Role.ADMIN]);
+const USERS_ADMIN_LIST_LIMIT = 500;
 
 @Injectable()
 export class UsersService {
@@ -667,6 +668,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       FROM users
       WHERE company_id = ${companyId}::uuid
       ORDER BY "createdAt" DESC
+      LIMIT ${USERS_ADMIN_LIST_LIMIT}
     `);
 
     return rows.map((row) => this.mapSafeUserRow(row));
@@ -1050,6 +1052,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       .findMany({
         where: { companyId },
         orderBy: { createdAt: "desc" },
+        take: USERS_ADMIN_LIST_LIMIT,
         select: {
           id: true,
           email: true,
@@ -1122,6 +1125,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         FROM users
         WHERE company_id = ${companyId}::uuid
         ORDER BY "createdAt" DESC
+        LIMIT ${USERS_ADMIN_LIST_LIMIT}
       `);
         return rows.map((row) => this.mapMinimalUser(row));
       });

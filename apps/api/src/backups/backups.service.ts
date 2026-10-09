@@ -22,6 +22,8 @@ import {
   MAX_AUTOMATIC_BACKUPS_PER_COMPANY,
 } from "./backup.types";
 
+const AUTOMATIC_BACKUP_COMPANY_BATCH_SIZE = 25;
+
 type BackupRecordRow = {
   id: string;
   companyId: string;
@@ -226,34 +228,50 @@ export class BackupsService {
 
   async runAutomaticBackups() {
     const cutoff = new Date(Date.now() - AUTOMATIC_BACKUP_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
-    const companies = await this.prisma.company.findMany({
-      where: { status: CompanyStatus.ACTIVE },
-      select: { id: true },
-      orderBy: { id: "asc" },
-    });
-    for (const company of companies) {
-      const latest = await (this.prisma as never as {
-        backupRecord: { findFirst(args: unknown): Promise<BackupRecordRow | null> };
-      }).backupRecord.findFirst({
+    let lastCompanyId: string | null = null;
+    let processed = 0;
+    let succeeded = 0;
+    let failed = 0;
+    for (;;) {
+      const companies: Array<{ id: string }> = await this.prisma.company.findMany({
         where: {
-          companyId: company.id,
-          type: BackupType.AUTOMATIC,
-          status: BackupStatus.COMPLETE,
-          deletedAt: null,
+          status: CompanyStatus.ACTIVE,
+          ...(lastCompanyId ? { id: { gt: lastCompanyId } } : {}),
         },
-        orderBy: { createdAt: "desc" },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: AUTOMATIC_BACKUP_COMPANY_BATCH_SIZE,
       });
-      if (latest && latest.createdAt > cutoff) continue;
-      try {
-        await this.createAutomaticForCompany(company.id);
-      } catch (error) {
-        this.logger.warn(
-          `Automatic backup failed companyId=${company.id}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+      if (companies.length === 0) break;
+      for (const company of companies) {
+        processed += 1;
+        const latest = await (this.prisma as never as {
+          backupRecord: { findFirst(args: unknown): Promise<BackupRecordRow | null> };
+        }).backupRecord.findFirst({
+          where: {
+            companyId: company.id,
+            type: BackupType.AUTOMATIC,
+            status: BackupStatus.COMPLETE,
+            deletedAt: null,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        if (latest && latest.createdAt > cutoff) continue;
+        try {
+          await this.createAutomaticForCompany(company.id);
+          succeeded += 1;
+        } catch (error) {
+          failed += 1;
+          this.logger.warn(
+            `Automatic backup failed companyId=${company.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
+      lastCompanyId = companies[companies.length - 1]?.id ?? lastCompanyId;
     }
+    return { processed, succeeded, failed };
   }
 
   async applyRetention(companyId: string) {
@@ -267,6 +285,7 @@ export class BackupsService {
         deletedAt: null,
       },
       orderBy: { createdAt: "desc" },
+      take: MAX_AUTOMATIC_BACKUPS_PER_COMPANY + 1,
     })) as BackupRecordRow[];
     const stale = rows.slice(MAX_AUTOMATIC_BACKUPS_PER_COMPANY);
     for (const row of stale) {

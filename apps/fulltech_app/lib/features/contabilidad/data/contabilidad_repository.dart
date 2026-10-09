@@ -204,6 +204,19 @@ class ContabilidadRepository {
     return normalized;
   }
 
+  /// Extrae las filas de una respuesta que puede llegar como lista directa o
+  /// como sobre paginado `{ items: [...], page, limit, hasMore, nextPage }`.
+  List<dynamic> _rows(dynamic data) {
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in ['items', 'data', 'rows']) {
+        final candidate = data[key];
+        if (candidate is List) return candidate;
+      }
+    }
+    return const [];
+  }
+
   Future<List<CloseModel>> listCloses({
     required DateTime from,
     required DateTime to,
@@ -234,7 +247,7 @@ class ContabilidadRepository {
             ),
           );
 
-      final rows = res.data is List ? (res.data as List) : const [];
+      final rows = _rows(res.data);
       try {
         return rows
             .whereType<Map>()
@@ -1242,7 +1255,7 @@ class ContabilidadRepository {
         },
       );
 
-      final rows = res.data is List ? (res.data as List) : const [];
+      final rows = _rows(res.data);
       return rows
           .whereType<Map>()
           .map((row) => PayablePayment.fromJson(row.cast<String, dynamic>()))
