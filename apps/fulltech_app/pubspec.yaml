@@ -22,7 +22,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # maps CFBundleShortVersionString to $(FLUTTER_BUILD_NAME), and codemagic.yaml passes it
 # to `flutter build ipa --build-name`. App Store Connect closes version trains, so never
 # reuse or lower a version that was already uploaded (1.0.3 and 1.0.5 are closed).
-version: 1.0.6+131
+version: 1.0.6+132
 
 environment:
   sdk: ^3.10.1
