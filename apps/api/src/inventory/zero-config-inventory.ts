@@ -6,6 +6,8 @@ export const DEFAULT_WAREHOUSE_CODE = "MAIN";
 export const DEFAULT_WAREHOUSE_NAME = "Main Warehouse";
 export const DEFAULT_TERMINAL_CODE = "DEFAULT";
 export const DEFAULT_TERMINAL_NAME = "Default Terminal";
+const ZERO_CONFIG_COMPANY_BATCH_SIZE = 100;
+const ZERO_CONFIG_PRODUCT_BATCH_SIZE = 500;
 
 type TransactionClient = Prisma.TransactionClient;
 type PrismaLike = Pick<PrismaClient, "$transaction" | "company">;
@@ -46,6 +48,21 @@ function stockHash(products: LocalProductSnapshot[]) {
     .map((product) => `${product.id}:${decimalKey(product.stock)}`)
     .join(",");
   return createHash("sha256").update(input).digest("hex");
+}
+
+function stockHashAccumulator() {
+  const hash = createHash("sha256");
+  let first = true;
+  return {
+    add(product: LocalProductSnapshot) {
+      if (!first) hash.update(",");
+      first = false;
+      hash.update(`${product.id}:${decimalKey(product.stock)}`);
+    },
+    digest() {
+      return hash.digest("hex");
+    },
+  };
 }
 
 export async function ensureDefaultWarehouseAndTerminal(
@@ -202,75 +219,94 @@ export async function backfillZeroConfigInventoryForCompany(
   const isLocalCompany =
     !company?.productSource || company.productSource === "LOCAL";
 
-  const products = isLocalCompany
-    ? await tx.product.findMany({
+  let localProductCount = 0;
+  let createdWarehouseStocks = 0;
+  const hashBuilder = stockHashAccumulator();
+
+  if (isLocalCompany) {
+    let cursor: string | undefined;
+    while (true) {
+      const products = await tx.product.findMany({
         where: {
           companyId,
           itemType: ProductItemType.PRODUCT,
           trackInventory: true,
+          ...(cursor ? { id: { gt: cursor } } : {}),
         },
-        select: { id: true, stock: true, itemType: true, trackInventory: true },
+        select: {
+          id: true,
+          stock: true,
+          itemType: true,
+          trackInventory: true,
+        },
         orderBy: { id: "asc" },
-      })
-    : [];
-  const productIds = products.map((product) => product.id);
-  const existingStocks = productIds.length
-    ? await tx.warehouseStock.findMany({
+        take: ZERO_CONFIG_PRODUCT_BATCH_SIZE,
+      });
+      if (products.length === 0) break;
+
+      for (const product of products) hashBuilder.add(product);
+      localProductCount += products.length;
+
+      const productIds = products.map((product) => product.id);
+      const existingStocks = await tx.warehouseStock.findMany({
         where: {
           companyId,
           warehouseId: warehouse.id,
           productId: { in: productIds },
         },
         select: { productId: true, quantity: true },
-      })
-    : [];
-  const stockByProductId = new Map(
-    existingStocks.map((stock) => [stock.productId, stock.quantity]),
-  );
+      });
+      const stockByProductId = new Map(
+        existingStocks.map((stock) => [stock.productId, stock.quantity]),
+      );
 
-  const mismatches = products.filter((product) => {
-    const quantity = stockByProductId.get(product.id);
-    return quantity && decimalKey(quantity) !== decimalKey(product.stock);
-  });
-  if (mismatches.length > 0) {
-    throw new Error(
-      `W3 backfill refused to overwrite ${mismatches.length} existing WarehouseStock rows for company ${companyId}`,
-    );
-  }
+      const mismatches = products.filter((product) => {
+        const quantity = stockByProductId.get(product.id);
+        return quantity && decimalKey(quantity) !== decimalKey(product.stock);
+      });
+      if (mismatches.length > 0) {
+        throw new Error(
+          `W3 backfill refused to overwrite ${mismatches.length} existing WarehouseStock rows for company ${companyId}`,
+        );
+      }
 
-  const missingStocks = products.filter(
-    (product) => !stockByProductId.has(product.id),
-  );
-  if (missingStocks.length > 0) {
-    await tx.warehouseStock.createMany({
-      data: missingStocks.map((product) => ({
-        id: randomUUID(),
-        companyId,
-        warehouseId: warehouse.id,
-        productId: product.id,
-        quantity: product.stock,
-      })),
-    });
+      const missingStocks = products.filter(
+        (product) => !stockByProductId.has(product.id),
+      );
+      if (missingStocks.length > 0) {
+        await tx.warehouseStock.createMany({
+          data: missingStocks.map((product) => ({
+            id: randomUUID(),
+            companyId,
+            warehouseId: warehouse.id,
+            productId: product.id,
+            quantity: product.stock,
+          })),
+        });
+      }
+      createdWarehouseStocks += missingStocks.length;
+      cursor = products[products.length - 1]?.id;
+      if (products.length < ZERO_CONFIG_PRODUCT_BATCH_SIZE) break;
+    }
   }
-  const createdWarehouseStocks = missingStocks.length;
 
   const warehouseStockCount = await tx.warehouseStock.count({
     where: { companyId, warehouseId: warehouse.id },
   });
-  if (warehouseStockCount !== products.length) {
+  if (warehouseStockCount !== localProductCount) {
     throw new Error(
-      `W3 backfill expected ${products.length} WarehouseStock rows for company ${companyId}, found ${warehouseStockCount}`,
+      `W3 backfill expected ${localProductCount} WarehouseStock rows for company ${companyId}, found ${warehouseStockCount}`,
     );
   }
 
-  const hash = stockHash(products);
+  const hash = isLocalCompany ? hashBuilder.digest() : stockHash([]);
   await tx.inventoryZeroConfigState.update({
     where: { companyId },
     data: {
       status: "COMPLETED",
       warehouseId: warehouse.id,
       terminalId: terminal.id,
-      localProductCount: products.length,
+      localProductCount,
       warehouseStockCount,
       stockHash: hash,
       completedAt: new Date(),
@@ -282,7 +318,7 @@ export async function backfillZeroConfigInventoryForCompany(
     status: "completed",
     warehouseId: warehouse.id,
     terminalId: terminal.id,
-    localProductCount: products.length,
+    localProductCount,
     createdWarehouseStocks,
     warehouseStockCount,
     stockHash: hash,
@@ -292,22 +328,32 @@ export async function backfillZeroConfigInventoryForCompany(
 export async function backfillZeroConfigInventoryForAllCompanies(
   prisma: PrismaLike,
 ): Promise<ZeroConfigBackfillSummary> {
-  const companies = await prisma.company.findMany({
-    select: { id: true },
-    orderBy: { id: "asc" },
-  });
   const results: ZeroConfigCompanyResult[] = [];
+  let cursor: string | undefined;
 
-  for (const company of companies) {
-    const result = await prisma.$transaction((tx) =>
-      backfillZeroConfigInventoryForCompany(tx, company.id),
-      { timeout: 30_000 },
-    );
-    results.push(result);
+  while (true) {
+    const companies = await prisma.company.findMany({
+      where: cursor ? { id: { gt: cursor } } : undefined,
+      select: { id: true },
+      orderBy: { id: "asc" },
+      take: ZERO_CONFIG_COMPANY_BATCH_SIZE,
+    });
+    if (companies.length === 0) break;
+
+    for (const company of companies) {
+      const result = await prisma.$transaction((tx) =>
+        backfillZeroConfigInventoryForCompany(tx, company.id),
+        { timeout: 30_000 },
+      );
+      results.push(result);
+    }
+
+    cursor = companies[companies.length - 1]?.id;
+    if (companies.length < ZERO_CONFIG_COMPANY_BATCH_SIZE) break;
   }
 
   return {
-    companyCount: companies.length,
+    companyCount: results.length,
     completed: results.filter((result) => result.status === "completed").length,
     skipped: results.filter((result) => result.status === "skipped").length,
     createdWarehouseStocks: results.reduce(
