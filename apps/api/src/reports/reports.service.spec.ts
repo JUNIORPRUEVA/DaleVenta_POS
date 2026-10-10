@@ -508,7 +508,7 @@ describe("ReportsService", () => {
     ]);
   });
 
-  it("castea el filtro raw de vendedor a uuid para usuarios no administradores", async () => {
+  it("castea filtros raw uuid de empresa y vendedor para reportes agregados", async () => {
     const capturedSql: string[] = [];
     const queryRaw = jest.fn((query: { strings?: readonly string[] }) => {
       const sql = query.strings?.join("") ?? "";
@@ -585,6 +585,14 @@ describe("ReportsService", () => {
       ]),
     );
     for (const sql of sellerFilters) {
+      expect(sql).toContain(" AS uuid)");
+    }
+    const companyFilters = capturedSql.filter((sql) =>
+      sql.includes('"company_id"'),
+    );
+    expect(companyFilters.length).toBeGreaterThan(0);
+    for (const sql of companyFilters) {
+      expect(sql).toContain('"company_id" = CAST(');
       expect(sql).toContain(" AS uuid)");
     }
   });
