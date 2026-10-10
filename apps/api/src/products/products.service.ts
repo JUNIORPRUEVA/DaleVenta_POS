@@ -1242,6 +1242,10 @@ export class ProductsService {
     });
     const search = query.search?.trim();
     const category = query.category?.trim();
+    const categories = (query.categories ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
     const sourceContext =
       await this.productSourceResolver.resolveForCompany(companyId);
     if (
@@ -1257,6 +1261,7 @@ export class ProductsService {
         const filtered = this.filterCatalogProducts(response.items, {
           search,
           category,
+          categories,
           includeArchived: query.includeArchived === "true",
         });
         return toPageResult(
@@ -1282,6 +1287,7 @@ export class ProductsService {
         companyId,
         ...(query.includeArchived === "true" ? {} : { archivedAt: null }),
         ...(category ? { categoria: category } : {}),
+        ...(categories.length > 0 ? { categoria: { in: categories } } : {}),
         ...(search
           ? {
               OR: [
@@ -1337,19 +1343,28 @@ export class ProductsService {
 
   private filterCatalogProducts(
     items: any[],
-    filters: { search?: string; category?: string; includeArchived: boolean },
+    filters: {
+      search?: string;
+      category?: string;
+      categories?: string[];
+      includeArchived: boolean;
+    },
   ) {
     const search = filters.search?.toLowerCase();
     const category = filters.category?.toLowerCase();
+    const categorySet = new Set(
+      (filters.categories ?? []).map((value) => value.toLowerCase()),
+    );
     return items.filter((item) => {
       if (!filters.includeArchived && (item.archived || item.archivedAt)) {
         return false;
       }
-      if (
-        category &&
-        `${item.categoria ?? item.categoriaNombre ?? ""}`.toLowerCase() !==
-          category
-      ) {
+      const itemCategory = `${item.categoria ?? item.categoriaNombre ?? ""}`
+        .toLowerCase();
+      if (category && itemCategory !== category) {
+        return false;
+      }
+      if (categorySet.size > 0 && !categorySet.has(itemCategory)) {
         return false;
       }
       if (!search) return true;

@@ -20,6 +20,7 @@ Future<PagedResult<ProductModel>> fetchProductsPage(
   required int limit,
   String? search,
   String? category,
+  List<String>? categories,
   String? warehouseId,
   bool includeArchived = false,
   bool silent = true,
@@ -27,6 +28,10 @@ Future<PagedResult<ProductModel>> fetchProductsPage(
 }) async {
   final normalizedSearch = search?.trim();
   final normalizedCategory = category?.trim();
+  final normalizedCategories = (categories ?? const <String>[])
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .toList(growable: false);
   final normalizedWarehouse = warehouseId?.trim();
 
   final res = await dio.get(
@@ -38,6 +43,8 @@ Future<PagedResult<ProductModel>> fetchProductsPage(
         'search': normalizedSearch,
       if (normalizedCategory != null && normalizedCategory.isNotEmpty)
         'category': normalizedCategory,
+      if (normalizedCategories.isNotEmpty)
+        'categories': normalizedCategories.join(','),
       if (normalizedWarehouse != null && normalizedWarehouse.isNotEmpty)
         'warehouseId': normalizedWarehouse,
       if (includeArchived) 'includeArchived': 'true',
@@ -70,6 +77,7 @@ Future<List<ProductModel>> loadAllProductPages(
   Dio dio, {
   String? search,
   String? category,
+  List<String>? categories,
   String? warehouseId,
   bool includeArchived = false,
   int pageSize = kProductPagesPageSize,
@@ -93,6 +101,7 @@ Future<List<ProductModel>> loadAllProductPages(
       limit: pageSize,
       search: search,
       category: category,
+      categories: categories,
       warehouseId: warehouseId,
       includeArchived: includeArchived,
       silent: silent,

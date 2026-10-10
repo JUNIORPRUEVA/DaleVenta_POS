@@ -10,6 +10,14 @@ export class ProductsQueryDto {
   @IsString()
   category?: string;
 
+  /**
+   * Lista de categorias separadas por coma. Permite al POS filtrar por varias
+   * categorias EN EL SERVIDOR (antes se filtraba en local sobre la pagina).
+   */
+  @IsOptional()
+  @IsString()
+  categories?: string;
+
   @IsOptional()
   @IsString()
   warehouseId?: string;

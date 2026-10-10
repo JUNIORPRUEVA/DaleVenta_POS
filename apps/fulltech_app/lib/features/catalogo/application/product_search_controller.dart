@@ -39,6 +39,9 @@ class ProductSearchController extends PagedListController<ProductModel> {
         limit: request.limit,
         search: request.query.isEmpty ? null : request.query,
         category: request.filters['category'] as String?,
+        categories: (request.filters['categories'] as List?)
+            ?.map((value) => '$value')
+            .toList(growable: false),
         warehouseId: request.filters['warehouseId'] as String?,
         includeArchived:
             includeArchived || request.filters['includeArchived'] == true,
