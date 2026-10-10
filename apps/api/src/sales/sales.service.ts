@@ -515,6 +515,10 @@ export class SalesService {
       items,
       page: pagination.page,
       limit: pagination.limit,
+      // En modo legacy el conjunto recibido es completo; en modo paginado el
+      // total real exigiria un count() extra, asi que queda null en vez de
+      // inventar un numero.
+      total: pagination.explicit ? null : rows.length,
       hasMore,
       nextPage: hasMore ? pagination.page + 1 : null,
     };
@@ -1029,10 +1033,14 @@ export class SalesService {
         isDeleted: true,
         deletedAt: { gte: range.gte, lt: range.lt },
       } satisfies Prisma.SaleWhereInput;
+
+    // IMPORTANTE: sin `take`. Antes habia `take: 1000`, que dejaba fuera del
+    // calculo las anulaciones situadas mas alla de la fila 1000 y producia
+    // totales (totalVendido/utilidad/comision) incorrectos en silencio. El
+    // conjunto considerado debe ser TODAS las anuladas del periodo.
     const cancelledSales = await this.prisma.sale.findMany({
       where: cancelledWhere,
       select: { id: true, userId: true },
-      take: 1000,
     });
     if (cancelledSales.length === 0) return [];
 

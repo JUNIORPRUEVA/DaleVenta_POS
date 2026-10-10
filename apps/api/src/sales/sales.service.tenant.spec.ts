@@ -4,6 +4,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { LEGACY_UNPAGINATED_LIMIT } from "../common/pagination/page-pagination";
 import { SalesService } from "./sales.service";
 
 describe("SalesService tenant isolation", () => {
@@ -792,7 +793,7 @@ describe("SalesService tenant isolation", () => {
       },
       orderBy: [{ saleDate: "desc" }, { id: "desc" }],
       skip: 0,
-      take: 51,
+      take: LEGACY_UNPAGINATED_LIMIT + 1,
       select: expect.objectContaining({
         id: true,
         totalSold: true,
@@ -864,7 +865,7 @@ describe("SalesService tenant isolation", () => {
     });
   });
 
-  it("listInvoices without limit preserves legacy list response and applies the default bounded page", async () => {
+  it("listInvoices without limit preserves the legacy list and does NOT truncate it", async () => {
     const prisma = {
       sale: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -880,7 +881,7 @@ describe("SalesService tenant isolation", () => {
 
     expect(result).toEqual([]);
     expect(prisma.sale.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 0, take: 51 }),
+      expect.objectContaining({ skip: 0, take: LEGACY_UNPAGINATED_LIMIT + 1 }),
     );
   });
 
