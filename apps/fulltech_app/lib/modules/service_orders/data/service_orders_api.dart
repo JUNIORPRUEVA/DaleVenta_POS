@@ -95,7 +95,7 @@ class ServiceOrdersApi {
     int page = 1,
     int limit = _defaultListLimit,
   }) async {
-    final result = await _listOrdersPage(page: page, limit: limit);
+    final result = await listOrdersPage(page: page, limit: limit);
     return result.items;
   }
 
@@ -118,7 +118,7 @@ class ServiceOrdersApi {
     var hasMore = true;
 
     while (hasMore && pagesVisited < maxPages) {
-      final result = await _listOrdersPage(page: page, limit: limit);
+      final result = await listOrdersPage(page: page, limit: limit);
       accumulator.addPage(result, (order) => order.id);
 
       hasMore = result.hasMore;
@@ -132,9 +132,9 @@ class ServiceOrdersApi {
     return accumulator.items;
   }
 
-  Future<PagedResult<ServiceOrderModel>> _listOrdersPage({
-    required int page,
-    required int limit,
+  Future<PagedResult<ServiceOrderModel>> listOrdersPage({
+    int page = 1,
+    int limit = _defaultListLimit,
   }) async {
     const path = ApiRoutes.serviceOrders;
     final effectivePage = page < 1 ? 1 : page;

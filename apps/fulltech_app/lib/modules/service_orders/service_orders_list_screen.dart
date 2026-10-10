@@ -156,10 +156,7 @@ class _ServiceOrdersListScreenState
       if (!mounted) return;
       AppFeedback.showError(
         context,
-        userSafeErrorMessage(
-          e,
-          fallback: 'No se pudo completar la limpieza.',
-        ),
+        userSafeErrorMessage(e, fallback: 'No se pudo completar la limpieza.'),
       );
     } finally {
       if (mounted) {
@@ -718,8 +715,36 @@ class _ServiceOrdersListScreenState
                       addRepaintBoundaries: true,
                       addSemanticIndexes: false,
                       padding: const EdgeInsets.only(bottom: 88),
-                      itemCount: visibleOrders.length,
+                      itemCount:
+                          visibleOrders.length +
+                          (state.hasMore || state.loadingMore ? 1 : 0),
                       itemBuilder: (context, index) {
+                        if (index >= visibleOrders.length) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: OutlinedButton.icon(
+                                onPressed: state.loadingMore
+                                    ? null
+                                    : () => unawaited(controller.loadMore()),
+                                icon: state.loadingMore
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.expand_more_rounded),
+                                label: Text(
+                                  state.loadingMore
+                                      ? 'Cargando...'
+                                      : 'Cargar mas ordenes',
+                                ),
+                              ),
+                            ),
+                          );
+                        }
                         final order = visibleOrders[index];
                         final canChangeOrderStatus =
                             canManageStatusAsRole ||

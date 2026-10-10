@@ -20,6 +20,9 @@ class ServiceOrdersListState {
   final List<ServiceOrderModel> items;
   final Map<String, ClienteModel> clientsById;
   final Map<String, UserModel> usersById;
+  final int page;
+  final bool hasMore;
+  final bool loadingMore;
 
   const ServiceOrdersListState({
     this.loading = false,
@@ -28,6 +31,9 @@ class ServiceOrdersListState {
     this.items = const [],
     this.clientsById = const {},
     this.usersById = const {},
+    this.page = 0,
+    this.hasMore = false,
+    this.loadingMore = false,
   });
 
   ServiceOrdersListState copyWith({
@@ -37,6 +43,9 @@ class ServiceOrdersListState {
     List<ServiceOrderModel>? items,
     Map<String, ClienteModel>? clientsById,
     Map<String, UserModel>? usersById,
+    int? page,
+    bool? hasMore,
+    bool? loadingMore,
     bool clearError = false,
   }) {
     return ServiceOrdersListState(
@@ -46,6 +55,9 @@ class ServiceOrdersListState {
       items: items ?? this.items,
       clientsById: clientsById ?? this.clientsById,
       usersById: usersById ?? this.usersById,
+      page: page ?? this.page,
+      hasMore: hasMore ?? this.hasMore,
+      loadingMore: loadingMore ?? this.loadingMore,
     );
   }
 }
@@ -196,7 +208,7 @@ class ServiceOrdersListController
         final localRepository = ref.read(serviceOrdersLocalRepositoryProvider);
         await localRepository.prepareForViewer(_viewerUserId);
         if (!mounted) return;
-        final orders = await ref.read(serviceOrdersApiProvider).listAllOrders();
+        final page = await ref.read(serviceOrdersApiProvider).listOrdersPage();
         if (!mounted) return;
         final clients = await ref
             .read(clientesRepositoryProvider)
@@ -215,13 +227,14 @@ class ServiceOrdersListController
           for (final user in users) user.id: user,
         };
 
-        for (final order in orders) {
+        for (final order in page.items) {
           final embeddedClient = order.client;
           if (embeddedClient != null) {
             clientMap[embeddedClient.id] = embeddedClient;
           }
         }
 
+        final orders = [...page.items];
         orders.sort(
           (a, b) => _orderActivityAt(b).compareTo(_orderActivityAt(a)),
         );
@@ -244,6 +257,9 @@ class ServiceOrdersListController
           items: orders,
           clientsById: clientMap,
           usersById: userMap,
+          page: page.page,
+          hasMore: page.hasMore,
+          loadingMore: false,
         );
       } catch (error) {
         if (!mounted) return;
@@ -268,6 +284,46 @@ class ServiceOrdersListController
   Future<void> refresh() => load(refresh: true);
 
   Future<void> retry() => load(refresh: true);
+
+  Future<void> loadMore() async {
+    if (state.loadingMore || !state.hasMore || state.loading) return;
+    state = state.copyWith(loadingMore: true, clearError: true);
+    try {
+      final page = await ref
+          .read(serviceOrdersApiProvider)
+          .listOrdersPage(page: state.page + 1);
+      if (!mounted) return;
+      final byId = {for (final item in state.items) item.id: item};
+      for (final order in page.items) {
+        byId[order.id] = order;
+      }
+      final items = byId.values.toList()
+        ..sort((a, b) => _orderActivityAt(b).compareTo(_orderActivityAt(a)));
+      final clientsById = {
+        ...state.clientsById,
+        ..._clientMapFromOrders(page.items),
+      };
+      state = state.copyWith(
+        items: items,
+        clientsById: clientsById,
+        page: page.page,
+        hasMore: page.hasMore,
+        loadingMore: false,
+        clearError: true,
+      );
+      await _persistSnapshot(
+        items: items,
+        clientsById: clientsById,
+        usersById: state.usersById,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      state = state.copyWith(
+        loadingMore: false,
+        error: _friendlyListMessage(error),
+      );
+    }
+  }
 
   Future<void> deleteOrder(String id) async {
     await ref.read(serviceOrdersApiProvider).deleteOrder(id);
