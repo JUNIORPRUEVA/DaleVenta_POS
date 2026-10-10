@@ -6,6 +6,7 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../catalogo/data/product_pages_loader.dart';
 
 final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
   return WarehouseRepository(ref.watch(dioProvider));
@@ -384,15 +385,10 @@ class WarehouseRepository {
 
   Future<List<ProductModel>> fetchProducts() async {
     try {
-      final res = await _dio.get(ApiRoutes.products);
-      final rows = res.data is List
-          ? res.data as List
-          : res.data is Map && (res.data as Map)['items'] is List
-          ? (res.data as Map)['items'] as List
-          : const [];
-      return rows
-          .whereType<Map>()
-          .map((row) => ProductModel.fromJson(row.cast()))
+      // Recorre todas las paginas: el backend pagina por defecto (50) y el
+      // selector de transferencias debe alcanzar cualquier producto.
+      final products = await loadAllProductPages(_dio);
+      return products
           .where((product) => product.productSource == 'LOCAL')
           .toList(growable: false);
     } on DioException catch (e) {

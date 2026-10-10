@@ -13,6 +13,7 @@ import '../../../core/company/company_settings_repository.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/models/product_model.dart';
+import '../../../features/catalogo/data/product_pages_loader.dart';
 import '../../../core/offline/offline_store.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
@@ -1394,31 +1395,14 @@ class VentasRepository {
 
   Future<List<ProductModel>> fetchProducts({bool forceRefresh = false}) async {
     try {
-      final res = await _dio.get(
-        ApiRoutes.catalogProducts,
-        queryParameters: null,
-        options: Options(
-          extra: const {'skipLoader': true},
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-          },
-        ),
+      // El backend pagina por defecto (50): se recorren TODAS las paginas para
+      // que Venta y Cotizaciones encuentren cualquier producto existente y no
+      // solo los de la primera pagina.
+      return await loadAllProductPages(
+        _dio,
+        silent: true,
+        extra: const {'skipLoader': true},
       );
-      final rows = _extractRows(res.data);
-      final parsed = rows
-          .whereType<Map>()
-          .map((row) => ProductModel.fromJson(row.cast<String, dynamic>()))
-          .toList();
-
-      final raw = res.data;
-      final rawLooksInvalid = raw != null && raw is! List && raw is! Map;
-      if (rawLooksInvalid) {
-        throw ApiException('Respuesta inválida al cargar productos');
-      }
-
-      return parsed;
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(

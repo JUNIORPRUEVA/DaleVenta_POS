@@ -9,6 +9,7 @@ import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
+import 'product_pages_loader.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../../../core/utils/file_utils.dart';
@@ -274,24 +275,12 @@ class CatalogRepository {
     required int requestSeq,
   }) async {
     try {
-      final res = await _dio.get(
-        ApiRoutes.catalogProducts,
-        queryParameters: null,
-        options: Options(
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-          },
-          extra: {'silent': silent},
-        ),
-      );
-      final rows = _extractRows(res.data);
-      final products = rows
-          .whereType<Map>()
-          .map((row) => ProductModel.fromJson(Map<String, dynamic>.from(row)))
-          .toList();
+      // El backend pagina por defecto (50). Recorremos TODAS las paginas para
+      // que el catalogo no dependa de la primera: esa era la causa de que
+      // productos existentes no aparecieran en la app (DATA_HIDDEN).
+      final products = await loadAllProductPages(_dio, silent: silent);
       if (_remoteFetchSeqByCompany[companyId] == requestSeq) {
+        // Solo se guarda como snapshot cuando el recorrido fue completo.
         await _saveProductsSnapshotForCompany(companyId, products);
       }
       return products;
