@@ -25,10 +25,23 @@ class ProductSearchController extends PagedListController<ProductModel> {
     required super.fetcher,
     required super.idOf,
     required super.pageSize,
-  }) : super(debounce: const Duration(milliseconds: 320));
+    super.offlineFallback,
+  }) : super(
+         debounce: const Duration(milliseconds: 320),
+         // Solo un fallo SIN respuesta del servidor habilita el snapshot
+         // local: un 401/403/400/500 es una decision del servidor y se
+         // muestra como error, no se tapa con datos viejos.
+         isOfflineError: (error) =>
+             error is DioException && error.response == null,
+       );
 
+  /// [offlineSnapshot] es el snapshot local COMPLETO disponible en el
+  /// dispositivo. Con conexion se busca en el servidor; si la red falla o no
+  /// hay conexion, se busca en ese snapshot (nombre/parcial/codigo) sin
+  /// fingir que una pagina parcial es el catalogo completo.
   factory ProductSearchController({
     required Dio dio,
+    Future<List<ProductModel>> Function()? offlineSnapshot,
     int pageSize = 50,
     bool includeArchived = false,
   }) {
@@ -49,6 +62,21 @@ class ProductSearchController extends PagedListController<ProductModel> {
       ),
       idOf: (product) => product.id,
       pageSize: pageSize,
+      offlineFallback: offlineSnapshot == null
+          ? null
+          : (query, filters) async {
+              final snapshot = await offlineSnapshot();
+              return filterProductSnapshot(
+                snapshot,
+                query: query,
+                category: filters['category'] as String?,
+                categories:
+                    (filters['categories'] as List?)
+                        ?.map((value) => '$value')
+                        .toList(growable: false) ??
+                    const <String>[],
+              );
+            },
     );
   }
 

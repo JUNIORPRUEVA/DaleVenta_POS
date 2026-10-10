@@ -1,4 +1,8 @@
+import 'dart:convert';
+
+import 'package:daleventa_pos/core/api/api_routes.dart';
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
+import 'package:daleventa_pos/core/auth/auth_repository.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
@@ -8,6 +12,7 @@ import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/registrar_venta_screen.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -216,6 +221,7 @@ void main() {
       products: [_trackedOutOfStockProduct],
     );
 
+    expect(find.text('Café'), findsOneWidget);
     expect(find.text('SIN STOCK'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -426,6 +432,9 @@ Future<_TestAuthController> _pumpPos(
         catalogRepositoryProvider.overrideWithValue(
           _FakeCatalogRepository(products, unitOptions),
         ),
+        // El POS pagina y busca en el SERVIDOR: la prueba usa un doble que
+        // respeta el contrato real (`/products` paginado + categorias).
+        dioProvider.overrideWithValue(_buildServerBackedDio(products)),
         warehousesProvider.overrideWith((ref) async => warehouses),
         warehouseTerminalsProvider.overrideWith((ref) async => terminals),
         posNcfSequencesProvider.overrideWith((ref) async => const []),
@@ -603,6 +612,116 @@ Future<void> _selectDialogUnit(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
+}
+
+/// Doble del endpoint real de productos para las pruebas del POS.
+///
+/// El POS pagina y busca en el SERVIDOR, asi que la prueba no puede inyectar
+/// el catalogo directamente en la pantalla: se reproduce el contrato real
+/// (`/products` con `page`/`limit`/`search`/`category`/`categories` y envelope
+/// `{items,page,limit,total,hasMore}`) sobre la misma lista de productos. Las
+/// aserciones de cada prueba no cambian.
+Dio _buildServerBackedDio(List<ProductModel> products) {
+  return Dio()
+    ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+      final path = options.path;
+      if (path.endsWith(ApiRoutes.productCategories)) {
+        final counts = <String, int>{};
+        for (final product in products) {
+          counts.update(
+            product.categoriaLabel,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
+        return _jsonResponse({
+          'items': [
+            for (final entry in counts.entries)
+              {'name': entry.key, 'count': entry.value},
+          ],
+        });
+      }
+      if (path.endsWith(ApiRoutes.catalogProducts)) {
+        final query = options.queryParameters;
+        final search = '${query['search'] ?? ''}'.trim().toLowerCase();
+        final filters =
+            <String>{
+                  ...'${query['categories'] ?? ''}'.split(','),
+                  '${query['category'] ?? ''}',
+                }
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toSet();
+        final filtered = products.where((product) {
+          if (filters.isNotEmpty && !filters.contains(product.categoriaLabel)) {
+            return false;
+          }
+          if (search.isEmpty) return true;
+          return product.nombre.toLowerCase().contains(search) ||
+              (product.codigo ?? '').toLowerCase().contains(search);
+        }).toList(growable: false);
+        final limit = int.tryParse('${query['limit'] ?? 50}') ?? 50;
+        final page = int.tryParse('${query['page'] ?? 1}') ?? 1;
+        final start = (page - 1) * limit;
+        final slice = start >= filtered.length
+            ? const <ProductModel>[]
+            : filtered.sublist(start, (start + limit).clamp(0, filtered.length));
+        final hasMore = start + slice.length < filtered.length;
+        return _jsonResponse({
+          'items': [
+            for (final product in slice)
+              () {
+                final encoded = product.toJson();
+                // `ProductModel.fromJson` prioriza `stockDecimal` sobre
+                // `stock`: el doble emite la pareja coherente, como el
+                // backend, para no introducir una discrepancia falsa.
+                encoded['stockDecimal'] = product.stock?.toString() ?? '0';
+                return encoded;
+              }(),
+          ],
+          'page': page,
+          'limit': limit,
+          'total': filtered.length,
+          'hasMore': hasMore,
+          'nextPage': hasMore ? page + 1 : null,
+        });
+      }
+      return ResponseBody.fromString(
+        '{}',
+        404,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
+    });
+}
+
+ResponseBody _jsonResponse(Map<String, dynamic> body) {
+  return ResponseBody.fromString(
+    jsonEncode(body),
+    200,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
+}
+
+class _FakeHttpClientAdapter implements HttpClientAdapter {
+  _FakeHttpClientAdapter(this._handler);
+
+  final Future<ResponseBody> Function(RequestOptions options) _handler;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    return _handler(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _FakeCatalogRepository extends CatalogRepository {

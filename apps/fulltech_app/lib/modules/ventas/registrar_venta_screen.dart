@@ -16,6 +16,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 
 import '../../core/models/product_model.dart';
+import '../../core/pagination/paged_list_controller.dart';
 
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
@@ -36,6 +37,7 @@ import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
+import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/contabilidad/data/contabilidad_repository.dart';
@@ -169,15 +171,33 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   bool _routeObserverSubscribed = false;
   RouteObserver<ModalRoute<dynamic>>? _routeObserver;
 
-  bool _loadingProducts = true;
   bool _saving = false;
   bool _remoteRefreshInFlight = false;
+
+  /// Barra fina de carga inicial del listado. Los refrescos silenciosos y la
+  /// paginacion tienen su propio indicador.
+  bool get _loadingProducts =>
+      _search.snapshot.isInitialLoading && _search.snapshot.items.isEmpty;
+
   OverlayEntry? _noStockNoticeEntry;
   DateTime? _lastSuccessfulRemoteSyncAt;
-  List<ProductModel> _products = const [];
+
+  /// Camino moderno del POS: los productos se paginan y se buscan en el
+  /// SERVIDOR (pagina 1 + loadMore + busqueda remota con debounce). NO se
+  /// descarga el catalogo completo ni se filtra en memoria.
+  late final ProductSearchController _search;
+  void Function()? _removeSearchListener;
+  final ScrollController _productScrollCtrl = ScrollController();
+  Map<String, int> _serverCategoryCounts = const <String, int>{};
+  bool _loadingServerCategories = false;
+
   List<SaleDraftItem> _cart = [];
   Set<String> _selectedCategories = <String>{};
   bool _searchOpen = false;
+
+  /// Productos disponibles: la pagina actual del servidor o, sin conexion, el
+  /// snapshot local COMPLETO (nunca una pagina parcial presentada como total).
+  List<ProductModel> get _products => _search.snapshot.items;
 
   ClienteModel? _selectedClient;
   String? _selectedFiscalVoucherType;
@@ -203,6 +223,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return code.isNotEmpty && query.isNotEmpty && code == query;
   }
 
+  /// Coincidencia exacta de codigo sobre lo que ya hay en pantalla (pagina
+  /// actual del servidor o snapshot local sin conexion).
   ProductModel? _findProductByCode(String rawCode) {
     for (final product in _products) {
       if (_matchesProductCode(product, rawCode)) return product;
@@ -210,29 +232,50 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return null;
   }
 
-  void _submitProductSearch(String rawValue) {
+  /// Enter / lector de codigos: el codigo se busca en el SERVIDOR (no en un
+  /// catalogo precargado). Si no hay conexion o no existe remoto, se resuelve
+  /// con el snapshot local y, como ultimo recurso, con la unica coincidencia
+  /// visible de la busqueda actual.
+  Future<void> _submitProductSearch(String rawValue) async {
     final value = rawValue.trim();
     if (value.isEmpty) return;
-    final product = _findProductByCode(value);
+
+    ProductModel? product;
+    if (!_search.snapshot.isOffline) {
+      product = await _search.findByCode(value);
+      if (!mounted) return;
+    }
+    product ??= _findProductByCode(value);
     if (product == null) {
       final visible = _filteredProducts;
-      if (visible.length == 1) {
-        unawaited(_addProduct(visible.first));
-        _searchCtrl.clear();
-        setState(() {});
-        _searchFocus.requestFocus();
-      }
-      return;
+      if (visible.length != 1) return;
+      product = visible.first;
     }
-    unawaited(_addProduct(product));
+
+    // Se limpia antes de agregar para dejar el campo listo para el siguiente
+    // escaneo (mismo flujo del POS, ahora con busqueda remota).
     _searchCtrl.clear();
     setState(() {});
     _searchFocus.requestFocus();
+    unawaited(_addProduct(product));
   }
 
   List<String> get _availableCategories {
-    final values = _products.map((item) => item.categoriaLabel).toSet().toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final serverValues =
+        _serverCategoryCounts.keys
+            .where((value) => value.trim().isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    if (serverValues.isNotEmpty) return serverValues;
+
+    // Sin conexion: se derivan del snapshot local disponible.
+    final values =
+        _products
+            .map((item) => item.categoriaLabel)
+            .where((value) => value.trim().isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return values;
   }
 
@@ -476,13 +519,66 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     ref.listenManual<CatalogState>(catalogControllerProvider, (previous, next) {
       _applyCatalogControllerProducts(next.items);
     });
+    _search = ProductSearchController(
+      dio: ref.read(dioProvider),
+      // Snapshot local persistido (dataset COMPLETO del dispositivo). Solo se
+      // usa como fallback cuando la red falla: abrir el POS NO descarga el
+      // catalogo completo.
+      offlineSnapshot: () =>
+          ref.read(catalogRepositoryProvider).getCachedProducts(),
+    );
+    _removeSearchListener = _search.addListener(_onProductSearchChanged);
+    _searchCtrl.addListener(_onSearchTextChanged);
+    _productScrollCtrl.addListener(_onProductScroll);
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _startLiveSync();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_loadProducts(silent: true));
+      unawaited(_search.loadInitial());
+      unawaited(_loadServerCategories());
     });
+  }
+
+  void _onProductSearchChanged(PagedListState<ProductModel> next) {
+    if (!mounted) return;
+    setState(() {
+      // Las lineas del carrito se refrescan con los datos recien recibidos
+      // (precio/stock/nombre) sin perder cantidades.
+      _refreshCartFromCatalog(next.items);
+    });
+  }
+
+  /// La busqueda se resuelve en el SERVIDOR con debounce y proteccion de
+  /// carrera: teclear no dispara una peticion por pulsacion.
+  void _onSearchTextChanged() {
+    _search.setQuery(_searchCtrl.text);
+  }
+
+  void _onProductScroll() {
+    if (!_productScrollCtrl.hasClients) return;
+    final position = _productScrollCtrl.position;
+    if (position.maxScrollExtent - position.pixels <= 400) {
+      unawaited(_search.loadMore());
+    }
+  }
+
+  /// Categorias reales del servidor: el conteo cubre el dataset completo, no
+  /// solo la pagina visible.
+  Future<void> _loadServerCategories() async {
+    if (_loadingServerCategories) return;
+    _loadingServerCategories = true;
+    try {
+      final counts = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProductCategories();
+      if (!mounted) return;
+      setState(() => _serverCategoryCounts = counts);
+    } catch (_) {
+      // Sin conexion: los filtros caen al derivado local sin romper el POS.
+    } finally {
+      _loadingServerCategories = false;
+    }
   }
 
   void _handleAuthScopeChanged(String nextCompanyId) {
@@ -491,8 +587,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       _cart = const [];
       _selectedClient = null;
       _selectedFiscalVoucherType = null;
-      _products = const [];
       _selectedCategories.clear();
+      _serverCategoryCounts = const <String, int>{};
       _searchCtrl.clear();
       _noteCtrl.clear();
       _searchOpen = false;
@@ -503,7 +599,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     ref.invalidate(companySettingsProvider);
     ref.invalidate(posNcfSequencesProvider);
     if (nextCompanyId.isNotEmpty) {
-      unawaited(_loadProducts(forceRemote: true, silent: true));
+      // La lista paginada se reincia con la nueva empresa (pagina 1) y las
+      // categorias se recalculan en el servidor.
+      unawaited(_search.reset());
+      unawaited(_loadServerCategories());
     }
   }
 
@@ -515,13 +614,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         .listen((_) => _loadProducts(forceRemote: true, silent: true));
   }
 
-  void _applyCatalogControllerProducts(List<ProductModel> rows) {
-    if (!mounted || rows.isEmpty) return;
-    final syncVersion = buildCatalogSyncVersion(rows);
-    final products = applyCatalogSyncVersion(rows, syncVersion);
-    final productsChanged = !areCatalogProductsEquivalent(_products, products);
-    final productsById = {for (final product in products) product.id: product};
-    var cartChanged = false;
+  /// Refresca las lineas del carrito (precio, stock, nombre) con datos
+  /// frescos del catalogo. No toca cantidades ni la seleccion.
+  void _refreshCartFromCatalog(List<ProductModel> rows) {
+    if (rows.isEmpty || _cart.isEmpty) return;
+    final productsById = {for (final product in rows) product.id: product};
     final nextCart = _cart
         .map((item) {
           final productId = item.product?.id ?? item.productId;
@@ -532,26 +629,25 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               areCatalogProductsEquivalent([current], [product])) {
             return item;
           }
-          cartChanged = true;
           return item.copyWith(product: product);
         })
         .toList(growable: false);
-
-    if (!productsChanged && !cartChanged && !_loadingProducts) return;
-
-    setState(() {
-      if (productsChanged) {
-        _products = products;
-        _selectedCategories = sanitizePosSelectedCategories(
-          _selectedCategories,
-          products,
-        );
-      }
-      if (cartChanged) {
+    for (var i = 0; i < nextCart.length; i += 1) {
+      if (!identical(nextCart[i], _cart[i])) {
         _cart = nextCart;
+        return;
       }
-      _loadingProducts = false;
-    });
+    }
+  }
+
+  /// El controlador de catalogo mantiene fresca la informacion del CARRITO
+  /// (precios/stock) ante cambios en tiempo real. El listado del POS ya no se
+  /// llena desde aqui: lo pagina y lo busca el servidor.
+  void _applyCatalogControllerProducts(List<ProductModel> rows) {
+    if (!mounted || rows.isEmpty || _cart.isEmpty) return;
+    final syncVersion = buildCatalogSyncVersion(rows);
+    final products = applyCatalogSyncVersion(rows, syncVersion);
+    setState(() => _refreshCartFromCatalog(products));
   }
 
   @override
@@ -656,12 +752,23 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     _realtimeSubscription?.cancel();
     _noStockNoticeEntry?.remove();
     _noStockNoticeEntry = null;
+    _removeSearchListener?.call();
+    _removeSearchListener = null;
+    _search.dispose();
+    _searchCtrl.removeListener(_onSearchTextChanged);
+    _productScrollCtrl.removeListener(_onProductScroll);
+    _productScrollCtrl.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
 
+  /// Recarga el listado del POS con el camino paginado.
+  ///
+  /// Ya NO descarga el catalogo completo: refresca la pagina 1 contra el
+  /// servidor. Las siguientes paginas llegan con `loadMore()` al hacer scroll,
+  /// y los refrescos silenciosos no mueven al usuario de pagina.
   Future<void> _loadProducts({
     bool forceRemote = false,
     bool silent = false,
@@ -683,66 +790,38 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         ref.read(authStateProvider).user?.companyId?.trim() ?? '';
     if (requestCompanyId.isEmpty) return;
 
-    final repo = ref.read(catalogRepositoryProvider);
-    if (_products.isEmpty) {
-      final cached = await repo.getCachedProducts();
-      if (!mounted) return;
-      if (cached.isNotEmpty &&
-          ref.read(authStateProvider).user?.companyId?.trim() ==
-              requestCompanyId) {
-        setState(() {
-          _products = cached;
-          _selectedCategories = sanitizePosSelectedCategories(
-            _selectedCategories,
-            cached,
-          );
-          _loadingProducts = false;
-        });
-      }
-    }
-
-    if (mounted && !silent) setState(() => _loadingProducts = true);
     try {
-      final fetched = await repo.fetchProducts(
-        forceRefresh: forceRemote,
-        silent: silent,
-      );
+      if (forceRemote) {
+        // Un refresco silencioso con paginas ya cargadas no se revierte.
+        if (!silent || _search.snapshot.page <= 1) {
+          await _search.refresh();
+        }
+      } else {
+        await _search.loadInitial();
+      }
+      if (!mounted) return;
       if (ref.read(authStateProvider).user?.companyId?.trim() !=
           requestCompanyId) {
         return;
       }
-      final syncVersion = buildCatalogSyncVersion(fetched);
-      final products = applyCatalogSyncVersion(fetched, syncVersion);
-      if (!mounted) return;
-      if (!areCatalogProductsEquivalent(_products, products)) {
-        setState(() {
-          _products = products;
-          _selectedCategories = sanitizePosSelectedCategories(
-            _selectedCategories,
-            products,
-          );
-          _loadingProducts = false;
-        });
-      } else if (_loadingProducts) {
-        setState(() => _loadingProducts = false);
-      }
-      _prefetchProductImages(products);
-      _lastSuccessfulRemoteSyncAt = DateTime.now();
-    } catch (e) {
-      if (mounted && !silent) setState(() => _loadingProducts = false);
-      if (!mounted) return;
-      if (silent) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userSafeErrorMessage(
-              e,
-              fallback:
-                  'No se pudieron cargar los productos. Revisa tu conexión e inténtalo nuevamente.',
+
+      final error = _search.snapshot.error;
+      if (error == null) {
+        _prefetchProductImages(_search.snapshot.items);
+        _lastSuccessfulRemoteSyncAt = DateTime.now();
+      } else if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                error,
+                fallback:
+                    'No se pudieron cargar los productos. Revisa tu conexión e inténtalo nuevamente.',
+              ),
             ),
           ),
-        ),
-      );
+        );
+      }
     } finally {
       if (silent && forceRemote) {
         _remoteRefreshInFlight = false;
@@ -751,6 +830,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   void _prefetchProductImages(List<ProductModel> products) {
+    if (products.isEmpty) return;
     unawaited(
       FulltechImageCacheManager.warmImageUrls(
         products.map((p) => p.displayFotoUrl),
@@ -765,10 +845,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       context,
     ).showSnackBar(const SnackBar(content: Text('Caché limpiado')));
     setState(() {
-      _products = const [];
-      _loadingProducts = true;
+      _selectedCategories = <String>{};
+      _serverCategoryCounts = const <String, int>{};
     });
-    await _loadProducts();
+    await _search.reset();
+    if (!mounted) return;
+    unawaited(_loadServerCategories());
   }
 
   Future<T?> _showRightDrawer<T>({
@@ -812,6 +894,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
     if (!mounted || next == null) return;
     setState(() => _selectedCategories = next);
+    // El filtro se aplica en el SERVIDOR (soporta varias categorias a la vez).
+    _search.patchFilter(
+      'categories',
+      next.isEmpty ? null : next.toList(growable: false),
+    );
   }
 
   Future<void> _openActionsDrawer() async {
@@ -1158,6 +1245,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         child: Column(
           children: [
             if (_loadingProducts) const LinearProgressIndicator(minHeight: 2),
+            if (_search.snapshot.isOffline) _buildOfflineCatalogBanner(),
             if (!isWide) _buildMobileInvoiceModeBar(),
             if (!isWide && _selectedCategories.isNotEmpty)
               Padding(
@@ -1176,8 +1264,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       ),
                     ),
                     TextButton(
-                      onPressed: () =>
-                          setState(() => _selectedCategories = <String>{}),
+                      onPressed: () {
+                        setState(() => _selectedCategories = <String>{});
+                        _search.patchFilter('categories', null);
+                      },
                       style: TextButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1254,15 +1344,99 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
+  /// Aviso honesto del modo offline: los productos mostrados son el snapshot
+  /// guardado en el dispositivo, no el catalogo del servidor. La venta sigue
+  /// permitida (la venta offline y su cola de sincronizacion no cambian).
+  Widget _buildOfflineCatalogBanner() {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      color: theme.colorScheme.errorContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 16,
+            color: theme.colorScheme.onErrorContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sin conexión: mostrando los productos guardados en este dispositivo',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => unawaited(_search.refresh()),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProductGrid({
     required bool isCompact,
     required ProductTaxUiConfig? taxConfig,
     required bool inventoryEnabled,
   }) {
     final visible = _filteredProducts;
+    final snapshot = _search.snapshot;
+    final hasTextQuery = _searchCtrl.text.trim().isNotEmpty;
 
     if (visible.isEmpty) {
-      return const Center(child: Text('No hay productos para mostrar'));
+      if (snapshot.isInitialLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      final error = snapshot.error;
+      if (error != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.cloud_off_rounded,
+                  size: 40,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  userSafeErrorMessage(
+                    error,
+                    fallback: 'No se pudieron cargar los productos.',
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => unawaited(_search.refresh()),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      return Center(
+        child: Text(
+          hasTextQuery || _selectedCategories.isNotEmpty
+              ? 'Ningún producto coincide con la búsqueda'
+              : 'No hay productos para mostrar',
+        ),
+      );
     }
 
     final mobileGridSurface = MediaQuery.sizeOf(context).width < 700;
@@ -1292,6 +1466,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             : 1.08;
 
         return GridView.builder(
+          controller: _productScrollCtrl,
           padding: EdgeInsets.all(gridPadding),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
@@ -1299,8 +1474,17 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             mainAxisSpacing: gridSpacing,
             childAspectRatio: aspectRatio,
           ),
-          itemCount: visible.length,
+          itemCount: visible.length + (snapshot.isLoadingMore ? 1 : 0),
           itemBuilder: (context, index) {
+            if (index >= visible.length) {
+              return const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
             final product = visible[index];
             return _SaleProductGridCard(
               product: product,

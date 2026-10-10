@@ -62,6 +62,36 @@ Future<PagedResult<ProductModel>> fetchProductsPage(
   return PagedResult.fromResponse(res.data, ProductModel.fromJson);
 }
 
+/// Filtra un snapshot local COMPLETO por texto y categorias.
+///
+/// Se usa como camino offline (sin conexion) y como fallback cuando la red
+/// falla: busca por nombre, nombre parcial y codigo. Nunca se usa para
+/// "simular" un dataset completo a partir de una pagina parcial.
+List<ProductModel> filterProductSnapshot(
+  List<ProductModel> snapshot, {
+  String query = '',
+  String? category,
+  List<String> categories = const <String>[],
+}) {
+  final normalizedQuery = query.trim().toLowerCase();
+  final categorySet = <String>{
+    if (category != null && category.trim().isNotEmpty) category.trim(),
+    ...categories.map((value) => value.trim()).where((v) => v.isNotEmpty),
+  };
+
+  return snapshot.where((product) {
+    if (categorySet.isNotEmpty &&
+        !categorySet.contains(product.categoriaLabel)) {
+      return false;
+    }
+    if (normalizedQuery.isEmpty) return true;
+    final name = product.nombre.toLowerCase();
+    final code = (product.codigo ?? '').trim().toLowerCase();
+    return name.contains(normalizedQuery) ||
+        (code.isNotEmpty && code.contains(normalizedQuery));
+  }).toList(growable: false);
+}
+
 /// Recorre TODAS las paginas de `/products` y devuelve el conjunto completo.
 ///
 /// Motivo (incidente P0 "faltan productos"): el backend paso a paginar por

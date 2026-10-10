@@ -25,6 +25,15 @@ typedef PagedFetcher<T> = Future<PagedResult<T>> Function(
 
 typedef PagedIdOf<T> = String Function(T item);
 
+/// Fallback local usado cuando el servidor no responde (modo offline).
+/// Recibe la query y los filtros actuales y devuelve las coincidencias del
+/// snapshot local completo. No es paginacion: el snapshot es el dataset
+/// completo disponible en el dispositivo.
+typedef PagedOfflineFallback<T> = Future<List<T>> Function(
+  String query,
+  Map<String, dynamic> filters,
+);
+
 /// Estado de una lista paginada por servidor.
 class PagedListState<T> {
   const PagedListState({
@@ -39,6 +48,7 @@ class PagedListState<T> {
     this.error,
     this.query = '',
     this.filters = const <String, dynamic>{},
+    this.isOffline = false,
   });
 
   final List<T> items;
@@ -52,6 +62,10 @@ class PagedListState<T> {
   final Object? error;
   final String query;
   final Map<String, dynamic> filters;
+
+  /// true cuando los datos mostrados provienen del snapshot local (sin
+  /// conexion). La UI debe indicarlo y no fingir que es el servidor.
+  final bool isOffline;
 
   bool get isEmpty => items.isEmpty && !isInitialLoading;
   bool get hasItems => items.isNotEmpty;
@@ -75,6 +89,7 @@ class PagedListState<T> {
     bool clearError = false,
     String? query,
     Map<String, dynamic>? filters,
+    bool? isOffline,
   }) {
     return PagedListState<T>(
       items: items ?? this.items,
@@ -88,6 +103,7 @@ class PagedListState<T> {
       error: clearError ? null : (error ?? this.error),
       query: query ?? this.query,
       filters: filters ?? this.filters,
+      isOffline: isOffline ?? this.isOffline,
     );
   }
 }
@@ -111,14 +127,25 @@ class PagedListController<T> extends StateNotifier<PagedListState<T>> {
     required PagedIdOf<T> idOf,
     int pageSize = 50,
     Duration debounce = const Duration(milliseconds: 300),
+    PagedOfflineFallback<T>? offlineFallback,
+    bool Function(Object error)? isOfflineError,
   })  : _fetcher = fetcher,
         _idOf = idOf,
         _debounce = debounce,
+        _offlineFallback = offlineFallback,
+        _isOfflineError = isOfflineError,
         super(PagedListState<T>(limit: pageSize));
 
   final PagedFetcher<T> _fetcher;
   final PagedIdOf<T> _idOf;
   final Duration _debounce;
+  final PagedOfflineFallback<T>? _offlineFallback;
+
+  /// Decide si un error habilita el fallback al snapshot local. Por defecto
+  /// (null) cualquier error lo habilita; un controlador que conozca su
+  /// transporte debe restringirlo a fallos SIN respuesta del servidor, de modo
+  /// que un 401/403/400 nunca se tape con datos locales.
+  final bool Function(Object error)? _isOfflineError;
 
   /// Se incrementa en cada cambio de contexto (query/filtros/refresh).
   /// Las respuestas con una generacion vieja se descartan.
@@ -259,10 +286,35 @@ class PagedListController<T> extends StateNotifier<PagedListState<T>> {
         total: result.total,
         isInitialLoading: false,
         isRefreshing: false,
+        isOffline: false,
         clearError: true,
       );
     } catch (error) {
       if (!mounted || generation != _generation) return;
+
+      // Caida de red / servidor: si hay snapshot local, se usa como fallback
+      // (busqueda local por nombre/parcial/codigo) sin borrar nada valido.
+      final fallbackItems = await _tryOfflineFallback(error);
+      if (!mounted || generation != _generation) return;
+      if (fallbackItems != null) {
+        _seenIds.clear();
+        final items = <T>[];
+        for (final item in fallbackItems) {
+          if (_seenIds.add(_idOf(item))) items.add(item);
+        }
+        state = state.copyWith(
+          items: items,
+          page: 1,
+          hasMore: false,
+          total: items.length,
+          isInitialLoading: false,
+          isRefreshing: false,
+          isOffline: true,
+          clearError: true,
+        );
+        return;
+      }
+
       state = state.copyWith(
         // Si ya habia datos, se conservan (no se vacia la pantalla).
         items: hadItems ? state.items : const [],
@@ -270,6 +322,19 @@ class PagedListController<T> extends StateNotifier<PagedListState<T>> {
         isRefreshing: false,
         error: error,
       );
+    }
+  }
+
+  Future<List<T>?> _tryOfflineFallback(Object error) async {
+    final fallback = _offlineFallback;
+    if (fallback == null) return null;
+    // Un error de negocio (el servidor respondio) NO se tapa con la cache.
+    final isOffline = _isOfflineError?.call(error) ?? true;
+    if (!isOffline) return null;
+    try {
+      return await fallback(state.query, state.filters);
+    } catch (_) {
+      return null;
     }
   }
 
