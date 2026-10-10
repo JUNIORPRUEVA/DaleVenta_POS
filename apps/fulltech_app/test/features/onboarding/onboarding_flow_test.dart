@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:daleventa_pos/core/auth/app_bootstrap_status.dart';
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/auth/business_registration_policy.dart';
+import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/routing/app_router.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
+import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/onboarding/data/onboarding_repository.dart';
 import 'package:daleventa_pos/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:dio/dio.dart';
@@ -27,6 +31,57 @@ class _FakeOnboardingRepository extends OnboardingRepository {
     startCalls += 1;
     state = _state(status: 'IN_PROGRESS', shouldShowWelcome: false);
     return state;
+  }
+}
+
+class _GuardedCatalogRepository extends CatalogRepository {
+  _GuardedCatalogRepository() : super(Dio());
+
+  int fetchProductsCalls = 0;
+  int createProductCalls = 0;
+
+  @override
+  Future<List<ProductModel>> fetchProducts({
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
+    fetchProductsCalls += 1;
+    throw StateError('Onboarding must not download the full catalog');
+  }
+
+  @override
+  Future<List<ProductModel>> getCachedProducts({Duration? maxAge}) async {
+    return const <ProductModel>[];
+  }
+
+  @override
+  Future<ProductModel> createProduct({
+    required String nombre,
+    String? codigo,
+    required double precio,
+    required double costo,
+    required double stock,
+    String? fotoUrl,
+    required String categoria,
+    String? operationId,
+    String? taxTreatment,
+    double? taxRate,
+    String? taxPriceMode,
+    String? unitOfMeasureId,
+    UnitOfMeasureModel? unitOfMeasure,
+    String? itemType,
+    bool? trackInventory,
+    bool skipLoader = false,
+  }) async {
+    createProductCalls += 1;
+    return ProductModel(
+      id: 'onboarding-product',
+      nombre: nombre,
+      precio: precio,
+      costo: costo,
+      stock: stock,
+      categoria: categoria,
+    );
   }
 }
 
@@ -94,6 +149,56 @@ void main() {
     expect(find.text('Tu cuenta está lista'), findsNothing);
   });
 
+  testWidgets(
+    'paso producto con 5000 productos usa conteo y no descarga catalogo',
+    (tester) async {
+      final repo = _FakeOnboardingRepository(
+        _state(
+          status: 'IN_PROGRESS',
+          shouldShowWelcome: false,
+          productCount: 5000,
+          steps: const {
+            'company': 'COMPLETED',
+            'billing': 'COMPLETED',
+            'product': 'PENDING',
+            'ready': 'PENDING',
+          },
+        ),
+      );
+      final catalog = _GuardedCatalogRepository();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            onboardingRepositoryProvider.overrideWithValue(repo),
+            catalogRepositoryProvider.overrideWithValue(catalog),
+          ],
+          child: const MaterialApp(home: OnboardingScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ya tienes productos'), findsOneWidget);
+      expect(find.text('Tu primer producto'), findsNothing);
+      expect(catalog.fetchProductsCalls, 0);
+      expect(catalog.createProductCalls, 0);
+    },
+  );
+
+  test('onboarding no usa fetchProducts ni loadAllProductPages', () {
+    final source = File(
+      'lib/features/onboarding/presentation/onboarding_screen.dart',
+    ).readAsStringSync();
+    final backendSource = File(
+      '../api/src/onboarding/onboarding.service.ts',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('fetchProducts(')));
+    expect(source, isNot(contains('loadAllProductPages')));
+    expect(backendSource, contains('this.prisma.product.count'));
+    expect(backendSource, isNot(contains('this.prisma.product.findMany')));
+  });
+
   testWidgets('router mantiene /onboarding cuando requiresOnboarding=true', (
     tester,
   ) async {
@@ -138,18 +243,20 @@ void main() {
 OnboardingStateModel _state({
   required String status,
   required bool shouldShowWelcome,
+  int productCount = 0,
+  Map<String, String> steps = const {
+    'company': 'PENDING',
+    'billing': 'PENDING',
+    'product': 'PENDING',
+    'ready': 'PENDING',
+  },
 }) {
   return OnboardingStateModel(
     required: status == 'WELCOME_PENDING' || status == 'IN_PROGRESS',
     shouldShowWelcome: shouldShowWelcome,
     status: status,
     tutorialStatus: 'PENDING',
-    steps: const {
-      'company': 'PENDING',
-      'billing': 'PENDING',
-      'product': 'PENDING',
-      'ready': 'PENDING',
-    },
+    steps: steps,
     company: const OnboardingCompanyModel(
       name: 'Demo',
       commercialName: 'Demo',
@@ -160,7 +267,7 @@ OnboardingStateModel _state({
       pricesIncludeTax: false,
       ncfEnabled: false,
     ),
-    productCount: 0,
+    productCount: productCount,
     trialEndsAt: DateTime(2026, 10, 4),
   );
 }
