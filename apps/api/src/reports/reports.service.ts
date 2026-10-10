@@ -172,64 +172,64 @@ export class ReportsService {
       cancelledInRangeSales,
       company,
     ] = await Promise.all([
-        this.prisma.sale.findMany({
-          where: saleWhere,
-          include: {
-            customer: { select: { id: true, nombre: true } },
-            items: {
-              include: {
-                product: { select: { categoria: true } },
-              },
+      this.prisma.sale.findMany({
+        where: saleWhere,
+        include: {
+          customer: { select: { id: true, nombre: true } },
+          items: {
+            include: {
+              product: { select: { categoria: true } },
             },
           },
-          orderBy: { saleDate: "asc" },
-          take: SALES_OVERVIEW_MAX_ROWS + 1,
-        }),
-        this.prisma.sale.findMany({
-          where: returnedWhere,
-          include: {
-            customer: { select: { id: true, nombre: true } },
-            items: {
-              include: {
-                product: { select: { categoria: true } },
-              },
+        },
+        orderBy: { saleDate: "asc" },
+        take: SALES_OVERVIEW_MAX_ROWS + 1,
+      }),
+      this.prisma.sale.findMany({
+        where: returnedWhere,
+        include: {
+          customer: { select: { id: true, nombre: true } },
+          items: {
+            include: {
+              product: { select: { categoria: true } },
             },
           },
-          orderBy: { deletedAt: "asc" },
-          take: SALES_OVERVIEW_MAX_ROWS + 1,
-        }),
-        this.prisma.sale.findMany({
-          where: refundWhere,
-          include: {
-            customer: { select: { id: true, nombre: true } },
-            items: {
-              include: {
-                product: { select: { categoria: true } },
-              },
+        },
+        orderBy: { deletedAt: "asc" },
+        take: SALES_OVERVIEW_MAX_ROWS + 1,
+      }),
+      this.prisma.sale.findMany({
+        where: refundWhere,
+        include: {
+          customer: { select: { id: true, nombre: true } },
+          items: {
+            include: {
+              product: { select: { categoria: true } },
             },
           },
-          orderBy: { saleDate: "asc" },
-          take: SALES_OVERVIEW_MAX_ROWS + 1,
-        }),
-        this.buildProductCatalogSummary(companyId, selectedCategory),
-        this.buildCashMovementSummary({
-          createdAt: range,
+        },
+        orderBy: { saleDate: "asc" },
+        take: SALES_OVERVIEW_MAX_ROWS + 1,
+      }),
+      this.buildProductCatalogSummary(companyId, selectedCategory),
+      this.buildCashMovementSummary({
+        createdAt: range,
+        companyId,
+        ...(canSeeAll ? {} : { userId: user.id }),
+      }),
+      this.prisma.sale.findMany({
+        where: {
           companyId,
-          ...(canSeeAll ? {} : { userId: user.id }),
-        }),
-        this.prisma.sale.findMany({
-          where: {
-            companyId,
-            ...userFilter,
-            kind: "invoice",
-            isDeleted: true,
-            deletedAt: range,
-          },
-          select: { id: true },
-          take: SALES_OVERVIEW_MAX_ROWS + 1,
-        }),
-        companyPromise,
-      ]);
+          ...userFilter,
+          kind: "invoice",
+          isDeleted: true,
+          deletedAt: range,
+        },
+        select: { id: true },
+        take: SALES_OVERVIEW_MAX_ROWS + 1,
+      }),
+      companyPromise,
+    ]);
     this.assertReportRowBudget("ventas", sales);
     this.assertReportRowBudget("ventas anuladas", returnedSales);
     this.assertReportRowBudget("devoluciones", refundSales);
@@ -646,8 +646,7 @@ export class ReportsService {
             {
               code: "payment_breakdown_invariant_violation",
               severity: "warning",
-              message:
-                `${paymentBreakdownViolations} ventas tienen abonos registrados por encima del efectivo/transferencia acumulado de la venta. El efectivo se expone sin recortar para que la inconsistencia sea auditable.`,
+              message: `${paymentBreakdownViolations} ventas tienen abonos registrados por encima del efectivo/transferencia acumulado de la venta. El efectivo se expone sin recortar para que la inconsistencia sea auditable.`,
             },
           ]
         : []),
@@ -764,7 +763,8 @@ export class ReportsService {
   }
 
   private canUseRawAggregates() {
-    const queryRaw = (this.prisma as unknown as { $queryRaw?: unknown }).$queryRaw;
+    const queryRaw = (this.prisma as unknown as { $queryRaw?: unknown })
+      .$queryRaw;
     return typeof queryRaw === "function" && !(queryRaw as any)._isMockFunction;
   }
 
@@ -836,8 +836,7 @@ export class ReportsService {
       outOfStock: inventoryEnabled ? productCatalog.inventory.outOfStock : 0,
       lowStock: inventoryEnabled ? productCatalog.inventory.lowStock : 0,
     };
-    const totalsCash =
-      financial.initialCash + creditPaymentPeriodSummary.cash;
+    const totalsCash = financial.initialCash + creditPaymentPeriodSummary.cash;
     const totalsTransfer =
       financial.initialTransfer + creditPaymentPeriodSummary.transfer;
     const initialCashOperations = financial.initialCashOperations;
@@ -846,7 +845,8 @@ export class ReportsService {
       {
         method: "Efectivo",
         amount: totalsCash,
-        count: initialCashOperations + creditPaymentPeriodSummary.cashOperations,
+        count:
+          initialCashOperations + creditPaymentPeriodSummary.cashOperations,
       },
       {
         method: "Transferencia",
@@ -867,8 +867,7 @@ export class ReportsService {
             {
               code: "payment_breakdown_invariant_violation",
               severity: "warning",
-              message:
-                `${financial.paymentBreakdownViolations} ventas tienen abonos registrados por encima del efectivo/transferencia acumulado de la venta. El efectivo se expone sin recortar para que la inconsistencia sea auditable.`,
+              message: `${financial.paymentBreakdownViolations} ventas tienen abonos registrados por encima del efectivo/transferencia acumulado de la venta. El efectivo se expone sin recortar para que la inconsistencia sea auditable.`,
             },
           ]
         : []),
@@ -977,11 +976,13 @@ export class ReportsService {
     sellerUserId: string | null;
   }): Promise<SalesOverviewFinancialSummary> {
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
       : Prisma.empty;
-    const rows = await (this.prisma as unknown as {
-      $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
-    }).$queryRaw<
+    const rows = await (
+      this.prisma as unknown as {
+        $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
+      }
+    ).$queryRaw<
       Array<{
         totalSales: bigint | number | string | null;
         saleItemRows: bigint | number | string | null;
@@ -1010,7 +1011,7 @@ export class ReportsService {
       WITH invoice_sales AS (
         SELECT s.*
         FROM "Sale" s
-        WHERE s."company_id" = ${params.companyId}
+        WHERE s."company_id" = ${params.companyId}::uuid
           AND s."kind" = 'invoice'
           AND s."saleDate" >= ${params.range.gte as Date}
           AND s."saleDate" < ${params.range.lt as Date}
@@ -1039,7 +1040,7 @@ export class ReportsService {
           COALESCE(SUM(cp."cashAmount"), 0) AS "creditCash",
           COALESCE(SUM(cp."transferAmount"), 0) AS "creditTransfer"
         FROM "sale_credit_payments" cp
-        WHERE cp."company_id" = ${params.companyId}
+        WHERE cp."company_id" = ${params.companyId}::uuid
         GROUP BY cp."saleId"
       ),
       per_sale AS (
@@ -1069,7 +1070,7 @@ export class ReportsService {
       cancelled_in_range AS (
         SELECT s."id"
         FROM "Sale" s
-        WHERE s."company_id" = ${params.companyId}
+        WHERE s."company_id" = ${params.companyId}::uuid
           AND s."kind" = 'invoice'
           AND s."isDeleted" = true
           AND s."deletedAt" >= ${params.range.gte as Date}
@@ -1079,7 +1080,7 @@ export class ReportsService {
       refund_documents_all AS (
         SELECT s."id", s."refunded_sale_id"
         FROM "Sale" s
-        WHERE s."company_id" = ${params.companyId}
+        WHERE s."company_id" = ${params.companyId}::uuid
           AND s."kind" = 'refund'
           AND s."isDeleted" = false
           AND s."saleDate" >= ${params.range.gte as Date}
@@ -1232,7 +1233,9 @@ export class ReportsService {
     selectedCategory: string | null,
   ): Promise<ProductCatalogSummary> {
     const delegate = this.prisma as unknown as {
-      $queryRaw?: <T = unknown>(query: TemplateStringsArray | Prisma.Sql) => Promise<T>;
+      $queryRaw?: <T = unknown>(
+        query: TemplateStringsArray | Prisma.Sql,
+      ) => Promise<T>;
       product: {
         findMany: (args: unknown) => Promise<
           Array<{
@@ -1287,7 +1290,7 @@ export class ReportsService {
           SUM(CASE WHEN p."costo" <= 0 THEN 1 ELSE 0 END) AS "productsWithoutCost"
         FROM "Product" p
         LEFT JOIN "unit_of_measures" u ON u."id" = p."unit_of_measure_id"
-        WHERE p."company_id" = ${companyId}
+        WHERE p."company_id" = ${companyId}::uuid
           AND p."item_type" = CAST(${ProductItemType.PRODUCT} AS "product_item_type")
           AND p."track_inventory" = true
           ${categoryFilter}
@@ -1335,7 +1338,7 @@ export class ReportsService {
 
     if (!params.selectedCategory && typeof delegate.$queryRaw === "function") {
       const sellerFilter = params.sellerUserId
-        ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+        ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
         : Prisma.empty;
       const rows = await delegate.$queryRaw<
         Array<{
@@ -1354,7 +1357,7 @@ export class ReportsService {
           COUNT(*) AS "rowCount"
         FROM "sale_credit_payments" cp
         INNER JOIN "Sale" s ON s."id" = cp."saleId"
-        WHERE cp."company_id" = ${params.companyId}
+        WHERE cp."company_id" = ${params.companyId}::uuid
           AND cp."paidAt" >= ${params.range.gte as Date}
           AND cp."paidAt" < ${params.range.lt as Date}
           ${sellerFilter}
@@ -1379,7 +1382,9 @@ export class ReportsService {
       where: {
         companyId: params.companyId,
         paidAt: params.range,
-        ...(params.sellerUserId ? { sale: { userId: params.sellerUserId } } : {}),
+        ...(params.sellerUserId
+          ? { sale: { userId: params.sellerUserId } }
+          : {}),
       },
       select: {
         saleId: true,
@@ -1436,7 +1441,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1456,7 +1461,7 @@ export class ReportsService {
           COALESCE(SUM(si."subtotalSold"), 0) AS "saleTotal"
         FROM "Sale" s
         LEFT JOIN "SaleItem" si ON si."saleId" = s."id"
-        WHERE s."company_id" = ${params.companyId}
+        WHERE s."company_id" = ${params.companyId}::uuid
           AND s."kind" = 'invoice'
           AND s."saleDate" >= ${params.range.gte as Date}
           AND s."saleDate" < ${params.range.lt as Date}
@@ -1485,7 +1490,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1510,7 +1515,7 @@ export class ReportsService {
         COALESCE(SUM(si."profit"), 0) AS "totalProfit"
       FROM "SaleItem" si
       INNER JOIN "Sale" s ON s."id" = si."saleId"
-      WHERE s."company_id" = ${params.companyId}
+      WHERE s."company_id" = ${params.companyId}::uuid
         AND s."kind" = 'invoice'
         AND s."saleDate" >= ${params.range.gte as Date}
         AND s."saleDate" < ${params.range.lt as Date}
@@ -1566,7 +1571,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1581,7 +1586,7 @@ export class ReportsService {
         COALESCE(SUM(si."profit"), 0) AS "profit"
       FROM "Sale" s
       LEFT JOIN "SaleItem" si ON si."saleId" = s."id"
-      WHERE s."company_id" = ${params.companyId}
+      WHERE s."company_id" = ${params.companyId}::uuid
         AND s."kind" = 'invoice'
         AND s."saleDate" >= ${params.range.gte as Date}
         AND s."saleDate" < ${params.range.lt as Date}
@@ -1611,7 +1616,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1643,7 +1648,7 @@ export class ReportsService {
         FROM "SaleItem" si
         INNER JOIN "Sale" s ON s."id" = si."saleId"
         LEFT JOIN "Product" p ON p."id" = si."productId"
-        WHERE s."company_id" = ${params.companyId}
+        WHERE s."company_id" = ${params.companyId}::uuid
           AND s."kind" = 'invoice'
           AND s."saleDate" >= ${params.range.gte as Date}
           AND s."saleDate" < ${params.range.lt as Date}
@@ -1723,16 +1728,20 @@ export class ReportsService {
         .join(" + ");
       byCategory.set(categoryName, current);
     }
-    return [...byCategory.values()].sort((a, b) => b.totalProfit - a.totalProfit);
+    return [...byCategory.values()].sort(
+      (a, b) => b.totalProfit - a.totalProfit,
+    );
   }
 
   private async productCategoriesFromDatabase(companyId: string) {
-    const rows = await (this.prisma as unknown as {
-      $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
-    }).$queryRaw<Array<{ category: string | null }>>(Prisma.sql`
+    const rows = await (
+      this.prisma as unknown as {
+        $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
+      }
+    ).$queryRaw<Array<{ category: string | null }>>(Prisma.sql`
       SELECT DISTINCT COALESCE(NULLIF(btrim("categoria"), ''), 'Sin categoria') AS "category"
       FROM "Product"
-      WHERE "company_id" = ${companyId}
+      WHERE "company_id" = ${companyId}::uuid
         AND "item_type" = CAST(${ProductItemType.PRODUCT} AS "product_item_type")
         AND "track_inventory" = true
       ORDER BY "category" ASC
