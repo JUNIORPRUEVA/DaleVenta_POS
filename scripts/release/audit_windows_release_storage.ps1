@@ -1,7 +1,7 @@
 param(
   [string]$Prefix = 'releases/windows/',
   [string]$SpecificKey = '',
-  [string[]]$EnvFile = @('.env', 'apps\api\.env'),
+  [string[]]$EnvFile = @('.env', 'apps\api\.env', 'apps\api\.env.uat.local'),
   [int]$MaxKeys = 1000
 )
 
@@ -24,7 +24,7 @@ foreach ($file in $EnvFile) {
 $nodeScript = @'
 const fs = require('fs');
 
-for (const file of process.env.FULLPOS_RELEASE_ENV_FILES.split(';').filter(Boolean)) {
+for (const file of (process.env.FULLPOS_RELEASE_ENV_FILES || '').split(';').filter(Boolean)) {
   if (!fs.existsSync(file)) continue;
   for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
     const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
