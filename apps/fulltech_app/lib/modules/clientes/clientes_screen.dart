@@ -793,7 +793,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                             desktopLayout ? 14 : 14,
                             24,
                           ),
-                          itemCount: state.items.length,
+                          itemCount: state.items.length + 1,
                           separatorBuilder: (context, index) => Divider(
                             height: 1,
                             color: theme.colorScheme.outlineVariant.withValues(
@@ -801,6 +801,38 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                             ),
                           ),
                           itemBuilder: (context, index) {
+                            if (index >= state.items.length) {
+                              // Pie de lista: la paginación se resuelve en el
+                              // SERVIDOR, así que al llegar al final se pide la
+                              // página siguiente en lugar de cortar en 100.
+                              if (controller.hasMoreClients) {
+                                if (!state.refreshing) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) {
+                                      unawaited(controller.loadMore());
+                                    }
+                                  });
+                                }
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 18),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 18),
+                                child: Center(child: Text('Fin de la lista')),
+                              );
+                            }
                             final client = state.items[index];
                             return _ClienteCard(
                               client: client,

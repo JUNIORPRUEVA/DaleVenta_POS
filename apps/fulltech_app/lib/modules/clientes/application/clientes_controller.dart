@@ -107,6 +107,15 @@ class ClientesController extends StateNotifier<ClientesState> {
   String get _ownerId =>
       ref.read(authStateProvider).user?.id ?? 'default_owner';
 
+  /// Paginacion de la lista (el backend ya entrega `total`/`hasMore`): sin
+  /// esto la pantalla se quedaba con las primeras 100 filas y los clientes
+  /// siguientes eran inalcanzables.
+  static const int _pageSize = 50;
+  int _page = 1;
+  bool _hasMore = false;
+
+  bool get hasMoreClients => _hasMore;
+
   Future<void> load({String? search}) async {
     final seq = ++_loadSeq;
     final nextSearch = search ?? state.search;
@@ -132,22 +141,80 @@ class ClientesController extends StateNotifier<ClientesState> {
     );
 
     try {
-      final items = await repo.listClientsAndCache(
+      final page = await repo.listClientsPage(
         ownerId: _ownerId,
         search: nextSearch,
         order: state.order,
         correoFilter: state.correoFilter,
         estadoFilter: state.estadoFilter,
         ownerFilter: state.ownerFilter,
+        page: 1,
+        pageSize: _pageSize,
       );
       if (seq != _loadSeq) return;
-      state = state.copyWith(items: items, loading: false, refreshing: false);
+      _page = 1;
+      _hasMore = page.hasMore;
+      state = state.copyWith(
+        items: page.items,
+        loading: false,
+        refreshing: false,
+      );
+      // La pagina 1 sigue alimentando el snapshot offline (mismo formato que
+      // antes) para no perder la cache local de clientes.
+      await repo.saveClientsSnapshot(
+        ownerId: _ownerId,
+        search: nextSearch,
+        order: state.order,
+        correoFilter: state.correoFilter,
+        estadoFilter: state.estadoFilter,
+        ownerFilter: state.ownerFilter,
+        items: page.items,
+      );
     } catch (e) {
       if (seq != _loadSeq) return;
       final message = e is ApiException
           ? e.message
           : 'No se pudieron cargar los clientes';
       state = state.copyWith(loading: false, refreshing: false, error: message);
+    }
+  }
+
+  /// Carga la siguiente pagina y agrega sin duplicar (dedupe por id).
+  Future<void> loadMore() async {
+    if (!_hasMore || state.refreshing || state.loading) return;
+    final seq = _loadSeq;
+    final repo = ref.read(clientesRepositoryProvider);
+    state = state.copyWith(refreshing: true, clearError: true);
+    try {
+      final next = await repo.listClientsPage(
+        ownerId: _ownerId,
+        search: state.search,
+        order: state.order,
+        correoFilter: state.correoFilter,
+        estadoFilter: state.estadoFilter,
+        ownerFilter: state.ownerFilter,
+        page: _page + 1,
+        pageSize: _pageSize,
+      );
+      if (seq != _loadSeq) return;
+      final seen = state.items.map((cliente) => cliente.id).toSet();
+      final merged = <ClienteModel>[
+        ...state.items,
+        ...next.items.where((cliente) => seen.add(cliente.id)),
+      ];
+      _page = next.page;
+      _hasMore = next.hasMore;
+      state = state.copyWith(
+        items: merged,
+        loading: false,
+        refreshing: false,
+      );
+    } catch (e) {
+      if (seq != _loadSeq) return;
+      final message = e is ApiException
+          ? e.message
+          : 'No se pudieron cargar más clientes';
+      state = state.copyWith(refreshing: false, error: message);
     }
   }
 

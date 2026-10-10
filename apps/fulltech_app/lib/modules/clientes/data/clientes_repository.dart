@@ -27,6 +27,28 @@ final clientesRepositoryProvider = Provider<ClientesRepository>((ref) {
   return repository;
 });
 
+/// Página de clientes tal como la entrega el servidor.
+class ClientsPageResult {
+  const ClientsPageResult({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.hasMore,
+    required this.nextPage,
+  });
+
+  final List<ClienteModel> items;
+  final int page;
+  final int limit;
+
+  /// Total de registros que cumplen los filtros en el servidor. Null si el
+  /// backend no lo informó (nunca se inventa un total).
+  final int? total;
+  final bool hasMore;
+  final int nextPage;
+}
+
 class ClientesRepository {
   final Dio _dio;
   final SyncQueueService _syncQueue;
@@ -250,6 +272,14 @@ class ClientesRepository {
           'pageSize': safePageSize,
           if (includeDeleted != null) 'includeDeleted': includeDeleted,
           if (onlyDeleted != null) 'onlyDeleted': onlyDeleted,
+          // Filtros resueltos en el SERVIDOR: la lista esta paginada, filtrar
+          // en local ocultaria registros de las paginas no cargadas.
+          if (correoFilter != CorreoFilter.todos)
+            'correoFilter': correoFilter == CorreoFilter.conCorreo
+                ? 'conCorreo'
+                : 'sinCorreo',
+          if (ownerFilter == OwnerFilter.mine) 'ownerFilter': 'mine',
+          'order': order == ClientesOrder.az ? 'az' : 'za',
         },
         options: skipLoader ? Options(extra: {'skipLoader': true}) : null,
       );
@@ -323,12 +353,89 @@ class ClientesRepository {
     }
   }
 
+  /// Página de clientes con el envelope completo del servidor.
+  ///
+  /// [listClients] sigue devolviendo solo las filas (compatibilidad), pero la
+  /// UI paginada necesita `total` y `hasMore` para poder llegar al último
+  /// registro en lugar de quedarse con las primeras 100 filas.
+  Future<ClientsPageResult> listClientsPage({
+    required String ownerId,
+    String search = '',
+    ClientesOrder order = ClientesOrder.az,
+    CorreoFilter correoFilter = CorreoFilter.todos,
+    EstadoFilter estadoFilter = EstadoFilter.activos,
+    OwnerFilter ownerFilter = OwnerFilter.todos,
+    int page = 1,
+    int pageSize = 50,
+    bool skipLoader = false,
+  }) async {
+    final safePage = page < 1 ? 1 : page;
+    final safePageSize = pageSize < 1 ? 20 : pageSize;
+    final includeDeleted = estadoFilter == EstadoFilter.todos ? true : null;
+    final onlyDeleted = estadoFilter == EstadoFilter.eliminados ? true : null;
+
+    try {
+      final res = await _dio.get(
+        ApiRoutes.clients,
+        queryParameters: {
+          if (search.trim().isNotEmpty) 'search': search.trim(),
+          'page': safePage,
+          'pageSize': safePageSize,
+          if (includeDeleted != null) 'includeDeleted': includeDeleted,
+          if (onlyDeleted != null) 'onlyDeleted': onlyDeleted,
+          if (correoFilter != CorreoFilter.todos)
+            'correoFilter': correoFilter == CorreoFilter.conCorreo
+                ? 'conCorreo'
+                : 'sinCorreo',
+          if (ownerFilter == OwnerFilter.mine) 'ownerFilter': 'mine',
+          'order': order == ClientesOrder.az ? 'az' : 'za',
+        },
+        options: skipLoader ? Options(extra: {'skipLoader': true}) : null,
+      );
+
+      final raw = res.data;
+      final rows = raw is Map && raw['items'] is List
+          ? (raw['items'] as List<dynamic>)
+          : raw is List
+          ? raw
+          : const <dynamic>[];
+      final items = rows
+          .whereType<Map>()
+          .map((e) => ClienteModel.fromJson(e.cast<String, dynamic>()))
+          .map(
+            (cliente) => cliente.ownerId.isEmpty
+                ? cliente.copyWith(ownerId: ownerId)
+                : cliente,
+          )
+          .toList(growable: false);
+
+      final meta = raw is Map ? raw : const <String, dynamic>{};
+      final total = meta['total'];
+      final hasMoreFlag = meta['hasMore'];
+      final limit = meta['limit'];
+      final nextPage = meta['nextPage'];
+      final resolvedLimit = limit is num ? limit.toInt() : safePageSize;
+      return ClientsPageResult(
+        items: items,
+        page: safePage,
+        limit: resolvedLimit,
+        total: total is num ? total.toInt() : null,
+        hasMore: hasMoreFlag is bool ? hasMoreFlag : items.length >= resolvedLimit,
+        nextPage: nextPage is num ? nextPage.toInt() : safePage + 1,
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _extractMessage(e.response?.data, 'No se pudieron cargar los clientes'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
   Future<ClienteModel> getClientById({
     required String ownerId,
     required String id,
     bool skipLoader = false,
-  }) async {
-    try {
+  }) async {    try {
       final res = await _dio.get(
         ApiRoutes.clientDetail(id),
         options: skipLoader ? Options(extra: {'skipLoader': true}) : null,
