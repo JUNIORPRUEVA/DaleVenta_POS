@@ -33,6 +33,7 @@ import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/offline/sync_status_menu_button.dart';
+import '../../core/pagination/paged_list_controller.dart';
 import '../../core/perf/perf_trace.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
@@ -55,6 +56,7 @@ import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../features/catalogo/application/catalog_controller.dart';
+import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/account/delete_account_dialog.dart';
@@ -430,8 +432,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   final FocusNode _mobileSearchFocusNode = FocusNode();
   final FocusNode _desktopSearchFocusNode = FocusNode();
   final GlobalKey _desktopCartAnimationTargetKey = GlobalKey();
+  late final ProductSearchController _productSearch;
+  void Function()? _removeProductSearchListener;
+  Map<String, int> _serverCategoryCounts = const <String, int>{};
+  bool _loadingServerCategories = false;
 
   final List<CotizacionItem> _items = [];
+  // Snapshot auxiliar para productos ya vistos/seleccionados, fiscal sync,
+  // PDF y herramientas legacy. El selector interactivo usa _productSearch.
   List<ProductModel> _productos = const [];
   List<UnitOfMeasureModel> _quickSaleUnitOptions = const [
     UnitOfMeasureModel.unit,
@@ -471,8 +479,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _openingBarcodeScanner = false;
   bool _finalizingCheckout = false;
   bool _shortcutCheckoutOpening = false;
-  bool _barcodeCatalogRefreshInFlight = false;
-  DateTime? _lastBarcodeCatalogRefreshAt;
   double _mobileCartExtent = 0;
   bool _mobileCartExtentInitialized = false;
 
@@ -549,6 +555,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _applyCatalogControllerProducts(next.items);
       },
     );
+    _productSearch = ProductSearchController(
+      dio: ref.read(dioProvider),
+      offlineSnapshot: () =>
+          ref.read(catalogRepositoryProvider).getCachedProducts(),
+    );
+    _removeProductSearchListener = _productSearch.addListener(
+      _onProductSearchChanged,
+    );
+    _searchCtrl.addListener(_onSearchTextChanged);
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _applyInitialClient();
@@ -719,6 +734,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _lastPublishedDesktopFooterSignature = null;
     _remoteRefreshInFlight = false;
     _lastSuccessfulRemoteSyncAt = null;
+    _serverCategoryCounts = const <String, int>{};
     final initialDraft = _DesktopTicketDraft.empty(
       id: _newId(),
       title: 'Ticket 1',
@@ -737,7 +753,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     ref.invalidate(cotizacionesRepositoryProvider);
     ref.invalidate(ventasControllerProvider);
     unawaited(_loadPinnedProducts(companyId: companyId));
-    unawaited(_bootstrapCatalog());
+    if (companyId.trim().isNotEmpty) {
+      unawaited(_productSearch.reset());
+      unawaited(_loadServerCategories());
+    }
     if (!widget.returnSavedQuotation && companyId.trim().isNotEmpty) {
       unawaited(_restorePersistedEditorDraftIfAny());
     } else {
@@ -856,6 +875,72 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _schedulePersistEditorDraft();
       unawaited(_syncQuotationAi());
     }
+  }
+
+  void _onProductSearchChanged(PagedListState<ProductModel> next) {
+    if (!mounted) return;
+    final syncedRows = _mergeProductSnapshot(_productos, next.items);
+    final productsChanged = !areCatalogProductsEquivalent(
+      _productos,
+      syncedRows,
+    );
+    final productsById = {
+      for (final product in syncedRows) product.id: product,
+    };
+    final nextItems = syncBillingItemsFiscalFromProducts(
+      items: _items,
+      productsById: productsById,
+    );
+    final itemsChanged = !_areBillingItemsFiscalEquivalent(_items, nextItems);
+
+    setState(() {
+      if (productsChanged) _productos = syncedRows;
+      if (itemsChanged) {
+        _items
+          ..clear()
+          ..addAll(nextItems);
+        _writeActiveDesktopDraft();
+      }
+      _loadingProducts =
+          next.isInitialLoading && next.items.isEmpty && _productos.isEmpty;
+      _error = next.error == null
+          ? null
+          : userSafeErrorMessage(
+              next.error,
+              fallback: 'No se pudieron cargar los productos.',
+            );
+    });
+    if (itemsChanged) {
+      _schedulePersistEditorDraft();
+      unawaited(_syncQuotationAi());
+    }
+    if (next.items.isNotEmpty) {
+      Future<void>.microtask(
+        () => FulltechImageCacheManager.warmImageUrls(
+          next.items.map((item) => item.displayFotoUrl),
+        ),
+      );
+    }
+  }
+
+  List<ProductModel> _mergeProductSnapshot(
+    List<ProductModel> current,
+    List<ProductModel> incoming,
+  ) {
+    if (incoming.isEmpty) return current;
+    final byId = <String, ProductModel>{
+      for (final product in current) product.id: product,
+    };
+    for (final product in incoming) {
+      byId[product.id] = product;
+    }
+    final merged = byId.values.toList(growable: false);
+    final catalogVersion = buildCatalogSyncVersion(merged);
+    return applyCatalogSyncVersion(merged, catalogVersion);
+  }
+
+  void _onSearchTextChanged() {
+    _productSearch.setQuery(_searchCtrl.text);
   }
 
   bool _syncEditorItemsFiscalWithLoadedProducts() {
@@ -1108,6 +1193,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _authStateSubscription = null;
     _catalogSubscription?.close();
     _catalogSubscription = null;
+    _removeProductSearchListener?.call();
+    _removeProductSearchListener = null;
+    _searchCtrl.removeListener(_onSearchTextChanged);
+    _productSearch.dispose();
     _persistEditorDraftTimer?.cancel();
     _persistEditorDraftTimer = null;
     _writeActiveDesktopDraft(readTaxProvider: false);
@@ -1438,7 +1527,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
     }
 
-    if (!silent && _productos.isEmpty) {
+    if (!silent &&
+        _productSearch.snapshot.items.isEmpty &&
+        _productos.isEmpty) {
       setState(() {
         _loadingProducts = true;
         _error = null;
@@ -1446,58 +1537,39 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
 
     try {
-      final rows = await ref
-          .read(catalogRepositoryProvider)
-          .fetchProducts(forceRefresh: forceRemote, silent: true);
+      if (forceRemote) {
+        if (!silent || _productSearch.snapshot.page <= 1) {
+          await _productSearch.refresh();
+        }
+      } else {
+        await _productSearch.loadInitial();
+      }
       if (!_isCurrentTenantGeneration(
         companyId: requestCompanyId,
         generation: requestGeneration,
       )) {
         return;
       }
-      final catalogVersion = buildCatalogSyncVersion(rows);
-      final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
       final syncedAt = DateTime.now();
-
-      final productsById = {
-        for (final product in syncedRows) product.id: product,
-      };
-      var itemsChanged = false;
-      final nextItems = syncBillingItemsFiscalFromProducts(
-        items: _items,
-        productsById: productsById,
-      );
-      itemsChanged = !_areBillingItemsFiscalEquivalent(_items, nextItems);
-      if (!areCatalogProductsEquivalent(_productos, syncedRows) ||
-          itemsChanged) {
-        setState(() {
-          _productos = syncedRows;
-          if (itemsChanged) {
-            _items
-              ..clear()
-              ..addAll(nextItems);
-            _writeActiveDesktopDraft();
-          }
-          _loadingProducts = false;
-          _error = null;
-        });
-        if (itemsChanged) {
-          _schedulePersistEditorDraft();
-          unawaited(_syncQuotationAi());
+      final searchError = _productSearch.snapshot.error;
+      if (searchError == null) {
+        if (_loadingProducts || _error != null) {
+          setState(() {
+            _loadingProducts = false;
+            _error = null;
+          });
         }
-      } else if (_loadingProducts) {
+        unawaited(_syncQuotationAi(triggerAi: false));
+        _lastSuccessfulRemoteSyncAt = syncedAt;
+      } else if (!silent) {
         setState(() {
           _loadingProducts = false;
-          _error = null;
+          _error = userSafeErrorMessage(
+            searchError,
+            fallback: 'No se pudieron cargar los productos.',
+          );
         });
       }
-      unawaited(_syncQuotationAi(triggerAi: false));
-      Future<void>.microtask(
-        () => FulltechImageCacheManager.warmImageUrls(
-          syncedRows.map((item) => item.displayFotoUrl),
-        ),
-      );
-      _lastSuccessfulRemoteSyncAt = syncedAt;
     } catch (e) {
       if (!_isCurrentTenantGeneration(
         companyId: requestCompanyId,
@@ -1522,6 +1594,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _bootstrapCatalog() async {
     await _loadProducts();
+    await _loadServerCategories();
+  }
+
+  Future<void> _loadServerCategories() async {
+    if (_loadingServerCategories) return;
+    _loadingServerCategories = true;
+    try {
+      final counts = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProductCategories();
+      if (!mounted) return;
+      setState(() => _serverCategoryCounts = counts);
+    } catch (_) {
+      // Offline: el selector conserva las categorías vistas/locales.
+    } finally {
+      _loadingServerCategories = false;
+    }
   }
 
   void _persistCatalogUiState() {}
@@ -1552,6 +1641,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     for (final product in _productos) {
       addCategory(product.categoriaLabel);
     }
+    for (final category in _serverCategoryCounts.keys) {
+      addCategory(category);
+    }
     for (final category in managedCategories) {
       addCategory(category.name);
     }
@@ -1576,19 +1668,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   List<ProductModel> get _visibleProducts {
-    final query = _searchCtrl.text.trim().toLowerCase();
-    final filtered = _productos.where((product) {
-      if (_selectedCategories.isNotEmpty &&
-          !_selectedCategories.contains(product.categoriaLabel)) {
-        return false;
-      }
-      if (query.isEmpty) return true;
-      final code = (product.codigo ?? '').trim().toLowerCase();
-      return product.nombre.toLowerCase().contains(query) ||
-          product.categoriaLabel.toLowerCase().contains(query) ||
-          code.contains(query);
-    }).toList();
-    return sortBillingProductsWithPinnedFirst(filtered, _pinnedProductIds);
+    return sortBillingProductsWithPinnedFirst(
+      _productSearch.snapshot.items,
+      _pinnedProductIds,
+    );
   }
 
   bool get _companyInventoryEnabled =>
@@ -1620,35 +1703,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final code = rawCode.trim();
     if (code.isEmpty) return null;
 
-    final localMatch = _findProductByExactCode(_productos, code);
-    if (localMatch != null) return localMatch;
-
-    final lastRefresh = _lastBarcodeCatalogRefreshAt;
-    if (_barcodeCatalogRefreshInFlight ||
-        (lastRefresh != null &&
-            DateTime.now().difference(lastRefresh) <
-                const Duration(seconds: 20))) {
-      return null;
-    }
-
-    _barcodeCatalogRefreshInFlight = true;
-    try {
-      final rows = await ref
-          .read(catalogRepositoryProvider)
-          .fetchProducts(forceRefresh: true, silent: true);
-      final catalogVersion = buildCatalogSyncVersion(rows);
-      final syncedRows = applyCatalogSyncVersion(rows, catalogVersion);
-      _lastBarcodeCatalogRefreshAt = DateTime.now();
+    if (!_productSearch.snapshot.isOffline) {
+      final remoteMatch = await _productSearch.findByCode(code);
+      if (remoteMatch != null) return remoteMatch;
       if (!mounted) return null;
-      setState(() {
-        _productos = syncedRows;
-        _loadingProducts = false;
-        _error = null;
-      });
-      return _findProductByExactCode(_productos, code);
-    } finally {
-      _barcodeCatalogRefreshInFlight = false;
     }
+
+    return _findProductByExactCode(_visibleProducts, code) ??
+        _findProductByExactCode(_productos, code);
   }
 
   Future<_BarcodeScanResult> _handleScannedBarcode(String rawCode) async {
@@ -1704,17 +1766,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
   }
 
-  void _submitSearchAndAddFirstVisibleProduct() {
-    final query = _searchCtrl.text.trim().toLowerCase();
-    if (query.isNotEmpty) {
-      for (final product in _productos) {
-        final code = (product.codigo ?? '').trim().toLowerCase();
-        if (code.isNotEmpty && code == query) {
-          _addProduct(product);
-          _searchCtrl.clear();
-          _commitEditorChange(() {});
-          return;
-        }
+  Future<void> _submitSearchAndAddFirstVisibleProduct() async {
+    final query = _searchCtrl.text.trim();
+    if (query.isNotEmpty && !_productSearch.snapshot.isOffline) {
+      final product = await _productSearch.findByCode(query);
+      if (!mounted) return;
+      if (product != null) {
+        _addProduct(product);
+        _searchCtrl.clear();
+        _commitEditorChange(() {});
+        return;
       }
     }
 
@@ -1821,11 +1882,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   void _submitSearchFromShortcut() {
     if (!_billingShortcutsEnabled || !_desktopSearchFocusNode.hasFocus) return;
-    _submitSearchAndAddFirstVisibleProduct();
+    unawaited(_submitSearchAndAddFirstVisibleProduct());
   }
 
   Map<ShortcutActivator, VoidCallback> _windowsBillingShortcutBindings() {
-    if (!_billingShortcutsEnabled) return const <ShortcutActivator, VoidCallback>{};
+    if (!_billingShortcutsEnabled) {
+      return const <ShortcutActivator, VoidCallback>{};
+    }
     return <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.f1): () =>
           unawaited(_openCheckoutDialogFromShortcut()),
@@ -1852,17 +1915,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           _handleBillingShortcutEscape,
       const SingleActivator(LogicalKeyboardKey.delete):
           _removeSelectedCartLineFromShortcut,
-      const SingleActivator(LogicalKeyboardKey.equal):
-          () => _adjustSelectedCartLineFromShortcut(1),
-      const SingleActivator(LogicalKeyboardKey.add):
-          () => _adjustSelectedCartLineFromShortcut(1),
-      const SingleActivator(LogicalKeyboardKey.numpadAdd):
-          () => _adjustSelectedCartLineFromShortcut(1),
-      const SingleActivator(LogicalKeyboardKey.minus):
-          () => _adjustSelectedCartLineFromShortcut(-1),
-      const SingleActivator(LogicalKeyboardKey.numpadSubtract):
-          () => _adjustSelectedCartLineFromShortcut(-1),
-      const SingleActivator(LogicalKeyboardKey.enter): _submitSearchFromShortcut,
+      const SingleActivator(LogicalKeyboardKey.equal): () =>
+          _adjustSelectedCartLineFromShortcut(1),
+      const SingleActivator(LogicalKeyboardKey.add): () =>
+          _adjustSelectedCartLineFromShortcut(1),
+      const SingleActivator(LogicalKeyboardKey.numpadAdd): () =>
+          _adjustSelectedCartLineFromShortcut(1),
+      const SingleActivator(LogicalKeyboardKey.minus): () =>
+          _adjustSelectedCartLineFromShortcut(-1),
+      const SingleActivator(LogicalKeyboardKey.numpadSubtract): () =>
+          _adjustSelectedCartLineFromShortcut(-1),
+      const SingleActivator(LogicalKeyboardKey.enter):
+          _submitSearchFromShortcut,
       const SingleActivator(LogicalKeyboardKey.numpadEnter):
           _submitSearchFromShortcut,
     };
@@ -2132,12 +2196,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ..clear()
       ..addAll(draft.selectedCategories);
     _searchCtrl.text = draft.searchQuery;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyProductCategoryFilter();
+    });
   }
 
   void _resetEditorState() {
     _items.clear();
     _searchCtrl.clear();
     _selectedCategories.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _applyProductCategoryFilter();
+    });
     _selectedClientId = null;
     _selectedClientName = 'Sin cliente';
     _selectedClientPhone = null;
@@ -4435,6 +4505,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ..clear()
         ..addAll(selected);
     });
+    _applyProductCategoryFilter();
+  }
+
+  void _applyProductCategoryFilter() {
+    _productSearch.patchFilter(
+      'categories',
+      _selectedCategories.isEmpty
+          ? null
+          : _selectedCategories.toList(growable: false),
+    );
   }
 
   Future<void> _openNoteDialog() async {
@@ -6869,12 +6949,50 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Widget _buildProductStrip({required bool inventoryEnabled}) {
-    return _visibleProducts.isEmpty
+    final products = _visibleProducts;
+    final snapshot = _productSearch.snapshot;
+    final isFiltering =
+        _searchCtrl.text.trim().isNotEmpty || _hasCategoryFilter;
+    if (products.isEmpty) {
+      if (snapshot.isInitialLoading || _loadingProducts) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (snapshot.error != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  userSafeErrorMessage(
+                    snapshot.error,
+                    fallback: 'No se pudieron cargar los productos.',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () => unawaited(_productSearch.refresh()),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+    return products.isEmpty
         ? Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                _searchCtrl.text.trim().isNotEmpty || _hasCategoryFilter
+                isFiltering
                     ? 'No hay productos con este filtro'
                     : 'El catálogo se mostrará aquí cuando haya productos disponibles',
                 textAlign: TextAlign.center,
@@ -6885,28 +7003,47 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               ),
             ),
           )
-        : GridView.builder(
-            padding: const EdgeInsets.fromLTRB(8, 5, 8, 8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.08,
-            ),
-            itemCount: _visibleProducts.length,
-            itemBuilder: (context, index) {
-              final product = _visibleProducts[index];
-              return _ProductThumbCard(
-                product: product,
-                onTap: () => _addProduct(product),
-                onImageTap: () => _openProductImagePreview(product),
-                money: _money,
-                showStockState: shouldShowBillingStockState(
-                  companyInventoryEnabled: inventoryEnabled,
-                  product: product,
-                ),
-              );
+        : NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.maxScrollExtent -
+                      notification.metrics.pixels <=
+                  240) {
+                unawaited(_productSearch.loadMore());
+              }
+              return false;
             },
+            child: GridView.builder(
+              padding: const EdgeInsets.fromLTRB(8, 5, 8, 8),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.08,
+              ),
+              itemCount: products.length + (snapshot.isLoadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= products.length) {
+                  return const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                final product = products[index];
+                return _ProductThumbCard(
+                  product: product,
+                  onTap: () => _addProduct(product),
+                  onImageTap: () => _openProductImagePreview(product),
+                  money: _money,
+                  showStockState: shouldShowBillingStockState(
+                    companyInventoryEnabled: inventoryEnabled,
+                    product: product,
+                  ),
+                );
+              },
+            ),
           );
   }
 
@@ -7048,7 +7185,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           canRequestFocus: true,
           onTapOutside: (_) => _mobileSearchFocusNode.unfocus(),
           onChanged: (_) => _commitEditorChange(() {}),
-          onSubmitted: (_) => _submitSearchAndAddFirstVisibleProduct(),
+          onSubmitted: (_) =>
+              unawaited(_submitSearchAndAddFirstVisibleProduct()),
           style: const TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 13,
@@ -7838,6 +7976,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       ),
                     ],
                   ),
+                  if (_productSearch.snapshot.isOffline)
+                    _buildMobileOfflineCatalogBanner(),
                   Expanded(
                     child: AnimatedPadding(
                       duration: const Duration(milliseconds: 180),
@@ -7864,6 +8004,44 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           ],
         );
       },
+    );
+  }
+
+  Widget _buildMobileOfflineCatalogBanner() {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      color: theme.colorScheme.errorContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 16,
+            color: theme.colorScheme.onErrorContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sin conexión: mostrando productos guardados en este dispositivo',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => unawaited(_productSearch.refresh()),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('Reintentar'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -7936,23 +8114,41 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             inventoryEnabled: inventoryEnabled,
                             loadingProducts: _loadingProducts,
                             error: _error,
+                            loadingMore: _productSearch.snapshot.isLoadingMore,
+                            offline: _productSearch.snapshot.isOffline,
                             money: _money,
                             onSearchChanged: () => _commitEditorChange(() {}),
-                            onSearchSubmitted:
-                                _submitSearchAndAddFirstVisibleProduct,
+                            onSearchSubmitted: () => unawaited(
+                              _submitSearchAndAddFirstVisibleProduct(),
+                            ),
                             onToggleCategory: (category) =>
                                 _commitEditorChange(() {
                                   if (!_selectedCategories.remove(category)) {
                                     _selectedCategories.add(category);
                                   }
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) {
+                                      _applyProductCategoryFilter();
+                                    }
+                                  });
                                 }),
-                            onClearCategories: () =>
-                                _commitEditorChange(_selectedCategories.clear),
+                            onClearCategories: () => _commitEditorChange(() {
+                              _selectedCategories.clear();
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) _applyProductCategoryFilter();
+                              });
+                            }),
                             onAddProduct: _addProductFromDesktopCatalog,
                             onTogglePinnedProduct: _togglePinnedProduct,
                             onAddExternalItem: () => _openExternalItemDialog(),
                             onOpenNewProduct: _openInventoryCatalog,
                             onOpenStockAdjustments: _openStockAdjustments,
+                            onLoadMore: () =>
+                                unawaited(_productSearch.loadMore()),
+                            onRetryProducts: () =>
+                                unawaited(_productSearch.refresh()),
                           ),
                         ),
                         SizedBox(
@@ -8032,12 +8228,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   if (_items.isEmpty) {
                                     _desktopSelectedCartIndex = null;
                                   } else if (index >= _items.length) {
-                                    _desktopSelectedCartIndex = _items.length - 1;
+                                    _desktopSelectedCartIndex =
+                                        _items.length - 1;
                                   }
                                 });
                               },
-                              onSelectItem: (index) =>
-                                  setState(() => _desktopSelectedCartIndex = index),
+                              onSelectItem: (index) => setState(
+                                () => _desktopSelectedCartIndex = index,
+                              ),
                             ),
                           ),
                         ),
@@ -9644,7 +9842,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
               helpText:
                   'Solicita contraseña y confirmación antes de eliminar una cuenta o empresa.',
             ),
-          ),
+              ),
         ],
         child: _TopbarActionShell(
           icon: Icons.storefront_rounded,
@@ -9658,6 +9856,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
         ),
       ),
     );
+
   }
 }
 
@@ -10898,7 +11097,6 @@ class _CompanySettingsSubmenuAction extends StatelessWidget {
         ),
       ),
     );
-
   }
 }
 
@@ -12777,6 +12975,65 @@ const bool _useModernDesktopCatalogGrid = true;
 const double _desktopCatalogToolbarControlHeight = 42.0;
 const double _desktopCatalogToolbarRadius = 7.0;
 
+class _DesktopCatalogStatusBanner extends StatelessWidget {
+  const _DesktopCatalogStatusBanner({
+    required this.icon,
+    required this.text,
+    required this.actionLabel,
+    required this.onAction,
+    this.error = false,
+  });
+
+  final IconData icon;
+  final String text;
+  final String actionLabel;
+  final VoidCallback onAction;
+  final bool error;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = error ? const Color(0xFFB91C1C) : const Color(0xFF075985);
+    final background = error
+        ? const Color(0xFFFEE2E2)
+        : const Color(0xFFE0F2FE);
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              foregroundColor: color,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DesktopCatalogPane extends StatefulWidget {
   const _DesktopCatalogPane({
     required this.searchController,
@@ -12790,6 +13047,8 @@ class _DesktopCatalogPane extends StatefulWidget {
     required this.inventoryEnabled,
     required this.loadingProducts,
     required this.error,
+    required this.loadingMore,
+    required this.offline,
     required this.money,
     required this.onSearchChanged,
     required this.onSearchSubmitted,
@@ -12800,6 +13059,8 @@ class _DesktopCatalogPane extends StatefulWidget {
     required this.onAddExternalItem,
     required this.onOpenNewProduct,
     required this.onOpenStockAdjustments,
+    required this.onLoadMore,
+    required this.onRetryProducts,
   });
 
   final TextEditingController searchController;
@@ -12813,6 +13074,8 @@ class _DesktopCatalogPane extends StatefulWidget {
   final bool inventoryEnabled;
   final bool loadingProducts;
   final String? error;
+  final bool loadingMore;
+  final bool offline;
   final String Function(double) money;
   final VoidCallback onSearchChanged;
   final VoidCallback onSearchSubmitted;
@@ -12823,6 +13086,8 @@ class _DesktopCatalogPane extends StatefulWidget {
   final VoidCallback onAddExternalItem;
   final VoidCallback onOpenNewProduct;
   final VoidCallback onOpenStockAdjustments;
+  final VoidCallback onLoadMore;
+  final VoidCallback onRetryProducts;
 
   @override
   State<_DesktopCatalogPane> createState() => _DesktopCatalogPaneState();
@@ -12836,12 +13101,22 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
   void initState() {
     super.initState();
     _gridScrollController = ScrollController();
+    _gridScrollController.addListener(_handleGridScroll);
   }
 
   @override
   void dispose() {
+    _gridScrollController.removeListener(_handleGridScroll);
     _gridScrollController.dispose();
     super.dispose();
+  }
+
+  void _handleGridScroll() {
+    if (!_gridScrollController.hasClients) return;
+    final position = _gridScrollController.position;
+    if (position.maxScrollExtent - position.pixels <= 480) {
+      widget.onLoadMore();
+    }
   }
 
   void _handleCategoryRailExpansionChanged(bool expanded) {
@@ -12878,6 +13153,26 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                         child: Column(
                           children: [
                             _buildDesktopCatalogCommandBar(theme),
+                            if (widget.offline)
+                              _DesktopCatalogStatusBanner(
+                                icon: Icons.cloud_off_rounded,
+                                text:
+                                    'Sin conexión: mostrando productos guardados en este dispositivo',
+                                actionLabel: 'Reintentar',
+                                onAction: widget.onRetryProducts,
+                              ),
+                            if (widget.error != null &&
+                                widget.visibleProducts.isEmpty)
+                              _DesktopCatalogStatusBanner(
+                                icon: Icons.error_outline_rounded,
+                                text: widget.error!,
+                                actionLabel: 'Reintentar',
+                                onAction: widget.onRetryProducts,
+                                error: true,
+                              ),
+                            if (widget.loadingProducts &&
+                                widget.visibleProducts.isEmpty)
+                              const LinearProgressIndicator(minHeight: 2),
                             const SizedBox(height: 8),
                             Expanded(
                               child: LayoutBuilder(
@@ -13087,7 +13382,8 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
     final cardHeight = (cardWidth / 0.72).clamp(194.0, 224.0);
     final quickSaleWidth = cardWidth;
     final quickSaleHeight = cardHeight;
-    final totalSlots = widget.visibleProducts.length + 1;
+    final extraSlots = 1 + (widget.loadingMore ? 1 : 0);
+    final totalSlots = widget.visibleProducts.length + extraSlots;
     final rows = (totalSlots / columns).ceil().clamp(1, 999);
     final contentHeight = rows * cardHeight + (rows - 1) * spacing;
 
@@ -13150,6 +13446,24 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                           ),
                           onTogglePinned: () => widget.onTogglePinnedProduct(
                             widget.visibleProducts[index],
+                          ),
+                        ),
+                      ),
+                    if (widget.loadingMore)
+                      Positioned(
+                        left:
+                            ((widget.visibleProducts.length + 1) % columns) *
+                            (cardWidth + spacing),
+                        top:
+                            ((widget.visibleProducts.length + 1) ~/ columns) *
+                            (cardHeight + spacing),
+                        width: cardWidth,
+                        height: cardHeight,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ),
                       ),
