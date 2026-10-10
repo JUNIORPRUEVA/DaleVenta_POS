@@ -23,6 +23,7 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
+import 'tpv_totals.dart';
 
 import '../../core/widgets/pdf_action_menu.dart';
 import '../cash/cash_dialogs.dart';
@@ -48,6 +49,11 @@ class TpvSalesHistoryScreen extends ConsumerStatefulWidget {
 
 class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   static const _invoicePageSize = 50;
+
+  /// Totales autoritativos del periodo (agregado del backend). Null mientras
+  /// no lleguen o si el agregado fallo: en ese caso la UI rotula el valor
+  /// local como "cargadas" y nunca lo presenta como total del periodo.
+  SalesSummaryModel? _periodSummary;
 
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
@@ -131,6 +137,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     });
 
     try {
+      unawaited(_loadPeriodSummary());
       final result = await repo.listInvoicesPage(
         from: _fromDate,
         to: _toDate,
@@ -152,8 +159,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     }
   }
 
-  Future<void> _loadMoreInvoices() async {
-    if (_loading || _loadingMore || !_hasMoreInvoices) return;
+  Future<void> _loadMoreInvoices() async {    if (_loading || _loadingMore || !_hasMoreInvoices) return;
     setState(() {
       _loadingMore = true;
       _error = null;
@@ -179,6 +185,22 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       setState(() => _error = invoiceListErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  /// Totales autoritativos del periodo. No bloquea la lista: si falla, los
+  /// badges caen al calculo local ROTULADO como "cargadas" (nunca como total
+  /// del periodo).
+  Future<void> _loadPeriodSummary() async {
+    try {
+      final summary = await ref
+          .read(ventasRepositoryProvider)
+          .summary(from: _fromDate, to: _toDate);
+      if (!mounted) return;
+      setState(() => _periodSummary = summary);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _periodSummary = null);
     }
   }
 
@@ -260,6 +282,19 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
   double get _netInvoiceTotal =>
       _invoiceRows.fold(0.0, (sum, sale) => sum + sale.netActiveAmount);
+
+  /// Totales que muestra el encabezado.
+  ///
+  /// La lista esta PAGINADA (`_invoicePageSize`): sumar con `.fold()` solo las
+  /// filas cargadas subestima el monto del periodo en cuanto hay mas de una
+  /// pagina. El agregado del backend (`/sales/summary`) es la fuente
+  /// autoritativa; el calculo local queda como respaldo ROTULADO como tal.
+  ({int count, double sold, bool authoritative}) get _headerTotals =>
+      tpvHeaderTotals(
+        periodSummary: _periodSummary,
+        loadedCount: _invoiceCount,
+        loadedSold: _netInvoiceTotal,
+      );
 
   List<String> get _cashiers {
     final values =
@@ -671,15 +706,25 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
               actions: [
                 _MetricBadge(
                   icon: Icons.receipt_long_outlined,
-                  label: 'Facturas',
-                  value: '$_invoiceCount',
+                  label: 'Facturas del período',
+                  value: '${_headerTotals.count}',
                 ),
                 const SizedBox(width: 8),
                 _MetricBadge(
                   icon: Icons.payments_outlined,
-                  label: 'Ventas netas',
-                  value: formatRdCurrencyAccounting(_netInvoiceTotal),
+                  label: _headerTotals.authoritative
+                      ? 'Ventas netas del período'
+                      : 'Ventas netas (cargadas)',
+                  value: formatRdCurrencyAccounting(_headerTotals.sold),
                 ),
+                if (_hasMoreInvoices) ...[
+                  const SizedBox(width: 8),
+                  _MetricBadge(
+                    icon: Icons.list_alt_outlined,
+                    label: 'Cargadas',
+                    value: '${_sales.length}',
+                  ),
+                ],
                 const SizedBox(width: 12),
               ],
             ),
