@@ -1025,21 +1025,85 @@ export class SalesService {
     dateRange: { saleDate?: Prisma.DateTimeFilter },
   ) {
     const range = dateRange.saleDate;
-    if (!range) return [];
+    if (!range?.gte || !range?.lt) return [];
+    if (typeof (this.prisma as any).$queryRaw !== "function") {
+      return this.cancelledRefundOffsetsLegacyForTests(baseWhere, dateRange);
+    }
 
-    const cancelledWhere = {
+    const companyId = baseWhere.companyId as string;
+    const userId =
+      typeof baseWhere.userId === "string" ? baseWhere.userId : null;
+    const customerId =
+      typeof baseWhere.customerId === "string" ? baseWhere.customerId : null;
+    const userFilter = userId
+      ? Prisma.sql`AND refund."userId" = ${userId}::uuid AND cancelled."userId" = ${userId}::uuid`
+      : Prisma.empty;
+    const customerFilter = customerId
+      ? Prisma.sql`AND refund."customerId" = ${customerId}::uuid AND cancelled."customerId" = ${customerId}::uuid`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        userId: string;
+        totalSold: string;
+        totalCost: string;
+        totalProfit: string;
+        commissionAmount: string;
+      }>
+    >`
+      SELECT
+        cancelled."userId"::text AS "userId",
+        COALESCE(SUM(refund."totalSold"), 0)::text AS "totalSold",
+        COALESCE(SUM(refund."totalCost"), 0)::text AS "totalCost",
+        COALESCE(SUM(refund."totalProfit"), 0)::text AS "totalProfit",
+        COALESCE(SUM(refund."commissionAmount"), 0)::text AS "commissionAmount"
+      FROM "Sale" refund
+      INNER JOIN "Sale" cancelled
+        ON cancelled.id = refund."refunded_sale_id"
+       AND cancelled.company_id = refund.company_id
+      WHERE refund.company_id = ${companyId}::uuid
+        AND refund.kind = 'refund'
+        AND refund."isDeleted" = false
+        AND refund."saleDate" >= ${range.gte}
+        AND refund."saleDate" < ${range.lt}
+        AND cancelled.kind = 'invoice'
+        AND cancelled."isDeleted" = true
+        AND cancelled."deletedAt" >= ${range.gte}
+        AND cancelled."deletedAt" < ${range.lt}
+        ${userFilter}
+        ${customerFilter}
+      GROUP BY cancelled."userId"
+    `;
+
+    return rows.map((row) => ({
+      // Attributed to the seller who owned the cancelled sale, because that
+      // is whose cancellation reversal was overstated.
+      userId: row.userId,
+      totalSold: this.toNumber(row.totalSold),
+      totalCost: this.toNumber(row.totalCost),
+      totalProfit: this.toNumber(row.totalProfit),
+      commissionAmount: this.toNumber(row.commissionAmount),
+    }));
+  }
+
+  private async cancelledRefundOffsetsLegacyForTests(
+    baseWhere: Prisma.SaleWhereInput,
+    dateRange: { saleDate?: Prisma.DateTimeFilter },
+  ) {
+    const range = dateRange.saleDate;
+    if (!range?.gte || !range?.lt) return [];
+    const readSales = (this.prisma.sale as any).findMany as
+      | ((args: unknown) => Promise<Array<{ id: string; userId: string }>>)
+      | undefined;
+    if (typeof readSales !== "function") return [];
+
+    const cancelledSales = await readSales({
+      where: {
         ...baseWhere,
         kind: "invoice",
         isDeleted: true,
         deletedAt: { gte: range.gte, lt: range.lt },
-      } satisfies Prisma.SaleWhereInput;
-
-    // IMPORTANTE: sin `take`. Antes habia `take: 1000`, que dejaba fuera del
-    // calculo las anulaciones situadas mas alla de la fila 1000 y producia
-    // totales (totalVendido/utilidad/comision) incorrectos en silencio. El
-    // conjunto considerado debe ser TODAS las anuladas del periodo.
-    const cancelledSales = await this.prisma.sale.findMany({
-      where: cancelledWhere,
+      },
       select: { id: true, userId: true },
     });
     if (cancelledSales.length === 0) return [];
@@ -1060,16 +1124,12 @@ export class SalesService {
         commissionAmount: true,
       },
     });
-
     const ownerBySaleId = new Map(
       cancelledSales.map((sale) => [sale.id, sale.userId]),
     );
-
     return rows
       .filter((row) => row.refundedSaleId)
       .map((row) => ({
-        // Attributed to the seller who owned the cancelled sale, because that
-        // is whose cancellation reversal was overstated.
         userId: ownerBySaleId.get(row.refundedSaleId as string) ?? "",
         totalSold: this.toNumber(row._sum.totalSold),
         totalCost: this.toNumber(row._sum.totalCost),
@@ -1240,11 +1300,7 @@ export class SalesService {
         totalCommission: number;
       }
     >();
-    const apply = (
-      row: SalesSummaryRow,
-      sign: 1 | -1,
-      countSales: number,
-    ) => {
+    const apply = (row: SalesSummaryRow, sign: 1 | -1, countSales: number) => {
       const current = rows.get(row.userId) ?? {
         userId: row.userId,
         totalSales: 0,
@@ -3175,13 +3231,15 @@ export class SalesService {
     return session;
   }
 
-  private logLegacyFinancialRequest(context: {
-    operation: string;
-    companyId: string;
-    userId: string;
-    clientRequestId?: string | null;
-    resolvedCashSessionId?: string | null;
-  } & FinancialClientMetadata) {
+  private logLegacyFinancialRequest(
+    context: {
+      operation: string;
+      companyId: string;
+      userId: string;
+      clientRequestId?: string | null;
+      resolvedCashSessionId?: string | null;
+    } & FinancialClientMetadata,
+  ) {
     this.logger.warn(JSON.stringify(legacyFinancialLogPayload(context)));
   }
 

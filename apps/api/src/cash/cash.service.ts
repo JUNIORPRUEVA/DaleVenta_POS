@@ -11,7 +11,11 @@ import { Prisma, Role } from "@prisma/client";
 import crypto from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
-import { isAdminLike, requireTenant, type TenantUser } from "../auth/tenant-context";
+import {
+  isAdminLike,
+  requireTenant,
+  type TenantUser,
+} from "../auth/tenant-context";
 import {
   cashCloseLegacyCompatEnabled,
   classifyFinancialContract,
@@ -43,6 +47,8 @@ import {
 
 type RequestUser = TenantUser;
 
+const CURRENT_CASH_MOVEMENTS_LIMIT = 500;
+
 @Injectable()
 export class CashService {
   private readonly logger = new Logger(CashService.name);
@@ -57,7 +63,9 @@ export class CashService {
   ) {}
 
   private terminalResolutionService() {
-    return this.terminalResolution ?? new TerminalResolutionService(this.prisma);
+    return (
+      this.terminalResolution ?? new TerminalResolutionService(this.prisma)
+    );
   }
 
   private businessDate(date = new Date()) {
@@ -85,9 +93,16 @@ export class CashService {
     const companyId = requireTenant(user);
     const businessDate = this.businessDate();
     const [cashboxToday, userOpenShift] = await Promise.all([
-      this.prisma.cashboxDaily.findFirst({ where: { companyId, businessDate } }),
+      this.prisma.cashboxDaily.findFirst({
+        where: { companyId, businessDate },
+      }),
       this.prisma.cashSession.findFirst({
-        where: { openedByUserId: user.id, companyId, status: "OPEN", closedAt: null },
+        where: {
+          openedByUserId: user.id,
+          companyId,
+          status: "OPEN",
+          closedAt: null,
+        },
         orderBy: { openedAt: "desc" },
       }),
     ]);
@@ -317,7 +332,10 @@ export class CashService {
       });
       if (existing) return existing;
     }
-    if (movementPath === "LEGACY_COMPAT_PATH" && !financialLegacyCompatEnabled()) {
+    if (
+      movementPath === "LEGACY_COMPAT_PATH" &&
+      !financialLegacyCompatEnabled()
+    ) {
       this.logger.warn(
         `OFFLINE_MOVEMENT_LEGACY_MISSING_SESSION company=${companyId} userId=${user.id}`,
       );
@@ -498,7 +516,12 @@ export class CashService {
   private async performCloseSession(
     user: RequestUser,
     companyId: string,
-    session: { id: string; cashboxDailyId: string | null; note: string | null; businessDate: string | null },
+    session: {
+      id: string;
+      cashboxDailyId: string | null;
+      note: string | null;
+      businessDate: string | null;
+    },
     dto: CloseCashSessionDto,
   ) {
     const summary = await this.buildSummaryForSession(session.id, companyId);
@@ -605,7 +628,8 @@ export class CashService {
     const session = await this.requireOpenSession(user.id, companyId);
     return this.prisma.cashMovement.findMany({
       where: { sessionId: session.id, companyId },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: CURRENT_CASH_MOVEMENTS_LIMIT,
     });
   }
 
@@ -766,7 +790,9 @@ export class CashService {
   ) {
     const companyId = requireTenant(user);
     const pageParam = Number(query.movementsPage ?? query.page);
-    const limitParam = Number(query.movementsLimit ?? query.limit ?? query.take);
+    const limitParam = Number(
+      query.movementsLimit ?? query.limit ?? query.take,
+    );
     const pagination = normalizePagePagination({
       page: Number.isFinite(pageParam) ? pageParam : undefined,
       limit: Number.isFinite(limitParam) ? limitParam : undefined,
@@ -863,7 +889,11 @@ export class CashService {
     }
 
     if (this.canUseAggregatedCashSummary()) {
-      return this.buildSummaryForSessionAggregated(session, sessionId, companyId);
+      return this.buildSummaryForSessionAggregated(
+        session,
+        sessionId,
+        companyId,
+      );
     }
 
     return this.buildSummaryForSessionLegacy(session, sessionId, companyId);
@@ -978,9 +1008,7 @@ export class CashService {
       }
     }
 
-    const creditLedgerCash = this.toNumber(
-      creditLedgerTotals._sum.cashAmount,
-    );
+    const creditLedgerCash = this.toNumber(creditLedgerTotals._sum.cashAmount);
     const creditLedgerTransfer = this.toNumber(
       creditLedgerTotals._sum.transferAmount,
     );
@@ -990,9 +1018,7 @@ export class CashService {
     creditInitialTransfer -= creditLedgerTransfer;
 
     const creditAbonos = this.toNumber(turnCreditPayments._sum.amount);
-    const creditPaymentCash = this.toNumber(
-      turnCreditPayments._sum.cashAmount,
-    );
+    const creditPaymentCash = this.toNumber(turnCreditPayments._sum.cashAmount);
     const creditPaymentTransfer = this.toNumber(
       turnCreditPayments._sum.transferAmount,
     );
@@ -1101,7 +1127,9 @@ export class CashService {
     sessionId: string,
     companyId: string,
   ) {
-    const rows = await this.prisma.$queryRaw<Array<{ count: bigint | number | string }>>(
+    const rows = await this.prisma.$queryRaw<
+      Array<{ count: bigint | number | string }>
+    >(
       Prisma.sql`
         SELECT COUNT(*) AS "count"
         FROM (
