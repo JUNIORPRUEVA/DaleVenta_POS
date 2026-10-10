@@ -155,7 +155,9 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     }));
     const findMany = jest.fn().mockResolvedValue(rows);
     const count = jest.fn().mockResolvedValue(103);
-    const { service } = buildService(findMany, { prisma: { product: { count } } });
+    const { service } = buildService(findMany, {
+      prisma: { product: { findMany, count } },
+    });
 
     const result = await service.findAll(
       { id: "user-a", role: "ADMIN", companyId: companyA } as never,
