@@ -119,7 +119,6 @@ export function toPageResult<T>(
   total?: number | null,
 ): PageResult<T> {
   const items = rows.slice(0, pagination.limit);
-  const hasMore = rows.length > pagination.limit;
 
   let resolvedTotal: number | null = null;
   if (typeof total === "number" && Number.isFinite(total)) {
@@ -127,6 +126,10 @@ export function toPageResult<T>(
   } else if (!pagination.explicit) {
     resolvedTotal = rows.length;
   }
+  const hasMore =
+    typeof resolvedTotal === "number" && pagination.explicit
+      ? pagination.page * pagination.limit < resolvedTotal
+      : rows.length > pagination.limit;
 
   return {
     items,

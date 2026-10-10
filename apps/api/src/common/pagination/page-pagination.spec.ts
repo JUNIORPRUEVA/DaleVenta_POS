@@ -70,9 +70,9 @@ describe("page-pagination contract", () => {
       expect(normalizePagePagination({ limit: 5000 }).limit).toBe(
         MAX_PAGE_LIMIT,
       );
-      expect(
-        normalizePagePagination({ limit: 10, maxLimit: 25 }).limit,
-      ).toBe(10);
+      expect(normalizePagePagination({ limit: 10, maxLimit: 25 }).limit).toBe(
+        10,
+      );
     });
 
     it("normaliza page invalida a 1", () => {
@@ -122,6 +122,20 @@ describe("page-pagination contract", () => {
       );
 
       expect(result.total).toBe(103);
+      expect(result.hasMore).toBe(true);
+      expect(result.nextPage).toBe(2);
+    });
+
+    it("deriva hasMore desde total cuando el servicio ya hizo count", () => {
+      const result = toPageResult(
+        [],
+        normalizePagePagination({ page: 1, limit: 50 }),
+        500,
+      );
+
+      expect(result.total).toBe(500);
+      expect(result.hasMore).toBe(true);
+      expect(result.nextPage).toBe(2);
     });
 
     it("nunca inventa un total: queda null si no se conoce", () => {

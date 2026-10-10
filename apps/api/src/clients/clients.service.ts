@@ -22,7 +22,11 @@ import { ClientsQueryDto } from './dto/clients-query.dto';
 import { UpdateClientLocationDto } from './dto/update-client-location.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
-import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
+import {
+  isAdminLike,
+  requireTenant,
+  type TenantUser,
+} from '../auth/tenant-context';
 import { UsageTelemetryService } from '../usage-telemetry/usage-telemetry.service';
 
 type AuthUser = TenantUser & { role: Role };
@@ -482,6 +486,7 @@ export class ClientsService {
     const pageResult = toPageResult(
       this.serializeClientCollection(items),
       pagination,
+      total,
     );
     return {
       ...pageResult,
@@ -535,13 +540,15 @@ export class ClientsService {
           direccion: dto.direccion,
           notas: dto.notas,
           taxId:
-            normalizedTaxId === undefined
-              ? undefined
-              : normalizedTaxId || null,
+            normalizedTaxId === undefined ? undefined : normalizedTaxId || null,
           businessName:
-            dto.businessName === undefined ? undefined : dto.businessName.trim() || null,
+            dto.businessName === undefined
+              ? undefined
+              : dto.businessName.trim() || null,
           taxIdType:
-            dto.taxIdType === undefined ? undefined : dto.taxIdType.trim() || null,
+            dto.taxIdType === undefined
+              ? undefined
+              : dto.taxIdType.trim() || null,
           ...(telefonoWasProvided
             ? { phoneNormalized: phoneNormalized ?? '' }
             : {}),

@@ -11,15 +11,12 @@ describe("ClientsService multi-tenant isolation", () => {
   };
 
   function serviceWith(prisma: Record<string, unknown>) {
-    if (!('$transaction' in prisma)) {
+    if (!("$transaction" in prisma)) {
       (prisma as any).$transaction = jest.fn(
         async (work: (tx: typeof prisma) => unknown) => work(prisma),
       );
     }
-    return new ClientsService(
-      prisma as never,
-      { emitOps: jest.fn() } as never,
-    );
+    return new ClientsService(prisma as never, { emitOps: jest.fn() } as never);
   }
 
   function clientRow(companyId: string) {
@@ -101,14 +98,20 @@ describe("ClientsService multi-tenant isolation", () => {
     };
     const service = serviceWith(prisma);
 
-    await service.findAll(userA as never, { correoFilter: "conCorreo" } as never);
+    await service.findAll(
+      userA as never,
+      { correoFilter: "conCorreo" } as never,
+    );
     expect(findMany.mock.calls[0][0].where.AND).toEqual([
       { email: { not: null } },
       { NOT: { email: "" } },
     ]);
 
     findMany.mockClear();
-    await service.findAll(userA as never, { correoFilter: "sinCorreo" } as never);
+    await service.findAll(
+      userA as never,
+      { correoFilter: "sinCorreo" } as never,
+    );
     expect(findMany.mock.calls[0][0].where.NOT).toEqual({
       AND: [{ email: { not: null } }, { NOT: { email: "" } }],
     });
@@ -124,11 +127,14 @@ describe("ClientsService multi-tenant isolation", () => {
     };
     const service = serviceWith(prisma);
 
-    const result = await service.findAll(userA as never, {
-      order: "az",
-      page: 1,
-      pageSize: 50,
-    } as never);
+    const result = await service.findAll(
+      userA as never,
+      {
+        order: "az",
+        page: 1,
+        pageSize: 50,
+      } as never,
+    );
 
     expect(findMany.mock.calls[0][0].orderBy).toEqual([
       { nombre: "asc" },
@@ -184,7 +190,9 @@ describe("ClientsService multi-tenant isolation", () => {
   it("throws ConflictException when the taxId already exists in the same company", async () => {
     const prisma = {
       client: {
-        findFirst: jest.fn().mockResolvedValue({ id: "33333333-3333-4333-8333-333333333333" }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "33333333-3333-4333-8333-333333333333" }),
         create: jest.fn(),
       },
     };
@@ -208,11 +216,14 @@ describe("ClientsService multi-tenant isolation", () => {
     };
     const service = serviceWith(prisma);
 
-    const result = await service.findAll(userA as never, {
-      search: "133020253",
-      page: 1,
-      pageSize: 20,
-    } as never);
+    const result = await service.findAll(
+      userA as never,
+      {
+        search: "133020253",
+        page: 1,
+        pageSize: 20,
+      } as never,
+    );
 
     expect(result.total).toBe(0);
     const where = prisma.client.findMany.mock.calls[0][0].where;
@@ -223,9 +234,7 @@ describe("ClientsService multi-tenant isolation", () => {
     });
     expect(parts).toContainEqual(
       expect.objectContaining({
-        OR: expect.arrayContaining([
-          { taxId: { contains: "133020253" } },
-        ]),
+        OR: expect.arrayContaining([{ taxId: { contains: "133020253" } }]),
       }),
     );
     expect(prisma.client.count).toHaveBeenCalledWith({ where });
@@ -240,15 +249,18 @@ describe("ClientsService multi-tenant isolation", () => {
     const prisma = {
       client: {
         findMany: jest.fn().mockResolvedValue(rows),
-        count: jest.fn().mockResolvedValue(3),
+        count: jest.fn().mockResolvedValue(5),
       },
     };
     const service = serviceWith(prisma);
 
-    const result = await service.findAll(userA as never, {
-      page: 2,
-      limit: 2,
-    } as never);
+    const result = await service.findAll(
+      userA as never,
+      {
+        page: 2,
+        limit: 2,
+      } as never,
+    );
 
     expect(prisma.client.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -262,7 +274,7 @@ describe("ClientsService multi-tenant isolation", () => {
     expect(result.pageSize).toBe(2);
     expect(result.hasMore).toBe(true);
     expect(result.nextPage).toBe(3);
-    expect(result.total).toBe(3);
+    expect(result.total).toBe(5);
   });
 
   it("rejects update of a client that belongs to another company", async () => {
