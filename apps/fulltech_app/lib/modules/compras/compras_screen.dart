@@ -13,6 +13,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
+import '../../core/pagination/paged_list_controller.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
@@ -22,7 +23,9 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/product_network_image.dart';
+import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
+import '../../core/auth/auth_repository.dart';
 import 'data/purchase_order_draft_storage.dart';
 import 'data/purchases_repository.dart';
 import 'purchase_models.dart';
@@ -41,7 +44,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     with SingleTickerProviderStateMixin {
   static const _draftStorage = PurchaseOrderDraftStorage();
   late final TabController _tabs;
+  late final ProductSearchController _productSearch;
   final _searchCtrl = TextEditingController();
+  final _productScrollCtrl = ScrollController();
   final _notesCtrl = TextEditingController();
   final _instructionsCtrl = TextEditingController();
   final _discountCtrl = TextEditingController(text: '0');
@@ -58,7 +63,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   bool _showPurchaseExtras = false;
   Timer? _draftSaveTimer;
   bool _restoringDraft = false;
-  List<ProductModel> _products = const [];
+  void Function()? _removeProductSearchListener;
+  Map<String, int> _serverCategoryCounts = const <String, int>{};
+  bool _loadingServerCategories = false;
   List<SupplierModel> _suppliers = const [];
   List<PurchaseOrderModel> _orders = const [];
   List<PurchaseRecommendationModel> _recommendations = const [];
@@ -80,6 +87,16 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (initial != 0) {
       _tabs.index = initial;
     }
+    _productSearch = ProductSearchController(
+      dio: ref.read(dioProvider),
+      offlineSnapshot: () =>
+          ref.read(catalogRepositoryProvider).getCachedProducts(),
+    );
+    _removeProductSearchListener = _productSearch.addListener(
+      _onProductSearchChanged,
+    );
+    _searchCtrl.addListener(_onProductSearchTextChanged);
+    _productScrollCtrl.addListener(_onProductScroll);
     for (final ctrl in [
       _notesCtrl,
       _instructionsCtrl,
@@ -117,6 +134,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   @override
   void dispose() {
     _draftSaveTimer?.cancel();
+    _removeProductSearchListener?.call();
+    _productSearch.dispose();
+    _productScrollCtrl.dispose();
     _tabs.dispose();
     _searchCtrl.dispose();
     _notesCtrl.dispose();
@@ -147,19 +167,39 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _instructionsCtrl.text.trim().isNotEmpty ||
       _notesCtrl.text.trim().isNotEmpty;
   int get _differentProducts => _cart.length;
-  List<String> get _categories =>
-      (_products.map((p) => p.categoriaLabel).toSet().toList()..sort());
-  List<ProductModel> get _visibleProducts {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    return _products.where((p) {
-      final matchQ =
-          q.isEmpty ||
-          p.nombre.toLowerCase().contains(q) ||
-          (p.codigo ?? '').toLowerCase().contains(q);
-      final matchCat =
-          _selectedCategory == null || p.categoriaLabel == _selectedCategory;
-      return matchQ && matchCat;
-    }).toList();
+  PagedListState<ProductModel> get _productState => _productSearch.snapshot;
+  List<String> get _categories {
+    final categories = <String>{
+      ..._serverCategoryCounts.keys,
+      ..._productState.items
+          .map((product) => product.categoriaLabel.trim())
+          .where((category) => category.isNotEmpty),
+    }.toList();
+    categories.sort();
+    return categories;
+  }
+
+  List<ProductModel> get _visibleProducts => _productState.items;
+
+  void _onProductSearchChanged(PagedListState<ProductModel> _) {
+    if (mounted) setState(() {});
+  }
+
+  void _onProductSearchTextChanged() {
+    _productSearch.setQuery(_searchCtrl.text);
+  }
+
+  void _onProductScroll() {
+    if (!_productScrollCtrl.hasClients) return;
+    final position = _productScrollCtrl.position;
+    if (position.maxScrollExtent - position.pixels <= 360) {
+      unawaited(_productSearch.loadMore());
+    }
+  }
+
+  void _selectProductCategory(String? category) {
+    setState(() => _selectedCategory = category);
+    _productSearch.patchFilter('category', category);
   }
 
   Future<void> _load() async {
@@ -167,6 +207,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     await Future.wait([_loadCachedPurchaseData(), _restoreDraft()]);
     await Future.wait([
       _refreshProducts(),
+      _loadServerCategories(),
       _refreshSuppliers(),
       _refreshOrders(),
       _refreshRecommendations(),
@@ -178,7 +219,6 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   Future<void> _loadCachedPurchaseData() async {
     final repo = ref.read(purchasesRepositoryProvider);
     final cached = await Future.wait([
-      ref.read(catalogRepositoryProvider).getCachedProducts(),
       repo.cachedSuppliers(),
       repo.cachedOrders(),
       repo.cachedRecommendations(),
@@ -186,12 +226,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     ]);
     if (!mounted) return;
     setState(() {
-      final products = cached[0] as List<ProductModel>;
-      final suppliers = cached[1] as List<SupplierModel>;
-      final orders = cached[2] as List<PurchaseOrderModel>;
-      final recommendations = cached[3] as List<PurchaseRecommendationModel>;
-      final invoices = cached[4] as List<PurchaseInvoiceModel>;
-      if (products.isNotEmpty) _products = products;
+      final suppliers = cached[0] as List<SupplierModel>;
+      final orders = cached[1] as List<PurchaseOrderModel>;
+      final recommendations = cached[2] as List<PurchaseRecommendationModel>;
+      final invoices = cached[3] as List<PurchaseInvoiceModel>;
       if (suppliers.isNotEmpty) _suppliers = suppliers;
       if (orders.isNotEmpty) _orders = orders;
       if (recommendations.isNotEmpty) _recommendations = recommendations;
@@ -201,11 +239,27 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _refreshProducts() async {
     try {
-      final products = await ref
-          .read(catalogRepositoryProvider)
-          .fetchProducts(silent: true);
-      if (mounted) setState(() => _products = products);
+      if (_productSearch.snapshot.hasItems) {
+        await _productSearch.refresh();
+      } else {
+        await _productSearch.loadInitial();
+      }
     } catch (_) {}
+  }
+
+  Future<void> _loadServerCategories() async {
+    if (_loadingServerCategories) return;
+    _loadingServerCategories = true;
+    try {
+      final counts = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProductCategories();
+      if (mounted) setState(() => _serverCategoryCounts = counts);
+    } catch (_) {
+      // La compra puede continuar con la pagina actual aunque fallen categorias.
+    } finally {
+      _loadingServerCategories = false;
+    }
   }
 
   Future<void> _refreshSuppliers() async {
@@ -530,8 +584,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             selectedCategory: _selectedCategory,
             categories: _categories,
             onSearchChanged: (_) => setState(() {}),
-            onCategoryChanged: (value) =>
-                setState(() => _selectedCategory = value),
+            onCategoryChanged: _selectProductCategory,
             onAddExternal: _openExternalProductDialog,
             onOpenOrder: isWide ? null : _openCartSheet,
             itemCount: _cart.length,
@@ -569,6 +622,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   ? 1.08
                   : 1.36;
               return GridView.builder(
+                controller: _productScrollCtrl,
                 padding: EdgeInsets.fromLTRB(
                   isWide ? 16 : 12,
                   0,
@@ -591,6 +645,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               );
             },
           ),
+        ),
+        _ProductPagingFooter(
+          state: _productState,
+          onLoadMore: () => unawaited(_productSearch.loadMore()),
         ),
       ],
     );
@@ -683,49 +741,65 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       ),
       child: SizedBox(
         height: 326,
-        child: _visibleProducts.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    _searchCtrl.text.trim().isNotEmpty ||
-                            _selectedCategory != null
-                        ? 'No hay productos con este filtro'
-                        : 'Los productos aparecerán aquí para agregarlos a la compra',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-              )
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final columns = width < 340 ? 2 : 3;
-                  const spacing = 7.0;
-                  final cellWidth =
-                      (width - (spacing * (columns - 1))) / columns;
-                  const visibleRows = 3.0;
-                  final cellHeight =
-                      (constraints.maxHeight - (spacing * (visibleRows - 1))) /
-                      visibleRows;
-                  return GridView.builder(
-                    padding: EdgeInsets.zero,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: spacing,
-                      mainAxisSpacing: spacing,
-                      childAspectRatio: cellWidth / cellHeight,
+        child: Column(
+          children: [
+            Expanded(
+              child: _visibleProducts.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          _productState.isInitialLoading
+                              ? 'Cargando productos...'
+                              : _searchCtrl.text.trim().isNotEmpty ||
+                                    _selectedCategory != null
+                              ? 'No hay productos con este filtro'
+                              : 'Los productos aparecerán aquí para agregarlos a la compra',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final columns = width < 340 ? 2 : 3;
+                        const spacing = 7.0;
+                        final cellWidth =
+                            (width - (spacing * (columns - 1))) / columns;
+                        const visibleRows = 3.0;
+                        final cellHeight =
+                            (constraints.maxHeight -
+                                (spacing * (visibleRows - 1))) /
+                            visibleRows;
+                        return GridView.builder(
+                          controller: _productScrollCtrl,
+                          padding: EdgeInsets.zero,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                crossAxisSpacing: spacing,
+                                mainAxisSpacing: spacing,
+                                childAspectRatio: cellWidth / cellHeight,
+                              ),
+                          itemCount: _visibleProducts.length,
+                          itemBuilder: (context, index) => _PurchaseProductCard(
+                            product: _visibleProducts[index],
+                            money: _money,
+                            qty: _qty,
+                            onTap: () =>
+                                _quickAddProduct(_visibleProducts[index]),
+                          ),
+                        );
+                      },
                     ),
-                    itemCount: _visibleProducts.length,
-                    itemBuilder: (context, index) => _PurchaseProductCard(
-                      product: _visibleProducts[index],
-                      money: _money,
-                      qty: _qty,
-                      onTap: () => _quickAddProduct(_visibleProducts[index]),
-                    ),
-                  );
-                },
-              ),
+            ),
+            _ProductPagingFooter(
+              state: _productState,
+              onLoadMore: () => unawaited(_productSearch.loadMore()),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1304,8 +1378,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: () {
+                  _selectProductCategory(draftCategory);
                   setState(() {
-                    _selectedCategory = draftCategory;
                     _selectedSupplierId = draftSupplier;
                     _scheduleDraftSave();
                   });
@@ -3160,7 +3234,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _snack(
         userSafeErrorMessage(
           e,
-          fallback: 'No se pudo enviar la orden al suplidor. Inténtalo nuevamente.',
+          fallback:
+              'No se pudo enviar la orden al suplidor. Inténtalo nuevamente.',
         ),
       );
     }
@@ -4886,6 +4961,68 @@ class _SupplierInfoLine extends StatelessWidget {
           Expanded(
             child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductPagingFooter extends StatelessWidget {
+  const _ProductPagingFooter({required this.state, required this.onLoadMore});
+
+  final PagedListState<ProductModel> state;
+  final VoidCallback onLoadMore;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!state.hasItems &&
+        !state.hasMore &&
+        !state.isInitialLoading &&
+        !state.isRefreshing) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (state.isInitialLoading || state.isRefreshing) ...[
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 8),
+            Text('Cargando productos...', style: theme.textTheme.bodySmall),
+          ] else ...[
+            Flexible(
+              child: Text(
+                state.isOffline
+                    ? 'Sin conexión: productos guardados'
+                    : 'Mostrando ${state.progressLabel}',
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF52667C),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (state.hasMore) ...[
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: state.isLoadingMore ? null : onLoadMore,
+                icon: state.isLoadingMore
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded, size: 18),
+                label: Text(state.isLoadingMore ? 'Cargando' : 'Ver más'),
+              ),
+            ],
+          ],
         ],
       ),
     );
