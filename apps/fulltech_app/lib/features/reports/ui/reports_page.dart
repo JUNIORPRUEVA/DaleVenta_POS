@@ -303,8 +303,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   ReportsFilterState _filters = ReportsFilterState.initial;
   bool _loading = true;
   bool _generatingPdf = false;
-  String? _error;
-  ProviderSubscription<int>? _salesRefreshSubscription;
+  String? _error;  ProviderSubscription<int>? _salesRefreshSubscription;
   ProviderSubscription<int>? _cashRefreshSubscription;
   Timer? _realtimeReloadDebounce;
   // Protección contra races y tormentas de recarga:
@@ -315,6 +314,13 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   int _loadGeneration = 0;
   bool _loadInFlight = false;
   bool _pendingReload = false;
+
+  /// Secciones DIFERIDAS (detalle acotado + comparaciones). Tienen su propia
+  /// generacion: el primer render de la pantalla no espera por ellas, porque en
+  /// un enlace lento esa cadena de peticiones es la causa de que Reportes
+  /// pareciera "no cargar".
+  int _sectionsGeneration = 0;
+  bool _loadingSections = false;
 
   KpisData _kpis = KpisData.fromSummary(SalesSummaryModel.empty());
   List<SaleModel> _sales = const [];
@@ -385,26 +391,22 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     _loadInFlight = true;
     setState(() {
       _loading = true;
+      _loadingSections = false;
       _error = null;
     });
     try {
       final repo = ref.read(ventasRepositoryProvider);
       final range = _range;
+
+      // FASE 1 (bloquea el primer render): RESUMEN agregado en el backend.
       final report = await repo.reportsSalesOverview(
         from: range.start,
         to: range.end,
         category: _selectedCategory,
       );
-      final sales = _projectSalesByCategory(
-        await _loadReportSales(repo, range),
-        _selectedCategory,
-      );
-      final comparisons = await _loadComparisonsSafely(repo);
-
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _kpis = KpisData.fromReport(report);
-        _sales = sales;
         _categories = _parseCategories(report['categories']);
         _salesSeries = _parseSeries(report['salesSeries']);
         _profitSeries = _parseSeries(report['profitSeries']);
@@ -412,9 +414,16 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         _topProducts = _parseTopProducts(report['topProducts']);
         _topClients = _parseTopClients(report['topClients']);
         _categoryProfits = _parseCategoryProfits(report['categoryProfits']);
-        _comparisons = comparisons;
+        // La pantalla ya es usable: los totales son los del backend.
         _loading = false;
+        _loadingSections = true;
       });
+
+      // FASE 2 (diferida): detalle y comparaciones, sin bloquear ni el render
+      // ni el siguiente cambio de filtro.
+      _sectionsGeneration = generation;
+      _releaseMainLoad();
+      unawaited(_loadSections(repo, range, generation));
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       TraceLog.log(
@@ -424,14 +433,45 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       );
       setState(() {
         _loading = false;
+        _loadingSections = false;
         _error = 'No se pudieron cargar los reportes';
       });
     } finally {
-      _loadInFlight = false;
-      if (_pendingReload) {
-        _pendingReload = false;
-        unawaited(_loadData());
-      }
+      _releaseMainLoad();
+    }
+  }
+
+  /// Libera el candado del resumen y, si hubo recargas consolidadas, ejecuta
+  /// una sola. Idempotente: se llama al diferir las secciones y en `finally`.
+  void _releaseMainLoad() {
+    _loadInFlight = false;
+    if (!_pendingReload) return;
+    _pendingReload = false;
+    unawaited(_loadData());
+  }
+
+  /// Detalle acotado (preview) + comparativas. Ninguna de las dos puede dejar
+  /// la pantalla en estado de carga: si fallan, se conserva lo ya mostrado.
+  Future<void> _loadSections(
+    VentasRepository repo,
+    DateTimeRange range,
+    int generation,
+  ) async {
+    try {
+      final sales = _projectSalesByCategory(
+        await _loadReportSales(repo, range),
+        _selectedCategory,
+      );
+      final comparisons = await _loadComparisonsSafely(repo);
+      if (!mounted || generation != _sectionsGeneration) return;
+      setState(() {
+        _sales = sales;
+        _comparisons = comparisons;
+        _loadingSections = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _sectionsGeneration) return;
+      setState(() => _loadingSections = false);
     }
   }
 
@@ -573,7 +613,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   }
 
   Future<void> _downloadPdf() async {
-    if (_loading || _generatingPdf) return;
+    // El PDF necesita el detalle: no se genera con las secciones a medias.
+    if (_loading || _loadingSections || _generatingPdf) return;
     setState(() => _generatingPdf = true);
     try {
       final range = _range;
@@ -733,12 +774,14 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                 ),
                 _ReportsMobileAppBarAction(
                   tooltip: 'Recargar',
-                  onPressed: _loading ? null : _loadData,
+                  onPressed: (_loading || _loadingSections) ? null : _loadData,
                   child: const Icon(Icons.refresh_rounded, size: 18),
                 ),
                 _ReportsMobileAppBarAction(
                   tooltip: 'PDF',
-                  onPressed: _loading || _generatingPdf ? null : _downloadPdf,
+                  onPressed: (_loading || _loadingSections || _generatingPdf)
+                      ? null
+                      : _downloadPdf,
                   child: _generatingPdf
                       ? const SizedBox(
                           width: 18,
@@ -768,7 +811,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                     customLabel: _selectedPeriod == DateRangePeriod.custom
                         ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
                         : null,
-                    loading: _loading,
+                    loading: _loading || _loadingSections,
                     generatingPdf: _generatingPdf,
                     categories: _categories,
                     selectedCategory: _selectedCategory,
@@ -781,7 +824,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (_loading) const LinearProgressIndicator(minHeight: 2),
+                if (_loading || _loadingSections)
+                  const LinearProgressIndicator(minHeight: 2),
                 if (_error != null)
                   Expanded(child: Center(child: Text(_error!)))
                 else
