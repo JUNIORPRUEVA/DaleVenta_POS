@@ -4,6 +4,7 @@ param(
   [string]$ApiBaseUrl = $env:FULLPOS_RELEASE_API_BASE_URL,
   [string]$ApiToken = $env:FULLPOS_RELEASE_API_TOKEN,
   [switch]$ConfirmPublish,
+  [switch]$DryRun,
   [switch]$RetentionDryRun,
   [switch]$AllowUnsignedUat
 )
@@ -68,7 +69,7 @@ function Assert-DownloadedArtifact {
 
 if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) { throw 'ApiBaseUrl is required.' }
 if ([string]::IsNullOrWhiteSpace($ApiToken)) { throw 'ApiToken is required; it will not be printed.' }
-if (-not $ConfirmPublish) {
+if (-not $ConfirmPublish -and -not $DryRun) {
   throw 'Publishing requires explicit -ConfirmPublish. Run prepare_windows_release.ps1 first; publish is intentionally separate.'
 }
 
@@ -95,6 +96,33 @@ $signatureStatus = Assert-DownloadedArtifact `
   -ExpectedSize ([long]$release.fileSize)
 
 Write-Step "Downloaded artifact verified. Signature=$signatureStatus"
+
+if ($DryRun) {
+  $checkBuild = [Math]::Max(0, [int]$release.buildNumber - 1)
+  $currentCheckUrl = "$base/api/app-updates/check?platform=windows&channel=stable&version=$([Uri]::EscapeDataString($release.version))&build=$($release.buildNumber)"
+  $previousCheckUrl = "$base/api/app-updates/check?platform=windows&channel=stable&version=$([Uri]::EscapeDataString($release.version))&build=$checkBuild"
+  [pscustomobject]@{
+    DRY_RUN = 'YES'
+    wouldPublish = 'NO'
+    wouldMutateRelease = 'NO'
+    wouldRunRetention = 'NO'
+    releaseId = $release.id
+    version = $release.version
+    buildNumber = $release.buildNumber
+    status = $release.status
+    fileName = $release.fileName
+    fileSize = $release.fileSize
+    sha256 = $release.sha256
+    signatureStatus = $signatureStatus
+    storageKey = $release.storageKey
+    downloadUrl = $release.downloadUrl
+    publishPayload = (@{ retentionDryRun = [bool]$RetentionDryRun } | ConvertTo-Json -Depth 4)
+    endpointPreviousBuildCheckUrl = $previousCheckUrl
+    endpointCurrentBuildCheckUrl = $currentCheckUrl
+    retentionModeIfPublished = $(if ($RetentionDryRun) { 'DRY_RUN' } else { 'LIVE_AFTER_SUCCESSFUL_PUBLISH' })
+  } | Format-List
+  return
+}
 
 $published = Invoke-JsonApi `
   -Method POST `

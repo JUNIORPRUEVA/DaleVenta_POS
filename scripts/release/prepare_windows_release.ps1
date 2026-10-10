@@ -9,6 +9,7 @@ param(
   [string]$S3BucketUri = $env:FULLPOS_RELEASE_S3_BUCKET_URI,
   [string]$S3EndpointUrl = $env:FULLPOS_RELEASE_S3_ENDPOINT_URL,
   [switch]$SkipBuild,
+  [switch]$DryRun,
   [switch]$AllowUnsignedUat
 )
 
@@ -122,8 +123,36 @@ function Assert-DownloadedArtifact {
   }
 }
 
+function New-ReleasePayload {
+  param(
+    [object]$Version,
+    [string]$FileName,
+    [long]$FileSize,
+    [string]$Sha256,
+    [string]$DownloadUrl,
+    [string]$StorageKey,
+    [string]$CommitSha,
+    [bool]$Signed
+  )
+
+  return @{
+    platform = 'windows'
+    channel = 'stable'
+    version = $Version.Version
+    buildNumber = $Version.BuildNumber
+    fileName = $FileName
+    fileSize = $FileSize
+    sha256 = $Sha256
+    downloadUrl = $DownloadUrl
+    storageKey = $StorageKey
+    releaseNotes = @()
+    commitSha = $CommitSha
+    signed = $Signed
+  }
+}
+
 if ([string]::IsNullOrWhiteSpace($ApiBaseUrl)) { throw 'ApiBaseUrl is required.' }
-if ([string]::IsNullOrWhiteSpace($ApiToken)) { throw 'ApiToken is required; it will not be printed.' }
+if ([string]::IsNullOrWhiteSpace($ApiToken) -and -not $DryRun) { throw 'ApiToken is required; it will not be printed.' }
 if ([string]::IsNullOrWhiteSpace($PublicBaseUrl)) { throw 'PublicBaseUrl is required.' }
 
 $repoRoot = Get-RepoRoot
@@ -156,6 +185,15 @@ if (-not $signed -and -not $AllowUnsignedUat) {
 
 $storageKey = "releases/windows/stable/$($version.Version)-$($version.BuildNumber)/$fileName"
 $downloadUrl = "$($PublicBaseUrl.TrimEnd('/'))/$storageKey"
+$payload = New-ReleasePayload `
+  -Version $version `
+  -FileName $fileName `
+  -FileSize $item.Length `
+  -Sha256 $sha256 `
+  -DownloadUrl $downloadUrl `
+  -StorageKey $storageKey `
+  -CommitSha $commitSha `
+  -Signed $signed
 
 Write-Step "Version: $($version.PubspecValue)"
 Write-Step "Commit: $commitSha"
@@ -164,6 +202,28 @@ Write-Step "Size: $($item.Length)"
 Write-Step "SHA256: $sha256"
 Write-Step "Signature: $($signature.Status)"
 Write-Step "Storage key: $storageKey"
+
+if ($DryRun) {
+  [pscustomobject]@{
+    DRY_RUN = 'YES'
+    wouldBuild = -not [bool]$SkipBuild
+    wouldUpload = 'NO'
+    wouldVerifyDownload = 'NO'
+    wouldCreateDraft = 'NO'
+    version = $version.Version
+    buildNumber = $version.BuildNumber
+    fileName = $fileName
+    size = $item.Length
+    sha256 = $sha256
+    signatureStatus = [string]$signature.Status
+    signed = $signed
+    storageMode = $StorageMode
+    storageKey = $storageKey
+    downloadUrl = $downloadUrl
+    releasePayload = ($payload | ConvertTo-Json -Depth 8)
+  } | Format-List
+  return
+}
 
 Copy-ReleaseArtifact `
   -InstallerPath $installerPath `
@@ -180,20 +240,7 @@ $release = Invoke-JsonApi `
   -Method POST `
   -Url "$($ApiBaseUrl.TrimEnd('/'))/api/app-updates/releases" `
   -ApiToken $ApiToken `
-  -Body @{
-    platform = 'windows'
-    channel = 'stable'
-    version = $version.Version
-    buildNumber = $version.BuildNumber
-    fileName = $fileName
-    fileSize = $item.Length
-    sha256 = $sha256
-    downloadUrl = $downloadUrl
-    storageKey = $storageKey
-    releaseNotes = @()
-    commitSha = $commitSha
-    signed = $signed
-  }
+  -Body $payload
 
 [pscustomobject]@{
   READY_TO_PUBLISH = 'YES'

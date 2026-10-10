@@ -1,6 +1,15 @@
 param(
   [switch]$SkipPubGet,
   [switch]$SkipInstaller,
+  [switch]$SignArtifacts,
+  [switch]$RequireSigning,
+  [string]$SignToolPath = $env:FULLPOS_SIGNTOOL_PATH,
+  [string]$SigningCertificateThumbprint = $env:FULLPOS_SIGNING_CERT_THUMBPRINT,
+  [string]$SigningCertificatePath = $env:FULLPOS_SIGNING_CERT_PATH,
+  [string]$SigningCertificatePasswordEnv = $(if ($env:FULLPOS_SIGNING_CERT_PASSWORD_ENV) { $env:FULLPOS_SIGNING_CERT_PASSWORD_ENV } else { 'FULLPOS_SIGNING_CERT_PASSWORD' }),
+  [string]$SigningTimestampUrl = $(if ($env:FULLPOS_SIGNING_TIMESTAMP_URL) { $env:FULLPOS_SIGNING_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }),
+  [string]$SigningDigestAlgorithm = $(if ($env:FULLPOS_SIGNING_DIGEST_ALGORITHM) { $env:FULLPOS_SIGNING_DIGEST_ALGORITHM } else { 'sha256' }),
+  [string]$ExpectedSignerSubject = $env:FULLPOS_EXPECTED_SIGNER_SUBJECT,
   [string]$ApiBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
   [string]$AppBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
   [int]$ApiTimeoutMs = 15000
@@ -65,6 +74,110 @@ function Get-InstallerMetadata {
     Sha256 = $hash.Hash
     SignatureStatus = $signature.Status
     SignerSubject = $signature.SignerCertificate.Subject
+  }
+}
+
+function Find-SignToolPath {
+  param([string]$PreferredPath)
+
+  if (-not [string]::IsNullOrWhiteSpace($PreferredPath)) {
+    if (Test-Path -LiteralPath $PreferredPath) {
+      return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
+    throw "Configured signtool.exe was not found: $PreferredPath"
+  }
+
+  $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+
+  $candidates = @(
+    'C:\Program Files (x86)\Windows Kits\10\bin',
+    'C:\Program Files\Windows Kits\10\bin',
+    'C:\Program Files (x86)\Windows Kits\8.1\bin',
+    'C:\Program Files\Windows Kits\8.1\bin'
+  )
+  foreach ($root in $candidates) {
+    if (-not (Test-Path -LiteralPath $root)) { continue }
+    $tool = Get-ChildItem -LiteralPath $root -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+      Sort-Object FullName -Descending |
+      Select-Object -First 1
+    if ($tool) { return $tool.FullName }
+  }
+
+  return $null
+}
+
+function Invoke-CodeSigning {
+  param(
+    [string]$FilePath,
+    [string]$SignTool,
+    [string]$CertificateThumbprint,
+    [string]$CertificatePath,
+    [string]$CertificatePasswordEnvName,
+    [string]$TimestampUrl,
+    [string]$DigestAlgorithm
+  )
+
+  if (-not (Test-Path -LiteralPath $FilePath)) {
+    throw "Cannot sign missing file: $FilePath"
+  }
+
+  $args = @('sign', '/fd', $DigestAlgorithm, '/tr', $TimestampUrl, '/td', $DigestAlgorithm)
+  if (-not [string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
+    $args += @('/sha1', $CertificateThumbprint)
+  } elseif (-not [string]::IsNullOrWhiteSpace($CertificatePath)) {
+    if (-not (Test-Path -LiteralPath $CertificatePath)) {
+      throw "Signing certificate file was not found: $CertificatePath"
+    }
+    $password = [Environment]::GetEnvironmentVariable($CertificatePasswordEnvName)
+    if ([string]::IsNullOrEmpty($password)) {
+      throw "Certificate password env var is required for PFX signing: $CertificatePasswordEnvName"
+    }
+    $args += @('/f', $CertificatePath, '/p', $password)
+  } else {
+    throw 'Signing requested but no certificate thumbprint or certificate path was configured.'
+  }
+  $args += @($FilePath)
+
+  & $SignTool @args *> $null
+  if ($LASTEXITCODE -ne 0) {
+    throw "signtool failed for $FilePath with exit code $LASTEXITCODE"
+  }
+}
+
+function Assert-AuthenticodeValid {
+  param(
+    [string]$FilePath,
+    [string]$ExpectedSubject,
+    [switch]$Required
+  )
+
+  if (-not (Test-Path -LiteralPath $FilePath)) {
+    throw "Cannot verify missing file: $FilePath"
+  }
+
+  $signature = Get-AuthenticodeSignature -LiteralPath $FilePath
+  $subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { '' }
+  if ($signature.Status -ne 'Valid') {
+    if ($Required) {
+      throw "Authenticode signature is not valid for $FilePath. Status=$($signature.Status)"
+    }
+    return [pscustomobject]@{
+      Path = $FilePath
+      Status = [string]$signature.Status
+      SignerSubject = $subject
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedSubject) -and $subject -notlike "*$ExpectedSubject*") {
+    throw "Signer subject for $FilePath does not match expected subject. Actual=$subject"
+  }
+
+  return [pscustomobject]@{
+    Path = $FilePath
+    Status = [string]$signature.Status
+    SignerSubject = $subject
   }
 }
 
@@ -169,6 +282,39 @@ try {
     Pop-Location
   }
 
+  $artifactDir = Join-Path $appRoot 'build\windows\x64\runner\Release'
+  $runtimeArtifacts = @(
+    (Join-Path $artifactDir 'fullpos_cloud.exe'),
+    (Join-Path $artifactDir 'updater\FullposUpdater.exe')
+  )
+
+  if ($SignArtifacts) {
+    $signTool = Find-SignToolPath -PreferredPath $SignToolPath
+    if (-not $signTool) {
+      throw 'Signing requested but signtool.exe was not found.'
+    }
+    Write-Step 'Signing Windows runtime artifacts.'
+    foreach ($artifact in $runtimeArtifacts) {
+      Invoke-CodeSigning `
+        -FilePath $artifact `
+        -SignTool $signTool `
+        -CertificateThumbprint $SigningCertificateThumbprint `
+        -CertificatePath $SigningCertificatePath `
+        -CertificatePasswordEnvName $SigningCertificatePasswordEnv `
+        -TimestampUrl $SigningTimestampUrl `
+        -DigestAlgorithm $SigningDigestAlgorithm
+    }
+  }
+
+  $signatureReports = foreach ($artifact in $runtimeArtifacts) {
+    Assert-AuthenticodeValid `
+      -FilePath $artifact `
+      -ExpectedSubject $ExpectedSignerSubject `
+      -Required:$RequireSigning
+  }
+  Write-Step 'Runtime Authenticode status:'
+  $signatureReports | Format-Table -AutoSize
+
   if (-not $SkipInstaller) {
     Write-Step 'Running Inno Setup packaging'
     & $installerScript `
@@ -181,6 +327,27 @@ try {
     }
 
     $installerPath = Join-Path $repoRoot "installer\output\FullPOS-Setup-$($version.Version)-$($version.BuildNumber).exe"
+    if ($SignArtifacts) {
+      $signTool = Find-SignToolPath -PreferredPath $SignToolPath
+      if (-not $signTool) {
+        throw 'Signing requested but signtool.exe was not found.'
+      }
+      Write-Step 'Signing Windows installer artifact.'
+      Invoke-CodeSigning `
+        -FilePath $installerPath `
+        -SignTool $signTool `
+        -CertificateThumbprint $SigningCertificateThumbprint `
+        -CertificatePath $SigningCertificatePath `
+        -CertificatePasswordEnvName $SigningCertificatePasswordEnv `
+        -TimestampUrl $SigningTimestampUrl `
+        -DigestAlgorithm $SigningDigestAlgorithm
+    }
+
+    Assert-AuthenticodeValid `
+      -FilePath $installerPath `
+      -ExpectedSubject $ExpectedSignerSubject `
+      -Required:$RequireSigning | Format-Table -AutoSize
+
     $metadata = Get-InstallerMetadata `
       -InstallerPath $installerPath `
       -Version $version.Version `
