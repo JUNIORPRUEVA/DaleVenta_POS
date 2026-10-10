@@ -22,6 +22,10 @@ import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { LicenseService } from "../license/license.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import {
+  normalizePagePagination,
+  toPageResult,
+} from "../common/pagination/page-pagination";
+import {
   ONBOARDING_STATUS,
   shouldRequireOnboarding,
 } from "../onboarding/onboarding.constants";
@@ -625,7 +629,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     };
   }
 
-  private async findAllSafe(companyId: string) {
+  private async findAllSafe(companyId: string, skip = 0, take = USERS_ADMIN_LIST_LIMIT) {
     const rows = await this.prisma.$queryRaw<any[]>(Prisma.sql`
       SELECT
         id,
@@ -668,7 +672,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
       FROM users
       WHERE company_id = ${companyId}::uuid
       ORDER BY "createdAt" DESC
-      LIMIT ${USERS_ADMIN_LIST_LIMIT}
+      LIMIT ${take}
+      OFFSET ${skip}
     `);
 
     return rows.map((row) => this.mapSafeUserRow(row));
@@ -1046,13 +1051,24 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     });
   }
 
-  findAll(requestUser: TenantUser) {
+  async findAll(
+    requestUser: TenantUser,
+    query: { page?: string; limit?: string } = {},
+  ) {
     const companyId = requireTenant(requestUser);
-    return this.prisma.user
+    const explicitPagination =
+      query.page != null || query.limit != null;
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+      defaultLimit: 50,
+    });
+    const rows = await this.prisma.user
       .findMany({
         where: { companyId },
         orderBy: { createdAt: "desc" },
-        take: USERS_ADMIN_LIST_LIMIT,
+        skip: explicitPagination ? pagination.skip : 0,
+        take: explicitPagination ? pagination.take : USERS_ADMIN_LIST_LIMIT,
         select: {
           id: true,
           email: true,
@@ -1102,7 +1118,11 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
               message: error instanceof Error ? error.message : String(error),
             },
           );
-          return this.findAllSafe(companyId);
+          return this.findAllSafe(
+            companyId,
+            explicitPagination ? pagination.skip : 0,
+            explicitPagination ? pagination.take : USERS_ADMIN_LIST_LIMIT,
+          );
         }
 
         // eslint-disable-next-line no-console
@@ -1125,10 +1145,12 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
         FROM users
         WHERE company_id = ${companyId}::uuid
         ORDER BY "createdAt" DESC
-        LIMIT ${USERS_ADMIN_LIST_LIMIT}
+        LIMIT ${explicitPagination ? pagination.take : USERS_ADMIN_LIST_LIMIT}
+        OFFSET ${explicitPagination ? pagination.skip : 0}
       `);
         return rows.map((row) => this.mapMinimalUser(row));
       });
+    return explicitPagination ? toPageResult(rows, pagination) : rows;
   }
 
   async signWorkContract(userId: string, dto: SignWorkContractDto) {

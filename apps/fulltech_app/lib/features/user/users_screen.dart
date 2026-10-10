@@ -365,6 +365,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             ],
           ),
           data: (users) {
+            final controller = ref.read(usersControllerProvider.notifier);
             final filteredUsers = _filterUsers(users, desktop: false);
 
             if (filteredUsers.isEmpty) {
@@ -378,13 +379,45 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                           : 'No hay resultados con ese filtro',
                     ),
                   ),
+                  if (controller.hasMore || controller.loadingMore) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: controller.loadingMore
+                          ? const CircularProgressIndicator(strokeWidth: 2)
+                          : OutlinedButton.icon(
+                              onPressed: () => ref
+                                  .read(usersControllerProvider.notifier)
+                                  .loadMore(),
+                              icon: const Icon(Icons.expand_more_rounded),
+                              label: const Text('Cargar mas usuarios'),
+                            ),
+                    ),
+                  ],
                 ],
               );
             }
             return ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: filteredUsers.length,
+              itemCount:
+                  filteredUsers.length +
+                  (controller.hasMore || controller.loadingMore ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index >= filteredUsers.length) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: controller.loadingMore
+                          ? const CircularProgressIndicator(strokeWidth: 2)
+                          : OutlinedButton.icon(
+                              onPressed: () => ref
+                                  .read(usersControllerProvider.notifier)
+                                  .loadMore(),
+                              icon: const Icon(Icons.expand_more_rounded),
+                              label: const Text('Cargar mas usuarios'),
+                            ),
+                    ),
+                  );
+                }
                 final user = filteredUsers[index];
                 return _UserCard(
                   user: user,
@@ -509,6 +542,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             ),
           ),
           data: (users) {
+            final controller = ref.read(usersControllerProvider.notifier);
             final desktopUsers = _filterUsers(users, desktop: true)
               ..sort(
                 (left, right) => left.nombreCompleto.toLowerCase().compareTo(
@@ -536,6 +570,11 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                       Expanded(
                         child: _UsersTable(
                           users: desktopUsers,
+                          hasMore: controller.hasMore,
+                          loadingMore: controller.loadingMore,
+                          onLoadMore: () => ref
+                              .read(usersControllerProvider.notifier)
+                              .loadMore(),
                           selectedUserId: selectedUser?.id,
                           onSelectUser: (user) {
                             setState(() => _selectedDesktopUserId = user.id);
@@ -2481,6 +2520,9 @@ class _PermissionScreenTile extends StatelessWidget {
 class _UsersTable extends StatelessWidget {
   const _UsersTable({
     required this.users,
+    required this.hasMore,
+    required this.loadingMore,
+    required this.onLoadMore,
     required this.selectedUserId,
     required this.onSelectUser,
     required this.onViewUser,
@@ -2492,6 +2534,9 @@ class _UsersTable extends StatelessWidget {
   });
 
   final List<UserModel> users;
+  final bool hasMore;
+  final bool loadingMore;
+  final VoidCallback onLoadMore;
   final String? selectedUserId;
   final ValueChanged<UserModel> onSelectUser;
   final ValueChanged<UserModel> onViewUser;
@@ -2505,13 +2550,28 @@ class _UsersTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (users.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
-          child: _DesktopUsersEmptyState(
-            icon: Icons.group_off_outlined,
-            title: 'Sin empleados',
-            message: 'Aún no hay empleados registrados.',
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _DesktopUsersEmptyState(
+                icon: Icons.group_off_outlined,
+                title: 'Sin empleados',
+                message: 'Aún no hay empleados registrados.',
+              ),
+              if (hasMore || loadingMore) ...[
+                const SizedBox(height: 14),
+                loadingMore
+                    ? const CircularProgressIndicator(strokeWidth: 2)
+                    : OutlinedButton.icon(
+                        onPressed: onLoadMore,
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: const Text('Cargar mas usuarios'),
+                      ),
+              ],
+            ],
           ),
         ),
       );
@@ -2541,12 +2601,35 @@ class _UsersTable extends StatelessWidget {
                       Expanded(
                         child: ListView.separated(
                           padding: const EdgeInsets.only(bottom: 16),
-                          itemCount: users.length,
+                          itemCount:
+                              users.length + (hasMore || loadingMore ? 1 : 0),
                           separatorBuilder: (_, __) => Divider(
                             height: 1,
                             color: theme.colorScheme.outlineVariant,
                           ),
                           itemBuilder: (context, index) {
+                            if (index >= users.length) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                child: Center(
+                                  child: loadingMore
+                                      ? const CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        )
+                                      : OutlinedButton.icon(
+                                          onPressed: onLoadMore,
+                                          icon: const Icon(
+                                            Icons.expand_more_rounded,
+                                          ),
+                                          label: const Text(
+                                            'Cargar mas usuarios',
+                                          ),
+                                        ),
+                                ),
+                              );
+                            }
                             final user = users[index];
                             return _UserRowCard(
                               user: user,

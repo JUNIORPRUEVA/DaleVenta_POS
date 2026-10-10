@@ -17,17 +17,51 @@ class UsersController extends StateNotifier<AsyncValue<List<UserModel>>> {
 
   final Ref ref;
   final UsersRepository repo;
+  static const _pageLimit = 50;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _nextPage = 2;
+
+  bool get loadingMore => _loadingMore;
+  bool get hasMore => _hasMore;
 
   Future<void> load() async {
     try {
-      final users = await repo.fetchUsers();
-      state = AsyncData(users);
+      final page = await repo.fetchUsersPage(page: 1, limit: _pageLimit);
+      _hasMore = page.hasMore;
+      _nextPage = page.nextPage ?? 2;
+      state = AsyncData(page.items);
     } catch (e, st) {
       state = AsyncError(e, st);
     }
   }
 
   Future<void> refresh() => load();
+
+  Future<void> loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+    _loadingMore = true;
+    state = AsyncData(state.value ?? const []);
+    try {
+      final page = await repo.fetchUsersPage(
+        page: _nextPage,
+        limit: _pageLimit,
+        skipLoader: true,
+      );
+      final current = state.value ?? const <UserModel>[];
+      final existingIds = current.map((item) => item.id).toSet();
+      _hasMore = page.hasMore;
+      _nextPage = page.nextPage ?? (_nextPage + 1);
+      _loadingMore = false;
+      state = AsyncData([
+        ...current,
+        ...page.items.where((item) => !existingIds.contains(item.id)),
+      ]);
+    } catch (e, st) {
+      _loadingMore = false;
+      state = AsyncError(e, st);
+    }
+  }
 
   Future<void> create(Map<String, dynamic> payload) async {
     final previous = state;

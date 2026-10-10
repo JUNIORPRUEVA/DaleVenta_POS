@@ -11,6 +11,50 @@ final usersRepositoryProvider = Provider<UsersRepository>((ref) {
   return UsersRepository(dio: ref.watch(dioProvider));
 });
 
+class UsersPage {
+  const UsersPage({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.hasMore,
+    this.nextPage,
+  });
+
+  final List<UserModel> items;
+  final int page;
+  final int limit;
+  final bool hasMore;
+  final int? nextPage;
+
+  factory UsersPage.fromJson(dynamic data, {required int fallbackPage}) {
+    if (data is List) {
+      return UsersPage(
+        items: data
+            .whereType<Map>()
+            .map((row) => UserModel.fromJson(row.cast<String, dynamic>()))
+            .toList(growable: false),
+        page: fallbackPage,
+        limit: data.length,
+        hasMore: false,
+      );
+    }
+    if (data is Map) {
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((row) => UserModel.fromJson(row.cast<String, dynamic>()))
+          .toList(growable: false);
+      return UsersPage(
+        items: items,
+        page: (data['page'] as num?)?.toInt() ?? fallbackPage,
+        limit: (data['limit'] as num?)?.toInt() ?? items.length,
+        hasMore: data['hasMore'] == true,
+        nextPage: (data['nextPage'] as num?)?.toInt(),
+      );
+    }
+    return UsersPage(items: const [], page: fallbackPage, limit: 0, hasMore: false);
+  }
+}
+
 class UsersRepository {
   UsersRepository({required Dio dio}) : _dio = dio;
 
@@ -20,15 +64,43 @@ class UsersRepository {
   DateTime? _usersCacheAt;
   static const Duration _usersCacheTtl = Duration(minutes: 5);
 
-  Future<List<UserModel>> fetchUsers({bool skipLoader = false}) async {
+  Future<List<UserModel>> fetchUsers({
+    bool skipLoader = false,
+    int? page,
+    int? limit,
+  }) async {
+    if (page == null && limit == null) {
+      final res = await _dio.get(
+        ApiRoutes.users,
+        options: skipLoader ? Options(extra: {'skipLoader': true}) : null,
+      );
+      final data = res.data as List<dynamic>;
+      return data
+          .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    final result = await fetchUsersPage(
+      skipLoader: skipLoader,
+      page: page ?? 1,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<UsersPage> fetchUsersPage({
+    bool skipLoader = false,
+    int page = 1,
+    int? limit,
+  }) async {
     final res = await _dio.get(
       ApiRoutes.users,
+      queryParameters: {
+        if (page > 0) 'page': page,
+        if (limit != null && limit > 0) 'limit': limit,
+      },
       options: skipLoader ? Options(extra: {'skipLoader': true}) : null,
     );
-    final data = res.data as List<dynamic>;
-    return data
-        .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return UsersPage.fromJson(res.data, fallbackPage: page);
   }
 
   Future<List<UserModel>> getAllUsers({

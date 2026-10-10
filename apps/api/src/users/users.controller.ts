@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Req, UnauthorizedException, UploadedFile, UseGuards, UseInterceptors, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UnauthorizedException, UploadedFile, UseGuards, UseInterceptors, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles } from '../auth/roles.decorator';
@@ -213,8 +213,12 @@ export class UsersController {
 
   @Get()
   @Roles(Role.ADMIN, Role.CAJERO, Role.ASISTENTE, Role.VENDEDOR, Role.TECNICO, Role.MARKETING)
-  findAll(@Req() req: Request) {
-    return this.users.findAll(req.user as TenantUser);
+  findAll(
+    @Req() req: Request,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.users.findAll(req.user as TenantUser, { page, limit });
   }
 
   @Get(':id/birthday-greeting')
