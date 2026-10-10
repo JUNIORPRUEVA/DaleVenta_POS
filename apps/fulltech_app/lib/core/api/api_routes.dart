@@ -184,6 +184,7 @@ class ApiRoutes {
   // Productos
   static const products = '/products';
   static const catalogProducts = '/products';
+  static const productCategories = '/products/categories';
   static const productsDebugPurge = '/products/debug/purge';
   static const productsUpload = '/products/upload';
   static const productsImportImageUrl = '/products/import-image-url';

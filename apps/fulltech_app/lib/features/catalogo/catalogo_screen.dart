@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/errors/user_safe_error_text.dart';
@@ -29,6 +30,7 @@ import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import 'application/catalog_controller.dart';
+import 'application/product_search_controller.dart';
 import 'data/catalog_repository.dart';
 
 String _formatProductStock(
@@ -192,6 +194,13 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     implements RouteAware {
   final _searchCtrl = TextEditingController();
   String _category = 'Todas';
+
+  /// Camino moderno del catalogo: pagina en el SERVIDOR, busca y filtra
+  /// remoto. NO se descarga el catalogo completo al abrir la pantalla.
+  late final ProductSearchController _search;
+  final ScrollController _scrollCtrl = ScrollController();
+  Map<String, int> _serverCategoryCounts = const <String, int>{};
+  bool _loadingServerCategories = false;
   DateTime? _lastAutoSyncAt;
   Timer? _liveSyncTimer;
   StreamSubscription<CatalogRealtimeMessage>? _realtimeSubscription;
@@ -209,9 +218,48 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _search = ProductSearchController(dio: ref.read(dioProvider));
+    _search.addListener((_) {
+      if (mounted) setState(() {});
+    });
+    _searchCtrl.addListener(_onSearchTextChanged);
+    _scrollCtrl.addListener(_onCatalogScroll);
     _subscribeRealtime();
     _scheduleAutoSync();
     _startLiveSync();
+    // Solo la primera pagina: el resto llega con loadMore.
+    unawaited(_search.loadInitial());
+    unawaited(_loadServerCategories());
+  }
+
+  void _onSearchTextChanged() {
+    // El controlador aplica debounce y proteccion de carrera.
+    _search.setQuery(_searchCtrl.text);
+  }
+
+  void _onCatalogScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final position = _scrollCtrl.position;
+    if (position.maxScrollExtent - position.pixels <= 400) {
+      unawaited(_search.loadMore());
+    }
+  }
+
+  /// Categorias reales del servidor (no derivadas de la pagina 1).
+  Future<void> _loadServerCategories() async {
+    if (_loadingServerCategories) return;
+    _loadingServerCategories = true;
+    try {
+      final counts = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProductCategories();
+      if (!mounted) return;
+      setState(() => _serverCategoryCounts = counts);
+    } catch (_) {
+      // Si falla, los chips caen al derivado local sin romper la pantalla.
+    } finally {
+      _loadingServerCategories = false;
+    }
   }
 
   void _subscribeRealtime() {
@@ -304,6 +352,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(catalogControllerProvider.notifier).load(silent: true);
+      // Refrescar la lista paginada solo si el usuario esta en la pagina 1:
+      // asi no se pierde el scroll ni las paginas ya cargadas.
+      if (_search.snapshot.page <= 1) {
+        unawaited(_search.refresh());
+        unawaited(_loadServerCategories());
+      }
     });
   }
 
@@ -359,6 +413,9 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     }
     _stopLiveSync();
     _realtimeSubscription?.cancel();
+    _searchCtrl.removeListener(_onSearchTextChanged);
+    _search.dispose();
+    _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -379,15 +436,21 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
     final catalog = ref.watch(catalogControllerProvider);
 
-    final categories =
+    // Los chips salen del endpoint de categorias (servidor). Si aun no han
+    // llegado, se usa el derivado local como respaldo para no dejar la UI
+    // sin filtros. El filtrado real ocurre SIEMPRE en el servidor.
+    final derivedCategories =
         catalog.items
             .map((p) => p.categoriaLabel)
             .where((c) => c.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    categories.remove('Todas');
-    categories.insert(0, 'Todas');
+    final baseCategories = _serverCategoryCounts.isNotEmpty
+        ? (_serverCategoryCounts.keys.toList()
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())))
+        : derivedCategories;
+    final categories = <String>['Todas', ...baseCategories.where((c) => c != 'Todas')];
 
     final categoryOptions =
         catalog.items
@@ -397,24 +460,15 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
             .toList()
           ..sort();
 
-    final query = _searchCtrl.text.trim().toLowerCase();
-    final filtered =
-        catalog.items.where((p) {
-          final matchCategory =
-              _category == 'Todas' || p.categoriaLabel == _category;
-          final matchQuery =
-              query.isEmpty || p.nombre.toLowerCase().contains(query);
-          return matchCategory && matchQuery;
-        }).toList()..sort(
-          (a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
-        );
+    // La lista ya viene filtrada y ordenada por el SERVIDOR.
+    final queryText = _searchCtrl.text.trim();
+    final filtered = _search.snapshot.items;
+    final totalProducts = _search.snapshot.total;
     final categoryCounts = <String, int>{
       for (final category in categories)
         category: category == 'Todas'
-            ? catalog.items.length
-            : catalog.items
-                  .where((product) => product.categoriaLabel == category)
-                  .length,
+            ? (totalProducts ?? _serverCategoryCounts.values.fold(0, (a, b) => a + b))
+            : (_serverCategoryCounts[category] ?? 0),
     };
 
     final hasCategoryFilters = categories.length > 1;
@@ -669,7 +723,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         child: Column(
           children: [
             if (isModal) modalHeader(),
-            if ((_hasActiveFilter || query.isNotEmpty) && !isModal)
+            if ((_hasActiveFilter || queryText.isNotEmpty) && !isModal)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 12),
@@ -697,7 +751,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                   children: [
                     Expanded(
                       child: Text(
-                        'Mostrando ${filtered.length} de ${catalog.items.length} productos${query.isNotEmpty ? ' para "$query"' : ''}',
+                        'Mostrando ${filtered.length} de ${totalProducts ?? filtered.length} productos${queryText.isNotEmpty ? ' para "$queryText"' : ''}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -709,6 +763,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                           _category = 'Todas';
                           _searchCtrl.clear();
                         });
+                        _search.patchFilter('category', null);
                       },
                       child: const Text('Limpiar'),
                     ),
@@ -719,7 +774,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
               visible: catalog.refreshing,
               label: 'Actualizando productos en segundo plano...',
             ),
-            if ((_hasActiveFilter || query.isNotEmpty) && isModal)
+            if ((_hasActiveFilter || queryText.isNotEmpty) && isModal)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 10),
@@ -735,7 +790,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                   children: [
                     Expanded(
                       child: Text(
-                        'Mostrando ${filtered.length} de ${catalog.items.length} productos',
+                        'Mostrando ${filtered.length} de ${totalProducts ?? filtered.length} productos',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -745,6 +800,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                           _category = 'Todas';
                           _searchCtrl.clear();
                         });
+                        _search.patchFilter('category', null);
                       },
                       child: const Text('Limpiar filtros'),
                     ),
@@ -754,19 +810,24 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
             Expanded(
               child: Builder(
                 builder: (context) {
-                  if (catalog.error != null && catalog.items.isEmpty) {
+                  if ((_search.snapshot.error ?? catalog.error) != null &&
+                      catalog.items.isEmpty &&
+                      filtered.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.error_outline, size: 56),
                           const SizedBox(height: 10),
-                          Text(catalog.error ?? 'Error cargando productos'),
+                          Text(
+                            userSafeErrorMessage(
+                              _search.snapshot.error ?? catalog.error,
+                              fallback: 'Error cargando productos',
+                            ),
+                          ),
                           const SizedBox(height: 12),
                           ElevatedButton.icon(
-                            onPressed: () => ref
-                                .read(catalogControllerProvider.notifier)
-                                .load(forceRemote: true),
+                            onPressed: () => _search.refresh(),
                             icon: const Icon(Icons.refresh),
                             label: const Text('Reintentar'),
                           ),
@@ -797,27 +858,35 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       if (_isDesktopWidth(constraints.maxWidth)) {
                         return _DesktopCatalogLayout(
                           products: filtered,
-                          totalProducts: catalog.items.length,
+                          totalProducts: totalProducts ?? filtered.length,
                           categories: categories,
                           categoryCounts: categoryCounts,
                           selectedCategory: _category,
-                          query: _searchCtrl.text.trim(),
+                          query: queryText,
                           isAdmin: isAdmin,
                           canManage: canManage,
                           showMeasurementUnit: measurementUnitsEnabled,
                           onSelectCategory: (value) {
                             if (_category == value) return;
                             setState(() => _category = value);
+                            _search.patchFilter(
+                              'category',
+                              value == 'Todas' ? null : value,
+                            );
                           },
                           onClearFilters: () {
                             setState(() {
                               _category = 'Todas';
                               _searchCtrl.clear();
                             });
+                            _search.patchFilter('category', null);
                           },
-                          onRefresh: () => ref
-                              .read(catalogControllerProvider.notifier)
-                              .load(forceRemote: true),
+                          onRefresh: () async {
+                            await _search.refresh();
+                            await ref
+                                .read(catalogControllerProvider.notifier)
+                                .load(forceRemote: true);
+                          },
                           onViewProduct: (product) => _showProductDetails(
                             product: product,
                             showCost: isAdmin,
@@ -840,15 +909,35 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       final width = constraints.maxWidth;
                       if (width < 560) {
                         return RefreshIndicator(
-                          onRefresh: () => ref
-                              .read(catalogControllerProvider.notifier)
-                              .load(forceRemote: true),
+                          onRefresh: () async {
+                            await _search.refresh();
+                            await ref
+                                .read(catalogControllerProvider.notifier)
+                                .load(forceRemote: true);
+                          },
                           child: ListView.separated(
+                            controller: _scrollCtrl,
                             padding: const EdgeInsets.only(bottom: 84),
-                            itemCount: filtered.length,
+                            itemCount:
+                                filtered.length +
+                                (_search.snapshot.isLoadingMore ? 1 : 0),
                             separatorBuilder: (_, __) =>
                                 const SizedBox(height: 8),
                             itemBuilder: (context, i) {
+                              if (i >= filtered.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 18),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
                               final p = filtered[i];
                               return _MobileProductListTile(
                                 product: p,
@@ -892,11 +981,17 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                       final tileHeight = (cardWidth * 0.84).clamp(108.0, 172.0);
 
                       return RefreshIndicator(
-                        onRefresh: () => ref
-                            .read(catalogControllerProvider.notifier)
-                            .load(forceRemote: true),
+                        onRefresh: () async {
+                          await _search.refresh();
+                          await ref
+                              .read(catalogControllerProvider.notifier)
+                              .load(forceRemote: true);
+                        },
                         child: GridView.builder(
-                          itemCount: filtered.length,
+                          controller: _scrollCtrl,
+                          itemCount:
+                              filtered.length +
+                              (_search.snapshot.isLoadingMore ? 1 : 0),
                           gridDelegate:
                               SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: columns,
@@ -905,6 +1000,17 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                                 mainAxisExtent: tileHeight,
                               ),
                           itemBuilder: (context, i) {
+                            if (i >= filtered.length) {
+                              return const Center(
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            }
                             final p = filtered[i];
                             return _ProductCard(
                               product: p,
@@ -970,6 +1076,11 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     );
     if (selected == null || !mounted) return;
     setState(() => _category = selected);
+    // El filtro viaja al servidor y reinicia a la pagina 1.
+    _search.patchFilter(
+      'category',
+      selected == 'Todas' ? null : selected,
+    );
   }
 
   Future<void> _confirmDelete(ProductModel product) async {
@@ -987,6 +1098,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
 
     try {
       await controller.remove(product.id);
+      _search.removeLocal(product.id);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

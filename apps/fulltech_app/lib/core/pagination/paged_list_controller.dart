@@ -129,6 +129,9 @@ class PagedListController<T> extends StateNotifier<PagedListState<T>> {
 
   int get pageSize => state.limit;
 
+  /// Vista publica del estado (StateNotifier.state es @protected).
+  PagedListState<T> get snapshot => state;
+
   /// Carga la primera pagina. No hace nada si ya hay contenido cargado.
   Future<void> loadInitial() async {
     if (state.hasItems || state.isInitialLoading) return;

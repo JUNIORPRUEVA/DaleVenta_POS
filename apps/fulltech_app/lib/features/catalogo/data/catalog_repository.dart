@@ -236,6 +236,51 @@ class CatalogRepository {
     return '[HTTP $status] $rawMessage\nEndpoint: $endpoint\nURI: $uri';
   }
 
+  /// Categorias reales de la empresa con su conteo, calculadas en el SERVIDOR.
+  ///
+  /// Sustituye a derivar los chips del catalogo cargado: con paginacion las
+  /// categorias presentes solo fuera de la pagina 1 desaparecian de la UI.
+  Future<Map<String, int>> fetchProductCategories({
+    bool includeArchived = false,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.productCategories,
+        queryParameters: includeArchived
+            ? const <String, dynamic>{'includeArchived': 'true'}
+            : null,
+        options: Options(
+          headers: const {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+          extra: const {'silent': true, 'skipLoader': true},
+        ),
+      );
+      final raw = res.data;
+      final rows = raw is Map && raw['items'] is List
+          ? raw['items'] as List
+          : const <dynamic>[];
+      final counts = <String, int>{};
+      for (final row in rows) {
+        if (row is! Map) continue;
+        final name = (row['name'] ?? '').toString().trim();
+        if (name.isEmpty) continue;
+        final count = row['count'];
+        counts[name] = count is num ? count.toInt() : 0;
+      }
+      return counts;
+    } on DioException catch (e) {
+      TraceLog.log(
+        'CATALOG',
+        'fetchProductCategories failed: ${_formatDioErrorDetail(e, 'No se pudieron cargar las categorías')}',
+        error: e,
+      );
+      return const <String, int>{};
+    }
+  }
+
   Future<List<ProductModel>> fetchProducts({
     bool forceRefresh = false,
     bool silent = false,
