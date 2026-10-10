@@ -105,6 +105,21 @@ export class ProductsController {
   @Header("Pragma", "no-cache")
   @Header("Expires", "0")
   @Header("Surrogate-Control", "no-store")
+  @Get("categories")
+  categories(@Req() req: Request, @Query() query: ProductsQueryDto) {
+    return this.products.listCategories(req.user as TenantUser, {
+      includeArchived: query.includeArchived,
+    });
+  }
+
+  @UseGuards(AuthGuard("jwt"))
+  @Header(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate",
+  )
+  @Header("Pragma", "no-cache")
+  @Header("Expires", "0")
+  @Header("Surrogate-Control", "no-store")
   @Get("source")
   source(@Req() req: Request) {
     return this.products.sourceInfo(req.user as TenantUser);

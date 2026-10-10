@@ -1144,6 +1144,96 @@ export class ProductsService {
     }
   }
 
+  /**
+   * Categorias realmente existentes para la empresa autenticada.
+   *
+   * Necesario para poder filtrar por categoria en el SERVIDOR sin derivar los
+   * chips del catalogo cargado: con paginacion, las categorias presentes fuera
+   * de la pagina 1 no aparecerian en la UI.
+   */
+  async listCategories(
+    user: TenantUser,
+    query: { includeArchived?: string } = {},
+  ): Promise<{ items: Array<{ name: string; count: number }>; total: number }> {
+    const companyId = requireTenant(user);
+    const includeArchived = query.includeArchived === "true";
+    const sourceContext =
+      await this.productSourceResolver.resolveForCompany(companyId);
+
+    if (
+      sourceContext.source === "FULLPOS" ||
+      sourceContext.source === "FULLPOS_DIRECT"
+    ) {
+      try {
+        const response = await this.catalogProducts.findAll({
+          companyId,
+          source: sourceContext.source,
+          fullposCompanyId: sourceContext.fullposCompanyId,
+        });
+        // El catalogo FULLPOS ya excluye los productos inactivos, por lo que
+        // no aplica el filtro de archivados en esta ruta.
+        return this.tallyCategories(
+          response.items.map((item) => ({
+            name: item.categoria ?? item.categoriaNombre,
+            count: 1,
+          })),
+        );
+      } catch (error) {
+        if (!this.allowLocalFallback) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `FULLPOS categories failed; falling back to LOCAL because PRODUCTS_ALLOW_LOCAL_FALLBACK=true. error=${message}`,
+        );
+        // fall through to LOCAL
+      }
+    }
+
+    try {
+      const rows = await this.prisma.product.groupBy({
+        by: ["categoria"],
+        where: {
+          companyId,
+          ...(includeArchived ? {} : { archivedAt: null }),
+        },
+        _count: { _all: true },
+      });
+      return this.tallyCategories(
+        rows.map((row) => ({
+          name: row.categoria,
+          count: (row as { _count?: { _all?: number } })._count?._all ?? 1,
+        })),
+      );
+    } catch (error) {
+      if (!this.isSchemaMismatch(error)) throw error;
+      const rows = await this.prisma.product.groupBy({
+        by: ["categoria"],
+        where: { companyId },
+        _count: { _all: true },
+      });
+      return this.tallyCategories(
+        rows.map((row) => ({
+          name: row.categoria,
+          count: (row as { _count?: { _all?: number } })._count?._all ?? 1,
+        })),
+      );
+    }
+  }
+
+  private tallyCategories(
+    entries: Array<{ name?: string | null; count?: number | null }>,
+  ) {
+    const counts = new Map<string, number>();
+    for (const entry of entries) {
+      const name = (entry.name ?? "").trim();
+      if (!name) continue;
+      counts.set(name, (counts.get(name) ?? 0) + (entry.count ?? 1));
+    }
+    const items = [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((left, right) => left.name.localeCompare(right.name, "es"));
+    return { items, total: items.length };
+  }
+
   async findAll(user: TenantUser, query: ProductsQueryDto = {}): Promise<any> {
     const companyId = requireTenant(user);
     const pagination = normalizePagePagination({

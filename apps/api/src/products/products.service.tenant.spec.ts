@@ -54,6 +54,69 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
   const companyA = "11111111-1111-1111-1111-111111111111";
   const companyB = "22222222-2222-4222-8222-222222222222";
 
+  it("categories: aisladas por empresa y calculadas en servidor (groupBy)", async () => {
+    const groupBy = jest
+      .fn()
+      .mockResolvedValue([{ categoria: "Herramientas", _count: { _all: 3 } }]);
+    const { service } = buildService(jest.fn(), {
+      prisma: { product: { findMany: jest.fn(), groupBy } },
+    });
+
+    const result = await service.listCategories({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: companyA,
+    } as never);
+
+    // El filtro de empresa viaja SIEMPRE a la consulta.
+    expect(groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ["categoria"],
+        where: { companyId: companyA, archivedAt: null },
+      }),
+    );
+    expect(result.items).toEqual([{ name: "Herramientas", count: 3 }]);
+    expect(result.total).toBe(1);
+  });
+
+  it("categories: incluye categorias que NO estan en la pagina 1", async () => {
+    // La empresa B solo tiene "Soldadura" en productos situados mas alla de la
+    // pagina 1: aun asi debe aparecer, porque las categorias no se derivan de
+    // los items cargados.
+    const groupByA = jest
+      .fn()
+      .mockResolvedValue([{ categoria: "Herramientas", _count: { _all: 60 } }]);
+    const groupByB = jest
+      .fn()
+      .mockResolvedValue([{ categoria: "Soldadura", _count: { _all: 40 } }]);
+
+    const serviceA = buildService(jest.fn(), {
+      prisma: { product: { findMany: jest.fn(), groupBy: groupByA } },
+    }).service;
+    const serviceB = buildService(jest.fn(), {
+      prisma: { product: { findMany: jest.fn(), groupBy: groupByB } },
+    }).service;
+
+    const resultA = await serviceA.listCategories({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: companyA,
+    } as never);
+    const resultB = await serviceB.listCategories({
+      id: "user-b",
+      role: "ADMIN",
+      companyId: companyB,
+    } as never);
+
+    expect(resultA.items.map((item) => item.name)).toEqual(["Herramientas"]);
+    expect(resultB.items.map((item) => item.name)).toEqual(["Soldadura"]);
+    expect(groupByB).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { companyId: companyB, archivedAt: null },
+      }),
+    );
+  });
+
   it("list all products scoped strictly to the authenticated company", async () => {
     const findMany = jest.fn().mockResolvedValue([
       {
