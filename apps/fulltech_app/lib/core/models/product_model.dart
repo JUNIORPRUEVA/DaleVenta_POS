@@ -17,8 +17,16 @@ double _asDouble(dynamic value) {
   return double.tryParse(normalized) ?? 0;
 }
 
-double? _asNullableDouble(dynamic value) {
-  if (value == null) return null;
+/// Valor numerico de la cadena decimal de stock (`stockDecimal`).
+/// Devuelve `null` si no es parseable, de modo que la comparacion con `stock`
+/// nunca reviente ni fuerce una derivacion erronea.
+double? _decimalValue(String? raw) {
+  final text = (raw ?? '').trim().replaceAll(',', '.');
+  if (text.isEmpty) return null;
+  return double.tryParse(text);
+}
+
+double? _asNullableDouble(dynamic value) {  if (value == null) return null;
   if (value is num) return value.toDouble();
   final normalized = value.toString().trim().replaceAll(',', '.');
   return double.tryParse(normalized);
@@ -139,6 +147,17 @@ class ProductModel {
     double? taxRate,
     String? taxPriceMode,
   }) {
+    final nextStock = stock ?? this.stock;
+    // `fromJson` prioriza `stockDecimal` sobre `stock`: si el stock cambia y no
+    // se pasa el decimal explicito, hay que derivarlo del valor nuevo o la
+    // serializacion reviviria el stock viejo al releer el producto (cache
+    // offline incluida). Si el valor no cambia, se conserva la cadena original
+    // para no perder su precision (p.ej. "10.500").
+    final nextStockDecimal =
+        stockDecimal ??
+        (stock != null && _decimalValue(this.stockDecimal) != nextStock
+            ? (nextStock?.toString() ?? '0')
+            : this.stockDecimal);
     return ProductModel(
       id: id ?? this.id,
       nombre: nombre ?? this.nombre,
@@ -147,8 +166,8 @@ class ProductModel {
       precio: precio ?? this.precio,
       costo: costo ?? this.costo,
       costAvailable: costAvailable ?? this.costAvailable,
-      stock: stock ?? this.stock,
-      stockDecimal: stockDecimal ?? this.stockDecimal,
+      stock: nextStock,
+      stockDecimal: nextStockDecimal,
       itemType: itemType ?? this.itemType,
       trackInventory: trackInventory ?? this.trackInventory,
       unitOfMeasureId: unitOfMeasureId ?? this.unitOfMeasureId,
