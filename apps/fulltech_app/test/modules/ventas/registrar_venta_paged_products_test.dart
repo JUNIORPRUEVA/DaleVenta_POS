@@ -169,6 +169,28 @@ void main() {
     expect(find.text('PROD 04'), findsOneWidget);
   });
 
+  testWidgets('POS no oculta resultados que el servidor devolvio por categoria', (
+    tester,
+  ) async {
+    final server = _PagedProductsServer(_catalog80);
+    await _pumpPos(tester, server: server);
+
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Limpieza');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(GridView),
+        matching: find.text('PROD 02'),
+      ),
+      findsOneWidget,
+      reason: 'el backend busca por categoria; la UI no debe filtrarla de nuevo',
+    );
+  });
+
   testWidgets('POS sin conexion usa el snapshot local y lo avisa', (
     tester,
   ) async {
@@ -317,8 +339,10 @@ class _PagedProductsServer {
         return false;
       }
       if (search.isEmpty) return true;
+      // Mismo criterio que el backend: nombre, codigo y categoria.
       return product.nombre.toLowerCase().contains(search) ||
-          (product.codigo ?? '').toLowerCase().contains(search);
+          (product.codigo ?? '').toLowerCase().contains(search) ||
+          product.categoriaLabel.toLowerCase().contains(search);
     }).toList(growable: false);
 
     final limit = int.tryParse('${query['limit'] ?? 50}') ?? 50;

@@ -208,8 +208,14 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final q = _searchCtrl.text.trim().toLowerCase();
     return _products.where((p) {
       final code = (p.codigo ?? '').trim().toLowerCase();
+      // Mismo criterio que el SERVIDOR (nombre, codigo y categoria): si el
+      // backend devolvio una coincidencia por categoria, la UI no puede
+      // ocultarla por filtrar con menos campos.
       final matchesText =
-          q.isEmpty || p.nombre.toLowerCase().contains(q) || code.contains(q);
+          q.isEmpty ||
+          p.nombre.toLowerCase().contains(q) ||
+          code.contains(q) ||
+          p.categoriaLabel.toLowerCase().contains(q);
       final matchesCategory =
           _selectedCategories.isEmpty ||
           _selectedCategories.contains(p.categoriaLabel);

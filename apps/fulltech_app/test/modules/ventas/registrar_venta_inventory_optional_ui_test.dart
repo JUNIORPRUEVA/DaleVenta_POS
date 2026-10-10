@@ -657,8 +657,10 @@ Dio _buildServerBackedDio(List<ProductModel> products) {
             return false;
           }
           if (search.isEmpty) return true;
+          // Mismo criterio que el backend real: nombre, codigo y categoria.
           return product.nombre.toLowerCase().contains(search) ||
-              (product.codigo ?? '').toLowerCase().contains(search);
+              (product.codigo ?? '').toLowerCase().contains(search) ||
+              product.categoriaLabel.toLowerCase().contains(search);
         }).toList(growable: false);
         final limit = int.tryParse('${query['limit'] ?? 50}') ?? 50;
         final page = int.tryParse('${query['page'] ?? 1}') ?? 1;
