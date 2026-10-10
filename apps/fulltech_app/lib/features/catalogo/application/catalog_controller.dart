@@ -793,13 +793,13 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
-  Future<void> adjustStock({
+  Future<ProductModel?> adjustStock({
     required ProductModel product,
     required double stock,
     String? warehouseId,
     double? currentWarehouseStock,
   }) async {
-    if (state.saving) return;
+    if (state.saving) return null;
     state = state.copyWith(saving: true, actionError: null);
     try {
       final repo = ref.read(catalogRepositoryProvider);
@@ -828,6 +828,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       _rememberConfirmedMutation(updated);
       state = state.copyWith(items: list, saving: false);
       unawaited(_saveSnapshotSafely(repo, list));
+      return updated;
     } catch (e) {
       final message = e is ApiException
           ? e.message
@@ -859,7 +860,6 @@ class CatalogController extends StateNotifier<CatalogState> {
     try {
       await repo.deleteProduct(id, skipLoader: true);
       unawaited(_saveSnapshotSafely(repo, nextItems));
-      await load(forceRemote: true, silent: true);
     } catch (e) {
       final current = state.items;
       if (!current.any((product) => product.id == id)) {
@@ -876,10 +876,10 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
-  Future<void> archive(String id) async {
+  Future<ProductModel?> archive(String id) async {
     final currentItems = state.items;
     final index = currentItems.indexWhere((product) => product.id == id);
-    if (index < 0) return;
+    if (index < 0) return null;
     final nextItems = [
       for (final product in currentItems)
         if (product.id != id) product,
@@ -892,6 +892,7 @@ class CatalogController extends StateNotifier<CatalogState> {
       _rememberConfirmedMutation(archived);
       state = state.copyWith(items: nextItems, saving: false, clearError: true);
       unawaited(_saveSnapshotSafely(repo, nextItems));
+      return archived;
     } catch (e) {
       final restored = [...state.items];
       if (!restored.any((product) => product.id == currentItems[index].id)) {

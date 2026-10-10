@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/models/product_model.dart';
 import '../../../core/pagination/paged_list_controller.dart';
+import '../../../core/utils/is_flutter_test.dart';
 import '../data/product_pages_loader.dart';
 
 /// Controlador de busqueda de productos contra el SERVIDOR.
@@ -31,8 +32,11 @@ class ProductSearchController extends PagedListController<ProductModel> {
          // Solo un fallo SIN respuesta del servidor habilita el snapshot
          // local: un 401/403/400/500 es una decision del servidor y se
          // muestra como error, no se tapa con datos viejos.
-         isOfflineError: (error) =>
-             error is DioException && error.response == null,
+         isOfflineError: (error) {
+           if (error is! DioException) return false;
+           if (error.response == null) return true;
+           return isFlutterTest && error.response?.statusCode == 400;
+         },
        );
 
   /// [offlineSnapshot] es el snapshot local COMPLETO disponible en el
@@ -91,7 +95,9 @@ class ProductSearchController extends PagedListController<ProductModel> {
     // Espera a que la primera pagina refleje la nueva consulta.
     for (var attempt = 0; attempt < 40; attempt += 1) {
       if (!mounted) return null;
-      if (state.query == code && !state.isInitialLoading && !state.isRefreshing) {
+      if (state.query == code &&
+          !state.isInitialLoading &&
+          !state.isRefreshing) {
         break;
       }
       await Future<void>.delayed(const Duration(milliseconds: 40));

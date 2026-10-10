@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
 import '../../catalogo/application/catalog_controller.dart';
+import '../../catalogo/application/product_search_controller.dart';
+import '../../catalogo/data/catalog_repository.dart';
 import '../data/inventory_reporting_repository.dart';
 import '../data/warehouse_repository.dart';
 
@@ -24,9 +27,6 @@ class _InventoryKardexScreenState extends ConsumerState<InventoryKardexScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(catalogControllerProvider.notifier).load(silent: true);
-    });
   }
 
   void _updateFilters(InventoryMovementFilters filters) {
@@ -217,29 +217,96 @@ class _KardexFiltersPanel extends ConsumerStatefulWidget {
 
 class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
   late InventoryMovementFilters _draft = widget.filters;
+  late final ProductSearchController _productSearch;
+  final _productSearchCtrl = TextEditingController();
+  void Function()? _removeProductSearchListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _productSearch = ProductSearchController(
+      dio: ref.read(dioProvider),
+      offlineSnapshot: () =>
+          ref.read(catalogRepositoryProvider).getCachedProducts(),
+    );
+    _removeProductSearchListener = _productSearch.addListener((_) {
+      if (mounted) setState(() {});
+    });
+    _productSearchCtrl.addListener(() {
+      _productSearch.setQuery(_productSearchCtrl.text);
+    });
+    for (final product in ref.read(catalogControllerProvider).items) {
+      _productSearch.upsertLocal(product);
+    }
+    _productSearch.loadInitial();
+  }
+
+  @override
+  void dispose() {
+    _removeProductSearchListener?.call();
+    _productSearch.dispose();
+    _productSearchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final products = ref.watch(catalogControllerProvider).items;
+    final productState = _productSearch.snapshot;
+    final products = productState.items;
     final warehouses = ref.watch(warehousesProvider).valueOrNull ?? const [];
     final fields = [
-      DropdownButtonFormField<String>(
-        initialValue: products.any((product) => product.id == _draft.productId)
-            ? _draft.productId
-            : '',
-        isExpanded: true,
-        decoration: _inputDecoration('Producto'),
-        items: [
-          const DropdownMenuItem(value: '', child: Text('Todos')),
-          for (final product in products)
-            DropdownMenuItem(value: product.id, child: Text(product.nombre)),
-        ],
-        onChanged: (value) => setState(
-          () => _draft = _draft.copyWith(
-            productId: value,
-            clearProduct: (value ?? '').isEmpty,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _productSearchCtrl,
+            decoration: _inputDecoration(
+              'Buscar producto',
+            ).copyWith(prefixIcon: const Icon(Icons.search_rounded)),
           ),
-        ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue:
+                products.any((product) => product.id == _draft.productId)
+                ? _draft.productId
+                : '',
+            isExpanded: true,
+            decoration: _inputDecoration('Producto'),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Todos')),
+              for (final product in products)
+                DropdownMenuItem(
+                  value: product.id,
+                  child: Text(product.nombre),
+                ),
+            ],
+            onChanged: (value) => setState(
+              () => _draft = _draft.copyWith(
+                productId: value,
+                clearProduct: (value ?? '').isEmpty,
+              ),
+            ),
+          ),
+          if (productState.hasMore) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: productState.isLoadingMore
+                    ? null
+                    : () => _productSearch.loadMore(),
+                icon: productState.isLoadingMore
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text('Cargar mas (${productState.progressLabel})'),
+              ),
+            ),
+          ],
+        ],
       ),
       DropdownButtonFormField<String>(
         initialValue:

@@ -17,6 +17,7 @@ import '../../../core/auth/admin_authorization.dart';
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/app_role.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/cache/fulltech_cache_manager.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
@@ -40,6 +41,7 @@ import '../../../core/widgets/fulltech_dialog.dart';
 import '../../../core/widgets/fulltech_page_header.dart';
 import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
+import '../../catalogo/application/product_search_controller.dart';
 import '../../catalogo/application/stock_adjustment_feedback.dart';
 import '../../catalogo/data/catalog_repository.dart';
 import '../../warehouses/data/warehouse_repository.dart';
@@ -1040,6 +1042,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   final _categoriesKey = GlobalKey<_CategoriesTabState>();
   final _inventoryKey = GlobalKey<_InventoryTabState>();
   final _mobileSearchCtrl = TextEditingController();
+  late final ProductSearchController _productSearch;
+  void Function()? _removeProductSearchListener;
   OverlayEntry? _noticeEntry;
   Timer? _noticeTimer;
   bool _mobileSearchOpen = false;
@@ -1048,20 +1052,35 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(catalogControllerProvider.notifier).load(silent: true);
+    _productSearch = ProductSearchController(
+      dio: ref.read(dioProvider),
+      offlineSnapshot: () =>
+          ref.read(catalogRepositoryProvider).getCachedProducts(),
+    );
+    _removeProductSearchListener = _productSearch.addListener((_) {
+      if (mounted) setState(() {});
     });
+    _seedProductSearchFromCatalogState();
+    unawaited(_productSearch.loadInitial());
   }
 
   @override
   void dispose() {
     _hideTopNotice();
+    _removeProductSearchListener?.call();
+    _productSearch.dispose();
     _mobileSearchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _refresh() {
-    return ref.read(catalogControllerProvider.notifier).load(forceRemote: true);
+    return _productSearch.refresh();
+  }
+
+  void _seedProductSearchFromCatalogState() {
+    for (final product in ref.read(catalogControllerProvider).items) {
+      _productSearch.upsertLocal(product);
+    }
   }
 
   List<String> _categoryOptions(
@@ -1091,7 +1110,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       context,
       product: product,
       categories: _categoryOptions(
-        ref.read(catalogControllerProvider).items,
+        _productSearch.snapshot.items,
         categoryState.items,
       ),
     );
@@ -1101,7 +1120,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       final inventoryEnabled = settings?.inventoryEnabled ?? true;
       await showInventoryStockAdjustmentsPanel(
         context,
-        products: ref.read(catalogControllerProvider).items,
+        products: _productSearch.snapshot.items,
         onRefresh: _refresh,
         onSetStock: _setProductStock,
         canAddStock: ref.read(authStateProvider).user != null,
@@ -1112,10 +1131,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       return;
     }
     if (!mounted || result?.saved != true) return;
-    if (result?.product == null) {
-      await ref
-          .read(catalogControllerProvider.notifier)
-          .load(forceRemote: true, silent: true);
+    final savedProduct = result?.product;
+    if (savedProduct != null) {
+      _productSearch.upsertLocal(savedProduct);
+    } else {
+      await _productSearch.refresh();
     }
     if (!mounted) return;
     _showTopNotice(
@@ -1179,7 +1199,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       reason: 'Ajustar stock de producto',
     );
     if (!allowed || !mounted) return;
-    await ref
+    final updated = await ref
         .read(catalogControllerProvider.notifier)
         .adjustStock(
           product: product,
@@ -1188,9 +1208,9 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
           currentWarehouseStock: currentWarehouseStock,
         );
     ref.invalidate(productWarehouseStockProvider(product.id));
-    await ref
-        .read(catalogControllerProvider.notifier)
-        .load(forceRemote: true, silent: true);
+    if (updated != null) {
+      _productSearch.upsertLocal(updated);
+    }
     if (!mounted) return;
     _showTopNotice(
       title: 'Stock actualizado',
@@ -1200,7 +1220,10 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   }
 
   Future<void> _exportCatalog() async {
-    final products = ref.read(catalogControllerProvider).items;
+    final products = await ref
+        .read(catalogRepositoryProvider)
+        .fetchProducts(forceRefresh: true, silent: true);
+    if (!mounted) return;
     if (products.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No hay productos para exportar')),
@@ -1364,6 +1387,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final controller = ref.read(catalogControllerProvider.notifier);
     for (final product in products) {
       await controller.remove(product.id);
+      _productSearch.removeLocal(product.id);
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1392,7 +1416,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     if (!allowed || !mounted) return;
     final controller = ref.read(catalogControllerProvider.notifier);
     for (final product in products) {
-      await controller.update(
+      final updated = await controller.update(
         id: product.id,
         nombre: product.nombre,
         codigo: product.codigo,
@@ -1405,6 +1429,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         taxRate: product.taxRate,
         taxPriceMode: product.taxPriceMode,
       );
+      if (updated != null) _productSearch.upsertLocal(updated);
     }
   }
 
@@ -1456,7 +1481,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
 
       final importDecision = await _showImportDecisionDialog(
         context,
-        products: ref.read(catalogControllerProvider).items,
+        products: _productSearch.snapshot.items,
         drafts: bundle.products,
         categoriesCount: bundle.categories.length,
         suppliersCount: bundle.suppliers.length,
@@ -1529,15 +1554,18 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   void _setMobileSearch(String value) {
     switch (_mobileTabIndex) {
       case 1:
+        _productSearch.setQuery(value);
         _inventoryKey.currentState?.setSearchQuery(value);
         break;
       case 2:
+        _productSearch.setQuery(value);
         _stockKey.currentState?.setSearchQuery(value);
         break;
       case 3:
         _categoriesKey.currentState?.setSearchQuery(value);
         break;
       default:
+        _productSearch.setQuery(value);
         _catalogKey.currentState?.setSearchQuery(value);
         break;
     }
@@ -1728,7 +1756,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final state = ref.watch(catalogControllerProvider);
+    final state = _productSearch.snapshot;
     final products = state.items;
     final settings = ref.watch(companySettingsProvider).valueOrNull;
     final inventoryEnabled = settings?.inventoryEnabled ?? true;
@@ -1772,9 +1800,15 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       CatalogTab(
         key: _catalogKey,
         products: products,
-        loading: state.refreshing,
-        error: state.error,
+        loading: state.isRefreshing || state.isInitialLoading,
+        error: state.error == null ? null : '${state.error}',
         onRefresh: _refresh,
+        onRemoteSearchChanged: _productSearch.setQuery,
+        onLoadMore: state.hasMore
+            ? () => unawaited(_productSearch.loadMore())
+            : null,
+        loadingMore: state.isLoadingMore,
+        progressLabel: state.progressLabel,
         onCreate: () => _openProductEditor(),
         onImport: _importCatalog,
         onExport: _exportCatalog,
@@ -1800,6 +1834,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
           final controller = ref.read(catalogControllerProvider.notifier);
           try {
             await controller.remove(product.id);
+            _productSearch.removeLocal(product.id);
           } on ProductDeleteRequiresArchiveException catch (_) {
             if (!context.mounted) return;
             final archive = await FullTechConfirmDialog.show(
@@ -1813,7 +1848,10 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
               iconColor: AppColors.secondary,
             );
             if (archive == true) {
-              await controller.archive(product.id);
+              final archived = await controller.archive(product.id);
+              if (archived != null) {
+                _productSearch.removeLocal(archived.id);
+              }
             }
           }
         },
@@ -1822,12 +1860,23 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         key: _inventoryKey,
         products: products,
         onRefresh: _refresh,
+        onLoadMore: state.hasMore
+            ? () => unawaited(_productSearch.loadMore())
+            : null,
+        loadingMore: state.isLoadingMore,
+        progressLabel: state.progressLabel,
         canViewCosts: canViewCosts,
       ),
       StockAdjustmentsPage(
         key: _stockKey,
         products: products,
         onRefresh: _refresh,
+        onRemoteSearchChanged: _productSearch.setQuery,
+        onLoadMore: state.hasMore
+            ? () => unawaited(_productSearch.loadMore())
+            : null,
+        loadingMore: state.isLoadingMore,
+        progressLabel: state.progressLabel,
         onSetStock: _setProductStock,
         canAddStock: canAddStock,
         inventoryEnabled: inventoryEnabled,
@@ -1978,8 +2027,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     ),
                   IconButton(
                     tooltip: 'Actualizar',
-                    onPressed: state.refreshing ? null : _refresh,
-                    icon: state.refreshing
+                    onPressed: state.isRefreshing ? null : _refresh,
+                    icon: state.isRefreshing
                         ? const SizedBox(
                             width: 18,
                             height: 18,
@@ -1995,7 +2044,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             Positioned.fill(
               child: isMobile ? pages[initialTabIndex] : pages[initialTabIndex],
             ),
-            if (state.loading)
+            if (state.isInitialLoading)
               const Positioned(
                 left: 0,
                 right: 0,
@@ -2693,6 +2742,10 @@ class CatalogTab extends StatefulWidget {
     required this.loading,
     required this.error,
     required this.onRefresh,
+    this.onRemoteSearchChanged,
+    this.onLoadMore,
+    this.loadingMore = false,
+    this.progressLabel,
     required this.onCreate,
     required this.onImport,
     required this.onExport,
@@ -2714,6 +2767,10 @@ class CatalogTab extends StatefulWidget {
   final bool loading;
   final String? error;
   final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onRemoteSearchChanged;
+  final VoidCallback? onLoadMore;
+  final bool loadingMore;
+  final String? progressLabel;
   final VoidCallback onCreate;
   final Future<void> Function() onImport;
   final Future<void> Function() onExport;
@@ -2790,12 +2847,15 @@ class _CatalogTabState extends State<CatalogTab> {
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => _query = value);
+      if (!mounted) return;
+      widget.onRemoteSearchChanged?.call(value);
+      setState(() => _query = value);
     });
   }
 
   void setSearchQuery(String value) {
     _debounce?.cancel();
+    widget.onRemoteSearchChanged?.call(value);
     if (mounted) setState(() => _query = value);
   }
 
@@ -3087,6 +3147,26 @@ class _CatalogTabState extends State<CatalogTab> {
                   child: _InlineWarning(message: widget.error!),
                 ),
               catalogContent,
+              if (widget.onLoadMore != null) ...[
+                const SizedBox(height: 12),
+                Center(
+                  child: OutlinedButton.icon(
+                    onPressed: widget.loadingMore ? null : widget.onLoadMore,
+                    icon: widget.loadingMore
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.expand_more_rounded),
+                    label: Text(
+                      widget.loadingMore
+                          ? 'Cargando...'
+                          : 'Cargar mas (${widget.progressLabel ?? visible.length})',
+                    ),
+                  ),
+                ),
+              ],
             ];
             if (mobile) {
               return RefreshIndicator(
@@ -3873,11 +3953,17 @@ class InventoryTab extends StatefulWidget {
     super.key,
     required this.products,
     required this.onRefresh,
+    this.onLoadMore,
+    this.loadingMore = false,
+    this.progressLabel,
     required this.canViewCosts,
   });
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
+  final VoidCallback? onLoadMore;
+  final bool loadingMore;
+  final String? progressLabel;
   final bool canViewCosts;
 
   @override
@@ -4066,6 +4152,30 @@ class _InventoryTabState extends State<InventoryTab> {
                         products: active,
                         showCostMetrics: canShowCostMetrics,
                       ),
+                      if (widget.onLoadMore != null) ...[
+                        const SizedBox(height: 12),
+                        Center(
+                          child: OutlinedButton.icon(
+                            onPressed: widget.loadingMore
+                                ? null
+                                : widget.onLoadMore,
+                            icon: widget.loadingMore
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.expand_more_rounded),
+                            label: Text(
+                              widget.loadingMore
+                                  ? 'Cargando...'
+                                  : 'Cargar mas (${widget.progressLabel ?? active.length})',
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -4312,6 +4422,10 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
     super.key,
     required this.products,
     required this.onRefresh,
+    this.onRemoteSearchChanged,
+    this.onLoadMore,
+    this.loadingMore = false,
+    this.progressLabel,
     required this.onSetStock,
     required this.canAddStock,
     this.inventoryEnabled = true,
@@ -4323,6 +4437,10 @@ class StockAdjustmentsPage extends ConsumerStatefulWidget {
 
   final List<ProductModel> products;
   final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onRemoteSearchChanged;
+  final VoidCallback? onLoadMore;
+  final bool loadingMore;
+  final String? progressLabel;
   final SetProductStockCallback onSetStock;
   final bool canAddStock;
   final bool inventoryEnabled;
@@ -4454,6 +4572,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
     if (_searchCtrl.text != value) {
       _searchCtrl.text = value;
     }
+    widget.onRemoteSearchChanged?.call(value);
     if (mounted) setState(() {});
   }
 
@@ -4752,7 +4871,10 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                               flex: 2,
                               child: TextField(
                                 controller: _searchCtrl,
-                                onChanged: (_) => setState(() {}),
+                                onChanged: (value) {
+                                  widget.onRemoteSearchChanged?.call(value);
+                                  setState(() {});
+                                },
                                 decoration: _inventoryTextInputDecoration(
                                   'Buscar producto',
                                   prefixIcon: Icon(Icons.search_rounded),
@@ -4955,6 +5077,30 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                             showMeasurementUnit: widget.showMeasurementUnits,
                             onSelected: () => _selectProduct(product),
                           ),
+                      if (widget.onLoadMore != null) ...[
+                        const SizedBox(height: 12),
+                        Center(
+                          child: OutlinedButton.icon(
+                            onPressed: widget.loadingMore
+                                ? null
+                                : widget.onLoadMore,
+                            icon: widget.loadingMore
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.expand_more_rounded),
+                            label: Text(
+                              widget.loadingMore
+                                  ? 'Cargando...'
+                                  : 'Cargar mas (${widget.progressLabel ?? filtered.length})',
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
