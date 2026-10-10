@@ -14,12 +14,10 @@ import 'package:flutter_test/flutter_test.dart';
 ///  - `cash.event` (otro dispositivo abrió/cerró turno),
 ///  - `permissions.reconnect` (el socket se reconectó tras background/caída).
 class _FakeOperationsRealtimeService implements OperationsRealtimeService {
-  final StreamController<SalesRealtimeMessage> sales = StreamController<
-    SalesRealtimeMessage
-  >.broadcast();
-  final StreamController<CashRealtimeMessage> cash = StreamController<
-    CashRealtimeMessage
-  >.broadcast();
+  final StreamController<SalesRealtimeMessage> sales =
+      StreamController<SalesRealtimeMessage>.broadcast();
+  final StreamController<CashRealtimeMessage> cash =
+      StreamController<CashRealtimeMessage>.broadcast();
   final StreamController<PermissionsRealtimeMessage> permissions =
       StreamController<PermissionsRealtimeMessage>.broadcast();
 
@@ -30,7 +28,8 @@ class _FakeOperationsRealtimeService implements OperationsRealtimeService {
   Stream<CashRealtimeMessage> get cashStream => cash.stream;
 
   @override
-  Stream<PermissionsRealtimeMessage> get permissionsStream => permissions.stream;
+  Stream<PermissionsRealtimeMessage> get permissionsStream =>
+      permissions.stream;
 
   @override
   Stream<OperationsRealtimeMessage> get stream =>
@@ -117,7 +116,27 @@ class _TrackingCashRepository implements CashRepository {
   }) async => const [];
 
   @override
+  Future<CashPage<CashMovementModel>> movementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
+
+  @override
   Future<List<CashSessionHistoryModel>> closedSessions() async => const [];
+
+  @override
+  Future<CashPage<CashSessionHistoryModel>> closedSessionsPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
 
   @override
   Future<CashSessionDetailModel> sessionDetail(String id) async {
@@ -161,73 +180,69 @@ ProviderContainer _buildContainer(
 
 void main() {
   group('OperationsDataRefreshService — revalidación multi-dispositivo', () {
-    test(
-      'evento realtime cash.event (otro dispositivo abrió/cerró) dispara '
-      'refetch silencioso contra el backend', () async {
-        final realtime = _FakeOperationsRealtimeService();
-        final repo = _TrackingCashRepository();
-        final container = _buildContainer(realtime, repo);
-        addTearDown(() {
-          realtime.disposeStreams();
-          container.dispose();
-        });
+    test('evento realtime cash.event (otro dispositivo abrió/cerró) dispara '
+        'refetch silencioso contra el backend', () async {
+      final realtime = _FakeOperationsRealtimeService();
+      final repo = _TrackingCashRepository();
+      final container = _buildContainer(realtime, repo);
+      addTearDown(() {
+        realtime.disposeStreams();
+        container.dispose();
+      });
 
-        // Instancia el servicio (se suscribe a los streams).
-        container.read(operationsDataRefreshProvider);
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await controller.refresh();
-        final before = repo.stateCalls;
-        expect(before, greaterThanOrEqualTo(2)); // constructor + refresh.
+      // Instancia el servicio (se suscribe a los streams).
+      container.read(operationsDataRefreshProvider);
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await controller.refresh();
+      final before = repo.stateCalls;
+      expect(before, greaterThanOrEqualTo(2)); // constructor + refresh.
 
-        // Otro dispositivo emite evento de caja (p. ej. cerró el turno).
-        realtime.cash.add(
-          CashRealtimeMessage(
-            eventId: 'cash-1',
-            type: 'cash.session.closed',
-            sessionId: 'shift-1',
-          ),
-        );
-        await pumpEventQueue();
+      // Otro dispositivo emite evento de caja (p. ej. cerró el turno).
+      realtime.cash.add(
+        CashRealtimeMessage(
+          eventId: 'cash-1',
+          type: 'cash.session.closed',
+          sessionId: 'shift-1',
+        ),
+      );
+      await pumpEventQueue();
 
-        // El controller reconsultó al backend (fuente de verdad).
-        expect(repo.stateCalls, greaterThan(before));
-      },
-    );
+      // El controller reconsultó al backend (fuente de verdad).
+      expect(repo.stateCalls, greaterThan(before));
+    });
 
-    test(
-      'reconexión del socket (permissions.reconnect) dispara refetch: '
-      'recupera eventos de caja perdidos en background', () async {
-        final realtime = _FakeOperationsRealtimeService();
-        final repo = _TrackingCashRepository();
-        final container = _buildContainer(realtime, repo);
-        addTearDown(() {
-          realtime.disposeStreams();
-          container.dispose();
-        });
+    test('reconexión del socket (permissions.reconnect) dispara refetch: '
+        'recupera eventos de caja perdidos en background', () async {
+      final realtime = _FakeOperationsRealtimeService();
+      final repo = _TrackingCashRepository();
+      final container = _buildContainer(realtime, repo);
+      addTearDown(() {
+        realtime.disposeStreams();
+        container.dispose();
+      });
 
-        container.read(operationsDataRefreshProvider);
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await controller.refresh();
-        final before = repo.stateCalls;
+      container.read(operationsDataRefreshProvider);
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await controller.refresh();
+      final before = repo.stateCalls;
 
-        // El socket se reconecta tras background/caída de red.
-        realtime.permissions.add(
-          PermissionsRealtimeMessage(
-            eventId: 'perm-1',
-            type: 'permissions.reconnect',
-            companyId: 'company-1',
-            userId: 'user-1',
-          ),
-        );
-        await pumpEventQueue();
+      // El socket se reconecta tras background/caída de red.
+      realtime.permissions.add(
+        PermissionsRealtimeMessage(
+          eventId: 'perm-1',
+          type: 'permissions.reconnect',
+          companyId: 'company-1',
+          userId: 'user-1',
+        ),
+      );
+      await pumpEventQueue();
 
-        expect(repo.stateCalls, greaterThan(before));
-      },
-    );
+      expect(repo.stateCalls, greaterThan(before));
+    });
 
     test(
       'resumed (hook de lifecycle) llama refreshCash(silent) y refetcha: '
@@ -253,16 +268,16 @@ void main() {
         );
         await controller.refresh();
         expect(
-          container.read(activeCashSessionControllerProvider)
-              .valueOrNull?.isOpen,
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.isOpen,
           isTrue,
         );
 
         // Mientras estuvo en background otro dispositivo cerró el turno.
-        repo.stateFactory = () => const CashGateState(
-          businessDate: '2026-08-22',
-          canOperate: false,
-        );
+        repo.stateFactory = () =>
+            const CashGateState(businessDate: '2026-08-22', canOperate: false);
 
         // `main.dart _refreshCashOnResume()` ejecuta exactamente esta llamada
         // (AppLifecycleState.resumed → refreshCash(silent: true)).
@@ -278,60 +293,55 @@ void main() {
       },
     );
 
-    test(
-      'refetch tras reconexión corrige un turno que pasó a CERRADO '
-      '(Windows cerró mientras Android estaba sin conexión)', () async {
-        final realtime = _FakeOperationsRealtimeService();
-        final repo = _TrackingCashRepository();
-        // Android conserva el snapshot viejo "abierto" (caché no sincronizada).
-        repo.stateFactory = () => CashGateState(
-          businessDate: '2026-08-22',
-          canOperate: true,
-          activeSession: _session,
-          fromCache: true,
-        );
-        final container = _buildContainer(realtime, repo);
-        addTearDown(() {
-          realtime.disposeStreams();
-          container.dispose();
-        });
+    test('refetch tras reconexión corrige un turno que pasó a CERRADO '
+        '(Windows cerró mientras Android estaba sin conexión)', () async {
+      final realtime = _FakeOperationsRealtimeService();
+      final repo = _TrackingCashRepository();
+      // Android conserva el snapshot viejo "abierto" (caché no sincronizada).
+      repo.stateFactory = () => CashGateState(
+        businessDate: '2026-08-22',
+        canOperate: true,
+        activeSession: _session,
+        fromCache: true,
+      );
+      final container = _buildContainer(realtime, repo);
+      addTearDown(() {
+        realtime.disposeStreams();
+        container.dispose();
+      });
 
-        // Instancia el servicio (se suscribe a los streams de realtime).
-        container.read(operationsDataRefreshProvider);
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await controller.refresh();
-        expect(
-          container.read(activeCashSessionControllerProvider)
-              .valueOrNull?.isOpen,
-          isTrue,
-        );
-        // Snapshot de caché → marcado como "no sincronizado".
-        expect(container.read(cashStateUnverifiedProvider), isTrue);
+      // Instancia el servicio (se suscribe a los streams de realtime).
+      container.read(operationsDataRefreshProvider);
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await controller.refresh();
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull?.isOpen,
+        isTrue,
+      );
+      // Snapshot de caché → marcado como "no sincronizado".
+      expect(container.read(cashStateUnverifiedProvider), isTrue);
 
-        // Android recupera internet y el socket se reconecta: el backend
-        // responde CERRADO (Windows lo cerró).
-        repo.stateFactory = () => const CashGateState(
-          businessDate: '2026-08-22',
-          canOperate: false,
-        );
-        realtime.permissions.add(
-          PermissionsRealtimeMessage(
-            eventId: 'perm-2',
-            type: 'permissions.reconnect',
-            companyId: 'company-1',
-            userId: 'user-1',
-          ),
-        );
-        await pumpEventQueue();
+      // Android recupera internet y el socket se reconecta: el backend
+      // responde CERRADO (Windows lo cerró).
+      repo.stateFactory = () =>
+          const CashGateState(businessDate: '2026-08-22', canOperate: false);
+      realtime.permissions.add(
+        PermissionsRealtimeMessage(
+          eventId: 'perm-2',
+          type: 'permissions.reconnect',
+          companyId: 'company-1',
+          userId: 'user-1',
+        ),
+      );
+      await pumpEventQueue();
 
-        expect(
-          container.read(activeCashSessionControllerProvider).valueOrNull,
-          isNull, // convergió a CERRADO
-        );
-        expect(container.read(cashStateUnverifiedProvider), isFalse);
-      },
-    );
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull,
+        isNull, // convergió a CERRADO
+      );
+      expect(container.read(cashStateUnverifiedProvider), isFalse);
+    });
   });
 }

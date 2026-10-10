@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,19 +30,20 @@ const _cashLine = AppColors.border;
 const _cashText = AppColors.textPrimary;
 const _cashMuted = AppColors.textSecondary;
 const _danger = AppColors.error;
+const _cashHistoryPageSize = 50;
 
 final cashExpenseHistoryProvider = FutureProvider<List<CashMovementModel>>((
   ref,
 ) {
   return ref
       .watch(cashRepositoryProvider)
-      .movementHistory(type: 'OUT', movementType: 'expense', take: 220);
+      .movementHistory(type: 'OUT', movementType: 'expense', take: 8);
 });
 
 final cashMovementHistoryProvider = FutureProvider<List<CashMovementModel>>((
   ref,
 ) {
-  return ref.watch(cashRepositoryProvider).movementHistory(take: 260);
+  return ref.watch(cashRepositoryProvider).movementHistory(take: 50);
 });
 
 final cashTurnHistoryProvider = FutureProvider<List<CashSessionHistoryModel>>((
@@ -214,21 +217,144 @@ enum _MovementDateFilter { today, yesterday, week, month, specific, all }
 class _CashMovementsHistoryScreenState
     extends ConsumerState<CashMovementsHistoryScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
   _MovementTypeFilter _type = _MovementTypeFilter.all;
   _MovementDateFilter _date = _MovementDateFilter.today;
   DateTime? _specificDate;
   bool _searchOpen = false;
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int? _total;
+  Object? _error;
+  List<CashMovementModel> _rows = const [];
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() => setState(() {}));
+    _searchController.addListener(_scheduleReload);
+    unawaited(_reloadMovements());
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _scheduleReload() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 320),
+      () => unawaited(_reloadMovements()),
+    );
+  }
+
+  DateTime? get _fromDate {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return switch (_date) {
+      _MovementDateFilter.today => today,
+      _MovementDateFilter.yesterday => today.subtract(const Duration(days: 1)),
+      _MovementDateFilter.week => today.subtract(
+        Duration(days: today.weekday - 1),
+      ),
+      _MovementDateFilter.month => DateTime(today.year, today.month),
+      _MovementDateFilter.specific => _specificDate,
+      _MovementDateFilter.all => null,
+    };
+  }
+
+  DateTime? get _toDate {
+    final from = _fromDate;
+    if (from == null) return null;
+    return switch (_date) {
+      _MovementDateFilter.week || _MovementDateFilter.month => DateTime.now(),
+      _ => from,
+    };
+  }
+
+  Future<void> _reloadMovements() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _page = 1;
+    });
+    try {
+      final page = await ref
+          .read(cashRepositoryProvider)
+          .movementHistoryPage(
+            type: switch (_type) {
+              _MovementTypeFilter.inOnly => 'IN',
+              _MovementTypeFilter.outOnly => 'OUT',
+              _MovementTypeFilter.all => null,
+            },
+            from: _fromDate,
+            to: _toDate,
+            search: _searchController.text,
+            page: 1,
+            limit: _cashHistoryPageSize,
+          );
+      if (!mounted) return;
+      setState(() {
+        _rows = page.items;
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _total = page.total;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreMovements() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(cashRepositoryProvider)
+          .movementHistoryPage(
+            type: switch (_type) {
+              _MovementTypeFilter.inOnly => 'IN',
+              _MovementTypeFilter.outOnly => 'OUT',
+              _MovementTypeFilter.all => null,
+            },
+            from: _fromDate,
+            to: _toDate,
+            search: _searchController.text,
+            page: _page + 1,
+            limit: _cashHistoryPageSize,
+          );
+      if (!mounted) return;
+      final byId = {for (final row in _rows) row.id: row};
+      for (final row in page.items) {
+        byId[row.id] = row;
+      }
+      setState(() {
+        _rows = byId.values.toList(growable: false);
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _total = page.total ?? _total;
+        _loadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loadingMore = false;
+      });
+    }
   }
 
   Future<void> _register(String type) async {
@@ -245,7 +371,7 @@ class _CashMovementsHistoryScreenState
             affectsProfit: input.affectsProfit,
           );
       if (!mounted) return;
-      ref.invalidate(cashMovementHistoryProvider);
+      unawaited(_reloadMovements());
       ref.invalidate(cashExpenseHistoryProvider);
       showCashToast(
         context,
@@ -258,49 +384,6 @@ class _CashMovementsHistoryScreenState
       if (!mounted) return;
       showCashToast(context, resolveCashError(error), isError: true);
     }
-  }
-
-  List<CashMovementModel> _filter(List<CashMovementModel> rows) {
-    final query = _searchController.text.trim().toLowerCase();
-    return rows
-        .where((row) {
-          if (_type == _MovementTypeFilter.inOnly && !row.isIn) return false;
-          if (_type == _MovementTypeFilter.outOnly && row.isIn) return false;
-          if (!_matchesDate(row.createdAt)) return false;
-          if (query.isEmpty) return true;
-          final text = [
-            row.reason,
-            row.userName ?? '',
-            row.businessDate ?? '',
-            row.amount.toStringAsFixed(2),
-            row.type,
-            row.movementType,
-            row.sessionStatus ?? '',
-          ].join(' ').toLowerCase();
-          return text.contains(query);
-        })
-        .toList(growable: false);
-  }
-
-  bool _matchesDate(DateTime value) {
-    if (_date == _MovementDateFilter.all) return true;
-    final local = toBusinessTime(value);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final rowDay = DateTime(local.year, local.month, local.day);
-    return switch (_date) {
-      _MovementDateFilter.today => rowDay == today,
-      _MovementDateFilter.yesterday =>
-        rowDay == today.subtract(const Duration(days: 1)),
-      _MovementDateFilter.week => !rowDay.isBefore(
-        today.subtract(Duration(days: today.weekday - 1)),
-      ),
-      _MovementDateFilter.month =>
-        rowDay.year == today.year && rowDay.month == today.month,
-      _MovementDateFilter.specific =>
-        _specificDate == null || _sameCalendarDay(rowDay, _specificDate!),
-      _MovementDateFilter.all => true,
-    };
   }
 
   Future<void> _pickSpecificDate() async {
@@ -320,6 +403,7 @@ class _CashMovementsHistoryScreenState
       _specificDate = selected;
       _date = _MovementDateFilter.specific;
     });
+    unawaited(_reloadMovements());
   }
 
   Future<void> _openMovementFilters() async {
@@ -363,62 +447,72 @@ class _CashMovementsHistoryScreenState
         _specificDate = result.specificDate;
       }
     });
+    unawaited(_reloadMovements());
   }
 
   Widget _buildMovementsContent(
-    BuildContext context,
-    AsyncValue<List<CashMovementModel>> history, {
+    BuildContext context, {
     required bool isMobile,
     required bool showStats,
     required EdgeInsetsGeometry listPadding,
   }) {
-    return history.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _CashPanelMessage(
+    if (_loading && _rows.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null && _rows.isEmpty) {
+      return _CashPanelMessage(
         icon: Icons.payments_outlined,
         title: 'No se pudieron cargar movimientos',
-        detail: resolveCashError(error),
-      ),
-      data: (rows) {
-        final visible = _filter(rows);
-        final entries = visible
-            .where((row) => row.isIn)
-            .fold<double>(0, (sum, row) => sum + row.amount);
-        final exits = visible
-            .where((row) => !row.isIn)
-            .fold<double>(0, (sum, row) => sum + row.amount);
-        if (visible.isEmpty) {
-          return const _CashPanelMessage(
-            icon: Icons.history_toggle_off_rounded,
-            title: 'Sin movimientos',
-            detail: 'No hay entradas ni salidas en el rango seleccionado.',
-          );
-        }
-        return Column(
-          children: [
-            if (showStats) ...[
-              _MovementStatsGrid(
-                isMobile: isMobile,
-                entries: entries,
-                exits: exits,
-                count: visible.length,
-              ),
-              const SizedBox(height: 14),
-            ],
-            Expanded(
-              child: ListView.separated(
-                padding: listPadding,
-                itemCount: visible.length,
-                separatorBuilder: (_, __) => isMobile
-                    ? const SizedBox.shrink()
-                    : const SizedBox(height: 8),
-                itemBuilder: (context, index) =>
-                    _CashMovementRow(row: visible[index]),
-              ),
-            ),
-          ],
-        );
-      },
+        detail: resolveCashError(_error!),
+      );
+    }
+    final entries = _rows
+        .where((row) => row.isIn)
+        .fold<double>(0, (sum, row) => sum + row.amount);
+    final exits = _rows
+        .where((row) => !row.isIn)
+        .fold<double>(0, (sum, row) => sum + row.amount);
+    if (_rows.isEmpty) {
+      return const _CashPanelMessage(
+        icon: Icons.history_toggle_off_rounded,
+        title: 'Sin movimientos',
+        detail: 'No hay entradas ni salidas en el rango seleccionado.',
+      );
+    }
+    return Column(
+      children: [
+        if (showStats) ...[
+          _MovementStatsGrid(
+            isMobile: isMobile,
+            entries: entries,
+            exits: exits,
+            count: _rows.length,
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (_error != null)
+          _InlineError('No se pudo cargar más: ${resolveCashError(_error!)}'),
+        Expanded(
+          child: ListView.separated(
+            padding: listPadding,
+            itemCount: _rows.length + (_hasMore || _loadingMore ? 1 : 0),
+            separatorBuilder: (_, __) =>
+                isMobile ? const SizedBox.shrink() : const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              if (index >= _rows.length) {
+                return _LoadMoreHistoryButton(
+                  loading: _loadingMore,
+                  label: _total == null
+                      ? 'Cargar más movimientos'
+                      : 'Cargar más (${_rows.length}/$_total)',
+                  onPressed: _loadMoreMovements,
+                );
+              }
+              return _CashMovementRow(row: _rows[index]);
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -493,17 +587,13 @@ class _CashMovementsHistoryScreenState
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final history = ref.watch(cashMovementHistoryProvider);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
-    final filteredForSummary = history.maybeWhen(
-      data: _filter,
-      orElse: () => const <CashMovementModel>[],
-    );
+    final filteredForSummary = _rows;
 
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): () =>
-            ref.invalidate(cashMovementHistoryProvider),
+            unawaited(_reloadMovements()),
       },
       child: Focus(
         autofocus: true,
@@ -544,8 +634,7 @@ class _CashMovementsHistoryScreenState
                     if (!_searchOpen)
                       IconButton(
                         tooltip: 'Actualizar',
-                        onPressed: () =>
-                            ref.invalidate(cashMovementHistoryProvider),
+                        onPressed: () => unawaited(_reloadMovements()),
                         icon: const Icon(Icons.refresh_rounded),
                       ),
                   ],
@@ -572,8 +661,7 @@ class _CashMovementsHistoryScreenState
                     const SizedBox(width: 6),
                     IconButton.filledTonal(
                       tooltip: 'Actualizar',
-                      onPressed: () =>
-                          ref.invalidate(cashMovementHistoryProvider),
+                      onPressed: () => unawaited(_reloadMovements()),
                       icon: const Icon(Icons.refresh_rounded),
                     ),
                     const SizedBox(width: 10),
@@ -594,7 +682,6 @@ class _CashMovementsHistoryScreenState
           body: isMobile
               ? _buildMovementsContent(
                   context,
-                  history,
                   isMobile: true,
                   showStats: false,
                   listPadding: const EdgeInsets.fromLTRB(0, 0, 0, 80),
@@ -616,8 +703,10 @@ class _CashMovementsHistoryScreenState
                             const SizedBox(width: 10),
                             _MovementTypeSelector(
                               selected: _type,
-                              onChanged: (value) =>
-                                  setState(() => _type = value),
+                              onChanged: (value) {
+                                setState(() => _type = value);
+                                unawaited(_reloadMovements());
+                              },
                             ),
                           ],
                         ),
@@ -636,6 +725,7 @@ class _CashMovementsHistoryScreenState
                                       return;
                                     }
                                     setState(() => _date = next);
+                                    unawaited(_reloadMovements());
                                   },
                                 ),
                                 if (_date == _MovementDateFilter.specific) ...[
@@ -672,7 +762,6 @@ class _CashMovementsHistoryScreenState
                         Expanded(
                           child: _buildMovementsContent(
                             context,
-                            history,
                             isMobile: false,
                             showStats: true,
                             listPadding: EdgeInsets.zero,
@@ -1186,38 +1275,111 @@ class CashExpensesHistoryScreen extends ConsumerStatefulWidget {
 class _CashExpensesHistoryScreenState
     extends ConsumerState<CashExpensesHistoryScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
   DateTime? _expenseDate;
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int? _total;
+  Object? _error;
+  List<CashMovementModel> _rows = const [];
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() => setState(() {}));
+    _searchController.addListener(_scheduleReload);
+    unawaited(_reloadExpenses());
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  List<CashMovementModel> _filter(List<CashMovementModel> rows) {
-    final query = _searchController.text.trim().toLowerCase();
-    return rows
-        .where((row) {
-          if (_expenseDate != null &&
-              !sameBusinessDay(row.createdAt, _expenseDate!)) {
-            return false;
-          }
-          if (query.isEmpty) return true;
-          final text = [
-            row.reason,
-            row.userName ?? '',
-            row.businessDate ?? '',
-            row.amount.toStringAsFixed(2),
-          ].join(' ').toLowerCase();
-          return text.contains(query);
-        })
-        .toList(growable: false);
+  void _scheduleReload() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 320),
+      () => unawaited(_reloadExpenses()),
+    );
+  }
+
+  Future<void> _reloadExpenses() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _page = 1;
+    });
+    try {
+      final page = await ref
+          .read(cashRepositoryProvider)
+          .movementHistoryPage(
+            type: 'OUT',
+            movementType: 'expense',
+            from: _expenseDate,
+            to: _expenseDate,
+            search: _searchController.text,
+            page: 1,
+            limit: _cashHistoryPageSize,
+          );
+      if (!mounted) return;
+      setState(() {
+        _rows = page.items;
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _total = page.total;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreExpenses() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(cashRepositoryProvider)
+          .movementHistoryPage(
+            type: 'OUT',
+            movementType: 'expense',
+            from: _expenseDate,
+            to: _expenseDate,
+            search: _searchController.text,
+            page: _page + 1,
+            limit: _cashHistoryPageSize,
+          );
+      if (!mounted) return;
+      final byId = {for (final row in _rows) row.id: row};
+      for (final row in page.items) {
+        byId[row.id] = row;
+      }
+      setState(() {
+        _rows = byId.values.toList(growable: false);
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _total = page.total ?? _total;
+        _loadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loadingMore = false;
+      });
+    }
   }
 
   Future<void> _pickExpenseDate() async {
@@ -1234,12 +1396,12 @@ class _CashExpensesHistoryScreenState
     );
     if (selected == null || !mounted) return;
     setState(() => _expenseDate = selected);
+    unawaited(_reloadExpenses());
   }
 
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final history = ref.watch(cashExpenseHistoryProvider);
 
     return Scaffold(
       backgroundColor: _cashBg,
@@ -1296,44 +1458,53 @@ class _CashExpensesHistoryScreenState
                     const SizedBox(width: 6),
                     IconButton.filledTonal(
                       tooltip: 'Quitar filtro de fecha',
-                      onPressed: () => setState(() => _expenseDate = null),
+                      onPressed: () {
+                        setState(() => _expenseDate = null);
+                        unawaited(_reloadExpenses());
+                      },
                       icon: const Icon(Icons.close_rounded),
                     ),
                   ],
                   const SizedBox(width: 8),
                   IconButton.filledTonal(
                     tooltip: 'Actualizar',
-                    onPressed: () => ref.invalidate(cashExpenseHistoryProvider),
+                    onPressed: () => unawaited(_reloadExpenses()),
                     icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
               Expanded(
-                child: history.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, _) => _CashPanelMessage(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'No se pudo cargar historial',
-                    detail: resolveCashError(error),
-                  ),
-                  data: (rows) {
-                    final visible = _filter(rows);
-                    final total = visible.fold<double>(
+                child: Builder(
+                  builder: (context) {
+                    if (_loading && _rows.isEmpty) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (_error != null && _rows.isEmpty) {
+                      return _CashPanelMessage(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'No se pudo cargar historial',
+                        detail: resolveCashError(_error!),
+                      );
+                    }
+                    final total = _rows.fold<double>(
                       0,
                       (sum, row) => sum + row.amount,
                     );
                     return Column(
                       children: [
                         _HistorySummaryBar(
-                          count: visible.length,
+                          count: _rows.length,
                           total: total,
-                          label: 'Gastos registrados',
+                          label: 'Gastos cargados',
                         ),
                         const SizedBox(height: 12),
+                        if (_error != null)
+                          _InlineError(
+                            'No se pudo cargar más: ${resolveCashError(_error!)}',
+                          ),
                         Expanded(
-                          child: visible.isEmpty
+                          child: _rows.isEmpty
                               ? const _CashPanelMessage(
                                   icon: Icons.payments_outlined,
                                   title: 'Sin gastos para mostrar',
@@ -1341,11 +1512,25 @@ class _CashExpensesHistoryScreenState
                                       'Cuando registres gastos de caja aparecerán aquí.',
                                 )
                               : ListView.separated(
-                                  itemCount: visible.length,
+                                  itemCount:
+                                      _rows.length +
+                                      (_hasMore || _loadingMore ? 1 : 0),
                                   separatorBuilder: (_, __) =>
                                       const SizedBox(height: 8),
-                                  itemBuilder: (context, index) =>
-                                      _ExpenseHistoryRow(row: visible[index]),
+                                  itemBuilder: (context, index) {
+                                    if (index >= _rows.length) {
+                                      return _LoadMoreHistoryButton(
+                                        loading: _loadingMore,
+                                        label: _total == null
+                                            ? 'Cargar más gastos'
+                                            : 'Cargar más (${_rows.length}/$_total)',
+                                        onPressed: _loadMoreExpenses,
+                                      );
+                                    }
+                                    return _ExpenseHistoryRow(
+                                      row: _rows[index],
+                                    );
+                                  },
                                 ),
                         ),
                       ],
@@ -1371,66 +1556,109 @@ class CashTurnHistoryScreen extends ConsumerStatefulWidget {
 
 class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
   bool _searchOpen = false;
   DateTimeRange? _selectedRange;
   _ShiftStatusFilter _statusFilter = _ShiftStatusFilter.all;
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int? _total;
+  Object? _error;
+  List<CashSessionHistoryModel> _rows = const [];
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() => setState(() {}));
+    _searchController.addListener(_scheduleReload);
+    unawaited(_reloadTurns());
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  List<CashSessionHistoryModel> _filterRows(
-    List<CashSessionHistoryModel> rows,
-  ) {
-    final query = _searchController.text.trim().toLowerCase();
-    return rows
-        .where((row) {
-          final range = _selectedRange;
-          if (range != null) {
-            final rowDate =
-                DateTime.tryParse(row.businessDate) ?? toBusinessTime(row.openedAt);
-            final rowDay = DateTime(rowDate.year, rowDate.month, rowDate.day);
-            final start = DateTime(
-              range.start.year,
-              range.start.month,
-              range.start.day,
-            );
-            final end = DateTime(
-              range.end.year,
-              range.end.month,
-              range.end.day,
-            );
-            if (rowDay.isBefore(start) || rowDay.isAfter(end)) {
-              return false;
-            }
-          }
-          if (_statusFilter == _ShiftStatusFilter.open &&
-              row.status.toUpperCase() != 'OPEN') {
-            return false;
-          }
-          if (_statusFilter == _ShiftStatusFilter.closed &&
-              row.status.toUpperCase() == 'OPEN') {
-            return false;
-          }
-          if (query.isEmpty) return true;
-          final haystack = [
-            row.userName,
-            row.businessDate,
-            row.status,
-            row.expectedAmount.toStringAsFixed(2),
-            row.closingAmount.toStringAsFixed(2),
-          ].join(' ').toLowerCase();
-          return haystack.contains(query);
-        })
-        .toList(growable: false);
+  void _scheduleReload() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 320),
+      () => unawaited(_reloadTurns()),
+    );
+  }
+
+  Future<void> _reloadTurns() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _page = 1;
+    });
+    try {
+      final page = await ref
+          .read(cashRepositoryProvider)
+          .closedSessionsPage(
+            from: _selectedRange?.start,
+            to: _selectedRange?.end,
+            search: _searchController.text,
+            page: 1,
+            limit: _cashHistoryPageSize,
+          );
+      if (!mounted) return;
+      setState(() {
+        _rows = page.items;
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _total = page.total;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreTurns() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(cashRepositoryProvider)
+          .closedSessionsPage(
+            from: _selectedRange?.start,
+            to: _selectedRange?.end,
+            search: _searchController.text,
+            page: _page + 1,
+            limit: _cashHistoryPageSize,
+          );
+      if (!mounted) return;
+      final byId = {for (final row in _rows) row.id: row};
+      for (final row in page.items) {
+        byId[row.id] = row;
+      }
+      setState(() {
+        _rows = byId.values.toList(growable: false);
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _total = page.total ?? _total;
+        _loadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loadingMore = false;
+      });
+    }
   }
 
   String get _rangeLabel {
@@ -1487,6 +1715,7 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
       _selectedRange = next.range;
       _statusFilter = next.status;
     });
+    unawaited(_reloadTurns());
   }
 
   Widget _buildAppBarSearchField() {
@@ -1521,7 +1750,6 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authStateProvider).user;
-    final history = ref.watch(cashTurnHistoryProvider);
     final isMobile = MediaQuery.sizeOf(context).width < 760;
 
     return Scaffold(
@@ -1561,7 +1789,7 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                 if (!_searchOpen)
                   IconButton(
                     tooltip: 'Actualizar',
-                    onPressed: () => ref.invalidate(cashTurnHistoryProvider),
+                    onPressed: () => unawaited(_reloadTurns()),
                     icon: const Icon(Icons.refresh_rounded),
                   ),
               ],
@@ -1573,23 +1801,37 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
             ),
       body: Padding(
         padding: EdgeInsets.all(isMobile ? 10 : 18),
-        child: history.when(
-          loading: () => const _CashCard(
-            child: _CashPanelMessage(
-              icon: Icons.history_rounded,
-              title: 'Historial',
-              detail: 'Sincronizando turnos...',
-            ),
-          ),
-          error: (error, _) => _CashCard(
-            child: _CashPanelMessage(
-              icon: Icons.history_toggle_off_rounded,
-              title: 'No se pudo cargar historial',
-              detail: resolveCashError(error),
-            ),
-          ),
-          data: (rows) {
-            final visibleRows = _filterRows(rows);
+        child: Builder(
+          builder: (context) {
+            if (_loading && _rows.isEmpty) {
+              return const _CashCard(
+                child: _CashPanelMessage(
+                  icon: Icons.history_rounded,
+                  title: 'Historial',
+                  detail: 'Sincronizando turnos...',
+                ),
+              );
+            }
+            if (_error != null && _rows.isEmpty) {
+              return _CashCard(
+                child: _CashPanelMessage(
+                  icon: Icons.history_toggle_off_rounded,
+                  title: 'No se pudo cargar historial',
+                  detail: resolveCashError(_error!),
+                ),
+              );
+            }
+            final visibleRows = switch (_statusFilter) {
+              _ShiftStatusFilter.open =>
+                _rows
+                    .where((row) => row.status.toUpperCase() == 'OPEN')
+                    .toList(growable: false),
+              _ShiftStatusFilter.closed =>
+                _rows
+                    .where((row) => row.status.toUpperCase() != 'OPEN')
+                    .toList(growable: false),
+              _ShiftStatusFilter.all => _rows,
+            };
             final totalExpected = visibleRows.fold<double>(
               0,
               (sum, row) => sum + row.expectedAmount,
@@ -1634,8 +1876,7 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                       const SizedBox(width: 8),
                       IconButton.filledTonal(
                         tooltip: 'Actualizar',
-                        onPressed: () =>
-                            ref.invalidate(cashTurnHistoryProvider),
+                        onPressed: () => unawaited(_reloadTurns()),
                         icon: const Icon(Icons.refresh_rounded),
                       ),
                     ],
@@ -1648,7 +1889,10 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                     child: InputChip(
                       label: Text(_rangeLabel),
                       avatar: const Icon(Icons.calendar_today_outlined),
-                      onDeleted: () => setState(() => _selectedRange = null),
+                      onDeleted: () {
+                        setState(() => _selectedRange = null);
+                        unawaited(_reloadTurns());
+                      },
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1663,11 +1907,25 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                         )
                       : ListView.separated(
                           padding: EdgeInsets.zero,
-                          itemCount: visibleRows.length,
+                          itemCount:
+                              visibleRows.length +
+                              (_hasMore || _loadingMore ? 1 : 0),
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 10),
-                          itemBuilder: (context, index) =>
-                              _TurnHistoryWideCard(row: visibleRows[index]),
+                          itemBuilder: (context, index) {
+                            if (index >= visibleRows.length) {
+                              return _LoadMoreHistoryButton(
+                                loading: _loadingMore,
+                                label: _total == null
+                                    ? 'Cargar más turnos'
+                                    : 'Cargar más (${_rows.length}/$_total)',
+                                onPressed: _loadMoreTurns,
+                              );
+                            }
+                            return _TurnHistoryWideCard(
+                              row: visibleRows[index],
+                            );
+                          },
                         ),
                 ),
               ],
@@ -2042,6 +2300,38 @@ class _ExpenseFormCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LoadMoreHistoryButton extends StatelessWidget {
+  const _LoadMoreHistoryButton({
+    required this.loading,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final bool loading;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: OutlinedButton.icon(
+          onPressed: loading ? null : onPressed,
+          icon: loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.expand_more_rounded),
+          label: Text(loading ? 'Cargando...' : label),
+        ),
       ),
     );
   }
@@ -3446,8 +3736,4 @@ InputDecoration _inputDecoration(
       borderSide: const BorderSide(color: _cashBlue, width: 1.6),
     ),
   );
-}
-
-bool _sameCalendarDay(DateTime a, DateTime b) {
-  return sameBusinessDay(a, b);
 }

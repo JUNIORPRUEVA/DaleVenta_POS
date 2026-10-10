@@ -22,14 +22,14 @@ class _FixedAuthController extends AuthController {
 }
 
 UserModel _adminUser() => UserModel(
-      id: 'user-a',
-      email: 'admin@test.local',
-      nombreCompleto: 'Admin Test',
-      telefono: '',
-      role: 'ADMIN',
-      companyId: 'company-a',
-      companyName: 'FULLTECH, SRL',
-    );
+  id: 'user-a',
+  email: 'admin@test.local',
+  nombreCompleto: 'Admin Test',
+  telefono: '',
+  role: 'ADMIN',
+  companyId: 'company-a',
+  companyName: 'FULLTECH, SRL',
+);
 
 /// Repositorio fake que NO toca la red.
 class _FakeCashRepository implements CashRepository {
@@ -81,27 +81,27 @@ class _FakeCashRepository implements CashRepository {
 
   @override
   Future<CashSummaryModel> summary() async => const CashSummaryModel(
-        openingAmount: 0,
-        totalSales: 0,
-        totalExpenses: 0,
-        totalWithdrawals: 0,
-        cashInManual: 0,
-        cashOutManual: 0,
-        creditAbonos: 0,
-        creditSalesTotal: 0,
-        creditInitialCash: 0,
-        creditInitialTransfer: 0,
-        creditBalanceTotal: 0,
-        creditPaymentCash: 0,
-        creditPaymentTransfer: 0,
-        salesCashTotal: 0,
-        salesTransferTotal: 0,
-        refundsCash: 0,
-        expectedCash: 100,
-        totalTickets: 0,
-        totalRefunds: 0,
-        categorySummary: [],
-      );
+    openingAmount: 0,
+    totalSales: 0,
+    totalExpenses: 0,
+    totalWithdrawals: 0,
+    cashInManual: 0,
+    cashOutManual: 0,
+    creditAbonos: 0,
+    creditSalesTotal: 0,
+    creditInitialCash: 0,
+    creditInitialTransfer: 0,
+    creditBalanceTotal: 0,
+    creditPaymentCash: 0,
+    creditPaymentTransfer: 0,
+    salesCashTotal: 0,
+    salesTransferTotal: 0,
+    refundsCash: 0,
+    expectedCash: 100,
+    totalTickets: 0,
+    totalRefunds: 0,
+    categorySummary: [],
+  );
 
   @override
   Future<List<CashMovementModel>> movements() async => const [];
@@ -124,6 +124,15 @@ class _FakeCashRepository implements CashRepository {
   Future<List<CashSessionHistoryModel>> closedSessions() async => const [];
 
   @override
+  Future<CashPage<CashSessionHistoryModel>> closedSessionsPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
+
+  @override
   Future<CashSessionDetailModel> sessionDetail(String id) {
     throw UnimplementedError('sessionDetail');
   }
@@ -138,8 +147,18 @@ class _FakeCashRepository implements CashRepository {
     DateTime? from,
     DateTime? to,
     int take = 160,
-  }) async =>
-      const [];
+  }) async => const [];
+
+  @override
+  Future<CashPage<CashMovementModel>> movementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
 }
 
 class _FakeCashCloseTicketPrinter implements CashCloseTicketPrinter {
@@ -246,10 +265,7 @@ void main() {
         expect(find.text('Registrar salida'), findsWidgets);
 
         // 4. Completar la acción: monto + motivo y confirmar.
-        await tester.enterText(
-          find.byType(TextFormField).at(0),
-          '500',
-        );
+        await tester.enterText(find.byType(TextFormField).at(0), '500');
         await tester.enterText(
           find.byType(TextFormField).at(1),
           'Compra de material',
@@ -332,31 +348,34 @@ void main() {
         await tester.pumpAndSettle();
 
         Object? capturedError;
-        await runZonedGuarded(() async {
-          // Abrir el diálogo "Gasto / salida".
-          await tester.tap(
-            find.widgetWithText(OutlinedButton, 'Gasto / salida'),
-          );
-          await tester.pumpAndSettle();
-          expect(find.text('Registrar salida'), findsWidgets);
+        await runZonedGuarded(
+          () async {
+            // Abrir el diálogo "Gasto / salida".
+            await tester.tap(
+              find.widgetWithText(OutlinedButton, 'Gasto / salida'),
+            );
+            await tester.pumpAndSettle();
+            expect(find.text('Registrar salida'), findsWidgets);
 
-          // Destruir CashBoxScreen mientras el diálogo está abierto.
-          showScreen.value = false;
-          await tester.pumpAndSettle();
+            // Destruir CashBoxScreen mientras el diálogo está abierto.
+            showScreen.value = false;
+            await tester.pumpAndSettle();
 
-          // Completar la acción: confirmar el diálogo.
-          await tester.enterText(find.byType(TextFormField).at(0), '500');
-          await tester.enterText(
-            find.byType(TextFormField).at(1),
-            'Compra de material',
-          );
-          await tester.tap(
-            find.widgetWithText(FilledButton, 'Registrar salida'),
-          );
-          await tester.pumpAndSettle();
-        }, (error, stack) {
-          capturedError = error;
-        });
+            // Completar la acción: confirmar el diálogo.
+            await tester.enterText(find.byType(TextFormField).at(0), '500');
+            await tester.enterText(
+              find.byType(TextFormField).at(1),
+              'Compra de material',
+            );
+            await tester.tap(
+              find.widgetWithText(FilledButton, 'Registrar salida'),
+            );
+            await tester.pumpAndSettle();
+          },
+          (error, stack) {
+            capturedError = error;
+          },
+        );
 
         // NO debe lanzarse la excepción de ref dispuesto.
         expect(capturedError, isNull);

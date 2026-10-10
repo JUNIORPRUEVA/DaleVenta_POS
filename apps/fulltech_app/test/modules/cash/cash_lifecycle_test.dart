@@ -84,6 +84,15 @@ class _FakeCashRepository implements CashRepository {
   }
 
   @override
+  Future<CashPage<CashSessionHistoryModel>> closedSessionsPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
+
+  @override
   Future<CashSessionDetailModel> sessionDetail(String id) {
     throw UnimplementedError('sessionDetail');
   }
@@ -99,6 +108,17 @@ class _FakeCashRepository implements CashRepository {
     DateTime? to,
     int take = 160,
   }) async => const [];
+
+  @override
+  Future<CashPage<CashMovementModel>> movementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
 }
 
 class _FakeCashCloseTicketPrinter implements CashCloseTicketPrinter {
@@ -195,8 +215,9 @@ void main() {
       final container = _buildContainer(repo);
       addTearDown(container.dispose);
 
-      final controller = container
-          .read(activeCashSessionControllerProvider.notifier);
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
       await controller.open(1000);
 
       final state = container.read(activeCashSessionControllerProvider);
@@ -207,79 +228,78 @@ void main() {
       final repo = _FakeCashRepository();
       // Para cerrar un turno debe existir un turno abierto identificable.
       repo.stateOverride = () async => CashGateState(
-            businessDate: '2026-08-20',
-            canOperate: true,
-            activeSession: _session,
-          );
+        businessDate: '2026-08-20',
+        canOperate: true,
+        activeSession: _session,
+      );
       final container = _buildContainer(repo);
       addTearDown(container.dispose);
 
-      final controller = container
-          .read(activeCashSessionControllerProvider.notifier);
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
       final result = await controller.close(1000);
 
       expect(result?.success, isTrue);
     });
 
-    test(
-      'usar un controller ya dispuesto NO lanza Bad state '
-      '(referencia obsoleta después de invalidar)', () async {
-        final repo = _FakeCashRepository();
-        final container = _buildContainer(repo);
-        addTearDown(container.dispose);
+    test('usar un controller ya dispuesto NO lanza Bad state '
+        '(referencia obsoleta después de invalidar)', () async {
+      final repo = _FakeCashRepository();
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
 
-        // Referencia "vieja" capturada ANTES de que Riverpod lo disponga
-        // (equivale a capturar el notifier antes de un showDialog).
-        final stale = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
+      // Referencia "vieja" capturada ANTES de que Riverpod lo disponga
+      // (equivale a capturar el notifier antes de un showDialog).
+      final stale = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
 
-        // Riverpod invalida (destruye) el controller, como hacía el realtime.
-        container.invalidate(activeCashSessionControllerProvider);
-        expect(stale.mounted, isFalse);
+      // Riverpod invalida (destruye) el controller, como hacía el realtime.
+      container.invalidate(activeCashSessionControllerProvider);
+      expect(stale.mounted, isFalse);
 
-        // Llamar operaciones sobre la referencia muerta debe ser seguro.
-        await stale.open(1000);
-        await stale.refresh();
-        await stale.close(1000);
+      // Llamar operaciones sobre la referencia muerta debe ser seguro.
+      await stale.open(1000);
+      await stale.refresh();
+      await stale.close(1000);
 
-        // El controller fresco sigue funcionando.
-        final fresh = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        expect(fresh.mounted, isTrue);
-        await fresh.open(1000);
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
-      },
-    );
+      // El controller fresco sigue funcionando.
+      final fresh = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      expect(fresh.mounted, isTrue);
+      await fresh.open(1000);
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull?.isOpen,
+        isTrue,
+      );
+    });
 
-    test(
-      'operación open en vuelo sobrevive al dispose/rebuild sin tocar un '
-      'notifier muerto', () async {
-        final repo = _FakeCashRepository();
-        final openCompleter = Completer<ActiveCashSession>();
-        repo.openSessionOverride = () => openCompleter.future;
-        final container = _buildContainer(repo);
-        addTearDown(container.dispose);
+    test('operación open en vuelo sobrevive al dispose/rebuild sin tocar un '
+        'notifier muerto', () async {
+      final repo = _FakeCashRepository();
+      final openCompleter = Completer<ActiveCashSession>();
+      repo.openSessionOverride = () => openCompleter.future;
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
 
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
 
-        // Arranca open() pero aún no ha terminado la llamada al backend.
-        final openFuture = controller.open(1000);
+      // Arranca open() pero aún no ha terminado la llamada al backend.
+      final openFuture = controller.open(1000);
 
-        // Mientras está en vuelo, se invalida el provider (dispose + rebuild).
-        container.invalidate(activeCashSessionControllerProvider);
+      // Mientras está en vuelo, se invalida el provider (dispose + rebuild).
+      container.invalidate(activeCashSessionControllerProvider);
 
-        // El backend termina la operación.
-        openCompleter.complete(_session);
+      // El backend termina la operación.
+      openCompleter.complete(_session);
 
-        // NO debe lanzar 'Bad state: Tried to use ... after dispose'.
-        await openFuture;
-      },
-    );
+      // NO debe lanzar 'Bad state: Tried to use ... after dispose'.
+      await openFuture;
+    });
 
     test(
       'refresh en vuelo que falla después de dispose no toca state/ref muerto',
@@ -330,10 +350,10 @@ void main() {
     test('doble cierre simultáneo solo ejecuta uno', () async {
       final repo = _FakeCashRepository();
       repo.stateOverride = () async => CashGateState(
-            businessDate: '2026-08-20',
-            canOperate: true,
-            activeSession: _session,
-          );
+        businessDate: '2026-08-20',
+        canOperate: true,
+        activeSession: _session,
+      );
       var calls = 0;
       final closeCompleter = Completer<void>();
       repo.closeSessionOverride = () {
@@ -376,8 +396,7 @@ void main() {
 
       expect(calls, 2);
       expect(
-        container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen,
+        container.read(activeCashSessionControllerProvider).valueOrNull?.isOpen,
         isTrue,
       );
     });
@@ -385,10 +404,10 @@ void main() {
     test('fallo en close() libera la guarda y permite reintentar', () async {
       final repo = _FakeCashRepository();
       repo.stateOverride = () async => CashGateState(
-            businessDate: '2026-08-20',
-            canOperate: true,
-            activeSession: _session,
-          );
+        businessDate: '2026-08-20',
+        canOperate: true,
+        activeSession: _session,
+      );
       var calls = 0;
       repo.closeSessionOverride = () {
         calls += 1;
@@ -402,10 +421,7 @@ void main() {
         activeCashSessionControllerProvider.notifier,
       );
       // Primer cierre falla y propaga el error; la guarda se libera (finally).
-      await expectLater(
-        controller.close(1000),
-        throwsA(isA<Exception>()),
-      );
+      await expectLater(controller.close(1000), throwsA(isA<Exception>()));
       // Reintento debe funcionar.
       final result = await controller.close(1000);
 
@@ -413,68 +429,71 @@ void main() {
       expect(result?.success, isTrue);
     });
 
-    test('un fallo de impresión tras cerrar NO dispara un segundo cierre', () async {
-      final repo = _FakeCashRepository();
-      repo.stateOverride = () async => CashGateState(
-            businessDate: '2026-08-20',
-            canOperate: true,
-            activeSession: _session,
-          );
-      var closeCalls = 0;
-      repo.closeSessionOverride = () {
-        closeCalls += 1;
-        return Future.value();
-      };
-      final container = ProviderContainer(
-        overrides: [
-          cashRepositoryProvider.overrideWithValue(repo),
-          cashCloseTicketPrinterProvider.overrideWithValue(
-            _ThrowingCashCloseTicketPrinter(),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'un fallo de impresión tras cerrar NO dispara un segundo cierre',
+      () async {
+        final repo = _FakeCashRepository();
+        repo.stateOverride = () async => CashGateState(
+          businessDate: '2026-08-20',
+          canOperate: true,
+          activeSession: _session,
+        );
+        var closeCalls = 0;
+        repo.closeSessionOverride = () {
+          closeCalls += 1;
+          return Future.value();
+        };
+        final container = ProviderContainer(
+          overrides: [
+            cashRepositoryProvider.overrideWithValue(repo),
+            cashCloseTicketPrinterProvider.overrideWithValue(
+              _ThrowingCashCloseTicketPrinter(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      final controller = container.read(
-        activeCashSessionControllerProvider.notifier,
-      );
-      // El cierre ya se aplicó en backend; la impresión falla después.
-      await expectLater(controller.close(1000), throwsA(isA<Exception>()));
-      // El backend sólo se llamó UNA vez: imprimir no vuelve a cerrar.
-      expect(closeCalls, 1);
-    });
+        final controller = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+        // El cierre ya se aplicó en backend; la impresión falla después.
+        await expectLater(controller.close(1000), throwsA(isA<Exception>()));
+        // El backend sólo se llamó UNA vez: imprimir no vuelve a cerrar.
+        expect(closeCalls, 1);
+      },
+    );
 
-    test('tras invalidar, la instancia vieja y la nueva no comparten estado',
-        () async {
-          final repo = _FakeCashRepository();
-          final container = _buildContainer(repo);
-          addTearDown(container.dispose);
+    test(
+      'tras invalidar, la instancia vieja y la nueva no comparten estado',
+      () async {
+        final repo = _FakeCashRepository();
+        final container = _buildContainer(repo);
+        addTearDown(container.dispose);
 
-          final stale = container.read(
-            activeCashSessionControllerProvider.notifier,
-          );
-          container.invalidate(activeCashSessionControllerProvider);
-          final fresh = container.read(
-            activeCashSessionControllerProvider.notifier,
-          );
+        final stale = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
+        container.invalidate(activeCashSessionControllerProvider);
+        final fresh = container.read(
+          activeCashSessionControllerProvider.notifier,
+        );
 
-          // Son instancias distintas: el estado de la vieja jamás puede
-          // escribirse sobre la nueva (equivale a Empresa A vs Empresa B).
-          expect(identical(stale, fresh), isFalse);
-          expect(stale.mounted, isFalse);
-          expect(fresh.mounted, isTrue);
+        // Son instancias distintas: el estado de la vieja jamás puede
+        // escribirse sobre la nueva (equivale a Empresa A vs Empresa B).
+        expect(identical(stale, fresh), isFalse);
+        expect(stale.mounted, isFalse);
+        expect(fresh.mounted, isTrue);
 
-          // open() sobre la instancia vieja es seguro (no lanza) y NO puede
-          // escribir sobre la nueva: cada una mantiene su propio estado.
-          await stale.open(1000);
+        // open() sobre la instancia vieja es seguro (no lanza) y NO puede
+        // escribir sobre la nueva: cada una mantiene su propio estado.
+        await stale.open(1000);
 
-          // La instancia nueva conserva su propio estado (null según el fake).
-          await pumpEventQueue();
-          final freshState = container.read(
-            activeCashSessionControllerProvider,
-          );
-          expect(freshState.valueOrNull, isNull);
-        });
+        // La instancia nueva conserva su propio estado (null según el fake).
+        await pumpEventQueue();
+        final freshState = container.read(activeCashSessionControllerProvider);
+        expect(freshState.valueOrNull, isNull);
+      },
+    );
 
     test(
       'multi-dispositivo: dispositivo B refresca y ve el turno abierto por A',
@@ -489,16 +508,26 @@ void main() {
         );
         // Dispositivo A abre el turno → backend ahora responde ABIERTO.
         repo.stateOverride = () async => CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: true,
-              activeSession: _session,
-            );
+          businessDate: '2026-08-20',
+          canOperate: true,
+          activeSession: _session,
+        );
         await controller.refresh();
 
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.shiftId, 'shift-1');
+        expect(
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.isOpen,
+          isTrue,
+        );
+        expect(
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.shiftId,
+          'shift-1',
+        );
         expect(container.read(cashStateUnverifiedProvider), isFalse);
       },
     );
@@ -509,10 +538,10 @@ void main() {
         final repo = _FakeCashRepository();
         // B arranca con turno abierto.
         repo.stateOverride = () async => CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: true,
-              activeSession: _session,
-            );
+          businessDate: '2026-08-20',
+          canOperate: true,
+          activeSession: _session,
+        );
         final container = _buildContainer(repo);
         addTearDown(container.dispose);
 
@@ -520,18 +549,23 @@ void main() {
           activeCashSessionControllerProvider.notifier,
         );
         await controller.refresh();
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
+        expect(
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.isOpen,
+          isTrue,
+        );
 
         // A cierra el turno → backend responde CERRADO (activo null).
-        repo.stateOverride = () async => const CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: false,
-            );
+        repo.stateOverride = () async =>
+            const CashGateState(businessDate: '2026-08-20', canOperate: false);
         await controller.refresh(silent: true);
 
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull, isNull);
+        expect(
+          container.read(activeCashSessionControllerProvider).valueOrNull,
+          isNull,
+        );
         expect(container.read(cashStateUnverifiedProvider), isFalse);
       },
     );
@@ -542,10 +576,10 @@ void main() {
         final repo = _FakeCashRepository();
         // B tiene el turno abierto confirmado.
         repo.stateOverride = () async => CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: true,
-              activeSession: _session,
-            );
+          businessDate: '2026-08-20',
+          canOperate: true,
+          activeSession: _session,
+        );
         final container = _buildContainer(repo);
         addTearDown(container.dispose);
 
@@ -553,44 +587,54 @@ void main() {
           activeCashSessionControllerProvider.notifier,
         );
         await controller.refresh();
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
+        expect(
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.isOpen,
+          isTrue,
+        );
 
         // Ahora hay fallo de red al revalidar: se conserva el snapshot y se
         // marca "estado no sincronizado" (regla #39: error != cerrado).
         repo.stateOverride = () async => throw Exception('red caida');
         await controller.refresh(silent: true);
 
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
-        expect(container.read(cashStateUnverifiedProvider), isTrue);
-      },
-    );
-
-    test(
-      'estado de caché (fallo de red) se muestra como "no sincronizado", '
-      'nunca como confirmado', () async {
-        final repo = _FakeCashRepository();
-        // El repo cae a caché: devuelve turno abierto pero marcado fromCache.
-        repo.stateOverride = () async => CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: true,
-              activeSession: _session,
-              fromCache: true,
-            );
-        final container = _buildContainer(repo);
-        addTearDown(container.dispose);
-
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
+        expect(
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.isOpen,
+          isTrue,
         );
-        await controller.refresh();
-
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
         expect(container.read(cashStateUnverifiedProvider), isTrue);
       },
     );
+
+    test('estado de caché (fallo de red) se muestra como "no sincronizado", '
+        'nunca como confirmado', () async {
+      final repo = _FakeCashRepository();
+      // El repo cae a caché: devuelve turno abierto pero marcado fromCache.
+      repo.stateOverride = () async => CashGateState(
+        businessDate: '2026-08-20',
+        canOperate: true,
+        activeSession: _session,
+        fromCache: true,
+      );
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
+
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await controller.refresh();
+
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull?.isOpen,
+        isTrue,
+      );
+      expect(container.read(cashStateUnverifiedProvider), isTrue);
+    });
 
     test(
       'cerrar un turno ya cerrado por otro dispositivo converge a CERRADO',
@@ -599,10 +643,10 @@ void main() {
         var closed = false;
         // B cree que está abierto (snapshot viejo).
         repo.stateOverride = () async => CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: !closed,
-              activeSession: closed ? null : _session,
-            );
+          businessDate: '2026-08-20',
+          canOperate: !closed,
+          activeSession: closed ? null : _session,
+        );
         repo.closeSessionOverride = () {
           // A ya lo cerró: el backend responde "ya cerrado".
           closed = true;
@@ -617,75 +661,85 @@ void main() {
           activeCashSessionControllerProvider.notifier,
         );
         await controller.refresh();
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
+        expect(
+          container
+              .read(activeCashSessionControllerProvider)
+              .valueOrNull
+              ?.isOpen,
+          isTrue,
+        );
 
         // B intenta cerrar: no debe quedarse mostrando el estado viejo.
         final result = await controller.close(1000);
         expect(result, isNull);
         expect(closed, isTrue);
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull, isNull);
+        expect(
+          container.read(activeCashSessionControllerProvider).valueOrNull,
+          isNull,
+        );
       },
     );
 
-    test(
-      'abrir un turno ya abierto por otro dispositivo NO crea uno nuevo: '
-      'el backend devuelve el existente y la UI converge', () async {
-        final repo = _FakeCashRepository();
-        // B cree que está cerrado; A ya abrió el turno.
-        repo.openSessionOverride = () async => _session;
-        final container = _buildContainer(repo);
-        addTearDown(container.dispose);
+    test('abrir un turno ya abierto por otro dispositivo NO crea uno nuevo: '
+        'el backend devuelve el existente y la UI converge', () async {
+      final repo = _FakeCashRepository();
+      // B cree que está cerrado; A ya abrió el turno.
+      repo.openSessionOverride = () async => _session;
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
 
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await controller.open(1000);
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await controller.open(1000);
 
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.shiftId, 'shift-1');
-        expect(container.read(cashStateUnverifiedProvider), isFalse);
-      },
-    );
+      expect(
+        container
+            .read(activeCashSessionControllerProvider)
+            .valueOrNull
+            ?.shiftId,
+        'shift-1',
+      );
+      expect(container.read(cashStateUnverifiedProvider), isFalse);
+    });
 
-    test(
-      'cambio de empresa/logout: nueva instancia revalida y no hereda el '
-      'snapshot anterior', () async {
-        final repo = _FakeCashRepository();
-        // Empresa A: turno abierto.
-        repo.stateOverride = () async => CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: true,
-              activeSession: _session,
-            );
-        final container = _buildContainer(repo);
-        addTearDown(container.dispose);
+    test('cambio de empresa/logout: nueva instancia revalida y no hereda el '
+        'snapshot anterior', () async {
+      final repo = _FakeCashRepository();
+      // Empresa A: turno abierto.
+      repo.stateOverride = () async => CashGateState(
+        businessDate: '2026-08-20',
+        canOperate: true,
+        activeSession: _session,
+      );
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
 
-        // Sesión Empresa A con turno abierto.
-        final first = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await first.refresh();
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull?.isOpen, isTrue);
+      // Sesión Empresa A con turno abierto.
+      final first = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await first.refresh();
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull?.isOpen,
+        isTrue,
+      );
 
-        // Empresa B (equivale a logout+login): se invalida y se revalida.
-        container.invalidate(activeCashSessionControllerProvider);
-        repo.stateOverride = () async => const CashGateState(
-              businessDate: '2026-08-20',
-              canOperate: false,
-            );
-        final second = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await second.refresh();
+      // Empresa B (equivale a logout+login): se invalida y se revalida.
+      container.invalidate(activeCashSessionControllerProvider);
+      repo.stateOverride = () async =>
+          const CashGateState(businessDate: '2026-08-20', canOperate: false);
+      final second = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await second.refresh();
 
-        expect(identical(first, second), isFalse);
-        expect(container.read(activeCashSessionControllerProvider)
-            .valueOrNull, isNull);
-      },
-    );
+      expect(identical(first, second), isFalse);
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull,
+        isNull,
+      );
+    });
   });
 
   // Regresión del bug REAL de login (UAT Windows):
@@ -818,42 +872,39 @@ void main() {
   // que la UI no debe decir "Sin conexión" ni marcar el estado como no
   // sincronizado por red.
   group('cash controller: estado que requiere revisión', () {
-    test(
-      'un gate requiresReview se expone como revisión y NO como "no '
-      'sincronizado"',
-      () async {
-        final repo = _FakeCashRepository();
-        repo.stateOverride = () async => const CashGateState(
-          businessDate: '2026-10-03',
-          canOperate: false,
-          requiresReview: true,
-          reviewMessage:
-              'Este turno abierto necesita revisión antes de operar. '
-              'Contacta a un administrador.',
-        );
-        final container = _buildContainer(repo);
-        addTearDown(container.dispose);
+    test('un gate requiresReview se expone como revisión y NO como "no '
+        'sincronizado"', () async {
+      final repo = _FakeCashRepository();
+      repo.stateOverride = () async => const CashGateState(
+        businessDate: '2026-10-03',
+        canOperate: false,
+        requiresReview: true,
+        reviewMessage:
+            'Este turno abierto necesita revisión antes de operar. '
+            'Contacta a un administrador.',
+      );
+      final container = _buildContainer(repo);
+      addTearDown(container.dispose);
 
-        final controller = container.read(
-          activeCashSessionControllerProvider.notifier,
-        );
-        await controller.refresh();
+      final controller = container.read(
+        activeCashSessionControllerProvider.notifier,
+      );
+      await controller.refresh();
 
-        expect(container.read(cashStateRequiresReviewProvider), isTrue);
-        expect(
-          container.read(cashStateReviewMessageProvider),
-          contains('revisión'),
-        );
-        expect(
-          container.read(cashStateUnverifiedProvider),
-          isFalse,
-          reason: 'fue una decisión del servidor, no un fallo de red',
-        );
-        expect(
-          container.read(activeCashSessionControllerProvider).valueOrNull,
-          isNull,
-        );
-      },
-    );
+      expect(container.read(cashStateRequiresReviewProvider), isTrue);
+      expect(
+        container.read(cashStateReviewMessageProvider),
+        contains('revisión'),
+      );
+      expect(
+        container.read(cashStateUnverifiedProvider),
+        isFalse,
+        reason: 'fue una decisión del servidor, no un fallo de red',
+      );
+      expect(
+        container.read(activeCashSessionControllerProvider).valueOrNull,
+        isNull,
+      );
+    });
   });
 }

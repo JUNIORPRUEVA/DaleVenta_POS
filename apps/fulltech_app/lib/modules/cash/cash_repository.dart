@@ -456,6 +456,25 @@ class CashRepository {
     DateTime? to,
     int take = 160,
   }) async {
+    final page = await movementHistoryPage(
+      type: type,
+      movementType: movementType,
+      from: from,
+      to: to,
+      limit: take,
+    );
+    return page.items;
+  }
+
+  Future<CashPage<CashMovementModel>> movementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async {
     try {
       final res = await _dio.get(
         ApiRoutes.cashMovementsHistory,
@@ -465,15 +484,16 @@ class CashRepository {
             'movementType': movementType!.trim(),
           if (from != null) 'from': _dateOnly(from),
           if (to != null) 'to': _dateOnly(to),
-          'take': take,
+          if ((search ?? '').trim().isNotEmpty) 'search': search!.trim(),
+          'page': page,
+          'limit': limit,
         },
         options: Options(extra: const {'skipLoader': true}),
       );
-      final rows = _extractRows(res.data);
-      return rows
-          .whereType<Map>()
-          .map((row) => CashMovementModel.fromJson(row.cast<String, dynamic>()))
-          .toList(growable: false);
+      return CashPage<CashMovementModel>.fromJson(
+        res.data,
+        CashMovementModel.fromJson,
+      );
     } on DioException catch (e) {
       throw ApiException(
         _message(e.response?.data, 'No se pudo cargar historial de caja'),
@@ -489,20 +509,33 @@ class CashRepository {
   }
 
   Future<List<CashSessionHistoryModel>> closedSessions() async {
+    final page = await closedSessionsPage();
+    return page.items;
+  }
+
+  Future<CashPage<CashSessionHistoryModel>> closedSessionsPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async {
     try {
       final res = await _dio.get(
         ApiRoutes.cashClosedSessions,
-        queryParameters: const {'limit': 50},
+        queryParameters: {
+          if (from != null) 'from': _dateOnly(from),
+          if (to != null) 'to': _dateOnly(to),
+          if ((search ?? '').trim().isNotEmpty) 'search': search!.trim(),
+          'page': page,
+          'limit': limit,
+        },
         options: Options(extra: const {'skipLoader': true}),
       );
-      final rows = _extractRows(res.data);
-      return rows
-          .whereType<Map>()
-          .map(
-            (row) =>
-                CashSessionHistoryModel.fromJson(row.cast<String, dynamic>()),
-          )
-          .toList(growable: false);
+      return CashPage<CashSessionHistoryModel>.fromJson(
+        res.data,
+        CashSessionHistoryModel.fromJson,
+      );
     } on DioException catch (e) {
       throw ApiException(
         _message(e.response?.data, 'No se pudo cargar historial de turnos'),

@@ -626,12 +626,27 @@ export class CashService {
     )
       ? query.movementType
       : undefined;
+    const search = (query.search ?? query.q ?? "").trim();
+    const searchWhere: Prisma.CashMovementWhereInput[] = search
+      ? [
+          { reason: { contains: search, mode: "insensitive" } },
+          { type: { contains: search, mode: "insensitive" } },
+          { movementType: { contains: search, mode: "insensitive" } },
+          { session: { userName: { contains: search, mode: "insensitive" } } },
+          {
+            session: {
+              businessDate: { contains: search, mode: "insensitive" },
+            },
+          },
+        ]
+      : [];
 
     const where: Prisma.CashMovementWhereInput = {
       ...(type ? { type } : {}),
       ...(movementType ? { movementType } : {}),
       companyId,
       ...this.movementDateRange(query.from, query.to),
+      ...(searchWhere.length > 0 ? { OR: searchWhere } : {}),
     };
 
     const rows = await this.prisma.cashMovement.findMany({
@@ -700,16 +715,48 @@ export class CashService {
       limit: Number.isFinite(limitParam) ? limitParam : undefined,
       defaultLimit: 50,
     });
+    const search = (query.search ?? query.q ?? "").trim();
+    const rangeWhere = this.sessionBusinessDateRange(query.from, query.to);
+    const searchWhere: Prisma.CashSessionWhereInput[] = search
+      ? [
+          { userName: { contains: search, mode: "insensitive" } },
+          { businessDate: { contains: search, mode: "insensitive" } },
+          { status: { contains: search, mode: "insensitive" } },
+        ]
+      : [];
+    const baseWhere: Prisma.CashSessionWhereInput = {
+      companyId,
+      status: "CLOSED",
+    };
     const rows = await this.prisma.cashSession.findMany({
-      where:
-        isAdminLike(user)
-          ? { companyId, status: "CLOSED" }
-          : { companyId, status: "CLOSED", openedByUserId: user.id },
+      where: isAdminLike(user)
+        ? {
+            ...baseWhere,
+            ...rangeWhere,
+            ...(searchWhere.length > 0 ? { OR: searchWhere } : {}),
+          }
+        : {
+            ...baseWhere,
+            openedByUserId: user.id,
+            ...rangeWhere,
+            ...(searchWhere.length > 0 ? { OR: searchWhere } : {}),
+          },
       orderBy: [{ closedAt: "desc" }, { id: "desc" }],
       skip: pagination.skip,
       take: pagination.take,
     });
     return toPageResult(rows, pagination);
+  }
+
+  private sessionBusinessDateRange(
+    from?: string,
+    to?: string,
+  ): Prisma.CashSessionWhereInput {
+    if (!from && !to) return {};
+    const businessDate: Prisma.StringFilter = {};
+    if (from) businessDate.gte = from;
+    if (to) businessDate.lte = to;
+    return { businessDate };
   }
 
   async sessionDetail(

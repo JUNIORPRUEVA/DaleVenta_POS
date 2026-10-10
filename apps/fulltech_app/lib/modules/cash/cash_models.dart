@@ -235,6 +235,56 @@ class CashMovementModel {
   }
 }
 
+class CashPage<T> {
+  const CashPage({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.hasMore,
+    this.nextPage,
+    this.total,
+  });
+
+  final List<T> items;
+  final int page;
+  final int limit;
+  final bool hasMore;
+  final int? nextPage;
+  final int? total;
+
+  factory CashPage.fromJson(
+    dynamic data,
+    T Function(Map<String, dynamic> json) decode,
+  ) {
+    if (data is List) {
+      return CashPage<T>(
+        items: data
+            .whereType<Map>()
+            .map((row) => decode(row.cast<String, dynamic>()))
+            .toList(growable: false),
+        page: 1,
+        limit: data.length,
+        hasMore: false,
+      );
+    }
+    if (data is Map) {
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((row) => decode(row.cast<String, dynamic>()))
+          .toList(growable: false);
+      return CashPage<T>(
+        items: items,
+        page: (data['page'] as num?)?.toInt() ?? 1,
+        limit: (data['limit'] as num?)?.toInt() ?? items.length,
+        total: (data['total'] as num?)?.toInt(),
+        hasMore: data['hasMore'] == true,
+        nextPage: (data['nextPage'] as num?)?.toInt(),
+      );
+    }
+    return CashPage<T>(items: [], page: 1, limit: 0, hasMore: false);
+  }
+}
+
 class CashSessionHistoryModel {
   const CashSessionHistoryModel({
     required this.id,

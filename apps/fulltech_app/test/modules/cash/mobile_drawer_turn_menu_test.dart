@@ -111,7 +111,27 @@ class _DrawerCashRepository implements CashRepository {
   }) async => const [];
 
   @override
+  Future<CashPage<CashMovementModel>> movementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
+
+  @override
   Future<List<CashSessionHistoryModel>> closedSessions() async => const [];
+
+  @override
+  Future<CashPage<CashSessionHistoryModel>> closedSessionsPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
 
   @override
   Future<CashSessionDetailModel> sessionDetail(String id) {

@@ -95,7 +95,27 @@ class _CashRepo implements CashRepository {
   }) async => const [];
 
   @override
+  Future<CashPage<CashMovementModel>> movementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
+
+  @override
   Future<List<CashSessionHistoryModel>> closedSessions() async => const [];
+
+  @override
+  Future<CashPage<CashSessionHistoryModel>> closedSessionsPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async => const CashPage(items: [], page: 1, limit: 50, hasMore: false);
 
   @override
   Future<CashSessionDetailModel> sessionDetail(String id) =>
@@ -332,7 +352,9 @@ void main() {
       expect(lifecycleBody, contains('runOutsideBuildPhase'));
       expect(
         lifecycleBody.indexOf('runOutsideBuildPhase'),
-        lessThan(lifecycleBody.indexOf('ref.invalidate(companySettingsProvider)')),
+        lessThan(
+          lifecycleBody.indexOf('ref.invalidate(companySettingsProvider)'),
+        ),
       );
     });
 
@@ -354,7 +376,10 @@ void main() {
         'lib/core/widgets/app_navigation.dart',
       ).readAsStringSync();
       // Se ignoran los comentarios: la garantía es sobre el código.
-      final code = source.replaceAll(RegExp(r'^\s*///.*$', multiLine: true), '');
+      final code = source.replaceAll(
+        RegExp(r'^\s*///.*$', multiLine: true),
+        '',
+      );
 
       expect(code, isNot(contains('ref.watch(')));
       expect(code, isNot(contains('WidgetRef')));
