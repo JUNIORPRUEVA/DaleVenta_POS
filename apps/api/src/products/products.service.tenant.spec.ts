@@ -1,6 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import { ConflictException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { LEGACY_UNPAGINATED_LIMIT } from "../common/pagination/page-pagination";
 import { ProductsService } from "./products.service";
 
 describe("ProductsService tenant isolation (multiempresa)", () => {
@@ -81,15 +82,92 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
     } as never);
 
     // La consulta SIEMPRE filtra por la empresa del usuario autenticado.
+    // Sin `page`/`limit` (cliente legacy) NO se trunca a 50: se devuelve el
+    // conjunto completo, que era la causa de que faltaran productos.
     expect(findMany).toHaveBeenCalledWith({
       where: { companyId: companyA, archivedAt: null },
       orderBy: [{ nombre: "asc" }, { id: "asc" }],
       skip: 0,
-      take: 51,
+      take: LEGACY_UNPAGINATED_LIMIT + 1,
       select: expect.any(Object),
     });
     expect(result.items).toHaveLength(1);
     expect(result.items[0].id).toBe("p-1");
+  });
+
+  it("sin paginacion devuelve el catalogo COMPLETO, no los primeros 50 (regresion P0)", async () => {
+    const fixture = {
+      id: "p",
+      nombre: "Producto",
+      codigo: "A-1",
+      categoria: "General",
+      costo: 10,
+      precio: 20,
+      stock: 5,
+      taxTreatment: "INHERIT",
+      taxRate: null,
+      taxPriceMode: null,
+      imagen: null,
+      imageKey: null,
+      imageUpdatedAt: null,
+    };
+    // 103 productos reales: el cliente solo veia 50 porque el backend paginaba
+    // por defecto y el cliente nunca pedia la pagina 2.
+    const rows = Array.from({ length: 103 }, (_, index) => ({
+      ...fixture,
+      id: `p-${index + 1}`,
+    }));
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const { service } = buildService(findMany);
+
+    const result = await service.findAll({
+      id: "user-a",
+      role: "ADMIN",
+      companyId: companyA,
+    } as never);
+
+    expect(result.items).toHaveLength(103);
+    expect(result.hasMore).toBe(false);
+    expect(result.nextPage).toBeNull();
+    expect(result.total).toBe(103);
+  });
+
+  it("con paginacion explicita devuelve una pagina acotada y el total autoritativo", async () => {
+    const fixture = {
+      id: "p",
+      nombre: "Producto",
+      codigo: "A-1",
+      categoria: "General",
+      costo: 10,
+      precio: 20,
+      stock: 5,
+      taxTreatment: "INHERIT",
+      taxRate: null,
+      taxPriceMode: null,
+      imagen: null,
+      imageKey: null,
+      imageUpdatedAt: null,
+    };
+    // take = limit + 1: la peticion pide 51 para saber si hay mas paginas.
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      ...fixture,
+      id: `p-${index + 1}`,
+    }));
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const count = jest.fn().mockResolvedValue(103);
+    const { service } = buildService(findMany, { prisma: { product: { count } } });
+
+    const result = await service.findAll(
+      { id: "user-a", role: "ADMIN", companyId: companyA } as never,
+      { page: 1, limit: 50 } as never,
+    );
+
+    expect(result.items).toHaveLength(50);
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(50);
+    expect(result.hasMore).toBe(true);
+    expect(result.nextPage).toBe(2);
+    expect(result.total).toBe(103);
   });
 
   it("does NOT reuse the where filter across companies (A nunca ve B)", async () => {

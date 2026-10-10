@@ -1172,6 +1172,7 @@ export class ProductsService {
         return toPageResult(
           filtered.slice(pagination.skip, pagination.skip + pagination.take),
           pagination,
+          filtered.length,
         );
       } catch (error) {
         if (!this.allowLocalFallback) {
@@ -1204,26 +1205,42 @@ export class ProductsService {
           ? { warehouseStocks: { some: { warehouseId: query.warehouseId } } }
           : {}),
       };
-      const products = await this.prisma.product.findMany({
-        where,
-        orderBy: [{ nombre: "asc" }, { id: "asc" }],
-        skip: pagination.skip,
-        take: pagination.take,
-        select: this.catalogProductSelect(),
-      });
-      return toPageResult(products.map((p) => this.mapProduct(p)), pagination);
+      const [products, total] = await Promise.all([
+        this.prisma.product.findMany({
+          where,
+          orderBy: [{ nombre: "asc" }, { id: "asc" }],
+          skip: pagination.skip,
+          take: pagination.take,
+          select: this.catalogProductSelect(),
+        }),
+        pagination.explicit
+          ? this.prisma.product.count({ where })
+          : Promise.resolve(null),
+      ]);
+      return toPageResult(
+        products.map((p) => this.mapProduct(p)),
+        pagination,
+        total,
+      );
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      const products = await this.prisma.product.findMany({
-        where: { companyId },
-        orderBy: [{ nombre: "asc" }, { id: "asc" }],
-        skip: pagination.skip,
-        take: pagination.take,
-        select: this.legacyCatalogProductSelect(),
-      });
+      const legacyWhere: Prisma.ProductWhereInput = { companyId };
+      const [products, total] = await Promise.all([
+        this.prisma.product.findMany({
+          where: legacyWhere,
+          orderBy: [{ nombre: "asc" }, { id: "asc" }],
+          skip: pagination.skip,
+          take: pagination.take,
+          select: this.legacyCatalogProductSelect(),
+        }),
+        pagination.explicit
+          ? this.prisma.product.count({ where: legacyWhere })
+          : Promise.resolve(null),
+      ]);
       return toPageResult(
         products.map((p) => this.mapProduct({ ...p, archivedAt: null })),
         pagination,
+        total,
       );
     }
   }
