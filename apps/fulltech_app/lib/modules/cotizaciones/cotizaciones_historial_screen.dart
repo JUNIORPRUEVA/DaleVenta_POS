@@ -26,7 +26,6 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/desktop_sales_style.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
-import '../ventas/data/ventas_repository.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
 import 'data/open_sales_tickets_repository.dart';
@@ -90,7 +89,6 @@ class _CotizacionesHistorialScreenState
   String? _error;
   List<CotizacionModel> _items = const [];
   List<ClienteModel> _knownClients = const [];
-  Map<String, String> _categoryByProductId = const {};
   Set<String> _ownedClientIds = const {};
   Set<String> _ownedClientPhones = const {};
   bool _autoOpened = false;
@@ -427,19 +425,8 @@ class _CotizacionesHistorialScreenState
     if (user == null) return;
 
     final clientsRepo = ref.read(clientesRepositoryProvider);
-    final salesRepo = ref.read(ventasRepositoryProvider);
 
     try {
-      final products = await salesRepo.fetchProducts(forceRefresh: true);
-      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
-      setState(() {
-        _categoryByProductId = {
-          for (final product in products)
-            if ((product.categoria ?? '').trim().isNotEmpty)
-              product.id: product.categoria!.trim(),
-        };
-      });
-
       final remoteClients = await clientsRepo.listClients(
         ownerId: user.id,
         pageSize: 300,
@@ -868,13 +855,6 @@ class _CotizacionesHistorialScreenState
 
   Set<String> _quoteTags(CotizacionModel item) {
     final tags = <String>{};
-    for (final line in item.items) {
-      final category = _categoryByProductId[line.productId]?.trim();
-      if (category != null && category.isNotEmpty) {
-        tags.add(category);
-      }
-    }
-
     final keywordTag = _inferKeywordTag(
       [
         item.note,
