@@ -9778,6 +9778,13 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanySettingsSubmenu(
               showPrinter: !kIsWeb,
+              onUpdates: () => _activateProtectedRoute(
+                context,
+                ref,
+                menuContext,
+                route: Routes.actualizaciones,
+                label: 'Actualización',
+              ),
               onPrinter: () => _activateProtectedRoute(
                 context,
                 ref,
@@ -9819,30 +9826,30 @@ class _CompanyAccountMenu extends ConsumerWidget {
           ),
           if (_showLegacyAccountMenuShortcuts)
             PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.delete_forever_outlined,
-              label: 'Eliminar mi cuenta',
-              danger: true,
-              onTap: () {
-                final authRepository = ref.read(authRepositoryProvider);
-                final authController = ref.read(authStateProvider.notifier);
-                Navigator.of(menuContext).pop();
-                _runAfterMenuCloses(() {
-                  if (context.mounted) {
-                    showDeleteAccountDialogWithDependencies(
-                      context,
-                      authRepository: authRepository,
-                      authController: authController,
-                    );
-                  }
-                });
-              },
-              helpText:
-                  'Solicita contraseña y confirmación antes de eliminar una cuenta o empresa.',
-            ),
+              enabled: false,
+              padding: EdgeInsets.zero,
+              child: _CompanyMenuItem(
+                icon: Icons.delete_forever_outlined,
+                label: 'Eliminar mi cuenta',
+                danger: true,
+                onTap: () {
+                  final authRepository = ref.read(authRepositoryProvider);
+                  final authController = ref.read(authStateProvider.notifier);
+                  Navigator.of(menuContext).pop();
+                  _runAfterMenuCloses(() {
+                    if (context.mounted) {
+                      showDeleteAccountDialogWithDependencies(
+                        context,
+                        authRepository: authRepository,
+                        authController: authController,
+                      );
+                    }
+                  });
+                },
+                helpText:
+                    'Solicita contraseña y confirmación antes de eliminar una cuenta o empresa.',
               ),
+            ),
         ],
         child: _TopbarActionShell(
           icon: Icons.storefront_rounded,
@@ -9856,7 +9863,6 @@ class _CompanyAccountMenu extends ConsumerWidget {
         ),
       ),
     );
-
   }
 }
 
@@ -10965,11 +10971,13 @@ String _companyUserInitials(String name) {
 class _CompanySettingsSubmenu extends StatefulWidget {
   const _CompanySettingsSubmenu({
     required this.showPrinter,
+    required this.onUpdates,
     required this.onPrinter,
     required this.onDeleteAccount,
   });
 
   final bool showPrinter;
+  final VoidCallback onUpdates;
   final VoidCallback onPrinter;
   final VoidCallback onDeleteAccount;
 
@@ -11035,6 +11043,11 @@ class _CompanySettingsSubmenuState extends State<_CompanySettingsSubmenu> {
           ),
         ),
         if (_expanded) ...[
+          _CompanySettingsSubmenuAction(
+            icon: Icons.system_update_alt_rounded,
+            label: 'Actualización',
+            onTap: widget.onUpdates,
+          ),
           if (widget.showPrinter)
             _CompanySettingsSubmenuAction(
               icon: Icons.print_outlined,
@@ -16090,7 +16103,8 @@ class _DesktopCategoryRailState extends State<_DesktopCategoryRail> {
               );
             }
             final hasMoreCategories =
-                widget.categories.length > _DesktopCategoryRail.defaultVisibleCount;
+                widget.categories.length >
+                _DesktopCategoryRail.defaultVisibleCount;
             final visibleCategories = _showAllCategories || !hasMoreCategories
                 ? widget.categories.toList(growable: false)
                 : widget.categories

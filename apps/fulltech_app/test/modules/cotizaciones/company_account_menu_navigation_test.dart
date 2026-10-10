@@ -105,30 +105,31 @@ void main() {
     expect(find.text('Almacenes'), findsNothing);
   });
 
-  testWidgets(
-    'Cuenta y empresa > Configuracion despliega opciones compactas',
-    (tester) async {
-      await _pumpCompanyMenu(tester);
+  testWidgets('Cuenta y empresa > Configuracion despliega opciones compactas', (
+    tester,
+  ) async {
+    await _pumpCompanyMenu(tester);
 
-      await tester.tap(find.byTooltip('Cuenta y empresa'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Cuenta y empresa'));
+    await tester.pumpAndSettle();
 
-      expect(_companyMenuItem('Empresa'), findsOneWidget);
-      expect(_companyMenuItem('Licencias'), findsOneWidget);
-      expect(_companyMenuItem('Configuracion'), findsOneWidget);
-      expect(find.text('Impresora'), findsNothing);
-      expect(find.text('Eliminar mi cuenta'), findsNothing);
+    expect(_companyMenuItem('Empresa'), findsOneWidget);
+    expect(_companyMenuItem('Licencias'), findsOneWidget);
+    expect(_companyMenuItem('Configuracion'), findsOneWidget);
+    expect(find.text('Actualización'), findsNothing);
+    expect(find.text('Impresora'), findsNothing);
+    expect(find.text('Eliminar mi cuenta'), findsNothing);
 
-      await tester.tap(_companyMenuItem('Configuracion'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 140));
-      await tester.pumpAndSettle();
+    await tester.tap(_companyMenuItem('Configuracion'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pumpAndSettle();
 
-      expect(find.text('Impresora'), findsOneWidget);
-      expect(find.text('Eliminar mi cuenta'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(find.text('Actualización'), findsOneWidget);
+    expect(find.text('Impresora'), findsOneWidget);
+    expect(find.text('Eliminar mi cuenta'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'Cuenta y empresa > Empresa soporta desmontaje rapido sin StateError',

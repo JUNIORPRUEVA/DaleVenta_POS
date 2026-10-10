@@ -905,6 +905,8 @@ class _SettingsCompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _SettingsCompanySubmenu(
               showPrinter: !kIsWeb,
+              onUpdates: () =>
+                  _activate(menuContext, context, Routes.actualizaciones),
               onPrinter: () => _activate(
                 menuContext,
                 context,
@@ -1067,11 +1069,13 @@ class _SettingsCompanyLogo extends StatelessWidget {
 class _SettingsCompanySubmenu extends StatefulWidget {
   const _SettingsCompanySubmenu({
     required this.showPrinter,
+    required this.onUpdates,
     required this.onPrinter,
     required this.onDeleteAccount,
   });
 
   final bool showPrinter;
+  final VoidCallback onUpdates;
   final VoidCallback onPrinter;
   final VoidCallback onDeleteAccount;
 
@@ -1137,6 +1141,11 @@ class _SettingsCompanySubmenuState extends State<_SettingsCompanySubmenu> {
           ),
         ),
         if (_expanded) ...[
+          _SettingsCompanySubmenuAction(
+            icon: Icons.system_update_alt_rounded,
+            label: 'Actualización',
+            onTap: widget.onUpdates,
+          ),
           if (widget.showPrinter)
             _SettingsCompanySubmenuAction(
               icon: Icons.print_outlined,
