@@ -5,8 +5,6 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
-import '../../../core/models/product_model.dart';
-import '../../catalogo/data/product_pages_loader.dart';
 
 final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
   return WarehouseRepository(ref.watch(dioProvider));
@@ -37,10 +35,6 @@ final warehouseTransfersProvider = FutureProvider<List<WarehouseTransferModel>>(
     return ref.watch(warehouseRepositoryProvider).fetchTransfers();
   },
 );
-
-final warehouseProductsProvider = FutureProvider<List<ProductModel>>((ref) {
-  return ref.watch(warehouseRepositoryProvider).fetchProducts();
-});
 
 double _asDouble(dynamic value) {
   if (value is num) return value.toDouble();
@@ -380,19 +374,6 @@ class WarehouseRepository {
       );
     } on DioException catch (e) {
       throw ApiException(_message(e, 'No se pudo cargar el stock por almacén'));
-    }
-  }
-
-  Future<List<ProductModel>> fetchProducts() async {
-    try {
-      // Recorre todas las paginas: el backend pagina por defecto (50) y el
-      // selector de transferencias debe alcanzar cualquier producto.
-      final products = await loadAllProductPages(_dio);
-      return products
-          .where((product) => product.productSource == 'LOCAL')
-          .toList(growable: false);
-    } on DioException catch (e) {
-      throw ApiException(_message(e, 'No se pudieron cargar los productos'));
     }
   }
 

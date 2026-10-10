@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,14 +7,18 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/admin_authorization.dart';
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/pagination/paged_list_controller.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/is_flutter_test.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
+import '../../catalogo/application/product_search_controller.dart';
+import '../../catalogo/data/catalog_repository.dart';
 import '../data/warehouse_repository.dart';
 
 class WarehouseSettingsScreen extends ConsumerWidget {
@@ -59,9 +65,6 @@ class WarehouseSettingsScreen extends ConsumerWidget {
     final transfers = canViewTransfers
         ? ref.watch(warehouseTransfersProvider)
         : const AsyncValue<List<WarehouseTransferModel>>.data([]);
-    final products = canCreateTransfers
-        ? ref.watch(warehouseProductsProvider)
-        : const AsyncValue<List<ProductModel>>.data([]);
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -88,7 +91,6 @@ class WarehouseSettingsScreen extends ConsumerWidget {
               ref.invalidate(warehousesProvider);
               ref.invalidate(warehouseTerminalsProvider);
               ref.invalidate(warehouseTransfersProvider);
-              ref.invalidate(warehouseProductsProvider);
               await Future<void>.delayed(const Duration(milliseconds: 250));
             },
             child: ListView(
@@ -207,15 +209,10 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                   data: (items) => _TransferPanel(
                     warehouses: items,
                     transfers: transfers.valueOrNull ?? const [],
-                    products: products.valueOrNull ?? const [],
                     canCreateTransfers: canCreateTransfers,
                     inventoryEnabled: inventoryEnabled,
-                    loading:
-                        transfers.isLoading ||
-                        products.isLoading ||
-                        products.isRefreshing ||
-                        transfers.isRefreshing,
-                    error: transfers.error ?? products.error,
+                    loading: transfers.isLoading || transfers.isRefreshing,
+                    error: transfers.error,
                   ),
                   loading: () => const SizedBox.shrink(),
                   error: (_, _) => const SizedBox.shrink(),
@@ -645,7 +642,6 @@ class _TransferPanel extends ConsumerStatefulWidget {
   const _TransferPanel({
     required this.warehouses,
     required this.transfers,
-    required this.products,
     required this.canCreateTransfers,
     required this.inventoryEnabled,
     required this.loading,
@@ -654,7 +650,6 @@ class _TransferPanel extends ConsumerStatefulWidget {
 
   final List<WarehouseModel> warehouses;
   final List<WarehouseTransferModel> transfers;
-  final List<ProductModel> products;
   final bool canCreateTransfers;
   final bool inventoryEnabled;
   final bool loading;
@@ -668,20 +663,82 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   String? _sourceId;
   String? _destinationId;
   String? _productId;
-  String _productQuery = '';
   String? _categoryFilter;
   String _stockFilter = 'all';
   final _productSearchCtrl = TextEditingController();
   final _quantityCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  late final ProductSearchController _productSearch;
+  void Function()? _removeProductSearchListener;
+  Map<String, int> _serverCategoryCounts = const <String, int>{};
+  bool _loadingServerCategories = false;
+  bool _productSearchStarted = false;
   bool _saving = false;
 
   @override
+  void initState() {
+    super.initState();
+    _productSearch = ProductSearchController(
+      dio: ref.read(dioProvider),
+      offlineSnapshot: () =>
+          ref.read(catalogRepositoryProvider).getCachedProducts(),
+    );
+    _removeProductSearchListener = _productSearch.addListener(
+      _onProductSearchChanged,
+    );
+    _productSearchCtrl.addListener(_onProductQueryChanged);
+    _ensureProductSearchStarted();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TransferPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _ensureProductSearchStarted();
+  }
+
+  @override
   void dispose() {
+    _removeProductSearchListener?.call();
+    _productSearch.dispose();
     _productSearchCtrl.dispose();
     _quantityCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  void _onProductSearchChanged(PagedListState<ProductModel> _) {
+    if (mounted) setState(() {});
+  }
+
+  void _onProductQueryChanged() {
+    _productSearch.setQuery(_productSearchCtrl.text);
+  }
+
+  void _ensureProductSearchStarted() {
+    if (_productSearchStarted ||
+        !widget.canCreateTransfers ||
+        !widget.inventoryEnabled) {
+      return;
+    }
+    _productSearchStarted = true;
+    unawaited(_productSearch.loadInitial());
+    unawaited(_loadServerCategories());
+  }
+
+  Future<void> _loadServerCategories() async {
+    if (_loadingServerCategories) return;
+    _loadingServerCategories = true;
+    try {
+      final counts = await ref
+          .read(catalogRepositoryProvider)
+          .fetchProductCategories();
+      if (!mounted) return;
+      setState(() => _serverCategoryCounts = counts);
+    } catch (_) {
+      // La lista de productos sigue funcionando aunque las categorias fallen.
+    } finally {
+      _loadingServerCategories = false;
+    }
   }
 
   @override
@@ -702,7 +759,11 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
     _destinationId ??= activeWarehouses
         .firstWhere((warehouse) => warehouse.id != _sourceId)
         .id;
-    final selectedProduct = widget.products
+    final productState = _productSearch.snapshot;
+    final transferProducts = productState.items
+        .where((product) => product.productSource == 'LOCAL')
+        .toList(growable: false);
+    final selectedProduct = transferProducts
         .where((product) => product.id == _productId)
         .firstOrNull;
 
@@ -720,7 +781,13 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                         'Las transferencias quedan en modo consulta hasta reactivar el control de inventario.',
                   )
                 : widget.canCreateTransfers
-                ? _buildForm(context, activeWarehouses, selectedProduct)
+                ? _buildForm(
+                    context,
+                    activeWarehouses,
+                    selectedProduct,
+                    transferProducts,
+                    productState,
+                  )
                 : const _WarehouseStatePanel(
                     icon: Icons.lock_outline_rounded,
                     title: 'Transferencias protegidas',
@@ -752,12 +819,22 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
+                    if (productState.isInitialLoading ||
+                        productState.isRefreshing)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
                   ],
                 ),
-                if (widget.error != null) ...[
+                if (widget.error != null || productState.error != null) ...[
                   const SizedBox(height: 10),
                   Text(
-                    '${widget.error}',
+                    '${widget.error ?? productState.error}',
                     style: const TextStyle(
                       color: Color(0xFFB91C1C),
                       fontWeight: FontWeight.w700,
@@ -790,6 +867,8 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
     BuildContext context,
     List<WarehouseModel> activeWarehouses,
     ProductModel? selectedProduct,
+    List<ProductModel> products,
+    PagedListState<ProductModel> productState,
   ) {
     final sourceId = _sourceId;
     final destinationId = _destinationId;
@@ -842,18 +921,22 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
         ),
         const SizedBox(height: 10),
         _TransferProductPicker(
-          products: widget.products,
+          products: products,
+          state: productState,
+          categories: _transferCategories(products),
           selectedProductId: _productId,
           sourceWarehouseId: sourceId,
           queryController: _productSearchCtrl,
-          query: _productQuery,
           categoryFilter: _categoryFilter,
           stockFilter: _stockFilter,
           availableQuantity: _availableQuantity,
-          onQueryChanged: (value) => setState(() => _productQuery = value),
-          onCategoryChanged: (value) => setState(() => _categoryFilter = value),
+          onCategoryChanged: (value) {
+            setState(() => _categoryFilter = value);
+            _productSearch.patchFilter('category', value);
+          },
           onStockFilterChanged: (value) => setState(() => _stockFilter = value),
           onSelected: (value) => setState(() => _productId = value),
+          onLoadMore: () => unawaited(_productSearch.loadMore()),
         ),
         const SizedBox(height: 8),
         Text(
@@ -1004,7 +1087,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
           );
       ref.invalidate(warehouseTransfersProvider);
       ref.invalidate(productWarehouseStockProvider(product.id));
-      ref.invalidate(warehouseProductsProvider);
+      unawaited(_productSearch.refresh());
       if (!mounted || !navigator.mounted) return;
       _quantityCtrl.clear();
       _notesCtrl.clear();
@@ -1077,48 +1160,53 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
   }
+
+  List<String> _transferCategories(List<ProductModel> products) {
+    final categories = <String>{
+      ..._serverCategoryCounts.keys,
+      ...products
+          .map((product) => product.categoriaLabel.trim())
+          .where((category) => category.isNotEmpty),
+    }.toList();
+    categories.sort();
+    return categories;
+  }
 }
 
 class _TransferProductPicker extends StatelessWidget {
   const _TransferProductPicker({
     required this.products,
+    required this.state,
+    required this.categories,
     required this.selectedProductId,
     required this.sourceWarehouseId,
     required this.queryController,
-    required this.query,
     required this.categoryFilter,
     required this.stockFilter,
     required this.availableQuantity,
-    required this.onQueryChanged,
     required this.onCategoryChanged,
     required this.onStockFilterChanged,
     required this.onSelected,
+    required this.onLoadMore,
   });
 
   final List<ProductModel> products;
+  final PagedListState<ProductModel> state;
+  final List<String> categories;
   final String? selectedProductId;
   final String? sourceWarehouseId;
   final TextEditingController queryController;
-  final String query;
   final String? categoryFilter;
   final String stockFilter;
   final double Function(ProductModel? product, String? warehouseId)
   availableQuantity;
-  final ValueChanged<String> onQueryChanged;
   final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<String> onStockFilterChanged;
   final ValueChanged<String?> onSelected;
+  final VoidCallback onLoadMore;
 
   @override
   Widget build(BuildContext context) {
-    final categories =
-        products
-            .map((product) => product.categoriaLabel.trim())
-            .where((category) => category.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    final normalizedQuery = query.trim().toLowerCase();
     final filtered = products.where((product) {
       if (categoryFilter != null && product.categoriaLabel != categoryFilter) {
         return false;
@@ -1135,12 +1223,8 @@ class _TransferProductPicker extends StatelessWidget {
           if (available > 0) return false;
           break;
       }
-      if (normalizedQuery.isEmpty) return true;
-      return product.nombre.toLowerCase().contains(normalizedQuery) ||
-          (product.codigo ?? '').toLowerCase().contains(normalizedQuery) ||
-          product.categoriaLabel.toLowerCase().contains(normalizedQuery);
+      return true;
     }).toList();
-    final visibleProducts = filtered.take(8).toList();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1159,7 +1243,6 @@ class _TransferProductPicker extends StatelessWidget {
                   flex: 5,
                   child: TextField(
                     controller: queryController,
-                    onChanged: onQueryChanged,
                     decoration:
                         _inputDecoration(
                           'Buscar producto por nombre, código o categoría',
@@ -1210,7 +1293,9 @@ class _TransferProductPicker extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              filtered.isEmpty
+              state.isInitialLoading
+                  ? 'Cargando productos...'
+                  : filtered.isEmpty
                   ? 'No hay productos con esos filtros'
                   : 'Producto para transferir',
               style: const TextStyle(
@@ -1226,10 +1311,10 @@ class _TransferProductPicker extends StatelessWidget {
                   ? const SizedBox.shrink()
                   : ListView.separated(
                       shrinkWrap: true,
-                      itemCount: visibleProducts.length,
+                      itemCount: filtered.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final product = visibleProducts[index];
+                        final product = filtered[index];
                         final selected = product.id == selectedProductId;
                         final available = availableQuantity(
                           product,
@@ -1298,14 +1383,38 @@ class _TransferProductPicker extends StatelessWidget {
                       },
                     ),
             ),
-            if (filtered.length > visibleProducts.length) ...[
-              const SizedBox(height: 6),
+            const SizedBox(height: 6),
+            if (state.isOffline)
+              const Text(
+                'Sin conexión: mostrando productos guardados en este dispositivo.',
+                style: TextStyle(
+                  color: Color(0xFF52667C),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
               Text(
-                'Mostrando ${visibleProducts.length} de ${filtered.length}; usa búsqueda para precisar.',
+                'Mostrando ${state.progressLabel}',
                 style: const TextStyle(
                   color: Color(0xFF52667C),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
+                ),
+              ),
+            if (state.hasMore) ...[
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: state.isLoadingMore ? null : onLoadMore,
+                icon: state.isLoadingMore
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more_rounded),
+                label: Text(
+                  state.isLoadingMore ? 'Cargando...' : 'Cargar más productos',
                 ),
               ),
             ],
