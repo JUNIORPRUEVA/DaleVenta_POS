@@ -109,3 +109,90 @@ de la versión que introduce el loadMore. No hay fecha fija todavía.
   warranty (200), work-scheduling (500/100/500), warehouses/transfers (100).
 - **Totales en UI**: "Ventas netas"/"Resumen" del TPV y gráficas de "Mis Ventas"
   siguen sumando lo cargado.
+
+## 5. MODERN_CLIENT_ARCHITECTURE
+
+Camino obligatorio para clientes modernos (NO descargar todo):
+
+```text
+SERVIDOR:  company/tenant + search + categoria + estado   (filtros)
+           -> count()                                      (total de la consulta)
+           -> orderBy determinista + skip/take              (pagina)
+           -> { items, page, limit, total, hasMore, nextPage }
+
+CLIENTE:   loadInitial()  -> page 1 (50) -> render inmediato
+           scroll cerca del final -> loadMore() -> page 2, 3...
+           "martillo"       -> setQuery()  (debounce 250-400 ms) -> page 1
+           categoria=X      -> patchFilter('category','X')       -> page 1
+           categoria + texto-> ambos filtros en la MISMA peticion
+```
+
+Implementación reutilizable (no duplicar por pantalla):
+
+- `apps/fulltech_app/lib/core/pagination/paged_result.dart` — envelope.
+- `apps/fulltech_app/lib/core/pagination/paged_list_controller.dart` —
+  `PagedListController<T>`: `loadInitial/loadMore/refresh/setQuery/setFilters/
+  retry/reset`, dedupe por id, token de generacion (respuestas viejas no pisan),
+  conserva la pagina 1 si falla la 2, debounce configurable, dispose seguro.
+- `apps/fulltech_app/lib/features/catalogo/application/product_search_controller.dart`
+  — `ProductSearchController` (search + categoria + `findByCode` remoto).
+  Debe ser el mecanismo único de Catálogo, Venta, Cotización y selector de
+  almacén.
+
+### FILTER_BEFORE_PAGINATION
+
+Los filtros viajan SIEMPRE al backend y se aplican **antes** de paginar.
+`total` es el de la consulta filtrada (ej.: 20.000 productos, `search=martillo`
+-> 117 coincidencias -> `total: 117`, no 20.000).
+
+### CACHE_PAGE_VS_SNAPSHOT
+
+| Concepto | Contenido | Cuándo se escribe |
+| --- | --- | --- |
+| `PAGE_CACHE` | una pagina concreta + `(page, query, category, timestamp)` | al recibir cada pagina |
+| `FULL_SNAPSHOT` | catálogo completo | **solo** en un recorrido completo intencional (offline/export) |
+
+Regla: una pagina parcial **nunca** se guarda como snapshot completo. Si la UI
+trabaja con datos offline debe indicarlo explícitamente.
+
+## 6. PERFORMANCE BUDGET
+
+```text
+DEFAULT UI PAGE      = 50   (permitido 100)
+SEARCH PAGE          = 20-50
+MAX INTERACTIVO      = 200
+LEGACY_UNPAGINATED   = 5000  (solo modo legacy / export / backend)
+```
+
+Los clientes modernos **no** deben pedir 5000. `loadAllProductPages()` solo es
+válido para legacy/offline/export, nunca para abrir una pantalla ni para una
+búsqueda interactiva.
+
+## 7. DEPRECATION_PLAN
+
+```text
+LEGACY_COMPATIBILITY = TEMPORARY
+MODERN_CLIENT_PATH   = PAGINATED
+REMOVAL_CONDITION    = cuando los builds antiguos soportados (130/131) hayan
+                       sido retirados del parque instalado
+```
+
+## 8. Gaps conocidos pendientes de cerrar
+
+1. **Endpoint de categorías**: no existe `GET /products/categories` ni una
+   consulta `distinct`. Hoy los chips de categoría se derivan de los productos
+   cargados; con paginación server-side el listado de categorías quedaría
+   incompleto. **Requiere endpoint nuevo** (sin migración).
+2. **Catálogo (UI)**: sigue cargando el catálogo completo y filtrando en local
+   (`catalogo_screen.dart`), pese a existir ya `ProductSearchController`.
+3. **Venta / Cotización / almacén**: usan `loadAllProductPages()` como camino
+   por defecto; deben migrar a `ProductSearchController` (búsqueda remota).
+4. **Clientes**: lista con `page=1&pageSize=100` explícito y filtros
+   (correo/estado/propietario) aplicados en local sobre esa página.
+5. **Cotizaciones**: `take=80` explícito en el historial, búsqueda local.
+6. **Sales / TPV / Mis Ventas**: `/sales` en modo legacy devuelve array plano
+   (sin `hasMore`); los totales de UI siguen calculándose con `.fold()`.
+7. **Topes duros sin navegación**: payroll (120/500/500/200), users (500),
+   warranty (200), work-scheduling (500/100/500), warehouses/transfers (100).
+8. **Orden determinista**: revisar `orderBy` en clients, cash, purchases,
+   cotizaciones y service-orders (añadir `id` como desempate donde falte).
