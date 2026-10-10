@@ -104,6 +104,14 @@ class _CotizacionesHistorialScreenState
   ProviderSubscription<AuthState>? _authSubscription;
   String? _activeCompanyId;
   int _loadGeneration = 0;
+  int _page = 1;
+  int? _nextPage;
+  int? _total;
+  bool _hasMore = false;
+  bool _loadingMore = false;
+  Timer? _searchDebounce;
+
+  static const int _historyPageSize = 50;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
@@ -357,6 +365,7 @@ class _CotizacionesHistorialScreenState
   @override
   void dispose() {
     _authSubscription?.close();
+    _searchDebounce?.cancel();
     _searchCtrl.removeListener(_handleSearchChanged);
     _searchCtrl.dispose();
     super.dispose();
@@ -372,6 +381,45 @@ class _CotizacionesHistorialScreenState
     final next = _searchCtrl.text.trim();
     if (next == _searchQuery) return;
     setState(() => _searchQuery = next);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        unawaited(_load());
+      }
+    });
+  }
+
+  bool get _hasRemoteFilters {
+    return _searchQuery.trim().isNotEmpty ||
+        _selectedClientKey != null ||
+        _selectedQuoteTag != null ||
+        _fromDate != null ||
+        _toDate != null ||
+        _ownOnly;
+  }
+
+  String? get _selectedCustomerId {
+    final key = _selectedClientKey;
+    if (key == null || !key.startsWith('id:')) return null;
+    return key.substring(3).trim();
+  }
+
+  String? get _selectedCustomerPhone {
+    final key = _selectedClientKey;
+    if (key == null || !key.startsWith('phone:')) return null;
+    return key.substring(6).trim();
+  }
+
+  String get _historySearchQuery {
+    final parts = <String>[
+      _searchQuery.trim(),
+      if (_selectedClientKey != null && _selectedClientKey!.startsWith('name:'))
+        _selectedClientKey!.substring(5).trim(),
+      if ((_selectedQuoteTag ?? '').trim().isNotEmpty &&
+          (_selectedQuoteTag ?? '').trim().toLowerCase() != 'general')
+        _selectedQuoteTag!.trim(),
+    ].where((part) => part.isNotEmpty).toList(growable: false);
+    return parts.join(' ');
   }
 
   Future<void> _load() async {
@@ -381,25 +429,53 @@ class _CotizacionesHistorialScreenState
       _loading = true;
       _refreshing = false;
       _error = null;
+      _loadingMore = false;
+      _page = 1;
+      _nextPage = null;
+      _total = null;
+      _hasMore = false;
     });
     final repo = ref.read(cotizacionesRepositoryProvider);
     try {
-      final cached = await repo.getCachedList(
-        customerPhone: widget.customerPhone,
-      );
-      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
-      if (cached.isNotEmpty) {
-        setState(() {
-          _items = cached;
-          _loading = false;
-          _refreshing = true;
-        });
+      if (!_hasRemoteFilters) {
+        final cached = await repo.getCachedList(
+          customerPhone: widget.customerPhone,
+          take: _historyPageSize,
+        );
+        if (!_isCurrentCompanyGeneration(generation, companyId)) return;
+        if (cached.isNotEmpty) {
+          setState(() {
+            _items = cached;
+            _loading = false;
+            _refreshing = true;
+          });
+        }
       }
 
-      final rows = await repo.listAndCache(customerPhone: widget.customerPhone);
+      final page = await repo.listPage(
+        customerPhone:
+            _selectedCustomerPhone ?? (widget.customerPhone ?? '').trim(),
+        customerId: _selectedCustomerId,
+        userId: _ownOnly ? ref.read(authStateProvider).user?.id : null,
+        search: _historySearchQuery,
+        from: _fromDate,
+        to: _toDate,
+        page: 1,
+        limit: _historyPageSize,
+      );
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
+      final rows = page.items;
+      final remoteCompanyId = _requireActiveCompanyIdForCache();
+      for (final item in rows) {
+        await repo.upsertLocal(item, companyId: remoteCompanyId);
+      }
       if (!_isCurrentCompanyGeneration(generation, companyId)) return;
       setState(() {
         _items = rows;
+        _page = page.page;
+        _nextPage = page.nextPage;
+        _total = page.total;
+        _hasMore = page.hasMore;
         _loading = false;
         _refreshing = false;
       });
@@ -414,6 +490,69 @@ class _CotizacionesHistorialScreenState
         );
         _loading = false;
         _refreshing = false;
+      });
+    }
+  }
+
+  String _requireActiveCompanyIdForCache() {
+    final companyId = ref.read(authStateProvider).user?.companyId?.trim() ?? '';
+    if (companyId.isEmpty) {
+      throw ApiException('Empresa activa requerida para cotizaciones locales');
+    }
+    return companyId;
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    final generation = _loadGeneration;
+    final companyId = _activeCompanyId;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(cotizacionesRepositoryProvider)
+          .listPage(
+            customerPhone:
+                _selectedCustomerPhone ?? (widget.customerPhone ?? '').trim(),
+            customerId: _selectedCustomerId,
+            userId: _ownOnly ? ref.read(authStateProvider).user?.id : null,
+            search: _historySearchQuery,
+            from: _fromDate,
+            to: _toDate,
+            page: _nextPage ?? (_page + 1),
+            limit: _historyPageSize,
+          );
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
+      final byId = {for (final item in _items) item.id: item};
+      for (final item in page.items) {
+        byId[item.id] = item;
+      }
+      final rows = byId.values.toList(growable: false);
+      final remoteCompanyId = _requireActiveCompanyIdForCache();
+      for (final item in page.items) {
+        await ref
+            .read(cotizacionesRepositoryProvider)
+            .upsertLocal(item, companyId: remoteCompanyId);
+      }
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
+      setState(() {
+        _items = rows;
+        _page = page.page;
+        _nextPage = page.nextPage;
+        _total = page.total;
+        _hasMore = page.hasMore;
+        _loadingMore = false;
+      });
+    } catch (e) {
+      if (!_isCurrentCompanyGeneration(generation, companyId)) return;
+      setState(() {
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar más cotizaciones.',
+        );
+        _loadingMore = false;
       });
     }
   }
@@ -894,28 +1033,6 @@ class _CotizacionesHistorialScreenState
     return null;
   }
 
-  bool _matchesSearch(CotizacionModel item) {
-    final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return true;
-
-    final createdDate = formatQuotationHistoryDate(
-      item.createdAt,
-      pattern: 'dd/MM/yyyy h:mm a',
-    );
-    final haystack = [
-      item.id,
-      item.customerName,
-      item.customerPhone ?? '',
-      item.createdByUserName ?? '',
-      item.note,
-      createdDate,
-      ..._quoteTags(item),
-      for (final line in item.items) ...[line.nombre, line.productId],
-    ].join(' ').toLowerCase();
-
-    return haystack.contains(query);
-  }
-
   List<_ClientFilterOption> get _clientOptions {
     final options = <String, _ClientFilterOption>{};
 
@@ -979,58 +1096,7 @@ class _CotizacionesHistorialScreenState
   }
 
   List<CotizacionModel> get _visibleItems {
-    final filtered = _items
-        .where((item) {
-          if (!_matchesSearch(item)) return false;
-          if (_ownOnly && !_isOwnClient(item)) return false;
-          if (_selectedClientKey != null &&
-              _clientKey(
-                    customerId: item.customerId,
-                    customerPhone: item.customerPhone,
-                    customerName: item.customerName,
-                  ) !=
-                  _selectedClientKey) {
-            return false;
-          }
-          if (_selectedQuoteTag != null &&
-              !_quoteTags(item).contains(_selectedQuoteTag)) {
-            return false;
-          }
-          if (_fromDate != null) {
-            final start = DateTime(
-              _fromDate!.year,
-              _fromDate!.month,
-              _fromDate!.day,
-            );
-            if (quotationHistoryLocalDate(item.createdAt).isBefore(start)) {
-              return false;
-            }
-          }
-          if (_toDate != null) {
-            final end = DateTime(
-              _toDate!.year,
-              _toDate!.month,
-              _toDate!.day,
-              23,
-              59,
-              59,
-              999,
-            );
-            if (quotationHistoryLocalDate(item.createdAt).isAfter(end)) {
-              return false;
-            }
-          }
-          return true;
-        })
-        .toList(growable: false);
-
-    filtered.sort((a, b) {
-      final aOwned = _isOwnClient(a);
-      final bOwned = _isOwnClient(b);
-      if (aOwned != bOwned) return aOwned ? -1 : 1;
-      return b.createdAt.compareTo(a.createdAt);
-    });
-    return filtered;
+    return List<CotizacionModel>.unmodifiable(_items);
   }
 
   Future<void> _openFilters() async {
@@ -1078,6 +1144,7 @@ class _CotizacionesHistorialScreenState
       _fromDate = result.fromDate;
       _toDate = result.toDate;
     });
+    unawaited(_load());
   }
 
   void _clearFilters() {
@@ -1088,6 +1155,7 @@ class _CotizacionesHistorialScreenState
       _toDate = null;
       _ownOnly = false;
     });
+    unawaited(_load());
   }
 
   Widget _buildMobileAppBarSearchField() {
@@ -1777,9 +1845,17 @@ class _CotizacionesHistorialScreenState
       onRefresh: _load,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
-        itemCount: visibleItems.length,
+        itemCount: visibleItems.length + (_hasMore || _loadingMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
+          if (index >= visibleItems.length) {
+            return _HistoryLoadMoreFooter(
+              loading: _loadingMore,
+              loaded: _items.length,
+              total: _total,
+              onPressed: _hasMore ? _loadMore : null,
+            );
+          }
           final item = visibleItems[index];
           final canEditOrDelete = _canEditOrDelete(item);
           final canDuplicate = true;
@@ -1884,12 +1960,17 @@ class _CotizacionesHistorialScreenState
                               _activeFilterCount > 0 ||
                               _searchQuery.isNotEmpty ||
                               _ownOnly,
-                          onToggleOwn: (v) => setState(() {
-                            _ownOnly = v;
-                            _selectedClientKey = null;
-                          }),
-                          onSelectTag: (tag) =>
-                              setState(() => _selectedQuoteTag = tag),
+                          onToggleOwn: (v) {
+                            setState(() {
+                              _ownOnly = v;
+                              _selectedClientKey = null;
+                            });
+                            unawaited(_load());
+                          },
+                          onSelectTag: (tag) {
+                            setState(() => _selectedQuoteTag = tag);
+                            unawaited(_load());
+                          },
                           onPickFrom: () async {
                             final now = DateTime.now();
                             final picked = await showDatePicker(
@@ -1901,6 +1982,7 @@ class _CotizacionesHistorialScreenState
                             );
                             if (picked != null) {
                               setState(() => _fromDate = picked);
+                              unawaited(_load());
                             }
                           },
                           onPickTo: () async {
@@ -1914,6 +1996,7 @@ class _CotizacionesHistorialScreenState
                             );
                             if (picked != null) {
                               setState(() => _toDate = picked);
+                              unawaited(_load());
                             }
                           },
                           onClearFilters: _clearFilters,
@@ -2048,10 +2131,20 @@ class _CotizacionesHistorialScreenState
                       onRefresh: _load,
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
-                        itemCount: visibleItems.length,
+                        itemCount:
+                            visibleItems.length +
+                            (_hasMore || _loadingMore ? 1 : 0),
                         separatorBuilder: (context, index) =>
                             const SizedBox(height: 8),
                         itemBuilder: (context, index) {
+                          if (index >= visibleItems.length) {
+                            return _HistoryLoadMoreFooter(
+                              loading: _loadingMore,
+                              loaded: _items.length,
+                              total: _total,
+                              onPressed: _hasMore ? _loadMore : null,
+                            );
+                          }
                           final item = visibleItems[index];
                           final canEditOrDelete = _canEditOrDelete(item);
                           final canEdit = canEditOrDelete;
@@ -2086,6 +2179,45 @@ class _CotizacionesHistorialScreenState
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryLoadMoreFooter extends StatelessWidget {
+  const _HistoryLoadMoreFooter({
+    required this.loading,
+    required this.loaded,
+    required this.total,
+    required this.onPressed,
+  });
+
+  final bool loading;
+  final int loaded;
+  final int? total;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final progress = total == null ? '$loaded' : '$loaded de $total';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: OutlinedButton.icon(
+          onPressed: loading ? null : onPressed,
+          icon: loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.expand_more_rounded),
+          label: Text(
+            loading ? 'Cargando...' : 'Cargar más ($progress)',
+            style: theme.textTheme.labelLarge,
+          ),
         ),
       ),
     );

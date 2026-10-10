@@ -452,6 +452,11 @@ export class CotizacionesService {
     user: TenantUser,
     query: {
       customerPhone?: string;
+      customerId?: string;
+      userId?: string;
+      search?: string;
+      from?: string;
+      to?: string;
       page?: number;
       limit?: number;
       take?: number;
@@ -467,6 +472,11 @@ export class CotizacionesService {
       userId: user.id,
       role: user.role,
       customerPhone: query.customerPhone?.trim() ?? null,
+      customerId: query.customerId?.trim() ?? null,
+      filterUserId: query.userId?.trim() ?? null,
+      search: query.search?.trim() ?? null,
+      from: query.from?.trim() ?? null,
+      to: query.to?.trim() ?? null,
       page: pagination.page,
       limit: pagination.limit,
     };
@@ -586,6 +596,11 @@ export class CotizacionesService {
     user: TenantUser,
     query: {
       customerPhone?: string;
+      customerId?: string;
+      userId?: string;
+      search?: string;
+      from?: string;
+      to?: string;
       page?: number;
       limit?: number;
       take?: number;
@@ -602,6 +617,7 @@ export class CotizacionesService {
       items: any[];
       page: number;
       limit: number;
+      total?: number | null;
       hasMore: boolean;
       nextPage: number | null;
     }>(cacheKey);
@@ -613,6 +629,11 @@ export class CotizacionesService {
 
     const where: Prisma.CotizacionWhereInput = { companyId };
 
+    const customerId = query.customerId?.trim();
+    if (customerId) {
+      where.customerId = customerId;
+    }
+
     const customerPhone = query.customerPhone?.trim();
     if (customerPhone) {
       const normalized = normalizePhone(customerPhone);
@@ -622,15 +643,88 @@ export class CotizacionesService {
       ];
     }
 
-    const items = await this.prisma.cotizacion.findMany({
-      where,
-      skip: pagination.skip,
-      take: pagination.take,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      include: this.buildQuoteInclude(),
-    });
+    const userId = query.userId?.trim();
+    if (userId) {
+      where.createdByUserId = userId;
+    }
 
-    const response = toPageResult(items, pagination);
+    const parseDateFilter = (value?: string, endOfDay = false) => {
+      const raw = value?.trim();
+      if (!raw) return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return new Date(
+          `${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`,
+        );
+      }
+      return new Date(raw);
+    };
+    const from = parseDateFilter(query.from);
+    const to = parseDateFilter(query.to, true);
+    if (from && Number.isNaN(from.getTime())) {
+      throw new BadRequestException('El filtro "from" no es una fecha valida');
+    }
+    if (to && Number.isNaN(to.getTime())) {
+      throw new BadRequestException('El filtro "to" no es una fecha valida');
+    }
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: from } : {}),
+        ...(to ? { lte: to } : {}),
+      };
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      const normalizedSearchPhone = normalizePhone(search);
+      const searchOr: Prisma.CotizacionWhereInput[] = [
+        { customerName: { contains: search, mode: "insensitive" } },
+        { customerPhone: { contains: search, mode: "insensitive" } },
+        { note: { contains: search, mode: "insensitive" } },
+        {
+          items: {
+            some: {
+              productNameSnapshot: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
+        {
+          createdBy: {
+            OR: [
+              { nombreCompleto: { contains: search, mode: "insensitive" } },
+              { email: { contains: search, mode: "insensitive" } },
+            ],
+          },
+        },
+      ];
+      if (normalizedSearchPhone) {
+        searchOr.push({
+          customerPhoneNormalized: {
+            contains: normalizedSearchPhone,
+            mode: "insensitive",
+          },
+        });
+      }
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : []),
+        { OR: searchOr },
+      ];
+    }
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.cotizacion.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        include: this.buildQuoteInclude(),
+      }),
+      this.prisma.cotizacion.count({ where }),
+    ]);
+
+    const response = toPageResult(items, pagination, total);
     await this.redis.set(cacheKey, response);
     return response;
   }

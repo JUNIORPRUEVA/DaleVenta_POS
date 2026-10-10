@@ -8,6 +8,7 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/offline/sync_queue_service.dart';
+import '../../../core/pagination/paged_result.dart';
 import '../cotizacion_models.dart';
 import '../quotation_history_utils.dart';
 import 'cotizaciones_local_repository.dart';
@@ -153,10 +154,35 @@ class CotizacionesRepository {
 
   Future<List<CotizacionModel>> list({
     String? customerPhone,
+    String? customerId,
     String? userId,
+    String? search,
     DateTime? from,
     DateTime? to,
     int take = 80,
+  }) async {
+    final page = await listPage(
+      customerPhone: customerPhone,
+      customerId: customerId,
+      userId: userId,
+      search: search,
+      from: from,
+      to: to,
+      page: 1,
+      limit: take,
+    );
+    return page.items;
+  }
+
+  Future<PagedResult<CotizacionModel>> listPage({
+    String? customerPhone,
+    String? customerId,
+    String? userId,
+    String? search,
+    DateTime? from,
+    DateTime? to,
+    int page = 1,
+    int limit = 50,
   }) async {
     try {
       final res = await _dio.get(
@@ -164,30 +190,20 @@ class CotizacionesRepository {
         queryParameters: {
           if (customerPhone != null && customerPhone.trim().isNotEmpty)
             'customerPhone': customerPhone.trim(),
+          if (customerId != null && customerId.trim().isNotEmpty)
+            'customerId': customerId.trim(),
           if (userId != null && userId.trim().isNotEmpty)
             'userId': userId.trim(),
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
           if (from != null) 'from': _dateOnly(from),
           if (to != null) 'to': _dateOnly(to),
-          'take': take,
+          'page': page < 1 ? 1 : page,
+          'limit': limit.clamp(1, 200).toInt(),
         },
       );
 
-      final data = res.data;
-      if (data is Map && data['items'] is List) {
-        final rows = (data['items'] as List).whereType<Map>();
-        return rows
-            .map((row) => CotizacionModel.fromApi(row.cast<String, dynamic>()))
-            .toList();
-      }
-
-      if (data is List) {
-        final rows = data.whereType<Map>();
-        return rows
-            .map((row) => CotizacionModel.fromApi(row.cast<String, dynamic>()))
-            .toList();
-      }
-
-      return const [];
+      return PagedResult.fromResponse(res.data, CotizacionModel.fromApi);
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudieron cargar cotizaciones'),
@@ -272,6 +288,10 @@ class CotizacionesRepository {
       if (item.id.trim() == id.trim()) return item;
     }
     return null;
+  }
+
+  Future<void> upsertLocal(CotizacionModel item, {required String companyId}) {
+    return _local.upsert(item, companyId: companyId);
   }
 
   Future<CotizacionModel> create(CotizacionModel draft) async {

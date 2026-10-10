@@ -42,8 +42,11 @@ describe("CotizacionesService tenant isolation", () => {
   });
 
   it("lists quotes with tenant scope, stable pagination and max 200 rows", async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(601);
     const prisma = {
-      cotizacion: { findMany: jest.fn().mockResolvedValue([]) },
+      cotizacion: { findMany, count },
+      $transaction: jest.fn((queries: unknown[]) => Promise.all(queries)),
     };
     const redis = {
       get: jest.fn().mockResolvedValue(null),
@@ -72,16 +75,80 @@ describe("CotizacionesService tenant isolation", () => {
       items: [],
       page: 3,
       limit: 200,
-      hasMore: false,
-      nextPage: null,
+      total: 601,
+      hasMore: true,
+      nextPage: 4,
     });
-    expect(prisma.cotizacion.findMany).toHaveBeenCalledWith({
+    expect(findMany).toHaveBeenCalledWith({
       where: { companyId: user.companyId },
       skip: 400,
       take: 201,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: expect.any(Object),
     });
+    expect(count).toHaveBeenCalledWith({
+      where: { companyId: user.companyId },
+    });
+  });
+
+  it("applies quote history filters before pagination", async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = {
+      cotizacion: { findMany, count },
+      $transaction: jest.fn((queries: unknown[]) => Promise.all(queries)),
+    };
+    const service = serviceWith(prisma);
+
+    await service.list(user as never, {
+      page: 1,
+      limit: 50,
+      search: "camara 809",
+      userId: user.id,
+      customerId: "22222222-2222-4222-8222-222222222222",
+      from: "2026-10-01",
+      to: "2026-10-10",
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: user.companyId,
+          createdByUserId: user.id,
+          customerId: "22222222-2222-4222-8222-222222222222",
+          createdAt: {
+            gte: new Date("2026-10-01T00:00:00.000Z"),
+            lte: new Date("2026-10-10T23:59:59.999Z"),
+          },
+          AND: [
+            {
+              OR: expect.arrayContaining([
+                { customerName: { contains: "camara 809", mode: "insensitive" } },
+                {
+                  items: {
+                    some: {
+                      productNameSnapshot: {
+                        contains: "camara 809",
+                        mode: "insensitive",
+                      },
+                    },
+                  },
+                },
+                {
+                  customerPhoneNormalized: {
+                    contains: "809",
+                    mode: "insensitive",
+                  },
+                },
+              ]),
+            },
+          ],
+        }),
+        skip: 0,
+        take: 51,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      }),
+    );
   });
 
   it("rejects clientId from another company when creating a quote", async () => {
