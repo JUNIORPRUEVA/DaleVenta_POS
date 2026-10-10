@@ -29,3 +29,20 @@ TpvHeaderTotals tpvHeaderTotals({
     authoritative: true,
   );
 }
+
+/// Subtitulo del dialogo "Resumen de ventas".
+///
+/// Declara SIEMPRE de donde salen los numeros: los totales del periodo son el
+/// agregado del servidor y los contadores derivados de la lista corresponden
+/// solo a las facturas cargadas (la lista esta paginada).
+String tpvSummaryScopeLabel({
+  required bool authoritative,
+  required int loadedCount,
+}) {
+  if (authoritative) {
+    return 'Totales del período (servidor). Activas, devueltas y clientes: '
+        'sobre $loadedCount facturas cargadas.';
+  }
+  return 'Solo las $loadedCount facturas cargadas. El agregado del período no '
+      'está disponible.';
+}

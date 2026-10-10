@@ -866,9 +866,13 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     final returnedInvoices = invoices
         .where((s) => s.isReturned || s.isPartiallyReturned)
         .length;
-    final totalSold = invoices.fold(
-      0.0,
-      (sum, sale) => sum + sale.netActiveAmount,
+    // Totales AUTORITATIVOS del periodo cuando el agregado del backend esta
+    // disponible; el calculo local queda solo como respaldo y el dialogo lo
+    // declara en su subtitulo (nunca presenta una pagina parcial como total).
+    final totals = tpvHeaderTotals(
+      periodSummary: _periodSummary,
+      loadedCount: totalInvoices,
+      loadedSold: invoices.fold(0.0, (sum, sale) => sum + sale.netActiveAmount),
     );
     final totalItemLines = invoices.fold<int>(
       0,
@@ -888,12 +892,16 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return _SalesSummaryDialog(
-          totalInvoices: totalInvoices,
+          totalInvoices: totals.count,
           activeInvoices: activeInvoices,
           returnedInvoices: returnedInvoices,
-          totalSold: totalSold,
+          totalSold: totals.sold,
           totalItems: totalItemLines,
           uniqueCustomers: uniqueCustomers,
+          scopeLabel: tpvSummaryScopeLabel(
+            authoritative: totals.authoritative,
+            loadedCount: invoices.length,
+          ),
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -2682,6 +2690,7 @@ class _SalesSummaryDialog extends StatelessWidget {
     required this.totalSold,
     required this.totalItems,
     required this.uniqueCustomers,
+    required this.scopeLabel,
   });
 
   final int totalInvoices;
@@ -2690,6 +2699,10 @@ class _SalesSummaryDialog extends StatelessWidget {
   final double totalSold;
   final int totalItems;
   final int uniqueCustomers;
+
+  /// Declara el alcance real de los numeros (periodo del servidor vs facturas
+  /// cargadas): la lista esta paginada.
+  final String scopeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -2732,11 +2745,11 @@ class _SalesSummaryDialog extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Resumen de ventas',
                           style: TextStyle(
                             color: Colors.white,
@@ -2744,10 +2757,10 @@ class _SalesSummaryDialog extends StatelessWidget {
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Información general de la lista',
-                          style: TextStyle(
+                          scopeLabel,
+                          style: const TextStyle(
                             color: Color(0xFFDCEBFF),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,

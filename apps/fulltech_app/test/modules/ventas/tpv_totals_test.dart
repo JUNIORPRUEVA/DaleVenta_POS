@@ -88,4 +88,22 @@ void main() {
     expect(totals.sold, 0);
     expect(totals.authoritative, isTrue);
   });
+
+  test('el rótulo del diálogo declara el alcance cuando el total es del periodo', () {
+    final label = tpvSummaryScopeLabel(authoritative: true, loadedCount: 50);
+
+    expect(label, contains('período'));
+    expect(label, contains('50 facturas cargadas'));
+  });
+
+  test('sin agregado el rótulo dice que solo son las filas cargadas', () {
+    final label = tpvSummaryScopeLabel(authoritative: false, loadedCount: 50);
+
+    expect(label, contains('Solo las 50 facturas cargadas'));
+    expect(
+      label,
+      contains('no está disponible'),
+      reason: 'la UI no debe sugerir que es el total del periodo',
+    );
+  });
 }
