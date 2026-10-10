@@ -196,7 +196,7 @@ class ServiceOrdersListController
         final localRepository = ref.read(serviceOrdersLocalRepositoryProvider);
         await localRepository.prepareForViewer(_viewerUserId);
         if (!mounted) return;
-        final orders = await ref.read(serviceOrdersApiProvider).listOrders();
+        final orders = await ref.read(serviceOrdersApiProvider).listAllOrders();
         if (!mounted) return;
         final clients = await ref
             .read(clientesRepositoryProvider)

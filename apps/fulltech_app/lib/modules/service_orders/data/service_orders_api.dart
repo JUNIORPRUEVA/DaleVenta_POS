@@ -6,6 +6,7 @@ import '../../../core/api/api_error_mapper.dart';
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/api_exception.dart';
+import '../../../core/pagination/paged_result.dart';
 import '../service_order_models.dart';
 
 final serviceOrdersApiProvider = Provider<ServiceOrdersApi>((ref) {
@@ -94,6 +95,47 @@ class ServiceOrdersApi {
     int page = 1,
     int limit = _defaultListLimit,
   }) async {
+    final result = await _listOrdersPage(page: page, limit: limit);
+    return result.items;
+  }
+
+  /// Recorre TODAS las paginas de ordenes de servicio.
+  ///
+  /// Necesario porque el repositorio local reemplaza la tabla completa al
+  /// guardar el snapshot: si se guardara solo la pagina 1 (limite 200), el
+  /// resto de ordenes desapareceria del cache local y de la lista aunque
+  /// exista en el servidor (incidente P0 de Service Orders).
+  Future<List<ServiceOrderModel>> listAllOrders({
+    int limit = _maxListLimit,
+    int maxPages = 50,
+  }) async {
+    final accumulator = PagedAccumulator<ServiceOrderModel>(
+      parse: ServiceOrderModel.fromJson,
+    );
+
+    var page = 1;
+    var pagesVisited = 0;
+    var hasMore = true;
+
+    while (hasMore && pagesVisited < maxPages) {
+      final result = await _listOrdersPage(page: page, limit: limit);
+      accumulator.addPage(result, (order) => order.id);
+
+      hasMore = result.hasMore;
+      pagesVisited += 1;
+
+      final next = result.nextPage;
+      if (next == null || next <= page) break;
+      page = next;
+    }
+
+    return accumulator.items;
+  }
+
+  Future<PagedResult<ServiceOrderModel>> _listOrdersPage({
+    required int page,
+    required int limit,
+  }) async {
     const path = ApiRoutes.serviceOrders;
     final effectivePage = page < 1 ? 1 : page;
     final effectiveLimit = limit.clamp(1, _maxListLimit).toInt();
@@ -112,17 +154,7 @@ class ServiceOrdersApi {
         options: _backgroundOptions,
       );
       _logResponse('GET', path, res.statusCode);
-      final raw = res.data;
-      final rows = raw is List
-          ? raw
-          : raw is Map && raw['items'] is List
-          ? raw['items'] as List<dynamic>
-          : const <dynamic>[];
-      return rows
-          .whereType<Map>()
-          .take(effectiveLimit)
-          .map((row) => ServiceOrderModel.fromJson(row.cast<String, dynamic>()))
-          .toList(growable: false);
+      return PagedResult.fromResponse(res.data, ServiceOrderModel.fromJson);
     } on DioException catch (error) {
       _logError('GET', path, error);
       _rethrow(error, 'No se pudieron cargar las órdenes');
