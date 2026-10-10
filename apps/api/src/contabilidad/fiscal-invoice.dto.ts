@@ -59,4 +59,12 @@ export class FiscalInvoicesQueryDto {
   @IsEnum(FiscalInvoiceKindDto)
   @IsOptional()
   kind?: FiscalInvoiceKindDto;
+
+  @IsString()
+  @IsOptional()
+  page?: string;
+
+  @IsString()
+  @IsOptional()
+  limit?: string;
 }

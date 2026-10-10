@@ -3705,9 +3705,26 @@ class _HistoryFullScreenPageState
 
       return ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
-        itemCount: orderedDays.length,
+        itemCount:
+            orderedDays.length + (state.hasMore || state.loadingMore ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
+          if (index >= orderedDays.length) {
+            return Center(
+              child: state.loadingMore
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () => ref
+                          .read(cierresDiariosControllerProvider.notifier)
+                          .loadMore(),
+                      icon: const Icon(Icons.expand_more_rounded),
+                      label: const Text('Cargar mas cierres'),
+                    ),
+            );
+          }
           final day = orderedDays[index];
           final closes = [...(byDay[day] ?? const <CloseModel>[])]
             ..sort((a, b) {

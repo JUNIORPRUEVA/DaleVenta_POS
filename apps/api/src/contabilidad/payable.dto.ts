@@ -118,6 +118,14 @@ export class PayableServicesQueryDto {
   @IsBoolean()
   @IsOptional()
   active?: boolean;
+
+  @IsString()
+  @IsOptional()
+  page?: string;
+
+  @IsString()
+  @IsOptional()
+  limit?: string;
 }
 
 export class PayablePaymentsQueryDto {
@@ -132,6 +140,14 @@ export class PayablePaymentsQueryDto {
   @IsString()
   @IsOptional()
   serviceId?: string;
+
+  @IsString()
+  @IsOptional()
+  page?: string;
+
+  @IsString()
+  @IsOptional()
+  limit?: string;
 }
 
 export class UpdatePayablePaymentDto {

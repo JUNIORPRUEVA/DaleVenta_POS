@@ -49,8 +49,15 @@ class PagosPendientesScreen extends ConsumerStatefulWidget {
 class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
   final _money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$ ');
   final _dateFmt = DateFormat('dd/MM/yyyy');
+  static const _pageLimit = 50;
 
   bool _loading = true;
+  bool _loadingMoreServices = false;
+  bool _loadingMorePayments = false;
+  bool _hasMoreServices = false;
+  bool _hasMorePayments = false;
+  int _nextServicesPage = 2;
+  int _nextPaymentsPage = 2;
   String? _error;
   List<PayableService> _services = const [];
   List<PayablePayment> _payments = const [];
@@ -71,13 +78,19 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     try {
       final repo = ref.read(contabilidadRepositoryProvider);
       final results = await Future.wait([
-        repo.listPayableServices(),
-        repo.listPayablePayments(),
+        repo.listPayableServicesPage(page: 1, limit: _pageLimit),
+        repo.listPayablePaymentsPage(page: 1, limit: _pageLimit),
       ]);
+      final servicesPage = results[0] as AccountingPage<PayableService>;
+      final paymentsPage = results[1] as AccountingPage<PayablePayment>;
       if (!mounted) return;
       setState(() {
-        _services = results[0] as List<PayableService>;
-        _payments = results[1] as List<PayablePayment>;
+        _services = servicesPage.items;
+        _payments = paymentsPage.items;
+        _hasMoreServices = servicesPage.hasMore;
+        _hasMorePayments = paymentsPage.hasMore;
+        _nextServicesPage = servicesPage.nextPage ?? 2;
+        _nextPaymentsPage = paymentsPage.nextPage ?? 2;
         _loading = false;
       });
     } catch (e) {
@@ -88,6 +101,78 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
           fallback: 'No se pudo cargar pagos pendientes.',
         );
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreServices() async {
+    if (_loading || _loadingMoreServices || !_hasMoreServices) return;
+    setState(() {
+      _loadingMoreServices = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(contabilidadRepositoryProvider)
+          .listPayableServicesPage(
+            page: _nextServicesPage,
+            limit: _pageLimit,
+          );
+      if (!mounted) return;
+      final existingIds = _services.map((item) => item.id).toSet();
+      setState(() {
+        _services = [
+          ..._services,
+          ...page.items.where((item) => !existingIds.contains(item.id)),
+        ];
+        _hasMoreServices = page.hasMore;
+        _nextServicesPage = page.nextPage ?? (_nextServicesPage + 1);
+        _loadingMoreServices = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar mas servicios.',
+        );
+        _loadingMoreServices = false;
+      });
+    }
+  }
+
+  Future<void> _loadMorePayments() async {
+    if (_loading || _loadingMorePayments || !_hasMorePayments) return;
+    setState(() {
+      _loadingMorePayments = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(contabilidadRepositoryProvider)
+          .listPayablePaymentsPage(
+            page: _nextPaymentsPage,
+            limit: _pageLimit,
+          );
+      if (!mounted) return;
+      final existingIds = _payments.map((item) => item.id).toSet();
+      setState(() {
+        _payments = [
+          ..._payments,
+          ...page.items.where((item) => !existingIds.contains(item.id)),
+        ];
+        _hasMorePayments = page.hasMore;
+        _nextPaymentsPage = page.nextPage ?? (_nextPaymentsPage + 1);
+        _loadingMorePayments = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudo cargar mas historial.',
+        );
+        _loadingMorePayments = false;
       });
     }
   }
@@ -1118,6 +1203,21 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
               onDelete: isAdmin ? () => _confirmDeleteService(service) : null,
             ),
           ),
+        if (_hasMoreServices || _loadingMoreServices) ...[
+          const SizedBox(height: 10),
+          Center(
+            child: _loadingMoreServices
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: _loadMoreServices,
+                    icon: const Icon(Icons.expand_more_rounded),
+                    label: const Text('Cargar mas servicios'),
+                  ),
+          ),
+        ],
         const SizedBox(height: 24),
         InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -1165,7 +1265,7 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     return Column(
       children: [
         const SizedBox(height: 8),
-        ..._payments.take(30).map((payment) {
+        ..._payments.map((payment) {
           final service = _findService(payment.serviceId);
           return _HistoryRow(
             payment: payment,
@@ -1206,6 +1306,21 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
             onDelete: isAdmin ? () => _confirmDeletePayment(payment) : null,
           );
         }),
+        if (_hasMorePayments || _loadingMorePayments) ...[
+          const SizedBox(height: 10),
+          Center(
+            child: _loadingMorePayments
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: _loadMorePayments,
+                    icon: const Icon(Icons.expand_more_rounded),
+                    label: const Text('Cargar mas pagos'),
+                  ),
+          ),
+        ],
       ],
     );
   }

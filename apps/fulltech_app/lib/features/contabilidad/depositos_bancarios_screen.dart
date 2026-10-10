@@ -72,7 +72,11 @@ class _DepositosBancariosScreenState
     symbol: 'RD ',
     decimalDigits: 2,
   );
+  static const _pageLimit = 50;
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _nextPage = 2;
   String? _error;
   List<DepositOrderModel> _orders = const [];
   List<DepositBankOption> _banks = const [];
@@ -101,15 +105,24 @@ class _DepositosBancariosScreenState
     try {
       final rows = await ref
           .read(contabilidadRepositoryProvider)
-          .listDepositOrders(from: _dateRange?.start, to: _dateRange?.end);
-      rows.sort((left, right) {
+          .listDepositOrdersPage(
+            from: _dateRange?.start,
+            to: _dateRange?.end,
+            status: _remoteStatusFilter(),
+            page: 1,
+            limit: _pageLimit,
+          );
+      final items = [...rows.items];
+      items.sort((left, right) {
         final byWindow = right.windowFrom.compareTo(left.windowFrom);
         if (byWindow != 0) return byWindow;
         return right.createdAt.compareTo(left.createdAt);
       });
       if (!mounted) return;
       setState(() {
-        _orders = rows;
+        _orders = items;
+        _hasMore = rows.hasMore;
+        _nextPage = rows.nextPage ?? 2;
         _loading = false;
       });
       await _loadBanks();
@@ -122,6 +135,64 @@ class _DepositosBancariosScreenState
           fallback: 'No se pudieron cargar los depósitos.',
         );
         _loading = false;
+      });
+    }
+  }
+
+  DepositOrderStatus? _remoteStatusFilter() {
+    switch (_viewFilter) {
+      case _DepositViewFilter.pending:
+        return DepositOrderStatus.pending;
+      case _DepositViewFilter.executed:
+        return DepositOrderStatus.executed;
+      case _DepositViewFilter.cancelled:
+        return DepositOrderStatus.cancelled;
+      case _DepositViewFilter.all:
+      case _DepositViewFilter.corrections:
+        return null;
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(contabilidadRepositoryProvider)
+          .listDepositOrdersPage(
+            from: _dateRange?.start,
+            to: _dateRange?.end,
+            status: _remoteStatusFilter(),
+            page: _nextPage,
+            limit: _pageLimit,
+          );
+      if (!mounted) return;
+      final existingIds = _orders.map((item) => item.id).toSet();
+      final merged = [
+        ..._orders,
+        ...page.items.where((item) => !existingIds.contains(item.id)),
+      ]..sort((left, right) {
+          final byWindow = right.windowFrom.compareTo(left.windowFrom);
+          if (byWindow != 0) return byWindow;
+          return right.createdAt.compareTo(left.createdAt);
+        });
+      setState(() {
+        _orders = merged;
+        _hasMore = page.hasMore;
+        _nextPage = page.nextPage ?? (_nextPage + 1);
+        _loadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar mas depositos.',
+        );
+        _loadingMore = false;
       });
     }
   }
@@ -2226,6 +2297,21 @@ class _DepositosBancariosScreenState
                   _handleTileAction(visibleOrders[index], action),
             ),
           ],
+        if (_hasMore || _loadingMore) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: _loadingMore
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: _loadMore,
+                    icon: const Icon(Icons.expand_more_rounded),
+                    label: const Text('Cargar mas depositos'),
+                  ),
+          ),
+        ],
       ],
     );
   }

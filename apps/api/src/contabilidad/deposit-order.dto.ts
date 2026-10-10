@@ -163,6 +163,14 @@ export class DepositOrdersQueryDto {
   @IsEnum(DepositOrderStatusDto)
   @IsOptional()
   status?: DepositOrderStatusDto;
+
+  @IsString()
+  @IsOptional()
+  page?: string;
+
+  @IsString()
+  @IsOptional()
+  limit?: string;
 }
 
 export class CreateDepositBankDto {

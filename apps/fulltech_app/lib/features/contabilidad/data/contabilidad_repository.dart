@@ -18,6 +18,61 @@ final contabilidadRepositoryProvider = Provider<ContabilidadRepository>((ref) {
   return ContabilidadRepository(ref.watch(dioProvider));
 });
 
+class AccountingPage<T> {
+  const AccountingPage({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.hasMore,
+    this.nextPage,
+    this.total,
+  });
+
+  final List<T> items;
+  final int page;
+  final int limit;
+  final bool hasMore;
+  final int? nextPage;
+  final int? total;
+
+  factory AccountingPage.fromJson(
+    dynamic data,
+    T Function(Map<String, dynamic> json) decode,
+  ) {
+    if (data is List) {
+      return AccountingPage<T>(
+        items: data
+            .whereType<Map>()
+            .map((row) => decode(row.cast<String, dynamic>()))
+            .toList(growable: false),
+        page: 1,
+        limit: data.length,
+        hasMore: false,
+      );
+    }
+    if (data is Map) {
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((row) => decode(row.cast<String, dynamic>()))
+          .toList(growable: false);
+      return AccountingPage<T>(
+        items: items,
+        page: (data['page'] as num?)?.toInt() ?? 1,
+        limit: (data['limit'] as num?)?.toInt() ?? items.length,
+        total: (data['total'] as num?)?.toInt(),
+        hasMore: data['hasMore'] == true,
+        nextPage: (data['nextPage'] as num?)?.toInt(),
+      );
+    }
+    return AccountingPage<T>(
+      items: const [],
+      page: 1,
+      limit: 0,
+      hasMore: false,
+    );
+  }
+}
+
 /// Secuencias NCF activas de la empresa (se recargan al invalidar el provider).
 final ncfSequencesProvider =
     FutureProvider.autoDispose<List<NcfSequenceModel>>((ref) {
@@ -204,23 +259,29 @@ class ContabilidadRepository {
     return normalized;
   }
 
-  /// Extrae las filas de una respuesta que puede llegar como lista directa o
-  /// como sobre paginado `{ items: [...], page, limit, hasMore, nextPage }`.
-  List<dynamic> _rows(dynamic data) {
-    if (data is List) return data;
-    if (data is Map) {
-      for (final key in ['items', 'data', 'rows']) {
-        final candidate = data[key];
-        if (candidate is List) return candidate;
-      }
-    }
-    return const [];
-  }
-
   Future<List<CloseModel>> listCloses({
     required DateTime from,
     required DateTime to,
     CloseType? type,
+    int? page,
+    int? limit,
+  }) async {
+    final result = await listClosesPage(
+      from: from,
+      to: to,
+      type: type,
+      page: page,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<AccountingPage<CloseModel>> listClosesPage({
+    required DateTime from,
+    required DateTime to,
+    CloseType? type,
+    int? page,
+    int? limit,
   }) async {
     try {
       final res = await _dio
@@ -230,6 +291,8 @@ class ContabilidadRepository {
               'from': _dateOnly(from),
               'to': _dateOnly(to),
               if (type != null) 'type': type.apiValue,
+              if (page != null) 'page': page,
+              if (limit != null) 'limit': limit,
             },
             options: Options(
               receiveTimeout: const Duration(seconds: 30),
@@ -247,16 +310,11 @@ class ContabilidadRepository {
             ),
           );
 
-      final rows = _rows(res.data);
       try {
-        return rows
-            .whereType<Map>()
-            .map(
-              (row) => CloseModel.fromJson(
-                _normalizeCloseJson(row.cast<String, dynamic>()),
-              ),
-            )
-            .toList();
+        return AccountingPage<CloseModel>.fromJson(
+          res.data,
+          (row) => CloseModel.fromJson(_normalizeCloseJson(row)),
+        );
       } catch (e) {
         debugPrint('[CONTABILIDAD] cierres parse failure: $e');
         throw ApiException(
@@ -817,6 +875,25 @@ class ContabilidadRepository {
     DateTime? from,
     DateTime? to,
     DepositOrderStatus? status,
+    int? page,
+    int? limit,
+  }) async {
+    final result = await listDepositOrdersPage(
+      from: from,
+      to: to,
+      status: status,
+      page: page,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<AccountingPage<DepositOrderModel>> listDepositOrdersPage({
+    DateTime? from,
+    DateTime? to,
+    DepositOrderStatus? status,
+    int? page,
+    int? limit,
   }) async {
     try {
       final res = await _dio.get(
@@ -825,14 +902,15 @@ class ContabilidadRepository {
           if (from != null) 'from': _dateOnly(from),
           if (to != null) 'to': _dateOnly(to),
           if (status != null) 'status': status.apiValue,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
         },
       );
 
-      final rows = res.data is List ? (res.data as List) : const [];
-      return rows
-          .whereType<Map>()
-          .map((row) => DepositOrderModel.fromJson(row.cast<String, dynamic>()))
-          .toList();
+      return AccountingPage<DepositOrderModel>.fromJson(
+        res.data,
+        DepositOrderModel.fromJson,
+      );
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(
@@ -1083,6 +1161,25 @@ class ContabilidadRepository {
     required DateTime from,
     required DateTime to,
     FiscalInvoiceKind? kind,
+    int? page,
+    int? limit,
+  }) async {
+    final result = await listFiscalInvoicesPage(
+      from: from,
+      to: to,
+      kind: kind,
+      page: page,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<AccountingPage<FiscalInvoiceModel>> listFiscalInvoicesPage({
+    required DateTime from,
+    required DateTime to,
+    FiscalInvoiceKind? kind,
+    int? page,
+    int? limit,
   }) async {
     try {
       final res = await _dio.get(
@@ -1091,16 +1188,15 @@ class ContabilidadRepository {
           'from': _dateOnly(from),
           'to': _dateOnly(to),
           if (kind != null) 'kind': kind.apiValue,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
         },
       );
 
-      final rows = res.data is List ? (res.data as List) : const [];
-      return rows
-          .whereType<Map>()
-          .map(
-            (row) => FiscalInvoiceModel.fromJson(row.cast<String, dynamic>()),
-          )
-          .toList();
+      return AccountingPage<FiscalInvoiceModel>.fromJson(
+        res.data,
+        FiscalInvoiceModel.fromJson,
+      );
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(
@@ -1152,18 +1248,38 @@ class ContabilidadRepository {
     }
   }
 
-  Future<List<PayableService>> listPayableServices({bool? active}) async {
+  Future<List<PayableService>> listPayableServices({
+    bool? active,
+    int? page,
+    int? limit,
+  }) async {
+    final result = await listPayableServicesPage(
+      active: active,
+      page: page,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<AccountingPage<PayableService>> listPayableServicesPage({
+    bool? active,
+    int? page,
+    int? limit,
+  }) async {
     try {
       final res = await _dio.get(
         ApiRoutes.contabilidadPayableServices,
-        queryParameters: {if (active != null) 'active': active},
+        queryParameters: {
+          if (active != null) 'active': active,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
+        },
       );
 
-      final rows = res.data is List ? (res.data as List) : const [];
-      return rows
-          .whereType<Map>()
-          .map((row) => PayableService.fromJson(row.cast<String, dynamic>()))
-          .toList();
+      return AccountingPage<PayableService>.fromJson(
+        res.data,
+        PayableService.fromJson,
+      );
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(
@@ -1243,6 +1359,25 @@ class ContabilidadRepository {
     DateTime? from,
     DateTime? to,
     String? serviceId,
+    int? page,
+    int? limit,
+  }) async {
+    final result = await listPayablePaymentsPage(
+      from: from,
+      to: to,
+      serviceId: serviceId,
+      page: page,
+      limit: limit,
+    );
+    return result.items;
+  }
+
+  Future<AccountingPage<PayablePayment>> listPayablePaymentsPage({
+    DateTime? from,
+    DateTime? to,
+    String? serviceId,
+    int? page,
+    int? limit,
   }) async {
     try {
       final res = await _dio.get(
@@ -1252,14 +1387,15 @@ class ContabilidadRepository {
           if (to != null) 'to': _dateOnly(to),
           if (serviceId != null && serviceId.trim().isNotEmpty)
             'serviceId': serviceId,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
         },
       );
 
-      final rows = _rows(res.data);
-      return rows
-          .whereType<Map>()
-          .map((row) => PayablePayment.fromJson(row.cast<String, dynamic>()))
-          .toList();
+      return AccountingPage<PayablePayment>.fromJson(
+        res.data,
+        PayablePayment.fromJson,
+      );
     } on DioException catch (e) {
       throw ApiException(
         _extractMessage(

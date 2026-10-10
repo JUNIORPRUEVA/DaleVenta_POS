@@ -15,10 +15,13 @@ class CierresDateRange {
 
 class CierresDiariosState {
   final bool loading;
+  final bool loadingMore;
   final bool saving;
   final String? deletingId;
   final String? error;
   final List<CloseModel> closes;
+  final bool hasMore;
+  final int nextPage;
   final DateTime from;
   final DateTime to;
   final CierresRangePreset preset;
@@ -27,10 +30,13 @@ class CierresDiariosState {
 
   const CierresDiariosState({
     this.loading = false,
+    this.loadingMore = false,
     this.saving = false,
     this.deletingId,
     this.error,
     this.closes = const [],
+    this.hasMore = false,
+    this.nextPage = 2,
     required this.from,
     required this.to,
     required this.preset,
@@ -51,10 +57,13 @@ class CierresDiariosState {
 
   CierresDiariosState copyWith({
     bool? loading,
+    bool? loadingMore,
     bool? saving,
     String? deletingId,
     String? error,
     List<CloseModel>? closes,
+    bool? hasMore,
+    int? nextPage,
     DateTime? from,
     DateTime? to,
     CierresRangePreset? preset,
@@ -67,10 +76,13 @@ class CierresDiariosState {
   }) {
     return CierresDiariosState(
       loading: loading ?? this.loading,
+      loadingMore: loadingMore ?? this.loadingMore,
       saving: saving ?? this.saving,
       deletingId: clearDeleting ? null : (deletingId ?? this.deletingId),
       error: clearError ? null : (error ?? this.error),
       closes: closes ?? this.closes,
+      hasMore: hasMore ?? this.hasMore,
+      nextPage: nextPage ?? this.nextPage,
       from: from ?? this.from,
       to: to ?? this.to,
       preset: preset ?? this.preset,
@@ -87,6 +99,7 @@ final cierresDiariosControllerProvider =
 
 class CierresDiariosController extends StateNotifier<CierresDiariosState> {
   final Ref ref;
+  static const _pageLimit = 50;
 
   CierresDiariosController(this.ref) : super(CierresDiariosState.initial()) {
     load();
@@ -97,9 +110,20 @@ class CierresDiariosController extends StateNotifier<CierresDiariosState> {
     try {
       final rows = await ref
           .read(contabilidadRepositoryProvider)
-          .listCloses(from: state.from, to: state.to, type: null);
+          .listClosesPage(
+            from: state.from,
+            to: state.to,
+            type: null,
+            page: 1,
+            limit: _pageLimit,
+          );
 
-      state = state.copyWith(loading: false, closes: rows);
+      state = state.copyWith(
+        loading: false,
+        closes: rows.items,
+        hasMore: rows.hasMore,
+        nextPage: rows.nextPage ?? 2,
+      );
     } catch (e) {
       final message = e is ApiException
           ? e.message
@@ -109,6 +133,39 @@ class CierresDiariosController extends StateNotifier<CierresDiariosState> {
   }
 
   Future<void> refresh() => load();
+
+  Future<void> loadMore() async {
+    if (state.loading || state.loadingMore || !state.hasMore) return;
+    state = state.copyWith(loadingMore: true, clearError: true);
+    try {
+      final rows = await ref
+          .read(contabilidadRepositoryProvider)
+          .listClosesPage(
+            from: state.from,
+            to: state.to,
+            type: null,
+            page: state.nextPage,
+            limit: _pageLimit,
+          );
+
+      final existingIds = state.closes.map((item) => item.id).toSet();
+      final merged = [
+        ...state.closes,
+        ...rows.items.where((item) => !existingIds.contains(item.id)),
+      ];
+      state = state.copyWith(
+        loadingMore: false,
+        closes: merged,
+        hasMore: rows.hasMore,
+        nextPage: rows.nextPage ?? (state.nextPage + 1),
+      );
+    } catch (e) {
+      final message = e is ApiException
+          ? e.message
+          : 'No se pudieron cargar más cierres';
+      state = state.copyWith(loadingMore: false, error: message);
+    }
+  }
 
   Future<void> setTypeFilter(CloseType type) async {
     state = state.copyWith(typeFilter: type, clearError: true);

@@ -2022,7 +2022,11 @@ class _FiscalInvoiceHistoryScreenState
   late DateTime _from = widget.initialFrom;
   late DateTime _to = widget.initialTo;
   FiscalInvoiceKind? _kindFilter;
+  static const _pageLimit = 50;
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _nextPage = 2;
   bool _sendingPreviousMonthReport = false;
   String? _error;
   List<FiscalInvoiceModel> _invoices = const [];
@@ -2042,10 +2046,18 @@ class _FiscalInvoiceHistoryScreenState
     try {
       final rows = await ref
           .read(contabilidadRepositoryProvider)
-          .listFiscalInvoices(from: _from, to: _to, kind: _kindFilter);
+          .listFiscalInvoicesPage(
+            from: _from,
+            to: _to,
+            kind: _kindFilter,
+            page: 1,
+            limit: _pageLimit,
+          );
       if (!mounted) return;
       setState(() {
-        _invoices = rows;
+        _invoices = rows.items;
+        _hasMore = rows.hasMore;
+        _nextPage = rows.nextPage ?? 2;
         _loading = false;
       });
     } catch (e) {
@@ -2055,6 +2067,44 @@ class _FiscalInvoiceHistoryScreenState
         _error = e is ApiException
             ? e.message
             : 'No se pudo cargar el historial fiscal';
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    setState(() {
+      _loadingMore = true;
+      _error = null;
+    });
+    try {
+      final page = await ref
+          .read(contabilidadRepositoryProvider)
+          .listFiscalInvoicesPage(
+            from: _from,
+            to: _to,
+            kind: _kindFilter,
+            page: _nextPage,
+            limit: _pageLimit,
+          );
+      if (!mounted) return;
+      final existingIds = _invoices.map((item) => item.id).toSet();
+      setState(() {
+        _invoices = [
+          ..._invoices,
+          ...page.items.where((item) => !existingIds.contains(item.id)),
+        ];
+        _hasMore = page.hasMore;
+        _nextPage = page.nextPage ?? (_nextPage + 1);
+        _loadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingMore = false;
+        _error = e is ApiException
+            ? e.message
+            : 'No se pudieron cargar mas facturas fiscales';
       });
     }
   }
@@ -2542,6 +2592,19 @@ class _FiscalInvoiceHistoryScreenState
                 child: _InvoiceCard(item: item),
               ),
             ),
+            if (_hasMore || _loadingMore)
+              Center(
+                child: _loadingMore
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: _loadMore,
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: const Text('Cargar mas facturas'),
+                      ),
+              ),
             if (!_loading && _invoices.isEmpty)
               const AppCard(
                 child: Text(

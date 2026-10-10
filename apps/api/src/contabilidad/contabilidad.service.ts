@@ -259,6 +259,8 @@ export class ContabilidadService {
   private async findManyDepositOrdersWithFallback(args: {
     where: Record<string, unknown>;
     orderBy: Array<{ createdAt: 'desc' | 'asc' }>;
+    skip?: number;
+    take?: number;
   }) {
     let lastError: unknown;
 
@@ -267,6 +269,8 @@ export class ContabilidadService {
         return await this.prisma.depositOrder.findMany({
           where: args.where,
           orderBy: args.orderBy,
+          skip: args.skip,
+          take: args.take,
           select,
         });
       } catch (error) {
@@ -2523,6 +2527,11 @@ export class ContabilidadService {
   async getDepositOrders(query: DepositOrdersQueryDto, actor: Actor) {
     const from = this.parseDate(query.from, 'from');
     const to = this.parseDate(query.to, 'to');
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+      defaultLimit: 50,
+    });
     if (from) from.setHours(0, 0, 0, 0);
     if (to) to.setHours(23, 59, 59, 999);
 
@@ -2581,6 +2590,8 @@ export class ContabilidadService {
       const rows = await this.findManyDepositOrdersWithFallback({
         where,
         orderBy: [{ createdAt: 'desc' }],
+        skip: pagination.skip,
+        take: pagination.take,
       });
       // eslint-disable-next-line no-console
       console.log('[deposit-orders][service] getDepositOrders:success', {
@@ -2588,7 +2599,10 @@ export class ContabilidadService {
         actorRole: actor.role ?? null,
         resultCount: rows.length,
       });
-      return rows.map((row) => this.enrichDepositOrderRow(row));
+      return toPageResult(
+        rows.map((row) => this.enrichDepositOrderRow(row)),
+        pagination,
+      );
     } catch (error: unknown) {
       const err = error as {
         name?: unknown;
@@ -2898,6 +2912,11 @@ export class ContabilidadService {
   async getFiscalInvoices(query: FiscalInvoicesQueryDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
     const companyId = requireTenant(actor as any);
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+      defaultLimit: 50,
+    });
     const where: Prisma.FiscalInvoiceWhereInput = { companyId };
 
     if (query.kind) {
@@ -2914,10 +2933,13 @@ export class ContabilidadService {
       };
     }
 
-    return this.prisma.fiscalInvoice.findMany({
+    const rows = await this.prisma.fiscalInvoice.findMany({
       where,
       orderBy: [{ invoiceDate: 'desc' }, { createdAt: 'desc' }],
+      skip: pagination.skip,
+      take: pagination.take,
     });
+    return toPageResult(rows, pagination);
   }
 
   async updateFiscalInvoice(
@@ -2993,13 +3015,18 @@ export class ContabilidadService {
   async getPayableServices(query: PayableServicesQueryDto, actor: Actor) {
     this.normalizeRoleGuard(actor);
     const companyId = requireTenant(actor as any);
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+      defaultLimit: 50,
+    });
     const where: Prisma.PayableServiceWhereInput = { companyId };
 
     if (query.active != null) {
       where.active = query.active;
     }
 
-    return this.prisma.payableService.findMany({
+    const rows = await this.prisma.payableService.findMany({
       where,
       include: {
         payments: {
@@ -3011,7 +3038,10 @@ export class ContabilidadService {
         { nextDueDate: 'asc' },
         { createdAt: 'desc' },
       ],
+      skip: pagination.skip,
+      take: pagination.take,
     });
+    return toPageResult(rows, pagination);
   }
 
   async updatePayableService(
