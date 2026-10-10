@@ -30,11 +30,15 @@ final productWarehouseStockProvider =
           .fetchProductStockBreakdown(productId);
     });
 
-final warehouseTransfersProvider = FutureProvider<List<WarehouseTransferModel>>(
-  (ref) {
-    return ref.watch(warehouseRepositoryProvider).fetchTransfers();
-  },
-);
+const int kWarehouseTransfersPageLimit = 50;
+
+final warehouseTransfersProvider = FutureProvider<WarehouseTransfersPage>((
+  ref,
+) {
+  return ref
+      .watch(warehouseRepositoryProvider)
+      .fetchTransfersPage(limit: kWarehouseTransfersPageLimit);
+});
 
 double _asDouble(dynamic value) {
   if (value is num) return value.toDouble();
@@ -318,6 +322,67 @@ class WarehouseTransferModel {
   }
 }
 
+class WarehouseTransfersPage {
+  const WarehouseTransfersPage({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.hasMore,
+    this.nextPage,
+  });
+
+  const WarehouseTransfersPage.empty()
+    : items = const <WarehouseTransferModel>[],
+      page = 1,
+      limit = kWarehouseTransfersPageLimit,
+      hasMore = false,
+      nextPage = null;
+
+  final List<WarehouseTransferModel> items;
+  final int page;
+  final int limit;
+  final bool hasMore;
+  final int? nextPage;
+
+  factory WarehouseTransfersPage.fromJson(
+    dynamic data, {
+    required int fallbackPage,
+    required int fallbackLimit,
+  }) {
+    if (data is List) {
+      final items = data
+          .whereType<Map>()
+          .map((row) => WarehouseTransferModel.fromJson(row.cast()))
+          .toList(growable: false);
+      return WarehouseTransfersPage(
+        items: items,
+        page: fallbackPage,
+        limit: fallbackLimit,
+        hasMore: false,
+      );
+    }
+    if (data is Map) {
+      final items = ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((row) => WarehouseTransferModel.fromJson(row.cast()))
+          .toList(growable: false);
+      return WarehouseTransfersPage(
+        items: items,
+        page: (data['page'] as num?)?.toInt() ?? fallbackPage,
+        limit: (data['limit'] as num?)?.toInt() ?? fallbackLimit,
+        hasMore: data['hasMore'] == true,
+        nextPage: (data['nextPage'] as num?)?.toInt(),
+      );
+    }
+    return WarehouseTransfersPage(
+      items: const [],
+      page: fallbackPage,
+      limit: fallbackLimit,
+      hasMore: false,
+    );
+  }
+}
+
 final warehouseInventoryOverviewProvider =
     FutureProvider<WarehouseInventoryOverview>((ref) async {
       final repo = ref.watch(warehouseRepositoryProvider);
@@ -383,6 +448,30 @@ class WarehouseRepository {
         .whereType<Map>()
         .map((row) => WarehouseTransferModel.fromJson(row.cast()))
         .toList(growable: false);
+  }
+
+  Future<WarehouseTransfersPage> fetchTransfersPage({
+    int page = 1,
+    int limit = kWarehouseTransfersPageLimit,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.warehouseTransfers,
+        queryParameters: {
+          if (page > 0) 'page': page,
+          if (limit > 0) 'limit': limit,
+        },
+      );
+      return WarehouseTransfersPage.fromJson(
+        res.data,
+        fallbackPage: page,
+        fallbackLimit: limit,
+      );
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e, 'No se pudieron cargar las transferencias'),
+      );
+    }
   }
 
   Future<WarehouseTransferModel> createTransfer({

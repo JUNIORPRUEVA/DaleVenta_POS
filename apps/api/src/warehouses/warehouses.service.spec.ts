@@ -110,6 +110,72 @@ function buildService(
       },
     ],
     inventoryMovements: [] as any[],
+    warehouseTransfers: [
+      row({
+        id: "transfer-3",
+        companyId: "company-a",
+        sourceWarehouseId: "warehouse-main",
+        destinationWarehouseId: "warehouse-branch",
+        sourceWarehouseNameSnapshot: "Main Warehouse",
+        sourceWarehouseCodeSnapshot: "MAIN",
+        destinationWarehouseNameSnapshot: "Bavaro",
+        destinationWarehouseCodeSnapshot: "BAV",
+        status: "COMPLETED",
+        clientRequestId: "transfer-3",
+        createdBy: null,
+        completedAt: new Date("2026-08-31T03:00:00.000Z"),
+        notes: null,
+        items: [],
+      }),
+      row({
+        id: "transfer-2",
+        companyId: "company-a",
+        sourceWarehouseId: "warehouse-main",
+        destinationWarehouseId: "warehouse-branch",
+        sourceWarehouseNameSnapshot: "Main Warehouse",
+        sourceWarehouseCodeSnapshot: "MAIN",
+        destinationWarehouseNameSnapshot: "Bavaro",
+        destinationWarehouseCodeSnapshot: "BAV",
+        status: "COMPLETED",
+        clientRequestId: "transfer-2",
+        createdBy: null,
+        completedAt: new Date("2026-08-31T02:00:00.000Z"),
+        notes: null,
+        items: [],
+      }),
+      row({
+        id: "transfer-1",
+        companyId: "company-a",
+        sourceWarehouseId: "warehouse-branch",
+        destinationWarehouseId: "warehouse-main",
+        sourceWarehouseNameSnapshot: "Bavaro",
+        sourceWarehouseCodeSnapshot: "BAV",
+        destinationWarehouseNameSnapshot: "Main Warehouse",
+        destinationWarehouseCodeSnapshot: "MAIN",
+        status: "COMPLETED",
+        clientRequestId: "transfer-1",
+        createdBy: null,
+        completedAt: new Date("2026-08-31T01:00:00.000Z"),
+        notes: null,
+        items: [],
+      }),
+      row({
+        id: "transfer-other",
+        companyId: "company-b",
+        sourceWarehouseId: "warehouse-other",
+        destinationWarehouseId: "warehouse-other",
+        sourceWarehouseNameSnapshot: "Other",
+        sourceWarehouseCodeSnapshot: "OTH",
+        destinationWarehouseNameSnapshot: "Other",
+        destinationWarehouseCodeSnapshot: "OTH",
+        status: "COMPLETED",
+        clientRequestId: "transfer-other",
+        createdBy: null,
+        completedAt: new Date("2026-08-31T04:00:00.000Z"),
+        notes: null,
+        items: [],
+      }),
+    ],
   };
 
   const api = {
@@ -275,6 +341,12 @@ function buildService(
       ),
     },
     warehouseTransfer: {
+      findMany: jest.fn(async (args: any) =>
+        db.warehouseTransfers
+          .filter((transfer) => transfer.companyId === args.where.companyId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(args.skip ?? 0, (args.skip ?? 0) + (args.take ?? 100)),
+      ),
       findFirst: jest.fn(async () => null),
       create: jest.fn(),
     },
@@ -313,6 +385,39 @@ describe("WarehousesService", () => {
     expect(result.map((item) => item.id)).toEqual([
       "warehouse-main",
       "warehouse-branch",
+    ]);
+  });
+
+  it("paginates same-company transfer history when requested", async () => {
+    const { service } = buildService();
+
+    const result = await service.listTransfers(userA as any, {
+      page: "1",
+      limit: "2",
+    });
+
+    expect(result).toMatchObject({
+      page: 1,
+      limit: 2,
+      hasMore: true,
+      nextPage: 2,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([
+      "transfer-3",
+      "transfer-2",
+    ]);
+  });
+
+  it("keeps flat transfer history for legacy clients", async () => {
+    const { service } = buildService();
+
+    const result = await service.listTransfers(userA as any);
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.map((item) => item.id)).toEqual([
+      "transfer-3",
+      "transfer-2",
+      "transfer-1",
     ]);
   });
 

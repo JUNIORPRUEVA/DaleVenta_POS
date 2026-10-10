@@ -64,7 +64,9 @@ class WarehouseSettingsScreen extends ConsumerWidget {
     ]);
     final transfers = canViewTransfers
         ? ref.watch(warehouseTransfersProvider)
-        : const AsyncValue<List<WarehouseTransferModel>>.data([]);
+        : const AsyncValue<WarehouseTransfersPage>.data(
+            WarehouseTransfersPage.empty(),
+          );
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
@@ -208,7 +210,9 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                 warehouses.when(
                   data: (items) => _TransferPanel(
                     warehouses: items,
-                    transfers: transfers.valueOrNull ?? const [],
+                    transferPage:
+                        transfers.valueOrNull ??
+                        const WarehouseTransfersPage.empty(),
                     canCreateTransfers: canCreateTransfers,
                     inventoryEnabled: inventoryEnabled,
                     loading: transfers.isLoading || transfers.isRefreshing,
@@ -641,7 +645,7 @@ class _TerminalAssignments extends StatelessWidget {
 class _TransferPanel extends ConsumerStatefulWidget {
   const _TransferPanel({
     required this.warehouses,
-    required this.transfers,
+    required this.transferPage,
     required this.canCreateTransfers,
     required this.inventoryEnabled,
     required this.loading,
@@ -649,7 +653,7 @@ class _TransferPanel extends ConsumerStatefulWidget {
   });
 
   final List<WarehouseModel> warehouses;
-  final List<WarehouseTransferModel> transfers;
+  final WarehouseTransfersPage transferPage;
   final bool canCreateTransfers;
   final bool inventoryEnabled;
   final bool loading;
@@ -674,10 +678,16 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   bool _loadingServerCategories = false;
   bool _productSearchStarted = false;
   bool _saving = false;
+  List<WarehouseTransferModel> _transfers = const <WarehouseTransferModel>[];
+  bool _hasMoreTransfers = false;
+  int? _nextTransfersPage;
+  bool _loadingMoreTransfers = false;
+  Object? _loadMoreTransfersError;
 
   @override
   void initState() {
     super.initState();
+    _syncTransferPage(widget.transferPage);
     _productSearch = ProductSearchController(
       dio: ref.read(dioProvider),
       offlineSnapshot: () =>
@@ -693,6 +703,9 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   @override
   void didUpdateWidget(covariant _TransferPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.transferPage, widget.transferPage)) {
+      _syncTransferPage(widget.transferPage);
+    }
     _ensureProductSearchStarted();
   }
 
@@ -723,6 +736,40 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
     _productSearchStarted = true;
     unawaited(_productSearch.loadInitial());
     unawaited(_loadServerCategories());
+  }
+
+  void _syncTransferPage(WarehouseTransfersPage page) {
+    _transfers = page.items;
+    _hasMoreTransfers = page.hasMore;
+    _nextTransfersPage = page.nextPage;
+    _loadMoreTransfersError = null;
+  }
+
+  Future<void> _loadMoreTransfers() async {
+    final nextPage = _nextTransfersPage;
+    if (_loadingMoreTransfers || !_hasMoreTransfers || nextPage == null) {
+      return;
+    }
+    setState(() {
+      _loadingMoreTransfers = true;
+      _loadMoreTransfersError = null;
+    });
+    try {
+      final page = await ref
+          .read(warehouseRepositoryProvider)
+          .fetchTransfersPage(page: nextPage, limit: widget.transferPage.limit);
+      if (!mounted) return;
+      setState(() {
+        _transfers = [..._transfers, ...page.items];
+        _hasMoreTransfers = page.hasMore;
+        _nextTransfersPage = page.nextPage;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadMoreTransfersError = error);
+    } finally {
+      if (mounted) setState(() => _loadingMoreTransfers = false);
+    }
   }
 
   Future<void> _loadServerCategories() async {
@@ -984,7 +1031,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
   }
 
   Widget _buildHistory() {
-    if (widget.transfers.isEmpty) {
+    if (_transfers.isEmpty) {
       return const _WarehouseStatePanel(
         icon: Icons.history_rounded,
         title: 'Sin transferencias',
@@ -996,7 +1043,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
       children: [
         const Text('Historial', style: TextStyle(fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
-        for (final transfer in widget.transfers.take(6))
+        for (final transfer in _transfers)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: DecoratedBox(
@@ -1021,6 +1068,35 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
               ),
             ),
           ),
+        if (_loadMoreTransfersError != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            userSafeErrorMessage(
+              _loadMoreTransfersError,
+              fallback: 'No se pudieron cargar mas transferencias.',
+            ),
+            style: const TextStyle(
+              color: Color(0xFFB91C1C),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+        if (_hasMoreTransfers) ...[
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: _loadingMoreTransfers
+                ? null
+                : () => unawaited(_loadMoreTransfers()),
+            icon: _loadingMoreTransfers
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.expand_more_rounded),
+            label: Text(_loadingMoreTransfers ? 'Cargando...' : 'Cargar mas'),
+          ),
+        ],
       ],
     );
   }
@@ -1091,6 +1167,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
       if (!mounted || !navigator.mounted) return;
       _quantityCtrl.clear();
       _notesCtrl.clear();
+      setState(() => _transfers = [transfer, ..._transfers]);
       _showMessage('Transferencia completada');
       _showTransferDetail(navigator.context, transfer);
     } catch (error) {

@@ -26,7 +26,14 @@ void main() {
         catalogRepositoryProvider.overrideWithValue(CatalogRepository(dio)),
         warehousesProvider.overrideWith((ref) async => warehouses),
         warehouseTerminalsProvider.overrideWith((ref) async => terminals),
-        warehouseTransfersProvider.overrideWith((ref) async => transfers),
+        warehouseTransfersProvider.overrideWith(
+          (ref) async => WarehouseTransfersPage(
+            items: transfers,
+            page: 1,
+            limit: kWarehouseTransfersPageLimit,
+            hasMore: false,
+          ),
+        ),
         productWarehouseStockProvider.overrideWith((ref, productId) async {
           return stockBreakdowns[productId] ??
               ProductWarehouseStockBreakdown(

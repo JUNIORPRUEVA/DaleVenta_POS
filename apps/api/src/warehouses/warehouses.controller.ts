@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -51,8 +52,16 @@ export class WarehousesController {
 
   @Get("transfers")
   @Permissions("viewTransfers", "createTransfers", "manageWarehouses")
-  listTransfers(@Req() req: Request) {
-    return this.warehouses.listTransfers(req.user as TenantUser);
+  listTransfers(
+    @Req() req: Request,
+    @Query()
+    query: {
+      page?: string;
+      limit?: string;
+      pageSize?: string;
+    },
+  ) {
+    return this.warehouses.listTransfers(req.user as TenantUser, query);
   }
 
   @Get("transfers/:id")

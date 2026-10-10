@@ -13,6 +13,10 @@ import {
   WarehouseTransferStatus,
 } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
+import {
+  normalizePagePagination,
+  toPageResult,
+} from "../common/pagination/page-pagination";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductSourceResolver } from "../products/product-source.resolver";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
@@ -274,7 +278,7 @@ export class WarehousesService {
         select: { inventoryEnabled: true },
       }),
       this.prisma.product.findFirst({
-      where: { id: productId, companyId },
+        where: { id: productId, companyId },
         select: {
           id: true,
           stock: true,
@@ -340,16 +344,31 @@ export class WarehousesService {
     };
   }
 
-  async listTransfers(user: TenantUser) {
+  async listTransfers(
+    user: TenantUser,
+    query: { page?: string; limit?: string; pageSize?: string } = {},
+  ) {
     const companyId = requireTenant(user);
     await this.assertMultiWarehouseEnabled(companyId);
+    const pagination = normalizePagePagination({
+      page: query.page,
+      limit: query.limit,
+      pageSize: query.pageSize,
+      defaultLimit: 50,
+      maxLimit: 200,
+      legacyLimit: 100,
+    });
     const rows = await this.prisma.warehouseTransfer.findMany({
       where: { companyId },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip: pagination.explicit ? pagination.skip : 0,
+      take: pagination.explicit ? pagination.take : pagination.limit,
       include: this.transferInclude(),
     });
-    return rows.map((row) => this.mapTransfer(row));
+    const transfers = rows.map((row) => this.mapTransfer(row));
+    return pagination.explicit
+      ? toPageResult(transfers, pagination)
+      : transfers;
   }
 
   async getTransfer(user: TenantUser, id: string) {
@@ -627,8 +646,7 @@ export class WarehousesService {
   }) {
     return (
       (product.itemType ?? ProductItemType.PRODUCT) ===
-        ProductItemType.PRODUCT &&
-      (product.trackInventory ?? true) === true
+        ProductItemType.PRODUCT && (product.trackInventory ?? true) === true
     );
   }
 
