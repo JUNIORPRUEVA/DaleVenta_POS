@@ -977,7 +977,7 @@ export class ReportsService {
     sellerUserId: string | null;
   }): Promise<SalesOverviewFinancialSummary> {
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await (this.prisma as unknown as {
       $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
@@ -1335,7 +1335,7 @@ export class ReportsService {
 
     if (!params.selectedCategory && typeof delegate.$queryRaw === "function") {
       const sellerFilter = params.sellerUserId
-        ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+        ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
         : Prisma.empty;
       const rows = await delegate.$queryRaw<
         Array<{
@@ -1436,7 +1436,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1485,7 +1485,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1566,7 +1566,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1611,7 +1611,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
