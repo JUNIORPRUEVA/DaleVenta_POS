@@ -80,6 +80,82 @@ describe("ClientsService multi-tenant isolation", () => {
     });
   });
 
+  it("aplica ownerFilter=mine en el servidor sin perder el aislamiento por empresa", async () => {
+    const findMany = jest.fn().mockResolvedValue([clientRow(companyA)]);
+    const prisma = {
+      client: { findMany, count: jest.fn().mockResolvedValue(1) },
+    };
+    const service = serviceWith(prisma);
+
+    await service.findAll(userA as never, { ownerFilter: "mine" } as never);
+
+    expect(findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ companyId: companyA, ownerId: userA.id }),
+    );
+  });
+
+  it("aplica correoFilter conCorreo/sinCorreo en el servidor", async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      client: { findMany, count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = serviceWith(prisma);
+
+    await service.findAll(userA as never, { correoFilter: "conCorreo" } as never);
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { email: { not: null } },
+      { NOT: { email: "" } },
+    ]);
+
+    findMany.mockClear();
+    await service.findAll(userA as never, { correoFilter: "sinCorreo" } as never);
+    expect(findMany.mock.calls[0][0].where.NOT).toEqual({
+      AND: [{ email: { not: null } }, { NOT: { email: "" } }],
+    });
+  });
+
+  it("order az/za se resuelve en el servidor y el envelope conserva total y hasMore", async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      client: {
+        findMany,
+        count: jest.fn().mockResolvedValue(500),
+      },
+    };
+    const service = serviceWith(prisma);
+
+    const result = await service.findAll(userA as never, {
+      order: "az",
+      page: 1,
+      pageSize: 50,
+    } as never);
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { nombre: "asc" },
+      { id: "desc" },
+    ]);
+    expect(result.total).toBe(500);
+    expect(result.limit).toBe(50);
+    expect(result.hasMore).toBe(true);
+    expect(result.nextPage).toBe(2);
+  });
+
+  it("sin order conserva el orden por actividad (compatibilidad)", async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      client: { findMany, count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = serviceWith(prisma);
+
+    await service.findAll(userA as never, {} as never);
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { lastActivityAt: "desc" },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+  });
+
   it("allows the same taxId in a different company (no cross-tenant dedup)", async () => {
     const prisma = {
       client: {

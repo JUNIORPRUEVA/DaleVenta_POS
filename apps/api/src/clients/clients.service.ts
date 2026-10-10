@@ -409,8 +409,19 @@ export class ClientsService {
     const phoneCandidate = phone || search;
     const phoneNormalizedSearch = normalizePhone(phoneCandidate);
     const taxIdNormalizedSearch = normalizeTaxId(search);
+    // "Con correo" = email presente y no vacio; el complemento se expresa con
+    // NOT en lugar de un OR propio para no chocar con el OR de la busqueda.
+    const conCorreoWhere: Prisma.ClientWhereInput = {
+      AND: [{ email: { not: null } }, { NOT: { email: '' } }],
+    };
     const baseWhere: Prisma.ClientWhereInput = {
       companyId,
+      ...(query.ownerFilter === 'mine' ? { ownerId: user.id } : {}),
+      ...(query.correoFilter === 'conCorreo'
+        ? conCorreoWhere
+        : query.correoFilter === 'sinCorreo'
+          ? { NOT: conCorreoWhere }
+          : {}),
       ...(query.onlyDeleted === true
         ? { isDeleted: true }
         : query.includeDeleted === true
@@ -452,11 +463,16 @@ export class ClientsService {
     const [items, total] = await Promise.all([
       this.prisma.client.findMany({
         where,
-        orderBy: [
-          { lastActivityAt: 'desc' },
-          { createdAt: 'desc' },
-          { id: 'desc' },
-        ],
+        orderBy:
+          query.order === 'az'
+            ? [{ nombre: 'asc' }, { id: 'desc' }]
+            : query.order === 'za'
+              ? [{ nombre: 'desc' }, { id: 'desc' }]
+              : [
+                  { lastActivityAt: 'desc' },
+                  { createdAt: 'desc' },
+                  { id: 'desc' },
+                ],
         skip: pagination.skip,
         take: pagination.take,
       }),
