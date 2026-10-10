@@ -356,7 +356,7 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
 
     try {
-      final fetched = await repo.fetchProducts(
+      final fetched = await repo.fetchProductsFirstPage(
         forceRefresh: forceRemote,
         silent: silent,
       );

@@ -314,6 +314,61 @@ class CatalogRepository {
     return future;
   }
 
+  Future<List<ProductModel>> fetchProductsFirstPage({
+    bool forceRefresh = false,
+    bool silent = false,
+    int limit = 50,
+  }) async {
+    if (isFlutterTest && runtimeType != CatalogRepository) {
+      final rows = await fetchProducts(
+        forceRefresh: forceRefresh,
+        silent: silent,
+      );
+      return rows.take(limit).toList(growable: false);
+    }
+
+    if (!forceRefresh) {
+      final fresh = await getFreshCachedProducts();
+      if (fresh != null && fresh.length <= limit) return fresh;
+    }
+
+    try {
+      final page = await fetchProductsPage(
+        _dio,
+        page: 1,
+        limit: limit,
+        silent: silent,
+      );
+      return page.items;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final message = _formatDioError(e, 'No se pudieron cargar los productos');
+      TraceLog.log(
+        'CATALOG',
+        'fetchProductsFirstPage failed: ${_formatDioErrorDetail(e, 'No se pudieron cargar los productos')}',
+        error: e,
+      );
+      if (status == 401 || status == 402 || status == 403 || status == 423) {
+        throw ApiException(message, status);
+      }
+      final cached = await getCachedProducts();
+      if (cached.isNotEmpty) return cached.take(limit).toList(growable: false);
+      throw ApiException(message, status);
+    } catch (e) {
+      TraceLog.log(
+        'CATALOG',
+        'fetchProductsFirstPage unexpected failure',
+        error: e,
+      );
+      throw ApiException(
+        userSafeErrorMessage(
+          e,
+          fallback: 'No se pudieron cargar los productos',
+        ),
+      );
+    }
+  }
+
   Future<List<ProductModel>> _fetchProductsRemote({
     required String companyId,
     required bool silent,
