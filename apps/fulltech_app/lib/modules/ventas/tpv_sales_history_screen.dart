@@ -12,6 +12,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
 import '../../core/theme/app_colors.dart';
@@ -86,7 +87,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     ).subtract(const Duration(days: 14));
     _toDate = DateTime(now.year, now.month, now.day);
     _searchController.addListener(() => setState(() {}));
-    _scrollController.addListener(_maybeLoadMoreInvoices);
     _salesRefreshSubscription = ref.listenManual<int>(
       salesDataRefreshTickProvider,
       (previous, next) => _scheduleRealtimeReload(),
@@ -98,9 +98,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   void dispose() {
     _realtimeReloadDebounce?.cancel();
     _salesRefreshSubscription?.close();
-    _scrollController
-      ..removeListener(_maybeLoadMoreInvoices)
-      ..dispose();
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -159,7 +157,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     }
   }
 
-  Future<void> _loadMoreInvoices() async {    if (_loading || _loadingMore || !_hasMoreInvoices) return;
+  Future<void> _loadMoreInvoices() async {
+    if (_loading || _loadingMore || !_hasMoreInvoices) return;
     setState(() {
       _loadingMore = true;
       _error = null;
@@ -201,16 +200,6 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _periodSummary = null);
-    }
-  }
-
-  void _maybeLoadMoreInvoices() {
-    if (!_scrollController.hasClients || !_hasMoreInvoices || _loadingMore) {
-      return;
-    }
-    final position = _scrollController.position;
-    if (position.extentAfter < 420) {
-      unawaited(_loadMoreInvoices());
     }
   }
 
@@ -754,6 +743,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                   ? _InvoiceListCard(
                       loading: _loading,
                       loadingMore: _loadingMore,
+                      hasMore: _hasMoreInvoices,
                       scrollController: _scrollController,
                       error: _error,
                       sales: visibleSales,
@@ -762,6 +752,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                       dateFmt: _dateFmt,
                       invoiceNumber: _invoiceNumber,
                       onReload: _load,
+                      onLoadMore: _loadMoreInvoices,
                       onSelect: _openMobileDetail,
                       onPdf: _sharePdf,
                       onPrint: _printInvoice,
@@ -775,6 +766,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                           child: _InvoiceListCard(
                             loading: _loading,
                             loadingMore: _loadingMore,
+                            hasMore: _hasMoreInvoices,
                             scrollController: _scrollController,
                             error: _error,
                             sales: visibleSales,
@@ -783,6 +775,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                             dateFmt: _dateFmt,
                             invoiceNumber: _invoiceNumber,
                             onReload: _load,
+                            onLoadMore: _loadMoreInvoices,
                             onSelect: (sale) =>
                                 setState(() => _selected = sale),
                             onPdf: _sharePdf,
@@ -1181,6 +1174,7 @@ class _InvoiceListCard extends StatelessWidget {
   const _InvoiceListCard({
     required this.loading,
     required this.loadingMore,
+    required this.hasMore,
     required this.scrollController,
     required this.error,
     required this.sales,
@@ -1189,6 +1183,7 @@ class _InvoiceListCard extends StatelessWidget {
     required this.dateFmt,
     required this.invoiceNumber,
     required this.onReload,
+    required this.onLoadMore,
     required this.onSelect,
     required this.onPdf,
     required this.onPrint,
@@ -1197,6 +1192,7 @@ class _InvoiceListCard extends StatelessWidget {
 
   final bool loading;
   final bool loadingMore;
+  final bool hasMore;
   final ScrollController scrollController;
   final String? error;
   final List<SaleModel> sales;
@@ -1205,6 +1201,7 @@ class _InvoiceListCard extends StatelessWidget {
   final DateFormat dateFmt;
   final String Function(SaleModel sale) invoiceNumber;
   final VoidCallback onReload;
+  final VoidCallback onLoadMore;
   final ValueChanged<SaleModel> onSelect;
   final ValueChanged<SaleModel> onPdf;
   final ValueChanged<SaleModel> onPrint;
@@ -1356,42 +1353,49 @@ class _InvoiceListCard extends StatelessWidget {
                     Expanded(
                       child: RefreshIndicator(
                         onRefresh: () async => onReload(),
-                        child: ListView.separated(
-                          controller: scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: EdgeInsets.all(mobile ? 10 : 0),
-                          itemCount: sales.length + (loadingMore ? 1 : 0),
-                          separatorBuilder: (_, __) =>
-                              SizedBox(height: mobile ? 8 : 0),
-                          itemBuilder: (context, index) {
-                            if (index >= sales.length) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.4,
+                        child: InfiniteScrollLoadMoreListener(
+                          threshold: 420,
+                          hasMore: hasMore,
+                          isLoadingMore: loadingMore,
+                          resetKeys: <Object?>[statusText],
+                          onLoadMore: onLoadMore,
+                          child: ListView.separated(
+                            controller: scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.all(mobile ? 10 : 0),
+                            itemCount: sales.length + (loadingMore ? 1 : 0),
+                            separatorBuilder: (_, __) =>
+                                SizedBox(height: mobile ? 8 : 0),
+                            itemBuilder: (context, index) {
+                              if (index >= sales.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.4,
+                                      ),
                                     ),
                                   ),
-                                ),
+                                );
+                              }
+                              final sale = sales[index];
+                              return _InvoiceRow(
+                                sale: sale,
+                                selected: sale.id == selectedId,
+                                dateFmt: dateFmt,
+                                invoiceNumber: invoiceNumber,
+                                onTap: () => onSelect(sale),
+                                onPdf: () => onPdf(sale),
+                                onPrint: () => onPrint(sale),
+                                onReturn: sale.canReturn
+                                    ? () => onReturn(sale)
+                                    : null,
                               );
-                            }
-                            final sale = sales[index];
-                            return _InvoiceRow(
-                              sale: sale,
-                              selected: sale.id == selectedId,
-                              dateFmt: dateFmt,
-                              invoiceNumber: invoiceNumber,
-                              onTap: () => onSelect(sale),
-                              onPdf: () => onPdf(sale),
-                              onPrint: () => onPrint(sale),
-                              onReturn: sale.canReturn
-                                  ? () => onReturn(sale)
-                                  : null,
-                            );
-                          },
+                            },
+                          ),
                         ),
                       ),
                     ),

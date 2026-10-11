@@ -24,30 +24,29 @@ import 'package:flutter_test/flutter_test.dart';
 /// loadMore, busca en el servidor con debounce y, si la red falla, cae al
 /// snapshot local COMPLETO avisando que esta en modo offline.
 void main() {
-  testWidgets(
-    'POS pide SOLO la pagina 1 y no descarga el catalogo completo',
-    (tester) async {
-      final server = _PagedProductsServer(_catalog80);
-      await _pumpPos(tester, server: server);
+  testWidgets('POS pide SOLO la pagina 1 y no descarga el catalogo completo', (
+    tester,
+  ) async {
+    final server = _PagedProductsServer(_catalog80);
+    await _pumpPos(tester, server: server);
 
-      final productRequests = server.requestsFor(ApiRoutes.catalogProducts);
-      expect(productRequests.length, 1, reason: 'abrir el POS = 1 peticion');
-      expect(productRequests.single.queryParameters['page'], 1);
-      expect(productRequests.single.queryParameters['limit'], 50);
-      expect(
-        _hasParameterCalled(productRequests.single, 'search'),
-        isFalse,
-        reason: 'sin busqueda no se envia search',
-      );
+    final productRequests = server.requestsFor(ApiRoutes.catalogProducts);
+    expect(productRequests.length, 1, reason: 'abrir el POS = 1 peticion');
+    expect(productRequests.single.queryParameters['page'], 1);
+    expect(productRequests.single.queryParameters['limit'], 50);
+    expect(
+      _hasParameterCalled(productRequests.single, 'search'),
+      isFalse,
+      reason: 'sin busqueda no se envia search',
+    );
 
-      expect(find.text('PROD 01'), findsOneWidget);
-      expect(
-        find.text('PROD 79'),
-        findsNothing,
-        reason: 'la pagina 2 aun no se ha pedido',
-      );
-    },
-  );
+    expect(find.text('PROD 01'), findsOneWidget);
+    expect(
+      find.text('PROD 79'),
+      findsNothing,
+      reason: 'la pagina 2 aun no se ha pedido',
+    );
+  });
 
   testWidgets('POS loadMore al final agrega la pagina 2 sin duplicar', (
     tester,
@@ -68,6 +67,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('PROD 79'), findsOneWidget);
   });
+
+  testWidgets(
+    'POS un gesto de scroll no encadena page3/page4 automaticamente',
+    (tester) async {
+      final server = _PagedProductsServer(_largeCatalog(180));
+      await _pumpPos(tester, server: server);
+
+      await tester.drag(find.byType(GridView).first, const Offset(0, -6000));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final pagesAfterOneScroll = server
+          .requestsFor(ApiRoutes.catalogProducts)
+          .map((request) => request.queryParameters['page'])
+          .toList();
+      expect(
+        pagesAfterOneScroll,
+        [1, 2],
+        reason: 'un gesto debe cargar solo una pagina adicional',
+      );
+
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2600)),
+      );
+      await tester.pump();
+      expect(
+        server
+            .requestsFor(ApiRoutes.catalogProducts)
+            .map((request) => request.queryParameters['page'])
+            .toList(),
+        [1, 2],
+        reason: 'un rebuild/idle posterior no debe encadenar page3',
+      );
+
+      await tester.drag(find.byType(GridView).first, const Offset(0, -6000));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final pagesAfterSecondScroll = server
+          .requestsFor(ApiRoutes.catalogProducts)
+          .map((request) => request.queryParameters['page'])
+          .toList();
+      expect(
+        pagesAfterSecondScroll,
+        [1, 2, 3],
+        reason: 'un segundo gesto real puede cargar la pagina siguiente',
+      );
+    },
+  );
 
   testWidgets('POS busca en el SERVIDOR con debounce (no por pulsacion)', (
     tester,
@@ -169,35 +217,34 @@ void main() {
     expect(find.text('PROD 04'), findsOneWidget);
   });
 
-  testWidgets('POS no oculta resultados que el servidor devolvio por categoria', (
-    tester,
-  ) async {
-    final server = _PagedProductsServer(_catalog80);
-    await _pumpPos(tester, server: server);
+  testWidgets(
+    'POS no oculta resultados que el servidor devolvio por categoria',
+    (tester) async {
+      final server = _PagedProductsServer(_catalog80);
+      await _pumpPos(tester, server: server);
 
-    await tester.tap(find.byTooltip('Buscar'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'Limpieza');
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Limpieza');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byType(GridView),
-        matching: find.text('PROD 02'),
-      ),
-      findsOneWidget,
-      reason: 'el backend busca por categoria; la UI no debe filtrarla de nuevo',
-    );
-  });
+      expect(
+        find.descendant(
+          of: find.byType(GridView),
+          matching: find.text('PROD 02'),
+        ),
+        findsOneWidget,
+        reason:
+            'el backend busca por categoria; la UI no debe filtrarla de nuevo',
+      );
+    },
+  );
 
   testWidgets('POS sin conexion usa el snapshot local y lo avisa', (
     tester,
   ) async {
-    final server = _PagedProductsServer(
-      _catalog80,
-      offline: true,
-    );
+    final server = _PagedProductsServer(_catalog80, offline: true);
     await _pumpPos(
       tester,
       server: server,
@@ -205,7 +252,9 @@ void main() {
     );
 
     expect(
-      find.text('Sin conexión: mostrando los productos guardados en este dispositivo'),
+      find.text(
+        'Sin conexión: mostrando los productos guardados en este dispositivo',
+      ),
       findsOneWidget,
       reason: 'la UI no debe fingir que son datos del servidor',
     );
@@ -326,24 +375,22 @@ class _PagedProductsServer {
   Map<String, dynamic> _page(RequestOptions options) {
     final query = options.queryParameters;
     final search = '${query['search'] ?? ''}'.trim().toLowerCase();
-    final filters =
-        <String>{
-              ...'${query['categories'] ?? ''}'.split(','),
-              '${query['category'] ?? ''}',
-            }
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toSet();
-    final filtered = products.where((product) {
-      if (filters.isNotEmpty && !filters.contains(product.categoriaLabel)) {
-        return false;
-      }
-      if (search.isEmpty) return true;
-      // Mismo criterio que el backend: nombre, codigo y categoria.
-      return product.nombre.toLowerCase().contains(search) ||
-          (product.codigo ?? '').toLowerCase().contains(search) ||
-          product.categoriaLabel.toLowerCase().contains(search);
-    }).toList(growable: false);
+    final filters = <String>{
+      ...'${query['categories'] ?? ''}'.split(','),
+      '${query['category'] ?? ''}',
+    }.map((value) => value.trim()).where((value) => value.isNotEmpty).toSet();
+    final filtered = products
+        .where((product) {
+          if (filters.isNotEmpty && !filters.contains(product.categoriaLabel)) {
+            return false;
+          }
+          if (search.isEmpty) return true;
+          // Mismo criterio que el backend: nombre, codigo y categoria.
+          return product.nombre.toLowerCase().contains(search) ||
+              (product.codigo ?? '').toLowerCase().contains(search) ||
+              product.categoriaLabel.toLowerCase().contains(search);
+        })
+        .toList(growable: false);
 
     final limit = int.tryParse('${query['limit'] ?? 50}') ?? 50;
     final page = int.tryParse('${query['page'] ?? 1}') ?? 1;
@@ -479,6 +526,21 @@ final _catalog80 = <ProductModel>[
     categoria: 'Calzado',
   ),
 ];
+
+List<ProductModel> _largeCatalog(int total) {
+  return [
+    for (var index = 1; index <= total; index += 1)
+      ProductModel(
+        id: '99999999-9999-4999-8999-${index.toString().padLeft(12, '0')}',
+        nombre: 'LARGE ${index.toString().padLeft(3, '0')}',
+        codigo: 'LARGE-${index.toString().padLeft(3, '0')}',
+        precio: index.toDouble(),
+        costo: 1,
+        stock: 100,
+        categoria: 'Panaderia',
+      ),
+  ];
+}
 
 final _beverageProduct = ProductModel(
   id: '44444444-4444-4444-8444-444444444444',

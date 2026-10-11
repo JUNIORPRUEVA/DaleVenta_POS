@@ -13,6 +13,7 @@ import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/close_model.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -1506,13 +1507,14 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-          content: Text(
-            userSafeErrorMessage(
-              e,
-              fallback: 'No se pudo subir el voucher POS. Inténtalo nuevamente.',
+            content: Text(
+              userSafeErrorMessage(
+                e,
+                fallback:
+                    'No se pudo subir el voucher POS. Inténtalo nuevamente.',
+              ),
             ),
           ),
-        ),
         );
       }
     } finally {
@@ -3710,19 +3712,13 @@ class _HistoryFullScreenPageState
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (index >= orderedDays.length) {
-            return Center(
-              child: state.loadingMore
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : OutlinedButton.icon(
-                      onPressed: () => ref
-                          .read(cierresDiariosControllerProvider.notifier)
-                          .loadMore(),
-                      icon: const Icon(Icons.expand_more_rounded),
-                      label: const Text('Cargar mas cierres'),
-                    ),
+            return LoadMoreFooter(
+              loading: state.loadingMore,
+              hasMore: true,
+              label: 'Ver más',
+              onLoadMore: () => ref
+                  .read(cierresDiariosControllerProvider.notifier)
+                  .loadMore(),
             );
           }
           final day = orderedDays[index];
@@ -4304,15 +4300,12 @@ class _CloseDetailFullScreenPageState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback:
-                  'No se pudo exportar el PDF. Inténtalo nuevamente.',
+              fallback: 'No se pudo exportar el PDF. Inténtalo nuevamente.',
             ),
           ),
         ),

@@ -11,6 +11,7 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/pagination/paged_load_more_footer.dart';
 import '../../../core/pagination/paged_list_controller.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
@@ -1083,18 +1084,11 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
         ],
         if (_hasMoreTransfers) ...[
           const SizedBox(height: 4),
-          OutlinedButton.icon(
-            onPressed: _loadingMoreTransfers
-                ? null
-                : () => unawaited(_loadMoreTransfers()),
-            icon: _loadingMoreTransfers
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.expand_more_rounded),
-            label: Text(_loadingMoreTransfers ? 'Cargando...' : 'Cargar mas'),
+          LoadMoreFooter(
+            loading: _loadingMoreTransfers,
+            hasMore: true,
+            label: 'Ver más',
+            onLoadMore: () => unawaited(_loadMoreTransfers()),
           ),
         ],
       ],
@@ -1481,18 +1475,12 @@ class _TransferProductPicker extends StatelessWidget {
               ),
             if (state.hasMore) ...[
               const SizedBox(height: 6),
-              OutlinedButton.icon(
-                onPressed: state.isLoadingMore ? null : onLoadMore,
-                icon: state.isLoadingMore
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.expand_more_rounded),
-                label: Text(
-                  state.isLoadingMore ? 'Cargando...' : 'Cargar más productos',
-                ),
+              LoadMoreFooter(
+                loading: state.isLoadingMore,
+                hasMore: true,
+                label: 'Ver más',
+                progressLabel: 'Mostrando ${state.progressLabel}',
+                onLoadMore: onLoadMore,
               ),
             ],
           ],

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/widgets/app_drawer.dart';
 import 'application/service_order_commissions_controller.dart';
@@ -320,19 +321,11 @@ class ServiceOrderCommissionsScreen extends ConsumerWidget {
                     ),
                   ),
                 if (state.pagination.hasMore)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: FilledButton.tonalIcon(
-                      onPressed: state.loadingMore ? null : controller.loadMore,
-                      icon: state.loadingMore
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.expand_more_rounded),
-                      label: const Text('Cargar más'),
-                    ),
+                  LoadMoreFooter(
+                    loading: state.loadingMore,
+                    hasMore: true,
+                    label: 'Ver más',
+                    onLoadMore: controller.loadMore,
                   ),
               ],
             ],

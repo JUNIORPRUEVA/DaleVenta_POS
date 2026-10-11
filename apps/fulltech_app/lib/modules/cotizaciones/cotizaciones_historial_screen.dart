@@ -16,6 +16,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
@@ -2200,26 +2201,13 @@ class _HistoryLoadMoreFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final progress = total == null ? '$loaded' : '$loaded de $total';
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: OutlinedButton.icon(
-          onPressed: loading ? null : onPressed,
-          icon: loading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.expand_more_rounded),
-          label: Text(
-            loading ? 'Cargando...' : 'Cargar más ($progress)',
-            style: theme.textTheme.labelLarge,
-          ),
-        ),
-      ),
+    return LoadMoreFooter(
+      loading: loading,
+      hasMore: onPressed != null,
+      label: 'Ver más',
+      progressLabel: 'Mostrando $progress',
+      onLoadMore: onPressed ?? () {},
     );
   }
 }

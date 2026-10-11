@@ -18,6 +18,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/evolution/evolution_api_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -266,9 +267,9 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
   void _showSequenceError(Object e, String fallback) {
     final message = e is ApiException ? e.message : fallback;
     setState(() => _error = message);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _openCreateSequenceDialog() async {
@@ -281,7 +282,9 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
       );
       if (result == null || !mounted) return;
       try {
-        await ref.read(contabilidadRepositoryProvider).createNcfSequence(
+        await ref
+            .read(contabilidadRepositoryProvider)
+            .createNcfSequence(
               voucherType: result.voucherType,
               startNumber: result.startNumber,
               endNumber: result.endNumber,
@@ -290,9 +293,7 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
             );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Secuencia ${result.voucherType} creada.'),
-          ),
+          SnackBar(content: Text('Secuencia ${result.voucherType} creada.')),
         );
         await _reloadNcfSequences();
       } catch (e) {
@@ -360,7 +361,10 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
         await _reloadNcfSequences();
       } catch (e) {
         if (!mounted) return;
-        _showSequenceError(e, 'No se pudo cambiar el estado de la secuencia NCF');
+        _showSequenceError(
+          e,
+          'No se pudo cambiar el estado de la secuencia NCF',
+        );
       }
     } finally {
       _sequenceDialogOpen = false;
@@ -464,11 +468,14 @@ class _FacturaFiscalScreenState extends ConsumerState<FacturaFiscalScreen> {
                       filesCount: _selectedFiles.length,
                       invoiceDate: _invoiceDate,
                       ncfEnabled:
-                          ref.watch(companySettingsProvider).valueOrNull
-                                  ?.ncfEnabled ??
-                              false,
-                      companyLoading:
-                          ref.watch(companySettingsProvider).isLoading,
+                          ref
+                              .watch(companySettingsProvider)
+                              .valueOrNull
+                              ?.ncfEnabled ??
+                          false,
+                      companyLoading: ref
+                          .watch(companySettingsProvider)
+                          .isLoading,
                       saving: _saving,
                       onAdd: _pickInvoiceImage,
                       onSave: _selectedFiles.isEmpty || _saving
@@ -1686,12 +1693,8 @@ class _NcfSequenceDialogState extends State<_NcfSequenceDialog> {
     super.initState();
     final sequence = widget.sequence;
     _voucherType = sequence?.voucherType ?? 'B01';
-    _startCtrl = TextEditingController(
-      text: '${sequence?.startNumber ?? 1}',
-    );
-    _endCtrl = TextEditingController(
-      text: '${sequence?.endNumber ?? 100000}',
-    );
+    _startCtrl = TextEditingController(text: '${sequence?.startNumber ?? 1}');
+    _endCtrl = TextEditingController(text: '${sequence?.endNumber ?? 100000}');
     _validUntil = sequence?.validUntil;
     _active = sequence?.active ?? true;
   }
@@ -1741,9 +1744,7 @@ class _NcfSequenceDialogState extends State<_NcfSequenceDialog> {
       return;
     }
     _submitting = true;
-    Navigator.of(
-      context,
-    ).pop(
+    Navigator.of(context).pop(
       _NcfSequenceFormResult(
         voucherType: _voucherType,
         startNumber: start,
@@ -1760,9 +1761,7 @@ class _NcfSequenceDialogState extends State<_NcfSequenceDialog> {
     final isEditing = _isEditing;
     final sequence = widget.sequence;
     return AlertDialog(
-      title: Text(
-        isEditing ? 'Editar secuencia NCF' : 'Agregar secuencia NCF',
-      ),
+      title: Text(isEditing ? 'Editar secuencia NCF' : 'Agregar secuencia NCF'),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -1790,8 +1789,7 @@ class _NcfSequenceDialogState extends State<_NcfSequenceDialog> {
                 ],
                 onChanged: isEditing
                     ? null
-                    : (value) =>
-                          setState(() => _voucherType = value ?? 'B01'),
+                    : (value) => setState(() => _voucherType = value ?? 'B01'),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -2593,17 +2591,11 @@ class _FiscalInvoiceHistoryScreenState
               ),
             ),
             if (_hasMore || _loadingMore)
-              Center(
-                child: _loadingMore
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : OutlinedButton.icon(
-                        onPressed: _loadMore,
-                        icon: const Icon(Icons.expand_more_rounded),
-                        label: const Text('Cargar mas facturas'),
-                      ),
+              LoadMoreFooter(
+                loading: _loadingMore,
+                hasMore: true,
+                label: 'Ver más',
+                onLoadMore: _loadMore,
               ),
             if (!_loading && _invoices.isEmpty)
               const AppCard(

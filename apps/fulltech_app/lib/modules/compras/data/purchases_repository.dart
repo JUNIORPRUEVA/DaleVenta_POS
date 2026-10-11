@@ -9,6 +9,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
+import '../../../core/pagination/paged_result.dart';
 import '../purchase_models.dart';
 
 final purchasesRepositoryProvider = Provider<PurchasesRepository>((ref) {
@@ -147,6 +148,33 @@ class PurchasesRepository {
                 PurchaseOrderModel.fromJson(Map<String, dynamic>.from(row)),
           )
           .toList();
+    } on DioException catch (e) {
+      throw ApiException(
+        _message(e.response?.data, 'No se pudieron cargar compras'),
+        e.response?.statusCode,
+      );
+    }
+  }
+
+  Future<PagedResult<PurchaseOrderModel>> listOrdersPage({
+    String? query,
+    String? status,
+    String? supplierId,
+    required int page,
+    required int limit,
+  }) async {
+    try {
+      final res = await _dio.get(
+        ApiRoutes.purchaseOrders,
+        queryParameters: {
+          'q': query,
+          'status': status,
+          'supplierId': supplierId,
+          'page': page,
+          'limit': limit,
+        }..removeWhere((_, value) => value == null || '$value'.trim().isEmpty),
+      );
+      return PagedResult.fromResponse(res.data, PurchaseOrderModel.fromJson);
     } on DioException catch (e) {
       throw ApiException(
         _message(e.response?.data, 'No se pudieron cargar compras'),

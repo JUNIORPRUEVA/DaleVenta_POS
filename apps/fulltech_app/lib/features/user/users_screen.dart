@@ -12,6 +12,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -381,16 +382,12 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                   ),
                   if (controller.hasMore || controller.loadingMore) ...[
                     const SizedBox(height: 16),
-                    Center(
-                      child: controller.loadingMore
-                          ? const CircularProgressIndicator(strokeWidth: 2)
-                          : OutlinedButton.icon(
-                              onPressed: () => ref
-                                  .read(usersControllerProvider.notifier)
-                                  .loadMore(),
-                              icon: const Icon(Icons.expand_more_rounded),
-                              label: const Text('Cargar mas usuarios'),
-                            ),
+                    LoadMoreFooter(
+                      loading: controller.loadingMore,
+                      hasMore: true,
+                      label: 'Ver más',
+                      onLoadMore: () =>
+                          ref.read(usersControllerProvider.notifier).loadMore(),
                     ),
                   ],
                 ],
@@ -403,19 +400,12 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                   (controller.hasMore || controller.loadingMore ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index >= filteredUsers.length) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: controller.loadingMore
-                          ? const CircularProgressIndicator(strokeWidth: 2)
-                          : OutlinedButton.icon(
-                              onPressed: () => ref
-                                  .read(usersControllerProvider.notifier)
-                                  .loadMore(),
-                              icon: const Icon(Icons.expand_more_rounded),
-                              label: const Text('Cargar mas usuarios'),
-                            ),
-                    ),
+                  return LoadMoreFooter(
+                    loading: controller.loadingMore,
+                    hasMore: true,
+                    label: 'Ver más',
+                    onLoadMore: () =>
+                        ref.read(usersControllerProvider.notifier).loadMore(),
                   );
                 }
                 final user = filteredUsers[index];
@@ -2563,13 +2553,12 @@ class _UsersTable extends StatelessWidget {
               ),
               if (hasMore || loadingMore) ...[
                 const SizedBox(height: 14),
-                loadingMore
-                    ? const CircularProgressIndicator(strokeWidth: 2)
-                    : OutlinedButton.icon(
-                        onPressed: onLoadMore,
-                        icon: const Icon(Icons.expand_more_rounded),
-                        label: const Text('Cargar mas usuarios'),
-                      ),
+                LoadMoreFooter(
+                  loading: loadingMore,
+                  hasMore: true,
+                  label: 'Ver más',
+                  onLoadMore: onLoadMore,
+                ),
               ],
             ],
           ),
@@ -2609,25 +2598,11 @@ class _UsersTable extends StatelessWidget {
                           ),
                           itemBuilder: (context, index) {
                             if (index >= users.length) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                child: Center(
-                                  child: loadingMore
-                                      ? const CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        )
-                                      : OutlinedButton.icon(
-                                          onPressed: onLoadMore,
-                                          icon: const Icon(
-                                            Icons.expand_more_rounded,
-                                          ),
-                                          label: const Text(
-                                            'Cargar mas usuarios',
-                                          ),
-                                        ),
-                                ),
+                              return LoadMoreFooter(
+                                loading: loadingMore,
+                                hasMore: true,
+                                label: 'Ver más',
+                                onLoadMore: onLoadMore,
                               );
                             }
                             final user = users[index];

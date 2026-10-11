@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/user_safe_error_text.dart';
+import '../../../core/pagination/paged_load_more_footer.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
@@ -289,21 +290,12 @@ class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
           ),
           if (productState.hasMore) ...[
             const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: productState.isLoadingMore
-                    ? null
-                    : () => _productSearch.loadMore(),
-                icon: productState.isLoadingMore
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.expand_more_rounded),
-                label: Text('Cargar mas (${productState.progressLabel})'),
-              ),
+            LoadMoreFooter(
+              loading: productState.isLoadingMore,
+              hasMore: true,
+              label: 'Ver más',
+              progressLabel: 'Mostrando ${productState.progressLabel}',
+              onLoadMore: () => _productSearch.loadMore(),
             ),
           ],
         ],

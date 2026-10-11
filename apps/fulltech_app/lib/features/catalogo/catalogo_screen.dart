@@ -14,6 +14,7 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/debug/debug_admin_action.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/realtime/catalog_realtime_service.dart';
 import '../../core/routing/app_route_observer.dart';
 import '../../core/routing/routes.dart';
@@ -223,7 +224,6 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       if (mounted) setState(() {});
     });
     _searchCtrl.addListener(_onSearchTextChanged);
-    _scrollCtrl.addListener(_onCatalogScroll);
     _subscribeRealtime();
     _scheduleAutoSync();
     _startLiveSync();
@@ -235,14 +235,6 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
   void _onSearchTextChanged() {
     // El controlador aplica debounce y proteccion de carrera.
     _search.setQuery(_searchCtrl.text);
-  }
-
-  void _onCatalogScroll() {
-    if (!_scrollCtrl.hasClients) return;
-    final position = _scrollCtrl.position;
-    if (position.maxScrollExtent - position.pixels <= 400) {
-      unawaited(_search.loadMore());
-    }
   }
 
   /// Categorias reales del servidor (no derivadas de la pagina 1).
@@ -391,7 +383,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback: 'No se pudo completar la limpieza. Inténtalo nuevamente.',
+              fallback:
+                  'No se pudo completar la limpieza. Inténtalo nuevamente.',
             ),
           ),
         ),
@@ -450,7 +443,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
         ? (_serverCategoryCounts.keys.toList()
             ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())))
         : derivedCategories;
-    final categories = <String>['Todas', ...baseCategories.where((c) => c != 'Todas')];
+    final categories = <String>[
+      'Todas',
+      ...baseCategories.where((c) => c != 'Todas'),
+    ];
 
     final categoryOptions =
         catalog.items
@@ -467,7 +463,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     final categoryCounts = <String, int>{
       for (final category in categories)
         category: category == 'Todas'
-            ? (totalProducts ?? _serverCategoryCounts.values.fold(0, (a, b) => a + b))
+            ? (totalProducts ??
+                  _serverCategoryCounts.values.fold(0, (a, b) => a + b))
             : (_serverCategoryCounts[category] ?? 0),
     };
 
@@ -915,53 +912,64 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                                 .read(catalogControllerProvider.notifier)
                                 .load(forceRemote: true);
                           },
-                          child: ListView.separated(
-                            controller: _scrollCtrl,
-                            padding: const EdgeInsets.only(bottom: 84),
-                            itemCount:
-                                filtered.length +
-                                (_search.snapshot.isLoadingMore ? 1 : 0),
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, i) {
-                              if (i >= filtered.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 18),
-                                  child: Center(
-                                    child: SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                          child: InfiniteScrollLoadMoreListener(
+                            threshold: 400,
+                            hasMore: _search.snapshot.hasMore,
+                            isLoadingMore: _search.snapshot.isLoadingMore,
+                            resetKeys: <Object?>[
+                              _searchCtrl.text.trim(),
+                              _category,
+                            ],
+                            onLoadMore: () => unawaited(_search.loadMore()),
+                            child: ListView.separated(
+                              controller: _scrollCtrl,
+                              padding: const EdgeInsets.only(bottom: 84),
+                              itemCount:
+                                  filtered.length +
+                                  (_search.snapshot.isLoadingMore ? 1 : 0),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, i) {
+                                if (i >= filtered.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 18),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              }
-                              final p = filtered[i];
-                              return _MobileProductListTile(
-                                product: p,
-                                showCost: isAdmin,
-                                showMeasurementUnit: measurementUnitsEnabled,
-                                canManage: canManage,
-                                onView: () => _showProductDetails(
+                                  );
+                                }
+                                final p = filtered[i];
+                                return _MobileProductListTile(
                                   product: p,
                                   showCost: isAdmin,
                                   showMeasurementUnit: measurementUnitsEnabled,
                                   canManage: canManage,
+                                  onView: () => _showProductDetails(
+                                    product: p,
+                                    showCost: isAdmin,
+                                    showMeasurementUnit:
+                                        measurementUnitsEnabled,
+                                    canManage: canManage,
+                                    onEdit: () => _openProductForm(
+                                      product: p,
+                                      categories: categoryOptions,
+                                    ),
+                                    onDelete: () => _confirmDelete(p),
+                                  ),
                                   onEdit: () => _openProductForm(
                                     product: p,
                                     categories: categoryOptions,
                                   ),
                                   onDelete: () => _confirmDelete(p),
-                                ),
-                                onEdit: () => _openProductForm(
-                                  product: p,
-                                  categories: categoryOptions,
-                                ),
-                                onDelete: () => _confirmDelete(p),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
                         );
                       }
@@ -987,54 +995,64 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                               .read(catalogControllerProvider.notifier)
                               .load(forceRemote: true);
                         },
-                        child: GridView.builder(
-                          controller: _scrollCtrl,
-                          itemCount:
-                              filtered.length +
-                              (_search.snapshot.isLoadingMore ? 1 : 0),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                mainAxisSpacing: spacing,
-                                crossAxisSpacing: spacing,
-                                mainAxisExtent: tileHeight,
-                              ),
-                          itemBuilder: (context, i) {
-                            if (i >= filtered.length) {
-                              return const Center(
-                                child: SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                        child: InfiniteScrollLoadMoreListener(
+                          threshold: 400,
+                          hasMore: _search.snapshot.hasMore,
+                          isLoadingMore: _search.snapshot.isLoadingMore,
+                          resetKeys: <Object?>[
+                            _searchCtrl.text.trim(),
+                            _category,
+                          ],
+                          onLoadMore: () => unawaited(_search.loadMore()),
+                          child: GridView.builder(
+                            controller: _scrollCtrl,
+                            itemCount:
+                                filtered.length +
+                                (_search.snapshot.isLoadingMore ? 1 : 0),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  mainAxisSpacing: spacing,
+                                  crossAxisSpacing: spacing,
+                                  mainAxisExtent: tileHeight,
                                 ),
-                              );
-                            }
-                            final p = filtered[i];
-                            return _ProductCard(
-                              product: p,
-                              showCost: isAdmin,
-                              showMeasurementUnit: measurementUnitsEnabled,
-                              canManage: canManage,
-                              onView: () => _showProductDetails(
+                            itemBuilder: (context, i) {
+                              if (i >= filtered.length) {
+                                return const Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                );
+                              }
+                              final p = filtered[i];
+                              return _ProductCard(
                                 product: p,
                                 showCost: isAdmin,
                                 showMeasurementUnit: measurementUnitsEnabled,
                                 canManage: canManage,
+                                onView: () => _showProductDetails(
+                                  product: p,
+                                  showCost: isAdmin,
+                                  showMeasurementUnit: measurementUnitsEnabled,
+                                  canManage: canManage,
+                                  onEdit: () => _openProductForm(
+                                    product: p,
+                                    categories: categoryOptions,
+                                  ),
+                                  onDelete: () => _confirmDelete(p),
+                                ),
                                 onEdit: () => _openProductForm(
                                   product: p,
                                   categories: categoryOptions,
                                 ),
                                 onDelete: () => _confirmDelete(p),
-                              ),
-                              onEdit: () => _openProductForm(
-                                product: p,
-                                categories: categoryOptions,
-                              ),
-                              onDelete: () => _confirmDelete(p),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       );
                     },
@@ -1077,10 +1095,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
     if (selected == null || !mounted) return;
     setState(() => _category = selected);
     // El filtro viaja al servidor y reinicia a la pagina 1.
-    _search.patchFilter(
-      'category',
-      selected == 'Todas' ? null : selected,
-    );
+    _search.patchFilter('category', selected == 'Todas' ? null : selected);
   }
 
   Future<void> _confirmDelete(ProductModel product) async {
@@ -1267,9 +1282,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(

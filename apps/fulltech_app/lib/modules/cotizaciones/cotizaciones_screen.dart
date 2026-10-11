@@ -33,6 +33,7 @@ import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/offline/sync_status_menu_button.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/pagination/paged_list_controller.dart';
 import '../../core/perf/perf_trace.dart';
 import '../../core/printing/unified_ticket_printer.dart';
@@ -7003,15 +7004,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               ),
             ),
           )
-        : NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification.metrics.maxScrollExtent -
-                      notification.metrics.pixels <=
-                  240) {
-                unawaited(_productSearch.loadMore());
-              }
-              return false;
-            },
+        : InfiniteScrollLoadMoreListener(
+            threshold: 240,
+            hasMore: snapshot.hasMore,
+            isLoadingMore: snapshot.isLoadingMore,
+            resetKeys: <Object?>[
+              _searchCtrl.text.trim(),
+              (_selectedCategories.toList()..sort()).join('|'),
+            ],
+            onLoadMore: () => unawaited(_productSearch.loadMore()),
             child: GridView.builder(
               padding: const EdgeInsets.fromLTRB(8, 5, 8, 8),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -8114,6 +8115,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             inventoryEnabled: inventoryEnabled,
                             loadingProducts: _loadingProducts,
                             error: _error,
+                            hasMore: _productSearch.snapshot.hasMore,
                             loadingMore: _productSearch.snapshot.isLoadingMore,
                             offline: _productSearch.snapshot.isOffline,
                             money: _money,
@@ -13060,6 +13062,7 @@ class _DesktopCatalogPane extends StatefulWidget {
     required this.inventoryEnabled,
     required this.loadingProducts,
     required this.error,
+    required this.hasMore,
     required this.loadingMore,
     required this.offline,
     required this.money,
@@ -13087,6 +13090,7 @@ class _DesktopCatalogPane extends StatefulWidget {
   final bool inventoryEnabled;
   final bool loadingProducts;
   final String? error;
+  final bool hasMore;
   final bool loadingMore;
   final bool offline;
   final String Function(double) money;
@@ -13114,22 +13118,12 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
   void initState() {
     super.initState();
     _gridScrollController = ScrollController();
-    _gridScrollController.addListener(_handleGridScroll);
   }
 
   @override
   void dispose() {
-    _gridScrollController.removeListener(_handleGridScroll);
     _gridScrollController.dispose();
     super.dispose();
-  }
-
-  void _handleGridScroll() {
-    if (!_gridScrollController.hasClients) return;
-    final position = _gridScrollController.position;
-    if (position.maxScrollExtent - position.pixels <= 480) {
-      widget.onLoadMore();
-    }
   }
 
   void _handleCategoryRailExpansionChanged(bool expanded) {
@@ -13407,80 +13401,101 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
             behavior: ScrollConfiguration.of(
               context,
             ).copyWith(scrollbars: false),
-            child: SingleChildScrollView(
-              controller: _gridScrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                horizontalGutter,
-                0,
-                horizontalGutter,
-                12,
-              ),
+            child: InfiniteScrollLoadMoreListener(
+              threshold: 480,
+              hasMore: widget.hasMore,
+              isLoadingMore: widget.loadingMore,
+              resetKeys: <Object?>[
+                widget.searchController.text.trim(),
+                (widget.selectedCategories.toList()..sort()).join('|'),
+              ],
+              onLoadMore: widget.onLoadMore,
               child: SizedBox(
-                height: contentHeight.clamp(
-                  constraints.maxHeight,
-                  double.infinity,
-                ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      width: quickSaleWidth,
-                      height: quickSaleHeight,
-                      child: _DesktopManualSaleGridCard(
-                        onTap: widget.onAddExternalItem,
-                      ),
+                child: SingleChildScrollView(
+                  controller: _gridScrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    horizontalGutter,
+                    0,
+                    horizontalGutter,
+                    12,
+                  ),
+                  child: SizedBox(
+                    height: contentHeight.clamp(
+                      constraints.maxHeight,
+                      double.infinity,
                     ),
-                    for (
-                      var index = 0;
-                      index < widget.visibleProducts.length;
-                      index++
-                    )
-                      Positioned(
-                        left: ((index + 1) % columns) * (cardWidth + spacing),
-                        top: ((index + 1) ~/ columns) * (cardHeight + spacing),
-                        width: cardWidth,
-                        height: cardHeight,
-                        child: _ModernDesktopProductCard(
-                          product: widget.visibleProducts[index],
-                          money: widget.money,
-                          pinned: widget.pinnedProductIds.contains(
-                            widget.visibleProducts[index].id.trim(),
-                          ),
-                          showStockState: shouldShowBillingStockState(
-                            companyInventoryEnabled: widget.inventoryEnabled,
-                            product: widget.visibleProducts[index],
-                          ),
-                          onTap: (globalStart) => widget.onAddProduct(
-                            widget.visibleProducts[index],
-                            globalStart,
-                          ),
-                          onTogglePinned: () => widget.onTogglePinnedProduct(
-                            widget.visibleProducts[index],
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          width: quickSaleWidth,
+                          height: quickSaleHeight,
+                          child: _DesktopManualSaleGridCard(
+                            onTap: widget.onAddExternalItem,
                           ),
                         ),
-                      ),
-                    if (widget.loadingMore)
-                      Positioned(
-                        left:
-                            ((widget.visibleProducts.length + 1) % columns) *
-                            (cardWidth + spacing),
-                        top:
-                            ((widget.visibleProducts.length + 1) ~/ columns) *
-                            (cardHeight + spacing),
-                        width: cardWidth,
-                        height: cardHeight,
-                        child: const Center(
-                          child: SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                        for (
+                          var index = 0;
+                          index < widget.visibleProducts.length;
+                          index++
+                        )
+                          Positioned(
+                            left:
+                                ((index + 1) % columns) * (cardWidth + spacing),
+                            top:
+                                ((index + 1) ~/ columns) *
+                                (cardHeight + spacing),
+                            width: cardWidth,
+                            height: cardHeight,
+                            child: _ModernDesktopProductCard(
+                              product: widget.visibleProducts[index],
+                              money: widget.money,
+                              pinned: widget.pinnedProductIds.contains(
+                                widget.visibleProducts[index].id.trim(),
+                              ),
+                              showStockState: shouldShowBillingStockState(
+                                companyInventoryEnabled:
+                                    widget.inventoryEnabled,
+                                product: widget.visibleProducts[index],
+                              ),
+                              onTap: (globalStart) => widget.onAddProduct(
+                                widget.visibleProducts[index],
+                                globalStart,
+                              ),
+                              onTogglePinned: () =>
+                                  widget.onTogglePinnedProduct(
+                                    widget.visibleProducts[index],
+                                  ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
+                        if (widget.loadingMore)
+                          Positioned(
+                            left:
+                                ((widget.visibleProducts.length + 1) %
+                                    columns) *
+                                (cardWidth + spacing),
+                            top:
+                                ((widget.visibleProducts.length + 1) ~/
+                                    columns) *
+                                (cardHeight + spacing),
+                            width: cardWidth,
+                            height: cardHeight,
+                            child: const Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -13536,55 +13551,84 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
       final remaining = widget.visibleProducts.length - firstRowsCapacity;
       maxRow += (remaining / columns).ceil();
     }
+    final loadingIndex = widget.visibleProducts.length;
     final contentHeight = (maxRow + 1) * cardHeight + maxRow * spacing;
 
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: SingleChildScrollView(
-        controller: _gridScrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: horizontalGutter),
-        child: SizedBox(
-          height: contentHeight.clamp(constraints.maxHeight, double.infinity),
-          child: Stack(
-            children: [
-              Positioned(
-                left: 0,
-                top: 0,
-                width: cardWidth,
-                height: manualHeight,
-                child: _DesktopExternalProductCard(
-                  onTap: widget.onAddExternalItem,
-                ),
-              ),
-              for (
-                var index = 0;
-                index < widget.visibleProducts.length;
-                index++
-              )
+      child: InfiniteScrollLoadMoreListener(
+        threshold: 480,
+        hasMore: widget.hasMore,
+        isLoadingMore: widget.loadingMore,
+        resetKeys: <Object?>[
+          widget.searchController.text.trim(),
+          (widget.selectedCategories.toList()..sort()).join('|'),
+        ],
+        onLoadMore: widget.onLoadMore,
+        child: SingleChildScrollView(
+          controller: _gridScrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: horizontalGutter),
+          child: SizedBox(
+            height: contentHeight.clamp(constraints.maxHeight, double.infinity),
+            child: Stack(
+              children: [
                 Positioned(
-                  left:
-                      _desktopCatalogProductColumn(index, columns) *
-                      (cardWidth + spacing),
-                  top:
-                      _desktopCatalogProductRow(index, columns) *
-                      (cardHeight + spacing),
+                  left: 0,
+                  top: 0,
                   width: cardWidth,
-                  height: cardHeight,
-                  child: _DesktopProductCard(
-                    product: widget.visibleProducts[index],
-                    money: widget.money,
-                    showStockState: shouldShowBillingStockState(
-                      companyInventoryEnabled: widget.inventoryEnabled,
-                      product: widget.visibleProducts[index],
-                    ),
-                    onTap: () => widget.onAddProduct(
-                      widget.visibleProducts[index],
-                      null,
-                    ),
+                  height: manualHeight,
+                  child: _DesktopExternalProductCard(
+                    onTap: widget.onAddExternalItem,
                   ),
                 ),
-            ],
+                for (
+                  var index = 0;
+                  index < widget.visibleProducts.length;
+                  index++
+                )
+                  Positioned(
+                    left:
+                        _desktopCatalogProductColumn(index, columns) *
+                        (cardWidth + spacing),
+                    top:
+                        _desktopCatalogProductRow(index, columns) *
+                        (cardHeight + spacing),
+                    width: cardWidth,
+                    height: cardHeight,
+                    child: _DesktopProductCard(
+                      product: widget.visibleProducts[index],
+                      money: widget.money,
+                      showStockState: shouldShowBillingStockState(
+                        companyInventoryEnabled: widget.inventoryEnabled,
+                        product: widget.visibleProducts[index],
+                      ),
+                      onTap: () => widget.onAddProduct(
+                        widget.visibleProducts[index],
+                        null,
+                      ),
+                    ),
+                  ),
+                if (widget.loadingMore)
+                  Positioned(
+                    left:
+                        _desktopCatalogProductColumn(loadingIndex, columns) *
+                        (cardWidth + spacing),
+                    top:
+                        _desktopCatalogProductRow(loadingIndex, columns) *
+                        (cardHeight + spacing),
+                    width: cardWidth,
+                    height: cardHeight,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

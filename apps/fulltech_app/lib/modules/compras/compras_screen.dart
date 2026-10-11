@@ -13,6 +13,8 @@ import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/product_model.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/pagination/paged_list_controller.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -45,6 +47,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   static const _draftStorage = PurchaseOrderDraftStorage();
   late final TabController _tabs;
   late final ProductSearchController _productSearch;
+  late final PagedListController<PurchaseOrderModel> _orderSearch;
   final _searchCtrl = TextEditingController();
   final _productScrollCtrl = ScrollController();
   final _notesCtrl = TextEditingController();
@@ -64,10 +67,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   Timer? _draftSaveTimer;
   bool _restoringDraft = false;
   void Function()? _removeProductSearchListener;
+  void Function()? _removeOrderSearchListener;
   Map<String, int> _serverCategoryCounts = const <String, int>{};
   bool _loadingServerCategories = false;
   List<SupplierModel> _suppliers = const [];
-  List<PurchaseOrderModel> _orders = const [];
   List<PurchaseRecommendationModel> _recommendations = const [];
   List<PurchaseInvoiceModel> _purchaseInvoices = const [];
   List<PurchaseDraftItem> _cart = const [];
@@ -95,8 +98,58 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     _removeProductSearchListener = _productSearch.addListener(
       _onProductSearchChanged,
     );
+    _orderSearch = PagedListController<PurchaseOrderModel>(
+      pageSize: 50,
+      fetcher: (request) => ref
+          .read(purchasesRepositoryProvider)
+          .listOrdersPage(
+            query: request.query.isEmpty ? null : request.query,
+            status: request.filters['status'] as String?,
+            supplierId: request.filters['supplierId'] as String?,
+            page: request.page,
+            limit: request.limit,
+          ),
+      idOf: (order) => order.id,
+      offlineFallback: (query, filters) async {
+        final cached = await ref
+            .read(purchasesRepositoryProvider)
+            .cachedOrders();
+        final status = (filters['status'] as String?)?.trim();
+        final supplierId = (filters['supplierId'] as String?)?.trim();
+        final normalizedQuery = query.trim().toLowerCase();
+        return cached
+            .where((order) {
+              if (status != null &&
+                  status.isNotEmpty &&
+                  order.status != status) {
+                return false;
+              }
+              if (supplierId != null &&
+                  supplierId.isNotEmpty &&
+                  order.supplier?.id != supplierId) {
+                return false;
+              }
+              if (normalizedQuery.isEmpty) return true;
+              return order.orderNumber.toLowerCase().contains(
+                    normalizedQuery,
+                  ) ||
+                  (order.supplier?.commercialName.toLowerCase().contains(
+                        normalizedQuery,
+                      ) ??
+                      false) ||
+                  order.items.any(
+                    (item) => item.productName.toLowerCase().contains(
+                      normalizedQuery,
+                    ),
+                  );
+            })
+            .toList(growable: false);
+      },
+    );
+    _removeOrderSearchListener = _orderSearch.addListener(
+      _onOrderSearchChanged,
+    );
     _searchCtrl.addListener(_onProductSearchTextChanged);
-    _productScrollCtrl.addListener(_onProductScroll);
     for (final ctrl in [
       _notesCtrl,
       _instructionsCtrl,
@@ -135,7 +188,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   void dispose() {
     _draftSaveTimer?.cancel();
     _removeProductSearchListener?.call();
+    _removeOrderSearchListener?.call();
     _productSearch.dispose();
+    _orderSearch.dispose();
     _productScrollCtrl.dispose();
     _tabs.dispose();
     _searchCtrl.dispose();
@@ -168,6 +223,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _notesCtrl.text.trim().isNotEmpty;
   int get _differentProducts => _cart.length;
   PagedListState<ProductModel> get _productState => _productSearch.snapshot;
+  PagedListState<PurchaseOrderModel> get _orderState => _orderSearch.snapshot;
   List<String> get _categories {
     final categories = <String>{
       ..._serverCategoryCounts.keys,
@@ -185,21 +241,22 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (mounted) setState(() {});
   }
 
-  void _onProductSearchTextChanged() {
-    _productSearch.setQuery(_searchCtrl.text);
+  void _onOrderSearchChanged(PagedListState<PurchaseOrderModel> _) {
+    if (mounted) setState(() {});
   }
 
-  void _onProductScroll() {
-    if (!_productScrollCtrl.hasClients) return;
-    final position = _productScrollCtrl.position;
-    if (position.maxScrollExtent - position.pixels <= 360) {
-      unawaited(_productSearch.loadMore());
-    }
+  void _onProductSearchTextChanged() {
+    _productSearch.setQuery(_searchCtrl.text);
   }
 
   void _selectProductCategory(String? category) {
     setState(() => _selectedCategory = category);
     _productSearch.patchFilter('category', category);
+  }
+
+  void _setOrderStatusFilter(String status) {
+    setState(() => _statusFilter = status);
+    _orderSearch.patchFilter('status', status);
   }
 
   Future<void> _load() async {
@@ -227,11 +284,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (!mounted) return;
     setState(() {
       final suppliers = cached[0] as List<SupplierModel>;
-      final orders = cached[1] as List<PurchaseOrderModel>;
       final recommendations = cached[2] as List<PurchaseRecommendationModel>;
       final invoices = cached[3] as List<PurchaseInvoiceModel>;
       if (suppliers.isNotEmpty) _suppliers = suppliers;
-      if (orders.isNotEmpty) _orders = orders;
       if (recommendations.isNotEmpty) _recommendations = recommendations;
       if (invoices.isNotEmpty) _purchaseInvoices = invoices;
     });
@@ -273,8 +328,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Future<void> _refreshOrders() async {
     try {
-      final orders = await ref.read(purchasesRepositoryProvider).listOrders();
-      if (mounted) setState(() => _orders = orders);
+      if (_orderSearch.snapshot.hasItems) {
+        await _orderSearch.refresh();
+      } else {
+        await _orderSearch.loadInitial();
+      }
     } catch (_) {}
   }
 
@@ -621,26 +679,36 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   : width < 720
                   ? 1.08
                   : 1.36;
-              return GridView.builder(
-                controller: _productScrollCtrl,
-                padding: EdgeInsets.fromLTRB(
-                  isWide ? 16 : 12,
-                  0,
-                  isWide ? 10 : 12,
-                  16,
-                ),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  childAspectRatio: aspectRatio,
-                  crossAxisSpacing: 7,
-                  mainAxisSpacing: 7,
-                ),
-                itemCount: _visibleProducts.length,
-                itemBuilder: (context, index) => _PurchaseProductCard(
-                  product: _visibleProducts[index],
-                  money: _money,
-                  qty: _qty,
-                  onTap: () => _quickAddProduct(_visibleProducts[index]),
+              return InfiniteScrollLoadMoreListener(
+                threshold: 360,
+                hasMore: _productState.hasMore,
+                isLoadingMore: _productState.isLoadingMore,
+                resetKeys: <Object?>[
+                  _searchCtrl.text.trim(),
+                  _selectedCategory,
+                ],
+                onLoadMore: () => unawaited(_productSearch.loadMore()),
+                child: GridView.builder(
+                  controller: _productScrollCtrl,
+                  padding: EdgeInsets.fromLTRB(
+                    isWide ? 16 : 12,
+                    0,
+                    isWide ? 10 : 12,
+                    16,
+                  ),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: aspectRatio,
+                    crossAxisSpacing: 7,
+                    mainAxisSpacing: 7,
+                  ),
+                  itemCount: _visibleProducts.length,
+                  itemBuilder: (context, index) => _PurchaseProductCard(
+                    product: _visibleProducts[index],
+                    money: _money,
+                    qty: _qty,
+                    onTap: () => _quickAddProduct(_visibleProducts[index]),
+                  ),
                 ),
               );
             },
@@ -772,23 +840,35 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                             (constraints.maxHeight -
                                 (spacing * (visibleRows - 1))) /
                             visibleRows;
-                        return GridView.builder(
-                          controller: _productScrollCtrl,
-                          padding: EdgeInsets.zero,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                crossAxisSpacing: spacing,
-                                mainAxisSpacing: spacing,
-                                childAspectRatio: cellWidth / cellHeight,
-                              ),
-                          itemCount: _visibleProducts.length,
-                          itemBuilder: (context, index) => _PurchaseProductCard(
-                            product: _visibleProducts[index],
-                            money: _money,
-                            qty: _qty,
-                            onTap: () =>
-                                _quickAddProduct(_visibleProducts[index]),
+                        return InfiniteScrollLoadMoreListener(
+                          threshold: 360,
+                          hasMore: _productState.hasMore,
+                          isLoadingMore: _productState.isLoadingMore,
+                          resetKeys: <Object?>[
+                            _searchCtrl.text.trim(),
+                            _selectedCategory,
+                          ],
+                          onLoadMore: () =>
+                              unawaited(_productSearch.loadMore()),
+                          child: GridView.builder(
+                            controller: _productScrollCtrl,
+                            padding: EdgeInsets.zero,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: columns,
+                                  crossAxisSpacing: spacing,
+                                  mainAxisSpacing: spacing,
+                                  childAspectRatio: cellWidth / cellHeight,
+                                ),
+                            itemCount: _visibleProducts.length,
+                            itemBuilder: (context, index) =>
+                                _PurchaseProductCard(
+                                  product: _visibleProducts[index],
+                                  money: _money,
+                                  qty: _qty,
+                                  onTap: () =>
+                                      _quickAddProduct(_visibleProducts[index]),
+                                ),
                           ),
                         );
                       },
@@ -1588,9 +1668,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   Widget _ordersTab() {
     final canDeleteOrders = ref.watch(authStateProvider).user != null;
-    final visible = _orders
-        .where((o) => _statusFilter.isEmpty || o.status == _statusFilter)
-        .toList();
+    final orderState = _orderState;
+    final visible = orderState.items;
     final isWide = MediaQuery.sizeOf(context).width >= 980;
     final isMobile = MediaQuery.sizeOf(context).width < 720;
     PurchaseOrderModel? selected;
@@ -1638,25 +1717,94 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       child: Text('Cancelada'),
                     ),
                   ],
-                  onChanged: (v) => setState(() => _statusFilter = v ?? ''),
+                  onChanged: (v) => _setOrderStatusFilter(v ?? ''),
                 ),
               ],
             ),
           ),
         Expanded(
-          child: visible.isEmpty
+          child: orderState.isInitialLoading && visible.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : orderState.error != null && visible.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          userSafeErrorMessage(
+                            orderState.error,
+                            fallback: 'No se pudieron cargar las compras.',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () => unawaited(_orderSearch.refresh()),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Reintentar'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : visible.isEmpty
               ? const Center(child: Text('No hay órdenes de compra.'))
               : Row(
                   children: [
                     Expanded(
-                      child: ListView.separated(
-                        itemCount: visible.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) => _orderTile(
-                          visible[index],
-                          selected: visible[index].id == _selectedOrderDetailId,
-                          showInlineDetail: isWide,
-                          canDelete: canDeleteOrders,
+                      child: InfiniteScrollLoadMoreListener(
+                        threshold: 520,
+                        hasMore: orderState.hasMore,
+                        isLoadingMore: orderState.isLoadingMore,
+                        resetKeys: <Object?>[_statusFilter],
+                        onLoadMore: () => unawaited(_orderSearch.loadMore()),
+                        child: ListView.separated(
+                          itemCount:
+                              visible.length +
+                              (orderState.hasMore ||
+                                      orderState.isLoadingMore ||
+                                      orderState.error != null
+                                  ? 1
+                                  : 0),
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            if (index >= visible.length) {
+                              if (orderState.error != null) {
+                                return Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: _InlinePurchaseError(
+                                    message: userSafeErrorMessage(
+                                      orderState.error,
+                                      fallback:
+                                          'No se pudieron cargar más compras.',
+                                    ),
+                                    onRetry: () =>
+                                        unawaited(_orderSearch.retryLoadMore()),
+                                  ),
+                                );
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: _ProductPagingFooter(
+                                  state: orderState,
+                                  loadingLabel: 'Cargando compras...',
+                                  offlineLabel:
+                                      'Sin conexión: compras guardadas',
+                                  onLoadMore: () =>
+                                      unawaited(_orderSearch.loadMore()),
+                                ),
+                              );
+                            }
+                            return _orderTile(
+                              visible[index],
+                              selected:
+                                  visible[index].id == _selectedOrderDetailId,
+                              showInlineDetail: isWide,
+                              canDelete: canDeleteOrders,
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -2792,7 +2940,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           supplierInstructions: _instructionsCtrl.text.trim(),
         );
     if (!mounted) return order;
-    setState(() => _orders = [order, ..._orders]);
+    _orderSearch.upsertLocal(order);
     if (clearDraft) {
       _restoringDraft = true;
       setState(() {
@@ -2827,12 +2975,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (!allowed || !mounted) return;
     try {
       final updated = await action();
-      setState(
-        () => _orders = [
-          for (final o in _orders)
-            if (o.id == updated.id) updated else o,
-        ],
-      );
+      _orderSearch.upsertLocal(updated);
       _snack(message);
     } catch (e) {
       _snack(
@@ -2880,11 +3023,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (confirmed != true) return;
     try {
       await ref.read(purchasesRepositoryProvider).deleteOrder(order.id);
+      _orderSearch.removeLocal(order.id);
       setState(() {
-        _orders = [
-          for (final item in _orders)
-            if (item.id != order.id) item,
-        ];
         if (_selectedOrderDetailId == order.id) {
           _selectedOrderDetailId = null;
         }
@@ -4967,63 +5107,71 @@ class _SupplierInfoLine extends StatelessWidget {
   }
 }
 
-class _ProductPagingFooter extends StatelessWidget {
-  const _ProductPagingFooter({required this.state, required this.onLoadMore});
+class _ProductPagingFooter<T> extends StatelessWidget {
+  const _ProductPagingFooter({
+    required this.state,
+    required this.onLoadMore,
+    this.loadingLabel = 'Cargando productos...',
+    this.offlineLabel = 'Sin conexión: productos guardados',
+  });
 
-  final PagedListState<ProductModel> state;
+  final PagedListState<T> state;
   final VoidCallback onLoadMore;
+  final String loadingLabel;
+  final String offlineLabel;
 
   @override
   Widget build(BuildContext context) {
-    if (!state.hasItems &&
-        !state.hasMore &&
-        !state.isInitialLoading &&
-        !state.isRefreshing) {
-      return const SizedBox.shrink();
-    }
-    final theme = Theme.of(context);
-    return Padding(
+    return PagedLoadMoreFooter<T>(
+      state: state,
+      onLoadMore: onLoadMore,
+      label: 'Ver más',
+      loadingLabel: loadingLabel,
+      offlineLabel: offlineLabel,
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (state.isInitialLoading || state.isRefreshing) ...[
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 8),
-            Text('Cargando productos...', style: theme.textTheme.bodySmall),
-          ] else ...[
-            Flexible(
+    );
+  }
+}
+
+class _InlinePurchaseError extends StatelessWidget {
+  const _InlinePurchaseError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer.withValues(alpha: .35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.error.withValues(alpha: .25),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: theme.colorScheme.error),
+            const SizedBox(width: 10),
+            Expanded(
               child: Text(
-                state.isOffline
-                    ? 'Sin conexión: productos guardados'
-                    : 'Mostrando ${state.progressLabel}',
-                overflow: TextOverflow.ellipsis,
+                message,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF52667C),
+                  color: theme.colorScheme.error,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            if (state.hasMore) ...[
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: state.isLoadingMore ? null : onLoadMore,
-                icon: state.isLoadingMore
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.expand_more_rounded, size: 18),
-                label: Text(state.isLoadingMore ? 'Cargando' : 'Ver más'),
-              ),
-            ],
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Reintentar'),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }

@@ -12,6 +12,7 @@ import '../../core/debug/debug_admin_action.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/models/user_model.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/realtime/operations_realtime_service.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -720,29 +721,11 @@ class _ServiceOrdersListScreenState
                           (state.hasMore || state.loadingMore ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index >= visibleOrders.length) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Center(
-                              child: OutlinedButton.icon(
-                                onPressed: state.loadingMore
-                                    ? null
-                                    : () => unawaited(controller.loadMore()),
-                                icon: state.loadingMore
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.expand_more_rounded),
-                                label: Text(
-                                  state.loadingMore
-                                      ? 'Cargando...'
-                                      : 'Cargar mas ordenes',
-                                ),
-                              ),
-                            ),
+                          return LoadMoreFooter(
+                            loading: state.loadingMore,
+                            hasMore: true,
+                            label: 'Ver más',
+                            onLoadMore: () => unawaited(controller.loadMore()),
                           );
                         }
                         final order = visibleOrders[index];

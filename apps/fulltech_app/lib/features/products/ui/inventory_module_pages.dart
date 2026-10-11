@@ -24,6 +24,7 @@ import '../../../core/cache/local_json_cache.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
+import '../../../core/pagination/paged_load_more_footer.dart';
 import '../../../core/tax/product_tax_options_provider.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/theme/app_colors.dart';
@@ -3149,22 +3150,13 @@ class _CatalogTabState extends State<CatalogTab> {
               catalogContent,
               if (widget.onLoadMore != null) ...[
                 const SizedBox(height: 12),
-                Center(
-                  child: OutlinedButton.icon(
-                    onPressed: widget.loadingMore ? null : widget.onLoadMore,
-                    icon: widget.loadingMore
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.expand_more_rounded),
-                    label: Text(
-                      widget.loadingMore
-                          ? 'Cargando...'
-                          : 'Cargar mas (${widget.progressLabel ?? visible.length})',
-                    ),
-                  ),
+                LoadMoreFooter(
+                  loading: widget.loadingMore,
+                  hasMore: true,
+                  label: 'Ver más',
+                  progressLabel:
+                      'Mostrando ${widget.progressLabel ?? visible.length}',
+                  onLoadMore: widget.onLoadMore!,
                 ),
               ],
             ];
@@ -4154,26 +4146,13 @@ class _InventoryTabState extends State<InventoryTab> {
                       ),
                       if (widget.onLoadMore != null) ...[
                         const SizedBox(height: 12),
-                        Center(
-                          child: OutlinedButton.icon(
-                            onPressed: widget.loadingMore
-                                ? null
-                                : widget.onLoadMore,
-                            icon: widget.loadingMore
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.expand_more_rounded),
-                            label: Text(
-                              widget.loadingMore
-                                  ? 'Cargando...'
-                                  : 'Cargar mas (${widget.progressLabel ?? active.length})',
-                            ),
-                          ),
+                        LoadMoreFooter(
+                          loading: widget.loadingMore,
+                          hasMore: true,
+                          label: 'Ver más',
+                          progressLabel:
+                              'Mostrando ${widget.progressLabel ?? active.length}',
+                          onLoadMore: widget.onLoadMore!,
                         ),
                       ],
                     ],
@@ -5079,26 +5058,13 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                           ),
                       if (widget.onLoadMore != null) ...[
                         const SizedBox(height: 12),
-                        Center(
-                          child: OutlinedButton.icon(
-                            onPressed: widget.loadingMore
-                                ? null
-                                : widget.onLoadMore,
-                            icon: widget.loadingMore
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.expand_more_rounded),
-                            label: Text(
-                              widget.loadingMore
-                                  ? 'Cargando...'
-                                  : 'Cargar mas (${widget.progressLabel ?? filtered.length})',
-                            ),
-                          ),
+                        LoadMoreFooter(
+                          loading: widget.loadingMore,
+                          hasMore: true,
+                          label: 'Ver más',
+                          progressLabel:
+                              'Mostrando ${widget.progressLabel ?? filtered.length}',
+                          onLoadMore: widget.onLoadMore!,
                         ),
                       ],
                     ],

@@ -16,6 +16,7 @@ import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 
 import '../../core/models/product_model.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/pagination/paged_list_controller.dart';
 
 import '../../core/printing/unified_ticket_printer.dart';
@@ -535,7 +536,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
     _removeSearchListener = _search.addListener(_onProductSearchChanged);
     _searchCtrl.addListener(_onSearchTextChanged);
-    _productScrollCtrl.addListener(_onProductScroll);
     WidgetsBinding.instance.addObserver(this);
     _subscribeRealtime();
     _startLiveSync();
@@ -559,14 +559,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   /// carrera: teclear no dispara una peticion por pulsacion.
   void _onSearchTextChanged() {
     _search.setQuery(_searchCtrl.text);
-  }
-
-  void _onProductScroll() {
-    if (!_productScrollCtrl.hasClients) return;
-    final position = _productScrollCtrl.position;
-    if (position.maxScrollExtent - position.pixels <= 400) {
-      unawaited(_search.loadMore());
-    }
   }
 
   /// Categorias reales del servidor: el conteo cubre el dataset completo, no
@@ -762,7 +754,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     _removeSearchListener = null;
     _search.dispose();
     _searchCtrl.removeListener(_onSearchTextChanged);
-    _productScrollCtrl.removeListener(_onProductScroll);
     _productScrollCtrl.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
@@ -1399,6 +1390,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final visible = _filteredProducts;
     final snapshot = _search.snapshot;
     final hasTextQuery = _searchCtrl.text.trim().isNotEmpty;
+    final categoryFilterKey = (_selectedCategories.toList()..sort()).join('|');
 
     if (visible.isEmpty) {
       if (snapshot.isInitialLoading) {
@@ -1471,37 +1463,44 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             ? 1.0
             : 1.08;
 
-        return GridView.builder(
-          controller: _productScrollCtrl,
-          padding: EdgeInsets.all(gridPadding),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: gridSpacing,
-            mainAxisSpacing: gridSpacing,
-            childAspectRatio: aspectRatio,
-          ),
-          itemCount: visible.length + (snapshot.isLoadingMore ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index >= visible.length) {
-              return const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+        return InfiniteScrollLoadMoreListener(
+          threshold: 400,
+          hasMore: snapshot.hasMore,
+          isLoadingMore: snapshot.isLoadingMore,
+          resetKeys: <Object?>[_searchCtrl.text.trim(), categoryFilterKey],
+          onLoadMore: () => unawaited(_search.loadMore()),
+          child: GridView.builder(
+            controller: _productScrollCtrl,
+            padding: EdgeInsets.all(gridPadding),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: gridSpacing,
+              mainAxisSpacing: gridSpacing,
+              childAspectRatio: aspectRatio,
+            ),
+            itemCount: visible.length + (snapshot.isLoadingMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= visible.length) {
+                return const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              final product = visible[index];
+              return _SaleProductGridCard(
+                product: product,
+                taxConfig: taxConfig,
+                money: _money,
+                mobileGrid: mobileGrid,
+                compactCard: compactCard,
+                showStockState: inventoryEnabled && product.isInventoryTracked,
+                onTap: () => unawaited(_addProduct(product)),
               );
-            }
-            final product = visible[index];
-            return _SaleProductGridCard(
-              product: product,
-              taxConfig: taxConfig,
-              money: _money,
-              mobileGrid: mobileGrid,
-              compactCard: compactCard,
-              showStockState: inventoryEnabled && product.isInventoryTracked,
-              onTap: () => unawaited(_addProduct(product)),
-            );
-          },
+            },
+          ),
         );
       },
     );
@@ -3129,15 +3128,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       ).showSnackBar(const SnackBar(content: Text('Cliente creado')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback:
-                  'No se pudo crear el cliente. Inténtalo nuevamente.',
+              fallback: 'No se pudo crear el cliente. Inténtalo nuevamente.',
             ),
           ),
         ),
@@ -3249,9 +3245,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(

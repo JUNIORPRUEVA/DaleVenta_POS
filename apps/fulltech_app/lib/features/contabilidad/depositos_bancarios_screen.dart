@@ -11,6 +11,7 @@ import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -171,14 +172,15 @@ class _DepositosBancariosScreenState
           );
       if (!mounted) return;
       final existingIds = _orders.map((item) => item.id).toSet();
-      final merged = [
-        ..._orders,
-        ...page.items.where((item) => !existingIds.contains(item.id)),
-      ]..sort((left, right) {
-          final byWindow = right.windowFrom.compareTo(left.windowFrom);
-          if (byWindow != 0) return byWindow;
-          return right.createdAt.compareTo(left.createdAt);
-        });
+      final merged =
+          [
+            ..._orders,
+            ...page.items.where((item) => !existingIds.contains(item.id)),
+          ]..sort((left, right) {
+            final byWindow = right.windowFrom.compareTo(left.windowFrom);
+            if (byWindow != 0) return byWindow;
+            return right.createdAt.compareTo(left.createdAt);
+          });
       setState(() {
         _orders = merged;
         _hasMore = page.hasMore;
@@ -1002,8 +1004,7 @@ class _DepositosBancariosScreenState
                 await _showSnack(
                   userSafeErrorMessage(
                     e,
-                    fallback:
-                        'No se pudo completar la operación del depósito.',
+                    fallback: 'No se pudo completar la operación del depósito.',
                   ),
                 );
               }
@@ -2299,17 +2300,11 @@ class _DepositosBancariosScreenState
           ],
         if (_hasMore || _loadingMore) ...[
           const SizedBox(height: 12),
-          Center(
-            child: _loadingMore
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: _loadMore,
-                    icon: const Icon(Icons.expand_more_rounded),
-                    label: const Text('Cargar mas depositos'),
-                  ),
+          LoadMoreFooter(
+            loading: _loadingMore,
+            hasMore: true,
+            label: 'Ver más',
+            onLoadMore: _loadMore,
           ),
         ],
       ],

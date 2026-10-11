@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/user_safe_error_text.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/time/business_time.dart';
@@ -1511,26 +1513,37 @@ class _CashExpensesHistoryScreenState
                                   detail:
                                       'Cuando registres gastos de caja aparecerán aquí.',
                                 )
-                              : ListView.separated(
-                                  itemCount:
-                                      _rows.length +
-                                      (_hasMore || _loadingMore ? 1 : 0),
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(height: 8),
-                                  itemBuilder: (context, index) {
-                                    if (index >= _rows.length) {
-                                      return _LoadMoreHistoryButton(
-                                        loading: _loadingMore,
-                                        label: _total == null
-                                            ? 'Cargar más gastos'
-                                            : 'Cargar más (${_rows.length}/$_total)',
-                                        onPressed: _loadMoreExpenses,
+                              : InfiniteScrollLoadMoreListener(
+                                  threshold: 520,
+                                  hasMore: _hasMore,
+                                  isLoadingMore: _loadingMore,
+                                  resetKeys: <Object?>[
+                                    _expenseDate?.toIso8601String(),
+                                    _searchController.text.trim(),
+                                  ],
+                                  onLoadMore: () =>
+                                      unawaited(_loadMoreExpenses()),
+                                  child: ListView.separated(
+                                    itemCount:
+                                        _rows.length +
+                                        (_hasMore || _loadingMore ? 1 : 0),
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 8),
+                                    itemBuilder: (context, index) {
+                                      if (index >= _rows.length) {
+                                        return _LoadMoreHistoryButton(
+                                          loading: _loadingMore,
+                                          label: _total == null
+                                              ? 'Cargar más gastos'
+                                              : 'Cargar más (${_rows.length}/$_total)',
+                                          onPressed: _loadMoreExpenses,
+                                        );
+                                      }
+                                      return _ExpenseHistoryRow(
+                                        row: _rows[index],
                                       );
-                                    }
-                                    return _ExpenseHistoryRow(
-                                      row: _rows[index],
-                                    );
-                                  },
+                                    },
+                                  ),
                                 ),
                         ),
                       ],
@@ -1905,27 +1918,39 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                           detail:
                               'Cuando cierres turnos de caja aparecerán aquí.',
                         )
-                      : ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount:
-                              visibleRows.length +
-                              (_hasMore || _loadingMore ? 1 : 0),
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            if (index >= visibleRows.length) {
-                              return _LoadMoreHistoryButton(
-                                loading: _loadingMore,
-                                label: _total == null
-                                    ? 'Cargar más turnos'
-                                    : 'Cargar más (${_rows.length}/$_total)',
-                                onPressed: _loadMoreTurns,
+                      : InfiniteScrollLoadMoreListener(
+                          threshold: 520,
+                          hasMore: _hasMore,
+                          isLoadingMore: _loadingMore,
+                          resetKeys: <Object?>[
+                            _selectedRange?.start.toIso8601String(),
+                            _selectedRange?.end.toIso8601String(),
+                            _statusFilter.name,
+                            _searchController.text.trim(),
+                          ],
+                          onLoadMore: () => unawaited(_loadMoreTurns()),
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            itemCount:
+                                visibleRows.length +
+                                (_hasMore || _loadingMore ? 1 : 0),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              if (index >= visibleRows.length) {
+                                return _LoadMoreHistoryButton(
+                                  loading: _loadingMore,
+                                  label: _total == null
+                                      ? 'Cargar más turnos'
+                                      : 'Cargar más (${_rows.length}/$_total)',
+                                  onPressed: _loadMoreTurns,
+                                );
+                              }
+                              return _TurnHistoryWideCard(
+                                row: visibleRows[index],
                               );
-                            }
-                            return _TurnHistoryWideCard(
-                              row: visibleRows[index],
-                            );
-                          },
+                            },
+                          ),
                         ),
                 ),
               ],
@@ -2318,21 +2343,13 @@ class _LoadMoreHistoryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: OutlinedButton.icon(
-          onPressed: loading ? null : onPressed,
-          icon: loading
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.expand_more_rounded),
-          label: Text(loading ? 'Cargando...' : label),
-        ),
-      ),
+    return LoadMoreFooter(
+      loading: loading,
+      hasMore: true,
+      label: 'Ver más',
+      progressLabel: label,
+      loadingLabel: 'Cargando...',
+      onLoadMore: onPressed,
     );
   }
 }

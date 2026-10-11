@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/user_safe_error_text.dart';
+import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/money_formatters.dart';
@@ -786,70 +788,64 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                             Center(child: Text('No hay clientes disponibles.')),
                           ],
                         )
-                      : ListView.separated(
-                          padding: EdgeInsets.fromLTRB(
-                            desktopLayout ? 14 : 14,
-                            desktopLayout ? 4 : 8,
-                            desktopLayout ? 14 : 14,
-                            24,
-                          ),
-                          itemCount: state.items.length + 1,
-                          separatorBuilder: (context, index) => Divider(
-                            height: 1,
-                            color: theme.colorScheme.outlineVariant.withValues(
-                              alpha: desktopLayout ? 0.48 : 0.35,
+                      : InfiniteScrollLoadMoreListener(
+                          hasMore: controller.hasMoreClients,
+                          isLoadingMore: state.refreshing,
+                          resetKeys: <Object?>[
+                            state.search.trim(),
+                            state.order,
+                            state.correoFilter,
+                            state.estadoFilter,
+                            state.ownerFilter,
+                          ],
+                          onLoadMore: () => unawaited(controller.loadMore()),
+                          child: ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              desktopLayout ? 14 : 14,
+                              desktopLayout ? 4 : 8,
+                              desktopLayout ? 14 : 14,
+                              24,
                             ),
-                          ),
-                          itemBuilder: (context, index) {
-                            if (index >= state.items.length) {
-                              // Pie de lista: la paginación se resuelve en el
-                              // SERVIDOR, así que al llegar al final se pide la
-                              // página siguiente en lugar de cortar en 100.
-                              if (controller.hasMoreClients) {
-                                if (!state.refreshing) {
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (mounted) {
-                                      unawaited(controller.loadMore());
-                                    }
-                                  });
-                                }
-                                return const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 18),
-                                  child: Center(
-                                    child: SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
+                            itemCount: state.items.length + 1,
+                            separatorBuilder: (context, index) => Divider(
+                              height: 1,
+                              color: theme.colorScheme.outlineVariant
+                                  .withValues(
+                                    alpha: desktopLayout ? 0.48 : 0.35,
                                   ),
+                            ),
+                            itemBuilder: (context, index) {
+                              if (index >= state.items.length) {
+                                return LoadMoreFooter(
+                                  loading: state.refreshing,
+                                  hasMore: controller.hasMoreClients,
+                                  label: 'Ver más',
+                                  loadingLabel: 'Cargando...',
+                                  doneLabel: 'Fin de la lista',
+                                  progressLabel:
+                                      'Mostrando ${state.items.length}',
+                                  onLoadMore: () =>
+                                      unawaited(controller.loadMore()),
                                 );
                               }
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 18),
-                                child: Center(child: Text('Fin de la lista')),
+                              final client = state.items[index];
+                              return _ClienteCard(
+                                client: client,
+                                compact: desktopLayout,
+                                selected:
+                                    desktopLayout &&
+                                    selectedClient?.id == client.id,
+                                onTap: desktopLayout
+                                    ? () => setState(() {
+                                        _selectedClientId = client.id;
+                                      })
+                                    : () => context.push(
+                                        Routes.clienteDetail(client.id),
+                                      ),
+                                onEdit: () => _openEditClientFlow(client),
                               );
-                            }
-                            final client = state.items[index];
-                            return _ClienteCard(
-                              client: client,
-                              compact: desktopLayout,
-                              selected:
-                                  desktopLayout &&
-                                  selectedClient?.id == client.id,
-                              onTap: desktopLayout
-                                  ? () => setState(() {
-                                      _selectedClientId = client.id;
-                                    })
-                                  : () => context.push(
-                                      Routes.clienteDetail(client.id),
-                                    ),
-                              onEdit: () => _openEditClientFlow(client),
-                            );
-                          },
+                            },
+                          ),
                         ),
                 ),
               ),

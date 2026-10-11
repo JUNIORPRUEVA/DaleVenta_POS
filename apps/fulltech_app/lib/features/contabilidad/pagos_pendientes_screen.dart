@@ -7,6 +7,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/errors/user_safe_error_text.dart';
+import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -114,10 +115,7 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     try {
       final page = await ref
           .read(contabilidadRepositoryProvider)
-          .listPayableServicesPage(
-            page: _nextServicesPage,
-            limit: _pageLimit,
-          );
+          .listPayableServicesPage(page: _nextServicesPage, limit: _pageLimit);
       if (!mounted) return;
       final existingIds = _services.map((item) => item.id).toSet();
       setState(() {
@@ -150,10 +148,7 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
     try {
       final page = await ref
           .read(contabilidadRepositoryProvider)
-          .listPayablePaymentsPage(
-            page: _nextPaymentsPage,
-            limit: _pageLimit,
-          );
+          .listPayablePaymentsPage(page: _nextPaymentsPage, limit: _pageLimit);
       if (!mounted) return;
       final existingIds = _payments.map((item) => item.id).toSet();
       setState(() {
@@ -588,8 +583,7 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                   await _showSnack(
                     userSafeErrorMessage(
                       e,
-                      fallback:
-                          'No se pudo registrar. Inténtalo nuevamente.',
+                      fallback: 'No se pudo registrar. Inténtalo nuevamente.',
                     ),
                   );
                 }
@@ -1205,17 +1199,11 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
           ),
         if (_hasMoreServices || _loadingMoreServices) ...[
           const SizedBox(height: 10),
-          Center(
-            child: _loadingMoreServices
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: _loadMoreServices,
-                    icon: const Icon(Icons.expand_more_rounded),
-                    label: const Text('Cargar mas servicios'),
-                  ),
+          LoadMoreFooter(
+            loading: _loadingMoreServices,
+            hasMore: true,
+            label: 'Ver más',
+            onLoadMore: _loadMoreServices,
           ),
         ],
         const SizedBox(height: 24),
@@ -1308,17 +1296,11 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
         }),
         if (_hasMorePayments || _loadingMorePayments) ...[
           const SizedBox(height: 10),
-          Center(
-            child: _loadingMorePayments
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : OutlinedButton.icon(
-                    onPressed: _loadMorePayments,
-                    icon: const Icon(Icons.expand_more_rounded),
-                    label: const Text('Cargar mas pagos'),
-                  ),
+          LoadMoreFooter(
+            loading: _loadingMorePayments,
+            hasMore: true,
+            label: 'Ver más',
+            onLoadMore: _loadMorePayments,
           ),
         ],
       ],
