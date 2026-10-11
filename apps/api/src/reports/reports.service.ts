@@ -976,7 +976,7 @@ export class ReportsService {
     sellerUserId: string | null;
   }): Promise<SalesOverviewFinancialSummary> {
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await (
       this.prisma as unknown as {
@@ -1011,7 +1011,7 @@ export class ReportsService {
       WITH invoice_sales AS (
         SELECT s.*
         FROM "Sale" s
-        WHERE s."company_id" = ${params.companyId}::uuid
+        WHERE s."company_id" = CAST(${params.companyId} AS uuid)
           AND s."kind" = 'invoice'
           AND s."saleDate" >= ${params.range.gte as Date}
           AND s."saleDate" < ${params.range.lt as Date}
@@ -1040,7 +1040,7 @@ export class ReportsService {
           COALESCE(SUM(cp."cashAmount"), 0) AS "creditCash",
           COALESCE(SUM(cp."transferAmount"), 0) AS "creditTransfer"
         FROM "sale_credit_payments" cp
-        WHERE cp."company_id" = ${params.companyId}::uuid
+        WHERE cp."company_id" = CAST(${params.companyId} AS uuid)
         GROUP BY cp."saleId"
       ),
       per_sale AS (
@@ -1070,7 +1070,7 @@ export class ReportsService {
       cancelled_in_range AS (
         SELECT s."id"
         FROM "Sale" s
-        WHERE s."company_id" = ${params.companyId}::uuid
+        WHERE s."company_id" = CAST(${params.companyId} AS uuid)
           AND s."kind" = 'invoice'
           AND s."isDeleted" = true
           AND s."deletedAt" >= ${params.range.gte as Date}
@@ -1080,7 +1080,7 @@ export class ReportsService {
       refund_documents_all AS (
         SELECT s."id", s."refunded_sale_id"
         FROM "Sale" s
-        WHERE s."company_id" = ${params.companyId}::uuid
+        WHERE s."company_id" = CAST(${params.companyId} AS uuid)
           AND s."kind" = 'refund'
           AND s."isDeleted" = false
           AND s."saleDate" >= ${params.range.gte as Date}
@@ -1290,7 +1290,7 @@ export class ReportsService {
           SUM(CASE WHEN p."costo" <= 0 THEN 1 ELSE 0 END) AS "productsWithoutCost"
         FROM "Product" p
         LEFT JOIN "unit_of_measures" u ON u."id" = p."unit_of_measure_id"
-        WHERE p."company_id" = ${companyId}::uuid
+        WHERE p."company_id" = CAST(${companyId} AS uuid)
           AND p."item_type" = CAST(${ProductItemType.PRODUCT} AS "product_item_type")
           AND p."track_inventory" = true
           ${categoryFilter}
@@ -1338,7 +1338,7 @@ export class ReportsService {
 
     if (!params.selectedCategory && typeof delegate.$queryRaw === "function") {
       const sellerFilter = params.sellerUserId
-        ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
+        ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
         : Prisma.empty;
       const rows = await delegate.$queryRaw<
         Array<{
@@ -1357,7 +1357,7 @@ export class ReportsService {
           COUNT(*) AS "rowCount"
         FROM "sale_credit_payments" cp
         INNER JOIN "Sale" s ON s."id" = cp."saleId"
-        WHERE cp."company_id" = ${params.companyId}::uuid
+        WHERE cp."company_id" = CAST(${params.companyId} AS uuid)
           AND cp."paidAt" >= ${params.range.gte as Date}
           AND cp."paidAt" < ${params.range.lt as Date}
           ${sellerFilter}
@@ -1441,7 +1441,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1461,7 +1461,7 @@ export class ReportsService {
           COALESCE(SUM(si."subtotalSold"), 0) AS "saleTotal"
         FROM "Sale" s
         LEFT JOIN "SaleItem" si ON si."saleId" = s."id"
-        WHERE s."company_id" = ${params.companyId}::uuid
+        WHERE s."company_id" = CAST(${params.companyId} AS uuid)
           AND s."kind" = 'invoice'
           AND s."saleDate" >= ${params.range.gte as Date}
           AND s."saleDate" < ${params.range.lt as Date}
@@ -1490,7 +1490,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1515,7 +1515,7 @@ export class ReportsService {
         COALESCE(SUM(si."profit"), 0) AS "totalProfit"
       FROM "SaleItem" si
       INNER JOIN "Sale" s ON s."id" = si."saleId"
-      WHERE s."company_id" = ${params.companyId}::uuid
+      WHERE s."company_id" = CAST(${params.companyId} AS uuid)
         AND s."kind" = 'invoice'
         AND s."saleDate" >= ${params.range.gte as Date}
         AND s."saleDate" < ${params.range.lt as Date}
@@ -1571,7 +1571,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1586,7 +1586,7 @@ export class ReportsService {
         COALESCE(SUM(si."profit"), 0) AS "profit"
       FROM "Sale" s
       LEFT JOIN "SaleItem" si ON si."saleId" = s."id"
-      WHERE s."company_id" = ${params.companyId}::uuid
+      WHERE s."company_id" = CAST(${params.companyId} AS uuid)
         AND s."kind" = 'invoice'
         AND s."saleDate" >= ${params.range.gte as Date}
         AND s."saleDate" < ${params.range.lt as Date}
@@ -1616,7 +1616,7 @@ export class ReportsService {
     };
     if (typeof delegate.$queryRaw !== "function") return null;
     const sellerFilter = params.sellerUserId
-      ? Prisma.sql`AND s."userId" = ${params.sellerUserId}::uuid`
+      ? Prisma.sql`AND s."userId" = CAST(${params.sellerUserId} AS uuid)`
       : Prisma.empty;
     const rows = await delegate.$queryRaw<
       Array<{
@@ -1648,7 +1648,7 @@ export class ReportsService {
         FROM "SaleItem" si
         INNER JOIN "Sale" s ON s."id" = si."saleId"
         LEFT JOIN "Product" p ON p."id" = si."productId"
-        WHERE s."company_id" = ${params.companyId}::uuid
+        WHERE s."company_id" = CAST(${params.companyId} AS uuid)
           AND s."kind" = 'invoice'
           AND s."saleDate" >= ${params.range.gte as Date}
           AND s."saleDate" < ${params.range.lt as Date}
@@ -1741,7 +1741,7 @@ export class ReportsService {
     ).$queryRaw<Array<{ category: string | null }>>(Prisma.sql`
       SELECT DISTINCT COALESCE(NULLIF(btrim("categoria"), ''), 'Sin categoria') AS "category"
       FROM "Product"
-      WHERE "company_id" = ${companyId}::uuid
+      WHERE "company_id" = CAST(${companyId} AS uuid)
         AND "item_type" = CAST(${ProductItemType.PRODUCT} AS "product_item_type")
         AND "track_inventory" = true
       ORDER BY "category" ASC

@@ -508,6 +508,95 @@ describe("ReportsService", () => {
     ]);
   });
 
+  it("castea filtros raw uuid de empresa y vendedor para reportes agregados", async () => {
+    const capturedSql: string[] = [];
+    const queryRaw = jest.fn((query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join("") ?? "";
+      capturedSql.push(sql);
+      if (sql.includes("invoice_sales AS")) {
+        return Promise.resolve([
+          {
+            totalSales: 0,
+            saleItemRows: 0,
+            totalSold: decimal(0),
+            totalCost: decimal(0),
+            totalProfit: decimal(0),
+            totalCommission: decimal(0),
+            taxableBase: decimal(0),
+            taxAmount: decimal(0),
+            exemptAmount: decimal(0),
+            discountAmount: decimal(0),
+            initialCash: decimal(0),
+            initialTransfer: decimal(0),
+            initialCashOperations: 0,
+            initialTransferOperations: 0,
+            paymentBreakdownViolations: 0,
+            zeroCostItems: 0,
+            zeroCostSoldAmount: decimal(0),
+            returnCount: 0,
+            returnedAmount: decimal(0),
+            returnedCost: decimal(0),
+            returnedProfit: decimal(0),
+            refundDocumentRows: 0,
+          },
+        ]);
+      }
+      if (sql.includes("FROM \"sale_credit_payments\" cp")) {
+        return Promise.resolve([
+          {
+            cash: decimal(0),
+            transfer: decimal(0),
+            cashOperations: 0,
+            transferOperations: 0,
+            rowCount: 0,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const service = serviceWith({
+      ...emptyPrisma(jest.fn()),
+      $queryRaw: queryRaw,
+      cashMovement: {
+        groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn(),
+      },
+    });
+
+    await service.salesOverview(
+      {
+        ...user,
+        id: "22222222-2222-2222-2222-222222222222",
+        role: "VENDEDOR",
+      } as never,
+      {
+        from: "2026-08-01",
+        to: "2026-08-22",
+      },
+    );
+
+    const sellerFilters = capturedSql.filter((sql) =>
+      sql.includes('s."userId"'),
+    );
+    expect(sellerFilters.length).toBeGreaterThan(0);
+    expect(sellerFilters).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('s."userId" = CAST('),
+      ]),
+    );
+    for (const sql of sellerFilters) {
+      expect(sql).toContain(" AS uuid)");
+    }
+    const companyFilters = capturedSql.filter((sql) =>
+      sql.includes('"company_id"'),
+    );
+    expect(companyFilters.length).toBeGreaterThan(0);
+    for (const sql of companyFilters) {
+      expect(sql).toContain('"company_id" = CAST(');
+      expect(sql).toContain(" AS uuid)");
+    }
+  });
+
   it("agrega abonos de credito del periodo en base de datos sin materializarlos", async () => {
     const findMany = jest
       .fn()
