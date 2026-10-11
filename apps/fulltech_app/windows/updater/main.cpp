@@ -60,6 +60,12 @@ bool StartsWithPath(const std::wstring& child, const std::wstring& root) {
   return c == ToLower(root) || c.rfind(r, 0) == 0;
 }
 
+bool EndsWith(const std::wstring& value, const std::wstring& suffix) {
+  if (suffix.size() > value.size()) return false;
+  return ToLower(value.substr(value.size() - suffix.size())) ==
+         ToLower(suffix);
+}
+
 std::wstring StripDevicePrefix(std::wstring path) {
   const std::wstring prefix = L"\\\\?\\";
   if (path.rfind(prefix, 0) == 0) return path.substr(prefix.size());
@@ -343,6 +349,55 @@ Result ValidatePackage(const Options& options) {
   return {L"SUCCESS", 0};
 }
 
+Result PrepareExecutablePackage(const Options& options,
+                                std::wstring* executable_path,
+                                bool* staged_copy) {
+  *staged_copy = false;
+  std::wstring source;
+  std::wstring root;
+  if (!CanonicalizeExistingPath(options.package_path, false, &source) ||
+      !CanonicalizeExistingPath(options.update_root, true, &root)) {
+    return {L"INVALID_PATH", 2};
+  }
+  if (!StartsWithPath(source, root)) return {L"PACKAGE_OUTSIDE_ROOT", 3};
+  if (EndsWith(source, L".exe")) {
+    *executable_path = source;
+    return {L"SUCCESS", 0};
+  }
+
+  std::wstring staged = source;
+  if (EndsWith(staged, L".ready")) {
+    staged = staged.substr(0, staged.size() - std::wstring(L".ready").size());
+  } else {
+    staged += L".exe";
+  }
+  if (!EndsWith(staged, L".exe")) staged += L".exe";
+
+  AppendLog(options, L"installer executable staging started");
+  if (!CopyFileW(source.c_str(), staged.c_str(), FALSE)) {
+    DWORD error = GetLastError();
+    AppendLog(options, std::wstring(L"installer executable staging failed error=") +
+                           std::to_wstring(error));
+    return {L"STAGING_FAILED", error};
+  }
+
+  std::wstring canonical_staged;
+  if (!CanonicalizeExistingPath(staged, false, &canonical_staged) ||
+      !StartsWithPath(canonical_staged, root)) {
+    DeleteFileW(staged.c_str());
+    return {L"PACKAGE_OUTSIDE_ROOT", 3};
+  }
+  if (!VerifySha256(canonical_staged, options.expected_sha256)) {
+    DeleteFileW(staged.c_str());
+    return {L"HASH_MISMATCH", 4};
+  }
+
+  *executable_path = canonical_staged;
+  *staged_copy = true;
+  AppendLog(options, L"installer executable staging ready");
+  return {L"SUCCESS", 0};
+}
+
 void PrintResult(const Result& result) {
   std::wprintf(L"RESULT=%ls\n", result.code.c_str());
 }
@@ -378,6 +433,12 @@ void WaitForMutex(const Options& options) {
 }
 
 Result RunInstaller(const Options& options) {
+  std::wstring executable_path;
+  bool staged_copy = false;
+  Result staging_result =
+      PrepareExecutablePackage(options, &executable_path, &staged_copy);
+  if (staging_result.code != L"SUCCESS") return staging_result;
+
   std::wstring inno_log = options.log_path + L".inno.log";
   std::wstring params = L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG=\"" +
                         inno_log + L"\"";
@@ -385,12 +446,13 @@ Result RunInstaller(const Options& options) {
   info.cbSize = sizeof(info);
   info.fMask = SEE_MASK_NOCLOSEPROCESS;
   info.lpVerb = L"runas";
-  info.lpFile = options.package_path.c_str();
+  info.lpFile = executable_path.c_str();
   info.lpParameters = params.c_str();
   info.nShow = SW_SHOWNORMAL;
   AppendLog(options, L"installer start requested");
   if (!ShellExecuteExW(&info)) {
     DWORD error = GetLastError();
+    if (staged_copy) DeleteFileW(executable_path.c_str());
     if (error == ERROR_CANCELLED) {
       AppendLog(options, L"uac result=cancelled");
       return {L"UAC_CANCELLED", error};
@@ -403,6 +465,10 @@ Result RunInstaller(const Options& options) {
   DWORD exit_code = 1;
   GetExitCodeProcess(info.hProcess, &exit_code);
   CloseHandle(info.hProcess);
+  if (staged_copy && !DeleteFileW(executable_path.c_str())) {
+    AppendLog(options, std::wstring(L"installer executable cleanup failed error=") +
+                           std::to_wstring(GetLastError()));
+  }
   AppendLog(options, std::wstring(L"installer exit code=") +
                          std::to_wstring(exit_code));
   if (exit_code == 0) return {L"SUCCESS", 0};

@@ -52,6 +52,11 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
         'No se encontró el actualizador seguro de Windows.',
       );
     }
+    final stagedUpdater = await _stageUpdaterExecutable(
+      updater: updater,
+      updateRoot: updateRoot,
+      targetBuild: targetBuild,
+    );
 
     final logPath = _updateLogPath(targetBuild);
     await File(logPath).parent.create(recursive: true);
@@ -78,7 +83,7 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
 
     TraceLog.log('AppUpdate', 'launching FullposUpdater.exe');
     await Process.start(
-      updater.path,
+      stagedUpdater.path,
       args,
       mode: ProcessStartMode.detached,
       runInShell: false,
@@ -115,6 +120,22 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
         'updates',
       ),
     );
+  }
+
+  Future<File> _stageUpdaterExecutable({
+    required File updater,
+    required Directory updateRoot,
+    required int targetBuild,
+  }) async {
+    final targetDirectory = Directory(p.join(updateRoot.path, '$targetBuild'));
+    await targetDirectory.create(recursive: true);
+    final stagedUpdater = File(
+      p.join(targetDirectory.path, 'FullposUpdater.exe'),
+    );
+    if (await stagedUpdater.exists()) {
+      await stagedUpdater.delete();
+    }
+    return updater.copy(stagedUpdater.path);
   }
 
   File _resolveUpdaterExecutable() {

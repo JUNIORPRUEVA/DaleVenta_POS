@@ -724,7 +724,7 @@ class _ServiceOrdersListScreenState
                           return LoadMoreFooter(
                             loading: state.loadingMore,
                             hasMore: true,
-                            label: 'Ver más',
+                            label: 'Cargar mas ordenes',
                             onLoadMore: () => unawaited(controller.loadMore()),
                           );
                         }

@@ -7,11 +7,14 @@ import { AppUpdatesService } from "./app-updates.service";
 describe("AppUpdatesController", () => {
   let app: INestApplication;
   const check = jest.fn().mockResolvedValue({ updateAvailable: false });
+  const usesPrivateUpdateCheckCache = jest.fn().mockReturnValue(false);
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AppUpdatesController],
-      providers: [{ provide: AppUpdatesService, useValue: { check } }],
+      providers: [
+        { provide: AppUpdatesService, useValue: { check, usesPrivateUpdateCheckCache } },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication();
@@ -31,6 +34,8 @@ describe("AppUpdatesController", () => {
 
   beforeEach(() => {
     check.mockClear();
+    usesPrivateUpdateCheckCache.mockClear();
+    usesPrivateUpdateCheckCache.mockReturnValue(false);
   });
 
   it("accepts a valid public unauthenticated request and sets short cache headers", async () => {
@@ -45,6 +50,41 @@ describe("AppUpdatesController", () => {
       { platform: "windows", channel: "stable", version: "1.0.6", build: 130 },
       expect.any(String),
     );
+  });
+
+  it("accepts an optional deviceId for future targeted clients", async () => {
+    await request(app.getHttpServer())
+      .get("/api/app-updates/check")
+      .query({
+        platform: "windows",
+        channel: "stable",
+        version: "1.0.6",
+        build: "130",
+        deviceId: "install-123",
+      })
+      .expect(200);
+
+    expect(check).toHaveBeenCalledWith(
+      {
+        platform: "windows",
+        channel: "stable",
+        version: "1.0.6",
+        build: 130,
+        deviceId: "install-123",
+      },
+      expect.any(String),
+    );
+  });
+
+  it("uses private no-store cache headers while pilot targeting is configured", async () => {
+    usesPrivateUpdateCheckCache.mockReturnValue(true);
+
+    const response = await request(app.getHttpServer())
+      .get("/api/app-updates/check")
+      .query({ platform: "windows", channel: "stable", version: "1.0.6", build: "130" })
+      .expect(200);
+
+    expect(response.headers["cache-control"]).toBe("private, no-store");
   });
 
   it("returns 400 for malformed build", async () => {

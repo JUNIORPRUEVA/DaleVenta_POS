@@ -8,9 +8,10 @@ final updatePersistenceProvider = Provider<UpdatePersistence>((ref) {
 });
 
 class UpdatePersistence {
-  const UpdatePersistence(this._store);
+  UpdatePersistence(this._store);
 
   final UpdateStateFileStore _store;
+  Future<void> _lastSave = Future<void>.value();
 
   Future<PersistedUpdateState> load() async {
     try {
@@ -25,6 +26,12 @@ class UpdatePersistence {
   }
 
   Future<void> save(PersistedUpdateState state) {
-    return _store.writeJson(state.toJson());
+    final nextSave = _lastSave
+        .catchError((_) {
+          return null;
+        })
+        .then((_) => _store.writeJson(state.toJson()));
+    _lastSave = nextSave;
+    return nextSave;
   }
 }

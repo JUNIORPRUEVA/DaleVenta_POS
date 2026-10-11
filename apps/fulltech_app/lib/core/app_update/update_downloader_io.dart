@@ -58,12 +58,18 @@ class UpdateInstallerResult {
 }
 
 class UpdateDownloader {
-  UpdateDownloader({Dio? dio, Directory? rootDirectory})
-    : _dio = dio,
-      _rootDirectory = rootDirectory;
+  UpdateDownloader({
+    Dio? dio,
+    Directory? rootDirectory,
+    Duration? streamIdleTimeout,
+  }) : _dio = dio,
+       _rootDirectory = rootDirectory,
+       _streamIdleTimeout =
+           streamIdleTimeout ?? Duration(milliseconds: Env.apiTimeoutMs);
 
   final Dio? _dio;
   final Directory? _rootDirectory;
+  final Duration _streamIdleTimeout;
 
   Future<UpdateDownloadResult> download(
     UpdateManifest manifest, {
@@ -96,6 +102,13 @@ class UpdateDownloader {
     IOSink? sink;
     var bytesDownloaded = 0;
 
+    Future<void> closeSinkIfOpen() async {
+      final openSink = sink;
+      if (openSink == null) return;
+      sink = null;
+      await openSink.close();
+    }
+
     try {
       final response = await dio.get<ResponseBody>(
         url.toString(),
@@ -114,9 +127,11 @@ class UpdateDownloader {
         );
       }
 
-      sink = partFile.openWrite();
-      await for (final chunk in response.data!.stream) {
-        sink.add(chunk);
+      final outputSink = partFile.openWrite();
+      sink = outputSink;
+      final stream = response.data!.stream.timeout(_streamIdleTimeout);
+      await for (final chunk in stream) {
+        outputSink.add(chunk);
         bytesDownloaded += chunk.length;
         onProgress?.call(
           UpdateDownloadProgress(
@@ -125,8 +140,8 @@ class UpdateDownloader {
           ),
         );
       }
-      await sink.flush();
-      await sink.close();
+      await outputSink.flush();
+      await outputSink.close();
       sink = null;
 
       final actualSize = await partFile.length();
@@ -146,9 +161,15 @@ class UpdateDownloader {
     } on UpdateDownloadException {
       rethrow;
     } on FileSystemException catch (error) {
+      await closeSinkIfOpen();
       await _deleteIfExists(partFile);
       throw UpdateDownloadException('DISK_WRITE_FAILED', error);
+    } on TimeoutException catch (error) {
+      await closeSinkIfOpen();
+      await _deleteIfExists(partFile);
+      throw UpdateDownloadException('DOWNLOAD_TIMEOUT', error);
     } on DioException catch (error) {
+      await closeSinkIfOpen();
       await _deleteIfExists(partFile);
       final statusCode = error.response?.statusCode;
       if (error.type == DioExceptionType.connectionTimeout ||
@@ -161,12 +182,11 @@ class UpdateDownloader {
         error,
       );
     } catch (error) {
+      await closeSinkIfOpen();
       await _deleteIfExists(partFile);
       throw UpdateDownloadException('DOWNLOAD_FAILED', error);
     } finally {
-      if (sink != null) {
-        await sink.close();
-      }
+      await closeSinkIfOpen();
       if (_dio == null) dio.close(force: true);
     }
   }

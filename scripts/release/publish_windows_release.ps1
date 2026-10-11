@@ -6,7 +6,8 @@ param(
   [switch]$ConfirmPublish,
   [switch]$DryRun,
   [switch]$RetentionDryRun,
-  [switch]$AllowUnsignedUat
+  [switch]$AllowUnsignedUat,
+  [switch]$AllowUnsignedProduction
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,34 @@ $ErrorActionPreference = 'Stop'
 function Write-Step {
   param([string]$Message)
   Write-Host "[fullpos-release-publish] $Message"
+}
+
+function Test-TruthyEnv {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+  return @('1', 'true', 'yes') -contains $Value.Trim().ToLowerInvariant()
+}
+
+function Assert-SignaturePolicy {
+  param(
+    [string]$SignatureStatus,
+    [switch]$AllowUnsignedUat,
+    [switch]$AllowUnsignedProduction
+  )
+
+  if ($SignatureStatus -eq 'Valid') { return 'SIGNED' }
+
+  if ($AllowUnsignedProduction) {
+    Write-Warning 'UNSIGNED PRODUCTION OVERRIDE ACTIVE. This is a temporary owner-approved exception; HTTPS, SHA256, size, version, channel, and release-record validation remain mandatory.'
+    return 'UNSIGNED_PRODUCTION_OVERRIDE'
+  }
+
+  if ($AllowUnsignedUat) {
+    Write-Warning 'Unsigned UAT release exception active. Do not use this flag for production stable releases.'
+    return 'UNSIGNED_UAT_OVERRIDE'
+  }
+
+  throw "Downloaded installer is not Authenticode-valid. Signature=$SignatureStatus. Use -AllowUnsignedProduction only for explicit owner-approved production exception, or -AllowUnsignedUat only for local/UAT."
 }
 
 function Invoke-JsonApi {
@@ -44,7 +73,9 @@ function Assert-DownloadedArtifact {
   param(
     [string]$DownloadUrl,
     [string]$ExpectedSha256,
-    [long]$ExpectedSize
+    [long]$ExpectedSize,
+    [switch]$AllowUnsignedUat,
+    [switch]$AllowUnsignedProduction
   )
   $temp = Join-Path ([IO.Path]::GetTempPath()) ("fullpos-publish-" + [Guid]::NewGuid() + ".exe")
   try {
@@ -58,10 +89,14 @@ function Assert-DownloadedArtifact {
       throw "Downloaded artifact SHA256 mismatch."
     }
     $signature = Get-AuthenticodeSignature -LiteralPath $temp
-    if ($signature.Status -ne 'Valid' -and -not $AllowUnsignedUat) {
-      throw 'Downloaded installer is not Authenticode-valid. Use -AllowUnsignedUat only for explicit local/UAT exception.'
+    $policy = Assert-SignaturePolicy `
+      -SignatureStatus ([string]$signature.Status) `
+      -AllowUnsignedUat:$AllowUnsignedUat `
+      -AllowUnsignedProduction:$AllowUnsignedProduction
+    return [pscustomobject]@{
+      Status = [string]$signature.Status
+      Policy = $policy
     }
-    return [string]$signature.Status
   } finally {
     Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
   }
@@ -72,6 +107,9 @@ if ([string]::IsNullOrWhiteSpace($ApiToken)) { throw 'ApiToken is required; it w
 if (-not $ConfirmPublish -and -not $DryRun) {
   throw 'Publishing requires explicit -ConfirmPublish. Run prepare_windows_release.ps1 first; publish is intentionally separate.'
 }
+
+$envAllowsUnsignedProduction = Test-TruthyEnv $env:FULLPOS_ALLOW_UNSIGNED_PRODUCTION_RELEASE
+$allowUnsignedProductionEffective = [bool]$AllowUnsignedProduction -or $envAllowsUnsignedProduction
 
 $base = $ApiBaseUrl.TrimEnd('/')
 $release = Invoke-JsonApi -Method GET -Url "$base/api/app-updates/releases/$ReleaseId" -ApiToken $ApiToken
@@ -90,12 +128,15 @@ Write-Step "Release: $($release.version)+$($release.buildNumber) id=$($release.i
 Write-Step "Artifact: $($release.fileName)"
 Write-Step "Storage key: $($release.storageKey)"
 
-$signatureStatus = Assert-DownloadedArtifact `
+$signatureReport = Assert-DownloadedArtifact `
   -DownloadUrl $release.downloadUrl `
   -ExpectedSha256 $release.sha256 `
-  -ExpectedSize ([long]$release.fileSize)
+  -ExpectedSize ([long]$release.fileSize) `
+  -AllowUnsignedUat:$AllowUnsignedUat `
+  -AllowUnsignedProduction:$allowUnsignedProductionEffective
 
-Write-Step "Downloaded artifact verified. Signature=$signatureStatus"
+Write-Step "Downloaded artifact verified. Signature=$($signatureReport.Status)"
+Write-Step "Signature policy: $($signatureReport.Policy)"
 
 if ($DryRun) {
   $checkBuild = [Math]::Max(0, [int]$release.buildNumber - 1)
@@ -113,7 +154,10 @@ if ($DryRun) {
     fileName = $release.fileName
     fileSize = $release.fileSize
     sha256 = $release.sha256
-    signatureStatus = $signatureStatus
+    signatureStatus = $signatureReport.Status
+    signaturePolicy = $signatureReport.Policy
+    unsignedProductionOverride = $(if ($allowUnsignedProductionEffective) { 'YES' } else { 'NO' })
+    defaultUnsignedProductionAllowed = 'NO'
     storageKey = $release.storageKey
     downloadUrl = $release.downloadUrl
     publishPayload = (@{ retentionDryRun = [bool]$RetentionDryRun } | ConvertTo-Json -Depth 4)

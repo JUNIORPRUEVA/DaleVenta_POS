@@ -22,14 +22,34 @@ function release(overrides: Record<string, unknown> = {}) {
 
 function buildService(releases: ReturnType<typeof release>[]) {
   const findMany = jest.fn().mockResolvedValue(releases);
+  const env: Record<string, string> = {};
   const service = new AppUpdatesService({
     appRelease: { findMany },
-  } as any, { get: jest.fn() } as any, { deleteObject: jest.fn() } as any);
+  } as any, { get: jest.fn((key: string) => env[key]) } as any, { deleteObject: jest.fn() } as any);
 
   jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
   jest.spyOn((service as any).logger, "error").mockImplementation(() => undefined);
 
-  return { service, findMany };
+  return { service, findMany, env };
+}
+
+function pilotRelease(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    platform: "windows",
+    channel: "stable",
+    version: "1.0.6",
+    buildNumber: 135,
+    fileName: "FullPOS-Setup-1.0.6-135.exe",
+    fileSize: 40174433,
+    sha256: "f".repeat(64),
+    downloadUrl: "https://downloads.example.com/FullPOS-Setup-1.0.6-135.exe",
+    mandatory: false,
+    minimumSupportedBuild: null,
+    releaseNotes: [],
+    publishedAt: "2026-10-11T12:00:00.000Z",
+    signed: false,
+    ...overrides,
+  });
 }
 
 const query = {
@@ -199,5 +219,90 @@ describe("AppUpdatesService", () => {
     expect(result).not.toHaveProperty("channel");
     expect(result).not.toHaveProperty("createdAt");
     expect(result).not.toHaveProperty("updatedAt");
+  });
+
+  it("does not expose a configured pilot release to a normal client", async () => {
+    const { service, env } = buildService([]);
+    env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(service.check({ ...query, build: 133 }, "normal-client")).resolves.toEqual({
+      updateAvailable: false,
+    });
+  });
+
+  it("returns a configured pilot release to an allowlisted client", async () => {
+    const { service, env } = buildService([]);
+    env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(service.check({ ...query, build: 133 }, "pilot-client")).resolves.toMatchObject({
+      updateAvailable: true,
+      version: "1.0.6",
+      buildNumber: 135,
+      fileSize: 40174433,
+      sha256: "f".repeat(64),
+      downloadUrl: "https://downloads.example.com/FullPOS-Setup-1.0.6-135.exe",
+    });
+  });
+
+  it("does not offer the pilot release again after the client reaches the pilot build", async () => {
+    const { service, env } = buildService([]);
+    env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(service.check({ ...query, build: 135 }, "pilot-client")).resolves.toEqual({
+      updateAvailable: false,
+    });
+  });
+
+  it("supports optional deviceId allowlisting without requiring it for old clients", async () => {
+    const { service, env } = buildService([]);
+    env.FULLPOS_UPDATE_PILOT_DEVICE_IDS = "install-123";
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(
+      service.check({ ...query, build: 133, deviceId: "install-123" }, "normal-client"),
+    ).resolves.toMatchObject({
+      updateAvailable: true,
+      buildNumber: 135,
+    });
+    await expect(service.check({ ...query, build: 133 }, "normal-client")).resolves.toEqual({
+      updateAvailable: false,
+    });
+  });
+
+  it("keeps the current behavior when the pilot allowlist is empty", async () => {
+    const { service, env } = buildService([release({ buildNumber: 131 })]);
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(service.check(query, "pilot-client")).resolves.toMatchObject({
+      updateAvailable: true,
+      buildNumber: 131,
+    });
+  });
+
+  it("keeps future global stable releases available to normal clients", async () => {
+    const { service, env } = buildService([release({ buildNumber: 140, version: "1.0.9" })]);
+    env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(service.check({ ...query, build: 133 }, "normal-client")).resolves.toMatchObject({
+      updateAvailable: true,
+      buildNumber: 140,
+      version: "1.0.9",
+    });
+  });
+
+  it("prefers a higher global release over a lower pilot release", async () => {
+    const { service, env } = buildService([release({ buildNumber: 140, version: "1.0.9" })]);
+    env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
+    env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
+
+    await expect(service.check({ ...query, build: 133 }, "pilot-client")).resolves.toMatchObject({
+      updateAvailable: true,
+      buildNumber: 140,
+      version: "1.0.9",
+    });
   });
 });

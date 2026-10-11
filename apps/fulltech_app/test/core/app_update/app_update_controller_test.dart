@@ -84,6 +84,38 @@ void main() {
       expect(controller.state.phase, AppUpdatePhase.idle);
     });
 
+    test(
+      'UAT 132 to 135 downloads once and installed 135 is not reoffered',
+      () async {
+        final controller = _controller(
+          manifest: UpdateManifest.fromJson(_manifestJson(build: 135)),
+          installedBuild: 132,
+        );
+
+        await controller.checkNow(force: true);
+        await _drainBackgroundUpdate();
+        await _drainBackgroundUpdate();
+
+        expect(controller.state.phase, AppUpdatePhase.readyToInstall);
+        expect(controller.state.persisted.targetBuild, 135);
+        expect(controller.state.persisted.sha256Expected, _sha);
+        expect(
+          controller.state.persisted.artifactRelativePath,
+          contains('135'),
+        );
+
+        final sameBuildController = _controller(
+          manifest: UpdateManifest.fromJson(_manifestJson(build: 135)),
+          installedBuild: 135,
+        );
+
+        await sameBuildController.checkNow(force: true);
+
+        expect(sameBuildController.state.phase, AppUpdatePhase.idle);
+        expect(sameBuildController.state.persisted.targetBuild, isNull);
+      },
+    );
+
     test('lower build never downgrades', () async {
       final controller = _controller(
         manifest: UpdateManifest.fromJson(_manifestJson(build: 129)),

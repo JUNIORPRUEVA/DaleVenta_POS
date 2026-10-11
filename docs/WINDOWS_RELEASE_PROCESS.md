@@ -77,6 +77,31 @@ is not `Authenticode Valid`, the build aborts. UAT may use unsigned artifacts
 only when the UAT policy explicitly passes the unsigned exception flags in the
 prepare/publish flow.
 
+### Temporary Unsigned Production Exception
+
+Production Windows releases are signed by default. An unsigned Windows/STABLE
+production release is blocked unless the owner explicitly approves a temporary
+exception for that specific release.
+
+The production override is intentionally separate from UAT:
+
+- default behavior: unsigned stable release is blocked;
+- UAT exception: `-AllowUnsignedUat`;
+- production exception: `-AllowUnsignedProduction` or
+  `FULLPOS_ALLOW_UNSIGNED_PRODUCTION_RELEASE=YES`;
+- both scripts print a visible warning when the production override is active;
+- HTTPS download, SHA-256, size, version, channel, release status, and retention
+  checks remain mandatory.
+
+Do not use the production override as a permanent policy. After an Authenticode
+certificate is available, return to the default signed-only production flow.
+
+Support guidance for unsigned installers must not tell clients to disable
+Microsoft Defender, SmartScreen, registry protections, or reputation-based
+protection globally. If Windows shows "Windows protected your PC", the client
+may select "More info" and then "Run anyway" for the official FullPOS installer
+link only. If User Account Control appears, the client may select "Yes".
+
 ## Prepare / Publish Automation
 
 Windows release automation is intentionally split into two explicit steps.
@@ -92,6 +117,10 @@ powershell -ExecutionPolicy Bypass -File scripts/release/prepare_windows_release
   -StorageRoot C:\fullpos-uat-storage `
   -AllowUnsignedUat
 ```
+
+For a temporarily owner-approved unsigned production release, replace the UAT
+flag with `-AllowUnsignedProduction`. Do not pass `-AllowUnsignedUat` for
+production.
 
 The prepare script reads `apps/fulltech_app/pubspec.yaml`, runs the official
 Windows builder unless `-SkipBuild` is supplied, computes size and SHA-256,
@@ -129,6 +158,9 @@ powershell -ExecutionPolicy Bypass -File scripts/release/publish_windows_release
   -RetentionDryRun `
   -AllowUnsignedUat
 ```
+
+For a temporarily owner-approved unsigned production release, replace the UAT
+flag with `-AllowUnsignedProduction`.
 
 Remove `-RetentionDryRun` only after reviewing the dry-run report. Publishing
 validates the draft, re-downloads the artifact over HTTPS, verifies SHA-256 and

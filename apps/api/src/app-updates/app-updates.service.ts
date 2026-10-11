@@ -43,6 +43,12 @@ type AppReleaseForManifest = {
   publishedAt: Date | null;
 };
 
+type PilotReleaseForManifest = AppReleaseForManifest & {
+  platform: AppReleasePlatform;
+  channel: AppReleaseChannel;
+  signed: boolean;
+};
+
 type AppReleaseForAdmin = {
   id: string;
   platform: AppReleasePlatform;
@@ -379,9 +385,11 @@ export class AppUpdatesService {
       },
     });
 
-    const selected = releases.find(
+    const selectedGlobal = releases.find(
       (release) => release.buildNumber > query.build && this.isUsableRelease(release),
     );
+    const selectedPilot = this.findPilotRelease(query, clientKey);
+    const selected = this.selectHighestRelease([selectedGlobal, selectedPilot]);
 
     if (!selected) {
       this.logResult(query, null, false);
@@ -402,6 +410,13 @@ export class AppUpdatesService {
       releaseNotes: Array.isArray(selected.releaseNotes) ? selected.releaseNotes : [],
       publishedAt: selected.publishedAt!.toISOString(),
     };
+  }
+
+  usesPrivateUpdateCheckCache() {
+    return (
+      this.configList("FULLPOS_UPDATE_PILOT_CLIENT_KEYS").length > 0 ||
+      this.configList("FULLPOS_UPDATE_PILOT_DEVICE_IDS").length > 0
+    );
   }
 
   private consumeRateLimit(key: string) {
@@ -456,6 +471,95 @@ export class AppUpdatesService {
     }
 
     return valid;
+  }
+
+  private findPilotRelease(
+    query: CheckAppUpdateQueryDto,
+    clientKey: string,
+  ): PilotReleaseForManifest | null {
+    const release = this.readPilotRelease();
+    if (!release) return null;
+    if (release.platform !== this.toPlatform(query.platform)) return null;
+    if (release.channel !== this.toChannel(query.channel)) return null;
+    if (release.buildNumber <= query.build) return null;
+    if (!this.isPilotTargetAllowed(query, clientKey)) return null;
+    if (!this.isUsableRelease(release)) return null;
+    return release;
+  }
+
+  private readPilotRelease(): PilotReleaseForManifest | null {
+    const raw = this.config.get<string>("FULLPOS_UPDATE_PILOT_RELEASE_JSON");
+    if (!raw || raw.trim().length === 0) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const platform = this.toPlatform(
+        (typeof parsed.platform === "string" ? parsed.platform : "windows") as PublicAppUpdatePlatform,
+      );
+      const channel = this.toChannel(
+        (typeof parsed.channel === "string" ? parsed.channel : "stable") as PublicAppUpdateChannel,
+      );
+      const publishedAt = parsed.publishedAt
+        ? new Date(String(parsed.publishedAt))
+        : new Date();
+      const release: PilotReleaseForManifest = {
+        platform,
+        channel,
+        version: String(parsed.version ?? ""),
+        buildNumber: Number(parsed.buildNumber),
+        fileName: String(parsed.fileName ?? ""),
+        fileSize: Number(parsed.fileSize),
+        sha256: String(parsed.sha256 ?? ""),
+        downloadUrl: String(parsed.downloadUrl ?? ""),
+        storageDeletedAt: null,
+        mandatory: parsed.mandatory === true,
+        minimumSupportedBuild:
+          parsed.minimumSupportedBuild === null || parsed.minimumSupportedBuild === undefined
+            ? null
+            : Number(parsed.minimumSupportedBuild),
+        releaseNotes: Array.isArray(parsed.releaseNotes) ? parsed.releaseNotes : [],
+        publishedAt: Number.isNaN(publishedAt.getTime()) ? null : publishedAt,
+        signed: parsed.signed === true,
+      };
+      this.validateReleaseMetadata(release, { requireSigned: false });
+      return release;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`app_update_pilot_release_invalid error=${message}`);
+      return null;
+    }
+  }
+
+  private isPilotTargetAllowed(query: CheckAppUpdateQueryDto, clientKey: string) {
+    const deviceId = this.normalizeTargetKey(query.deviceId ?? "");
+    const client = this.normalizeTargetKey(clientKey);
+    const deviceIds = new Set(this.configList("FULLPOS_UPDATE_PILOT_DEVICE_IDS"));
+    const clientKeys = new Set(this.configList("FULLPOS_UPDATE_PILOT_CLIENT_KEYS"));
+
+    return (
+      (deviceId.length > 0 && deviceIds.has(deviceId)) ||
+      (client.length > 0 && clientKeys.has(client))
+    );
+  }
+
+  private selectHighestRelease(
+    releases: Array<AppReleaseForManifest | null | undefined>,
+  ): AppReleaseForManifest | null {
+    return releases
+      .filter((release): release is AppReleaseForManifest => release !== null && release !== undefined)
+      .sort((a, b) => b.buildNumber - a.buildNumber)[0] ?? null;
+  }
+
+  private configList(key: string) {
+    const raw = this.config.get<string>(key) ?? "";
+    return raw
+      .split(",")
+      .map((item) => this.normalizeTargetKey(item))
+      .filter((item) => item.length > 0);
+  }
+
+  private normalizeTargetKey(value: string) {
+    return value.trim().toLowerCase();
   }
 
   private toPlatform(platform: PublicAppUpdatePlatform) {

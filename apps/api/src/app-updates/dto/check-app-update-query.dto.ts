@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsIn, IsInt, IsString, Matches, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Matches, Min } from "class-validator";
 
 export const publicAppUpdatePlatforms = ["windows", "android", "ios"] as const;
 export const publicAppUpdateChannels = ["stable", "beta"] as const;
@@ -28,4 +28,10 @@ export class CheckAppUpdateQueryDto {
   @IsInt()
   @Min(0)
   build!: number;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @Matches(/^[0-9A-Za-z._:-]{1,128}$/)
+  deviceId?: string;
 }

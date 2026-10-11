@@ -1,5 +1,5 @@
-import { Controller, Get, Header, Query, Req } from "@nestjs/common";
-import type { Request } from "express";
+import { Controller, Get, Query, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { AppUpdatesService } from "./app-updates.service";
 import { AppUpdateManifestDto } from "./dto/app-update-manifest.dto";
 import { CheckAppUpdateQueryDto } from "./dto/check-app-update-query.dto";
@@ -9,11 +9,17 @@ export class AppUpdatesController {
   constructor(private readonly appUpdates: AppUpdatesService) {}
 
   @Get("check")
-  @Header("Cache-Control", "public, max-age=60")
   check(
     @Query() query: CheckAppUpdateQueryDto,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<AppUpdateManifestDto> {
+    res.setHeader(
+      "Cache-Control",
+      this.appUpdates.usesPrivateUpdateCheckCache()
+        ? "private, no-store"
+        : "public, max-age=60",
+    );
     return this.appUpdates.check(query, this.clientKey(req));
   }
 

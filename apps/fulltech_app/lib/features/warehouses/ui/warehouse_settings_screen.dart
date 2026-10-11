@@ -1464,7 +1464,7 @@ class _TransferProductPicker extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               )
-            else
+            else if (!state.hasMore)
               Text(
                 'Mostrando ${state.progressLabel}',
                 style: const TextStyle(
@@ -1472,13 +1472,15 @@ class _TransferProductPicker extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
+              )
+            else
+              const SizedBox.shrink(),
             if (state.hasMore) ...[
               const SizedBox(height: 6),
               LoadMoreFooter(
                 loading: state.isLoadingMore,
                 hasMore: true,
-                label: 'Ver más',
+                label: 'Cargar más productos',
                 progressLabel: 'Mostrando ${state.progressLabel}',
                 onLoadMore: onLoadMore,
               ),

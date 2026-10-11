@@ -10,7 +10,8 @@ param(
   [string]$S3EndpointUrl = $env:FULLPOS_RELEASE_S3_ENDPOINT_URL,
   [switch]$SkipBuild,
   [switch]$DryRun,
-  [switch]$AllowUnsignedUat
+  [switch]$AllowUnsignedUat,
+  [switch]$AllowUnsignedProduction
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,35 @@ $ErrorActionPreference = 'Stop'
 function Write-Step {
   param([string]$Message)
   Write-Host "[fullpos-release-prepare] $Message"
+}
+
+function Test-TruthyEnv {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+  return @('1', 'true', 'yes') -contains $Value.Trim().ToLowerInvariant()
+}
+
+function Assert-SignaturePolicy {
+  param(
+    [bool]$Signed,
+    [string]$SignatureStatus,
+    [switch]$AllowUnsignedUat,
+    [switch]$AllowUnsignedProduction
+  )
+
+  if ($Signed) { return 'SIGNED' }
+
+  if ($AllowUnsignedProduction) {
+    Write-Warning 'UNSIGNED PRODUCTION OVERRIDE ACTIVE. This is a temporary owner-approved exception; HTTPS, SHA256, size, version, channel, and release-record validation remain mandatory.'
+    return 'UNSIGNED_PRODUCTION_OVERRIDE'
+  }
+
+  if ($AllowUnsignedUat) {
+    Write-Warning 'Unsigned UAT release exception active. Do not use this flag for production stable releases.'
+    return 'UNSIGNED_UAT_OVERRIDE'
+  }
+
+  throw "Installer is not Authenticode-valid. Signature=$SignatureStatus. Use -AllowUnsignedProduction only for explicit owner-approved production exception, or -AllowUnsignedUat only for local/UAT."
 }
 
 function Get-RepoRoot {
@@ -157,6 +187,8 @@ if ([string]::IsNullOrWhiteSpace($PublicBaseUrl)) { throw 'PublicBaseUrl is requ
 
 $repoRoot = Get-RepoRoot
 $version = Read-PubspecVersion -RepoRoot $repoRoot
+$envAllowsUnsignedProduction = Test-TruthyEnv $env:FULLPOS_ALLOW_UNSIGNED_PRODUCTION_RELEASE
+$allowUnsignedProductionEffective = [bool]$AllowUnsignedProduction -or $envAllowsUnsignedProduction
 $commitSha = (& git -C $repoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commitSha)) {
   throw 'Unable to resolve git commit SHA.'
@@ -179,9 +211,11 @@ $item = Get-Item -LiteralPath $installerPath
 $sha256 = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToUpperInvariant()
 $signature = Get-AuthenticodeSignature -LiteralPath $installerPath
 $signed = $signature.Status -eq 'Valid'
-if (-not $signed -and -not $AllowUnsignedUat) {
-  throw 'Installer is not Authenticode-valid. Use -AllowUnsignedUat only for explicit local/UAT exception.'
-}
+$signaturePolicy = Assert-SignaturePolicy `
+  -Signed $signed `
+  -SignatureStatus ([string]$signature.Status) `
+  -AllowUnsignedUat:$AllowUnsignedUat `
+  -AllowUnsignedProduction:$allowUnsignedProductionEffective
 
 $storageKey = "releases/windows/stable/$($version.Version)-$($version.BuildNumber)/$fileName"
 $downloadUrl = "$($PublicBaseUrl.TrimEnd('/'))/$storageKey"
@@ -201,6 +235,7 @@ Write-Step "Installer: $fileName"
 Write-Step "Size: $($item.Length)"
 Write-Step "SHA256: $sha256"
 Write-Step "Signature: $($signature.Status)"
+Write-Step "Signature policy: $signaturePolicy"
 Write-Step "Storage key: $storageKey"
 
 if ($DryRun) {
@@ -217,6 +252,9 @@ if ($DryRun) {
     sha256 = $sha256
     signatureStatus = [string]$signature.Status
     signed = $signed
+    signaturePolicy = $signaturePolicy
+    unsignedProductionOverride = $(if ($allowUnsignedProductionEffective) { 'YES' } else { 'NO' })
+    defaultUnsignedProductionAllowed = 'NO'
     storageMode = $StorageMode
     storageKey = $storageKey
     downloadUrl = $downloadUrl
@@ -252,6 +290,9 @@ $release = Invoke-JsonApi `
   sha256 = $sha256
   signatureStatus = [string]$signature.Status
   signed = $signed
+  signaturePolicy = $signaturePolicy
+  unsignedProductionOverride = $(if ($allowUnsignedProductionEffective) { 'YES' } else { 'NO' })
+  defaultUnsignedProductionAllowed = 'NO'
   storageKey = $storageKey
   downloadUrl = $downloadUrl
   status = $release.status

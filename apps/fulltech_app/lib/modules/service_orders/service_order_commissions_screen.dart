@@ -324,7 +324,7 @@ class ServiceOrderCommissionsScreen extends ConsumerWidget {
                   LoadMoreFooter(
                     loading: state.loadingMore,
                     hasMore: true,
-                    label: 'Ver más',
+                    label: 'Cargar mas comisiones',
                     onLoadMore: controller.loadMore,
                   ),
               ],
