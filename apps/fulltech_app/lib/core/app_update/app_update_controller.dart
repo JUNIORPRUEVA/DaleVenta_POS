@@ -106,6 +106,17 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     );
   }
 
+  Future<void> prepareCurrentUpdateNow() async {
+    await _ensureLoaded();
+    final manifest = state.manifest;
+    if (manifest == null || !manifest.updateAvailable) return;
+    if (state.phase != AppUpdatePhase.available &&
+        state.phase != AppUpdatePhase.installFailed) {
+      return;
+    }
+    await _startBackgroundDownload(manifest);
+  }
+
   Future<void> requestInstallPreparedUpdate() async {
     await _ensureLoaded();
     if (state.phase != AppUpdatePhase.readyToInstall) return;

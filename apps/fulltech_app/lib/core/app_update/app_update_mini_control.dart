@@ -12,21 +12,36 @@ class AppUpdateMiniControl extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appUpdateProvider);
+    final phase = state.phase;
+    final dismissed =
+        state.manifest?.isDismissedBy(state.persisted.dismissedBuild) ?? false;
+    final canPrepare =
+        phase == AppUpdatePhase.available ||
+        phase == AppUpdatePhase.installFailed;
+    final isPreparing =
+        phase == AppUpdatePhase.downloading ||
+        phase == AppUpdatePhase.verifying ||
+        phase == AppUpdatePhase.verifyingSha ||
+        phase == AppUpdatePhase.verifyingSignature;
+    final waiting = phase == AppUpdatePhase.waitingSafeState;
+    final installing = phase == AppUpdatePhase.installRequested;
+    final ready = phase == AppUpdatePhase.readyToInstall;
     final visible =
-        state.hasVisibleMainPrompt ||
-        state.phase == AppUpdatePhase.installRequested ||
-        state.phase == AppUpdatePhase.waitingSafeState;
+        !dismissed &&
+        (canPrepare || isPreparing || ready || waiting || installing);
     if (!visible) return const SizedBox.shrink();
 
-    final waiting = state.phase == AppUpdatePhase.waitingSafeState;
-    final installing = state.phase == AppUpdatePhase.installRequested;
-    final enabled = state.phase == AppUpdatePhase.readyToInstall;
     final controller = ref.read(appUpdateProvider.notifier);
     final label = waiting
         ? 'Terminando operación actual...'
         : installing
         ? 'Preparando...'
+        : isPreparing
+        ? 'Preparando actualización...'
         : 'Actualizar';
+    final actionEnabled = ready || canPrepare;
+    final canDismiss =
+        state.manifest?.buildNumber != null && !waiting && !installing;
 
     return Padding(
       padding: EdgeInsets.only(right: compact ? 6 : 8),
@@ -40,12 +55,22 @@ class AppUpdateMiniControl extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Tooltip(
-              message: 'Instalar actualización',
+              message: ready
+                  ? 'Instalar actualización'
+                  : canPrepare
+                  ? 'Preparar actualización'
+                  : 'Preparando actualización',
               child: TextButton.icon(
-                onPressed: enabled
-                    ? () => controller.requestInstallPreparedUpdate()
+                onPressed: actionEnabled
+                    ? () {
+                        if (ready) {
+                          controller.requestInstallPreparedUpdate();
+                        } else {
+                          controller.prepareCurrentUpdateNow();
+                        }
+                      }
                     : null,
-                icon: waiting || installing
+                icon: waiting || installing || isPreparing
                     ? const SizedBox(
                         width: 14,
                         height: 14,
@@ -53,7 +78,7 @@ class AppUpdateMiniControl extends ConsumerWidget {
                       )
                     : const Icon(Icons.system_update_alt_rounded, size: 17),
                 label: Text(
-                  compact && enabled ? 'Actualizar' : label,
+                  compact && ready ? 'Actualizar' : label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -70,7 +95,7 @@ class AppUpdateMiniControl extends ConsumerWidget {
                 ),
               ),
             ),
-            if (enabled)
+            if (canDismiss)
               Tooltip(
                 message: 'Ocultar actualización',
                 child: IconButton(

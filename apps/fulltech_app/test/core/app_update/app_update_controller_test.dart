@@ -724,6 +724,23 @@ void main() {
   });
 
   group('AppUpdateMiniControl widget', () {
+    testWidgets('AVAILABLE shows update and dismiss controls', (tester) async {
+      final controller = WidgetAppUpdateController(
+        _readyWidgetState().copyWith(phase: AppUpdatePhase.available),
+      );
+
+      await tester.pumpWidget(_updateWidget(controller));
+
+      expect(find.text('Actualizar'), findsOneWidget);
+      expect(find.byTooltip('Preparar actualización'), findsOneWidget);
+      expect(find.byTooltip('Ocultar actualización'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Preparar actualización'));
+      await tester.pump();
+
+      expect(controller.prepareRequests, 1);
+    });
+
     testWidgets('READY shows update and dismiss controls', (tester) async {
       final controller = WidgetAppUpdateController(_readyWidgetState());
 
@@ -734,18 +751,22 @@ void main() {
       expect(find.byTooltip('Ocultar actualización'), findsOneWidget);
     });
 
-    testWidgets('DOWNLOADING and VERIFYING stay hidden', (tester) async {
+    testWidgets('DOWNLOADING and VERIFYING stay visible as progress', (
+      tester,
+    ) async {
       final downloading = WidgetAppUpdateController(
         _readyWidgetState().copyWith(phase: AppUpdatePhase.downloading),
       );
       await tester.pumpWidget(_updateWidget(downloading));
-      expect(find.text('Actualizar'), findsNothing);
+      expect(find.text('Preparando actualización...'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
       final verifying = WidgetAppUpdateController(
         _readyWidgetState().copyWith(phase: AppUpdatePhase.verifyingSha),
       );
       await tester.pumpWidget(_updateWidget(verifying));
-      expect(find.text('Actualizar'), findsNothing);
+      expect(find.text('Preparando actualización...'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('dismiss hides current build prompt', (tester) async {
@@ -964,12 +985,19 @@ class WidgetAppUpdateController extends AppUpdateController {
   }
 
   int checkRequests = 0;
+  int prepareRequests = 0;
   int installRequests = 0;
   int dismissRequests = 0;
 
   @override
   Future<void> checkNow({bool force = false}) async {
     checkRequests += 1;
+  }
+
+  @override
+  Future<void> prepareCurrentUpdateNow() async {
+    prepareRequests += 1;
+    state = state.copyWith(phase: AppUpdatePhase.downloading);
   }
 
   @override
