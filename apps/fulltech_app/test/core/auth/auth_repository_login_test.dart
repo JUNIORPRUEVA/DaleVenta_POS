@@ -69,7 +69,7 @@ void main() {
     expect(storage.clearedTokens, isTrue);
   });
 
-  test('hydrate rechaza token expirado antes de renderizar snapshot', () async {
+  test('hydrate rechaza token expirado si no hay refresh token', () async {
     final storage = _FakeTokenStorage(
       accessToken: _jwt(
         userId: 'user-a',
@@ -87,6 +87,32 @@ void main() {
     expect(session.hasToken, isFalse);
     expect(storage.clearedTokens, isTrue);
   });
+
+  test(
+    'hydrate conserva token expirado si hay refresh token durable',
+    () async {
+      final storage = _FakeTokenStorage(
+        accessToken: _jwt(
+          userId: 'user-a',
+          companyId: 'company-a',
+          expiresAt: DateTime.now().toUtc().subtract(
+            const Duration(minutes: 1),
+          ),
+        ),
+        refreshToken: 'refresh-for-test',
+        userSnapshot: _user(id: 'user-a', companyId: 'company-a'),
+      );
+
+      final session = await AuthRepository(
+        dio: Dio(BaseOptions(baseUrl: 'https://example.test')),
+        storage: storage,
+      ).hydrateSession();
+
+      expect(session.hasToken, isTrue);
+      expect(session.user?.id, 'user-a');
+      expect(storage.clearedTokens, isFalse);
+    },
+  );
 
   test('login traduce fallos de conexion sin terminos internos', () async {
     final error = await _captureAuthError(
@@ -306,9 +332,10 @@ String _jwt({String? userId, String? companyId, DateTime? expiresAt}) {
 }
 
 class _FakeTokenStorage extends TokenStorage {
-  _FakeTokenStorage({this.accessToken, this.userSnapshot});
+  _FakeTokenStorage({this.accessToken, this.refreshToken, this.userSnapshot});
 
   final String? accessToken;
+  final String? refreshToken;
   final UserModel? userSnapshot;
   bool savedTokens = false;
   bool clearedTokens = false;
@@ -317,6 +344,9 @@ class _FakeTokenStorage extends TokenStorage {
 
   @override
   Future<String?> getAccessToken() async => accessToken;
+
+  @override
+  Future<String?> getRefreshToken() async => refreshToken;
 
   @override
   Future<UserModel?> getUserSnapshot() async => userSnapshot;

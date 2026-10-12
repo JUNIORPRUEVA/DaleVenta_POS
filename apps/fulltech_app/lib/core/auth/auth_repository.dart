@@ -25,6 +25,12 @@ import '../loading/loading_interceptor.dart';
 
 enum SessionVerificationStatus { authenticated, invalid, deferred }
 
+enum _RefreshOutcome { refreshed, invalid, failed }
+
+class _SessionVerificationDeferred implements Exception {
+  const _SessionVerificationDeferred();
+}
+
 class HydratedSession {
   final bool hasToken;
   final UserModel? user;
@@ -571,7 +577,6 @@ class AuthRepository {
 
       final identity = _identityFromAccessToken(token);
       if (identity == null ||
-          identity.isExpired ||
           (identity.userId ?? '').isEmpty ||
           (identity.companyId ?? '').isEmpty) {
         await _safeClearTokens();
@@ -583,6 +588,17 @@ class AuthRepository {
         await _safeClearTokens();
         return const HydratedSession.empty();
       }
+
+      if (identity.isExpired) {
+        final refresh = await _storage.getRefreshToken().timeout(
+          _storageTimeout,
+        );
+        if (refresh == null || refresh.isEmpty) {
+          await _safeClearTokens();
+          return const HydratedSession.empty();
+        }
+      }
+
       return HydratedSession(hasToken: true, user: user);
     } catch (_) {
       return const HydratedSession.empty();
@@ -844,6 +860,7 @@ class AuthRepository {
   Future<UserModel?> getMeOrNull({
     bool silent = false,
     bool allowCachedFallback = true,
+    bool throwOnFailure = false,
   }) async {
     // Widget tests (smoke test) should not block on secure storage/network.
     // Those calls can hang in tests and leave pending timeout timers.
@@ -875,37 +892,47 @@ class AuthRepository {
       } on DioException catch (e) {
         // Si expira, intenta refresh y reintenta
         if (e.response?.statusCode == 401) {
-          final refreshed = await _refreshAndSave(silent: silent);
-          if (refreshed) {
-            final res = await _dio
-                .get(
-                  ApiRoutes.usersMe,
-                  options: Options(
-                    extra: {
-                      'silent': silent,
-                      'disableOfflineCache': true,
-                      'skipLoader': true,
-                    },
-                  ),
-                )
-                .timeout(_bootstrapTimeout);
-            final refreshedAccess = await _storage.getAccessToken();
-            final user = _userFromMeResponse(res.data, refreshedAccess);
-            await _storage.saveUserSnapshot(user);
-            return user;
+          final refreshOutcome = await _refreshAndSave(silent: silent);
+          switch (refreshOutcome) {
+            case _RefreshOutcome.refreshed:
+              final res = await _dio
+                  .get(
+                    ApiRoutes.usersMe,
+                    options: Options(
+                      extra: {
+                        'silent': silent,
+                        'disableOfflineCache': true,
+                        'skipLoader': true,
+                      },
+                    ),
+                  )
+                  .timeout(_bootstrapTimeout);
+              final refreshedAccess = await _storage.getAccessToken();
+              final user = _userFromMeResponse(res.data, refreshedAccess);
+              await _storage.saveUserSnapshot(user);
+              return user;
+            case _RefreshOutcome.invalid:
+              await _safeClearTokens();
+              return null;
+            case _RefreshOutcome.failed:
+              if (throwOnFailure) {
+                throw const _SessionVerificationDeferred();
+              }
+              if (!allowCachedFallback) return null;
+              return await _storage.getUserSnapshot();
           }
-
-          await _safeClearTokens();
-          return null;
         }
 
+        if (throwOnFailure) rethrow;
         if (!allowCachedFallback) return null;
         return await _storage.getUserSnapshot();
       } on TimeoutException {
+        if (throwOnFailure) rethrow;
         if (!allowCachedFallback) return null;
         return await _storage.getUserSnapshot();
       }
     } catch (_) {
+      if (throwOnFailure) rethrow;
       if (!allowCachedFallback) return null;
       return await _storage.getUserSnapshot();
     }
@@ -925,33 +952,37 @@ class AuthRepository {
       final user = await getMeOrNull(
         silent: silent,
         allowCachedFallback: false,
+        throwOnFailure: true,
       );
       if (user != null) {
         return SessionVerificationResult.authenticated(user);
       }
 
-      await _safeClearTokens();
+      final refresh = await _storage.getRefreshToken().timeout(_storageTimeout);
+      if (refresh != null && refresh.isNotEmpty) {
+        return SessionVerificationResult.deferred(user: hydrated.user);
+      }
+
       return const SessionVerificationResult.invalid();
+    } on _SessionVerificationDeferred {
+      return SessionVerificationResult.deferred(user: hydrated.user);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         await _safeClearTokens();
         return const SessionVerificationResult.invalid();
       }
 
-      await _safeClearTokens();
-      return const SessionVerificationResult.invalid();
+      return SessionVerificationResult.deferred(user: hydrated.user);
     } on TimeoutException {
-      await _safeClearTokens();
-      return const SessionVerificationResult.invalid();
+      return SessionVerificationResult.deferred(user: hydrated.user);
     } catch (_) {
-      await _safeClearTokens();
-      return const SessionVerificationResult.invalid();
+      return SessionVerificationResult.deferred(user: hydrated.user);
     }
   }
 
-  Future<bool> _refreshAndSave({bool silent = false}) async {
+  Future<_RefreshOutcome> _refreshAndSave({bool silent = false}) async {
     final refresh = await _storage.getRefreshToken();
-    if (refresh == null || refresh.isEmpty) return false;
+    if (refresh == null || refresh.isEmpty) return _RefreshOutcome.invalid;
     try {
       final res = await _dio.post(
         ApiRoutes.refresh,
@@ -965,12 +996,18 @@ class AuthRepository {
           access,
           (newRefresh != null && newRefresh.isNotEmpty) ? newRefresh : refresh,
         );
-        return true;
+        return _RefreshOutcome.refreshed;
       }
+    } on DioException catch (e) {
+      final status = e.response?.statusCode ?? 0;
+      if (status == 400 || status == 401 || status == 403) {
+        return _RefreshOutcome.invalid;
+      }
+      return _RefreshOutcome.failed;
     } catch (_) {
-      return false;
+      return _RefreshOutcome.failed;
     }
-    return false;
+    return _RefreshOutcome.failed;
   }
 }
 
