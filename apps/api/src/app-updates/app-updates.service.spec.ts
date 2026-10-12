@@ -1,4 +1,8 @@
-import { AppReleaseChannel, AppReleasePlatform, AppReleaseStatus } from "@prisma/client";
+import {
+  AppReleaseChannel,
+  AppReleasePlatform,
+  AppReleaseStatus,
+} from "@prisma/client";
 import { AppUpdatesService } from "./app-updates.service";
 
 const validSha = "a".repeat(64);
@@ -23,12 +27,20 @@ function release(overrides: Record<string, unknown> = {}) {
 function buildService(releases: ReturnType<typeof release>[]) {
   const findMany = jest.fn().mockResolvedValue(releases);
   const env: Record<string, string> = {};
-  const service = new AppUpdatesService({
-    appRelease: { findMany },
-  } as any, { get: jest.fn((key: string) => env[key]) } as any, { deleteObject: jest.fn() } as any);
+  const service = new AppUpdatesService(
+    {
+      appRelease: { findMany },
+    } as any,
+    { get: jest.fn((key: string) => env[key]) } as any,
+    { deleteObject: jest.fn() } as any,
+  );
 
-  jest.spyOn((service as any).logger, "log").mockImplementation(() => undefined);
-  jest.spyOn((service as any).logger, "error").mockImplementation(() => undefined);
+  jest
+    .spyOn((service as any).logger, "log")
+    .mockImplementation(() => undefined);
+  jest
+    .spyOn((service as any).logger, "error")
+    .mockImplementation(() => undefined);
 
   return { service, findMany, env };
 }
@@ -86,9 +98,13 @@ describe("AppUpdatesService", () => {
   });
 
   it("does not return an archived artifact even if it is greater", async () => {
-    const { service } = buildService([release({ buildNumber: 131, storageDeletedAt: new Date() })]);
+    const { service } = buildService([
+      release({ buildNumber: 131, storageDeletedAt: new Date() }),
+    ]);
 
-    await expect(service.check(query, "test-archived-artifact")).resolves.toEqual({
+    await expect(
+      service.check(query, "test-archived-artifact"),
+    ).resolves.toEqual({
       updateAvailable: false,
     });
   });
@@ -136,6 +152,9 @@ describe("AppUpdatesService", () => {
       fileSize: 123456789,
       sha256: validSha,
       downloadUrl: "https://downloads.example.com/Fullpos-Setup-1.0.7+131.exe",
+      signed: false,
+      channel: "stable",
+      status: "published",
       mandatory: false,
       minimumSupportedBuild: null,
       releaseNotes: [],
@@ -159,11 +178,15 @@ describe("AppUpdatesService", () => {
   it("skips a revoked greater build because revoked releases are not queried", async () => {
     const { service, findMany } = buildService([release({ buildNumber: 131 })]);
 
-    await expect(service.check(query, "test-revoked-greater")).resolves.toMatchObject({
+    await expect(
+      service.check(query, "test-revoked-greater"),
+    ).resolves.toMatchObject({
       updateAvailable: true,
       buildNumber: 131,
     });
-    expect(findMany.mock.calls[0][0].where.status).toBe(AppReleaseStatus.PUBLISHED);
+    expect(findMany.mock.calls[0][0].where.status).toBe(
+      AppReleaseStatus.PUBLISHED,
+    );
   });
 
   it("does not mix platforms", async () => {
@@ -171,7 +194,9 @@ describe("AppUpdatesService", () => {
 
     await service.check({ ...query, platform: "android" }, "test-platform");
 
-    expect(findMany.mock.calls[0][0].where.platform).toBe(AppReleasePlatform.ANDROID);
+    expect(findMany.mock.calls[0][0].where.platform).toBe(
+      AppReleasePlatform.ANDROID,
+    );
   });
 
   it("does not mix channels", async () => {
@@ -179,7 +204,9 @@ describe("AppUpdatesService", () => {
 
     await service.check({ ...query, channel: "beta" }, "test-channel");
 
-    expect(findMany.mock.calls[0][0].where.channel).toBe(AppReleaseChannel.BETA);
+    expect(findMany.mock.calls[0][0].where.channel).toBe(
+      AppReleaseChannel.BETA,
+    );
   });
 
   it("does not return a release with invalid sha256", async () => {
@@ -214,9 +241,7 @@ describe("AppUpdatesService", () => {
     const result = await service.check(query, "test-public-response");
 
     expect(result).not.toHaveProperty("id");
-    expect(result).not.toHaveProperty("status");
     expect(result).not.toHaveProperty("platform");
-    expect(result).not.toHaveProperty("channel");
     expect(result).not.toHaveProperty("createdAt");
     expect(result).not.toHaveProperty("updatedAt");
   });
@@ -226,7 +251,9 @@ describe("AppUpdatesService", () => {
     env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
     env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
 
-    await expect(service.check({ ...query, build: 133 }, "normal-client")).resolves.toEqual({
+    await expect(
+      service.check({ ...query, build: 133 }, "normal-client"),
+    ).resolves.toEqual({
       updateAvailable: false,
     });
   });
@@ -236,7 +263,9 @@ describe("AppUpdatesService", () => {
     env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
     env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
 
-    await expect(service.check({ ...query, build: 133 }, "pilot-client")).resolves.toMatchObject({
+    await expect(
+      service.check({ ...query, build: 133 }, "pilot-client"),
+    ).resolves.toMatchObject({
       updateAvailable: true,
       version: "1.0.6",
       buildNumber: 135,
@@ -251,7 +280,9 @@ describe("AppUpdatesService", () => {
     env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
     env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
 
-    await expect(service.check({ ...query, build: 135 }, "pilot-client")).resolves.toEqual({
+    await expect(
+      service.check({ ...query, build: 135 }, "pilot-client"),
+    ).resolves.toEqual({
       updateAvailable: false,
     });
   });
@@ -262,12 +293,17 @@ describe("AppUpdatesService", () => {
     env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
 
     await expect(
-      service.check({ ...query, build: 133, deviceId: "install-123" }, "normal-client"),
+      service.check(
+        { ...query, build: 133, deviceId: "install-123" },
+        "normal-client",
+      ),
     ).resolves.toMatchObject({
       updateAvailable: true,
       buildNumber: 135,
     });
-    await expect(service.check({ ...query, build: 133 }, "normal-client")).resolves.toEqual({
+    await expect(
+      service.check({ ...query, build: 133 }, "normal-client"),
+    ).resolves.toEqual({
       updateAvailable: false,
     });
   });
@@ -283,11 +319,15 @@ describe("AppUpdatesService", () => {
   });
 
   it("keeps future global stable releases available to normal clients", async () => {
-    const { service, env } = buildService([release({ buildNumber: 140, version: "1.0.9" })]);
+    const { service, env } = buildService([
+      release({ buildNumber: 140, version: "1.0.9" }),
+    ]);
     env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
     env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
 
-    await expect(service.check({ ...query, build: 133 }, "normal-client")).resolves.toMatchObject({
+    await expect(
+      service.check({ ...query, build: 133 }, "normal-client"),
+    ).resolves.toMatchObject({
       updateAvailable: true,
       buildNumber: 140,
       version: "1.0.9",
@@ -295,11 +335,15 @@ describe("AppUpdatesService", () => {
   });
 
   it("prefers a higher global release over a lower pilot release", async () => {
-    const { service, env } = buildService([release({ buildNumber: 140, version: "1.0.9" })]);
+    const { service, env } = buildService([
+      release({ buildNumber: 140, version: "1.0.9" }),
+    ]);
     env.FULLPOS_UPDATE_PILOT_CLIENT_KEYS = "pilot-client";
     env.FULLPOS_UPDATE_PILOT_RELEASE_JSON = pilotRelease();
 
-    await expect(service.check({ ...query, build: 133 }, "pilot-client")).resolves.toMatchObject({
+    await expect(
+      service.check({ ...query, build: 133 }, "pilot-client"),
+    ).resolves.toMatchObject({
       updateAvailable: true,
       buildNumber: 140,
       version: "1.0.9",

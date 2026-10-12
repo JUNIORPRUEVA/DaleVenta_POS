@@ -16,6 +16,7 @@ import 'package:daleventa_pos/features/account/account_menu_screens.dart';
 import 'package:daleventa_pos/core/app_update/update_downloader.dart';
 import 'package:daleventa_pos/core/app_update/update_restart_guard.dart';
 import 'package:daleventa_pos/core/app_update/update_signature_verifier.dart';
+import 'package:daleventa_pos/core/app_update/update_trust_policy.dart';
 import 'package:daleventa_pos/core/app_update/update_verifier.dart';
 
 void main() {
@@ -921,6 +922,10 @@ TestAppUpdateController _controller({
     verifier,
     signatureVerifier ?? FakeUpdateSignatureVerifier(),
     installer ?? FakeAppUpdateInstaller(),
+    const UpdateTrustPolicy(
+      allowUnsignedProduction: true,
+      allowedHosts: {'downloads.example.com'},
+    ),
   );
 }
 
@@ -933,6 +938,7 @@ class TestAppUpdateController extends AppUpdateController {
     super.verifier,
     super.signatureVerifier,
     super.installer,
+    super.trustPolicy,
   );
 
   int installerLaunches = 0;
@@ -949,6 +955,10 @@ class WidgetAppUpdateController extends AppUpdateController {
         const FakeUpdateVerifier(),
         FakeUpdateSignatureVerifier(),
         FakeAppUpdateInstaller(),
+        const UpdateTrustPolicy(
+          allowUnsignedProduction: true,
+          allowedHosts: {'downloads.example.com'},
+        ),
       ) {
     state = initial;
   }
@@ -1164,6 +1174,7 @@ class FakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
     String? expectedSha256,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
+    bool? allowUnsignedForProduction,
   }) async {
     final code = failureCode;
     if (code != null) throw UpdateSignatureVerificationException(code);
@@ -1185,6 +1196,7 @@ class DelayedFakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
     String? expectedSha256,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
+    bool? allowUnsignedForProduction,
   }) async {
     if (!_called.isCompleted) _called.complete();
     await _complete.future;

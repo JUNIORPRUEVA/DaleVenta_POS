@@ -34,15 +34,17 @@ class UpdateSignatureVerifier {
     String? expectedSha256,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
+    bool? allowUnsignedForProduction,
   }) async {
     if (kIsWeb || !Platform.isWindows) {
       throw const UpdateSignatureVerificationException('UNSUPPORTED_PLATFORM');
     }
 
     final publisher = (expectedPublisher ?? Env.expectedUpdatePublisher).trim();
-    final allowUnsigned = allowUnsignedForUat ?? Env.allowUnsignedUpdatesForUat;
-    if (allowUnsigned && publisher.isEmpty) return;
-    if (publisher.isEmpty) {
+    final allowUnsigned =
+        (allowUnsignedForUat ?? Env.allowUnsignedUpdatesForUat) ||
+        (allowUnsignedForProduction ?? Env.allowUnsignedUpdatesForProduction);
+    if (!allowUnsigned && publisher.isEmpty) {
       throw const UpdateSignatureVerificationException(
         'EXPECTED_PUBLISHER_MISSING',
       );

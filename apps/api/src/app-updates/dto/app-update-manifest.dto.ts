@@ -10,6 +10,9 @@ export type AppUpdateManifestDto =
       fileSize: number;
       sha256: string;
       downloadUrl: string;
+      signed: boolean;
+      channel: "stable" | "beta";
+      status: "published";
       mandatory: boolean;
       minimumSupportedBuild: number | null;
       releaseNotes: unknown[];

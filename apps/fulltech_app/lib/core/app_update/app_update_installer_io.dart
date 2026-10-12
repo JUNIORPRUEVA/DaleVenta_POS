@@ -35,7 +35,11 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
     }
 
     final publisher = Env.expectedUpdatePublisher;
-    final allowUnsigned = Env.allowUnsignedUpdatesForUat;
+    final acceptedByProductionPolicy =
+        persisted.signatureAcceptedBy == 'ProductionUnsignedPolicy' &&
+        persisted.signatureStatus == 'NotSigned';
+    final allowUnsigned =
+        Env.allowUnsignedUpdatesForUat || acceptedByProductionPolicy;
     if (!allowUnsigned && publisher.isEmpty) {
       throw const AppUpdateInstallException(
         'Falta configurar el publisher esperado para validar la actualización.',

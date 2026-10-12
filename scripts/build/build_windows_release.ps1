@@ -12,7 +12,9 @@ param(
   [string]$ExpectedSignerSubject = $env:FULLPOS_EXPECTED_SIGNER_SUBJECT,
   [string]$ApiBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
   [string]$AppBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
-  [int]$ApiTimeoutMs = 15000
+  [int]$ApiTimeoutMs = 15000,
+  [bool]$AllowUnsignedUpdatesForProduction = $true,
+  [string]$UpdateDownloadAllowedHosts = '612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -273,7 +275,9 @@ try {
       --dart-define=FULLPOS_PRODUCTION_BUILD=true `
       --dart-define=API_BASE_URL=$ApiBaseUrl `
       --dart-define=APP_BASE_URL=$AppBaseUrl `
-      --dart-define=API_TIMEOUT_MS=$ApiTimeoutMs
+      --dart-define=API_TIMEOUT_MS=$ApiTimeoutMs `
+      --dart-define=ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION=$AllowUnsignedUpdatesForProduction `
+      --dart-define=UPDATE_DOWNLOAD_ALLOWED_HOSTS=$UpdateDownloadAllowedHosts
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
       throw "flutter build windows --release failed with exit code $exitCode"

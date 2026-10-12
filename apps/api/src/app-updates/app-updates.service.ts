@@ -30,6 +30,7 @@ import {
 } from "./dto/app-release-admin.dto";
 
 type AppReleaseForManifest = {
+  channel?: AppReleaseChannel;
   version: string;
   buildNumber: number;
   fileName: string;
@@ -41,6 +42,7 @@ type AppReleaseForManifest = {
   minimumSupportedBuild: number | null;
   releaseNotes: Prisma.JsonValue;
   publishedAt: Date | null;
+  signed?: boolean;
 };
 
 type PilotReleaseForManifest = AppReleaseForManifest & {
@@ -111,7 +113,10 @@ const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._+ -]{0,254}$/;
 @Injectable()
 export class AppUpdatesService {
   private readonly logger = new Logger(AppUpdatesService.name);
-  private readonly rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+  private readonly rateLimitBuckets = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -122,7 +127,11 @@ export class AppUpdatesService {
   async createRelease(dto: CreateAppReleaseDto) {
     const data = this.toCreateData(dto);
     this.validateReleaseMetadata(data, { requireSigned: false });
-    await this.ensureBuildIsUnique(data.platform, data.channel, data.buildNumber);
+    await this.ensureBuildIsUnique(
+      data.platform,
+      data.channel,
+      data.buildNumber,
+    );
 
     const release = await this.prisma.appRelease.create({ data });
     this.logger.log(
@@ -139,27 +148,40 @@ export class AppUpdatesService {
 
     const releases = await this.prisma.appRelease.findMany({
       where,
-      orderBy: [{ platform: "asc" }, { channel: "asc" }, { buildNumber: "desc" }],
+      orderBy: [
+        { platform: "asc" },
+        { channel: "asc" },
+        { buildNumber: "desc" },
+      ],
     });
     return releases.map((release) => this.toAdminDto(release));
   }
 
   async getRelease(id: string) {
     const release = await this.prisma.appRelease.findUnique({ where: { id } });
-    if (!release) throw new NotFoundException("Release de actualización no encontrado.");
+    if (!release)
+      throw new NotFoundException("Release de actualización no encontrado.");
     return this.toAdminDto(release);
   }
 
   async updateRelease(id: string, dto: UpdateAppReleaseDto) {
     const current = await this.prisma.appRelease.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException("Release de actualización no encontrado.");
+    if (!current)
+      throw new NotFoundException("Release de actualización no encontrado.");
     if (current.status !== AppReleaseStatus.DRAFT) {
-      throw new BadRequestException("Solo se pueden editar releases en estado DRAFT.");
+      throw new BadRequestException(
+        "Solo se pueden editar releases en estado DRAFT.",
+      );
     }
 
     const merged = this.mergeRelease(current, dto);
     this.validateReleaseMetadata(merged, { requireSigned: false });
-    await this.ensureBuildIsUnique(merged.platform, merged.channel, merged.buildNumber, id);
+    await this.ensureBuildIsUnique(
+      merged.platform,
+      merged.channel,
+      merged.buildNumber,
+      id,
+    );
 
     const release = await this.prisma.appRelease.update({
       where: { id },
@@ -177,12 +199,15 @@ export class AppUpdatesService {
   ) {
     const release = await this.prisma.$transaction(async (tx) => {
       const current = await tx.appRelease.findUnique({ where: { id } });
-      if (!current) throw new NotFoundException("Release de actualización no encontrado.");
+      if (!current)
+        throw new NotFoundException("Release de actualización no encontrado.");
       if (current.status === AppReleaseStatus.PUBLISHED) {
         throw new BadRequestException("El release ya fue publicado.");
       }
       if (current.status === AppReleaseStatus.REVOKED) {
-        throw new BadRequestException("Un release revocado no puede publicarse.");
+        throw new BadRequestException(
+          "Un release revocado no puede publicarse.",
+        );
       }
 
       this.validateReleaseMetadata(current, {
@@ -198,7 +223,9 @@ export class AppUpdatesService {
         },
       });
       if (result.count !== 1) {
-        throw new ConflictException("El release cambió de estado durante la publicación.");
+        throw new ConflictException(
+          "El release cambió de estado durante la publicación.",
+        );
       }
 
       return tx.appRelease.findUniqueOrThrow({ where: { id } });
@@ -234,7 +261,8 @@ export class AppUpdatesService {
   async revokeRelease(id: string) {
     const release = await this.prisma.$transaction(async (tx) => {
       const current = await tx.appRelease.findUnique({ where: { id } });
-      if (!current) throw new NotFoundException("Release de actualización no encontrado.");
+      if (!current)
+        throw new NotFoundException("Release de actualización no encontrado.");
       if (current.status === AppReleaseStatus.DRAFT) {
         throw new BadRequestException("Un release DRAFT no puede revocarse.");
       }
@@ -250,7 +278,9 @@ export class AppUpdatesService {
         },
       });
       if (result.count !== 1) {
-        throw new ConflictException("El release cambió de estado durante la revocación.");
+        throw new ConflictException(
+          "El release cambió de estado durante la revocación.",
+        );
       }
 
       return tx.appRelease.findUniqueOrThrow({ where: { id } });
@@ -262,10 +292,12 @@ export class AppUpdatesService {
     return this.toAdminDto(release);
   }
 
-  async applyWindowsStableRetention(options: {
-    dryRun?: boolean;
-    publishedReleaseId?: string;
-  } = {}) {
+  async applyWindowsStableRetention(
+    options: {
+      dryRun?: boolean;
+      publishedReleaseId?: string;
+    } = {},
+  ) {
     const dryRun = options.dryRun ?? true;
     const releases = await this.prisma.appRelease.findMany({
       where: {
@@ -286,7 +318,9 @@ export class AppUpdatesService {
     const candidates = published.slice(2);
     const keepIds = new Set(keep.map((release) => release.id));
     const draftStorageKeys = new Set(
-      drafts.map((release) => release.storageKey).filter((key): key is string => !!key),
+      drafts
+        .map((release) => release.storageKey)
+        .filter((key): key is string => !!key),
     );
     const results: AppReleaseRetentionItem[] = keep.map((release) =>
       this.toRetentionItem(release, "keep"),
@@ -323,7 +357,9 @@ export class AppUpdatesService {
         this.logger.error(
           `app_release_retention_delete_failed id=${release.id} build=${release.buildNumber} key=${release.storageKey} error=${message}`,
         );
-        results.push(this.toRetentionItem(release, "failed", "Storage delete failed."));
+        results.push(
+          this.toRetentionItem(release, "failed", "Storage delete failed."),
+        );
       }
     }
 
@@ -332,7 +368,9 @@ export class AppUpdatesService {
       (item) => item.action === "skipped" && !keepIds.has(item.id),
     );
     const deleted = results.some((item) => item.action === "deleted");
-    const deleteCandidates = results.some((item) => item.action === "delete-candidate");
+    const deleteCandidates = results.some(
+      (item) => item.action === "delete-candidate",
+    );
     const status = failed
       ? "PARTIAL"
       : skippedCandidates
@@ -377,6 +415,8 @@ export class AppUpdatesService {
         fileSize: true,
         sha256: true,
         downloadUrl: true,
+        channel: true,
+        signed: true,
         storageDeletedAt: true,
         mandatory: true,
         minimumSupportedBuild: true,
@@ -386,7 +426,8 @@ export class AppUpdatesService {
     });
 
     const selectedGlobal = releases.find(
-      (release) => release.buildNumber > query.build && this.isUsableRelease(release),
+      (release) =>
+        release.buildNumber > query.build && this.isUsableRelease(release),
     );
     const selectedPilot = this.findPilotRelease(query, clientKey);
     const selected = this.selectHighestRelease([selectedGlobal, selectedPilot]);
@@ -405,9 +446,14 @@ export class AppUpdatesService {
       fileSize: Number(selected.fileSize),
       sha256: selected.sha256,
       downloadUrl: selected.downloadUrl,
+      signed: selected.signed === true,
+      channel: this.toPublicChannel(selected.channel ?? channel),
+      status: "published",
       mandatory: selected.mandatory,
       minimumSupportedBuild: selected.minimumSupportedBuild,
-      releaseNotes: Array.isArray(selected.releaseNotes) ? selected.releaseNotes : [],
+      releaseNotes: Array.isArray(selected.releaseNotes)
+        ? selected.releaseNotes
+        : [],
       publishedAt: selected.publishedAt!.toISOString(),
     };
   }
@@ -424,7 +470,10 @@ export class AppUpdatesService {
     const bucket = this.rateLimitBuckets.get(key);
 
     if (!bucket || bucket.resetAt <= now) {
-      this.rateLimitBuckets.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+      this.rateLimitBuckets.set(key, {
+        count: 1,
+        resetAt: now + RATE_LIMIT_WINDOW_MS,
+      });
       this.pruneRateLimitBuckets(now);
       return;
     }
@@ -447,7 +496,9 @@ export class AppUpdatesService {
 
   private isUsableRelease(release: AppReleaseForManifest) {
     const fileSize =
-      typeof release.fileSize === "bigint" ? Number(release.fileSize) : release.fileSize;
+      typeof release.fileSize === "bigint"
+        ? Number(release.fileSize)
+        : release.fileSize;
 
     const valid =
       release.downloadUrl.trim().startsWith("https://") &&
@@ -494,10 +545,14 @@ export class AppUpdatesService {
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const platform = this.toPlatform(
-        (typeof parsed.platform === "string" ? parsed.platform : "windows") as PublicAppUpdatePlatform,
+        (typeof parsed.platform === "string"
+          ? parsed.platform
+          : "windows") as PublicAppUpdatePlatform,
       );
       const channel = this.toChannel(
-        (typeof parsed.channel === "string" ? parsed.channel : "stable") as PublicAppUpdateChannel,
+        (typeof parsed.channel === "string"
+          ? parsed.channel
+          : "stable") as PublicAppUpdateChannel,
       );
       const publishedAt = parsed.publishedAt
         ? new Date(String(parsed.publishedAt))
@@ -514,10 +569,13 @@ export class AppUpdatesService {
         storageDeletedAt: null,
         mandatory: parsed.mandatory === true,
         minimumSupportedBuild:
-          parsed.minimumSupportedBuild === null || parsed.minimumSupportedBuild === undefined
+          parsed.minimumSupportedBuild === null ||
+          parsed.minimumSupportedBuild === undefined
             ? null
             : Number(parsed.minimumSupportedBuild),
-        releaseNotes: Array.isArray(parsed.releaseNotes) ? parsed.releaseNotes : [],
+        releaseNotes: Array.isArray(parsed.releaseNotes)
+          ? parsed.releaseNotes
+          : [],
         publishedAt: Number.isNaN(publishedAt.getTime()) ? null : publishedAt,
         signed: parsed.signed === true,
       };
@@ -530,11 +588,18 @@ export class AppUpdatesService {
     }
   }
 
-  private isPilotTargetAllowed(query: CheckAppUpdateQueryDto, clientKey: string) {
+  private isPilotTargetAllowed(
+    query: CheckAppUpdateQueryDto,
+    clientKey: string,
+  ) {
     const deviceId = this.normalizeTargetKey(query.deviceId ?? "");
     const client = this.normalizeTargetKey(clientKey);
-    const deviceIds = new Set(this.configList("FULLPOS_UPDATE_PILOT_DEVICE_IDS"));
-    const clientKeys = new Set(this.configList("FULLPOS_UPDATE_PILOT_CLIENT_KEYS"));
+    const deviceIds = new Set(
+      this.configList("FULLPOS_UPDATE_PILOT_DEVICE_IDS"),
+    );
+    const clientKeys = new Set(
+      this.configList("FULLPOS_UPDATE_PILOT_CLIENT_KEYS"),
+    );
 
     return (
       (deviceId.length > 0 && deviceIds.has(deviceId)) ||
@@ -545,9 +610,14 @@ export class AppUpdatesService {
   private selectHighestRelease(
     releases: Array<AppReleaseForManifest | null | undefined>,
   ): AppReleaseForManifest | null {
-    return releases
-      .filter((release): release is AppReleaseForManifest => release !== null && release !== undefined)
-      .sort((a, b) => b.buildNumber - a.buildNumber)[0] ?? null;
+    return (
+      releases
+        .filter(
+          (release): release is AppReleaseForManifest =>
+            release !== null && release !== undefined,
+        )
+        .sort((a, b) => b.buildNumber - a.buildNumber)[0] ?? null
+    );
   }
 
   private configList(key: string) {
@@ -589,7 +659,9 @@ export class AppUpdatesService {
     return map[status];
   }
 
-  private toPublicPlatform(platform: AppReleasePlatform): PublicAppUpdatePlatform {
+  private toPublicPlatform(
+    platform: AppReleasePlatform,
+  ): PublicAppUpdatePlatform {
     const map: Record<AppReleasePlatform, PublicAppUpdatePlatform> = {
       WINDOWS: "windows",
       ANDROID: "android",
@@ -638,7 +710,8 @@ export class AppUpdatesService {
 
   private toUpdateData(dto: UpdateAppReleaseDto): Prisma.AppReleaseUpdateInput {
     const data: Prisma.AppReleaseUpdateInput = {};
-    if (dto.platform !== undefined) data.platform = this.toPlatform(dto.platform);
+    if (dto.platform !== undefined)
+      data.platform = this.toPlatform(dto.platform);
     if (dto.channel !== undefined) data.channel = this.toChannel(dto.channel);
     if (dto.version !== undefined) data.version = dto.version;
     if (dto.buildNumber !== undefined) data.buildNumber = dto.buildNumber;
@@ -651,7 +724,8 @@ export class AppUpdatesService {
     if (dto.sha256 !== undefined) data.sha256 = dto.sha256;
     if (dto.downloadUrl !== undefined) data.downloadUrl = dto.downloadUrl;
     if (dto.storageKey !== undefined) data.storageKey = dto.storageKey || null;
-    if (dto.releaseNotes !== undefined) data.releaseNotes = dto.releaseNotes as Prisma.InputJsonValue;
+    if (dto.releaseNotes !== undefined)
+      data.releaseNotes = dto.releaseNotes as Prisma.InputJsonValue;
     if (dto.commitSha !== undefined) data.commitSha = dto.commitSha || null;
     if (dto.signed !== undefined) data.signed = dto.signed;
     return data;
@@ -670,12 +744,17 @@ export class AppUpdatesService {
           ? current.minimumSupportedBuild
           : dto.minimumSupportedBuild,
       fileName: dto.fileName ?? current.fileName,
-      fileSize: dto.fileSize === undefined ? current.fileSize : BigInt(dto.fileSize),
+      fileSize:
+        dto.fileSize === undefined ? current.fileSize : BigInt(dto.fileSize),
       sha256: dto.sha256 ?? current.sha256,
       downloadUrl: dto.downloadUrl ?? current.downloadUrl,
-      storageKey: dto.storageKey === undefined ? current.storageKey : dto.storageKey || null,
+      storageKey:
+        dto.storageKey === undefined
+          ? current.storageKey
+          : dto.storageKey || null,
       releaseNotes: dto.releaseNotes ?? current.releaseNotes,
-      commitSha: dto.commitSha === undefined ? current.commitSha : dto.commitSha || null,
+      commitSha:
+        dto.commitSha === undefined ? current.commitSha : dto.commitSha || null,
       signed: dto.signed ?? current.signed,
     };
   }
@@ -696,7 +775,9 @@ export class AppUpdatesService {
       select: { id: true },
     });
     if (existing) {
-      throw new ConflictException("Ya existe un release para ese platform/channel/build.");
+      throw new ConflictException(
+        "Ya existe un release para ese platform/channel/build.",
+      );
     }
   }
 
@@ -715,16 +796,24 @@ export class AppUpdatesService {
     options: { requireSigned: boolean },
   ) {
     const fileSize =
-      typeof release.fileSize === "bigint" ? Number(release.fileSize) : release.fileSize;
+      typeof release.fileSize === "bigint"
+        ? Number(release.fileSize)
+        : release.fileSize;
 
     if (!Number.isInteger(release.buildNumber) || release.buildNumber <= 0) {
-      throw new BadRequestException("buildNumber debe ser entero y mayor que cero.");
+      throw new BadRequestException(
+        "buildNumber debe ser entero y mayor que cero.",
+      );
     }
     if (!Number.isSafeInteger(fileSize) || fileSize <= 0) {
-      throw new BadRequestException("fileSize debe ser entero y mayor que cero.");
+      throw new BadRequestException(
+        "fileSize debe ser entero y mayor que cero.",
+      );
     }
     if (!SHA256_HEX.test(release.sha256)) {
-      throw new BadRequestException("sha256 debe tener 64 caracteres hexadecimales.");
+      throw new BadRequestException(
+        "sha256 debe tener 64 caracteres hexadecimales.",
+      );
     }
     if (!this.isHttpsUrl(release.downloadUrl)) {
       throw new BadRequestException("downloadUrl debe ser HTTPS.");
@@ -738,11 +827,18 @@ export class AppUpdatesService {
     if (release.commitSha && !/^[a-fA-F0-9]{7,64}$/.test(release.commitSha)) {
       throw new BadRequestException("commitSha no es válido.");
     }
-    if (release.storageKey && !this.isSafeReleaseStorageKey(release.storageKey, release.fileName)) {
-      throw new BadRequestException("storageKey no es seguro para releases Windows.");
+    if (
+      release.storageKey &&
+      !this.isSafeReleaseStorageKey(release.storageKey, release.fileName)
+    ) {
+      throw new BadRequestException(
+        "storageKey no es seguro para releases Windows.",
+      );
     }
     if (options.requireSigned && !release.signed) {
-      throw new BadRequestException("La política actual exige releases firmados.");
+      throw new BadRequestException(
+        "La política actual exige releases firmados.",
+      );
     }
   }
 
@@ -771,9 +867,11 @@ export class AppUpdatesService {
     if (raw !== undefined && raw.trim().length > 0) {
       return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
     }
-    return (this.config.get<string>("NODE_ENV") ?? process.env.NODE_ENV ?? "")
-      .trim()
-      .toLowerCase() === "production";
+    return (
+      (this.config.get<string>("NODE_ENV") ?? process.env.NODE_ENV ?? "")
+        .trim()
+        .toLowerCase() === "production"
+    );
   }
 
   private toAdminDto(release: AppReleaseForAdmin) {
@@ -791,7 +889,9 @@ export class AppUpdatesService {
       sha256: release.sha256,
       downloadUrl: release.downloadUrl,
       storageKey: release.storageKey,
-      releaseNotes: Array.isArray(release.releaseNotes) ? release.releaseNotes : [],
+      releaseNotes: Array.isArray(release.releaseNotes)
+        ? release.releaseNotes
+        : [],
       publishedAt: release.publishedAt?.toISOString() ?? null,
       revokedAt: release.revokedAt?.toISOString() ?? null,
       storageDeletedAt: release.storageDeletedAt?.toISOString() ?? null,
@@ -810,11 +910,16 @@ export class AppUpdatesService {
       publishedReleaseId?: string;
     },
   ) {
-    if (context.keepIds.has(release.id)) return "Release is CURRENT or PREVIOUS.";
-    if (context.publishedReleaseId && release.id === context.publishedReleaseId) {
+    if (context.keepIds.has(release.id))
+      return "Release is CURRENT or PREVIOUS.";
+    if (
+      context.publishedReleaseId &&
+      release.id === context.publishedReleaseId
+    ) {
       return "Release was just published.";
     }
-    if (release.status !== AppReleaseStatus.PUBLISHED) return "Release is not PUBLISHED.";
+    if (release.status !== AppReleaseStatus.PUBLISHED)
+      return "Release is not PUBLISHED.";
     if (release.storageDeletedAt !== null) return "Artifact already deleted.";
     if (!release.storageKey) return "Release has no exact storageKey.";
     if (context.draftStorageKeys.has(release.storageKey)) {

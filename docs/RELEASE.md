@@ -86,6 +86,11 @@ Windows:
   `scripts/build/build_windows_release.ps1`. The script fixes the DaleVentas
   API host, rejects FullPOS Owner hosts, sets `FULLPOS_PRODUCTION_BUILD=true`,
   and verifies the generated runtime artifact before installer packaging.
+- While Windows releases are temporarily unsigned, the official build script
+  injects `ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION` and
+  `UPDATE_DOWNLOAD_ALLOWED_HOSTS` via `--dart-define`. This is a bridge policy
+  only: clients must not edit `.env`, and a future signed build must set the
+  production unsigned flag back to `false`.
 - Run Windows builds from a real short Git worktree, for example
   `C:\src\fullpos-release`. Do not rely on `subst` for release builds: Flutter,
   CMake and MSBuild can mix physical and mapped paths in generated files, and

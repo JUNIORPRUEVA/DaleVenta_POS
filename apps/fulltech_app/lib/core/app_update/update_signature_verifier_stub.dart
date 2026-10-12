@@ -24,8 +24,9 @@ class UpdateSignatureVerifier {
     String? expectedSha256,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
+    bool? allowUnsignedForProduction,
   }) async {
-    if (allowUnsignedForUat == true &&
+    if ((allowUnsignedForUat == true || allowUnsignedForProduction == true) &&
         (expectedPublisher ?? '').trim().isEmpty) {
       return;
     }

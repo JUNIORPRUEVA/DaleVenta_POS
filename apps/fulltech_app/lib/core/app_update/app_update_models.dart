@@ -79,6 +79,9 @@ extension AppUpdatePhasePersistence on AppUpdatePhase {
 }
 
 class UpdateManifest {
+  static const stableChannel = 'stable';
+  static const publishedStatus = 'published';
+
   final bool updateAvailable;
   final String? version;
   final int? buildNumber;
@@ -86,6 +89,9 @@ class UpdateManifest {
   final int? fileSize;
   final String? sha256;
   final String? downloadUrl;
+  final bool signed;
+  final String channel;
+  final String status;
   final bool mandatory;
   final int? minimumSupportedBuild;
   final List<String> releaseNotes;
@@ -99,6 +105,9 @@ class UpdateManifest {
     this.fileSize,
     this.sha256,
     this.downloadUrl,
+    this.signed = true,
+    this.channel = stableChannel,
+    this.status = publishedStatus,
     this.mandatory = false,
     this.minimumSupportedBuild,
     this.releaseNotes = const [],
@@ -119,6 +128,10 @@ class UpdateManifest {
     final fileSize = _asInt(json['fileSize']);
     final sha256 = _asTrimmedString(json['sha256']);
     final downloadUrl = _asTrimmedString(json['downloadUrl']);
+    final channel =
+        _asTrimmedString(json['channel'])?.toLowerCase() ?? stableChannel;
+    final status =
+        _asTrimmedString(json['status'])?.toLowerCase() ?? publishedStatus;
     final publishedAtRaw = _asTrimmedString(json['publishedAt']);
     final publishedAt = publishedAtRaw == null
         ? null
@@ -136,6 +149,8 @@ class UpdateManifest {
         RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(sha256) &&
         downloadUrl != null &&
         Uri.tryParse(downloadUrl)?.scheme == 'https' &&
+        channel == stableChannel &&
+        status == publishedStatus &&
         publishedAt != null;
 
     if (!valid) {
@@ -150,6 +165,9 @@ class UpdateManifest {
       fileSize: fileSize,
       sha256: sha256,
       downloadUrl: downloadUrl,
+      signed: json['signed'] == true,
+      channel: channel,
+      status: status,
       mandatory: json['mandatory'] == true,
       minimumSupportedBuild: _asInt(json['minimumSupportedBuild']),
       releaseNotes: _asReleaseNotes(json['releaseNotes']),
@@ -164,6 +182,9 @@ class UpdateManifest {
       updateAvailable && buildNumber != null && buildNumber == dismissedBuild;
 
   bool get hasDownloadUrl => (downloadUrl ?? '').trim().isNotEmpty;
+
+  bool get isStablePublished =>
+      channel == stableChannel && status == publishedStatus;
 
   bool get update => updateAvailable;
 
@@ -228,6 +249,8 @@ class PersistedUpdateState {
   final int? bytesDownloaded;
   final int? fileSizeExpected;
   final String? sha256Expected;
+  final String? signatureStatus;
+  final String? signatureAcceptedBy;
   final int? dismissedBuild;
   final int attempts;
   final String? lastErrorCode;
@@ -244,6 +267,8 @@ class PersistedUpdateState {
     this.bytesDownloaded,
     this.fileSizeExpected,
     this.sha256Expected,
+    this.signatureStatus,
+    this.signatureAcceptedBy,
     this.dismissedBuild,
     this.attempts = 0,
     this.lastErrorCode,
@@ -274,6 +299,10 @@ class PersistedUpdateState {
       bytesDownloaded: UpdateManifest._asInt(json['bytesDownloaded']),
       fileSizeExpected: UpdateManifest._asInt(json['fileSizeExpected']),
       sha256Expected: UpdateManifest._asTrimmedString(json['sha256Expected']),
+      signatureStatus: UpdateManifest._asTrimmedString(json['signatureStatus']),
+      signatureAcceptedBy: UpdateManifest._asTrimmedString(
+        json['signatureAcceptedBy'],
+      ),
       dismissedBuild: UpdateManifest._asInt(json['dismissedBuild']),
       attempts: UpdateManifest._asInt(json['attempts']) ?? 0,
       lastErrorCode: UpdateManifest._asTrimmedString(json['lastErrorCode']),
@@ -302,6 +331,8 @@ class PersistedUpdateState {
     int? bytesDownloaded,
     int? fileSizeExpected,
     String? sha256Expected,
+    String? signatureStatus,
+    String? signatureAcceptedBy,
     int? dismissedBuild,
     int? attempts,
     String? lastErrorCode,
@@ -332,6 +363,12 @@ class PersistedUpdateState {
       sha256Expected: clearTarget
           ? null
           : (sha256Expected ?? this.sha256Expected),
+      signatureStatus: clearTarget
+          ? null
+          : (signatureStatus ?? this.signatureStatus),
+      signatureAcceptedBy: clearTarget
+          ? null
+          : (signatureAcceptedBy ?? this.signatureAcceptedBy),
       dismissedBuild: clearDismissedBuild
           ? null
           : (dismissedBuild ?? this.dismissedBuild),
@@ -355,6 +392,8 @@ class PersistedUpdateState {
       'bytesDownloaded': bytesDownloaded,
       'fileSizeExpected': fileSizeExpected,
       'sha256Expected': sha256Expected,
+      'signatureStatus': signatureStatus,
+      'signatureAcceptedBy': signatureAcceptedBy,
       'dismissedBuild': dismissedBuild,
       'attempts': attempts,
       'lastErrorCode': lastErrorCode,

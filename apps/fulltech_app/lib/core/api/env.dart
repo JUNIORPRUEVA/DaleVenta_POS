@@ -73,6 +73,20 @@ class Env {
       );
       if (v.trim().isNotEmpty) return v;
     }
+    if (key == 'ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION') {
+      const v = String.fromEnvironment(
+        'ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION',
+        defaultValue: '',
+      );
+      if (v.trim().isNotEmpty) return v;
+    }
+    if (key == 'UPDATE_DOWNLOAD_ALLOWED_HOSTS') {
+      const v = String.fromEnvironment(
+        'UPDATE_DOWNLOAD_ALLOWED_HOSTS',
+        defaultValue: '',
+      );
+      if (v.trim().isNotEmpty) return v;
+    }
 
     // 2) Runtime values for Web (injected via env.js)
     if (kIsWeb) {
@@ -228,6 +242,25 @@ class Env {
         .trim()
         .toLowerCase();
     return raw == '1' || raw == 'true' || raw == 'yes' || raw == 'on';
+  }
+
+  static bool get allowUnsignedUpdatesForProduction {
+    final raw = (_readEnv('ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION') ?? '')
+        .trim()
+        .toLowerCase();
+    return raw == '1' || raw == 'true' || raw == 'yes' || raw == 'on';
+  }
+
+  static Set<String> get updateDownloadAllowedHosts {
+    final raw = (_readEnv('UPDATE_DOWNLOAD_ALLOWED_HOSTS') ?? '').trim();
+    final source = raw.isEmpty
+        ? '612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com'
+        : raw;
+    return source
+        .split(',')
+        .map((entry) => entry.trim().toLowerCase())
+        .where((entry) => entry.isNotEmpty)
+        .toSet();
   }
 
   static bool get releasesEnabled {

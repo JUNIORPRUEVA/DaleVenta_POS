@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/env.dart';
 import '../debug/trace_log.dart';
 import 'app_update_installer.dart';
 import 'app_update_installer_contract.dart';
@@ -12,6 +13,7 @@ import 'app_update_telemetry.dart';
 import 'update_downloader.dart';
 import 'update_restart_guard.dart';
 import 'update_signature_verifier.dart';
+import 'update_trust_policy.dart';
 import 'update_verifier.dart';
 
 final appUpdateProvider =
@@ -24,6 +26,10 @@ final appUpdateProvider =
         ref.read(updateVerifierProvider),
         ref.read(updateSignatureVerifierProvider),
         ref.read(appUpdateInstallerProvider),
+        UpdateTrustPolicy(
+          allowUnsignedProduction: Env.allowUnsignedUpdatesForProduction,
+          allowedHosts: Env.updateDownloadAllowedHosts,
+        ),
       );
     });
 
@@ -36,6 +42,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     this._verifier,
     this._signatureVerifier,
     this._installer,
+    this._trustPolicy,
   ) : super(AppUpdateState.initial());
 
   final AppUpdateRepository _repository;
@@ -45,6 +52,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   final UpdateVerifier _verifier;
   final UpdateSignatureVerifier _signatureVerifier;
   final AppUpdateInstaller _installer;
+  final UpdateTrustPolicy _trustPolicy;
   Future<void>? _checkFuture;
   Future<void>? _downloadFuture;
   Future<void>? _loadFuture;
@@ -613,6 +621,24 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         filePath: download.partPath,
         expectedSha256: manifest.sha256 ?? '',
       );
+      final trustDecision = _trustPolicy.evaluate(
+        manifest: manifest,
+        currentBuild: state.installedRelease?.currentBuild ?? 0,
+        bytesDownloaded: download.bytesDownloaded,
+      );
+      if (!trustDecision.accepted) {
+        await _downloader.discardBuild(targetBuild);
+        await _failDownload(
+          manifest,
+          targetBuild,
+          trustDecision.errorCode ?? 'UPDATE_TRUST_REJECTED',
+          UpdateSignatureVerificationException(
+            trustDecision.errorCode ?? 'UPDATE_TRUST_REJECTED',
+          ),
+          StackTrace.current,
+        );
+        return;
+      }
 
       await _setState(
         state.copyWith(
@@ -628,6 +654,8 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         filePath: download.partPath,
         updateRootPath: download.updateRootPath,
         expectedSha256: manifest.sha256 ?? '',
+        allowUnsignedForProduction:
+            trustDecision.acceptedBy == 'ProductionUnsignedPolicy',
       );
       await _downloader.promoteToReady(download);
 
@@ -645,6 +673,8 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             bytesDownloaded: download.bytesDownloaded,
             fileSizeExpected: download.fileSizeExpected,
             sha256Expected: manifest.sha256?.toLowerCase(),
+            signatureStatus: trustDecision.signatureStatus,
+            signatureAcceptedBy: trustDecision.acceptedBy,
             lastUpdateResult: 'READY_TO_INSTALL',
             clearLastError: true,
           ),
