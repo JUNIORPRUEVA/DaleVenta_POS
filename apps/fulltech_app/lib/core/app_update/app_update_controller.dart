@@ -330,6 +330,30 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         await _downloader.discardBuild(previousBuild);
       }
 
+      if (_hasPreparedArtifactFor(manifest)) {
+        await _setState(
+          state.copyWith(
+            phase: AppUpdatePhase.readyToInstall,
+            installedRelease: installedRelease,
+            manifest: manifest,
+            checkedAt: _lastCheckedAt,
+            progress: UpdateDownloadProgress(
+              bytesDownloaded: state.persisted.bytesDownloaded ?? 0,
+              totalBytes:
+                  state.persisted.fileSizeExpected ?? manifest.fileSize ?? 0,
+            ),
+            clearMessage: true,
+            persisted: state.persisted.copyWith(
+              phase: AppUpdatePhase.readyToInstall,
+              lastUpdateCheckAt: _lastCheckedAt,
+              lastUpdateResult: 'READY_TO_INSTALL',
+              clearLastError: true,
+            ),
+          ),
+        );
+        return;
+      }
+
       final dismissed = manifest.isDismissedBy(state.persisted.dismissedBuild);
       const phase = AppUpdatePhase.available;
       await _setState(
@@ -376,6 +400,33 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         ),
       );
     }
+  }
+
+  bool _hasPreparedArtifactFor(UpdateManifest manifest) {
+    final persisted = state.persisted;
+    final targetBuild = manifest.buildNumber;
+    final artifact = persisted.artifactRelativePath;
+    if (targetBuild == null || artifact == null || artifact.trim().isEmpty) {
+      return false;
+    }
+    if (persisted.targetBuild != targetBuild) return false;
+    if (persisted.phase != AppUpdatePhase.readyToInstall &&
+        persisted.phase != AppUpdatePhase.installFailed) {
+      return false;
+    }
+    final expectedSize = manifest.fileSize;
+    if (expectedSize != null &&
+        persisted.fileSizeExpected != null &&
+        persisted.fileSizeExpected != expectedSize) {
+      return false;
+    }
+    final expectedSha = manifest.sha256?.toLowerCase();
+    if (expectedSha != null &&
+        persisted.sha256Expected != null &&
+        persisted.sha256Expected != expectedSha) {
+      return false;
+    }
+    return true;
   }
 
   Future<bool> _reconcileInstallerResult(

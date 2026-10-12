@@ -117,6 +117,39 @@ void main() {
       },
     );
 
+    test(
+      'ready artifact is reused on recheck without downloading again',
+      () async {
+        final downloader = FakeUpdateDownloader();
+        final persistence = FakeUpdatePersistence(
+          initial: PersistedUpdateState.initial().copyWith(
+            phase: AppUpdatePhase.readyToInstall,
+            targetBuild: 138,
+            targetVersion: '1.0.7',
+            artifactRelativePath: '138/Fullpos-Setup.exe.ready',
+            bytesDownloaded: 123456789,
+            fileSizeExpected: 123456789,
+            sha256Expected: _sha,
+          ),
+        );
+        final controller = _controller(
+          manifest: UpdateManifest.fromJson(_manifestJson(build: 138)),
+          installedBuild: 137,
+          persistence: persistence,
+          downloader: downloader,
+        );
+
+        await controller.checkNow(force: true);
+        await _drainBackgroundUpdate();
+
+        expect(controller.state.phase, AppUpdatePhase.readyToInstall);
+        expect(controller.state.persisted.artifactRelativePath, isNotNull);
+        expect(controller.state.persisted.lastUpdateResult, 'READY_TO_INSTALL');
+        expect(downloader.downloads, 0);
+        expect(downloader.promoted, isFalse);
+      },
+    );
+
     test('lower build never downgrades', () async {
       final controller = _controller(
         manifest: UpdateManifest.fromJson(_manifestJson(build: 129)),
@@ -1109,6 +1142,7 @@ class FakeUpdateDownloader extends UpdateDownloader {
   final String? failureCode;
   final UpdateInstallerResult? installerResult;
   final List<int> discardedBuilds = [];
+  int downloads = 0;
   bool promoted = false;
 
   @override
@@ -1116,6 +1150,7 @@ class FakeUpdateDownloader extends UpdateDownloader {
     UpdateManifest manifest, {
     void Function(UpdateDownloadProgress progress)? onProgress,
   }) async {
+    downloads += 1;
     final code = failureCode;
     if (code != null) throw UpdateDownloadException(code);
     onProgress?.call(

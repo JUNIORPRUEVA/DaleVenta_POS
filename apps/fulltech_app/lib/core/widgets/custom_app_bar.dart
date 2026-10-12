@@ -87,9 +87,13 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
       ref: ref,
     );
 
+    final titleUpdateControl = AppUpdateMiniControl(
+      compact: true,
+      inTitle: true,
+    );
+
     final resolvedActions = <Widget>[
       ...?actions,
-      AppUpdateMiniControl(compact: isMobileLayout),
       if (primaryPendingAction != null) primaryPendingAction,
       if (trailing != null)
         trailing!
@@ -121,31 +125,47 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
         titleWidget ??
         (!(showLogo || showDepartmentLabel)
             ? (subtitle == null || subtitle!.trim().isEmpty
-                  ? Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isMobileLayout
-                            ? Colors.white
-                            : desktopForeground,
-                        fontWeight: FontWeight.w900,
-                      ),
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isMobileLayout
+                                  ? Colors.white
+                                  : desktopForeground,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        titleUpdateControl,
+                      ],
                     )
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isMobileLayout
-                                ? Colors.white
-                                : desktopForeground,
-                            fontSize: 17,
-                            height: 1.05,
-                            fontWeight: FontWeight.w900,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isMobileLayout
+                                      ? Colors.white
+                                      : desktopForeground,
+                                  fontSize: 17,
+                                  height: 1.05,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            titleUpdateControl,
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -201,17 +221,25 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: isMobileLayout
-                                ? Colors.white
-                                : desktopForeground,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: isMobileLayout
+                                      ? Colors.white
+                                      : desktopForeground,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                            ),
+                            titleUpdateControl,
+                          ],
                         ),
                         if (showDepartmentLabel) const SizedBox(height: 2),
                         if (showDepartmentLabel && isMobileLayout)

@@ -5,9 +5,14 @@ import 'app_update_controller.dart';
 import 'app_update_models.dart';
 
 class AppUpdateMiniControl extends ConsumerWidget {
-  const AppUpdateMiniControl({super.key, this.compact = false});
+  const AppUpdateMiniControl({
+    super.key,
+    this.compact = false,
+    this.inTitle = false,
+  });
 
   final bool compact;
+  final bool inTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,8 +48,17 @@ class AppUpdateMiniControl extends ConsumerWidget {
     final canDismiss =
         state.manifest?.buildNumber != null && !waiting && !installing;
 
+    final iconSize = inTitle ? 15.0 : 17.0;
+    final closeSize = inTitle ? 14.0 : 16.0;
+    final horizontalPadding = inTitle ? 7.0 : 10.0;
+    final fontSize = inTitle ? 11.0 : 12.0;
+    final closeTapSize = inTitle ? 26.0 : 30.0;
+
     return Padding(
-      padding: EdgeInsets.only(right: compact ? 6 : 8),
+      padding: EdgeInsets.only(
+        left: inTitle ? 8 : 0,
+        right: inTitle ? 0 : (compact ? 6 : 8),
+      ),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -76,9 +90,9 @@ class AppUpdateMiniControl extends ConsumerWidget {
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.system_update_alt_rounded, size: 17),
+                    : Icon(Icons.system_update_alt_rounded, size: iconSize),
                 label: Text(
-                  compact && ready ? 'Actualizar' : label,
+                  (compact || inTitle) && ready ? 'Actualizar' : label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -86,10 +100,12 @@ class AppUpdateMiniControl extends ConsumerWidget {
                   foregroundColor: const Color(0xFF1957E6),
                   disabledForegroundColor: const Color(0xFF64748B),
                   visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  textStyle: const TextStyle(
+                  minimumSize: Size(0, inTitle ? 28 : 34),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  textStyle: TextStyle(
                     fontWeight: FontWeight.w900,
-                    fontSize: 12,
+                    fontSize: fontSize,
                     letterSpacing: 0,
                   ),
                 ),
@@ -100,11 +116,11 @@ class AppUpdateMiniControl extends ConsumerWidget {
                 message: 'Ocultar actualización',
                 child: IconButton(
                   onPressed: controller.dismissCurrentBuild,
-                  icon: const Icon(Icons.close_rounded, size: 16),
+                  icon: Icon(Icons.close_rounded, size: closeSize),
                   color: const Color(0xFF64748B),
-                  constraints: const BoxConstraints.tightFor(
-                    width: 30,
-                    height: 30,
+                  constraints: BoxConstraints.tightFor(
+                    width: closeTapSize,
+                    height: closeTapSize,
                   ),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
