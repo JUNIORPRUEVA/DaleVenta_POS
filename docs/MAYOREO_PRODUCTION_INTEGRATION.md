@@ -121,7 +121,7 @@ lockfile local no representan una degradacion de esas versiones del runtime.
 No se modificaron servicios ni esquema productivo. Quedan pendientes las
 respuestas explicitas sobre migracion productiva y excepcion de firma Windows.
 
-Relacion de 83 rutas integradas respecto de 6b3e38ed; incluye las ocho
+Relacion inicial de 83 rutas integradas respecto de 6b3e38ed; incluye las ocho
 mejoras previas de production-main preservadas, no atribuidas como cambios
 nuevos de Mayoreo:
 
@@ -226,7 +226,7 @@ del servidor ni se desactivo autenticacion.
   health publico ok, price-lists protegido con 401 y PWA version 142.
 - Windows 142 publicado: 18eaf1bc-bc60-44c0-8dd5-b17f1e9f36f1.
   Manifesto publico y descarga externa parcial 206/MZ verificados. Descarga
-  completa desde R2 verificada por SHA256 antes de crear/pulicar el release.
+  completa desde R2 verificada por SHA256 antes de crear/publicar el release.
   Retencion en dry-run: no se eliminaron instaladores anteriores.
 - Revision final detecto un enlace antiguo real: AppAccessLinks apuntaba al
   instalador GitHub 1.0.3-7. Tambien se almacenaban URLs R2 con expiracion fija.
@@ -240,3 +240,77 @@ del servidor ni se desactivo autenticacion.
 - Pruebas nuevas: enlace publico 302/no-store y 404 sin release; firma renovada
   en cada consulta; rechazo de claves privadas/traversal; fallo de storage
   visible; compatibilidad con releases previos.
+
+## Validacion de la correccion de entrega 143
+
+- Commit funcional d230f9d36e14c7ce73ddaa4b25ca0ea090b0724f.
+  Empaquetado API seguro ad0fcb58: .dockerignore excluye .env, datos locales
+  y salidas generadas del contexto de compilacion; no cambia el runtime.
+- npm run api:build PASS. Regresion API completa: 76 suites/753 pruebas PASS,
+  1 suite/8 pruebas omitidas. El doble de storage del test administrativo
+  se actualizo al nuevo contrato; se conserva y refuerza la asercion publica.
+- Flutter analyze --no-pub PASS, sin incidencias. Regresion de enlaces,
+  landing, listas, cotizaciones y updater: 208 pruebas PASS.
+- Web 143 compilada con Flutter 3.41.6; verificado que main.dart.js incluye
+  la ruta estable y ya no incluye FullPOS-Cloud-Setup-1.0.3-7.exe.
+- Imagenes compiladas localmente, paquete 244452997 bytes, SHA256
+  61b25bd85e6f6d848473383585e92c6d59f4f00f53c046095c06957778852ddc.
+- Config digest API 143:
+  645cee4acc00c3d6136747fb9e2c8df4692031304c92ed5ce74b7884e2c29547.
+- Config digest PWA 143:
+  3995487a53faca592cad75b969c0f7f763a936a34b5c784c09c9654fd268e7fe.
+- Respaldo antes de correccion:
+  database-before-delivery143-20261019T023618Z.dump, 6346483 bytes,
+  SHA256 3ef911c7593dba079edbbdfe67f771a726078b3a64b87881c8b777c0952d7350.
+  Catalogo validado, imagenes y especificaciones privadas 142 preservadas.
+- Rutas adicionales: apps/api/.dockerignore;
+  apps/api/src/app-updates/app-release-storage.service.ts y .spec.ts;
+  apps/api/src/app-updates/app-updates.service.ts y .spec.ts;
+  apps/api/src/app-updates/app-updates.controller.ts y .spec.ts;
+  apps/api/src/app-updates/app-update-releases.service.spec.ts;
+  apps/fulltech_app/lib/core/app_access/app_access_links.dart;
+  apps/fulltech_app/test/features/auth/landing_screen_test.dart.
+  pubspec.yaml y este registro tambien reflejan la version final.
+
+## Artefacto Windows 143 y gate de publicacion
+
+- Instalador oficial d230f9d36e14c7ce73ddaa4b25ca0ea090b0724f, compilado en
+  C:/src/fullpos-mayoreo-release143. Archivo FullPOS-Setup-1.0.6-143.exe,
+  40207471 bytes, NotSigned, SHA256
+  54F0A1B7495A698360E23A1909A395005B27AA510517071BDBD8AE97D9A6B986.
+- Ejecutable fullpos_cloud.exe 1.0.6+143, sin ejecutable UAT en la distribucion.
+  AOT nativo y JavaScript incluyen el enlace estable nuevo y no incluyen
+  FullPOS-Cloud-Setup-1.0.3-7.exe. Instalador transferido y hash comprobado.
+- Artefactos de servidor 143 cargados y digests comprobados. Preflight del
+  runtime nuevo contra configuracion productiva, solo lectura: release 142
+  resuelto con firma R2 nueva, SHA conservado y cero migraciones pendientes.
+- Runtime Docker 143 contra UAT local: health 200 y ruta de descarga publica
+  404 con mensaje correcto cuando no hay releases; no redirige al archivo viejo.
+- Se solicito aprobacion especifica para publicar Windows 143 sin firma,
+  porque la autorizacion previa correspondia al instalador 142 ya publicado.
+  Este gate sigue pendiente hasta recibir respuesta. La actualizacion API/PWA
+  y el enlace estable de descarga funcionan con el release 142 mientras tanto.
+
+## Estado productivo comprobado al cierre de esta ejecucion
+
+- API fullpos/daleventapos-backend:mayoreo-143, contenedor 4e66a81cb46f:
+  Swarm completed, healthy, health publico ok y cero ERROR desde el despliegue.
+- PWA fullpos/daleventapos-pwa:mayoreo-143, contenedor fd7ef671b421:
+  Swarm completed; version.json 1.0.6/143 y shell/bootstrap 143-d230f9d3.
+- Env, mounts y EndpointSpec comparados con las copias privadas anteriores:
+  iguales. No se cambiaron credenciales, almacenamiento ni puertos.
+- Ruta publica estable /api/app-updates/windows/latest/download: 302/no-store;
+  redirige al instalador vigente de R2. Descarga externa 206 y cabecera MZ
+  verificadas. El enlace antiguo de GitHub no interviene.
+- Manifiesto publico: Windows 142 publicado; firma R2 generada al consultar,
+  no reutiliza la URL guardada en el registro. El cliente 142 no recibe una
+  actualizacion ficticia a su propia version. Autenticacion price-lists: 401.
+- Sin nuevas migraciones, seeds, ventas, cobros ni datos de prueba en produccion.
+  Solo se aplico la migracion aprobada y se creo/publico el release 142 aprobado.
+- Windows 143 esta compilado y verificado, pero NO publicado. La respuesta a la
+  nueva excepcion de firma solicitada es el unico gate pendiente.
+- Mayoreo permanece desactivado por defecto por empresa. Configuracion:
+  FullPOS > Configuracion > Empresa > Mayoreo > Listas de precios.
+  Administracion de listas: Inventario > Listas precios.
+- Estado del servidor: GO. Estado de la publicacion Windows 143: pendiente de
+  autorizacion, NO-GO hasta recibirla. Se conservan 142 y las imagenes anteriores.
