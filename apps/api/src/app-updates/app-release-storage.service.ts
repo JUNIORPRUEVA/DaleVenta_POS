@@ -15,6 +15,27 @@ export class AppReleaseStorageService {
     return this.localRoot() ? "local" : "r2";
   }
 
+  async resolveDownloadUrl(release: {
+    storageKey?: string | null;
+    fileName: string;
+    downloadUrl: string;
+  }) {
+    const key = release.storageKey;
+    if (!key || this.localRoot()) return release.downloadUrl;
+    if (
+      !key.startsWith("releases/windows/") ||
+      key.includes("..") ||
+      key.includes("\\") ||
+      !key.endsWith(`/${release.fileName}`)
+    ) {
+      throw new InternalServerErrorException("Invalid Windows release storage key.");
+    }
+    return this.r2.createPresignedGetUrl({
+      objectKey: key,
+      expiresInSeconds: 604800,
+    });
+  }
+
   async deleteObject(storageKey: string) {
     const root = this.localRoot();
     if (!root) {

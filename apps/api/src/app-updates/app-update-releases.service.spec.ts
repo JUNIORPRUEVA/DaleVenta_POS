@@ -119,7 +119,10 @@ function buildService(initial: ReturnType<typeof draft>[] = [], env: Record<stri
     appRelease,
     $transaction: jest.fn(async (callback: (tx: unknown) => unknown) => callback(prisma)),
   };
-  const r2 = { deleteObject: jest.fn(async () => ({ ok: true })) };
+  const r2 = {
+    deleteObject: jest.fn(async () => ({ ok: true })),
+    resolveDownloadUrl: jest.fn(async () => "https://downloads.example.com/fresh-installer.exe"),
+  };
   const service = new AppUpdatesService(prisma as any, {
     get: jest.fn((key: string) => env[key]),
   } as any, r2 as any);
@@ -273,7 +276,7 @@ describe("App release administration", () => {
   });
 
   it("published releases appear in public check", async () => {
-    const { service } = buildService([
+    const { service, r2 } = buildService([
       draft({ id: "published-1", status: AppReleaseStatus.PUBLISHED, publishedAt: now }),
     ]);
 
@@ -285,7 +288,9 @@ describe("App release administration", () => {
     ).resolves.toMatchObject({
       updateAvailable: true,
       buildNumber: 131,
+      downloadUrl: "https://downloads.example.com/fresh-installer.exe",
     });
+    expect(r2.resolveDownloadUrl).toHaveBeenCalledTimes(1);
   });
 
   it("revoked releases disappear from public check", async () => {

@@ -94,6 +94,25 @@ describe("AppUpdatesController", () => {
       .expect(400);
   });
 
+  it("redirects the stable public Windows link to the latest verified manifest", async () => {
+    check.mockResolvedValueOnce({ updateAvailable: true, buildNumber: 143, downloadUrl: "https://downloads.example.test/installer.exe" });
+    const response = await request(app.getHttpServer())
+      .get("/api/app-updates/windows/latest/download")
+      .expect(302);
+    expect(response.headers.location).toBe("https://downloads.example.test/installer.exe");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(check).toHaveBeenCalledWith(
+      { platform: "windows", channel: "stable", version: "0.0.0", build: 0 },
+      expect.any(String),
+    );
+  });
+
+  it("does not redirect to an old installer when none is published", async () => {
+    await request(app.getHttpServer())
+      .get("/api/app-updates/windows/latest/download")
+      .expect(404);
+  });
+
   it("returns 400 for invalid platform", async () => {
     await request(app.getHttpServer())
       .get("/api/app-updates/check")

@@ -33,7 +33,7 @@ void main() {
   test('landing download links use centralized production sources', () {
     expect(
       AppAccessLinks.windowsReleaseUri.toString(),
-      'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/download/v1.0.4/FullPOS-Cloud-Setup-1.0.3-7.exe',
+      'https://daleventapos-backend.gcdndd.easypanel.host/api/app-updates/windows/latest/download',
     );
     expect(
       AppAccessLinks.androidReleaseUri.toString(),

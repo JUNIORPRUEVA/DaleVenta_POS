@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../config/product_config.dart';
+
 enum AppAccessKind { android, ios, pwa, windows }
 
 class AppAccessChannel {
@@ -29,7 +31,7 @@ class AppAccessLinks {
   static final Uri pwaUri = Uri.parse('https://fullposcloud.fulltechrd.com/');
 
   static final Uri windowsReleaseUri = Uri.parse(
-    'https://github.com/JUNIORPRUEVA/DaleVenta_POS/releases/download/v1.0.4/FullPOS-Cloud-Setup-1.0.3-7.exe',
+    '${ProductConfig.productionApiBaseUrl}/api/app-updates/windows/latest/download',
   );
 
   static final Uri androidReleaseUri = Uri.parse(

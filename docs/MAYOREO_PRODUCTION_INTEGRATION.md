@@ -74,7 +74,7 @@ Solo corresponden a este producto daleventapos_backend y daleventapos_pwa.
   Los dos modulos brotli y entrypoint del runtime local se compararon por
   SHA256 con produccion y coinciden. No se reutiliza JavaScript antiguo.
 
-Estado: pruebas combinadas PASS; artefactos, publicacion y despliegue pendientes.
+Estado de preparacion inicial: pruebas combinadas PASS; ver avance de despliegue al final.
 
 ## Artefactos verificados
 
@@ -210,3 +210,33 @@ scripts/isolated-uat/stop-db.ps1
 scripts/isolated-uat/test-mayoreo.ps1
 scripts/isolated-uat/verify.ps1
 ```
+
+## Despliegue autorizado y correccion de entrega
+
+El propietario indico "continua" despues de los dos gates especificos. Se
+aplico la migracion autorizada y se publico el instalador 142 sin firma,
+con excepcion limitada a esa operacion. No se cambio la politica de firma
+del servidor ni se desactivo autenticacion.
+
+- Respaldo inmediato: database-immediate-20261019T022433Z.dump, 6317605 bytes,
+  SHA256 ed16f7c6a86448d950dbc74328101eec9cfe215c092aa99c935744ee359d4175.
+- Migracion 20261013180000_wholesale_price_lists aplicada; default false
+  comprobado por information_schema. No se habilito Mayoreo globalmente.
+- API y PWA 142: actualizaciones Swarm completadas con rollback automatico;
+  health publico ok, price-lists protegido con 401 y PWA version 142.
+- Windows 142 publicado: 18eaf1bc-bc60-44c0-8dd5-b17f1e9f36f1.
+  Manifesto publico y descarga externa parcial 206/MZ verificados. Descarga
+  completa desde R2 verificada por SHA256 antes de crear/pulicar el release.
+  Retencion en dry-run: no se eliminaron instaladores anteriores.
+- Revision final detecto un enlace antiguo real: AppAccessLinks apuntaba al
+  instalador GitHub 1.0.3-7. Tambien se almacenaban URLs R2 con expiracion fija.
+  Se corrige el acceso Windows para resolver el ultimo release publicado en
+  el backend, y se renueva la firma R2 cada vez que se consulta el manifiesto.
+  No se firman claves ajenas al prefijo releases/windows ni se exponen datos
+  de empresas. Releases antiguos sin storageKey y almacenamiento local se
+  mantienen compatibles.
+- La correccion requiere compilacion 143: el instalador 142 ya publicado es
+  inmutable y no se sobrescribe. No hay nuevas migraciones ni cambios de ventas.
+- Pruebas nuevas: enlace publico 302/no-store y 404 sin release; firma renovada
+  en cada consulta; rechazo de claves privadas/traversal; fallo de storage
+  visible; compatibilidad con releases previos.

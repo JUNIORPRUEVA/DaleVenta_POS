@@ -30,6 +30,7 @@ import {
 } from "./dto/app-release-admin.dto";
 
 type AppReleaseForManifest = {
+  storageKey?: string | null;
   channel?: AppReleaseChannel;
   version: string;
   buildNumber: number;
@@ -415,6 +416,7 @@ export class AppUpdatesService {
         fileSize: true,
         sha256: true,
         downloadUrl: true,
+        storageKey: true,
         channel: true,
         signed: true,
         storageDeletedAt: true,
@@ -445,7 +447,9 @@ export class AppUpdatesService {
       fileName: selected.fileName,
       fileSize: Number(selected.fileSize),
       sha256: selected.sha256,
-      downloadUrl: selected.downloadUrl,
+      downloadUrl: selected.storageKey
+        ? await this.releaseStorage.resolveDownloadUrl(selected)
+        : selected.downloadUrl,
       signed: selected.signed === true,
       channel: this.toPublicChannel(selected.channel ?? channel),
       status: "published",

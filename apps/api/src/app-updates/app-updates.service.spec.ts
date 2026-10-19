@@ -27,12 +27,13 @@ function release(overrides: Record<string, unknown> = {}) {
 function buildService(releases: ReturnType<typeof release>[]) {
   const findMany = jest.fn().mockResolvedValue(releases);
   const env: Record<string, string> = {};
+  const resolveDownloadUrl = jest.fn().mockResolvedValue("https://downloads.example.com/fresh-installer.exe");
   const service = new AppUpdatesService(
     {
       appRelease: { findMany },
     } as any,
     { get: jest.fn((key: string) => env[key]) } as any,
-    { deleteObject: jest.fn() } as any,
+    { deleteObject: jest.fn(), resolveDownloadUrl } as any,
   );
 
   jest
@@ -42,7 +43,7 @@ function buildService(releases: ReturnType<typeof release>[]) {
     .spyOn((service as any).logger, "error")
     .mockImplementation(() => undefined);
 
-  return { service, findMany, env };
+  return { service, findMany, env, resolveDownloadUrl };
 }
 
 function pilotRelease(overrides: Record<string, unknown> = {}) {
@@ -72,6 +73,23 @@ const query = {
 };
 
 describe("AppUpdatesService", () => {
+  it("uses renewed storage URLs for published releases with a storage key", async () => {
+    const candidate = release({ storageKey: "releases/windows/stable/1.0.7-131/Fullpos-Setup-1.0.7+131.exe" });
+    const { service, resolveDownloadUrl } = buildService([candidate]);
+    await expect(service.check(query, "fresh-storage-url")).resolves.toMatchObject({
+      updateAvailable: true,
+      downloadUrl: "https://downloads.example.com/fresh-installer.exe",
+      buildNumber: 131,
+      sha256: validSha,
+    });
+    expect(resolveDownloadUrl).toHaveBeenCalledWith(candidate);
+  });
+
+  it("surfaces signing failures instead of returning a stale stored URL", async () => {
+    const { service, resolveDownloadUrl } = buildService([release({ storageKey: "releases/windows/stable/setup.exe" })]);
+    resolveDownloadUrl.mockRejectedValueOnce(new Error("storage unavailable"));
+    await expect(service.check(query, "storage-signing-failure")).rejects.toThrow("storage unavailable");
+  });
   it("returns false when there are no releases", async () => {
     const { service } = buildService([]);
 
