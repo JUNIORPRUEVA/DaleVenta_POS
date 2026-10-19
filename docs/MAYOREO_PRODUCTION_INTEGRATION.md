@@ -46,4 +46,63 @@ Solo corresponden a este producto daleventapos_backend y daleventapos_pwa.
 8. Publicar production-main y desplegar solo los artefactos verificados;
    comprobar salud, version y carga de PWA sin crear ventas en produccion.
 
-Estado inicial: integracion creada; validacion y despliegue pendientes.
+## Evidencia de preparacion
+
+- Integracion funcional: dd8d2729e78183f4a66046b7fc4023e8b8736311.
+- SDK web fijado a Flutter 3.41.6: 2f99ff9492c834ae7ab543b6b6d9da6909be5c9c.
+- npm ci: completo; 15 avisos de vulnerabilidad de dependencias existentes
+  (3 moderate, 10 high, 2 critical). No se ejecuta npm audit fix ni se cambia
+  el arbol de dependencias dentro de este despliegue.
+- API build: PASS. Prisma validate con entorno UAT local: PASS.
+- API Jest: 75 suites y 743 pruebas PASS; 1 suite/8 pruebas omitidas.
+- Flutter analyze: PASS, sin incidencias. Flutter tests: 1282 PASS, 1 omitida.
+- HTTP UAT integrado: PASS, cantidades limite, override manual persistido,
+  snapshots historicos, desactivacion con reglas existentes y aislamiento.
+- E2E autenticado Mayoreo: PASS; se repitio con detectOpenHandles/forceExit
+  tras el aviso de salida tardia de Jest, tambien PASS.
+- Historial productivo: 169 migraciones aplicadas; solo queda pendiente
+  20261013180000_wholesale_price_lists.
+- Respaldo previo en servidor:
+  /root/fullpos-deploy-backups/mayoreo-142-20261018/database-before-mayoreo.dump.
+  Tamano 6317605 bytes; catalogo pg_restore --list validado.
+  SHA256 c59b94be8c8450f04de811eb604d54b4c38688eec076aec3f3d9753cbd7c38e0.
+  Las especificaciones privadas de ambos servicios se guardan en esa misma
+  carpeta con permisos 0600; no se copian ni muestran credenciales.
+- La descarga de la imagen SDK web se cancelo por lentitud. La compilacion
+  web usa Flutter 3.41.6 local. El empaquetado sustituye todos los archivos
+  estaticos y copia la configuracion actual sobre el runtime nginx 1.31.6.
+  Los dos modulos brotli y entrypoint del runtime local se compararon por
+  SHA256 con produccion y coinciden. No se reutiliza JavaScript antiguo.
+
+Estado: pruebas combinadas PASS; artefactos, publicacion y despliegue pendientes.
+
+## Artefactos verificados
+
+- Windows oficial compilado desde worktree limpio
+  C:/src/fullpos-mayoreo-release142, commit 2f99ff9492c834ae7ab543b6b6d9da6909be5c9c.
+  FullPOS-Setup-1.0.6-142.exe: 40202765 bytes, NotSigned.
+  SHA256 D90FA86EEE81DB6AC6A317BC2957AF00FC1278F513D003CC635707646FD6C723.
+- UAT Windows del codigo integrado compilada y abierta con almacenamiento
+  aislado existente. Prueba GUI: digitar 3 aplica 250/unidad y total 750;
+  digitar 15 aplica 100/unidad y total 1500, sin pulsar mas/menos.
+  Navegacion reciente conservada; no se cobra otra venta desde la GUI.
+- PWA compilada localmente: version.json 1.0.6/142; carga visual de landing
+  y entrega Brotli comprobadas en http://127.0.0.1:4182.
+- Runtime API empaquetado arranca contra UAT local, health 200 y ruta
+  price-lists sin autenticar 401.
+- Paquete Docker transferido por partes y recompuesto/verificado en servidor:
+  244455270 bytes, SHA256
+  385E3D7A32C86DE1711945B1CE5CAF6BF61CDB30B82514D30D23479BF16BFE06.
+- API: fullpos/daleventapos-backend:mayoreo-142-dd8d2729,
+  config digest c05827ead2925b676d1d5e43142a7298ec28efd2c4b431d3405a0e2700106beb.
+- PWA: fullpos/daleventapos-pwa:mayoreo-142,
+  config digest 36ae4780e0e2d1cb0283c9ca57e8529cb0ffbf9f4b6dbaa6d594059f0ce92335.
+  Ambos digests coinciden con manifest.json del archivo local exportado.
+- Receta temporal de empaquetado web: C:/src/fullpos-pwa142-context/Dockerfile,
+  SHA256 979CB1CA2241DE0A8B9A023A498A7E2D2CCF66CAF67EC2A33F7AA7A4E1FAE40E.
+  Preparacion/cache-busting/Brotli: prepare-web.cjs, SHA256
+  013FEA43C224E02614B8307B339AA8A480E0E4EBDA34C08C7F12BC0CA67A320C.
+- La revision automatica bloqueo la eliminacion de build/windows. Se conservo
+  esa carpeta y se compilo Windows produccion desde el nuevo worktree limpio.
+- Instalador sin firma y migracion productiva: autorizaciones especificas
+  solicitadas al propietario antes de publicar/aplicar.
