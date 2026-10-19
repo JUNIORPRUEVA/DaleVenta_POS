@@ -64,6 +64,7 @@ export class SettingsService {
           inventoryEnabled: true,
           measurementUnitsEnabled: true,
           multiWarehouseEnabled: true,
+          wholesalePriceListsEnabled: true,
         },
       });
       const measurementUnitsEnabled =
@@ -78,6 +79,10 @@ export class SettingsService {
         this.boolValue(dto, "inventoryEnabled") ??
         company?.inventoryEnabled ??
         true;
+      const wholesalePriceListsEnabled =
+        this.boolValue(dto, "wholesalePriceListsEnabled") ??
+        company?.wholesalePriceListsEnabled ??
+        false;
       const companyData = this.companyProductSourceData(dto);
       const hasInventoryEnabledChange =
         this.boolValue(dto, "inventoryEnabled") !== undefined &&
@@ -92,6 +97,7 @@ export class SettingsService {
         this.boolValue(dto, "measurementUnitsEnabled") !== undefined ||
         this.boolValue(dto, "multiWarehouseEnabled") !== undefined ||
         this.boolValue(dto, "inventoryEnabled") !== undefined ||
+        this.boolValue(dto, "wholesalePriceListsEnabled") !== undefined ||
         Object.keys(companyData).length > 0
       ) {
         if (hasMultiWarehouseChange && !multiWarehouseEnabled) {
@@ -106,6 +112,7 @@ export class SettingsService {
             measurementUnitsEnabled,
             inventoryEnabled,
             multiWarehouseEnabled,
+            wholesalePriceListsEnabled,
             ...companyData,
           } as any,
           select: { id: true },
@@ -131,6 +138,7 @@ export class SettingsService {
         measurementUnitsEnabled,
         inventoryEnabled,
         multiWarehouseEnabled,
+        wholesalePriceListsEnabled,
         inventoryEnabledChanged: hasInventoryEnabledChange,
       };
     });
@@ -311,6 +319,7 @@ export class SettingsService {
         inventoryEnabled: true,
         measurementUnitsEnabled: true,
         multiWarehouseEnabled: true,
+        wholesalePriceListsEnabled: true,
       },
     });
     const companyName = company?.name?.trim() ?? "";
@@ -336,6 +345,8 @@ export class SettingsService {
       inventoryEnabled: company?.inventoryEnabled !== false,
       measurementUnitsEnabled: company?.measurementUnitsEnabled === true,
       multiWarehouseEnabled: company?.multiWarehouseEnabled === true,
+      wholesalePriceListsEnabled:
+        company?.wholesalePriceListsEnabled === true,
     };
   }
 
@@ -573,6 +584,7 @@ export class SettingsService {
       inventoryEnabled?: boolean;
       measurementUnitsEnabled?: boolean;
       multiWarehouseEnabled?: boolean;
+      wholesalePriceListsEnabled?: boolean;
       adminAuthorizationPinHash: string | null;
     },
     fiscal: {
@@ -616,6 +628,7 @@ export class SettingsService {
       inventoryEnabled: config.inventoryEnabled !== false,
       measurementUnitsEnabled: config.measurementUnitsEnabled === true,
       multiWarehouseEnabled: config.multiWarehouseEnabled === true,
+      wholesalePriceListsEnabled: config.wholesalePriceListsEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
       productsSource: productSource.source,
       productsReadOnly: productSource.readOnly,

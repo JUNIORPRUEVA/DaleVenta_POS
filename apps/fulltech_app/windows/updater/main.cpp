@@ -18,8 +18,13 @@
 
 namespace {
 
+#ifdef FULLPOS_WINDOWS_UAT_MAYOREO
+constexpr wchar_t kSingleInstanceMutexName[] =
+    L"Local\\DaleVentasPOSUATMayoreoSingleInstance";
+#else
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\DaleVentasPOSSingleInstance";
+#endif
 constexpr DWORD kWaitTimeoutMs = 120000;
 
 struct Options {

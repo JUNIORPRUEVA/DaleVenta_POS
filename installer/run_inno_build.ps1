@@ -5,7 +5,8 @@ param(
   [string]$LogName,
   [string]$Version = '1.0.3+120',
   [string]$VersionInfo = '1.0.3.120',
-  [string]$SourceDir = '..\apps\fulltech_app\build\windows\x64\runner\Release'
+  [string]$SourceDir = '..\apps\fulltech_app\build\windows\x64\runner\Release',
+  [switch]$UatMayoreo
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,16 @@ function Assert-DaleVentasReleaseSource {
   }
 }
 
+function Assert-UatMayoreoSource {
+  param([string]$Path)
+
+  $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
+  $expectedExe = Join-Path $resolved.Path 'fullpos_cloud_uat_mayoreo.exe'
+  if (-not (Test-Path -LiteralPath $expectedExe)) {
+    throw "UAT Mayoreo source no contiene el ejecutable aislado: $expectedExe"
+  }
+}
+
 if (-not $iscc) {
   throw 'ISCC.exe no encontrado. Instala Inno Setup 6 o agrega ISCC.exe a una ruta conocida.'
 }
@@ -48,7 +59,11 @@ if (-not (Test-Path -LiteralPath $scriptPath)) {
   throw "Script Inno no existe en $scriptPath"
 }
 
-Assert-DaleVentasReleaseSource -Path (Join-Path $installerDir $SourceDir)
+if ($UatMayoreo) {
+  Assert-UatMayoreoSource -Path (Join-Path $installerDir $SourceDir)
+} else {
+  Assert-DaleVentasReleaseSource -Path (Join-Path $installerDir $SourceDir)
+}
 
 Set-Location $installerDir
 $args = @(
@@ -57,6 +72,9 @@ $args = @(
   "/DMyAppVersionInfo=$VersionInfo",
   "/DMyAppSourceDir=$SourceDir"
 )
+if ($UatMayoreo) {
+  $args += '/DMyAppUatMayoreo=1'
+}
 
 & $iscc @args *> $logPath
 exit $LASTEXITCODE

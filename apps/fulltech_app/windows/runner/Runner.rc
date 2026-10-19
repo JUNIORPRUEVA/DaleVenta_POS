@@ -72,6 +72,20 @@ IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 #define VERSION_AS_STRING "1.0.0"
 #endif
 
+#ifdef FULLPOS_WINDOWS_UAT_MAYOREO
+#define FULLPOS_RC_COMPANY_NAME "FullPOS"
+#define FULLPOS_RC_FILE_DESCRIPTION "FullPOS UAT Mayoreo"
+#define FULLPOS_RC_INTERNAL_NAME "FullPOS UAT Mayoreo"
+#define FULLPOS_RC_ORIGINAL_FILENAME "fullpos_cloud_uat_mayoreo.exe"
+#define FULLPOS_RC_PRODUCT_NAME "FullPOS UAT Mayoreo"
+#else
+#define FULLPOS_RC_COMPANY_NAME "FullPOS"
+#define FULLPOS_RC_FILE_DESCRIPTION "FullPOS"
+#define FULLPOS_RC_INTERNAL_NAME "FullPOS"
+#define FULLPOS_RC_ORIGINAL_FILENAME "fullpos_cloud.exe"
+#define FULLPOS_RC_PRODUCT_NAME "FullPOS"
+#endif
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION VERSION_AS_NUMBER
  PRODUCTVERSION VERSION_AS_NUMBER
@@ -89,13 +103,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "FullPOS" "\0"
-            VALUE "FileDescription", "FullPOS" "\0"
+            VALUE "CompanyName", FULLPOS_RC_COMPANY_NAME "\0"
+            VALUE "FileDescription", FULLPOS_RC_FILE_DESCRIPTION "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "FullPOS" "\0"
+            VALUE "InternalName", FULLPOS_RC_INTERNAL_NAME "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 FullPOS. All rights reserved." "\0"
-            VALUE "OriginalFilename", "fullpos_cloud.exe" "\0"
-            VALUE "ProductName", "FullPOS" "\0"
+            VALUE "OriginalFilename", FULLPOS_RC_ORIGINAL_FILENAME "\0"
+            VALUE "ProductName", FULLPOS_RC_PRODUCT_NAME "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

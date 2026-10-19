@@ -19,6 +19,7 @@ class Routes {
   static const catalogoCategorias = '/catalogo/categorias';
   static const catalogoConteo = '/catalogo/conteo';
   static const catalogoKardex = '/catalogo/kardex';
+  static const listasPrecios = '/catalogo/listas-precios';
   static const contabilidad = '/contabilidad';
   static const contabilidadCierresDiarios = '/contabilidad/cierres-diarios';
   static const contabilidadDepositos = '/contabilidad/depositos-bancarios';

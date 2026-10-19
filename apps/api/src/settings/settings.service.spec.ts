@@ -154,6 +154,7 @@ describe("SettingsService company master data protection", () => {
         inventoryEnabled: true,
         measurementUnitsEnabled: true,
         multiWarehouseEnabled: true,
+        wholesalePriceListsEnabled: true,
       },
     });
     expect(prisma.appConfig.update).toHaveBeenCalledWith({

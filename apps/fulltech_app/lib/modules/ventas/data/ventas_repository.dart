@@ -897,6 +897,8 @@ class VentasRepository {
     double? creditAmount,
     double? expectedTotalSold,
     double? globalDiscountAmount,
+    String? priceListId,
+    bool priceListManualOverride = false,
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
@@ -916,6 +918,7 @@ class VentasRepository {
     }
     final normalizedCustomerId = (customerId ?? '').trim();
     final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
+    final normalizedPriceListId = (priceListId ?? '').trim();
     final clientRequestId = 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
     final occurredAt = DateTime.now().toUtc();
     final syncIdentity = await _resolveSaleSyncIdentity();
@@ -948,6 +951,9 @@ class VentasRepository {
       if (normalizedSourceQuotationId.isNotEmpty)
         'sourceQuotationId': normalizedSourceQuotationId,
       if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
+      if (normalizedPriceListId.isNotEmpty)
+        'priceListId': normalizedPriceListId,
+      if (priceListManualOverride) 'priceListManualOverride': true,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
       if ((paymentMethod ?? '').trim().isNotEmpty)
         'paymentMethod': paymentMethod!.trim(),
@@ -982,6 +988,8 @@ class VentasRepository {
         creditAmount: creditAmount,
         expectedTotalSold: expectedTotalSold,
         globalDiscountAmount: globalDiscountAmount,
+        priceListId: priceListId,
+        priceListManualOverride: priceListManualOverride,
         fiscalVoucherType: fiscalVoucherType,
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
@@ -1093,6 +1101,8 @@ class VentasRepository {
     double? creditAmount,
     double? expectedTotalSold,
     double? globalDiscountAmount,
+    String? priceListId,
+    bool priceListManualOverride = false,
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
@@ -1107,6 +1117,7 @@ class VentasRepository {
   }) async {
     final normalizedCustomerId = (customerId ?? '').trim();
     final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
+    final normalizedPriceListId = (priceListId ?? '').trim();
     final res = await _dio.post(
       ApiRoutes.sales,
       data: {
@@ -1127,6 +1138,9 @@ class VentasRepository {
         if (normalizedSourceQuotationId.isNotEmpty)
           'sourceQuotationId': normalizedSourceQuotationId,
         if (normalizedCustomerId.isNotEmpty) 'customerId': normalizedCustomerId,
+        if (normalizedPriceListId.isNotEmpty)
+          'priceListId': normalizedPriceListId,
+        if (priceListManualOverride) 'priceListManualOverride': true,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         if ((paymentMethod ?? '').trim().isNotEmpty)
           'paymentMethod': paymentMethod!.trim(),
@@ -1650,7 +1664,11 @@ class VentasRepository {
     return pageResult;
   }
 
-  SalesPageResult _mapSalesPage(dynamic data, int fallbackPage, int fallbackLimit) {
+  SalesPageResult _mapSalesPage(
+    dynamic data,
+    int fallbackPage,
+    int fallbackLimit,
+  ) {
     final rows = _extractRows(data);
     final mapped = rows
         .whereType<Map>()

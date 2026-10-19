@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../api/env.dart';
 import '../debug/trace_log.dart';
+import '../storage/windows_product_paths.dart';
 import 'app_update_installer_contract.dart';
 import 'app_update_models.dart';
 
@@ -113,14 +114,16 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
   Directory _defaultUpdateRoot() {
     final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
     if (localAppData.isNotEmpty) {
-      return Directory(p.join(localAppData, 'DaleVentas POS', 'updates'));
+      return Directory(
+        p.join(localAppData, WindowsProductPaths.productName, 'updates'),
+      );
     }
     return Directory(
       p.join(
         Platform.environment['USERPROFILE'] ?? '.',
         'AppData',
         'Local',
-        'DaleVentas POS',
+        WindowsProductPaths.productName,
         'updates',
       ),
     );
@@ -168,7 +171,7 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
           );
     return p.join(
       root,
-      'DaleVentas POS',
+      WindowsProductPaths.productName,
       'logs',
       'updates',
       'update-$targetBuild.log',

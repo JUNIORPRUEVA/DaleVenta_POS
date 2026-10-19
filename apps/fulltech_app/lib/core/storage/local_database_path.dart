@@ -19,11 +19,13 @@ Future<String> resolveLocalDatabasePath(String fileName) async {
   if (windowsDatabaseDir != null) {
     await windowsDatabaseDir.create(recursive: true);
     final targetPath = p.join(windowsDatabaseDir.path, fileName);
-    await copyLegacyDatabaseIfNeeded(
-      fileName: fileName,
-      targetPath: targetPath,
-      legacyDirectories: await _legacyDatabaseDirectories(),
-    );
+    if (!WindowsProductPaths.isUatMayoreoBuild) {
+      await copyLegacyDatabaseIfNeeded(
+        fileName: fileName,
+        targetPath: targetPath,
+        legacyDirectories: await _legacyDatabaseDirectories(),
+      );
+    }
     return targetPath;
   }
 

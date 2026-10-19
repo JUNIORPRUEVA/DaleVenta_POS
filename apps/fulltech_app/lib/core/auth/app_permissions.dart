@@ -52,6 +52,8 @@ enum AppPermission {
   createTransfers,
   viewQuotes,
   viewClients,
+  managePriceLists,
+  selectManualPriceList,
   viewMediaGallery,
 
   // Accounting
@@ -133,6 +135,8 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.createTransfers,
     AppPermission.viewQuotes,
     AppPermission.viewClients,
+    AppPermission.managePriceLists,
+    AppPermission.selectManualPriceList,
     AppPermission.viewAccounting,
     AppPermission.manageUsers,
     AppPermission.managePayroll,

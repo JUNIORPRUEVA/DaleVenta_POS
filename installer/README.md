@@ -74,6 +74,25 @@ Tambien puedes llamar directamente a Inno Setup si ya conoces la ruta de `ISCC.e
 
 El ejecutable final queda en `installer/output/FullPOS-Setup-<version>-<build>.exe`.
 
+## Generar setup UAT Mayoreo
+
+Primero generar el build Windows UAT aislado:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build\build_windows_uat_release.ps1
+```
+
+Luego empaquetar con el modo UAT:
+
+```powershell
+Set-Location installer
+.\find_and_build_inno.ps1 -UatMayoreo
+```
+
+El instalador UAT usa `FullPOS UAT Mayoreo`, `fullpos_cloud_uat_mayoreo.exe`,
+`C:\Program Files\DaleVentas POS UAT Mayoreo`, un `AppId` distinto y no elimina
+accesos directos de la instalacion normal.
+
 Si quieres publicar otra version puntual, cambia primero `version:` en
 `apps/fulltech_app/pubspec.yaml` y luego ejecuta el script oficial:
 

@@ -57,6 +57,7 @@ import {
   type OperationalTerminalContext,
 } from "../terminals/terminal-resolution.service";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import { PriceListsService } from "../price-lists/price-lists.service";
 import {
   normalizePagePagination,
   type PagePagination,
@@ -76,6 +77,11 @@ type NormalizedSaleItem = {
   unitPrecisionSnapshot: number;
   priceSoldUnit: Prisma.Decimal;
   originalUnitPriceSnapshot?: Prisma.Decimal;
+  appliedPriceListId?: string | null;
+  appliedPriceListNameSnapshot?: string | null;
+  appliedPricingRuleId?: string | null;
+  appliedPricingRuleMode?: "FIXED_PRICE" | "PERCENT_DISCOUNT" | null;
+  appliedPricingSnapshot?: Prisma.InputJsonValue;
   costUnitSnapshot: Prisma.Decimal;
   subtotalSold: Prisma.Decimal;
   subtotalCost: Prisma.Decimal;
@@ -124,6 +130,8 @@ export class SalesService {
     private readonly terminalResolution?: TerminalResolutionService,
     @Optional()
     private readonly telemetry?: UsageTelemetryService,
+    @Optional()
+    private readonly priceLists?: PriceListsService,
   ) {}
 
   /**
@@ -1467,7 +1475,11 @@ export class SalesService {
     const [companySnapshot, appConfigSnapshot] = await Promise.all([
       this.prisma.company.findFirst({
         where: { id: companyId },
-        select: { name: true, inventoryEnabled: true },
+        select: {
+          name: true,
+          inventoryEnabled: true,
+          wholesalePriceListsEnabled: true,
+        },
       }),
       this.prisma.appConfig.findFirst({
         where: { companyId },
@@ -1567,6 +1579,13 @@ export class SalesService {
             unitSymbolSnapshot: item.unitSymbolSnapshot,
             unitPrecisionSnapshot: item.unitPrecisionSnapshot,
             priceSoldUnit,
+            originalUnitPriceSnapshot: item.originalUnitPriceSnapshot ?? undefined,
+            appliedPriceListId: item.appliedPriceListId ?? null,
+            appliedPriceListNameSnapshot:
+              item.appliedPriceListNameSnapshot ?? null,
+            appliedPricingRuleId: item.appliedPricingRuleId ?? null,
+            appliedPricingRuleMode: item.appliedPricingRuleMode ?? null,
+            appliedPricingSnapshot: item.appliedPricingSnapshot ?? undefined,
             costUnitSnapshot,
             subtotalSold: lineTotal,
             subtotalCost,
@@ -1603,6 +1622,38 @@ export class SalesService {
         );
 
     this.assertNoUnsupportedExternalStockMutation(normalizedItems);
+    const wholesalePricing = sourceQuotation
+      ? {
+          priceListId: sourceQuotation.priceListId ?? null,
+          priceListName: sourceQuotation.priceListNameSnapshot ?? null,
+          manualOverride: sourceQuotation.priceListManualOverride === true,
+          lines: new Map<number, never>(),
+        }
+      : await this.resolveWholesalePricingForSale(
+          companyId,
+          user,
+          customerId,
+          dto,
+          normalizedItems,
+        );
+    if (!sourceQuotation && wholesalePricing.lines.size > 0) {
+      normalizedItems = normalizedItems.map((item, index) => {
+        const resolved = wholesalePricing.lines.get(index);
+        if (!resolved) return item;
+        return {
+          ...item,
+          priceSoldUnit: resolved.unitPrice,
+          originalUnitPriceSnapshot: resolved.originalUnitPrice,
+          appliedPriceListId: resolved.priceListId,
+          appliedPriceListNameSnapshot: resolved.priceListName,
+          appliedPricingRuleId: resolved.ruleId,
+          appliedPricingRuleMode: resolved.ruleMode,
+          appliedPricingSnapshot: resolved.snapshot,
+          subtotalSold: item.qty.mul(resolved.unitPrice),
+          profit: item.qty.mul(resolved.unitPrice).minus(item.subtotalCost),
+        };
+      });
+    }
     perf?.mark("products");
 
     const fiscalSettings = await this.taxes.getCompanyFiscalSettings(companyId);
@@ -1935,6 +1986,10 @@ export class SalesService {
               customerFiscalSnapshot?.direccion?.trim() || null,
             customerPhoneSnapshot:
               customerFiscalSnapshot?.telefono?.trim() || null,
+            priceListId: wholesalePricing.priceListId,
+            priceListNameSnapshot:
+              wholesalePricing.priceListName,
+            priceListManualOverride: wholesalePricing.manualOverride,
             totalCost,
             totalProfit,
             commercialProfit,
@@ -1997,6 +2052,12 @@ export class SalesService {
             unitNameSnapshot: item.unitNameSnapshot,
             unitSymbolSnapshot: item.unitSymbolSnapshot,
             unitPrecisionSnapshot: item.unitPrecisionSnapshot,
+            originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
+            appliedPriceListId: item.appliedPriceListId,
+            appliedPriceListNameSnapshot: item.appliedPriceListNameSnapshot,
+            appliedPricingRuleId: item.appliedPricingRuleId,
+            appliedPricingRuleMode: item.appliedPricingRuleMode,
+            appliedPricingSnapshot: item.appliedPricingSnapshot,
             priceSoldUnit: item.priceSoldUnit,
             costUnitSnapshot: item.costUnitSnapshot,
             subtotalCost: item.subtotalCost,
@@ -3321,6 +3382,7 @@ export class SalesService {
           item.originalUnitPriceSnapshot === undefined
             ? undefined
             : new Prisma.Decimal(item.originalUnitPriceSnapshot),
+        ...this.priceListSnapshotFields(item),
         costUnitSnapshot,
         subtotalSold,
         subtotalCost,
@@ -3379,6 +3441,7 @@ export class SalesService {
         item.originalUnitPriceSnapshot === undefined
           ? undefined
           : new Prisma.Decimal(item.originalUnitPriceSnapshot),
+      ...this.priceListSnapshotFields(item),
       costUnitSnapshot,
       subtotalSold,
       subtotalCost,
@@ -3388,6 +3451,69 @@ export class SalesService {
       taxPriceMode: null,
       inventoryTrackedSnapshot: false,
     };
+  }
+
+  private priceListSnapshotFields(item: CreateSaleItemDto) {
+    const snapshot: Prisma.InputJsonValue | undefined =
+      item.appliedPriceListId || item.appliedPricingRuleId
+        ? {
+            priceListId: item.appliedPriceListId ?? null,
+            priceListName: item.appliedPriceListNameSnapshot ?? null,
+            ruleId: item.appliedPricingRuleId ?? null,
+            ruleMode: item.appliedPricingRuleMode ?? null,
+          }
+        : undefined;
+    return {
+      appliedPriceListId: item.appliedPriceListId ?? null,
+      appliedPriceListNameSnapshot:
+        item.appliedPriceListNameSnapshot?.trim() || null,
+      appliedPricingRuleId: item.appliedPricingRuleId ?? null,
+      appliedPricingRuleMode: item.appliedPricingRuleMode ?? null,
+      appliedPricingSnapshot: snapshot,
+    };
+  }
+
+  private async resolveWholesalePricingForSale(
+    companyId: string,
+    user: TenantUser,
+    customerId: string | null,
+    dto: CreateSaleDto,
+    items: NormalizedSaleItem[],
+  ) {
+    if (!this.priceLists) {
+      const hasWholesalePayload =
+        Boolean(dto.priceListId) ||
+        dto.priceListManualOverride === true ||
+        dto.items.some(
+          (item) => item.appliedPriceListId || item.appliedPricingRuleId,
+        );
+      if (hasWholesalePayload) {
+        throw new BadRequestException(
+          "El módulo de listas de precios no está disponible.",
+        );
+      }
+      return {
+        priceListId: null,
+        priceListName: null,
+        manualOverride: false,
+        lines: new Map<number, never>(),
+      };
+    }
+    return this.priceLists.resolveDocumentPricing({
+      companyId,
+      user,
+      customerId,
+      requestedPriceListId: dto.priceListId ?? null,
+      requestedPriceListManualOverride: dto.priceListManualOverride,
+      lines: items.map((item, index) => ({
+        index,
+        productId: item.productId,
+        quantity: item.qty,
+        unitPrice: item.priceSoldUnit,
+        appliedPriceListId: item.appliedPriceListId,
+        appliedPricingRuleId: item.appliedPricingRuleId,
+      })),
+    });
   }
 
   private resolveInventoryTrackedSnapshot(

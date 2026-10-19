@@ -20,6 +20,8 @@ function isServerUatMode(env: NodeJS.ProcessEnv) {
 }
 
 function expectedUatDatabase(env: NodeJS.ProcessEnv) {
+  const explicit = (env.UAT_EXPECTED_DB_NAME ?? "").trim();
+  if (explicit) return explicit;
   return isServerUatMode(env) ? SERVER_UAT_DB_NAME : LOCAL_UAT_DB_NAME;
 }
 
@@ -45,7 +47,7 @@ export function assertSafeUatEnvironment(env = process.env) {
     throw new Error("UAT safety refused startup: DATABASE_URL is required.");
   }
 
-  const { host, database } = parseDatabaseUrl(rawUrl);
+  const { host, database, port } = parseDatabaseUrl(rawUrl);
   const normalizedDatabase = database.toLowerCase();
   const normalizedHost = host.toLowerCase();
   const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -61,6 +63,13 @@ export function assertSafeUatEnvironment(env = process.env) {
   if (normalizedDatabase !== expectedDatabase) {
     throw new Error(
       `UAT safety refused startup: database must be "${expectedDatabase}", got "${database}".`,
+    );
+  }
+
+  const expectedPort = (env.UAT_EXPECTED_DB_PORT ?? "").trim();
+  if (expectedPort && port !== expectedPort) {
+    throw new Error(
+      `UAT safety refused startup: database port must be "${expectedPort}", got "${port}".`,
     );
   }
 

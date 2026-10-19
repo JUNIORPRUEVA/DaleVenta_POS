@@ -8,8 +8,17 @@ enum WindowsProductFolder { app, databases, mediaCache, logs, config }
 class WindowsProductPaths {
   WindowsProductPaths._();
 
-  static const productName = 'DaleVentas POS';
-  static const overrideRootEnv = 'DALEVENTAS_POS_ROOT';
+  static const bool isUatMayoreoBuild = bool.fromEnvironment(
+    'FULLPOS_UAT_BUILD',
+    defaultValue: false,
+  );
+
+  static String get productName =>
+      isUatMayoreoBuild ? 'DaleVentas POS UAT Mayoreo' : 'DaleVentas POS';
+
+  static String get overrideRootEnv => isUatMayoreoBuild
+      ? 'DALEVENTAS_POS_UAT_MAYOREO_ROOT'
+      : 'DALEVENTAS_POS_ROOT';
 
   static bool get isOfficialWindowsStorageEnabled {
     if (kIsWeb || !Platform.isWindows) return false;

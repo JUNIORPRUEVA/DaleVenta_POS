@@ -537,9 +537,16 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     final multiWarehouseEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ??
         false;
+    final wholesalePriceListsEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.wholesalePriceListsEnabled ??
+        false;
     final sections = buildAppNavigationSections(
       currentUser,
       multiWarehouseEnabled: multiWarehouseEnabled,
+      wholesalePriceListsEnabled: wholesalePriceListsEnabled,
     );
     // Estado autoritativo del turno (fuente de verdad = backend). El drawer
     // móvil observa el MISMO provider que el resto de la app: si el turno
@@ -859,6 +866,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   final categoriesItem = pick(Routes.catalogoCategorias);
   final inventoryCountItem = pick(Routes.catalogoConteo);
   final kardexItem = pick(Routes.catalogoKardex);
+  final priceListsItem = pick(Routes.listasPrecios);
   final warehousesItem = pick(Routes.configuracionAlmacenes);
   final cashItems = pickItems([
     Routes.cajaRegistrarIngreso,
@@ -924,6 +932,12 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
           icon: Icons.history_rounded,
           title: 'Kardex',
           route: Routes.catalogoKardex,
+        ),
+      if (priceListsItem != null)
+        const AppNavigationItem(
+          icon: Icons.price_change_outlined,
+          title: 'Listas precios',
+          route: Routes.listasPrecios,
         ),
       if (warehousesItem != null)
         const AppNavigationItem(

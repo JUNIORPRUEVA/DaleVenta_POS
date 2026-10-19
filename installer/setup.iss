@@ -29,6 +29,25 @@
 #ifndef MyAppVersionInfo
 #define MyAppVersionInfo "0.0.0.0"
 #endif
+#ifndef MyAppId
+#define MyAppId "{{0ED49D5E-6E78-4F11-8E78-6D37FDE2078A}"
+#endif
+#ifndef MyAppOutputBaseFilename
+#define MyAppOutputBaseFilename "FullPOS-Setup"
+#endif
+
+#ifdef MyAppUatMayoreo
+#undef MyAppName
+#define MyAppName "FullPOS UAT Mayoreo"
+#undef MyAppFolderName
+#define MyAppFolderName "DaleVentas POS UAT Mayoreo"
+#undef MyAppExeName
+#define MyAppExeName "fullpos_cloud_uat_mayoreo.exe"
+#undef MyAppId
+#define MyAppId "{{9B4EC7B1-8B53-4C50-A9E4-2F7F5A0D0E4A}"
+#undef MyAppOutputBaseFilename
+#define MyAppOutputBaseFilename "FullPOS-UAT-Mayoreo-Setup"
+#endif
 
 #ifndef MyAppSourceDir
 #define MyAppSourceDir "..\apps\fulltech_app\build\windows\x64\runner\Release"
@@ -38,7 +57,7 @@
 #define WebView2RedistPath "redist\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
 
 [Setup]
-AppId={{0ED49D5E-6E78-4F11-8E78-6D37FDE2078A}
+AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion} (build {#MyAppBuildNumber})
@@ -52,7 +71,7 @@ UsePreviousAppDir=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=FullPOS-Setup-{#MyAppVersion}-{#MyAppBuildNumber}
+OutputBaseFilename={#MyAppOutputBaseFilename}-{#MyAppVersion}-{#MyAppBuildNumber}
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -80,12 +99,14 @@ Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#WebView2RedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 #endif
 
+#ifndef MyAppUatMayoreo
 [InstallDelete]
 ; El nombre visible cambio de "DaleVentas POS" a "FullPOS": al actualizar una
 ; instalacion previa se eliminan sus accesos directos para no dejar entradas
 ; huerfanas duplicadas en el Menu Inicio ni en el escritorio.
 Type: filesandordirs; Name: "{commonprograms}\DaleVentas POS"
 Type: files; Name: "{commondesktop}\DaleVentas POS.lnk"
+#endif
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; WorkingDir: "{app}\app"

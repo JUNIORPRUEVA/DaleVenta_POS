@@ -59,6 +59,22 @@ export class CreateSaleItemDto {
   originalUnitPriceSnapshot?: number;
 
   @IsOptional()
+  @IsUUID()
+  appliedPriceListId?: string;
+
+  @IsOptional()
+  @IsString()
+  appliedPriceListNameSnapshot?: string;
+
+  @IsOptional()
+  @IsUUID()
+  appliedPricingRuleId?: string;
+
+  @IsOptional()
+  @IsIn(["FIXED_PRICE", "PERCENT_DISCOUNT"])
+  appliedPricingRuleMode?: "FIXED_PRICE" | "PERCENT_DISCOUNT";
+
+  @IsOptional()
   @IsString()
   unitCodeSnapshot?: string;
 
@@ -122,6 +138,19 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsUUID()
+  priceListId?: string;
+
+  @IsOptional()
+  @IsString()
+  priceListNameSnapshot?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  priceListManualOverride?: boolean;
 
   @IsOptional()
   @IsString()

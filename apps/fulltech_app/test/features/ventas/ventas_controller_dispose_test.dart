@@ -159,6 +159,8 @@ class _FakeVentasRepository implements VentasRepository {
     double? creditAmount,
     double? expectedTotalSold,
     double? globalDiscountAmount,
+    String? priceListId,
+    bool priceListManualOverride = false,
     String? fiscalVoucherType,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,

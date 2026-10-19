@@ -188,6 +188,14 @@ class ApiRoutes {
   static const productsDebugPurge = '/products/debug/purge';
   static const productsUpload = '/products/upload';
   static const productsImportImageUrl = '/products/import-image-url';
+
+  // Mayoreo
+  static const priceLists = '/price-lists';
+  static String priceList(String id) => '/price-lists/$id';
+  static String priceListRules(String id) => '/price-lists/$id/rules';
+  static String clientPriceList(String clientId) =>
+      '/price-lists/clients/$clientId';
+  static const priceListResolveLine = '/price-lists/resolve-line';
   static const productUnitOfMeasures = '/products/unit-of-measures';
   static String productDetail(String id) => '/products/$id';
   static String updateProduct(String id) => '/products/$id';

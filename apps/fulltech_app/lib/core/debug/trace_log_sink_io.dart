@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../storage/windows_product_paths.dart';
+
 class TraceLogSink {
   static const int _maxBytes = 1024 * 1024;
   static File? _logFile;
@@ -38,7 +40,7 @@ class TraceLogSink {
       final programFiles = Platform.environment['ProgramFiles']?.trim();
       if (programFiles != null && programFiles.isNotEmpty) {
         final official = Directory(
-          '$programFiles${Platform.pathSeparator}DaleVentas POS${Platform.pathSeparator}logs',
+          '$programFiles${Platform.pathSeparator}${WindowsProductPaths.productName}${Platform.pathSeparator}logs',
         );
         if (await official.exists()) return official;
       }
@@ -46,7 +48,7 @@ class TraceLogSink {
       final localAppData = Platform.environment['LOCALAPPDATA']?.trim();
       if (localAppData != null && localAppData.isNotEmpty) {
         return Directory(
-          '$localAppData${Platform.pathSeparator}FullPOS${Platform.pathSeparator}logs',
+          '$localAppData${Platform.pathSeparator}${WindowsProductPaths.productName}${Platform.pathSeparator}logs',
         );
       }
     }

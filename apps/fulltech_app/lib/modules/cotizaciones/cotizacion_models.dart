@@ -266,10 +266,10 @@ class CotizacionItem {
     final isExternalItem = !_isUuid((map['productId'] ?? '').toString());
     return CotizacionItem(
       productId: (map['productId'] ?? '').toString(),
-      productSource:
-          (map['productSource'] ?? map['product_source'])?.toString(),
-      sourceProductId:
-          (map['sourceProductId'] ?? map['source_product_id'])?.toString(),
+      productSource: (map['productSource'] ?? map['product_source'])
+          ?.toString(),
+      sourceProductId: (map['sourceProductId'] ?? map['source_product_id'])
+          ?.toString(),
       nombre:
           (map['productNameSnapshot'] ??
                   map['productName'] ??
@@ -330,6 +330,8 @@ class CotizacionModel {
   final String? customerTaxId;
   final String? customerAddress;
   final String? customerEmail;
+  final String? priceListId;
+  final bool priceListManualOverride;
   final String note;
   final bool includeItbis;
   final double itbisRate;
@@ -356,6 +358,8 @@ class CotizacionModel {
     this.customerTaxId,
     this.customerAddress,
     this.customerEmail,
+    this.priceListId,
+    this.priceListManualOverride = false,
     required this.note,
     required this.includeItbis,
     required this.itbisRate,
@@ -409,6 +413,8 @@ class CotizacionModel {
     String? customerTaxId,
     String? customerAddress,
     String? customerEmail,
+    String? priceListId,
+    bool? priceListManualOverride,
     String? note,
     bool? includeItbis,
     double? itbisRate,
@@ -435,6 +441,9 @@ class CotizacionModel {
       customerTaxId: customerTaxId ?? this.customerTaxId,
       customerAddress: customerAddress ?? this.customerAddress,
       customerEmail: customerEmail ?? this.customerEmail,
+      priceListId: priceListId ?? this.priceListId,
+      priceListManualOverride:
+          priceListManualOverride ?? this.priceListManualOverride,
       note: note ?? this.note,
       includeItbis: includeItbis ?? this.includeItbis,
       itbisRate: itbisRate ?? this.itbisRate,
@@ -463,6 +472,8 @@ class CotizacionModel {
     'customerTaxId': customerTaxId,
     'customerAddress': customerAddress,
     'customerEmail': customerEmail,
+    'priceListId': priceListId,
+    'priceListManualOverride': priceListManualOverride,
     'note': note,
     'includeItbis': includeItbis,
     'itbisRate': itbisRate,
@@ -503,6 +514,8 @@ class CotizacionModel {
       customerEmail:
           (map['customerEmail'] ?? map['customerCorreo'] ?? map['email'])
               ?.toString(),
+      priceListId: map['priceListId']?.toString(),
+      priceListManualOverride: map['priceListManualOverride'] == true,
       note: (map['note'] ?? '').toString(),
       includeItbis: map['includeItbis'] == true,
       itbisRate: (map['itbisRate'] as num?)?.toDouble() ?? 0.18,
@@ -578,6 +591,8 @@ class CotizacionModel {
                   map['correo'] ??
                   map['email'])
               ?.toString(),
+      priceListId: map['priceListId']?.toString(),
+      priceListManualOverride: map['priceListManualOverride'] == true,
       note: (map['note'] ?? '').toString(),
       includeItbis: map['includeItbis'] == true,
       itbisRate: _asDouble(map['itbisRate'], 0.18),
@@ -605,6 +620,9 @@ class CotizacionModel {
       'customerId': customerId,
     'customerName': customerName,
     'customerPhone': (customerPhone ?? '').trim(),
+    if (priceListId != null && priceListId!.trim().isNotEmpty)
+      'priceListId': priceListId,
+    if (priceListManualOverride) 'priceListManualOverride': true,
     if (note.trim().isNotEmpty) 'note': note.trim(),
     'includeItbis': includeItbis,
     'itbisRate': itbisRate,

@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/routing/routes.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
+import '../../features/price_lists/data/price_lists_repository.dart';
 import 'application/clientes_controller.dart';
 import 'cliente_model.dart';
 
@@ -118,6 +120,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
 
   bool _loadingInitial = false;
   ClienteModel? _cliente;
+  String? _defaultPriceListId;
 
   bool get _isEdit => widget.clienteId != null && widget.clienteId!.isNotEmpty;
 
@@ -150,6 +153,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         _telefonoCtrl.text = cliente.telefono;
         _direccionCtrl.text = cliente.direccion ?? '';
         _taxIdCtrl.text = cliente.taxId ?? '';
+        _defaultPriceListId = cliente.defaultPriceListId;
       });
     } catch (_) {
       if (!mounted) return;
@@ -168,8 +172,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
     final valid = _formKey.currentState!.validate();
     if (!valid) {
       if (widget.requireFiscalData &&
-          (_nombreCtrl.text.trim().isEmpty ||
-              _taxIdCtrl.text.trim().isEmpty)) {
+          (_nombreCtrl.text.trim().isEmpty || _taxIdCtrl.text.trim().isEmpty)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -196,6 +199,21 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             businessName: _cliente?.businessName,
             taxIdType: _taxIdCtrl.text.trim().isEmpty ? null : 'RNC',
           );
+      final wholesaleEnabled =
+          ref
+              .read(companySettingsProvider)
+              .valueOrNull
+              ?.wholesalePriceListsEnabled ==
+          true;
+      if (wholesaleEnabled) {
+        await ref
+            .read(priceListsRepositoryProvider)
+            .assignClientPriceList(
+              clientId: saved.id,
+              priceListId: _defaultPriceListId,
+            );
+        ref.invalidate(priceListsProvider);
+      }
       if (!mounted) return;
       if (widget.returnSavedClient) {
         Navigator.of(context).pop(saved);
@@ -337,10 +355,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
     );
   }
 
-  InputDecoration _fieldDecoration({
-    required String label,
-    String? hint,
-  }) {
+  InputDecoration _fieldDecoration({required String label, String? hint}) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -381,6 +396,15 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
     BuildContext context, {
     required ClientesState state,
   }) {
+    final wholesaleEnabled =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.wholesalePriceListsEnabled ==
+        true;
+    final priceLists = wholesaleEnabled
+        ? ref.watch(priceListsProvider)
+        : const AsyncValue<List<PriceListModel>>.data(<PriceListModel>[]);
     final form = Form(
       key: _formKey,
       child: Column(
@@ -460,6 +484,49 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             decoration: _fieldDecoration(label: 'Dirección', hint: 'Opcional'),
             onFieldSubmitted: (_) => _save(),
           ),
+          if (wholesaleEnabled) ...[
+            const SizedBox(height: 12),
+            priceLists.when(
+              loading: () => const LinearProgressIndicator(minHeight: 2),
+              error: (_, __) => DropdownButtonFormField<String?>(
+                initialValue: null,
+                decoration: _fieldDecoration(label: 'Lista de precios'),
+                items: const [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('No se pudieron cargar las listas'),
+                  ),
+                ],
+                onChanged: null,
+              ),
+              data: (lists) {
+                final activeLists = lists.where((list) => list.active).toList();
+                final selected =
+                    activeLists.any((list) => list.id == _defaultPriceListId)
+                    ? _defaultPriceListId
+                    : null;
+                return DropdownButtonFormField<String?>(
+                  initialValue: selected,
+                  isExpanded: true,
+                  decoration: _fieldDecoration(label: 'Lista de precios'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Sin lista mayorista'),
+                    ),
+                    for (final list in activeLists)
+                      DropdownMenuItem<String?>(
+                        value: list.id,
+                        child: Text(list.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: state.saving
+                      ? null
+                      : (value) => setState(() => _defaultPriceListId = value),
+                );
+              },
+            ),
+          ],
           const SizedBox(height: 18),
           Row(
             children: [
@@ -523,10 +590,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         const SingleActivator(LogicalKeyboardKey.enter): _save,
         const SingleActivator(LogicalKeyboardKey.numpadEnter): _save,
       },
-      child: Focus(
-        autofocus: true,
-        child: form,
-      ),
+      child: Focus(autofocus: true, child: form),
     );
   }
 }

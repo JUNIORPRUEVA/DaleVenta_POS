@@ -10,10 +10,17 @@
 
 namespace {
 
+#ifdef FULLPOS_WINDOWS_UAT_MAYOREO
+constexpr wchar_t kWindowTitle[] = L"FullPOS Cloud UAT - Mayoreo";
+constexpr wchar_t kWindowClassName[] = L"FULLPOS_UAT_MAYOREO_WIN32_WINDOW";
+constexpr wchar_t kSingleInstanceMutexName[] =
+    L"Local\\DaleVentasPOSUATMayoreoSingleInstance";
+#else
 constexpr wchar_t kWindowTitle[] = L"FullPOS Cloud - Sistema de facturacion";
 constexpr wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\DaleVentasPOSSingleInstance";
+#endif
 
 bool FocusExistingWindow() {
   HWND existing_window = ::FindWindow(kWindowClassName, kWindowTitle);

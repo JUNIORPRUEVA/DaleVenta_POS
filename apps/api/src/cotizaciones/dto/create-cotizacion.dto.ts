@@ -39,6 +39,22 @@ export class CreateCotizacionItemDto {
   originalUnitPriceSnapshot?: number;
 
   @IsOptional()
+  @IsUUID()
+  appliedPriceListId?: string;
+
+  @IsOptional()
+  @IsString()
+  appliedPriceListNameSnapshot?: string;
+
+  @IsOptional()
+  @IsUUID()
+  appliedPricingRuleId?: string;
+
+  @IsOptional()
+  @IsIn(['FIXED_PRICE', 'PERCENT_DISCOUNT'])
+  appliedPricingRuleMode?: 'FIXED_PRICE' | 'PERCENT_DISCOUNT';
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
@@ -75,6 +91,18 @@ export class CreateCotizacionDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsUUID()
+  priceListId?: string;
+
+  @IsOptional()
+  @IsString()
+  priceListNameSnapshot?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  priceListManualOverride?: boolean;
 
   @IsOptional()
   @IsBoolean()

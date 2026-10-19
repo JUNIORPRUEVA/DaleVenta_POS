@@ -1,6 +1,6 @@
 param(
-  [string]$ApiBaseUrl = 'http://31.97.99.70:4001',
-  [string]$AppBaseUrl = 'http://31.97.99.70:4001',
+  [string]$ApiBaseUrl = 'http://127.0.0.1:4001',
+  [string]$AppBaseUrl = 'http://127.0.0.1:4001',
   [switch]$SkipPubGet
 )
 
@@ -14,6 +14,41 @@ function Write-Step {
 function Get-RepoRoot {
   $scriptDir = Split-Path -Parent $PSCommandPath
   return (Resolve-Path -LiteralPath (Join-Path $scriptDir '..\..')).Path
+}
+
+function Assert-UatUrlSafe {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [Parameter(Mandatory = $true)][string]$Url
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Url)) {
+    throw "$Name is required for an isolated UAT build."
+  }
+
+  try {
+    $uri = [Uri]$Url
+  } catch {
+    throw "$Name is not a valid absolute URL: $Url"
+  }
+
+  if (-not $uri.IsAbsoluteUri -or ($uri.Scheme -ne 'http' -and $uri.Scheme -ne 'https') -or [string]::IsNullOrWhiteSpace($uri.Host)) {
+    throw "$Name must be an absolute http/https URL: $Url"
+  }
+
+  $urlHost = $uri.Host.ToLowerInvariant()
+  $blockedHosts = @(
+    'daleventapos-backend.gcdndd.easypanel.host',
+    'ventas-fullpos-backend.gcdndd.easypanel.host',
+    '31.97.99.70'
+  )
+  if ($blockedHosts -contains $urlHost -or
+      $urlHost.Contains('easypanel') -or
+      $urlHost.Contains('gcdndd') -or
+      $urlHost.Contains('daleventapos-backend') -or
+      $urlHost.Contains('ventas-fullpos-backend')) {
+    throw "Refusing to build Windows UAT Mayoreo with a production/shared host in ${Name}: $urlHost"
+  }
 }
 
 function Test-DriveLetterAvailable {
@@ -38,6 +73,15 @@ function Test-DriveLetterAvailable {
 
 function Get-AvailableDriveLetter {
   $preferred = @('X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q', 'P', 'O', 'N', 'M', 'L', 'K')
+  $cachePath = Join-Path (Get-RepoRoot) 'apps\fulltech_app\build\windows\x64\CMakeCache.txt'
+  if (Test-Path -LiteralPath $cachePath) {
+    $sourceEntry = Get-Content -LiteralPath $cachePath |
+      Where-Object { $_ -match '^CMAKE_HOME_DIRECTORY:INTERNAL=' } |
+      Select-Object -First 1
+    if ($sourceEntry -match '^CMAKE_HOME_DIRECTORY:INTERNAL=([A-Za-z]):/apps/fulltech_app/windows$') {
+      $preferred = @($Matches[1].ToUpperInvariant()) + $preferred
+    }
+  }
   foreach ($letter in $preferred) {
     if (Test-DriveLetterAvailable -Letter $letter) {
       return $letter
@@ -46,13 +90,8 @@ function Get-AvailableDriveLetter {
   throw 'No unused drive letter is available for the temporary short-path build mapping.'
 }
 
-if ([string]::IsNullOrWhiteSpace($ApiBaseUrl) -or [string]::IsNullOrWhiteSpace($AppBaseUrl)) {
-  throw 'UAT API/App URLs are required.'
-}
-if ($ApiBaseUrl -like '*daleventapos-backend.gcdndd.easypanel.host*' -or
-    $AppBaseUrl -like '*daleventapos-backend.gcdndd.easypanel.host*') {
-  throw 'Refusing to build a UAT client with the production DaleVentas backend.'
-}
+Assert-UatUrlSafe -Name 'API_BASE_URL' -Url $ApiBaseUrl
+Assert-UatUrlSafe -Name 'APP_BASE_URL' -Url $AppBaseUrl
 
 $repoRoot = Get-RepoRoot
 $appRelativePath = 'apps\fulltech_app'
@@ -68,10 +107,13 @@ $driveRoot = "${driveName}\"
 $mappedAppRoot = "$driveRoot$appRelativePath"
 $createdMapping = $false
 $exitCode = 1
+$previousWindowsChannel = $env:FULLPOS_WINDOWS_CHANNEL
 
 try {
   Write-Step "Repo root: $repoRoot"
   Write-Step "UAT API_BASE_URL: $ApiBaseUrl"
+  Write-Step 'Windows identity: UAT Mayoreo (fullpos_cloud_uat_mayoreo.exe)'
+  $env:FULLPOS_WINDOWS_CHANNEL = 'uat-mayoreo'
   Write-Step "Creating temporary mapping $driveName => $repoRoot"
   & subst $driveName $repoRoot
   if ($LASTEXITCODE -ne 0) {
@@ -91,12 +133,25 @@ try {
     }
 
     Write-Step 'Running flutter build windows --release for UAT'
+    $releaseOutput = Join-Path $mappedAppRoot 'build\windows\x64\runner\Release'
+    if (Test-Path -LiteralPath $releaseOutput) {
+      Write-Step 'Cleaning previous Windows Release output to avoid mixed production/UAT artifacts'
+      Remove-Item -LiteralPath $releaseOutput -Recurse -Force
+    }
+
     & flutter build windows --release `
+      --dart-define=FULLPOS_UAT_BUILD=true `
+      --dart-define=FULLPOS_UAT_NAME=MAYOREO `
       --dart-define=API_BASE_URL=$ApiBaseUrl `
       --dart-define=APP_BASE_URL=$AppBaseUrl
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
       throw "flutter build windows --release failed with exit code $exitCode"
+    }
+
+    $expectedExe = Join-Path $releaseOutput 'fullpos_cloud_uat_mayoreo.exe'
+    if (-not (Test-Path -LiteralPath $expectedExe)) {
+      throw "Expected isolated UAT executable was not created: $expectedExe"
     }
   } finally {
     Pop-Location
@@ -116,6 +171,11 @@ try {
         $exitCode = 1
       }
     }
+  }
+  if ($null -eq $previousWindowsChannel) {
+    Remove-Item Env:\FULLPOS_WINDOWS_CHANNEL -ErrorAction SilentlyContinue
+  } else {
+    $env:FULLPOS_WINDOWS_CHANNEL = $previousWindowsChannel
   }
 }
 

@@ -50,6 +50,7 @@ import {
   type UnitOfMeasureSnapshot,
 } from "../products/unit-of-measure.util";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import { PriceListsService } from "../price-lists/price-lists.service";
 
 type AiRuntimeConfig = {
   apiKey: string;
@@ -93,6 +94,8 @@ export class CotizacionesService {
     private readonly taxes: TaxService,
     @Optional()
     private readonly telemetry?: UsageTelemetryService,
+    @Optional()
+    private readonly priceLists?: PriceListsService,
   ) {}
 
   private buildQuoteInclude() {
@@ -766,7 +769,35 @@ export class CotizacionesService {
 
     const customerPhoneNormalized = normalizePhone(customerPhone);
 
-    const normalized = await this.normalizeItems(companyId, dto.items);
+    let normalized: Array<any> = await this.normalizeItems(companyId, dto.items);
+    const wholesalePricing = await this.resolveWholesalePricingForQuote(
+      companyId,
+      user,
+      dto.customerId ?? null,
+      dto,
+      normalized,
+    );
+    if (wholesalePricing.lines.size > 0) {
+      normalized = normalized.map((item, index) => {
+        const resolved = wholesalePricing.lines.get(index);
+        if (!resolved) return item;
+        return {
+          ...item,
+          unitPrice: resolved.unitPrice,
+          originalUnitPriceSnapshot: resolved.originalUnitPrice,
+          appliedPriceListId: resolved.priceListId,
+          appliedPriceListNameSnapshot: resolved.priceListName,
+          appliedPricingRuleId: resolved.ruleId,
+          appliedPricingRuleMode: resolved.ruleMode,
+          appliedPricingSnapshot: resolved.snapshot,
+          lineTotal: item.qty.mul(resolved.unitPrice),
+          profit:
+            item.subtotalCost == null
+              ? null
+              : item.qty.mul(resolved.unitPrice).minus(item.subtotalCost),
+        };
+      });
+    }
     // Descuento REAL por línea y bruto original desde la cotización.
     // El cálculo fiscal prorratea el descuento general en `discountAmount`
     // para las bases imponibles, pero el PDF debe mostrar el descuento
@@ -845,6 +876,9 @@ export class CotizacionesService {
             customerPhone,
             customerPhoneNormalized,
             note: note.length ? note : null,
+            priceListId: wholesalePricing.priceListId,
+            priceListNameSnapshot: wholesalePricing.priceListName,
+            priceListManualOverride: wholesalePricing.manualOverride,
             includeItbis,
             itbisRate,
             fiscalTaxEnabled: fiscalSettings.taxEnabled,
@@ -868,6 +902,11 @@ export class CotizacionesService {
                 productNameSnapshot: item.productNameSnapshot,
                 productImageSnapshot: item.productImageSnapshot,
                 originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
+                appliedPriceListId: item.appliedPriceListId,
+                appliedPriceListNameSnapshot: item.appliedPriceListNameSnapshot,
+                appliedPricingRuleId: item.appliedPricingRuleId,
+                appliedPricingRuleMode: item.appliedPricingRuleMode,
+                appliedPricingSnapshot: item.appliedPricingSnapshot,
                 qty: item.qty,
                 unitCodeSnapshot: item.unitCodeSnapshot,
                 unitNameSnapshot: item.unitNameSnapshot,
@@ -1121,6 +1160,12 @@ export class CotizacionesService {
                     productNameSnapshot: item.productNameSnapshot,
                     productImageSnapshot: item.productImageSnapshot,
                     originalUnitPriceSnapshot: item.originalUnitPriceSnapshot,
+                    appliedPriceListId: item.appliedPriceListId,
+                    appliedPriceListNameSnapshot:
+                      item.appliedPriceListNameSnapshot,
+                    appliedPricingRuleId: item.appliedPricingRuleId,
+                    appliedPricingRuleMode: item.appliedPricingRuleMode,
+                    appliedPricingSnapshot: item.appliedPricingSnapshot,
                     qty: item.qty,
                     unitCodeSnapshot: item.unitCodeSnapshot,
                     unitNameSnapshot: item.unitNameSnapshot,
@@ -1650,6 +1695,20 @@ export class CotizacionesService {
         productNameSnapshot,
         productImageSnapshot,
         originalUnitPriceSnapshot,
+        appliedPriceListId: item.appliedPriceListId ?? null,
+        appliedPriceListNameSnapshot:
+          item.appliedPriceListNameSnapshot?.trim() || null,
+        appliedPricingRuleId: item.appliedPricingRuleId ?? null,
+        appliedPricingRuleMode: item.appliedPricingRuleMode ?? null,
+        appliedPricingSnapshot:
+          item.appliedPriceListId || item.appliedPricingRuleId
+            ? {
+                priceListId: item.appliedPriceListId ?? null,
+                priceListName: item.appliedPriceListNameSnapshot ?? null,
+                ruleId: item.appliedPricingRuleId ?? null,
+                ruleMode: item.appliedPricingRuleMode ?? null,
+              }
+            : undefined,
         qty,
         ...unitSnapshotFields(product?.unitOfMeasure ?? DEFAULT_UNIT_OF_MEASURE),
         unitPrice,
@@ -1682,6 +1741,49 @@ export class CotizacionesService {
       return source as ProductSource;
     }
     return null;
+  }
+
+  private async resolveWholesalePricingForQuote(
+    companyId: string,
+    user: TenantUser,
+    customerId: string | null,
+    dto: CreateCotizacionDto,
+    items: Awaited<ReturnType<CotizacionesService["normalizeItems"]>>,
+  ) {
+    if (!this.priceLists) {
+      const hasWholesalePayload =
+        Boolean(dto.priceListId) ||
+        dto.priceListManualOverride === true ||
+        dto.items.some(
+          (item) => item.appliedPriceListId || item.appliedPricingRuleId,
+        );
+      if (hasWholesalePayload) {
+        throw new BadRequestException(
+          "El módulo de listas de precios no está disponible.",
+        );
+      }
+      return {
+        priceListId: null,
+        priceListName: null,
+        manualOverride: false,
+        lines: new Map<number, never>(),
+      };
+    }
+    return this.priceLists.resolveDocumentPricing({
+      companyId,
+      user,
+      customerId,
+      requestedPriceListId: dto.priceListId ?? null,
+      requestedPriceListManualOverride: dto.priceListManualOverride,
+      lines: items.map((item, index) => ({
+        index,
+        productId: item.productId,
+        quantity: item.qty,
+        unitPrice: item.unitPrice,
+        appliedPriceListId: item.appliedPriceListId,
+        appliedPricingRuleId: item.appliedPricingRuleId,
+      })),
+    });
   }
 
   private cleanSourceProductId(value: unknown) {
