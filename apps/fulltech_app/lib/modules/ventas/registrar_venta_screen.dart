@@ -42,6 +42,7 @@ import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/contabilidad/data/contabilidad_repository.dart';
+import '../../features/price_lists/data/price_lists_repository.dart';
 import '../../features/warehouses/data/warehouse_repository.dart';
 import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
@@ -201,6 +202,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   List<ProductModel> get _products => _search.snapshot.items;
 
   ClienteModel? _selectedClient;
+  String? _manualPriceListId;
+  ClienteModel? _lastWholesaleClient;
+  String? _lastWholesaleManualPriceListId;
+  int _wholesalePricingRequest = 0;
+  bool _wholesalePricingBusy = false;
   String? _selectedFiscalVoucherType;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
@@ -434,6 +440,19 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
+  ValueKey<String> _cartItemViewKey(SaleDraftItem item) {
+    final identity = item.productId ?? item.sourceProductId ?? item.name;
+    return ValueKey(
+      [
+        identity,
+        item.qty.toStringAsFixed(6),
+        item.priceSoldUnit.toStringAsFixed(6),
+        item.subtotalSold.toStringAsFixed(6),
+        item.originalUnitPrice?.toStringAsFixed(6) ?? '',
+      ].join('|'),
+    );
+  }
+
   void _showNoStockNotice() {
     final overlay = Overlay.maybeOf(context);
     if (overlay == null) return;
@@ -584,6 +603,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     setState(() {
       _cart = const [];
       _selectedClient = null;
+      _manualPriceListId = null;
       _selectedFiscalVoucherType = null;
       _selectedCategories.clear();
       _serverCategoryCounts = const <String, int>{};
@@ -909,6 +929,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           setState(() {
             _cart = [];
             _selectedClient = null;
+            _manualPriceListId = null;
             _selectedFiscalVoucherType = null;
             _noteCtrl.clear();
           });
@@ -974,6 +995,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             onSelect: () {
               Navigator.of(dialogContext).pop();
               setState(() => _selectedClient = client);
+              unawaited(_repriceCartForWholesale());
             },
           ),
         );
@@ -1610,6 +1632,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       final qtyValue = _formatItemQty(item);
                       final outOfStock = _hasNoStock(item);
                       return ListTile(
+                        key: _cartItemViewKey(item),
                         dense: true,
                         minLeadingWidth: 26,
                         contentPadding: const EdgeInsets.symmetric(
@@ -1895,6 +1918,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                       ),
                     ],
                   ),
+                  if (_wholesalePriceListsEnabled) ...[
+                    const SizedBox(height: 5),
+                    _buildWholesalePriceListSelector(compact: true),
+                  ],
                   const SizedBox(height: 7),
                   Row(
                     children: [
@@ -1922,6 +1949,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               : () => setState(() {
                                   _cart = [];
                                   _selectedClient = null;
+                                  _manualPriceListId = null;
                                   _selectedFiscalVoucherType = null;
                                   _noteCtrl.clear();
                                 }),
@@ -2050,9 +2078,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                     _SelectedSaleClientHeader(
                       client: _selectedClient!,
                       onTap: _openClientPickerDialog,
-                      onClear: () => setState(() {
-                        _selectedClient = null;
-                      }),
+                      onClear: () {
+                        setState(() => _selectedClient = null);
+                        unawaited(_repriceCartForWholesale());
+                      },
                     ),
                     SizedBox(height: compactVertical ? 4 : 6),
                   ] else
@@ -2074,6 +2103,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               final outOfStock = _hasNoStock(item);
 
                               return Material(
+                                key: _cartItemViewKey(item),
                                 color: Colors.transparent,
                                 child: InkWell(
                                   onTap: () => _openEditCartItemDialog(index),
@@ -2222,6 +2252,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         ),
                       ),
                     ),
+                  if (_wholesalePriceListsEnabled) ...[
+                    const SizedBox(height: 6),
+                    _buildWholesalePriceListSelector(),
+                  ],
                   // ── Línea divisoria + Total a Cobrar ──
                   if (_cart.isNotEmpty) ...[
                     const Divider(height: 12, thickness: 1),
@@ -2326,6 +2360,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                           onPressed: () => setState(() {
                             _cart = [];
                             _selectedClient = null;
+                            _manualPriceListId = null;
                             _selectedFiscalVoucherType = null;
                             _noteCtrl.clear();
                           }),
@@ -2592,6 +2627,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       setState(() {
         _selectedClient = selected;
       });
+      unawaited(_repriceCartForWholesale());
     }
   }
 
@@ -2815,7 +2851,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         _showNoStockNotice();
         return;
       }
-      _updateItem(idx, current.copyWith(qty: nextQty));
+      unawaited(_updateItemWithWholesale(idx, current.copyWith(qty: nextQty)));
       return;
     }
     if (_productUsesPhysicalInventory(product) &&
@@ -2831,22 +2867,27 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final productSource = isUuid ? 'LOCAL' : product.productSource;
     final sourceProductId = isUuid ? product.id : product.sourceProductId;
 
+    final requestId = ++_wholesalePricingRequest;
+    setState(() => _wholesalePricingBusy = true);
+    final pricedItem = await _withWholesalePrice(
+      SaleDraftItem(
+        product: product,
+        productId: productId,
+        productSource: productSource,
+        sourceProductId: sourceProductId,
+        name: product.nombre,
+        imageUrl: product.displayFotoUrl,
+        isExternal: productId == null,
+        qty: quantity,
+        priceSoldUnit: product.precio,
+        costUnitSnapshot: product.costo,
+      ),
+      requestId: requestId,
+    );
+    if (!mounted || requestId != _wholesalePricingRequest) return;
     setState(() {
-      _cart = [
-        ..._cart,
-        SaleDraftItem(
-          product: product,
-          productId: productId,
-          productSource: productSource,
-          sourceProductId: sourceProductId,
-          name: product.nombre,
-          imageUrl: product.displayFotoUrl,
-          isExternal: productId == null,
-          qty: quantity,
-          priceSoldUnit: product.precio,
-          costUnitSnapshot: product.costo,
-        ),
-      ];
+      _cart = [..._cart, pricedItem];
+      _wholesalePricingBusy = false;
     });
   }
 
@@ -2934,12 +2975,161 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     return quantity;
   }
 
-  void _updateItem(int index, SaleDraftItem next) {
+  Future<void> _updateItemWithWholesale(int index, SaleDraftItem next) async {
+    final requestId = ++_wholesalePricingRequest;
+    setState(() => _wholesalePricingBusy = true);
+    final priced = await _withWholesalePrice(next, requestId: requestId);
+    if (!mounted || index < 0 || index >= _cart.length) return;
+    if (requestId != _wholesalePricingRequest) return;
     setState(() {
       final list = [..._cart];
-      list[index] = next;
+      list[index] = priced;
       _cart = list;
+      _wholesalePricingBusy = false;
     });
+  }
+
+  bool get _wholesalePriceListsEnabled =>
+      ref
+          .read(companySettingsProvider)
+          .valueOrNull
+          ?.wholesalePriceListsEnabled ==
+      true;
+
+  String? get _effectiveManualPriceListId {
+    final value = _manualPriceListId?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  bool get _hasManualPriceListOverride => _effectiveManualPriceListId != null;
+
+  void _rememberWholesalePricingContext() {
+    _lastWholesaleClient = _selectedClient;
+    _lastWholesaleManualPriceListId = _effectiveManualPriceListId;
+  }
+
+  void _restoreWholesalePricingContext() {
+    _selectedClient = _lastWholesaleClient;
+    _manualPriceListId = _lastWholesaleManualPriceListId;
+  }
+
+  Future<void> _selectManualPriceList(String? priceListId) async {
+    if (!_wholesalePriceListsEnabled) return;
+    final normalized = priceListId?.trim();
+    final next = normalized == null || normalized.isEmpty ? null : normalized;
+    if (next != null) {
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: AppPermission.selectManualPriceList,
+        forceAdminAuthorization: true,
+        reason: 'Autorizar selección manual de lista de precios',
+      );
+      if (!allowed || !mounted) return;
+    }
+    final previous = _manualPriceListId;
+    setState(() => _manualPriceListId = next);
+    final updated = await _repriceCartForWholesale();
+    if (!updated && mounted) {
+      setState(() => _manualPriceListId = previous);
+    }
+  }
+
+  Future<SaleDraftItem> _withWholesalePrice(
+    SaleDraftItem item, {
+    required int requestId,
+  }) async {
+    if (!_wholesalePriceListsEnabled || item.isExternal) return item;
+    final productId = (item.productId ?? item.product?.id ?? '').trim();
+    if (productId.isEmpty) return item;
+    final resolved = await ref
+        .read(priceListsRepositoryProvider)
+        .resolveLine(
+          productId: productId,
+          qty: item.qty,
+          priceListId: _effectiveManualPriceListId,
+          clientId: _selectedClient?.id,
+        );
+    if (requestId != _wholesalePricingRequest) return item;
+    if (resolved.applied) {
+      return item.copyWith(
+        priceSoldUnit: resolved.unitPrice,
+        originalUnitPrice: resolved.originalUnitPrice,
+      );
+    }
+    final basePrice = item.product?.precio ?? item.originalUnitPrice;
+    if (basePrice == null) return item;
+    return item.copyWith(
+      priceSoldUnit: basePrice,
+      clearOriginalUnitPrice: true,
+    );
+  }
+
+  Future<bool> _repriceCartForWholesale() async {
+    if (!_wholesalePriceListsEnabled || _cart.isEmpty) {
+      _rememberWholesalePricingContext();
+      return true;
+    }
+    final requestId = ++_wholesalePricingRequest;
+    setState(() => _wholesalePricingBusy = true);
+    try {
+      final repriced = <SaleDraftItem>[];
+      for (final item in _cart) {
+        repriced.add(await _withWholesalePrice(item, requestId: requestId));
+      }
+      if (!mounted || requestId != _wholesalePricingRequest) return false;
+      setState(() {
+        _cart = repriced;
+        _wholesalePricingBusy = false;
+        _rememberWholesalePricingContext();
+      });
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('Wholesale sale repricing failed: $error\n$stackTrace');
+      if (!mounted || requestId != _wholesalePricingRequest) return false;
+      setState(() {
+        _restoreWholesalePricingContext();
+        _wholesalePricingBusy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se actualizaron los precios mayoristas. Se conservó la última lista calculada.',
+          ),
+        ),
+      );
+      return false;
+    }
+  }
+
+  Widget _buildWholesalePriceListSelector({bool compact = false}) {
+    if (!_wholesalePriceListsEnabled) return const SizedBox.shrink();
+    final listsAsync = ref.watch(priceListsProvider);
+    return listsAsync.when(
+      loading: () => compact
+          ? const LinearProgressIndicator(minHeight: 2)
+          : const SizedBox(
+              height: 34,
+              child: Center(child: LinearProgressIndicator(minHeight: 2)),
+            ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (lists) {
+        final activeLists = lists.where((list) => list.active).toList();
+        if (activeLists.isEmpty) return const SizedBox.shrink();
+        final selected =
+            activeLists.any((list) => list.id == _effectiveManualPriceListId)
+            ? _effectiveManualPriceListId
+            : null;
+        return _WholesalePriceListSelector(
+          compact: compact,
+          selectedId: selected,
+          clientListName: _selectedClient?.defaultPriceListName,
+          busy: _wholesalePricingBusy,
+          lists: activeLists,
+          onChanged: _selectManualPriceList,
+        );
+      },
+    );
   }
 
   Future<void> _openEditCartItemDialog(int index) async {
@@ -3061,7 +3251,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     _disposeTextControllersAfterFrame([qtyCtrl, priceCtrl]);
 
     if (updated == null || !mounted) return;
-    _updateItem(index, updated);
+    unawaited(_updateItemWithWholesale(index, updated));
   }
 
   Future<void> _createQuickClient() async {
@@ -3123,6 +3313,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       setState(() {
         _selectedClient = created;
       });
+      unawaited(_repriceCartForWholesale());
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Cliente creado')));
@@ -3146,6 +3337,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Agrega al menos un item')));
+      return;
+    }
+
+    if (_wholesalePricingBusy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Espera a que se actualicen los precios mayoristas.'),
+        ),
+      );
       return;
     }
 
@@ -3235,6 +3435,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       setState(() {
         _cart = [];
         _selectedClient = null;
+        _manualPriceListId = null;
         _selectedFiscalVoucherType = null;
         _noteCtrl.clear();
       });
@@ -3300,6 +3501,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           paymentTransferAmount: payment.transferAmount,
           cashReceived: payment.cashReceived,
           changeAmount: payment.changeAmount,
+          priceListId: _effectiveManualPriceListId,
+          priceListManualOverride: _hasManualPriceListOverride,
           expectedTotalSold: tax.total,
           fiscalVoucherType: _selectedFiscalVoucherType,
           optimisticTaxableBase: tax.taxableBase,
@@ -3320,6 +3523,81 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           error.message.toLowerCase().contains('no tienes permiso');
     }
     return error.toString().toLowerCase().contains('no tienes permiso');
+  }
+}
+
+class _WholesalePriceListSelector extends StatelessWidget {
+  const _WholesalePriceListSelector({
+    required this.selectedId,
+    required this.clientListName,
+    required this.busy,
+    required this.lists,
+    required this.onChanged,
+    this.compact = false,
+  });
+
+  final String? selectedId;
+  final String? clientListName;
+  final bool busy;
+  final List<PriceListModel> lists;
+  final ValueChanged<String?> onChanged;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final defaultLabel = (clientListName ?? '').trim().isEmpty
+        ? 'Precio general / cliente'
+        : 'Cliente: ${clientListName!.trim()}';
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: 'Lista de precios',
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 10,
+          vertical: compact ? 4 : 6,
+        ),
+        border: const OutlineInputBorder(),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.sell_outlined,
+            size: compact ? 15 : 17,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                value: selectedId,
+                isDense: true,
+                isExpanded: true,
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(defaultLabel, overflow: TextOverflow.ellipsis),
+                  ),
+                  for (final list in lists)
+                    DropdownMenuItem<String?>(
+                      value: list.id,
+                      child: Text(list.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: busy ? null : onChanged,
+              ),
+            ),
+          ),
+          if (busy) ...[
+            const SizedBox(width: 6),
+            const SizedBox.square(
+              dimension: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

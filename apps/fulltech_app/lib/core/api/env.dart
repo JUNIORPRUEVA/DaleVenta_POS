@@ -9,6 +9,15 @@ class Env {
   static const String _defaultAppBaseUrl = ProductConfig.productionAppBaseUrl;
   static const int _defaultApiTimeoutMs = 15000;
   static const int _minApiTimeoutMs = 1000;
+  static const bool _isUatBuild = bool.fromEnvironment(
+    'FULLPOS_UAT_BUILD',
+    defaultValue: false,
+  );
+  static const Set<String> _uatBlockedApiHosts = {
+    ProductConfig.productionApiHost,
+    'ventas-fullpos-backend.gcdndd.easypanel.host',
+    '31.97.99.70',
+  };
 
   static bool get marketingDebugUiEnabled {
     final raw = (_readEnv('MARKETING_DEBUG_UI') ?? '').trim().toLowerCase();
@@ -110,6 +119,11 @@ class Env {
       if (kIsWeb) {
         return '${Uri.base.origin}/api';
       }
+      if (_isUatBuild) {
+        throw StateError(
+          'FULLPOS_UAT_BUILD requiere API_BASE_URL explicito. No se permite usar el backend por defecto.',
+        );
+      }
       debugPrint(
         'API_BASE_URL is missing. Define it in .env / EasyPanel env vars. Using fallback: $_defaultApiBaseUrl',
       );
@@ -127,6 +141,11 @@ class Env {
       debugPrint(
         'Relative API_BASE_URL is only valid on web. Value="$raw". Using fallback.',
       );
+      if (_isUatBuild) {
+        throw StateError(
+          'FULLPOS_UAT_BUILD requiere API_BASE_URL absoluto y explicito.',
+        );
+      }
       return _defaultApiBaseUrl;
     }
 
@@ -135,6 +154,9 @@ class Env {
     final parsed = Uri.tryParse(value);
 
     if (parsed == null || parsed.scheme.isEmpty) {
+      if (_isUatBuild) {
+        throw StateError('API_BASE_URL invalido para FULLPOS_UAT_BUILD.');
+      }
       debugPrint('Invalid API_BASE_URL (no scheme): "$value". Using default.');
       return _defaultApiBaseUrl;
     }
@@ -142,8 +164,17 @@ class Env {
     final host = parsed.host.trim().toLowerCase();
     final isHttp = parsed.scheme == 'http' || parsed.scheme == 'https';
     if (!isHttp || host.isEmpty) {
+      if (_isUatBuild) {
+        throw StateError('API_BASE_URL invalido para FULLPOS_UAT_BUILD.');
+      }
       debugPrint('Invalid API_BASE_URL: "$value". Using default.');
       return _defaultApiBaseUrl;
+    }
+
+    if (_isUatBuild && _isBlockedUatApiHost(host)) {
+      throw StateError(
+        'FULLPOS_UAT_BUILD rechazo API_BASE_URL con host productivo o compartido: $host',
+      );
     }
 
     // In release builds, warn if config looks dev-only, but don't block startup.
@@ -162,6 +193,14 @@ class Env {
         ? value.substring(0, value.length - 1)
         : value;
     return normalized;
+  }
+
+  static bool _isBlockedUatApiHost(String host) {
+    if (_uatBlockedApiHosts.contains(host)) return true;
+    return host.contains('easypanel') ||
+        host.contains('gcdndd') ||
+        host.contains('daleventapos-backend') ||
+        host.contains('ventas-fullpos-backend');
   }
 
   static String get appBaseUrl {

@@ -2,7 +2,8 @@ param(
   [string]$Version,
   [int]$BuildNumber,
   [string]$VersionInfo,
-  [string]$SourceDir = '..\apps\fulltech_app\build\windows\x64\runner\Release'
+  [string]$SourceDir = '..\apps\fulltech_app\build\windows\x64\runner\Release',
+  [switch]$UatMayoreo
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +45,16 @@ function Assert-DaleVentasReleaseSource {
   & rg -a --fixed-strings $forbiddenApiHost $resolved.Path --quiet
   if ($LASTEXITCODE -eq 0) {
     throw "Release source contiene backend prohibido de FullPOS Owner: $forbiddenApiHost"
+  }
+}
+
+function Assert-UatMayoreoSource {
+  param([string]$Path)
+
+  $resolved = Resolve-Path -LiteralPath $Path -ErrorAction Stop
+  $expectedExe = Join-Path $resolved.Path 'fullpos_cloud_uat_mayoreo.exe'
+  if (-not (Test-Path -LiteralPath $expectedExe)) {
+    throw "UAT Mayoreo source no contiene el ejecutable aislado: $expectedExe"
   }
 }
 
@@ -107,7 +118,8 @@ if ($Version -ne $pubspecVersion.Version -or $BuildNumber -ne $pubspecVersion.Bu
   throw "Installer version $Version+$BuildNumber does not match pubspec.yaml $($pubspecVersion.Version)+$($pubspecVersion.BuildNumber). Update pubspec.yaml first."
 }
 
-$outputExe = Join-Path $installerDir "output\FullPOS-Setup-$Version-$BuildNumber.exe"
+$outputPrefix = if ($UatMayoreo) { 'FullPOS-UAT-Mayoreo-Setup' } else { 'FullPOS-Setup' }
+$outputExe = Join-Path $installerDir "output\$outputPrefix-$Version-$BuildNumber.exe"
 
 Set-Location $installerDir
 $isccPath = Find-IsccPath
@@ -121,11 +133,26 @@ if (-not $isccPath) {
   exit 2
 }
 
-Assert-DaleVentasReleaseSource -Path (Join-Path $installerDir $SourceDir)
+if ($UatMayoreo) {
+  Assert-UatMayoreoSource -Path (Join-Path $installerDir $SourceDir)
+} else {
+  Assert-DaleVentasReleaseSource -Path (Join-Path $installerDir $SourceDir)
+}
 
 $before = if (Test-Path $outputExe) { (Get-Item $outputExe).LastWriteTimeUtc.ToString('o') } else { '' }
 
-& $isccPath $setupScript "/DMyAppVersion=$Version" "/DMyAppBuildNumber=$BuildNumber" "/DMyAppVersionInfo=$VersionInfo" "/DMyAppSourceDir=$SourceDir" *> $reportPath
+$isccArgs = @(
+  $setupScript,
+  "/DMyAppVersion=$Version",
+  "/DMyAppBuildNumber=$BuildNumber",
+  "/DMyAppVersionInfo=$VersionInfo",
+  "/DMyAppSourceDir=$SourceDir"
+)
+if ($UatMayoreo) {
+  $isccArgs += '/DMyAppUatMayoreo=1'
+}
+
+& $isccPath @isccArgs *> $reportPath
 
 $afterExists = Test-Path $outputExe
 $after = if ($afterExists) { (Get-Item $outputExe).LastWriteTimeUtc.ToString('o') } else { '' }

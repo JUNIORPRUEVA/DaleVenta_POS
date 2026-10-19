@@ -80,6 +80,7 @@ class CompanySettings {
   final bool inventoryEnabled;
   final bool measurementUnitsEnabled;
   final bool multiWarehouseEnabled;
+  final bool wholesalePriceListsEnabled;
 
   const CompanySettings({
     required this.companyName,
@@ -119,6 +120,7 @@ class CompanySettings {
     this.inventoryEnabled = true,
     this.measurementUnitsEnabled = false,
     this.multiWarehouseEnabled = false,
+    this.wholesalePriceListsEnabled = false,
   });
 
   factory CompanySettings.empty() {
@@ -160,6 +162,7 @@ class CompanySettings {
       inventoryEnabled: true,
       measurementUnitsEnabled: false,
       multiWarehouseEnabled: false,
+      wholesalePriceListsEnabled: false,
     );
   }
 
@@ -201,6 +204,7 @@ class CompanySettings {
     bool? inventoryEnabled,
     bool? measurementUnitsEnabled,
     bool? multiWarehouseEnabled,
+    bool? wholesalePriceListsEnabled,
     bool clearLogo = false,
   }) {
     return CompanySettings(
@@ -252,6 +256,8 @@ class CompanySettings {
           measurementUnitsEnabled ?? this.measurementUnitsEnabled,
       multiWarehouseEnabled:
           multiWarehouseEnabled ?? this.multiWarehouseEnabled,
+      wholesalePriceListsEnabled:
+          wholesalePriceListsEnabled ?? this.wholesalePriceListsEnabled,
     );
   }
 
@@ -293,6 +299,7 @@ class CompanySettings {
     'inventoryEnabled': inventoryEnabled,
     'measurementUnitsEnabled': measurementUnitsEnabled,
     'multiWarehouseEnabled': multiWarehouseEnabled,
+    'wholesalePriceListsEnabled': wholesalePriceListsEnabled,
   };
 
   factory CompanySettings.fromMap(Map<String, dynamic> map) {
@@ -360,6 +367,11 @@ class CompanySettings {
         map.containsKey('multiWarehouseEnabled')
             ? map['multiWarehouseEnabled']
             : map['multi_warehouse_enabled'],
+      ),
+      wholesalePriceListsEnabled: _bool(
+        map.containsKey('wholesalePriceListsEnabled')
+            ? map['wholesalePriceListsEnabled']
+            : map['wholesale_price_lists_enabled'],
       ),
     );
   }

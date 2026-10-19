@@ -474,6 +474,7 @@ class SaleModel {
       returnStatus == 'ACTIVE' && !isRefundDocument;
   bool get canCancel =>
       kind == 'invoice' && !isCancelled && !isReturned && !isRefundDocument;
+
   /// Una venta solo afectó inventario si alguna de sus lineas se vendió con
   /// control de existencias. Las ventas fuera de inventario (productos con
   /// trackInventory=false o lineas sin producto) no mueven stock.
@@ -559,6 +560,7 @@ class SaleDraftItem {
     double? qty,
     double? priceSoldUnit,
     double? originalUnitPrice,
+    bool clearOriginalUnitPrice = false,
     double? costUnitSnapshot,
     String? unitCodeSnapshot,
     String? unitNameSnapshot,
@@ -579,7 +581,9 @@ class SaleDraftItem {
       isExternal: isExternal ?? this.isExternal,
       qty: qty ?? this.qty,
       priceSoldUnit: priceSoldUnit ?? this.priceSoldUnit,
-      originalUnitPrice: originalUnitPrice ?? this.originalUnitPrice,
+      originalUnitPrice: clearOriginalUnitPrice
+          ? null
+          : (originalUnitPrice ?? this.originalUnitPrice),
       costUnitSnapshot: costUnitSnapshot ?? this.costUnitSnapshot,
       unitCodeSnapshot: unitCodeSnapshot ?? this.unitCodeSnapshot,
       unitNameSnapshot: unitNameSnapshot ?? this.unitNameSnapshot,

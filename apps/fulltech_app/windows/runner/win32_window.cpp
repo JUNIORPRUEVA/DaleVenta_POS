@@ -29,7 +29,12 @@ namespace {
 #define ICON_SMALL2 2
 #endif
 
+#ifdef FULLPOS_WINDOWS_UAT_MAYOREO
+constexpr const wchar_t kWindowClassName[] =
+    L"FULLPOS_UAT_MAYOREO_WIN32_WINDOW";
+#else
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+#endif
 
 /// Registry key for app theme preference.
 ///

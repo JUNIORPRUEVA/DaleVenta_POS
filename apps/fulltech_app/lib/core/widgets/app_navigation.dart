@@ -50,6 +50,7 @@ class AppNavigationSection {
 List<AppNavigationSection> buildAppNavigationSections(
   UserModel? currentUser, {
   required bool multiWarehouseEnabled,
+  bool wholesalePriceListsEnabled = false,
 }) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
@@ -57,6 +58,7 @@ List<AppNavigationSection> buildAppNavigationSections(
   }
 
   final resolvedMultiWarehouseEnabled = multiWarehouseEnabled;
+  final resolvedWholesalePriceListsEnabled = wholesalePriceListsEnabled;
 
   final sections = <AppNavigationSection>[
     AppNavigationSection(
@@ -146,6 +148,14 @@ List<AppNavigationSection> buildAppNavigationSections(
             appIcon: AppIcons.inventory,
             title: 'Kardex',
             route: Routes.catalogoKardex,
+          ),
+        if (resolvedWholesalePriceListsEnabled &&
+            canOrAuthorize(AppPermission.managePriceLists))
+          const AppNavigationItem(
+            icon: Icons.price_change_outlined,
+            appIcon: AppIcons.inventory,
+            title: 'Listas precios',
+            route: Routes.listasPrecios,
           ),
         if (resolvedMultiWarehouseEnabled &&
             canOrAuthorize(AppPermission.manageWarehouses))

@@ -61,6 +61,7 @@ import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/account/delete_account_dialog.dart';
+import '../../features/price_lists/data/price_lists_repository.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../cash/cash_repository.dart';
 import '../cash/cash_models.dart';
@@ -460,6 +461,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String? _selectedClientId;
   String _selectedClientName = 'Sin cliente';
   String? _selectedClientPhone;
+  String? _manualPriceListId;
+  String? _lastWholesaleManualPriceListId;
+  String? _lastWholesaleClientId;
+  String _lastWholesaleClientName = 'Sin cliente';
+  String? _lastWholesaleClientPhone;
+  String _lastWholesaleFiscalCustomerTaxId = '';
+  String _lastWholesaleFiscalCustomerName = '';
+  List<CotizacionItem> _lastWholesaleItems = const [];
+  int _wholesalePricingRequest = 0;
+  bool _wholesalePricingBusy = false;
   String _note = '';
 
   String _fiscalCustomerTaxId = '';
@@ -784,6 +795,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   void _applyQuotationToEditor(CotizacionModel quotation) {
+    ++_wholesalePricingRequest;
+    _wholesalePricingBusy = false;
+    _manualPriceListId = quotation.priceListManualOverride
+        ? quotation.priceListId
+        : null;
     _items
       ..clear()
       ..addAll(quotation.items.map((item) => item.copyWith()));
@@ -794,6 +810,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _generalDiscountAmount = quotation.globalDiscountAmount;
     _editingId = quotation.id;
     _editingCreatedAt = quotation.createdAt;
+    _rememberWholesalePricingContext();
   }
 
   _DesktopTicketDraft _ticketDraftFromQuotation(
@@ -815,6 +832,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientId: quotation.customerId,
       selectedClientName: cleanCustomer.isEmpty ? 'Sin cliente' : cleanCustomer,
       selectedClientPhone: quotation.customerPhone,
+      manualPriceListId: quotation.priceListManualOverride
+          ? quotation.priceListId
+          : null,
       note: quotation.note,
       includeItbis: quotation.includeItbis,
       globalDiscountAmount: quotation.globalDiscountAmount,
@@ -1898,6 +1918,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _desktopSelectedCartIndex = _items.length - 1;
       }
     });
+    unawaited(_repriceCartForWholesale());
   }
 
   void _adjustSelectedCartLineFromShortcut(double delta) {
@@ -2164,6 +2185,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       selectedClientId: _selectedClientId,
       selectedClientName: _selectedClientName,
       selectedClientPhone: _selectedClientPhone,
+      manualPriceListId: _effectiveManualPriceListId,
       note: _note,
       includeItbis: includeItbis ?? _quoteTaxEnabled,
       // Persiste el tipo EFECTIVO: si impuestos/comprobantes están OFF, se
@@ -2204,6 +2226,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   void _replaceEditorStateFromDraft(_DesktopTicketDraft draft) {
+    ++_wholesalePricingRequest;
+    _wholesalePricingBusy = false;
+    _manualPriceListId = draft.manualPriceListId;
     _items
       ..clear()
       ..addAll(draft.items.map((item) => item.copyWith()));
@@ -2226,12 +2251,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ..clear()
       ..addAll(draft.selectedCategories);
     _searchCtrl.text = draft.searchQuery;
+    _rememberWholesalePricingContext();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _applyProductCategoryFilter();
     });
   }
 
   void _resetEditorState() {
+    ++_wholesalePricingRequest;
     _items.clear();
     _searchCtrl.clear();
     _selectedCategories.clear();
@@ -2241,6 +2268,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedClientId = null;
     _selectedClientName = 'Sin cliente';
     _selectedClientPhone = null;
+    _manualPriceListId = null;
+    _wholesalePricingBusy = false;
     _note = '';
     _fiscalCustomerTaxId = '';
     _fiscalCustomerName = '';
@@ -2248,6 +2277,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _generalDiscountAmount = 0;
     _editingId = null;
     _editingCreatedAt = null;
+    _rememberWholesalePricingContext();
   }
 
   Future<void> _confirmAndClearSale() async {
@@ -2461,6 +2491,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   void _createNewDesktopTicket() {
+    if (_showWholesalePricingPending()) return;
     final trace = PerfTrace.begin('ticket.create');
     trace?.step('handler_start');
     setState(() {
@@ -2487,6 +2518,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   void _switchDesktopTicket(String id) {
+    if (_showWholesalePricingPending()) return;
     if (id == _activeDesktopTicketId) return;
     final trace = PerfTrace.begin('ticket.select');
     trace?.step('handler_start');
@@ -3381,6 +3413,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _saveCurrentAsQuotation() async {
+    if (_showWholesalePricingPending()) return;
     if (_items.isEmpty) {
       _showSalesNotice(
         title: 'Ticket vacío',
@@ -3394,6 +3427,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!allowed || !mounted) return;
 
     final repository = ref.read(cotizacionesRepositoryProvider);
+    if (_showWholesalePricingPending()) return;
     final baseDraft = _buildDraftCotizacion();
     final hasClient =
         baseDraft.customerName.trim().isNotEmpty &&
@@ -3844,6 +3878,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (isMobile && addingNewLine && _items.length <= 2) {
       setState(() => _mobileCartExtentInitialized = false);
     }
+    unawaited(_repriceCartForWholesale());
   }
 
   void _addProductFromDesktopCatalog(
@@ -4314,9 +4349,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   void _setQty(int index, double qty) {
     if (qty <= 0) {
       _commitEditorChange(() => _items.removeAt(index));
+      unawaited(_repriceCartForWholesale());
       return;
     }
     _commitEditorChange(() => _items[index] = _items[index].copyWith(qty: qty));
+    unawaited(_repriceCartForWholesale());
   }
 
   void _setUnitPrice(int index, double price) {
@@ -4328,6 +4365,177 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         unitPrice: price,
       );
     });
+  }
+
+  bool get _wholesalePriceListsEnabled =>
+      ref
+          .read(companySettingsProvider)
+          .valueOrNull
+          ?.wholesalePriceListsEnabled ==
+      true;
+
+  String? get _effectiveManualPriceListId {
+    final value = _manualPriceListId?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  bool get _hasManualPriceListOverride => _effectiveManualPriceListId != null;
+
+  void _rememberWholesalePricingContext() {
+    _lastWholesaleManualPriceListId = _effectiveManualPriceListId;
+    _lastWholesaleClientId = _selectedClientId;
+    _lastWholesaleClientName = _selectedClientName;
+    _lastWholesaleClientPhone = _selectedClientPhone;
+    _lastWholesaleFiscalCustomerTaxId = _fiscalCustomerTaxId;
+    _lastWholesaleFiscalCustomerName = _fiscalCustomerName;
+    _lastWholesaleItems = List.of(_items);
+  }
+
+  void _restoreWholesalePricingContext() {
+    _manualPriceListId = _lastWholesaleManualPriceListId;
+    _selectedClientId = _lastWholesaleClientId;
+    _selectedClientName = _lastWholesaleClientName;
+    _selectedClientPhone = _lastWholesaleClientPhone;
+    _fiscalCustomerTaxId = _lastWholesaleFiscalCustomerTaxId;
+    _fiscalCustomerName = _lastWholesaleFiscalCustomerName;
+    _items
+      ..clear()
+      ..addAll(_lastWholesaleItems);
+  }
+
+  Future<void> _selectManualPriceList(String? priceListId) async {
+    if (!_wholesalePriceListsEnabled) return;
+    final normalized = priceListId?.trim();
+    final next = normalized == null || normalized.isEmpty ? null : normalized;
+    if (next != null) {
+      final allowed = await ensureAdminAuthorization(
+        context,
+        ref,
+        permission: AppPermission.selectManualPriceList,
+        forceAdminAuthorization: true,
+        reason: 'Autorizar selección manual de lista de precios',
+      );
+      if (!allowed || !mounted) return;
+    }
+    setState(() => _manualPriceListId = next);
+    await _repriceCartForWholesale();
+  }
+
+  Future<CotizacionItem> _withWholesalePrice(
+    CotizacionItem item, {
+    required int requestId,
+    required String? clientId,
+    required String? priceListId,
+  }) async {
+    if (!_wholesalePriceListsEnabled || item.isExternal) return item;
+    final productId = item.productId.trim();
+    if (productId.isEmpty) return item;
+    final resolved = await ref
+        .read(priceListsRepositoryProvider)
+        .resolveLine(
+          productId: productId,
+          qty: item.qty,
+          priceListId: priceListId,
+          clientId: clientId,
+        );
+    if (requestId != _wholesalePricingRequest) return item;
+    if (resolved.applied) {
+      return item.copyWith(
+        unitPrice: resolved.unitPrice,
+        originalUnitPrice: resolved.originalUnitPrice,
+        lineTotalSnapshot: resolved.unitPrice * item.qty,
+      );
+    }
+    final official = _findOfficialProduct(productId);
+    if (official == null) return item;
+    return syncBillingItemFiscalFromProduct(
+      item.copyWith(
+        unitPrice: official.precio,
+        lineTotalSnapshot: official.precio * item.qty,
+      ),
+      official,
+    );
+  }
+
+  Future<bool> _repriceCartForWholesale() async {
+    final requestId = ++_wholesalePricingRequest;
+    if (!_wholesalePriceListsEnabled || _items.isEmpty) {
+      _wholesalePricingBusy = false;
+      _rememberWholesalePricingContext();
+      return true;
+    }
+    final sourceItems = List<CotizacionItem>.of(_items);
+    final clientId = _selectedClientId;
+    final priceListId = _effectiveManualPriceListId;
+    setState(() => _wholesalePricingBusy = true);
+    try {
+      final repriced = <CotizacionItem>[];
+      for (final item in sourceItems) {
+        repriced.add(
+          await _withWholesalePrice(
+            item,
+            requestId: requestId,
+            clientId: clientId,
+            priceListId: priceListId,
+          ),
+        );
+        if (!mounted || requestId != _wholesalePricingRequest) return false;
+      }
+      if (!mounted || requestId != _wholesalePricingRequest) return false;
+      _commitEditorChange(() {
+        _items
+          ..clear()
+          ..addAll(repriced);
+        _wholesalePricingBusy = false;
+        _rememberWholesalePricingContext();
+      });
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('Wholesale quotation repricing failed: $error\n$stackTrace');
+      if (!mounted || requestId != _wholesalePricingRequest) return false;
+      _commitEditorChange(() {
+        _restoreWholesalePricingContext();
+        _wholesalePricingBusy = false;
+      });
+      _showSalesNotice(
+        title: 'No se actualizaron los precios mayoristas',
+        message:
+            'Se restauró el último carrito calculado. Verifica la conexión e inténtalo de nuevo.',
+        icon: Icons.warning_amber_rounded,
+        accent: const Color(0xFFDC2626),
+      );
+      return false;
+    }
+  }
+
+  Widget _buildWholesalePriceListSelector({bool compact = false}) {
+    if (!_wholesalePriceListsEnabled) return const SizedBox.shrink();
+    final listsAsync = ref.watch(priceListsProvider);
+    return listsAsync.when(
+      loading: () => compact
+          ? const LinearProgressIndicator(minHeight: 2)
+          : const SizedBox(
+              height: 34,
+              child: Center(child: LinearProgressIndicator(minHeight: 2)),
+            ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (lists) {
+        final activeLists = lists.where((list) => list.active).toList();
+        if (activeLists.isEmpty) return const SizedBox.shrink();
+        final selected =
+            activeLists.any((list) => list.id == _effectiveManualPriceListId)
+            ? _effectiveManualPriceListId
+            : null;
+        return _QuotePriceListSelector(
+          compact: compact,
+          selectedId: selected,
+          clientListName: null,
+          busy: _wholesalePricingBusy,
+          lists: activeLists,
+          onChanged: _selectManualPriceList,
+        );
+      },
+    );
   }
 
   double? _nextOriginalUnitPrice(CotizacionItem item, double nextUnitPrice) {
@@ -4355,9 +4563,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       final allowed = await _ensureDiscountPermission();
       if (!allowed || !mounted) return;
     }
+    var quantityChanged = false;
     _commitEditorChange(() {
       if (index < 0 || index >= _items.length) return;
       final current = _items[index];
+      quantityChanged = current.qty != result.qty;
       final base = current.effectiveOriginalUnitPrice;
       final discountAmount = result.discountMode == _LineDiscountMode.percent
           ? base * (result.discountValue / 100)
@@ -4371,6 +4581,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         unitPrice: nextPrice,
       );
     });
+    if (quantityChanged) {
+      await _repriceCartForWholesale();
+    }
   }
 
   Future<void> _pickCategory() async {
@@ -4920,6 +5133,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     _selectedClientPhone = updated.telefono;
                     _applyClientFiscalPrefill(updated);
                   });
+                  unawaited(_repriceCartForWholesale());
                 }
               }
 
@@ -4957,6 +5171,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           _selectedClientPhone = selectedDetailClient.telefono;
                           _applyClientFiscalPrefill(selectedDetailClient);
                         });
+                        unawaited(_repriceCartForWholesale());
                         Navigator.pop(context);
                       },
                     )
@@ -5046,6 +5261,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                     _selectedClientPhone = created.telefono;
                                     _applyClientFiscalPrefill(created);
                                   });
+                                  unawaited(_repriceCartForWholesale());
                                   Navigator.pop(context);
                                 },
                                 tooltip: 'Agregar cliente',
@@ -5071,6 +5287,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   _fiscalCustomerTaxId = '';
                                   _fiscalCustomerName = '';
                                 });
+                                unawaited(_repriceCartForWholesale());
                                 Navigator.pop(context);
                               },
                               child: Container(
@@ -5166,6 +5383,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                 client.telefono;
                                             _applyClientFiscalPrefill(client);
                                           });
+                                          unawaited(_repriceCartForWholesale());
                                           Navigator.pop(context);
                                         },
                                         trailing: Row(
@@ -5267,6 +5485,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                 client.telefono;
                                             _applyClientFiscalPrefill(client);
                                           });
+                                          unawaited(_repriceCartForWholesale());
                                           Navigator.pop(context);
                                         },
                                         trailing: Row(
@@ -5330,6 +5549,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         _selectedClientPhone = updated.telefono;
                         _applyClientFiscalPrefill(updated);
                       });
+                      unawaited(_repriceCartForWholesale());
                       Navigator.pop(context);
                     },
                     icon: const Icon(Icons.edit_outlined),
@@ -5506,6 +5726,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       customerId: _selectedClientId,
       customerName: _selectedClientName,
       customerPhone: _selectedClientPhone,
+      priceListId: _effectiveManualPriceListId,
+      priceListManualOverride: _hasManualPriceListOverride,
       note: _note,
       includeItbis: _shouldShowItbis,
       itbisRate: _quoteTaxSummary.defaultRate,
@@ -5764,6 +5986,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openPdfPreview() async {
+    if (_showWholesalePricingPending()) return;
     if (_items.isEmpty) {
       _showSalesNotice(
         title: 'Ticket vacío',
@@ -6543,6 +6766,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   bool _validateCheckoutReady() {
+    if (_showWholesalePricingPending()) return false;
     if (_items.isEmpty) {
       _showSalesNotice(
         title: 'Ticket vacío',
@@ -6568,6 +6792,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return true;
   }
 
+  bool _showWholesalePricingPending() {
+    if (!_wholesalePricingBusy) return false;
+    _showSalesNotice(
+      title: 'Calculando precios',
+      message:
+          'Espera a que termine el cálculo de precios antes de guardar o cobrar.',
+      icon: Icons.hourglass_top_rounded,
+      accent: const Color(0xFFF59E0B),
+    );
+    return true;
+  }
+
   String _checkoutPaymentLabel(_CheckoutPaymentMethod method) => method.label;
 
   Future<void> _openCheckoutDialog() async {
@@ -6589,6 +6825,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
     if (!mounted) return;
 
+    if (!_validateCheckoutReady()) return;
     final result = await showDialog<_CheckoutResult>(
       context: context,
       barrierDismissible: false,
@@ -6823,6 +7060,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               : _editingId,
           customerId: _selectedClientId,
           note: saleNote.isEmpty ? _note : saleNote,
+          priceListId: _effectiveManualPriceListId,
+          priceListManualOverride: _hasManualPriceListOverride,
           paymentMethod: checkout == null
               ? null
               : switch (checkout.method) {
@@ -7147,6 +7386,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       onRemove: () {
         if (index < 0 || index >= _items.length) return;
         _commitEditorChange(() => _items.removeAt(index));
+        unawaited(_repriceCartForWholesale());
         onAfterCommit?.call();
       },
     );
@@ -7167,31 +7407,39 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final canExpandTickets = _desktopTickets.length > 1;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 9, 12, 6),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _MobileSelectorButton(
-              icon: Icons.receipt_long_outlined,
-              overline: 'Ticket',
-              label: primaryLabel,
-              showDot: canExpandTickets,
-              onTap: canExpandTickets
-                  ? () => setState(
-                      () => _showMobileTicketDropdown =
-                          !_showMobileTicketDropdown,
-                    )
-                  : _createNewDesktopTicket,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _MobileSelectorButton(
+                  icon: Icons.receipt_long_outlined,
+                  overline: 'Ticket',
+                  label: primaryLabel,
+                  showDot: canExpandTickets,
+                  onTap: canExpandTickets
+                      ? () => setState(
+                          () => _showMobileTicketDropdown =
+                              !_showMobileTicketDropdown,
+                        )
+                      : _createNewDesktopTicket,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MobileSelectorButton(
+                  icon: Icons.person_outline_rounded,
+                  overline: 'Cliente actual',
+                  label: hasClient ? clientLabel : 'Cliente general',
+                  onTap: _openClientDialog,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _MobileSelectorButton(
-              icon: Icons.person_outline_rounded,
-              overline: 'Cliente actual',
-              label: hasClient ? clientLabel : 'Cliente general',
-              onTap: _openClientDialog,
-            ),
-          ),
+          if (_wholesalePriceListsEnabled) ...[
+            const SizedBox(height: 8),
+            _buildWholesalePriceListSelector(compact: true),
+          ],
         ],
       ),
     );
@@ -8268,14 +8516,19 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               isAdmin: isAdmin,
                               utilityAmount: _utilityAmount,
                               money: _money,
+                              priceListSelector:
+                                  _buildWholesalePriceListSelector(),
                               onPickClient: _openClientDialog,
-                              onClearClient: () => _commitEditorChange(() {
-                                _selectedClientId = null;
-                                _selectedClientName = 'Sin cliente';
-                                _selectedClientPhone = null;
-                                _fiscalCustomerTaxId = '';
-                                _fiscalCustomerName = '';
-                              }),
+                              onClearClient: () {
+                                _commitEditorChange(() {
+                                  _selectedClientId = null;
+                                  _selectedClientName = 'Sin cliente';
+                                  _selectedClientPhone = null;
+                                  _fiscalCustomerTaxId = '';
+                                  _fiscalCustomerName = '';
+                                });
+                                unawaited(_repriceCartForWholesale());
+                              },
                               onOpenHistory: _openRecentSalesPanel,
                               onQuote: _saveCurrentAsQuotation,
                               onPdf: _openPdfPreview,
@@ -8329,6 +8582,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                         _items.length - 1;
                                   }
                                 });
+                                unawaited(_repriceCartForWholesale());
                               },
                               onSelectItem: (index) => setState(
                                 () => _desktopSelectedCartIndex = index,
@@ -15093,6 +15347,81 @@ class _DesktopSaleActionMenuRow extends StatelessWidget {
   }
 }
 
+class _QuotePriceListSelector extends StatelessWidget {
+  const _QuotePriceListSelector({
+    required this.selectedId,
+    required this.clientListName,
+    required this.busy,
+    required this.lists,
+    required this.onChanged,
+    this.compact = false,
+  });
+
+  final String? selectedId;
+  final String? clientListName;
+  final bool busy;
+  final List<PriceListModel> lists;
+  final ValueChanged<String?> onChanged;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final defaultLabel = (clientListName ?? '').trim().isEmpty
+        ? 'Precio general / cliente'
+        : 'Cliente: ${clientListName!.trim()}';
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: 'Lista de precios',
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 10,
+          vertical: compact ? 4 : 6,
+        ),
+        border: const OutlineInputBorder(),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.sell_outlined,
+            size: compact ? 15 : 17,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                value: selectedId,
+                isDense: true,
+                isExpanded: true,
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(defaultLabel, overflow: TextOverflow.ellipsis),
+                  ),
+                  for (final list in lists)
+                    DropdownMenuItem<String?>(
+                      value: list.id,
+                      child: Text(list.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: busy ? null : onChanged,
+              ),
+            ),
+          ),
+          if (busy) ...[
+            const SizedBox(width: 6),
+            const SizedBox.square(
+              dimension: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _DesktopQuotePanel extends StatelessWidget {
   const _DesktopQuotePanel({
     required this.items,
@@ -15109,6 +15438,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.isAdmin,
     required this.utilityAmount,
     required this.money,
+    required this.priceListSelector,
     required this.onPickClient,
     required this.onClearClient,
     required this.onOpenHistory,
@@ -15146,6 +15476,7 @@ class _DesktopQuotePanel extends StatelessWidget {
   final bool isAdmin;
   final double utilityAmount;
   final String Function(double) money;
+  final Widget priceListSelector;
   final VoidCallback onPickClient;
   final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
@@ -15208,6 +15539,11 @@ class _DesktopQuotePanel extends StatelessWidget {
               onOpenNote: onOpenNote,
               onPdf: onPdf,
             ),
+            if (priceListSelector is! SizedBox)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                child: priceListSelector,
+              ),
             Expanded(
               child: items.isEmpty
                   ? Center(
@@ -19327,6 +19663,7 @@ class _DesktopTicketDraft {
     required this.selectedClientId,
     required this.selectedClientName,
     required this.selectedClientPhone,
+    this.manualPriceListId,
     required this.note,
     required this.includeItbis,
     required this.fiscalVoucherType,
@@ -19385,6 +19722,7 @@ class _DesktopTicketDraft {
   final String? selectedClientId;
   final String selectedClientName;
   final String? selectedClientPhone;
+  final String? manualPriceListId;
   final String note;
   final bool includeItbis;
   final String fiscalVoucherType;
@@ -19409,6 +19747,7 @@ class _DesktopTicketDraft {
     String? selectedClientId,
     String? selectedClientName,
     String? selectedClientPhone,
+    String? manualPriceListId,
     String? note,
     bool? includeItbis,
     String? fiscalVoucherType,
@@ -19433,6 +19772,7 @@ class _DesktopTicketDraft {
       selectedClientId: selectedClientId ?? this.selectedClientId,
       selectedClientName: selectedClientName ?? this.selectedClientName,
       selectedClientPhone: selectedClientPhone ?? this.selectedClientPhone,
+      manualPriceListId: manualPriceListId ?? this.manualPriceListId,
       note: note ?? this.note,
       includeItbis: includeItbis ?? this.includeItbis,
       fiscalVoucherType: fiscalVoucherType ?? this.fiscalVoucherType,
@@ -19465,6 +19805,7 @@ class _DesktopTicketDraft {
     'selectedClientId': selectedClientId,
     'selectedClientName': selectedClientName,
     'selectedClientPhone': selectedClientPhone,
+    'manualPriceListId': manualPriceListId,
     'note': note,
     'includeItbis': includeItbis,
     'fiscalVoucherType': fiscalVoucherType,
@@ -19508,6 +19849,7 @@ class _DesktopTicketDraft {
       selectedClientName: (map['selectedClientName'] ?? 'Sin cliente')
           .toString(),
       selectedClientPhone: map['selectedClientPhone']?.toString(),
+      manualPriceListId: map['manualPriceListId']?.toString(),
       note: (map['note'] ?? '').toString(),
       includeItbis: map['includeItbis'] == true,
       fiscalVoucherType: (map['fiscalVoucherType'] ?? '').toString(),

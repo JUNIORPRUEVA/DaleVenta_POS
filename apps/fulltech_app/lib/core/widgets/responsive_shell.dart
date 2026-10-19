@@ -128,6 +128,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   String? _lastAuthorizationCleanupLocation;
   UserModel? _user;
   bool _multiWarehouseEnabled = false;
+  bool _wholesalePriceListsEnabled = false;
   DesktopShellRouteActions? _routeActions;
   DesktopShellFooterContent? _footerContent;
   ProviderSubscription<AuthState>? _authSubscription;
@@ -144,6 +145,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     _multiWarehouseEnabled =
         ref.read(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ??
         false;
+    _wholesalePriceListsEnabled =
+        ref
+            .read(companySettingsProvider)
+            .valueOrNull
+            ?.wholesalePriceListsEnabled ??
+        false;
     _routeActions = ref.read(desktopShellRouteActionsProvider);
     _footerContent = ref.read(desktopShellFooterContentProvider);
     _authSubscription = ref.listenManual<AuthState>(authStateProvider, (
@@ -159,9 +166,18 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           previous,
           next,
         ) {
-          final enabled = next.valueOrNull?.multiWarehouseEnabled ?? false;
-          if (enabled == _multiWarehouseEnabled) return;
-          _setShellStateSafely(() => _multiWarehouseEnabled = enabled);
+          final multiWarehouseEnabled =
+              next.valueOrNull?.multiWarehouseEnabled ?? false;
+          final wholesalePriceListsEnabled =
+              next.valueOrNull?.wholesalePriceListsEnabled ?? false;
+          if (multiWarehouseEnabled == _multiWarehouseEnabled &&
+              wholesalePriceListsEnabled == _wholesalePriceListsEnabled) {
+            return;
+          }
+          _setShellStateSafely(() {
+            _multiWarehouseEnabled = multiWarehouseEnabled;
+            _wholesalePriceListsEnabled = wholesalePriceListsEnabled;
+          });
         });
     _routeActionsSubscription = ref.listenManual<DesktopShellRouteActions?>(
       desktopShellRouteActionsProvider,
@@ -208,6 +224,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final sections = buildAppNavigationSections(
       user,
       multiWarehouseEnabled: _multiWarehouseEnabled,
+      wholesalePriceListsEnabled: _wholesalePriceListsEnabled,
     );
     final location = safeCurrentLocation(context);
     AppNavigator.recordShellLocation(location);
@@ -778,6 +795,12 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
           ),
         if (routeToItem.containsKey(Routes.catalogoKardex))
           menuItem(Routes.catalogoKardex, 'Kardex', Icons.history_rounded),
+        if (routeToItem.containsKey(Routes.listasPrecios))
+          menuItem(
+            Routes.listasPrecios,
+            'Listas precios',
+            Icons.price_change_outlined,
+          ),
         if (routeToItem.containsKey(Routes.configuracionAlmacenes))
           menuItem(
             Routes.configuracionAlmacenes,

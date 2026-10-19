@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../api/env.dart';
+import '../storage/windows_product_paths.dart';
 import 'app_update_models.dart';
 
 final updateDownloaderProvider = Provider<UpdateDownloader>((ref) {
@@ -256,7 +257,9 @@ class UpdateDownloader {
     if (Platform.isWindows) {
       final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
       if (localAppData.isNotEmpty) {
-        return Directory(p.join(localAppData, 'DaleVentas POS', 'updates'));
+        return Directory(
+          p.join(localAppData, WindowsProductPaths.productName, 'updates'),
+        );
       }
     }
     final support = await getApplicationSupportDirectory();

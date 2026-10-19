@@ -19,6 +19,7 @@ import '../../features/contabilidad/depositos_bancarios_screen.dart';
 import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
+import '../../features/price_lists/ui/price_lists_screen.dart';
 import '../../features/reports/ui/reports_page.dart';
 import '../../features/warehouses/ui/inventory_kardex_screen.dart';
 import '../../features/warehouses/ui/warehouse_settings_screen.dart';
@@ -229,6 +230,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const InventoryKardexScreen(),
           ),
           GoRoute(
+            path: Routes.listasPrecios,
+            builder: (context, state) => const PriceListsScreen(),
+          ),
+          GoRoute(
             path: Routes.contabilidad,
             builder: (context, state) => const ContabilidadScreen(),
           ),
@@ -437,8 +442,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final multiWarehouseEnabled =
           refresh.companySettings.valueOrNull?.multiWarehouseEnabled == true;
+      final wholesalePriceListsEnabled =
+          refresh.companySettings.valueOrNull?.wholesalePriceListsEnabled ==
+          true;
       if (RouteAccess.requiresMultiWarehouseFeature(loc) &&
           !multiWarehouseEnabled) {
+        final fallback = RouteAccess.defaultHomeForUser(auth.user);
+        return path == fallback ? Routes.profile : fallback;
+      }
+      if (RouteAccess.requiresWholesalePriceListsFeature(loc) &&
+          !wholesalePriceListsEnabled) {
         final fallback = RouteAccess.defaultHomeForUser(auth.user);
         return path == fallback ? Routes.profile : fallback;
       }

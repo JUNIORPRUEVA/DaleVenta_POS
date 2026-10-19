@@ -7,9 +7,24 @@ project(fullpos_cloud LANGUAGES CXX)
 # y rompe el build. Forzamos OFF para permitir compilar/instalar en Windows.
 set(CMAKE_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION OFF)
 
+# The UAT build script sets this environment variable before invoking Flutter.
+# Keeping the switch outside Dart makes the native runner, updater and installer
+# agree on the same Windows identity.
+set(FULLPOS_WINDOWS_UAT_MAYOREO OFF)
+if(DEFINED ENV{FULLPOS_WINDOWS_CHANNEL})
+  string(TOLOWER "$ENV{FULLPOS_WINDOWS_CHANNEL}" FULLPOS_WINDOWS_CHANNEL)
+  if(FULLPOS_WINDOWS_CHANNEL STREQUAL "uat-mayoreo")
+    set(FULLPOS_WINDOWS_UAT_MAYOREO ON)
+  endif()
+endif()
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "fullpos_cloud")
+if(FULLPOS_WINDOWS_UAT_MAYOREO)
+  set(BINARY_NAME "fullpos_cloud_uat_mayoreo")
+else()
+  set(BINARY_NAME "fullpos_cloud")
+endif()
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

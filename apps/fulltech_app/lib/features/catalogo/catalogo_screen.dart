@@ -30,6 +30,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/sync_status_banner.dart';
+import '../price_lists/data/price_lists_repository.dart';
 import 'application/catalog_controller.dart';
 import 'application/product_search_controller.dart';
 import 'data/catalog_repository.dart';
@@ -1608,6 +1609,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen>
                   label: 'Precio',
                   value: formatRdAccountingAmount(product.precio),
                 ),
+                _ProductWholesaleRulesSummary(product: product),
                 if (showCost)
                   _ProductDetailLine(
                     label: 'Costo',
@@ -3264,6 +3266,7 @@ class _DesktopProductDetailContent extends StatelessWidget {
                   label: 'Precio',
                   value: formatRdAccountingAmount(product.precio),
                 ),
+                _ProductWholesaleRulesSummary(product: product),
                 if (showCost)
                   _ProductDetailLine(
                     label: 'Costo',
@@ -3361,6 +3364,100 @@ class _ProductDetailLine extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _ProductWholesaleRulesSummary extends ConsumerWidget {
+  const _ProductWholesaleRulesSummary({required this.product});
+
+  final ProductModel product;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(companySettingsProvider).valueOrNull;
+    if (settings?.wholesalePriceListsEnabled != true) {
+      return const SizedBox.shrink();
+    }
+    final listsAsync = ref.watch(priceListsProvider);
+    return listsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 4),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (lists) {
+        final rules = <String>[];
+        for (final list in lists.where((list) => list.active)) {
+          final matches = list.rules.where(
+            (rule) => rule.productId == product.id,
+          );
+          for (final rule in matches) {
+            rules.add('${list.name}: ${_formatWholesaleRule(rule)}');
+          }
+        }
+        if (rules.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.sell_outlined,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Listas de precios',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  for (final rule in rules.take(4))
+                    Text(rule, style: Theme.of(context).textTheme.bodySmall),
+                  if (rules.length > 4)
+                    Text(
+                      '+${rules.length - 4} reglas adicionales',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static String _formatWholesaleRule(PriceListRuleModel rule) {
+    final qtyValue = rule.minQuantity.truncateToDouble() == rule.minQuantity
+        ? rule.minQuantity.toStringAsFixed(0)
+        : rule.minQuantity.toStringAsFixed(2);
+    final qty = rule.minQuantity <= 1 ? '' : ' desde $qtyValue';
+    switch (rule.mode) {
+      case 'PERCENT_DISCOUNT':
+        final percent = rule.discountPercent ?? 0;
+        return '${percent.toStringAsFixed(percent.truncateToDouble() == percent ? 0 : 2)}% desc.$qty';
+      case 'FIXED_PRICE':
+      default:
+        final price = rule.fixedPrice ?? 0;
+        return '${formatRdAccountingAmount(price)}$qty';
+    }
   }
 }
 

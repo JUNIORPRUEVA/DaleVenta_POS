@@ -16,6 +16,12 @@ class RouteAccess {
         path.startsWith('${Routes.catalogoKardex}/');
   }
 
+  static bool requiresWholesalePriceListsFeature(String location) {
+    final path = location.split('?').first;
+    return path == Routes.listasPrecios ||
+        path.startsWith('${Routes.listasPrecios}/');
+  }
+
   static AppPermission? permissionForLocation(String location) {
     final path = location.split('?').first;
 
@@ -34,6 +40,8 @@ class RouteAccess {
       case Routes.catalogoCategorias:
       case Routes.catalogoConteo:
         return AppPermission.viewCatalog;
+      case Routes.listasPrecios:
+        return AppPermission.managePriceLists;
       case Routes.catalogoKardex:
         return AppPermission.viewInventoryHistory;
       case Routes.ventasBase:

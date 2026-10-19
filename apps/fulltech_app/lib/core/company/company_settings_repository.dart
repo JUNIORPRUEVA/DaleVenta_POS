@@ -280,6 +280,7 @@ class CompanySettingsRepository {
         'inventoryEnabled': settings.inventoryEnabled,
         'measurementUnitsEnabled': settings.measurementUnitsEnabled,
         'multiWarehouseEnabled': settings.multiWarehouseEnabled,
+        'wholesalePriceListsEnabled': settings.wholesalePriceListsEnabled,
       };
       if (settings.openAiApiKey.trim().isNotEmpty) {
         payload['openAiApiKey'] = settings.openAiApiKey.trim();

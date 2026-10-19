@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../storage/windows_product_paths.dart';
+
 class UpdateStateFileStore {
   const UpdateStateFileStore();
 
@@ -11,7 +13,9 @@ class UpdateStateFileStore {
     if (Platform.isWindows) {
       final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
       if (localAppData.isNotEmpty) {
-        return Directory(p.join(localAppData, 'DaleVentas POS', 'updates'));
+        return Directory(
+          p.join(localAppData, WindowsProductPaths.productName, 'updates'),
+        );
       }
     }
     final support = await getApplicationSupportDirectory();

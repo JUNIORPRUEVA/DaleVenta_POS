@@ -2110,6 +2110,7 @@ class _CompanySettingsEditorState
   bool _inventoryEnabled = true;
   bool _measurementUnitsEnabled = false;
   bool _multiWarehouseEnabled = false;
+  bool _wholesalePriceListsEnabled = false;
 
   @override
   void initState() {
@@ -2177,6 +2178,7 @@ class _CompanySettingsEditorState
     _inventoryEnabled = settings.inventoryEnabled;
     _measurementUnitsEnabled = settings.measurementUnitsEnabled;
     _multiWarehouseEnabled = settings.multiWarehouseEnabled;
+    _wholesalePriceListsEnabled = settings.wholesalePriceListsEnabled;
   }
 
   String? _normalizeLogoBase64(String? value) {
@@ -2383,6 +2385,7 @@ class _CompanySettingsEditorState
       inventoryEnabled: _inventoryEnabled,
       measurementUnitsEnabled: _measurementUnitsEnabled,
       multiWarehouseEnabled: _multiWarehouseEnabled,
+      wholesalePriceListsEnabled: _wholesalePriceListsEnabled,
       bankAccounts: [
         if (_bankAlias.text.trim().isNotEmpty ||
             _bankType.text.trim().isNotEmpty ||
@@ -2562,6 +2565,12 @@ class _CompanySettingsEditorState
               setState(() => _measurementUnitsEnabled = value),
           onMultiWarehouseEnabledChanged: (value) =>
               setState(() => _multiWarehouseEnabled = value),
+        ),
+        SizedBox(height: compactDesktop ? 6 : 10),
+        _WholesaleSettingsPanel(
+          enabled: _wholesalePriceListsEnabled,
+          onChanged: (value) =>
+              setState(() => _wholesalePriceListsEnabled = value),
         ),
         SizedBox(height: compactDesktop ? 4 : 10),
         Align(
@@ -2912,6 +2921,53 @@ class _InventorySettingsPanel extends StatelessWidget {
                   'Activa inventario por almacenes, transferencias y Kardex por ubicación.',
               value: multiWarehouseEnabled,
               onChanged: onMultiWarehouseEnabledChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WholesaleSettingsPanel extends StatelessWidget {
+  const _WholesaleSettingsPanel({
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFDDE7EE)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Mayoreo', style: _titleStyle(15)),
+            const SizedBox(height: 6),
+            _CompactSwitchRow(
+              title: 'Listas de precios',
+              subtitle:
+                  'Permite precios por cliente, reglas por producto y escalas por cantidad.',
+              leading: Text(
+                enabled ? 'Activo' : 'Inactivo',
+                style: TextStyle(
+                  color: enabled ? AppColors.success : AppColors.textMuted,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+              value: enabled,
+              onChanged: onChanged,
             ),
           ],
         ),

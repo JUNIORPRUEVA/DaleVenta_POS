@@ -11,6 +11,8 @@ class ClienteModel {
   final String? taxId;
   final String? businessName;
   final String? taxIdType;
+  final String? defaultPriceListId;
+  final String? defaultPriceListName;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isDeleted;
@@ -30,6 +32,8 @@ class ClienteModel {
     this.taxId,
     this.businessName,
     this.taxIdType,
+    this.defaultPriceListId,
+    this.defaultPriceListName,
     this.createdAt,
     this.updatedAt,
     this.isDeleted = false,
@@ -78,6 +82,12 @@ class ClienteModel {
         map['businessName'] ?? map['business_name'],
       ),
       taxIdType: _optionalString(map['taxIdType'] ?? map['tax_id_type']),
+      defaultPriceListId: _optionalString(
+        map['defaultPriceListId'] ?? map['default_price_list_id'],
+      ),
+      defaultPriceListName: map['defaultPriceList'] is Map
+          ? _optionalString((map['defaultPriceList'] as Map)['name'])
+          : _optionalString(map['defaultPriceListName']),
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'].toString())
           : (map['createdAt'] != null
@@ -111,6 +121,8 @@ class ClienteModel {
       'taxId': taxId,
       'businessName': businessName,
       'taxIdType': taxIdType,
+      'defaultPriceListId': defaultPriceListId,
+      'defaultPriceListName': defaultPriceListName,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'is_deleted': isDeleted ? 1 : 0,
@@ -151,6 +163,8 @@ class ClienteModel {
     String? taxId,
     String? businessName,
     String? taxIdType,
+    String? defaultPriceListId,
+    String? defaultPriceListName,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isDeleted,
@@ -162,6 +176,7 @@ class ClienteModel {
     bool clearTaxId = false,
     bool clearBusinessName = false,
     bool clearTaxIdType = false,
+    bool clearDefaultPriceList = false,
     bool clearSyncStatus = false,
   }) {
     return ClienteModel(
@@ -179,6 +194,12 @@ class ClienteModel {
           ? null
           : (businessName ?? this.businessName),
       taxIdType: clearTaxIdType ? null : (taxIdType ?? this.taxIdType),
+      defaultPriceListId: clearDefaultPriceList
+          ? null
+          : (defaultPriceListId ?? this.defaultPriceListId),
+      defaultPriceListName: clearDefaultPriceList
+          ? null
+          : (defaultPriceListName ?? this.defaultPriceListName),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
