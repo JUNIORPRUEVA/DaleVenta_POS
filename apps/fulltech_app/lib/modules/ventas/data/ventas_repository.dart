@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
@@ -12,8 +14,11 @@ import '../../../core/company/company_settings_model.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
+import '../../../core/errors/operation_error_message.dart';
+import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
 import '../../../features/catalogo/data/product_pages_loader.dart';
+import '../../../core/offline/offline_emergency_policy.dart';
 import '../../../core/offline/offline_store.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
@@ -58,6 +63,8 @@ class VentasRepository {
   final CashRepository _cashRepository;
   final Future<String?> Function()? _originCashSessionIdResolver;
   final CompanySettingsRepository _companySettingsRepository;
+  final OfflineEmergencyPolicy _offlineEmergencyPolicy;
+  final bool _durableSaleAttempts;
   final LocalJsonCache _cache = LocalJsonCache();
   final OfflineStore _offlineStore = OfflineStore.instance;
   final TokenStorage _tokenStorage = TokenStorage();
@@ -74,11 +81,17 @@ class VentasRepository {
     CashRepository? cashRepository,
     Future<String?> Function()? originCashSessionIdResolver,
     CompanySettingsRepository? companySettingsRepository,
+    OfflineEmergencyPolicy? offlineEmergencyPolicy,
+    @visibleForTesting bool? durableSaleAttemptsForTesting,
   }) : _cashRepository = cashRepository ?? CashRepository(_dio, _syncQueue),
        _originCashSessionIdResolver = originCashSessionIdResolver,
        _companySettingsRepository =
            companySettingsRepository ??
-           CompanySettingsRepository(_dio, _syncQueue);
+           CompanySettingsRepository(_dio, _syncQueue),
+       _offlineEmergencyPolicy =
+           offlineEmergencyPolicy ?? OfflineEmergencyPolicy(),
+       _durableSaleAttempts = durableSaleAttemptsForTesting ??
+           (!kIsWeb && Platform.isWindows && kReleaseMode);
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -180,12 +193,14 @@ class VentasRepository {
   }
 
   String _extractMessage(dynamic data, String fallback) {
+    final operationMessage = customerOperationErrorMessage(data);
+    if (operationMessage != null) return operationMessage;
     if (data is Map) {
       final message = data['message'];
-      if (message is String && message.trim().isNotEmpty) return message;
+      if (message is String && message.trim().isNotEmpty && !looksTechnical(message)) return message;
       if (message is List && message.isNotEmpty) {
         final first = message.first;
-        if (first is String && first.trim().isNotEmpty) return first;
+        if (first is String && first.trim().isNotEmpty && !looksTechnical(first)) return first;
       }
     }
     return fallback;
@@ -347,7 +362,19 @@ class VentasRepository {
         includeDeleted: includeDeleted,
         limit: limit,
       );
-      if (cached.isNotEmpty) return cached;
+      final offline = await _offlineInvoiceRows(
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+      );
+      final merged = _mergeSales(cached, offline);
+      if (merged.isNotEmpty) {
+        final capped = requestedLimit == null
+            ? merged
+            : merged.take(requestedLimit).toList(growable: false);
+        return capped;
+      }
       throw ApiErrorMapper.fromDio(
         e,
         fallbackMessage: 'No se pudieron cargar las facturas',
@@ -394,7 +421,20 @@ class VentasRepository {
         limit: requestedLimit,
         page: requestedPage,
       );
-      if (cached.items.isNotEmpty) return cached;
+      final offline = await _offlineInvoiceRows(
+        from: from,
+        to: to,
+        customerId: customerId,
+        includeDeleted: includeDeleted,
+      );
+      final merged = _mergeSales(cached.items, offline);
+      if (merged.isNotEmpty) {
+        return _pageLocalSales(
+          merged,
+          page: requestedPage,
+          limit: requestedLimit,
+        );
+      }
       throw ApiErrorMapper.fromDio(
         e,
         fallbackMessage: 'No se pudieron cargar las facturas',
@@ -911,6 +951,7 @@ class VentasRepository {
     double? optimisticExemptAmount,
     double? optimisticDiscountAmount,
     bool? optimisticFiscalTaxEnabled,
+    String? clientRequestId,
     required List<SaleDraftItem> items,
   }) async {
     if (items.isEmpty) {
@@ -919,7 +960,9 @@ class VentasRepository {
     final normalizedCustomerId = (customerId ?? '').trim();
     final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
     final normalizedPriceListId = (priceListId ?? '').trim();
-    final clientRequestId = 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
+    final requestId = (clientRequestId ?? '').trim().isNotEmpty
+        ? clientRequestId!.trim()
+        : 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
     final occurredAt = DateTime.now().toUtc();
     final syncIdentity = await _resolveSaleSyncIdentity();
     final originCashSessionId = await _resolveOriginCashSessionId();
@@ -937,7 +980,7 @@ class VentasRepository {
         )
         .toList(growable: false);
     final payload = {
-      'clientRequestId': clientRequestId,
+      'clientRequestId': requestId,
       'originCashSessionId': originCashSessionId,
       'saleOccurredAt': occurredAt.toIso8601String(),
       if ((syncIdentity.deviceFingerprint ?? '').isNotEmpty)
@@ -975,8 +1018,33 @@ class VentasRepository {
       'items': capturedItems.map((item) => item.toPayload()).toList(),
     };
 
+    String? remoteAttemptId;
+    String? remoteAttemptCompanyId;
+    String? remoteAttemptUserId;
+    if (_durableSaleAttempts) {
+      final actor = await _tokenStorage.getUserSnapshot();
+      if ((actor?.companyId ?? '').trim().isEmpty || (actor?.id ?? '').trim().isEmpty) {
+        throw ApiException('No se pudo verificar la identidad del cobro. Revisa la sesión antes de continuar.');
+      }
+      remoteAttemptId = 'sales.attempt:$requestId';
+      remoteAttemptCompanyId = actor!.companyId;
+      remoteAttemptUserId = actor.id;
+      try {
+        await _offlineStore.reserveRemoteSaleAttempt(PendingSyncAction(
+          id: remoteAttemptId, type: 'sales.attempt', scope: 'sales',
+          companyId: actor.companyId, userId: actor.id,
+          terminalId: syncIdentity.terminalId, entityId: requestId,
+          idempotencyKey: requestId, payload: payload, status: 'requires_action',
+          attempts: 0, createdAt: occurredAt, updatedAt: occurredAt,
+        ));
+        await _syncQueue.refreshStats();
+      } on StateError catch (error) {
+        throw ApiException(error.message.toString());
+      }
+    }
+
     try {
-      return await _createSaleRemote(
+      final remoteSale = await _createSaleRemote(
         customerId: customerId,
         sourceQuotationId: sourceQuotationId,
         note: note,
@@ -993,7 +1061,7 @@ class VentasRepository {
         fiscalVoucherType: fiscalVoucherType,
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
-        clientRequestId: clientRequestId,
+        clientRequestId: requestId,
         originCashSessionId: originCashSessionId,
         originTerminalId: syncIdentity.terminalId,
         terminalId: syncIdentity.terminalId,
@@ -1002,29 +1070,72 @@ class VentasRepository {
         saleOccurredAt: occurredAt.toIso8601String(),
         items: capturedItems,
       );
+      if (remoteSale != null && remoteAttemptId != null) {
+        await _offlineStore.removePendingAction(remoteAttemptId);
+      }
+      return remoteSale;
     } on DioException catch (e) {
       if (!_shouldQueueNetworkFailure(e)) {
-        throw ApiException(
-          _extractMessage(e.response?.data, 'No se pudo guardar la venta'),
-          e.response?.statusCode,
-        );
+        // Only definitive validation/auth rejections release the attempt.
+        // 409 and 5xx can require reconciliation with an existing remote sale.
+        if (remoteAttemptId != null && const [400, 401, 403, 404, 422].contains(e.response?.statusCode)) {
+          await _offlineStore.removePendingAction(remoteAttemptId);
+        }
+        throw ApiErrorMapper.fromDio(e, fallbackMessage: 'No se pudo guardar la venta', dio: _dio);
       }
       if ((fiscalVoucherType ?? '').trim().isNotEmpty) {
         throw ApiException(
-          'La factura fiscal requiere conexión para que el backend asigne el NCF. Mantén el carrito y vuelve a emitir cuando regrese la conexión.',
+          remoteAttemptId != null
+              ? 'No pudimos confirmar si la factura fiscal se emitió. Revisa el historial con el encargado antes de volver a emitirla.'
+              : 'Necesitas internet para emitir una factura con comprobante fiscal (NCF). Conserva el carrito y conecta este equipo antes de continuar.',
           e.response?.statusCode,
         );
       }
       final user = await _tokenStorage.getUserSnapshot();
       final companyId = user?.companyId?.trim();
       final userId = user?.id.trim();
+      if (remoteAttemptId != null &&
+          (remoteAttemptCompanyId != companyId || remoteAttemptUserId != userId)) {
+        throw ApiException('La sesión cambió durante el cobro. Conservamos el intento original para revisión.');
+      }
       if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
         throw ApiException(
-          'No se pudo guardar la venta offline porque la sesión local no tiene empresa/usuario confiable.',
+          'No pudimos comprobar tu usuario y empresa para guardar la venta sin internet. Conecta este equipo y verifica tu sesión antes de continuar.',
           e.response?.statusCode,
         );
       }
-      final localId = 'local_$clientRequestId';
+      final offlineDecision = await _offlineEmergencyPolicy.canStartOfflineSale(
+        companyId: companyId!,
+        userId: userId!,
+        deviceFingerprint: syncIdentity.deviceFingerprint ?? '',
+        nowUtc: occurredAt,
+      );
+      if (!offlineDecision.allowed) {
+        throw ApiException(
+          remoteAttemptId == null ? offlineDecision.message :
+              '${offlineDecision.message} Conservamos el intento de cobro; verifica su resultado antes de iniciar otro.',
+          e.response?.statusCode);
+      }
+      _assertEmergencyOfflinePayment(
+        paymentMethod: paymentMethod,
+        paymentCashAmount: paymentCashAmount,
+        paymentTransferAmount: paymentTransferAmount,
+        creditAmount: creditAmount,
+        expectedTotalSold: expectedTotalSold,
+        items: capturedItems,
+        statusCode: e.response?.statusCode,
+      );
+      final normalizedPaymentMethod = (paymentMethod ?? 'cash')
+          .trim()
+          .toLowerCase();
+      final offlineTotal = expectedTotalSold ?? _sumItems(capturedItems);
+      final resolvedPaymentCashAmount =
+          paymentCashAmount ??
+          (normalizedPaymentMethod == 'cash' ? offlineTotal : 0);
+      final resolvedPaymentTransferAmount =
+          paymentTransferAmount ??
+          (normalizedPaymentMethod == 'transfer' ? offlineTotal : 0);
+      final localId = 'local_$requestId';
       final pendingAction = PendingSyncAction(
         id: '$_createSaleSyncType:$localId',
         type: _createSaleSyncType,
@@ -1034,7 +1145,7 @@ class VentasRepository {
         entityType: 'sale',
         entityId: localId,
         terminalId: syncIdentity.terminalId,
-        idempotencyKey: clientRequestId,
+        idempotencyKey: requestId,
         payload: payload,
         status: 'pending',
         attempts: 0,
@@ -1046,22 +1157,23 @@ class VentasRepository {
           .toList();
       await _offlineStore.saveOfflineSaleAtomically(
         localSaleId: localId,
-        companyId: companyId!,
-        userId: userId!,
-        clientRequestId: clientRequestId,
+        companyId: companyId,
+        userId: userId,
+        clientRequestId: requestId,
         salePayload: payload,
         itemPayloads: itemPayloads,
         paymentPayload: {
-          'paymentMethod': paymentMethod ?? 'cash',
-          'paymentCashAmount': paymentCashAmount ?? expectedTotalSold ?? 0,
-          'paymentTransferAmount': paymentTransferAmount ?? 0,
+          'paymentMethod': normalizedPaymentMethod,
+          'paymentCashAmount': resolvedPaymentCashAmount,
+          'paymentTransferAmount': resolvedPaymentTransferAmount,
           if (cashReceived != null) 'cashReceived': cashReceived,
           if (changeAmount != null) 'changeAmount': changeAmount,
           'creditAmount': creditAmount ?? 0,
         },
         pendingAction: pendingAction,
-        totalSold: expectedTotalSold ?? _sumItems(items),
+        totalSold: offlineTotal,
         saleOccurredAt: occurredAt,
+        remoteAttemptId: remoteAttemptId,
       );
       await _syncQueue.refreshStats();
       return _optimisticSale(
@@ -1072,9 +1184,9 @@ class VentasRepository {
         customerName: customerName,
         customerPhone: customerPhone,
         note: note,
-        paymentMethod: paymentMethod ?? 'cash',
-        paymentCashAmount: paymentCashAmount ?? expectedTotalSold ?? 0,
-        paymentTransferAmount: paymentTransferAmount ?? 0,
+        paymentMethod: normalizedPaymentMethod,
+        paymentCashAmount: resolvedPaymentCashAmount,
+        paymentTransferAmount: resolvedPaymentTransferAmount,
         cashReceived: cashReceived,
         changeAmount: changeAmount,
         creditAmount: creditAmount ?? 0,
@@ -1277,7 +1389,7 @@ class VentasRepository {
     return {
       'code': 'OFFLINE_SYNC_CONFLICT',
       'message':
-          'Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.',
+          'Esta venta necesita revisión. Comprueba el historial y pide ayuda al encargado antes de repetir el cobro.',
     };
   }
 
@@ -1696,6 +1808,253 @@ class VentasRepository {
     );
   }
 
+  Future<List<SaleModel>> _offlineInvoiceRows({
+    required DateTime from,
+    required DateTime to,
+    String? customerId,
+    required bool includeDeleted,
+  }) async {
+    if (!includeDeleted) {
+      // Las ventas offline locales no representan anulaciones/devoluciones;
+      // son facturas creadas en este dispositivo y pendientes de sync.
+    }
+    final user = await _tokenStorage.getUserSnapshot();
+    final companyId = user?.companyId?.trim();
+    if ((companyId ?? '').isEmpty) return const [];
+
+    try {
+      final rows = await _offlineStore.listOfflineSales(
+        companyId: companyId!,
+        limit: 500,
+      );
+      final mapped = <SaleModel>[];
+      for (final row in rows) {
+        final sale = _offlineSaleToModel(
+          row,
+          currentUserName: user?.nombreCompleto,
+        );
+        if (sale == null) continue;
+        if (!_isSaleDateInRange(sale.saleDate, from: from, to: to)) continue;
+        final requestedCustomer = (customerId ?? '').trim();
+        if (requestedCustomer.isNotEmpty &&
+            (sale.customerId ?? '').trim() != requestedCustomer) {
+          continue;
+        }
+        mapped.add(sale);
+      }
+      mapped.sort((a, b) {
+        final bDate = b.saleDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final aDate = a.saleDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+      return mapped;
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'RECENT_SALES',
+        'offline invoice fallback fallo (no bloquea error remoto)',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return const [];
+    }
+  }
+
+  SaleModel? _offlineSaleToModel(
+    Map<String, dynamic> row, {
+    String? currentUserName,
+  }) {
+    final payloadRaw = row['payload'];
+    if (payloadRaw is! Map) return null;
+    final payload = payloadRaw.cast<String, dynamic>();
+    final saleId = (row['serverId'] ?? row['localId'] ?? '').toString().trim();
+    if (saleId.isEmpty) return null;
+
+    final itemRows = ((payload['items'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList(growable: false);
+    final items = itemRows
+        .asMap()
+        .entries
+        .map((entry) {
+          final item = entry.value;
+          final qty = _nullableDouble(item['qty']) ?? 0;
+          final price = _nullableDouble(item['priceSoldUnit']) ?? 0;
+          final cost = _nullableDouble(item['costUnitSnapshot']) ?? 0;
+          final subtotalSold =
+              _nullableDouble(item['subtotalSold']) ?? (qty * price);
+          final subtotalCost =
+              _nullableDouble(item['subtotalCost']) ?? (qty * cost);
+          return SaleItemModel(
+            id: '${saleId}_item_${entry.key}',
+            productId: item['productId']?.toString(),
+            productSource: item['productSource']?.toString(),
+            sourceProductId: item['sourceProductId']?.toString(),
+            productNameSnapshot:
+                (item['productNameSnapshot'] ??
+                        item['productName'] ??
+                        'Producto')
+                    .toString(),
+            productImageSnapshot:
+                (item['productImageSnapshot'] ?? item['imageUrl'])?.toString(),
+            qty: qty,
+            priceSoldUnit: price,
+            costUnitSnapshot: cost,
+            subtotalSold: subtotalSold,
+            subtotalCost: subtotalCost,
+            profit:
+                _nullableDouble(item['profit']) ??
+                (subtotalSold - subtotalCost),
+            category: item['category']?.toString(),
+            unitCodeSnapshot:
+                (item['unitCodeSnapshot'] ?? item['unitCode'] ?? 'UNIT')
+                    .toString(),
+            unitNameSnapshot:
+                (item['unitNameSnapshot'] ?? item['unitName'] ?? 'Unidad')
+                    .toString(),
+            unitSymbolSnapshot:
+                (item['unitSymbolSnapshot'] ?? item['unitSymbol'] ?? 'u')
+                    .toString(),
+            unitPrecisionSnapshot:
+                int.tryParse(
+                  (item['unitPrecisionSnapshot'] ?? item['unitPrecision'] ?? 0)
+                      .toString(),
+                ) ??
+                0,
+            inventoryTrackedSnapshot:
+                item['inventoryTrackedSnapshot'] == true ||
+                item['inventory_tracked_snapshot'] == true,
+            grossAmount: _nullableDouble(item['grossAmount']) ?? 0,
+            lineDiscountAmount:
+                _nullableDouble(item['lineDiscountAmount']) ?? 0,
+            taxableBase: _nullableDouble(item['taxableBase']) ?? 0,
+            taxRate: _nullableDouble(item['taxRate']) ?? 0,
+            taxAmount: _nullableDouble(item['taxAmount']) ?? 0,
+            exemptAmount: _nullableDouble(item['exemptAmount']) ?? 0,
+            taxIncluded: item['taxIncluded'] == true,
+            taxExempt: item['taxExempt'] != false,
+          );
+        })
+        .toList(growable: false);
+
+    final totalSold =
+        _nullableDouble(row['totalSold']) ??
+        _nullableDouble(payload['expectedTotalSold']) ??
+        items.fold<double>(0, (sum, item) => sum + item.subtotalSold);
+    final totalCost = items.fold<double>(
+      0,
+      (sum, item) => sum + item.subtotalCost,
+    );
+    final paymentMethod = (payload['paymentMethod'] ?? 'cash').toString();
+    final cashAmount =
+        _nullableDouble(payload['paymentCashAmount']) ??
+        (paymentMethod == 'cash' ? totalSold : 0);
+    final transferAmount =
+        _nullableDouble(payload['paymentTransferAmount']) ?? 0;
+    final creditAmount = _nullableDouble(payload['creditAmount']) ?? 0;
+    final paidAmount = cashAmount + transferAmount;
+    final creditBalance = paymentMethod == 'credit'
+        ? (totalSold - paidAmount).clamp(0, double.infinity).toDouble()
+        : 0.0;
+
+    return SaleModel(
+      id: saleId,
+      userId: (row['userId'] ?? '').toString(),
+      userName: (currentUserName ?? '').trim().isEmpty
+          ? null
+          : currentUserName!.trim(),
+      customerId: payload['customerId']?.toString(),
+      customerName: payload['customerName']?.toString(),
+      customerPhone: payload['customerPhone']?.toString(),
+      cashSessionId: payload['originCashSessionId']?.toString(),
+      saleDate:
+          DateTime.tryParse((row['saleOccurredAt'] ?? '').toString()) ??
+          DateTime.tryParse((payload['saleOccurredAt'] ?? '').toString()),
+      note: payload['note']?.toString(),
+      totalSold: totalSold,
+      totalCost: totalCost,
+      totalProfit: totalSold - totalCost,
+      commissionAmount: 0,
+      paymentMethod: paymentMethod,
+      paymentCashAmount: cashAmount,
+      paymentTransferAmount: transferAmount,
+      cashReceived: _nullableDouble(payload['cashReceived']),
+      changeAmount: _nullableDouble(payload['changeAmount']),
+      creditAmount: creditAmount,
+      creditPaidAmount: paidAmount,
+      creditBalance: creditBalance,
+      creditStatus: paymentMethod == 'credit'
+          ? (creditBalance > 0 ? 'open' : 'paid')
+          : 'none',
+      isDeleted: false,
+      deletedAt: null,
+      status: (row['status'] ?? 'pending').toString(),
+      returnStatus: 'ACTIVE',
+      fiscalTaxEnabled: payload['fiscalTaxEnabled'] == true,
+      fiscalPriceMode: (payload['fiscalPriceMode'] ?? 'NO_TAX').toString(),
+      taxableBase: _nullableDouble(payload['taxableBase']) ?? 0,
+      taxAmount: _nullableDouble(payload['taxAmount']) ?? 0,
+      exemptAmount: _nullableDouble(payload['exemptAmount']) ?? 0,
+      discountAmount: _nullableDouble(payload['globalDiscountAmount']) ?? 0,
+      fiscalVoucherType: payload['fiscalVoucherType']?.toString(),
+      fiscalCustomerTaxId: payload['fiscalCustomerTaxId']?.toString(),
+      fiscalCustomerName: payload['fiscalCustomerName']?.toString(),
+      items: items,
+    );
+  }
+
+  bool _isSaleDateInRange(
+    DateTime? saleDate, {
+    required DateTime from,
+    required DateTime to,
+  }) {
+    if (saleDate == null) return true;
+    final saleDay = _dateOnly(saleDate.toLocal());
+    return saleDay.compareTo(_dateOnly(from)) >= 0 &&
+        saleDay.compareTo(_dateOnly(to)) <= 0;
+  }
+
+  List<SaleModel> _mergeSales(List<SaleModel> primary, List<SaleModel> local) {
+    final seen = <String>{};
+    final merged = <SaleModel>[];
+    for (final sale in [...local, ...primary]) {
+      final key = sale.id.trim();
+      if (key.isEmpty || !seen.add(key)) continue;
+      merged.add(sale);
+    }
+    merged.sort((a, b) {
+      final bDate = b.saleDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final aDate = a.saleDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return merged;
+  }
+
+  SalesPageResult _pageLocalSales(
+    List<SaleModel> rows, {
+    required int page,
+    required int limit,
+  }) {
+    final start = (page - 1) * limit;
+    if (start >= rows.length) {
+      return SalesPageResult(
+        items: const [],
+        page: page,
+        limit: limit,
+        hasMore: false,
+        nextPage: null,
+      );
+    }
+    final end = (start + limit).clamp(0, rows.length);
+    return SalesPageResult(
+      items: rows.sublist(start, end),
+      page: page,
+      limit: limit,
+      hasMore: end < rows.length,
+      nextPage: end < rows.length ? page + 1 : null,
+    );
+  }
+
   int? _readInt(Object? value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -1753,6 +2112,47 @@ class VentasRepository {
   String _cacheKeyPart(String? value) {
     final normalized = (value ?? '').trim();
     return normalized.isEmpty ? 'all' : normalized;
+  }
+
+  void _assertEmergencyOfflinePayment({
+    required String? paymentMethod,
+    required double? paymentCashAmount,
+    required double? paymentTransferAmount,
+    required double? creditAmount,
+    required double? expectedTotalSold,
+    required List<SaleDraftItem> items,
+    required int? statusCode,
+  }) {
+    final normalizedMethod = (paymentMethod ?? 'cash').trim().toLowerCase();
+    final totalSold = expectedTotalSold ?? _sumItems(items);
+    final cashAmount =
+        paymentCashAmount ?? (normalizedMethod == 'cash' ? totalSold : 0);
+    final transferAmount =
+        paymentTransferAmount ??
+        (normalizedMethod == 'transfer' ? totalSold : 0);
+    final deferredAmount = creditAmount ?? 0;
+    const tolerance = 0.01;
+
+    final isCash = normalizedMethod == 'cash';
+    final isTransfer = normalizedMethod == 'transfer';
+    final isMixed = normalizedMethod == 'mixed' || normalizedMethod == 'mixto';
+    final allowedMethod = isCash || isTransfer || isMixed;
+    final paidTotal = cashAmount + transferAmount;
+    final totalsMatch = (paidTotal - totalSold).abs() <= tolerance;
+    final validBreakdown =
+        (isCash && cashAmount > 0 && transferAmount.abs() <= tolerance) ||
+        (isTransfer && transferAmount > 0 && cashAmount.abs() <= tolerance) ||
+        (isMixed && cashAmount > 0 && transferAmount > 0);
+
+    if (!allowedMethod ||
+        deferredAmount.abs() > tolerance ||
+        !totalsMatch ||
+        !validBreakdown) {
+      throw ApiException(
+        'Offline acepta efectivo, transferencia o mixto con el total completo.',
+        statusCode,
+      );
+    }
   }
 
   double _sumItems(List<SaleDraftItem> items) {

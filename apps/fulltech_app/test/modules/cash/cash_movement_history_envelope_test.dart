@@ -5,7 +5,11 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:daleventa_pos/core/api/api_offline_circuit_breaker.dart';
+import 'package:daleventa_pos/core/api/api_routes.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/modules/cash/cash_repository.dart';
@@ -14,21 +18,34 @@ import 'package:daleventa_pos/modules/cash/cash_repository.dart';
 /// `{ items: [...], page, limit, hasMore, nextPage }`. El historial de caja
 /// debe desenvolverlo; antes devolvía una lista vacía.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late List<RequestOptions> captured;
 
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     captured = <RequestOptions>[];
   });
 
   CashRepository buildRepository(
-    ResponseBody Function(RequestOptions) handler,
-  ) {
+    ResponseBody Function(RequestOptions) handler, {
+    ApiOfflineCircuitState? offlineCircuitState,
+  }) {
     final dio = Dio()
       ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
         captured.add(options);
         return handler(options);
       });
-    return CashRepository(dio, SyncQueueService(OfflineStore.instance));
+    return CashRepository(
+      dio,
+      SyncQueueService(OfflineStore.instance),
+      offlineCircuitState: offlineCircuitState,
+    );
   }
 
   ResponseBody jsonResponse(dynamic body, [int status = 200]) {
@@ -215,6 +232,43 @@ void main() {
       expect(rows.single.id, 'mv-1');
     },
   );
+
+  test(
+    'movementHistoryPage offline muestra movimientos pendientes locales',
+    () async {
+      final circuit = ApiOfflineCircuitState();
+      final repository = buildRepository((options) {
+        if (options.path == ApiRoutes.cashMovements &&
+            options.method.toUpperCase() == 'POST') {
+          return ResponseBody.fromString('', 503, headers: _jsonHeaders);
+        }
+        throw StateError('historial offline no debe tocar red');
+      }, offlineCircuitState: circuit);
+
+      await repository.addMovement(
+        type: 'OUT',
+        amount: 125,
+        reason: 'Compra de hielo UAT',
+        sessionId: 'session-local-1',
+        movementType: 'expense',
+        affectsProfit: true,
+      );
+      final callsBeforeHistory = captured.length;
+      circuit.markOffline();
+
+      final page = await repository.movementHistoryPage(
+        type: 'OUT',
+        movementType: 'expense',
+        search: 'hielo',
+      );
+
+      expect(captured, hasLength(callsBeforeHistory));
+      expect(page.items, isNotEmpty);
+      expect(page.items.first.reason, 'Compra de hielo UAT');
+      expect(page.items.first.amount, 125);
+      expect(page.total, greaterThanOrEqualTo(1));
+    },
+  );
 }
 
 class _FakeHttpClientAdapter implements HttpClientAdapter {
@@ -234,3 +288,7 @@ class _FakeHttpClientAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+const Map<String, List<String>> _jsonHeaders = {
+  Headers.contentTypeHeader: [Headers.jsonContentType],
+};

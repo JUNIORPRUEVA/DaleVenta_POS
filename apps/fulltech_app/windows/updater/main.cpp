@@ -331,6 +331,39 @@ std::wstring ReadPublisher(const std::wstring& path) {
   return publisher;
 }
 
+int ReadPackageBuild(const std::wstring& path) {
+  DWORD unused = 0;
+  DWORD size = GetFileVersionInfoSizeW(path.c_str(), &unused);
+  if (size == 0) return 0;
+  std::vector<unsigned char> data(size);
+  if (!GetFileVersionInfoW(path.c_str(), 0, size, data.data())) return 0;
+  struct Translation { WORD language; WORD code_page; };
+  Translation* translations = nullptr;
+  UINT bytes = 0;
+  if (!VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation",
+                      reinterpret_cast<void**>(&translations), &bytes)) return 0;
+  for (UINT i = 0; i < bytes / sizeof(Translation); ++i) {
+    wchar_t key[128]{};
+    swprintf_s(key, L"\\StringFileInfo\\%04x%04x\\ProductVersion",
+               translations[i].language, translations[i].code_page);
+    wchar_t* text = nullptr;
+    UINT length = 0;
+    if (!VerQueryValueW(data.data(), key, reinterpret_cast<void**>(&text),
+                        &length) || text == nullptr || length == 0) continue;
+    const std::wstring version = Trim(text);
+    const auto separator = version.find_last_of(L".+");
+    if (separator == std::wstring::npos) continue;
+    const std::wstring component = version.substr(separator + 1);
+    if (component.empty() || component.find_first_not_of(L"0123456789") != std::wstring::npos) continue;
+    wchar_t* end = nullptr;
+    const unsigned long value = wcstoul(component.c_str(), &end, 10);
+    if (end != nullptr && *end == L'\0' && value > 0 && value <= 2147483647UL) {
+      return static_cast<int>(value);
+    }
+  }
+  return 0;
+}
+
 Result ValidatePackage(const Options& options) {
   std::wstring package;
   std::wstring root;
@@ -342,6 +375,11 @@ Result ValidatePackage(const Options& options) {
   if (!VerifySha256(package, options.expected_sha256)) {
     return {L"HASH_MISMATCH", 4};
   }
+  if (options.target_build > 0) {
+    const int actual_build = ReadPackageBuild(package);
+    if (actual_build == 0) return {L"PACKAGE_VERSION_MISSING", 8};
+    if (actual_build != options.target_build) return {L"PACKAGE_BUILD_MISMATCH", 9};
+  }
   if (options.allow_unsigned && Trim(options.expected_publisher).empty()) {
     return {L"SUCCESS", 0};
   }
@@ -352,6 +390,19 @@ Result ValidatePackage(const Options& options) {
     return {L"PUBLISHER_MISMATCH", 7};
   }
   return {L"SUCCESS", 0};
+}
+
+Result LockAndValidatePackage(const Options& options, HANDLE* locked_file) {
+  *locked_file = CreateFileW(options.package_path.c_str(), GENERIC_READ,
+                             FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                             FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (*locked_file == INVALID_HANDLE_VALUE) return {L"PACKAGE_LOCK_FAILED", 10};
+  Result result = ValidatePackage(options);
+  if (result.code != L"SUCCESS") {
+    CloseHandle(*locked_file);
+    *locked_file = INVALID_HANDLE_VALUE;
+  }
+  return result;
 }
 
 Result PrepareExecutablePackage(const Options& options,
@@ -444,6 +495,15 @@ Result RunInstaller(const Options& options) {
       PrepareExecutablePackage(options, &executable_path, &staged_copy);
   if (staging_result.code != L"SUCCESS") return staging_result;
 
+  Options executable_options = options;
+  executable_options.package_path = executable_path;
+  HANDLE locked_package = INVALID_HANDLE_VALUE;
+  Result final_validation = LockAndValidatePackage(executable_options, &locked_package);
+  if (final_validation.code != L"SUCCESS") {
+    if (staged_copy) DeleteFileW(executable_path.c_str());
+    return final_validation;
+  }
+
   std::wstring inno_log = options.log_path + L".inno.log";
   std::wstring params = L"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG=\"" +
                         inno_log + L"\"";
@@ -457,6 +517,7 @@ Result RunInstaller(const Options& options) {
   AppendLog(options, L"installer start requested");
   if (!ShellExecuteExW(&info)) {
     DWORD error = GetLastError();
+    CloseHandle(locked_package);
     if (staged_copy) DeleteFileW(executable_path.c_str());
     if (error == ERROR_CANCELLED) {
       AppendLog(options, L"uac result=cancelled");
@@ -470,6 +531,7 @@ Result RunInstaller(const Options& options) {
   DWORD exit_code = 1;
   GetExitCodeProcess(info.hProcess, &exit_code);
   CloseHandle(info.hProcess);
+  CloseHandle(locked_package);
   if (staged_copy && !DeleteFileW(executable_path.c_str())) {
     AppendLog(options, std::wstring(L"installer executable cleanup failed error=") +
                            std::to_wstring(GetLastError()));
@@ -518,6 +580,16 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     return static_cast<int>(validation.exit_code);
   }
   if (options.verify_only) {
+    if (options.parent_pid != 0) WaitForParent(options);
+    HANDLE locked_package = INVALID_HANDLE_VALUE;
+    Result final_validation = LockAndValidatePackage(options, &locked_package);
+    if (final_validation.code != L"SUCCESS") {
+      AppendLog(options, std::wstring(L"validation failed result=") + final_validation.code);
+      WriteResultFile(options, final_validation);
+      PrintResult(final_validation);
+      return static_cast<int>(final_validation.exit_code);
+    }
+    CloseHandle(locked_package);
     AppendLog(options, L"verify-only success");
     PrintResult(validation);
     return 0;

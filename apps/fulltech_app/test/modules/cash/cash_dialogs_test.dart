@@ -27,6 +27,15 @@ void main() {
   });
 
   group('resolveCashError (sin exponer detalles técnicos en UI)', () {
+    test('no presenta una excepción técnica ni recomienda repetir un cierre', () {
+      final message = resolveCashError(Exception(
+        'DioException [bad response] status code of 409 RequestOptions cash.close',
+      ));
+      expect(message, contains('historial'));
+      expect(message, isNot(contains('DioException')));
+      expect(message, isNot(contains('409')));
+      expect(message, isNot(contains('cash.close')));
+    });
     test('quita el prefijo de clase y el sufijo (code:) de ApiException', () {
       final text = resolveCashError(
         const ApiException.detailed(

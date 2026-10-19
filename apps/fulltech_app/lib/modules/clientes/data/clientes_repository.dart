@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_offline_circuit_breaker.dart';
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/cache/local_json_cache.dart';
@@ -22,6 +23,7 @@ final clientesRepositoryProvider = Provider<ClientesRepository>((ref) {
   final repository = ClientesRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
+    offlineCircuitState: ref.read(apiOfflineCircuitStateProvider),
   );
   repository.registerSyncHandlers();
   return repository;
@@ -52,6 +54,7 @@ class ClientsPageResult {
 class ClientesRepository {
   final Dio _dio;
   final SyncQueueService _syncQueue;
+  final ApiOfflineCircuitState? _offlineCircuitState;
   final LocalJsonCache _cache = LocalJsonCache();
 
   static const String _upsertSyncType = 'clientes.upsert';
@@ -60,7 +63,11 @@ class ClientesRepository {
 
   bool _handlersRegistered = false;
 
-  ClientesRepository(this._dio, this._syncQueue);
+  ClientesRepository(
+    this._dio,
+    this._syncQueue, {
+    ApiOfflineCircuitState? offlineCircuitState,
+  }) : _offlineCircuitState = offlineCircuitState;
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -374,6 +381,19 @@ class ClientesRepository {
     final includeDeleted = estadoFilter == EstadoFilter.todos ? true : null;
     final onlyDeleted = estadoFilter == EstadoFilter.eliminados ? true : null;
 
+    if (_offlineCircuitState?.isOfflineFastFailActive == true) {
+      return _cachedClientsPage(
+        ownerId: ownerId,
+        search: search,
+        order: order,
+        correoFilter: correoFilter,
+        estadoFilter: estadoFilter,
+        ownerFilter: ownerFilter,
+        page: safePage,
+        pageSize: safePageSize,
+      );
+    }
+
     try {
       final res = await _dio.get(
         ApiRoutes.clients,
@@ -420,10 +440,24 @@ class ClientesRepository {
         page: safePage,
         limit: resolvedLimit,
         total: total is num ? total.toInt() : null,
-        hasMore: hasMoreFlag is bool ? hasMoreFlag : items.length >= resolvedLimit,
+        hasMore: hasMoreFlag is bool
+            ? hasMoreFlag
+            : items.length >= resolvedLimit,
         nextPage: nextPage is num ? nextPage.toInt() : safePage + 1,
       );
     } on DioException catch (e) {
+      if (_isNetworkFailure(e)) {
+        return _cachedClientsPage(
+          ownerId: ownerId,
+          search: search,
+          order: order,
+          correoFilter: correoFilter,
+          estadoFilter: estadoFilter,
+          ownerFilter: ownerFilter,
+          page: safePage,
+          pageSize: safePageSize,
+        );
+      }
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudieron cargar los clientes'),
         e.response?.statusCode,
@@ -435,7 +469,8 @@ class ClientesRepository {
     required String ownerId,
     required String id,
     bool skipLoader = false,
-  }) async {    try {
+  }) async {
+    try {
       final res = await _dio.get(
         ApiRoutes.clientDetail(id),
         options: skipLoader ? Options(extra: {'skipLoader': true}) : null,
@@ -452,6 +487,78 @@ class ClientesRepository {
         e.response?.statusCode,
       );
     }
+  }
+
+  Future<ClientsPageResult> _cachedClientsPage({
+    required String ownerId,
+    required String search,
+    required ClientesOrder order,
+    required CorreoFilter correoFilter,
+    required EstadoFilter estadoFilter,
+    required OwnerFilter ownerFilter,
+    required int page,
+    required int pageSize,
+  }) async {
+    var items = await getCachedClients(
+      ownerId: ownerId,
+      search: search,
+      order: order,
+      correoFilter: correoFilter,
+      estadoFilter: estadoFilter,
+      ownerFilter: ownerFilter,
+    );
+
+    if (items.isEmpty && search.trim().isNotEmpty) {
+      items = await getCachedClients(
+        ownerId: ownerId,
+        order: order,
+        correoFilter: correoFilter,
+        estadoFilter: estadoFilter,
+        ownerFilter: ownerFilter,
+      );
+      items = _filterCachedClients(items, search: search);
+    }
+
+    final safePage = page < 1 ? 1 : page;
+    final safePageSize = pageSize < 1 ? 20 : pageSize;
+    final start = (safePage - 1) * safePageSize;
+    final pageItems = start >= items.length
+        ? const <ClienteModel>[]
+        : items.skip(start).take(safePageSize).toList(growable: false);
+    final hasMore = start + pageItems.length < items.length;
+    return ClientsPageResult(
+      items: pageItems,
+      page: safePage,
+      limit: safePageSize,
+      total: items.length,
+      hasMore: hasMore,
+      nextPage: hasMore ? safePage + 1 : safePage + 1,
+    );
+  }
+
+  List<ClienteModel> _filterCachedClients(
+    List<ClienteModel> items, {
+    required String search,
+  }) {
+    final query = search.trim().toLowerCase();
+    if (query.isEmpty) return items;
+    return items
+        .where((cliente) {
+          return [
+            cliente.nombre,
+            cliente.telefono,
+            cliente.correo ?? '',
+            cliente.taxId ?? '',
+            cliente.businessName ?? '',
+            cliente.direccion ?? '',
+          ].join(' ').toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  bool _isNetworkFailure(DioException error) {
+    final status = error.response?.statusCode;
+    return status == null || status >= 500;
   }
 
   Future<Map<String, dynamic>> purgeAllDebug() async {

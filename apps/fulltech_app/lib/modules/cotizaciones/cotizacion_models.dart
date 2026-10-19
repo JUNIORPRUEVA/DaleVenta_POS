@@ -616,8 +616,7 @@ class CotizacionModel {
   }
 
   Map<String, dynamic> toCreateDto() => {
-    if (customerId != null && customerId!.trim().isNotEmpty)
-      'customerId': customerId,
+    if (_isUuid(customerId)) 'customerId': customerId!.trim(),
     'customerName': customerName,
     'customerPhone': (customerPhone ?? '').trim(),
     if (priceListId != null && priceListId!.trim().isNotEmpty)
@@ -631,6 +630,14 @@ class CotizacionModel {
   };
 
   String toJsonString() => jsonEncode(toMap());
+
+  static bool _isUuid(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return false;
+    return RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    ).hasMatch(text);
+  }
 
   factory CotizacionModel.fromJsonString(String source) {
     return CotizacionModel.fromMap(

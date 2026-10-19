@@ -6,10 +6,14 @@ import '../storage/windows_product_paths.dart';
 class TraceLogSink {
   static const int _maxBytes = 1024 * 1024;
   static File? _logFile;
+  static Future<void> _pendingWrite = Future<void>.value();
 
   static void write(String line) {
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
-    unawaited(_append('${_redact(line)}\n'));
+    _pendingWrite = _pendingWrite
+        .catchError((_) {})
+        .then((_) => _append('${_redact(line)}\n'));
+    unawaited(_pendingWrite);
   }
 
   static Future<void> _append(String line) async {
@@ -37,6 +41,9 @@ class TraceLogSink {
 
   static Future<Directory> _resolveDirectory() async {
     if (Platform.isWindows) {
+      final productLogs = WindowsProductPaths.folder(WindowsProductFolder.logs);
+      if (productLogs != null) return productLogs;
+
       final programFiles = Platform.environment['ProgramFiles']?.trim();
       if (programFiles != null && programFiles.isNotEmpty) {
         final official = Directory(

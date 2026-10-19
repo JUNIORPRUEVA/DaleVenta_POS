@@ -3,11 +3,16 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_offline_circuit_breaker.dart';
 import '../../core/api/api_routes.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/auth/token_storage.dart';
 import '../../core/cache/local_json_cache.dart';
 import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
+import '../../core/errors/operation_error_message.dart';
+import '../../core/errors/user_safe_error_text.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_queue_service.dart';
 import 'cash_models.dart';
 
@@ -49,17 +54,28 @@ final cashRepositoryProvider = Provider<CashRepository>((ref) {
   final repository = CashRepository(
     ref.watch(dioProvider),
     ref.read(syncQueueServiceProvider.notifier),
+    offlineStore: ref.read(offlineStoreProvider),
+    offlineCircuitState: ref.read(apiOfflineCircuitStateProvider),
   );
   repository.registerSyncHandlers();
   return repository;
 });
 
 class CashRepository {
-  CashRepository(this._dio, this._syncQueue);
+  CashRepository(
+    this._dio,
+    this._syncQueue, {
+    OfflineStore? offlineStore,
+    ApiOfflineCircuitState? offlineCircuitState,
+  }) : _offlineStore = offlineStore ?? OfflineStore.instance,
+       _offlineCircuitState = offlineCircuitState;
 
   final Dio _dio;
   final SyncQueueService _syncQueue;
+  final OfflineStore _offlineStore;
+  final ApiOfflineCircuitState? _offlineCircuitState;
   final LocalJsonCache _cache = LocalJsonCache();
+  final TokenStorage _tokenStorage = TokenStorage();
   bool _handlersRegistered = false;
 
   /// `true` si la última llamada a [state] cayó a la caché local por un fallo
@@ -72,6 +88,7 @@ class CashRepository {
   static const String _movementSyncType = 'cash.movement';
   static const String _pendingMovementsCacheKey = 'cash.pending.movements';
   static const String _activeSessionCacheKey = 'cash.active.session';
+  static const String _turnHistoryCacheKey = 'cash.turn.history';
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -138,11 +155,14 @@ class CashRepository {
   }
 
   String _message(dynamic data, String fallback) {
+    final operationMessage = customerOperationErrorMessage(data);
+    if (operationMessage != null) return operationMessage;
     if (data is Map) {
       final message = data['message'];
-      if (message is String && message.trim().isNotEmpty) return message;
+      if (message is String && message.trim().isNotEmpty && !looksTechnical(message)) return message;
       if (message is List && message.isNotEmpty) {
-        return message.first.toString();
+        final first = message.first;
+        if (first is String && !looksTechnical(first)) return first;
       }
     }
     return fallback;
@@ -159,6 +179,7 @@ class CashRepository {
       final state = CashGateState.fromJson(
         (res.data as Map).cast<String, dynamic>(),
       );
+      final rawState = (res.data as Map).cast<String, dynamic>();
       TraceLog.log(
         'cash',
         'cash.fetch.done active=${state.activeSession?.shiftId ?? 'null'}',
@@ -168,6 +189,7 @@ class CashRepository {
           'activeSession': _activeSessionToJson(state.activeSession!),
           'businessDate': state.businessDate,
           'canOperate': state.canOperate,
+          'openingAmount': _openingAmountFromStatePayload(rawState),
         });
       } else {
         // Si el backend reporta que NO hay turno abierto, limpiamos el caché
@@ -238,6 +260,7 @@ class CashRepository {
         'activeSession': _activeSessionToJson(session),
         'businessDate': session.businessDate,
         'canOperate': true,
+        'openingAmount': openingAmount,
       });
       return session;
     } on DioException catch (e) {
@@ -256,6 +279,8 @@ class CashRepository {
         'activeSession': _activeSessionToJson(local),
         'businessDate': local.businessDate,
         'canOperate': true,
+        'openingAmount': openingAmount,
+        'fromCache': true,
       });
       await _syncQueue.enqueue(
         id: '$_openSyncType:$clientSessionId',
@@ -312,7 +337,7 @@ class CashRepository {
     if (resolvedSessionId.isEmpty) {
       // Sin identidad de turno no se puede cerrar de forma segura.
       throw ApiException(
-        'No pudimos identificar el turno a cerrar. Actualiza Fullpos e inténtalo nuevamente.',
+        'No pudimos comprobar qué turno se debe cerrar. Pide al encargado que revise la caja antes de intentar otro cierre.',
       );
     }
     try {
@@ -396,10 +421,16 @@ class CashRepository {
   }
 
   Future<CashSummaryModel> summary() async {
+    if (_offlineCircuitState?.isOfflineFastFailActive == true) {
+      final local = await _localSummaryFromCache();
+      if (local != null) return local;
+    }
     try {
       final res = await _dio.get(
         ApiRoutes.cashSummary,
-        options: Options(extra: const {'skipLoader': true}),
+        options: Options(
+          extra: const {'skipLoader': true, 'disableOfflineCache': true},
+        ),
       );
       final summary = CashSummaryModel.fromJson(
         (res.data as Map).cast<String, dynamic>(),
@@ -407,12 +438,8 @@ class CashRepository {
       return await _mergePendingMovementsIntoSummary(summary);
     } on DioException catch (e) {
       if (_shouldQueueNetworkFailure(e)) {
-        final cached = e.response?.data;
-        if (cached is Map) {
-          return _mergePendingMovementsIntoSummary(
-            CashSummaryModel.fromJson(cached.cast<String, dynamic>()),
-          );
-        }
+        final local = await _localSummaryFromCache();
+        if (local != null) return local;
       }
       final status = e.response?.statusCode;
       if (status == 404) {
@@ -428,6 +455,8 @@ class CashRepository {
       );
     }
   }
+
+  Future<CashSummaryModel?> cachedSummary() => _localSummaryFromCache();
 
   Future<List<CashMovementModel>> movements() async {
     try {
@@ -475,6 +504,17 @@ class CashRepository {
     int page = 1,
     int limit = 50,
   }) async {
+    if (_offlineCircuitState?.isOfflineFastFailActive == true) {
+      return _localMovementHistoryPage(
+        type: type,
+        movementType: movementType,
+        from: from,
+        to: to,
+        search: search,
+        page: page,
+        limit: limit,
+      );
+    }
     try {
       final res = await _dio.get(
         ApiRoutes.cashMovementsHistory,
@@ -495,6 +535,17 @@ class CashRepository {
         CashMovementModel.fromJson,
       );
     } on DioException catch (e) {
+      if (_shouldQueueNetworkFailure(e)) {
+        return _localMovementHistoryPage(
+          type: type,
+          movementType: movementType,
+          from: from,
+          to: to,
+          search: search,
+          page: page,
+          limit: limit,
+        );
+      }
       throw ApiException(
         _message(e.response?.data, 'No se pudo cargar historial de caja'),
       );
@@ -520,6 +571,15 @@ class CashRepository {
     int page = 1,
     int limit = 50,
   }) async {
+    if (_offlineCircuitState?.isOfflineFastFailActive == true) {
+      return _localTurnHistoryPage(
+        from: from,
+        to: to,
+        search: search,
+        page: page,
+        limit: limit,
+      );
+    }
     try {
       final res = await _dio.get(
         ApiRoutes.cashClosedSessions,
@@ -530,13 +590,32 @@ class CashRepository {
           'page': page,
           'limit': limit,
         },
-        options: Options(extra: const {'skipLoader': true}),
+        options: Options(
+          extra: const {'skipLoader': true, 'disableOfflineCache': true},
+        ),
       );
-      return CashPage<CashSessionHistoryModel>.fromJson(
+      final parsed = CashPage<CashSessionHistoryModel>.fromJson(
         res.data,
         CashSessionHistoryModel.fromJson,
       );
+      if (page == 1 &&
+          (from == null && to == null && (search ?? '').trim().isEmpty)) {
+        await _cache.writeMap(_turnHistoryCacheKey, {
+          'items': parsed.items.map(_historyToJson).toList(growable: false),
+          'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        });
+      }
+      return parsed;
     } on DioException catch (e) {
+      if (_shouldQueueNetworkFailure(e)) {
+        return _localTurnHistoryPage(
+          from: from,
+          to: to,
+          search: search,
+          page: page,
+          limit: limit,
+        );
+      }
       throw ApiException(
         _message(e.response?.data, 'No se pudo cargar historial de turnos'),
       );
@@ -550,6 +629,10 @@ class CashRepository {
   }
 
   Future<CashSessionDetailModel> sessionDetail(String id) async {
+    if (_offlineCircuitState?.isOfflineFastFailActive == true) {
+      final local = await _localSessionDetail(id);
+      if (local != null) return local;
+    }
     try {
       final res = await _dio.get(
         ApiRoutes.cashSessionDetail(id),
@@ -560,6 +643,10 @@ class CashRepository {
           : const <String, dynamic>{};
       return CashSessionDetailModel.fromJson(data.cast<String, dynamic>());
     } on DioException catch (e) {
+      if (_shouldQueueNetworkFailure(e)) {
+        final local = await _localSessionDetail(id);
+        if (local != null) return local;
+      }
       throw ApiException(
         _message(e.response?.data, 'No se pudo cargar el detalle del turno'),
       );
@@ -606,7 +693,7 @@ class CashRepository {
         // Sin identidad de turno no se puede garantizar el destino del
         // movimiento: no se encola (evita aplicarlo a un turno posterior).
         throw ApiException(
-          'No pudimos identificar el turno del movimiento. Actualiza Fullpos e inténtalo nuevamente.',
+          'No pudimos comprobar a qué turno pertenece el movimiento. Pide al encargado que revise la caja antes de registrarlo de nuevo.',
         );
       }
       final payload = {
@@ -809,6 +896,386 @@ class CashRepository {
       totalRefunds: summary.totalRefunds,
       categorySummary: summary.categorySummary,
     );
+  }
+
+  Future<CashSummaryModel?> _localSummaryFromCache() async {
+    final cached = await _cache.readMap(_activeSessionCacheKey);
+    if (cached == null || cached['activeSession'] is! Map) return null;
+    final openingAmount = _asDouble(cached['openingAmount']);
+    final sessionId = _cachedSessionId(cached);
+    var summary = CashSummaryModel(
+      openingAmount: openingAmount,
+      totalSales: 0,
+      totalExpenses: 0,
+      totalWithdrawals: 0,
+      cashInManual: 0,
+      cashOutManual: 0,
+      creditAbonos: 0,
+      creditSalesTotal: 0,
+      creditInitialCash: 0,
+      creditInitialTransfer: 0,
+      creditBalanceTotal: 0,
+      creditPaymentCash: 0,
+      creditPaymentTransfer: 0,
+      salesCashTotal: 0,
+      salesTransferTotal: 0,
+      refundsCash: 0,
+      expectedCash: openingAmount,
+      totalTickets: 0,
+      totalRefunds: 0,
+      categorySummary: const [],
+    );
+    if ((sessionId ?? '').isNotEmpty) {
+      summary = await _mergeOfflineSalesIntoSummary(summary, sessionId!);
+    }
+    return _mergePendingMovementsIntoSummary(summary);
+  }
+
+  Future<CashPage<CashSessionHistoryModel>> _localTurnHistoryPage({
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final cachedRows = await _cachedHistoryRows();
+    final activeRow = await _activeSessionHistoryRow();
+    final byId = <String, CashSessionHistoryModel>{
+      for (final row in cachedRows) row.id: row,
+      if (activeRow != null) activeRow.id: activeRow,
+    };
+    var rows = byId.values.toList(growable: false)
+      ..sort((a, b) => b.openedAt.compareTo(a.openedAt));
+    rows = rows
+        .where((row) {
+          if (from != null || to != null) {
+            final day = DateTime(
+              row.openedAt.year,
+              row.openedAt.month,
+              row.openedAt.day,
+            );
+            if (from != null) {
+              final start = DateTime(from.year, from.month, from.day);
+              if (day.isBefore(start)) return false;
+            }
+            if (to != null) {
+              final end = DateTime(to.year, to.month, to.day);
+              if (day.isAfter(end)) return false;
+            }
+          }
+          final query = (search ?? '').trim().toLowerCase();
+          if (query.isEmpty) return true;
+          return [
+            row.id,
+            row.userName,
+            row.businessDate,
+            row.status,
+          ].join(' ').toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+
+    final safeLimit = limit <= 0 ? 50 : limit;
+    final safePage = page <= 0 ? 1 : page;
+    final start = (safePage - 1) * safeLimit;
+    final items = start >= rows.length
+        ? const <CashSessionHistoryModel>[]
+        : rows.skip(start).take(safeLimit).toList(growable: false);
+    final hasMore = start + items.length < rows.length;
+    return CashPage<CashSessionHistoryModel>(
+      items: items,
+      page: safePage,
+      limit: safeLimit,
+      total: rows.length,
+      hasMore: hasMore,
+      nextPage: hasMore ? safePage + 1 : null,
+    );
+  }
+
+  Future<CashPage<CashMovementModel>> _localMovementHistoryPage({
+    String? type,
+    String? movementType,
+    DateTime? from,
+    DateTime? to,
+    String? search,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    var rows = await _pendingMovementModels();
+    rows =
+        rows
+            .where((movement) {
+              final normalizedType = (type ?? '').trim().toLowerCase();
+              if (normalizedType.isNotEmpty &&
+                  movement.type.trim().toLowerCase() != normalizedType) {
+                return false;
+              }
+
+              final normalizedMovementType = (movementType ?? '')
+                  .trim()
+                  .toLowerCase();
+              if (normalizedMovementType.isNotEmpty &&
+                  movement.movementType.trim().toLowerCase() !=
+                      normalizedMovementType) {
+                return false;
+              }
+
+              if (from != null || to != null) {
+                final day = DateTime(
+                  movement.createdAt.year,
+                  movement.createdAt.month,
+                  movement.createdAt.day,
+                );
+                if (from != null) {
+                  final start = DateTime(from.year, from.month, from.day);
+                  if (day.isBefore(start)) return false;
+                }
+                if (to != null) {
+                  final end = DateTime(to.year, to.month, to.day);
+                  if (day.isAfter(end)) return false;
+                }
+              }
+
+              final query = (search ?? '').trim().toLowerCase();
+              if (query.isEmpty) return true;
+              return [
+                movement.id,
+                movement.reason,
+                movement.type,
+                movement.movementType,
+                movement.amount.toStringAsFixed(2),
+              ].join(' ').toLowerCase().contains(query);
+            })
+            .toList(growable: false)
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    final safeLimit = limit <= 0 ? 50 : limit;
+    final safePage = page <= 0 ? 1 : page;
+    final start = (safePage - 1) * safeLimit;
+    final items = start >= rows.length
+        ? const <CashMovementModel>[]
+        : rows.skip(start).take(safeLimit).toList(growable: false);
+    final hasMore = start + items.length < rows.length;
+    return CashPage<CashMovementModel>(
+      items: items,
+      page: safePage,
+      limit: safeLimit,
+      total: rows.length,
+      hasMore: hasMore,
+      nextPage: hasMore ? safePage + 1 : null,
+    );
+  }
+
+  Future<List<CashSessionHistoryModel>> _cachedHistoryRows() async {
+    final cached = await _cache.readMap(_turnHistoryCacheKey);
+    final items = cached?['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map>()
+        .map(
+          (row) =>
+              CashSessionHistoryModel.fromJson(row.cast<String, dynamic>()),
+        )
+        .where((row) => row.id.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<CashSessionHistoryModel?> _activeSessionHistoryRow() async {
+    final cached = await _cache.readMap(_activeSessionCacheKey);
+    final active = cached?['activeSession'];
+    if (active is! Map) return null;
+    final session = ActiveCashSession.fromJson(active.cast<String, dynamic>());
+    if (session.shiftId.trim().isEmpty) return null;
+    final summary = await _localSummaryFromCache();
+    final expected =
+        summary?.expectedCash ?? _asDouble(cached?['openingAmount']);
+    return CashSessionHistoryModel(
+      id: session.shiftId,
+      userName: session.userName,
+      businessDate: session.businessDate,
+      openedAt: session.openedAt,
+      closedAt: null,
+      initialAmount:
+          summary?.openingAmount ?? _asDouble(cached?['openingAmount']),
+      closingAmount: 0,
+      expectedAmount: expected,
+      difference: 0,
+      status: cached?['pendingClose'] == true ? 'Pendiente' : 'OPEN',
+    );
+  }
+
+  Future<CashSessionDetailModel?> _localSessionDetail(String id) async {
+    final row = await _activeSessionHistoryRow();
+    if (row == null || row.id != id) return null;
+    final summary = await _localSummaryFromCache();
+    if (summary == null) return null;
+    return CashSessionDetailModel(
+      id: row.id,
+      userName: row.userName,
+      businessDate: row.businessDate,
+      openedAt: row.openedAt,
+      closedAt: row.closedAt,
+      initialAmount: row.initialAmount,
+      closingAmount: row.closingAmount,
+      expectedAmount: row.expectedAmount,
+      difference: row.difference,
+      status: row.status,
+      note: 'Datos locales pendientes de sincronizar.',
+      summary: summary,
+      movements: await _pendingMovementModels(),
+    );
+  }
+
+  Map<String, dynamic> _historyToJson(CashSessionHistoryModel row) {
+    return {
+      'id': row.id,
+      'userName': row.userName,
+      'businessDate': row.businessDate,
+      'openedAt': row.openedAt.toUtc().toIso8601String(),
+      'closedAt': row.closedAt?.toUtc().toIso8601String(),
+      'initialAmount': row.initialAmount,
+      'closingAmount': row.closingAmount,
+      'expectedAmount': row.expectedAmount,
+      'difference': row.difference,
+      'status': row.status,
+    };
+  }
+
+  double _openingAmountFromStatePayload(Map<String, dynamic> data) {
+    final userOpenShift = data['userOpenShift'];
+    if (userOpenShift is Map) {
+      final amount = _asDouble(
+        userOpenShift['initialAmount'] ?? userOpenShift['openingAmount'],
+      );
+      if (amount != 0) return amount;
+    }
+    final activeSession = data['activeSession'];
+    if (activeSession is Map) {
+      return _asDouble(
+        activeSession['initialAmount'] ?? activeSession['openingAmount'],
+      );
+    }
+    return 0;
+  }
+
+  Future<CashSummaryModel> _mergeOfflineSalesIntoSummary(
+    CashSummaryModel summary,
+    String sessionId,
+  ) async {
+    final user = await _tokenStorage.getUserSnapshot();
+    final companyId = user?.companyId?.trim() ?? '';
+    final userId = user?.id.trim() ?? '';
+    if (companyId.isEmpty || userId.isEmpty) return summary;
+
+    final rows = await _offlineStore.listOfflineSales(
+      companyId: companyId,
+      userId: userId,
+      limit: 1000,
+    );
+    if (rows.isEmpty) return summary;
+
+    var totalSales = summary.totalSales;
+    var salesCash = summary.salesCashTotal;
+    var salesTransfer = summary.salesTransferTotal;
+    var tickets = summary.totalTickets;
+
+    for (final row in rows) {
+      final status = row['status']?.toString().trim().toLowerCase() ?? '';
+      if (status == 'synced') continue;
+
+      final payload = (row['payload'] is Map)
+          ? (row['payload'] as Map).cast<String, dynamic>()
+          : const <String, dynamic>{};
+      final originSessionId = (payload['originCashSessionId'] ?? '')
+          .toString()
+          .trim();
+      if (originSessionId != sessionId) continue;
+
+      final aggregate = await _offlineStore.getOfflineSaleAggregate(
+        companyId: companyId,
+        localSaleId: row['localId']?.toString() ?? '',
+      );
+      final payment = _firstPaymentPayload(aggregate) ?? payload;
+      final method =
+          (payment['paymentMethod'] ?? payload['paymentMethod'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+      final totalSold = _firstPositiveDouble([
+        row['totalSold'],
+        payload['expectedTotalSold'],
+        payment['totalSold'],
+      ]);
+      final rawCashAmount = _firstPositiveDouble([
+        payment['paymentCashAmount'],
+        payload['paymentCashAmount'],
+      ]);
+      final cashAmount =
+          rawCashAmount > 0 ||
+              method == 'transfer' ||
+              method == 'mixed' ||
+              method == 'mixto'
+          ? rawCashAmount
+          : totalSold;
+      final transferAmount = _firstPositiveDouble([
+        payment['paymentTransferAmount'],
+        payload['paymentTransferAmount'],
+      ]);
+
+      totalSales += totalSold;
+      salesCash += cashAmount;
+      salesTransfer += transferAmount;
+      tickets += 1;
+    }
+
+    if (tickets == summary.totalTickets) return summary;
+    return CashSummaryModel(
+      openingAmount: summary.openingAmount,
+      totalSales: totalSales,
+      totalExpenses: summary.totalExpenses,
+      totalWithdrawals: summary.totalWithdrawals,
+      cashInManual: summary.cashInManual,
+      cashOutManual: summary.cashOutManual,
+      creditAbonos: summary.creditAbonos,
+      creditSalesTotal: summary.creditSalesTotal,
+      creditInitialCash: summary.creditInitialCash,
+      creditInitialTransfer: summary.creditInitialTransfer,
+      creditBalanceTotal: summary.creditBalanceTotal,
+      creditPaymentCash: summary.creditPaymentCash,
+      creditPaymentTransfer: summary.creditPaymentTransfer,
+      salesCashTotal: salesCash,
+      salesTransferTotal: salesTransfer,
+      refundsCash: summary.refundsCash,
+      expectedCash:
+          summary.openingAmount +
+          salesCash +
+          summary.creditPaymentCash -
+          summary.refundsCash +
+          summary.cashInManual -
+          summary.cashOutManual,
+      totalTickets: tickets,
+      totalRefunds: summary.totalRefunds,
+      categorySummary: summary.categorySummary,
+    );
+  }
+
+  Map<String, dynamic>? _firstPaymentPayload(Map<String, dynamic>? aggregate) {
+    final payments = aggregate?['payments'];
+    if (payments is List) {
+      for (final payment in payments) {
+        if (payment is Map) return payment.cast<String, dynamic>();
+      }
+    }
+    final payment = aggregate?['payment'];
+    if (payment is Map) return payment.cast<String, dynamic>();
+    return null;
+  }
+
+  double _firstPositiveDouble(List<dynamic> values) {
+    for (final value in values) {
+      final amount = _asDouble(value);
+      if (amount > 0) return amount;
+    }
+    return 0;
   }
 
   Map<String, dynamic> _activeSessionToJson(ActiveCashSession session) {

@@ -232,6 +232,125 @@ export class SalesService {
     } satisfies Prisma.SaleInclude;
   }
 
+  private decimalSignature(value: unknown, scale: number) {
+    return new Prisma.Decimal(value as Prisma.Decimal.Value)
+      .toDecimalPlaces(scale)
+      .toFixed();
+  }
+
+  private saleItemReplaySignature(item: {
+    productId?: string | null;
+    productSource?: ProductSource | string | null;
+    sourceProductId?: string | null;
+    productName?: string | null;
+    productNameSnapshot?: string | null;
+    qty: unknown;
+    priceSoldUnit: unknown;
+  }) {
+    const productId = item.productId?.trim() || null;
+    const sourceProductId = item.sourceProductId?.trim() || null;
+    const productName =
+      (item.productName ?? item.productNameSnapshot ?? "").trim() || null;
+    const productKey = productId
+      ? { productId }
+      : sourceProductId || item.productSource
+        ? {
+            productSource: item.productSource ?? null,
+            sourceProductId,
+          }
+        : { productName };
+    return JSON.stringify({
+      productKey,
+      qty: this.decimalSignature(item.qty, 6),
+      priceSoldUnit: this.decimalSignature(item.priceSoldUnit, 2),
+    });
+  }
+
+  private assertIdempotentSaleReplayMatches(
+    existing: {
+      id: string;
+      customerId?: string | null;
+      cashSessionId?: string | null;
+      paymentMethod?: string | null;
+      totalSold?: unknown;
+      fiscalVoucherType?: string | null;
+      items?: Array<{
+        productId?: string | null;
+        productSource?: ProductSource | string | null;
+        sourceProductId?: string | null;
+        productNameSnapshot?: string | null;
+        qty: unknown;
+        priceSoldUnit: unknown;
+      }>;
+    },
+    dto: CreateSaleDto,
+  ) {
+    const mismatches: string[] = [];
+    const requestedCustomerId = dto.customerId?.trim() || null;
+    const requestedCashSessionId = dto.originCashSessionId?.trim() || null;
+    const requestedPaymentMethod = dto.paymentMethod?.trim() || "cash";
+    const requestedVoucherType = dto.fiscalVoucherType?.trim() || null;
+
+    if (requestedCustomerId && existing.customerId !== requestedCustomerId) {
+      mismatches.push("customerId");
+    }
+    if (
+      requestedCashSessionId &&
+      existing.cashSessionId !== requestedCashSessionId
+    ) {
+      mismatches.push("originCashSessionId");
+    }
+    if (
+      existing.paymentMethod &&
+      existing.paymentMethod !== requestedPaymentMethod
+    ) {
+      mismatches.push("paymentMethod");
+    }
+    if (
+      requestedVoucherType &&
+      existing.fiscalVoucherType !== requestedVoucherType
+    ) {
+      mismatches.push("fiscalVoucherType");
+    }
+    if (
+      dto.expectedTotalSold !== undefined &&
+      dto.expectedTotalSold !== null &&
+      existing.totalSold !== undefined &&
+      this.decimalSignature(existing.totalSold, 2) !==
+        this.decimalSignature(dto.expectedTotalSold, 2)
+    ) {
+      mismatches.push("expectedTotalSold");
+    }
+
+    const existingItems = existing.items ?? [];
+    if (existingItems.length !== dto.items.length) {
+      mismatches.push("items.length");
+    } else {
+      const existingSignatures = existingItems
+        .map((item) => this.saleItemReplaySignature(item))
+        .sort();
+      const requestedSignatures = dto.items
+        .map((item) => this.saleItemReplaySignature(item))
+        .sort();
+      for (let index = 0; index < requestedSignatures.length; index += 1) {
+        if (requestedSignatures[index] !== existingSignatures[index]) {
+          mismatches.push("items");
+          break;
+        }
+      }
+    }
+
+    if (mismatches.length > 0) {
+      throw new ConflictException({
+        code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+        message:
+          "Ya existe una venta con el mismo identificador, pero el contenido del reintento no coincide.",
+        saleId: existing.id,
+        fields: mismatches,
+      });
+    }
+  }
+
   private compatibleSaleListSelect() {
     return {
       id: true,
@@ -1440,7 +1559,10 @@ export class SalesService {
         where: { companyId, clientRequestId },
         include: this.saleInclude(),
       });
-      if (existing) return existing;
+      if (existing) {
+        this.assertIdempotentSaleReplayMatches(existing, dto);
+        return existing;
+      }
     }
 
     let customerFiscalSnapshot: {
@@ -2168,7 +2290,10 @@ export class SalesService {
           where: { companyId, clientRequestId },
           include: this.saleInclude(),
         });
-        if (existing) return existing;
+        if (existing) {
+          this.assertIdempotentSaleReplayMatches(existing, dto);
+          return existing;
+        }
         throw new BadRequestException(
           "No se pudo registrar la venta porque ya existe una solicitud fiscal con el mismo identificador.",
         );

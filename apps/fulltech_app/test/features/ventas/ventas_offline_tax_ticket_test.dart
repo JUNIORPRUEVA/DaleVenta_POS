@@ -8,12 +8,15 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/errors/api_exception.dart';
+import 'package:daleventa_pos/core/offline/offline_emergency_policy.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/core/printing/models/company_info.dart';
 import 'package:daleventa_pos/core/printing/models/ticket_data.dart';
 import 'package:daleventa_pos/core/printing/models/ticket_layout_config.dart';
 import 'package:daleventa_pos/core/printing/models/ticket_renderer.dart';
+import 'package:daleventa_pos/core/usage/client_telemetry_headers.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/data/ventas_repository.dart';
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
@@ -39,6 +42,7 @@ void main() {
     databaseCounter += 1;
     store = OfflineStore.forTesting('offline_tax_ticket_$databaseCounter.db');
     await store.clearAll();
+    await OfflineStore.instance.clearAll();
     final token = TokenStorage();
     await token.saveUserSnapshot(
       UserModel.fromJson({
@@ -52,6 +56,7 @@ void main() {
 
   tearDown(() async {
     await store.closeForTesting();
+    await OfflineStore.instance.closeForTesting();
   });
 
   VentasRepository buildRepository({required bool offlineSales}) {
@@ -107,27 +112,40 @@ void main() {
   }
 
   List<SaleDraftItem> items() => const [
-        SaleDraftItem(
-          productId: 'prod-1',
-          name: 'ARTICULO GRAVADO',
-          imageUrl: null,
-          isExternal: false,
-          qty: 1,
-          priceSoldUnit: 1000,
-          costUnitSnapshot: 500,
-        ),
-      ];
+    SaleDraftItem(
+      productId: 'prod-1',
+      name: 'ARTICULO GRAVADO',
+      imageUrl: null,
+      isExternal: false,
+      qty: 1,
+      priceSoldUnit: 1000,
+      costUnitSnapshot: 500,
+    ),
+  ];
+
+  Future<void> authorizeOfflineSales() async {
+    final now = DateTime.now().toUtc();
+    final headers = await ClientTelemetryHeaders.instance.headers();
+    await OfflineEmergencyPolicy().recordServerValidation(
+      companyId: 'company-1',
+      userId: 'user-1',
+      deviceFingerprint: headers['x-client-device-id'] ?? '',
+      serverUtc: now,
+      observedAtUtc: now,
+    );
+  }
 
   test(
     'OFFLINE immediate print model keeps authoritative tax and prints ITBIS',
     () async {
+      await authorizeOfflineSales();
       final repository = buildRepository(offlineSales: true);
 
       final sale = await repository.createSale(
         paymentMethod: 'cash',
-        paymentCashAmount: 850,
-        cashReceived: 1000,
-        changeAmount: 150,
+        paymentCashAmount: 1180,
+        cashReceived: 1200,
+        changeAmount: 20,
         expectedTotalSold: 1180,
         optimisticTaxableBase: 1000,
         optimisticTaxAmount: 180,
@@ -138,12 +156,15 @@ void main() {
       );
 
       expect(sale, isNotNull);
-      expect(sale!.taxAmount, 180,
-          reason: 'el modelo local optimista debe conservar el ITBIS');
+      expect(
+        sale!.taxAmount,
+        180,
+        reason: 'el modelo local optimista debe conservar el ITBIS',
+      );
       expect(sale.taxableBase, 1000);
       expect(sale.fiscalTaxEnabled, isTrue);
-      expect(sale.cashReceived, 1000);
-      expect(sale.changeAmount, 150);
+      expect(sale.cashReceived, 1200);
+      expect(sale.changeAmount, 20);
 
       final lines = TicketRenderer(
         layout: _taxLayout,
@@ -157,17 +178,86 @@ void main() {
       );
       expect(
         lines.any(
-          (l) => l.contains('EFECTIVO RECIBIDO') && l.contains('1,000.00'),
+          (l) => l.contains('EFECTIVO RECIBIDO') && l.contains('1,200.00'),
         ),
         isTrue,
       );
       expect(
-        lines.any((l) => l.contains('DEVUELTA') && l.contains('150.00')),
+        lines.any((l) => l.contains('DEVUELTA') && l.contains('20.00')),
         isTrue,
       );
       expect(lines.every((l) => l.length <= 48), isTrue);
     },
   );
+
+  test('OFFLINE sale requires a recent trusted backend validation', () async {
+    final repository = buildRepository(offlineSales: true);
+
+    expect(
+      () => repository.createSale(
+        paymentMethod: 'cash',
+        paymentCashAmount: 1180,
+        expectedTotalSold: 1180,
+        items: items(),
+      ),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          contains('Conecta este equipo a internet y abre la empresa para autorizar las ventas sin conexión.'),
+        ),
+      ),
+    );
+  });
+
+  test(
+    'OFFLINE emergency mode accepts transfer and mixed full payments',
+    () async {
+      await authorizeOfflineSales();
+      final repository = buildRepository(offlineSales: true);
+
+      final transferSale = await repository.createSale(
+        paymentMethod: 'transfer',
+        paymentTransferAmount: 1180,
+        expectedTotalSold: 1180,
+        items: items(),
+      );
+
+      expect(transferSale, isNotNull);
+      expect(transferSale!.paymentMethod, 'transfer');
+      expect(transferSale.paymentCashAmount, 0);
+      expect(transferSale.paymentTransferAmount, 1180);
+
+      final mixedSale = await repository.createSale(
+        paymentMethod: 'mixed',
+        paymentCashAmount: 500,
+        paymentTransferAmount: 680,
+        expectedTotalSold: 1180,
+        items: items(),
+      );
+
+      expect(mixedSale, isNotNull);
+      expect(mixedSale!.paymentMethod, 'mixed');
+      expect(mixedSale.paymentCashAmount, 500);
+      expect(mixedSale.paymentTransferAmount, 680);
+    },
+  );
+
+  test('OFFLINE emergency mode rejects incomplete mixed payment', () async {
+    await authorizeOfflineSales();
+    final repository = buildRepository(offlineSales: true);
+
+    await expectLater(
+      repository.createSale(
+        paymentMethod: 'mixed',
+        paymentCashAmount: 500,
+        paymentTransferAmount: 100,
+        expectedTotalSold: 1180,
+        items: items(),
+      ),
+      throwsA(isA<ApiException>()),
+    );
+  });
 
   test(
     'ONLINE payload never includes the optimistic/offline tax fields',
@@ -209,6 +299,51 @@ void main() {
       expect(data['changeAmount'], 150);
     },
   );
+
+  test('ONLINE sale uses caller-provided clientRequestId', () async {
+    RequestOptions? captured;
+    final dio = Dio()
+      ..httpClientAdapter = _CaptureAdapter((options) {
+        captured = options;
+        if (options.path == '/warehouses/terminals') {
+          return _jsonResponse(<dynamic>[]);
+        }
+        return _jsonResponse(<dynamic>[]);
+      });
+    final repository = VentasRepository(
+      dio,
+      SyncQueueService(store),
+      WarehouseRepository(dio),
+      originCashSessionIdResolver: () async =>
+          '11111111-1111-4111-8111-111111111111',
+    );
+
+    await repository.createSale(
+      paymentMethod: 'cash',
+      paymentCashAmount: 1180,
+      expectedTotalSold: 1180,
+      clientRequestId: 'sale_req_uat_attempt_1',
+      items: items(),
+    );
+
+    final data = captured!.data as Map<String, dynamic>;
+    expect(data['clientRequestId'], 'sale_req_uat_attempt_1');
+  });
+
+  test('OFFLINE queued sale keeps caller-provided clientRequestId', () async {
+    await authorizeOfflineSales();
+    final repository = buildRepository(offlineSales: true);
+
+    final sale = await repository.createSale(
+      paymentMethod: 'cash',
+      paymentCashAmount: 1180,
+      expectedTotalSold: 1180,
+      clientRequestId: 'sale_req_offline_uat_attempt_1',
+      items: items(),
+    );
+
+    expect(sale!.id, 'local_sale_req_offline_uat_attempt_1');
+  });
 }
 
 const _company = CompanyInfo(
@@ -256,7 +391,11 @@ const _taxLayout = TicketLayoutConfig(
 
 ResponseBody _jsonResponse(dynamic body) {
   return ResponseBody.fromString(
-    body == null ? '{}' : body is String ? body : _encode(body),
+    body == null
+        ? '{}'
+        : body is String
+        ? body
+        : _encode(body),
     200,
     headers: {
       Headers.contentTypeHeader: [Headers.jsonContentType],

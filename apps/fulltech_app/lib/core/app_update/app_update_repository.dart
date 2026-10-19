@@ -17,7 +17,8 @@ class AppUpdateRepository {
 
   final Dio? _dio;
 
-  bool get isConfigured => Env.apiBaseUrl.trim().isNotEmpty;
+  bool get isConfigured =>
+      !Env.appUpdatesDisabled && Env.apiBaseUrl.trim().isNotEmpty;
 
   ReleasePlatform? getSupportedPlatform() {
     if (kIsWeb) return null;

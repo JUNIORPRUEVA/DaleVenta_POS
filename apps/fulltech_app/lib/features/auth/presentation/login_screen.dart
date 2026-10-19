@@ -164,8 +164,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return _LoginNoticeData.error(
           title: 'Acceso no confirmado',
           message: 'Revisa tu usuario y contrasena.',
-          helpText:
-              'Intenta nuevamente o solicita ayuda al administrador.',
+          helpText: 'Intenta nuevamente o solicita ayuda al administrador.',
           feedbackKind: AppFeedbackKind.warning,
           showNotification: false,
         );
@@ -177,19 +176,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               'Si tu acceso deberia estar activo, comunicate con administracion.',
         );
       case ApiErrorType.noInternet:
-        return _LoginNoticeData.error(
-          title: 'Sin conexión',
-          message: error.message,
-          helpText:
-              'Conecta la PC a internet y vuelve a intentar cuando la señal esté estable.',
-        );
+        return _buildContinuityNotice();
       case ApiErrorType.dns:
-        return _LoginNoticeData.error(
-          title: 'Servicio no encontrado',
-          message: error.message,
-          helpText:
-              'Prueba cambiar de red o reiniciar el internet antes de intentar otra vez.',
-        );
+        return _buildContinuityNotice();
       case ApiErrorType.tls:
         return _LoginNoticeData.error(
           title: 'Conexión segura rechazada',
@@ -198,19 +187,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               'Verifica la fecha y hora de la PC. Si usas antivirus o red empresarial, puede estar bloqueando la conexión.',
         );
       case ApiErrorType.network:
-        return _LoginNoticeData.error(
-          title: 'Conexión interrumpida',
-          message: error.message,
-          helpText:
-              'Espera unos segundos y vuelve a intentar. Si continúa, prueba otra red.',
-        );
+        return _buildContinuityNotice();
       case ApiErrorType.timeout:
-        return _LoginNoticeData.error(
-          title: 'Tiempo de espera agotado',
-          message: error.message,
-          helpText:
-              'La respuesta tardó demasiado. Revisa tu conexión y vuelve a intentar.',
-        );
+        return _buildContinuityNotice();
       case ApiErrorType.config:
         return _LoginNoticeData.error(
           title: 'App no configurada',
@@ -240,6 +219,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  _LoginNoticeData _buildContinuityNotice() {
+    return const _LoginNoticeData.error(
+      title: 'Modo local',
+      message: 'Puedes vender 48 h.',
+      helpText: 'Sincroniza al volver.',
+      feedbackKind: AppFeedbackKind.info,
+      compactNotification: true,
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (!mounted) return;
@@ -251,6 +240,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .login(_emailCtrl.text, _passwordCtrl.text);
       await _rememberUserAfterLogin();
       if (!mounted) return;
+      AppFeedback.dismissPersistentNotification();
       final destination = RouteAccess.defaultHomeForRole(
         user?.appRole ?? AppRole.unknown,
       );
@@ -290,6 +280,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         title: notice.title,
         body: '${notice.message} ${notice.helpText}',
         kind: notice.feedbackKind,
+        compact: notice.compactNotification,
       ),
       scope: 'LoginScreen',
     );
@@ -360,10 +351,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           textStyle: const WidgetStatePropertyAll(
-            TextStyle(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.2,
-            ),
+            TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
           ),
           shadowColor: WidgetStatePropertyAll(
             AppColors.primary.withValues(alpha: 0.34),
@@ -570,8 +558,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         color: AppColors.secondaryBorder,
                                         width: 1.2,
                                       ),
-                                      shadowColor: AppColors.primary
-                                          .withValues(alpha: 0.12),
+                                      shadowColor: AppColors.primary.withValues(
+                                        alpha: 0.12,
+                                      ),
                                       elevation: 2,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
@@ -674,6 +663,7 @@ class _LoginNoticeData {
     required this.helpText,
     this.feedbackKind = AppFeedbackKind.error,
     this.showNotification = true,
+    this.compactNotification = false,
     this.actionLabel,
     this.actionUri,
   }) : isError = true;
@@ -683,6 +673,7 @@ class _LoginNoticeData {
   final String helpText;
   final AppFeedbackKind feedbackKind;
   final bool showNotification;
+  final bool compactNotification;
   final bool isError;
   final String? actionLabel;
   final Uri? actionUri;

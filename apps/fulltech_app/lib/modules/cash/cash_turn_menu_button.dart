@@ -20,8 +20,7 @@ class CashTurnMenuButton extends ConsumerWidget {
   static const _navigatorSettleDelay = Duration(milliseconds: 220);
 
   /// Copy única para el estado válido "sin turno abierto" (no es un error).
-  static const _noOpenTurnMessage =
-      'No tienes un turno abierto actualmente.';
+  static const _noOpenTurnMessage = 'No tienes un turno abierto actualmente.';
 
   final bool compact;
 
@@ -135,13 +134,17 @@ class CashTurnMenuButton extends ConsumerWidget {
           return;
         }
       }
-      final summary = await repository.summary();
+      final unverified = ref.read(cashStateUnverifiedProvider);
+      final summary = unverified
+          ? (await repository.cachedSummary()) ?? await repository.summary()
+          : await repository.summary();
       if (!context.mounted) return;
       final action = await showDialog<String>(
         context: context,
         builder: (dialogContext) => _CurrentTurnDialog(
           active: active,
           summary: summary,
+          unverified: unverified,
           onCloseTurn: () {
             Navigator.of(dialogContext).pop('close');
           },
@@ -187,7 +190,20 @@ class CashTurnMenuButton extends ConsumerWidget {
   Future<void> _showHistory(BuildContext context, WidgetRef ref) async {
     final repository = ref.read(cashRepositoryProvider);
     final printer = ref.read(cashCloseTicketPrinterProvider);
-    final rows = await repository.closedSessions();
+    final List<CashSessionHistoryModel> rows;
+    try {
+      rows = await repository.closedSessions();
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Ver historial de turnos desde menu de turno',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
+      return;
+    }
     if (!context.mounted) return;
     final rootContext = context;
     await showDialog<void>(
@@ -805,12 +821,14 @@ class _CurrentTurnDialog extends StatelessWidget {
   const _CurrentTurnDialog({
     required this.active,
     required this.summary,
+    required this.unverified,
     required this.onCloseTurn,
     required this.onOpenHistory,
   });
 
   final ActiveCashSession? active;
   final CashSummaryModel summary;
+  final bool unverified;
   final VoidCallback onCloseTurn;
   final VoidCallback onOpenHistory;
 
@@ -819,7 +837,9 @@ class _CurrentTurnDialog extends StatelessWidget {
     final openedAt = active == null ? null : toBusinessTime(active!.openedAt);
     final activeDuration = openedAt == null
         ? 'Turno actual'
-        : _formatDuration(DateTime.now().toUtc().difference(active!.openedAt.toUtc()));
+        : _formatDuration(
+            DateTime.now().toUtc().difference(active!.openedAt.toUtc()),
+          );
     final dateText = openedAt == null
         ? active?.businessDate ?? ''
         : DateFormat('dd/MM HH:mm', 'es_DO').format(openedAt);
@@ -925,6 +945,10 @@ class _CurrentTurnDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (unverified) ...[
+                          const _TurnOfflineNotice(),
+                          const SizedBox(height: 10),
+                        ],
                         _TurnHero(summary: summary, compact: isPhone),
                         const SizedBox(height: 10),
                         Row(
@@ -1054,6 +1078,40 @@ class _MiniTurnCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Color(0xFF52667C), fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TurnOfflineNotice extends StatelessWidget {
+  const _TurnOfflineNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFAC515)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 18, color: Color(0xFFB54708)),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Mostrando datos locales. Se actualizarán al volver la conexión.',
+              style: TextStyle(
+                color: Color(0xFF7A4D04),
+                fontSize: 12,
+                height: 1.25,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ],
       ),

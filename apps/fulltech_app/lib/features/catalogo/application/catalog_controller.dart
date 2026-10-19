@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -195,9 +196,19 @@ class CatalogController extends StateNotifier<CatalogState> {
   }
 
   String _newProductOperationId(String action, {String? productId}) {
-    final now = DateTime.now().toUtc().microsecondsSinceEpoch;
-    final suffix = productId == null ? '' : '-$productId';
-    return '$action-$now-$hashCode$suffix';
+    return _newOperationUuid();
+  }
+
+  String _newOperationUuid() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
   }
 
   String _normalizeImportCode(String? value) {
@@ -819,6 +830,7 @@ class CatalogController extends StateNotifier<CatalogState> {
         stock: counted,
         delta: delta,
         warehouseId: warehouseId,
+        operationId: _newProductOperationId('stock', productId: product.id),
         reason: 'Ajuste manual de stock',
       );
       final list = state.items

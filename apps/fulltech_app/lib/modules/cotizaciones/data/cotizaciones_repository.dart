@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/api_offline_circuit_breaker.dart';
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -19,6 +20,7 @@ final cotizacionesRepositoryProvider = Provider<CotizacionesRepository>((ref) {
     ref.read(cotizacionesLocalRepositoryProvider),
     ref.read(syncQueueServiceProvider.notifier),
     () => ref.read(authStateProvider).user?.companyId,
+    ref.read(apiOfflineCircuitStateProvider),
   );
   repository.registerSyncHandlers();
   return repository;
@@ -29,6 +31,7 @@ class CotizacionesRepository {
   final CotizacionesLocalRepository _local;
   final SyncQueueService _syncQueue;
   final String? Function() _companyIdReader;
+  final ApiOfflineCircuitState? _offlineCircuitState;
 
   static const String _createSyncType = 'quotes.create';
   static const String _updateSyncType = 'quotes.update';
@@ -41,7 +44,9 @@ class CotizacionesRepository {
     this._local,
     this._syncQueue, [
     String? Function()? companyIdReader,
-  ]) : _companyIdReader = companyIdReader ?? (() => null);
+    ApiOfflineCircuitState? offlineCircuitState,
+  ]) : _companyIdReader = companyIdReader ?? (() => null),
+       _offlineCircuitState = offlineCircuitState;
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -184,6 +189,18 @@ class CotizacionesRepository {
     int page = 1,
     int limit = 50,
   }) async {
+    if (_offlineCircuitState?.isOfflineFastFailActive == true) {
+      return _localListPage(
+        customerPhone: customerPhone,
+        customerId: customerId,
+        userId: userId,
+        search: search,
+        from: from,
+        to: to,
+        page: page,
+        limit: limit,
+      );
+    }
     try {
       final res = await _dio.get(
         ApiRoutes.cotizaciones,
@@ -205,6 +222,18 @@ class CotizacionesRepository {
 
       return PagedResult.fromResponse(res.data, CotizacionModel.fromApi);
     } on DioException catch (e) {
+      if (_isNetworkFailure(e)) {
+        return _localListPage(
+          customerPhone: customerPhone,
+          customerId: customerId,
+          userId: userId,
+          search: search,
+          from: from,
+          to: to,
+          page: page,
+          limit: limit,
+        );
+      }
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudieron cargar cotizaciones'),
         e.response?.statusCode,
@@ -257,6 +286,103 @@ class CotizacionesRepository {
         })
         .toList(growable: false);
     return filteredByDate.take(take).toList(growable: false);
+  }
+
+  Future<PagedResult<CotizacionModel>> _localListPage({
+    String? customerPhone,
+    String? customerId,
+    String? userId,
+    String? search,
+    DateTime? from,
+    DateTime? to,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    final companyId = _currentCompanyId();
+    if (companyId == null) {
+      return const PagedResult<CotizacionModel>(
+        items: [],
+        page: 1,
+        limit: 0,
+        total: 0,
+        hasMore: false,
+      );
+    }
+    var items = await _local.listAll(companyId: companyId, limit: 1000);
+    items =
+        items
+            .where((item) {
+              final phone = (customerPhone ?? '').trim();
+              if (phone.isNotEmpty &&
+                  (item.customerPhone ?? '').trim() != phone) {
+                return false;
+              }
+
+              final normalizedCustomerId = (customerId ?? '').trim();
+              if (normalizedCustomerId.isNotEmpty &&
+                  (item.customerId ?? '').trim() != normalizedCustomerId) {
+                return false;
+              }
+
+              final normalizedUserId = (userId ?? '').trim();
+              if (normalizedUserId.isNotEmpty &&
+                  (item.createdByUserId ?? '').trim() != normalizedUserId) {
+                return false;
+              }
+
+              if (from != null || to != null) {
+                final localCreatedAt = quotationHistoryLocalDate(
+                  item.createdAt,
+                );
+                final created = DateTime(
+                  localCreatedAt.year,
+                  localCreatedAt.month,
+                  localCreatedAt.day,
+                );
+                if (from != null) {
+                  final start = DateTime(from.year, from.month, from.day);
+                  if (created.isBefore(start)) return false;
+                }
+                if (to != null) {
+                  final end = DateTime(to.year, to.month, to.day);
+                  if (created.isAfter(end)) return false;
+                }
+              }
+
+              final query = (search ?? '').trim().toLowerCase();
+              if (query.isEmpty) return true;
+              return [
+                item.id,
+                item.customerName,
+                item.customerPhone ?? '',
+                item.note,
+                item.total.toStringAsFixed(2),
+                for (final line in item.items) line.nombre,
+              ].join(' ').toLowerCase().contains(query);
+            })
+            .toList(growable: false)
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    final safeLimit = limit <= 0 ? 50 : limit.clamp(1, 200).toInt();
+    final safePage = page <= 0 ? 1 : page;
+    final start = (safePage - 1) * safeLimit;
+    final pageItems = start >= items.length
+        ? const <CotizacionModel>[]
+        : items.skip(start).take(safeLimit).toList(growable: false);
+    final hasMore = start + pageItems.length < items.length;
+    return PagedResult<CotizacionModel>(
+      items: pageItems,
+      page: safePage,
+      limit: safeLimit,
+      total: items.length,
+      hasMore: hasMore,
+      nextPage: hasMore ? safePage + 1 : null,
+    );
+  }
+
+  bool _isNetworkFailure(DioException error) {
+    final status = error.response?.statusCode;
+    return status == null || status >= 500;
   }
 
   Future<List<CotizacionModel>> listAndCache({

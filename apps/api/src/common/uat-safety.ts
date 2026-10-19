@@ -1,5 +1,6 @@
 const LOCAL_UAT_DB_NAME = "daleventa_uat_local";
 const SERVER_UAT_DB_NAME = "daleventa_uat";
+const DEFAULT_OFFLINE_SAFE_48H_DB_NAME = "daleventa_offline_safe_48h_uat";
 const PROTECTED_DATABASES = new Set(["daleventa", "daleventa_pos"]);
 const KNOWN_REMOTE_HOST_PATTERNS = [
   /easypanel/i,
@@ -22,6 +23,8 @@ function isServerUatMode(env: NodeJS.ProcessEnv) {
 function expectedUatDatabase(env: NodeJS.ProcessEnv) {
   const explicit = (env.UAT_EXPECTED_DB_NAME ?? "").trim();
   if (explicit) return explicit;
+  const local = (env.UAT_DB_NAME ?? "").trim();
+  if (local === DEFAULT_OFFLINE_SAFE_48H_DB_NAME) return local;
   return isServerUatMode(env) ? SERVER_UAT_DB_NAME : LOCAL_UAT_DB_NAME;
 }
 

@@ -1,6 +1,7 @@
 param(
-  [string]$ApiBaseUrl = 'http://127.0.0.1:4001',
-  [string]$AppBaseUrl = 'http://127.0.0.1:4001',
+  [string]$ApiBaseUrl = 'http://127.0.0.1:46548',
+  [string]$AppBaseUrl = 'http://127.0.0.1:46548',
+  [string]$WindowsAppRoot = '',
   [switch]$SkipPubGet
 )
 
@@ -51,45 +52,6 @@ function Assert-UatUrlSafe {
   }
 }
 
-function Test-DriveLetterAvailable {
-  param([char]$Letter)
-
-  $driveRoot = "${Letter}:\"
-  $driveName = "${Letter}:"
-  if (Get-PSDrive -Name ([string]$Letter) -ErrorAction SilentlyContinue) {
-    return $false
-  }
-  if (Test-Path -LiteralPath $driveRoot) {
-    return $false
-  }
-  $substLines = @(cmd /c subst 2>$null)
-  foreach ($line in $substLines) {
-    if ($line.TrimStart().StartsWith($driveName, [StringComparison]::OrdinalIgnoreCase)) {
-      return $false
-    }
-  }
-  return $true
-}
-
-function Get-AvailableDriveLetter {
-  $preferred = @('X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q', 'P', 'O', 'N', 'M', 'L', 'K')
-  $cachePath = Join-Path (Get-RepoRoot) 'apps\fulltech_app\build\windows\x64\CMakeCache.txt'
-  if (Test-Path -LiteralPath $cachePath) {
-    $sourceEntry = Get-Content -LiteralPath $cachePath |
-      Where-Object { $_ -match '^CMAKE_HOME_DIRECTORY:INTERNAL=' } |
-      Select-Object -First 1
-    if ($sourceEntry -match '^CMAKE_HOME_DIRECTORY:INTERNAL=([A-Za-z]):/apps/fulltech_app/windows$') {
-      $preferred = @($Matches[1].ToUpperInvariant()) + $preferred
-    }
-  }
-  foreach ($letter in $preferred) {
-    if (Test-DriveLetterAvailable -Letter $letter) {
-      return $letter
-    }
-  }
-  throw 'No unused drive letter is available for the temporary short-path build mapping.'
-}
-
 Assert-UatUrlSafe -Name 'API_BASE_URL' -Url $ApiBaseUrl
 Assert-UatUrlSafe -Name 'APP_BASE_URL' -Url $AppBaseUrl
 
@@ -101,27 +63,23 @@ if (-not (Test-Path -LiteralPath (Join-Path $appRoot 'pubspec.yaml'))) {
   throw "Flutter app root not found: $appRoot"
 }
 
-$letter = Get-AvailableDriveLetter
-$driveName = "${letter}:"
-$driveRoot = "${driveName}\"
-$mappedAppRoot = "$driveRoot$appRelativePath"
-$createdMapping = $false
 $exitCode = 1
 $previousWindowsChannel = $env:FULLPOS_WINDOWS_CHANNEL
+$previousWindowsRoot = $env:DALEVENTAS_POS_UAT_MAYOREO_ROOT
 
 try {
   Write-Step "Repo root: $repoRoot"
   Write-Step "UAT API_BASE_URL: $ApiBaseUrl"
   Write-Step 'Windows identity: UAT Mayoreo (fullpos_cloud_uat_mayoreo.exe)'
   $env:FULLPOS_WINDOWS_CHANNEL = 'uat-mayoreo'
-  Write-Step "Creating temporary mapping $driveName => $repoRoot"
-  & subst $driveName $repoRoot
-  if ($LASTEXITCODE -ne 0) {
-    throw "subst failed with exit code $LASTEXITCODE"
+  if (-not [string]::IsNullOrWhiteSpace($WindowsAppRoot)) {
+    $resolvedWindowsAppRoot = (New-Item -ItemType Directory -Force -Path $WindowsAppRoot).FullName
+    $env:DALEVENTAS_POS_UAT_MAYOREO_ROOT = $resolvedWindowsAppRoot
+    Write-Step "Windows UAT data root for launched child processes: $resolvedWindowsAppRoot"
   }
-  $createdMapping = $true
+  Write-Step "Building from physical short worktree path: $appRoot"
 
-  Push-Location -LiteralPath $mappedAppRoot
+  Push-Location -LiteralPath $appRoot
   try {
     if (-not $SkipPubGet) {
       Write-Step 'Running flutter pub get'
@@ -133,17 +91,19 @@ try {
     }
 
     Write-Step 'Running flutter build windows --release for UAT'
-    $releaseOutput = Join-Path $mappedAppRoot 'build\windows\x64\runner\Release'
-    if (Test-Path -LiteralPath $releaseOutput) {
-      Write-Step 'Cleaning previous Windows Release output to avoid mixed production/UAT artifacts'
-      Remove-Item -LiteralPath $releaseOutput -Recurse -Force
+    $releaseOutput = Join-Path $appRoot 'build\windows\x64\runner\Release'
+    if (Test-Path -LiteralPath (Join-Path $releaseOutput 'fullpos_cloud.exe')) {
+      throw 'Production executable found in output. Use a fresh short UAT worktree.'
     }
 
     & flutter build windows --release `
       --dart-define=FULLPOS_UAT_BUILD=true `
       --dart-define=FULLPOS_UAT_NAME=MAYOREO `
       --dart-define=API_BASE_URL=$ApiBaseUrl `
-      --dart-define=APP_BASE_URL=$AppBaseUrl
+      --dart-define=APP_BASE_URL=$AppBaseUrl `
+      --dart-define=DISABLE_APP_UPDATES=true `
+      --dart-define=ALLOW_UNSIGNED_UPDATES_FOR_UAT=false `
+      --dart-define=ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION=false
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
       throw "flutter build windows --release failed with exit code $exitCode"
@@ -160,18 +120,9 @@ try {
   Write-Step 'Windows UAT Release build completed successfully.'
   $exitCode = 0
 } catch {
-  Write-Error $_
+  Write-Error $_ -ErrorAction Continue
 } finally {
-  if ($createdMapping) {
-    Write-Step "Removing temporary mapping $driveName"
-    & subst $driveName /D
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Could not remove temporary mapping $driveName; run 'subst $driveName /D' manually."
-      if ($exitCode -eq 0) {
-        $exitCode = 1
-      }
-    }
-  }
+  $env:DALEVENTAS_POS_UAT_MAYOREO_ROOT = $previousWindowsRoot
   if ($null -eq $previousWindowsChannel) {
     Remove-Item Env:\FULLPOS_WINDOWS_CHANNEL -ErrorAction SilentlyContinue
   } else {

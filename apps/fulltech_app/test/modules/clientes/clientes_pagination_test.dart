@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:daleventa_pos/core/api/api_offline_circuit_breaker.dart';
 import 'package:daleventa_pos/core/api/api_routes.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_model.dart';
 import 'package:daleventa_pos/modules/clientes/data/clientes_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -43,8 +45,16 @@ void main() {
     final server = _ClientsServer(totalClients: 1000, pageSize: 50);
     final repo = _repository(server);
 
-    final first = await repo.listClientsPage(ownerId: 'o', page: 1, pageSize: 50);
-    final deep = await repo.listClientsPage(ownerId: 'o', page: 18, pageSize: 50);
+    final first = await repo.listClientsPage(
+      ownerId: 'o',
+      page: 1,
+      pageSize: 50,
+    );
+    final deep = await repo.listClientsPage(
+      ownerId: 'o',
+      page: 18,
+      pageSize: 50,
+    );
 
     expect(first.items.first.nombre, 'Cliente 001');
     expect(
@@ -54,55 +64,102 @@ void main() {
     );
   });
 
-  test('los filtros de UI viajan al servidor (correo, propietario, orden)', () async {
-    final server = _ClientsServer(totalClients: 200, pageSize: 50);
-    final repo = _repository(server);
+  test(
+    'los filtros de UI viajan al servidor (correo, propietario, orden)',
+    () async {
+      final server = _ClientsServer(totalClients: 200, pageSize: 50);
+      final repo = _repository(server);
 
-    await repo.listClientsPage(
-      ownerId: 'o',
-      page: 2,
-      pageSize: 50,
-      correoFilter: CorreoFilter.sinCorreo,
-      ownerFilter: OwnerFilter.mine,
-      order: ClientesOrder.za,
-    );
+      await repo.listClientsPage(
+        ownerId: 'o',
+        page: 2,
+        pageSize: 50,
+        correoFilter: CorreoFilter.sinCorreo,
+        ownerFilter: OwnerFilter.mine,
+        order: ClientesOrder.za,
+      );
 
-    final query = server.requests.last.queryParameters;
-    expect(query['correoFilter'], 'sinCorreo');
-    expect(query['ownerFilter'], 'mine');
-    expect(query['order'], 'za');
-    expect(query['page'], 2);
-    expect(query['pageSize'], 50);
-  });
+      final query = server.requests.last.queryParameters;
+      expect(query['correoFilter'], 'sinCorreo');
+      expect(query['ownerFilter'], 'mine');
+      expect(query['order'], 'za');
+      expect(query['page'], 2);
+      expect(query['pageSize'], 50);
+    },
+  );
 
-  test('sin filtros no se envían parámetros que el servidor no espera', () async {
-    final server = _ClientsServer(totalClients: 10, pageSize: 50);
-    final repo = _repository(server);
+  test(
+    'sin filtros no se envían parámetros que el servidor no espera',
+    () async {
+      final server = _ClientsServer(totalClients: 10, pageSize: 50);
+      final repo = _repository(server);
 
-    await repo.listClientsPage(ownerId: 'o');
+      await repo.listClientsPage(ownerId: 'o');
 
-    final query = server.requests.last.queryParameters;
-    expect(query.containsKey('correoFilter'), isFalse);
-    expect(query.containsKey('ownerFilter'), isFalse);
-    expect(query['order'], 'az');
-  });
+      final query = server.requests.last.queryParameters;
+      expect(query.containsKey('correoFilter'), isFalse);
+      expect(query.containsKey('ownerFilter'), isFalse);
+      expect(query['order'], 'az');
+    },
+  );
 
   test('la última página no ofrece más y devuelve el total real', () async {
     final server = _ClientsServer(totalClients: 120, pageSize: 50);
     final repo = _repository(server);
 
-    final last = await repo.listClientsPage(ownerId: 'o', page: 3, pageSize: 50);
+    final last = await repo.listClientsPage(
+      ownerId: 'o',
+      page: 3,
+      pageSize: 50,
+    );
 
     expect(last.items, hasLength(20));
     expect(last.total, 120);
     expect(last.hasMore, isFalse);
   });
+
+  test('offline devuelve snapshot local sin tocar red', () async {
+    final server = _ClientsServer(totalClients: 10, pageSize: 50);
+    final circuit = ApiOfflineCircuitState();
+    final repo = _repository(server, offlineCircuitState: circuit);
+    await repo.saveClientsSnapshot(
+      ownerId: 'owner-offline',
+      search: '',
+      order: ClientesOrder.az,
+      correoFilter: CorreoFilter.todos,
+      estadoFilter: EstadoFilter.activos,
+      ownerFilter: OwnerFilter.todos,
+      items: const [
+        ClienteModel(
+          id: 'client-local-1',
+          ownerId: 'owner-offline',
+          nombre: 'Cliente Local UAT',
+          telefono: '8090000001',
+        ),
+      ],
+    );
+    circuit.markOffline();
+
+    final page = await repo.listClientsPage(
+      ownerId: 'owner-offline',
+      search: 'local',
+    );
+
+    expect(server.requests, isEmpty);
+    expect(page.items, hasLength(1));
+    expect(page.items.single.nombre, 'Cliente Local UAT');
+    expect(page.total, 1);
+  });
 }
 
-ClientesRepository _repository(_ClientsServer server) {
+ClientesRepository _repository(
+  _ClientsServer server, {
+  ApiOfflineCircuitState? offlineCircuitState,
+}) {
   return ClientesRepository(
     Dio()..httpClientAdapter = _FakeHttpClientAdapter(server.handle),
     SyncQueueService(OfflineStore.instance),
+    offlineCircuitState: offlineCircuitState,
   );
 }
 
@@ -118,8 +175,7 @@ class _ClientsServer {
       return ResponseBody.fromString('{}', 404, headers: _jsonHeaders);
     }
     requests.add(options);
-    final page =
-        int.tryParse('${options.queryParameters['page'] ?? 1}') ?? 1;
+    final page = int.tryParse('${options.queryParameters['page'] ?? 1}') ?? 1;
     final limit =
         int.tryParse('${options.queryParameters['pageSize'] ?? pageSize}') ??
         pageSize;

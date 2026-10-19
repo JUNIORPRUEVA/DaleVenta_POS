@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
+import 'core/api/env.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -226,6 +227,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         runInitialReleaseCheck(
           ensureStartupReady: prepareAppFirstFrame,
           checkForUpdates: () async {
+            if (Env.appUpdatesDisabled) return;
             if (!mounted) return;
             await ref.read(appUpdateProvider.notifier).scheduleInitialCheck();
           },
@@ -314,9 +316,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       ),
     );
     unawaited(
-      _lifecycleCoordinator.runUpdateCheck(
-        () => ref.read(appUpdateProvider.notifier).checkNow(),
-      ),
+      _lifecycleCoordinator.runUpdateCheck(() async {
+        if (Env.appUpdatesDisabled) return;
+        await ref.read(appUpdateProvider.notifier).checkNow();
+      }),
     );
     final authState = ref.read(authStateProvider);
     if (authState.isAuthenticated) {

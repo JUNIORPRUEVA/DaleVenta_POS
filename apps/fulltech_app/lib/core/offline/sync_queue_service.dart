@@ -9,6 +9,8 @@ import '../auth/token_storage.dart';
 import '../debug/app_error_reporter.dart';
 import '../debug/trace_log.dart';
 import '../errors/api_exception.dart';
+import '../errors/operation_error_message.dart';
+import '../errors/user_safe_error_text.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
 
@@ -162,6 +164,22 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     _handlers[type] = handler;
   }
 
+  Future<PendingSyncAction?> pendingOperation({
+    required String companyId,
+    required String userId,
+    required String operationId,
+  }) async {
+    final actions = await _store.listPendingActions(
+      companyId: companyId,
+      userId: userId,
+      limit: 100000,
+    );
+    for (final action in actions) {
+      if (action.idempotencyKey == operationId) return action;
+    }
+    return null;
+  }
+
   Future<void> enqueue({
     required String id,
     required String type,
@@ -173,6 +191,9 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     String? entityType,
     String? entityId,
     String? idempotencyKey,
+    String? cacheKey,
+    Map<String, dynamic>? cachePayload,
+    bool requireDatabase = false,
   }) async {
     final activeScope = await _resolveScope();
     final resolvedCompanyId = _clean(companyId) ?? activeScope?.companyId;
@@ -198,6 +219,9 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         createdAt: DateTime.now().toUtc(),
         updatedAt: DateTime.now().toUtc(),
       ),
+      cacheKey: cacheKey,
+      cachePayload: cachePayload,
+      requireDatabase: requireDatabase,
     );
     TraceLog.log('sync_queue', 'enqueued type=$type scope=$scope id=$id');
     await refreshStats();
@@ -281,6 +305,15 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         dueOnly: true,
       );
       for (final action in actions) {
+        final currentScope = await _resolveScope();
+        if (currentScope?.companyId != scope.companyId ||
+            currentScope?.userId != scope.userId) {
+          TraceLog.log(
+            'sync_queue',
+            'processing stopped after session scope changed',
+          );
+          break;
+        }
         final handler = _handlers[action.type];
         if (handler == null) continue;
         if (action.permanent ||
@@ -291,6 +324,41 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
             action.status == 'obsolete' ||
             action.status == 'tenant_mismatch') {
           continue;
+        }
+
+        if (action.type == 'catalog.products.stock' ||
+            action.type == 'sales.create') {
+          final productIds = action.type == 'catalog.products.stock'
+              ? <String>{(action.payload['id'] ?? '').toString()}
+              : <String>{
+                  for (final item
+                      in (action.payload['items'] as List? ?? const []))
+                    if (item is Map) (item['productId'] ?? '').toString(),
+                };
+          final pendingDependencies = await _store.listPendingActions(
+            companyId: scope.companyId,
+            userId: scope.userId,
+            limit: 100000,
+          );
+          final blocked = pendingDependencies.any((dependency) {
+            if (dependency.id == action.id) return false;
+            final productId =
+                dependency.entityId ??
+                dependency.payload['id']?.toString() ??
+                dependency.payload['operationId']?.toString();
+            if (!productIds.contains(productId)) return false;
+            if (dependency.type == 'catalog.products.create') return true;
+            return action.type == 'sales.create' &&
+                dependency.type == 'catalog.products.stock' &&
+                !dependency.createdAt.isAfter(action.createdAt);
+          });
+          if (blocked) {
+            TraceLog.log(
+              'sync_queue',
+              'waiting for product/stock dependency id=${action.id}',
+            );
+            continue;
+          }
         }
 
         final now = DateTime.now().toUtc();
@@ -559,12 +627,20 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   }
 
   String _customerSyncMessage(Object error) {
+    final operationMessage = error is DioException
+        ? customerOperationErrorMessage(error.response?.data, statusCode: error.response?.statusCode)
+        : error is ApiException
+        ? customerOperationErrorMessage(error.message)
+        : customerOperationErrorMessage(error.toString());
+    if (operationMessage != null) return operationMessage;
     if (error is ObsoleteSyncOperationException) {
-      return 'Una operación de caja pendiente no se aplicó porque ya no correspondía al turno actual. Revisa la caja.';
+      return 'No se aplicó una operación de caja pendiente porque no pudimos comprobar su turno original. Pide al encargado que la revise con soporte; no la registres en otro turno.';
     }
     if (error is ApiException) {
-      if (error.type == ApiErrorType.unauthorized ||
-          error.type == ApiErrorType.forbidden) {
+      if (error.type == ApiErrorType.forbidden) {
+        return 'Tu usuario no tiene permiso para completar esta operación. Pide ayuda al administrador de la empresa.';
+      }
+      if (error.type == ApiErrorType.unauthorized) {
         return 'Necesitas iniciar sesión nuevamente para continuar sincronizando.';
       }
       if (error.isNetworkError) {
@@ -573,10 +649,8 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       if (error.type == ApiErrorType.server || error.retryable) {
         return 'Algunas ventas están pendientes de enviarse al servidor. Tus datos permanecen guardados en este dispositivo y volveremos a intentarlo.';
       }
-      final message = error.message.trim();
-      return message.isEmpty
-          ? 'La acción quedó guardada en este dispositivo y necesita revisión.'
-          : message;
+      return userSafeErrorMessage(error, fallback:
+          'No se pudo completar esta operación. Pide ayuda al encargado antes de repetirla.');
     }
 
     if (error is DioException) {

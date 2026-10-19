@@ -70,15 +70,50 @@ void main() {
   test('friendly sync message maps business conflict codes', () {
     expect(
       friendlySyncStatusMessage('ORIGIN_SESSION_CLOSED'),
-      'Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.',
+      contains('turno de esta operación ya está cerrado'),
     );
     expect(
       friendlySyncStatusMessage('INSUFFICIENT_WAREHOUSE_STOCK'),
-      'No hay existencia suficiente para completar esta venta.',
+      contains('No hay existencias suficientes'),
     );
     expect(
       friendlySyncStatusMessage('LEGACY_MISSING_SESSION'),
-      'Actualiza Fullpos para completar esta operación.',
+      contains('no la registres en otro turno'),
+    );
+  });
+
+  test('historical cash conflict is not described as a lost connection', () {
+    final message = friendlySyncStatusMessage(
+      'DioException [bad response]: status code of 409 '
+      'RequestOptions.validateStatus cash.close',
+    );
+    expect(message, contains('antes de repetirla'));
+    expect(message, isNot(contains('conexión')));
+    expect(message, isNot(contains('cash.close')));
+    expect(message, isNot(contains('DioException')));
+  });
+
+  test('unknown stored codes and JSON never become customer text', () {
+    for (final raw in [
+      'NEW_REPLAY_ERROR',
+      '{"code":"NEW_ERROR","trace":"secret"}',
+    ]) {
+      final message = friendlySyncStatusMessage(raw);
+      expect(message, contains('pide ayuda al encargado'));
+      expect(message, isNot(contains('NEW_')));
+      expect(message, isNot(contains('secret')));
+    }
+  });
+
+  test('a stored conflict message does not hide the attention status', () {
+    expect(
+      resolveSyncHeaderStatus(
+        const SyncQueueState(
+          conflictCount: 1,
+          lastError: 'LEGACY_MISSING_SESSION',
+        ),
+      ),
+      SyncHeaderStatus.attention,
     );
   });
 

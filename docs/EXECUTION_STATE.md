@@ -1,5 +1,31 @@
 # Execution State
 
+## Active task — Offline Safe48H Phase17 (2026-10-14)
+
+Worktree `C:\src\fullpos-offline-safe-48h`, branch `feature/offline-safe-48h`.
+Scope: Windows candidate and historical installer/updater acceptance, UAT only.
+Production/push/merge/deploy/customer updates remain prohibited. The state below
+is historical evidence from another worktree, not authorization or the active
+environment. Current API46548/clone46552, PostgreSQL56548; manual SQLite preserved.
+Phase16 source manifest:24/24 hashes matched before starting;1135 source files
+hashed in `.uat/evidence/phase17-baseline.json`; consistent manual backup created.
+Hyper-V inventory still permission-blocked; no bypass. No code-signing certificate.
+Cached-policy/build/disabled-update handoff guards fixed and tested. New native
+helper binds target to PE ProductVersion and locks/revalidates final package.
+Final local UAT candidate17002 packaged/hashed;3 interrupted replacements preserve
+open DB/WAL/SHM and8 fixture pending actions;9 native and6 real HTTPS tests PASS.
+Flutter1335 PASS/5 skipped;Jest752 PASS/8 skipped;analyze/API build/Prisma PASS.
+Candidate opened in `.uat/phase17-visual`, title[UAT], cloneAPI46552; owner confirms
+POS visible without startup error and Updates shows no pending update/no error.
+Candidate left open; no further manual screen repetition requested. No historical GUI, elevated signed chain or physical
+hardware result asserted. Next external steps: authorized Windows isolation and
+safe historical API routing, signed positive updater UAT, then explicit pilot
+approval. Motor GO within proven UAT; integral acceptance/pilot/publication NO-GO.
+Final decisions belong in
+`docs/offline-safe-48h-phase-17-final-windows-acceptance-2026-10-14.md`.
+
+---
+
 Last updated: 2026-10-07 12:35 local.
 
 ## Objective

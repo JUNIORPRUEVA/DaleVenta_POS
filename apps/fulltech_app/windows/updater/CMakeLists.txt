@@ -10,7 +10,7 @@ if(FULLPOS_WINDOWS_UAT_MAYOREO)
   target_compile_definitions(FullposUpdater PRIVATE FULLPOS_WINDOWS_UAT_MAYOREO=1)
 endif()
 target_compile_options(FullposUpdater PRIVATE /W4 /WX /EHsc)
-target_link_libraries(FullposUpdater PRIVATE wintrust.lib crypt32.lib shell32.lib bcrypt.lib shlwapi.lib)
+target_link_libraries(FullposUpdater PRIVATE wintrust.lib crypt32.lib shell32.lib bcrypt.lib shlwapi.lib version.lib)
 
 # El destino debe ser una ruta ABSOLUTA expresada con un generator expression,
 # igual que hace el runner en windows/CMakeLists.txt:

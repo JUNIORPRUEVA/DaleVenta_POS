@@ -45,12 +45,48 @@ void main() {
       ),
     );
   });
+
+  test('Facturación siembra catálogo local antes de esperar red', () {
+    final handleCompanyChanged = _sourceBetween(
+      source,
+      'void _handleCompanyChanged',
+      'bool _isCurrentTenantGeneration',
+    );
+    final loadProducts = _sourceBetween(
+      source,
+      'Future<void> _loadProducts',
+      'Future<void> _bootstrapCatalog',
+    );
+
+    expect(source, contains('_seedProductsFromLocalSources('));
+    expect(handleCompanyChanged, contains('_seedProductsFromLocalSources('));
+    expect(loadProducts, contains('_seedProductsFromLocalSources('));
+
+    final seedIndex = handleCompanyChanged.indexOf(
+      '_seedProductsFromLocalSources(',
+    );
+    final resetIndex = handleCompanyChanged.indexOf('_productSearch.reset()');
+    expect(seedIndex, isNonNegative);
+    expect(resetIndex, isNonNegative);
+    expect(seedIndex, lessThan(resetIndex));
+  });
+}
+
+String _sourceBetween(String source, String startToken, String endToken) {
+  final start = source.indexOf(startToken);
+  expect(start, isNonNegative, reason: 'No se encontró $startToken');
+  final end = source.indexOf(endToken, start + startToken.length);
+  expect(end, isNonNegative, reason: 'No se encontró $endToken');
+  return source.substring(start, end);
 }
 
 String _methodBody(String source, String methodName) {
   final signature = source.indexOf(methodName);
   expect(signature, isNonNegative, reason: 'No se encontró $methodName');
-  final open = source.indexOf('{', signature);
+  final asyncBody = source.indexOf(') async {', signature);
+  final open = asyncBody >= 0
+      ? source.indexOf('{', asyncBody)
+      : source.indexOf('{', signature);
   expect(open, isNonNegative, reason: 'No se encontró cuerpo de $methodName');
 
   var depth = 0;

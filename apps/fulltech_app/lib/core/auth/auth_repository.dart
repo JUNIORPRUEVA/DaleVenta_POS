@@ -9,11 +9,13 @@ import '../api/api_connectivity_interceptor.dart';
 import '../api/api_diagnostics_interceptor.dart';
 import '../api/api_error_mapper.dart';
 import '../api/api_offline_cache_interceptor.dart';
+import '../api/api_offline_circuit_breaker.dart';
 import '../api/api_retry_interceptor.dart';
 import '../api/api_routes.dart';
 import '../errors/api_exception.dart';
 import '../models/user_model.dart';
 import '../network/network_reachability.dart';
+import '../offline/offline_emergency_validation_interceptor.dart';
 import '../offline/sync_queue_service.dart';
 import '../utils/is_flutter_test.dart';
 import 'admin_authorization_session.dart';
@@ -73,12 +75,17 @@ final networkReachabilityProvider = Provider<NetworkReachability>((ref) {
   return NetworkReachability();
 });
 
+final apiOfflineCircuitStateProvider = Provider<ApiOfflineCircuitState>((ref) {
+  return ApiOfflineCircuitState();
+});
+
 final dioProvider = Provider<Dio>((ref) {
   final api = ApiClient();
   final storage = ref.watch(tokenStorageProvider);
   final sessionEvents = ref.watch(authSessionEventsProvider);
   final reachability = ref.watch(networkReachabilityProvider);
   final offlineStore = ref.watch(offlineStoreProvider);
+  final offlineCircuitState = ref.watch(apiOfflineCircuitStateProvider);
   api.dio.interceptors.add(AuthInterceptor(storage, sessionEvents, api.dio));
   api.dio.interceptors.add(
     InterceptorsWrapper(
@@ -117,23 +124,32 @@ final dioProvider = Provider<Dio>((ref) {
     ApiConnectivityInterceptor(dio: api.dio, reachability: reachability),
   );
   api.dio.interceptors.add(
+    OfflineEmergencyValidationInterceptor(tokenStorage: storage, dio: api.dio),
+  );
+  api.dio.interceptors.add(
     LoadingInterceptor(ref.read(appLoadingProvider.notifier)),
   );
   api.dio.interceptors.add(ApiDiagnosticsInterceptor());
+  final offlineCacheInterceptor = ApiOfflineCacheInterceptor(
+    store: offlineStore,
+    fastFailActive: () => offlineCircuitState.isOfflineFastFailActive,
+    scopeResolver: () async {
+      final user = await storage.getUserSnapshot();
+      final companyId = user?.companyId?.trim();
+      final userId = user?.id.trim();
+      if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
+        return 'public';
+      }
+      return 'company:$companyId:user:$userId';
+    },
+  );
   api.dio.interceptors.add(
-    ApiOfflineCacheInterceptor(
-      store: offlineStore,
-      scopeResolver: () async {
-        final user = await storage.getUserSnapshot();
-        final companyId = user?.companyId?.trim();
-        final userId = user?.id.trim();
-        if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
-          return 'public';
-        }
-        return 'company:$companyId:user:$userId';
-      },
+    ApiOfflineCircuitBreaker(
+      state: offlineCircuitState,
+      cachedResponseResolver: offlineCacheInterceptor.cachedResponseFor,
     ),
   );
+  api.dio.interceptors.add(offlineCacheInterceptor);
   api.dio.interceptors.add(ApiRetryInterceptor(dio: api.dio));
   return api.dio;
 });
@@ -499,6 +515,7 @@ class AuthRepository {
     try {
       final readyUser = _requireReadySession(user, accountCreated: true);
       await _storage.saveUserSnapshot(readyUser);
+      unawaited(_refreshOfflineEmergencyAuthorizationSafe());
       return readyUser;
     } on ApiException {
       await _safeClearTokens();
@@ -566,6 +583,27 @@ class AuthRepository {
     try {
       await _storage.clearTokens().timeout(_storageTimeout);
     } catch (_) {}
+  }
+
+  Future<void> _refreshOfflineEmergencyAuthorizationSafe() async {
+    try {
+      await _dio
+          .post(
+            ApiRoutes.offlineEmergencyAuthorize,
+            options: Options(
+              extra: const {
+                'silent': true,
+                'skipLoader': true,
+                'disableOfflineCache': true,
+              },
+            ),
+          )
+          .timeout(_bootstrapTimeout);
+    } catch (_) {
+      // La autorización offline es una capacidad de continuidad, no debe
+      // bloquear el inicio de sesión online. Si falla, la venta offline quedará
+      // bloqueada conservadoramente hasta una validación correcta.
+    }
   }
 
   Future<HydratedSession> hydrateSession() async {
@@ -656,6 +694,7 @@ class AuthRepository {
           accountCreated: false,
         );
         await _storage.saveUserSnapshot(user);
+        unawaited(_refreshOfflineEmergencyAuthorizationSafe());
         return user;
       } on DioException {
         final fallbackUser = _userFromLoginResponse(res.data);
@@ -665,6 +704,7 @@ class AuthRepository {
             accountCreated: false,
           );
           await _storage.saveUserSnapshot(user);
+          unawaited(_refreshOfflineEmergencyAuthorizationSafe());
           return user;
         }
         rethrow;
@@ -676,6 +716,7 @@ class AuthRepository {
             accountCreated: false,
           );
           await _storage.saveUserSnapshot(user);
+          unawaited(_refreshOfflineEmergencyAuthorizationSafe());
           return user;
         }
         rethrow;
@@ -888,6 +929,7 @@ class AuthRepository {
             .timeout(_bootstrapTimeout);
         final user = _userFromMeResponse(res.data, token);
         await _storage.saveUserSnapshot(user);
+        unawaited(_refreshOfflineEmergencyAuthorizationSafe());
         return user;
       } on DioException catch (e) {
         // Si expira, intenta refresh y reintenta
@@ -910,6 +952,7 @@ class AuthRepository {
               final refreshedAccess = await _storage.getAccessToken();
               final user = _userFromMeResponse(res.data, refreshedAccess);
               await _storage.saveUserSnapshot(user);
+              unawaited(_refreshOfflineEmergencyAuthorizationSafe());
               return user;
             case _RefreshOutcome.invalid:
               await _safeClearTokens();

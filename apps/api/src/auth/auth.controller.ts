@@ -63,6 +63,17 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard("jwt"))
+  @Post("offline-emergency/authorize")
+  async authorizeOfflineEmergency(@Req() req: Request) {
+    const user = req.user as any;
+    return this.auth.authorizeOfflineEmergency(user, {
+      deviceFingerprint: this.headerValue(req, "x-client-device-id"),
+      platform: this.headerValue(req, "x-client-platform"),
+      appVersion: this.headerValue(req, "x-client-app-version"),
+    });
+  }
+
+  @UseGuards(AuthGuard("jwt"))
   @Get("account/deletion-preview")
   async deletionPreview(@Req() req: Request) {
     const user = req.user as any;
@@ -77,5 +88,10 @@ export class AuthController {
   ) {
     const user = req.user as any;
     return this.auth.deleteAccount(user.id, user.companyId, dto);
+  }
+
+  private headerValue(req: Request, name: string) {
+    const value = req.headers[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value;
   }
 }

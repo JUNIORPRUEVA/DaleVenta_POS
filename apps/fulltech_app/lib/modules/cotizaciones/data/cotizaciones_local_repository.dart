@@ -30,6 +30,7 @@ class CotizacionesLocalRepository {
     await backupLocalDatabaseBeforeMigration(
       fileName: _databaseFileName,
       label: 'cotizaciones_local',
+      targetVersion: _dbVersion,
     );
     _database = await openResilientLocalDatabase(
       fileName: _databaseFileName,

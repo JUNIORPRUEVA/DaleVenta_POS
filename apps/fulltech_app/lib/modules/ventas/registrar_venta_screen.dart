@@ -83,6 +83,13 @@ Set<String> sanitizePosSelectedCategories(
       : sanitized;
 }
 
+@visibleForTesting
+String saleSavedConfirmationMessage(SaleModel sale) {
+  return sale.id.startsWith('local_')
+      ? 'Venta guardada en este equipo. Pendiente de sincronización.'
+      : 'Venta confirmada por el servidor.';
+}
+
 _SaleWarehouseContext? _resolvePosSaleWarehouseContext({
   required List<WarehouseModel> warehouses,
   required List<TerminalWarehouseModel> terminals,
@@ -1158,6 +1165,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         showDepartmentLabel: isWide,
         actions: isWide
             ? [
+                if (_search.snapshot.isOffline)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _buildOfflineCatalogIndicator(compact: false),
+                  ),
                 IconButton(
                   tooltip: 'Recargar productos',
                   onPressed: () => _loadProducts(forceRemote: true),
@@ -1264,7 +1276,14 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         child: Column(
           children: [
             if (_loadingProducts) const LinearProgressIndicator(minHeight: 2),
-            if (_search.snapshot.isOffline) _buildOfflineCatalogBanner(),
+            if (!isWide && _search.snapshot.isOffline)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildOfflineCatalogIndicator(compact: true),
+                ),
+              ),
             if (!isWide) _buildMobileInvoiceModeBar(),
             if (!isWide && _selectedCategories.isNotEmpty)
               Padding(
@@ -1363,43 +1382,54 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
-  /// Aviso honesto del modo offline: los productos mostrados son el snapshot
-  /// guardado en el dispositivo, no el catalogo del servidor. La venta sigue
-  /// permitida (la venta offline y su cola de sincronizacion no cambian).
-  Widget _buildOfflineCatalogBanner() {
+  /// Indicador discreto del catalogo local: informa el alcance real sin
+  /// convertir la pantalla de cobro en una alerta de conectividad.
+  Widget _buildOfflineCatalogIndicator({required bool compact}) {
     final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      color: theme.colorScheme.errorContainer,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 16,
-            color: theme.colorScheme.onErrorContainer,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Sin conexión: mostrando los productos guardados en este dispositivo',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onErrorContainer,
-                fontWeight: FontWeight.w600,
+    final foreground = theme.colorScheme.onSurface;
+    final border = theme.colorScheme.outlineVariant;
+    final background = theme.colorScheme.surfaceContainerHighest;
+    return Tooltip(
+      message:
+          'Mostrando productos guardados en este equipo. Se actualizarán al recuperar conexión.',
+      child: Container(
+        constraints: BoxConstraints(maxWidth: compact ? 220 : 260),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 10,
+          vertical: compact ? 5 : 6,
+        ),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_done_outlined, size: 15, color: foreground),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                compact ? 'Catálogo local' : 'Catálogo local del equipo',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-          TextButton(
-            onPressed: () => unawaited(_search.refresh()),
-            style: TextButton.styleFrom(
+            const SizedBox(width: 2),
+            IconButton(
+              tooltip: 'Actualizar catálogo',
+              onPressed: () => unawaited(_search.refresh()),
               visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+              icon: Icon(Icons.refresh_rounded, size: 16, color: foreground),
             ),
-            child: const Text('Reintentar'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -3354,7 +3384,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           item.qty <= 0 || item.priceSoldUnit < 0 || item.costUnitSnapshot < 0,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Revisa: qty > 0 y montos no negativos')),
+        const SnackBar(content: Text('La cantidad de cada producto debe ser mayor que cero. El precio y el costo no pueden ser negativos.')),
       );
       return;
     }
@@ -3401,33 +3431,37 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
     setState(() => _saving = true);
     try {
-      final created = await _createSaleWithAuthorizationFallback(payment);
-      if (created != null) {
-        debugPrint(
-          '[SALE PRINT] cashierSnapshot=${created.userName ?? 'none'} '
-          'ncf=${created.ncf ?? 'none'} '
-          'ncfExpiration=${created.ncfExpirationDate?.toIso8601String() ?? 'none'}',
+      final saleAttemptClientRequestId =
+          'sale_req_${DateTime.now().microsecondsSinceEpoch}';
+      final created = await _createSaleWithAuthorizationFallback(
+        payment,
+        clientRequestId: saleAttemptClientRequestId,
+      );
+      if (created == null) return;
+      debugPrint(
+        '[SALE PRINT] cashierSnapshot=${created.userName ?? 'none'} '
+        'ncf=${created.ncf ?? 'none'} '
+        'ncfExpiration=${created.ncfExpirationDate?.toIso8601String() ?? 'none'}',
+      );
+      final printResult = await ref
+          .read(unifiedTicketPrinterProvider)
+          .printSaleTicket(sale: created, items: created.items);
+      if (!printResult.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Venta guardada, pero no se imprimio: ${printResult.message}',
+            ),
+          ),
         );
-        final printResult = await ref
-            .read(unifiedTicketPrinterProvider)
-            .printSaleTicket(sale: created, items: created.items);
-        if (!printResult.success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Venta guardada, pero no se imprimio: ${printResult.message}',
-              ),
-            ),
-          );
-        } else if (printResult.warning != null && mounted) {
-          // La venta se completó; solo se informa que la caja no se abrió.
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
-              content: Text(printResult.warning!),
-            ),
-          );
-        }
+      } else if (printResult.warning != null && mounted) {
+        // La venta se completó; solo se informa que la caja no se abrió.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+            content: Text(printResult.warning!),
+          ),
+        );
       }
 
       if (!mounted) return;
@@ -3441,7 +3475,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Venta guardada correctamente')),
+        SnackBar(content: Text(saleSavedConfirmationMessage(created))),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -3451,7 +3485,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback: 'No se pudo guardar. Inténtalo nuevamente.',
+              fallback: 'No pudimos confirmar el resultado del cobro. Revisa el historial con el encargado antes de volver a cobrar.',
             ),
           ),
         ),
@@ -3462,10 +3496,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   }
 
   Future<SaleModel?> _createSaleWithAuthorizationFallback(
-    _SalePaymentDraft payment,
-  ) async {
+    _SalePaymentDraft payment, {
+    required String clientRequestId,
+  }) async {
     try {
-      return await _createSale(payment);
+      return await _createSale(payment, clientRequestId: clientRequestId);
     } catch (error) {
       if (!_isPermissionDenied(error) || !mounted) rethrow;
       setState(() => _saving = false);
@@ -3481,11 +3516,14 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         throw ApiException('No se autorizó el cobro de la factura.');
       }
       setState(() => _saving = true);
-      return _createSale(payment);
+      return _createSale(payment, clientRequestId: clientRequestId);
     }
   }
 
-  Future<SaleModel?> _createSale(_SalePaymentDraft payment) async {
+  Future<SaleModel?> _createSale(
+    _SalePaymentDraft payment, {
+    required String clientRequestId,
+  }) async {
     final tax = _cartTaxSummary(
       ref.read(productTaxUiConfigProvider).valueOrNull,
     );
@@ -3510,6 +3548,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           optimisticExemptAmount: tax.exemptAmount,
           optimisticDiscountAmount: 0,
           optimisticFiscalTaxEnabled: tax.taxEnabled,
+          clientRequestId: clientRequestId,
           items: _cart,
         );
     ref.read(operationsDataRefreshProvider).refreshSalesAndCash();

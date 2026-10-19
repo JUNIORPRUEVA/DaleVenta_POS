@@ -2,9 +2,16 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $ApiRoot = Join-Path $RepoRoot "apps\api"
-$UatEnvFile = Join-Path $ApiRoot ".env.uat.local"
-$UatEnvExample = Join-Path $ApiRoot ".env.uat.local.example"
+$UatEnvFile = Join-Path $ApiRoot ".env.offline-safe-48h.uat.local"
+$UatEnvExample = Join-Path $ApiRoot ".env.offline-safe-48h.uat.local.example"
 $ComposeFile = Join-Path $RepoRoot "scripts\uat\docker-compose.uat.yml"
+$UatComposeProject = "fullpos_offline_safe_48h_uat"
+$UatPostgresService = "offline_safe_48h_postgres"
+$UatPostgresContainer = "fullpos_offline_safe_48h_postgres"
+$UatExpectedDbName = "daleventa_offline_safe_48h_uat"
+$UatExpectedDbUser = "daleventa_offline_safe_48h_user"
+$UatExpectedDbPort = "56548"
+$UatExpectedApiPort = "46548"
 
 function New-UatSecret([int]$Bytes = 24) {
   $buffer = New-Object byte[] $Bytes
@@ -28,7 +35,7 @@ function Ensure-UatEnvFile {
   $content = @"
 APP_ENV=uat
 UAT_LOCAL_ONLY=true
-PORT=4000
+PORT=$UatExpectedApiPort
 PRODUCTS_SOURCE=LOCAL
 RUN_SEED=false
 RUN_MIGRATIONS=false
@@ -39,19 +46,20 @@ UPLOAD_DIR=./uploads-uat
 JWT_SECRET=$jwtSecret
 JWT_EXPIRES_IN=15m
 
-UAT_DB_NAME=daleventa_uat_local
-UAT_DB_USER=daleventa_uat_user
+UAT_EXPECTED_DB_NAME=$UatExpectedDbName
+UAT_DB_NAME=$UatExpectedDbName
+UAT_DB_USER=$UatExpectedDbUser
 UAT_DB_PASSWORD=$dbPassword
-UAT_DB_PORT=55432
-DATABASE_URL=postgresql://daleventa_uat_user:$dbPassword@127.0.0.1:55432/daleventa_uat_local
+UAT_DB_PORT=$UatExpectedDbPort
+DATABASE_URL=postgresql://$($UatExpectedDbUser):$dbPassword@127.0.0.1:$UatExpectedDbPort/$UatExpectedDbName
 
 UAT_ADMIN_EMAIL=uat.admin@daleventa.local
 UAT_ADMIN_PASSWORD=$adminPassword
 "@
   Set-Content -LiteralPath $UatEnvFile -Value $content -Encoding UTF8
-  Write-Host "Created local ignored UAT env file: apps/api/.env.uat.local"
+  Write-Host "Created local ignored UAT env file: apps/api/.env.offline-safe-48h.uat.local"
   Write-Host "UAT admin email: uat.admin@daleventa.local"
-  Write-Host "UAT admin password is stored only in apps/api/.env.uat.local; do not commit it."
+  Write-Host "UAT admin password is stored only in apps/api/.env.offline-safe-48h.uat.local; do not commit it."
 }
 
 function Import-UatEnv {
@@ -75,11 +83,23 @@ function Assert-UatEnvironment {
   if ($env:UAT_LOCAL_ONLY -ne "true") {
     throw "Refusing UAT command: UAT_LOCAL_ONLY must be true."
   }
-  if ($env:UAT_DB_NAME -ne "daleventa_uat_local") {
-    throw "Refusing UAT command: UAT_DB_NAME must be daleventa_uat_local."
+  if ($env:UAT_EXPECTED_DB_NAME -ne $UatExpectedDbName) {
+    throw "Refusing UAT command: UAT_EXPECTED_DB_NAME must be $UatExpectedDbName."
   }
-  if ($env:DATABASE_URL -notmatch "/daleventa_uat_local($|\?)") {
-    throw "Refusing UAT command: DATABASE_URL must target daleventa_uat_local."
+  if ($env:UAT_DB_NAME -ne $UatExpectedDbName) {
+    throw "Refusing UAT command: UAT_DB_NAME must be $UatExpectedDbName."
+  }
+  if ($env:UAT_DB_PORT -eq "55432" -or $env:UAT_DB_PORT -eq "55433") {
+    throw "Refusing UAT command: UAT_DB_PORT must not be 55432/55433."
+  }
+  if ($env:UAT_DB_PORT -ne $UatExpectedDbPort) {
+    throw "Refusing UAT command: UAT_DB_PORT must be $UatExpectedDbPort."
+  }
+  if ($env:PORT -ne $UatExpectedApiPort) {
+    throw "Refusing UAT command: PORT must be $UatExpectedApiPort."
+  }
+  if ($env:DATABASE_URL -notmatch "/$UatExpectedDbName($|\?)") {
+    throw "Refusing UAT command: DATABASE_URL must target $UatExpectedDbName."
   }
   if ($env:DATABASE_URL -match "easypanel|gcdndd|31\.97\.99\.70|hostinger|/daleventa($|\?)|/daleventa_pos($|\?)") {
     throw "Refusing UAT command: DATABASE_URL looks remote or protected."

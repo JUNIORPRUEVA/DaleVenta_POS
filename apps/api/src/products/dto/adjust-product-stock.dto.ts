@@ -25,5 +25,9 @@ export class AdjustProductStockDto {
 
   @IsOptional()
   @IsString()
+  operationId?: string;
+
+  @IsOptional()
+  @IsString()
   reason?: string;
 }

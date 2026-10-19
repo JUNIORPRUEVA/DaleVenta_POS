@@ -255,6 +255,12 @@ class UpdateDownloader {
 
   Future<Directory> _defaultRoot() async {
     if (Platform.isWindows) {
+      final productUpdates = WindowsProductPaths.folder(
+        WindowsProductFolder.updates,
+      );
+      if (productUpdates != null) {
+        return productUpdates;
+      }
       final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
       if (localAppData.isNotEmpty) {
         return Directory(

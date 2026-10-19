@@ -4,18 +4,35 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:daleventa_pos/core/errors/api_exception.dart';
+import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
+import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/data/ventas_repository.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late List<RequestOptions> captured;
+
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
 
   setUp(() {
     captured = <RequestOptions>[];
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  tearDown(() async {
+    await OfflineStore.instance.clearAll();
   });
 
   VentasRepository buildRepository(ResponseBody Function(RequestOptions) h) {
@@ -207,6 +224,72 @@ void main() {
               ),
         ),
       );
+    },
+  );
+
+  test(
+    'listInvoices usa ventas offline locales cuando el backend no responde',
+    () async {
+      await _seedOfflineSessionAndSale(
+        localSaleId: 'local_sale_req_recent',
+        clientRequestId: 'sale_req_recent',
+        totalSold: 270,
+        occurredAt: DateTime.utc(2026, 10, 14, 12),
+      );
+      final repository = buildRepository(
+        (options) => throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionTimeout,
+        ),
+      );
+
+      final rows = await repository.listInvoices(
+        from: DateTime(2026, 10, 1),
+        to: DateTime(2026, 10, 31),
+        limit: 10,
+      );
+
+      expect(rows, hasLength(1));
+      expect(rows.single.id, 'local_sale_req_recent');
+      expect(rows.single.totalSold, 270);
+      expect(rows.single.items.single.productNameSnapshot, 'Tela azul UAT');
+      expect(rows.single.cashSessionId, 'cash-uat');
+    },
+  );
+
+  test(
+    'listInvoicesPage pagina ventas offline cuando no hay backend',
+    () async {
+      await _seedOfflineSessionAndSale(
+        localSaleId: 'local_sale_req_page_1',
+        clientRequestId: 'sale_req_page_1',
+        totalSold: 120,
+        occurredAt: DateTime.utc(2026, 10, 14, 12),
+      );
+      await _seedOfflineSessionAndSale(
+        localSaleId: 'local_sale_req_page_2',
+        clientRequestId: 'sale_req_page_2',
+        totalSold: 150,
+        occurredAt: DateTime.utc(2026, 10, 14, 13),
+      );
+      final repository = buildRepository(
+        (options) => throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+        ),
+      );
+
+      final page = await repository.listInvoicesPage(
+        from: DateTime(2026, 10, 1),
+        to: DateTime(2026, 10, 31),
+        page: 1,
+        limit: 1,
+      );
+
+      expect(page.items, hasLength(1));
+      expect(page.items.single.id, 'local_sale_req_page_2');
+      expect(page.hasMore, isTrue);
+      expect(page.nextPage, 2);
     },
   );
 
@@ -458,4 +541,75 @@ class _FakeHttpClientAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+Future<void> _seedOfflineSessionAndSale({
+  required String localSaleId,
+  required String clientRequestId,
+  required double totalSold,
+  required DateTime occurredAt,
+}) async {
+  await TokenStorage().saveUserSnapshot(
+    UserModel(
+      id: 'user-offline',
+      email: 'offline@test.local',
+      nombreCompleto: 'Cajero Offline',
+      telefono: '',
+      companyId: 'company-offline',
+    ),
+  );
+  final payload = <String, dynamic>{
+    'clientRequestId': clientRequestId,
+    'originCashSessionId': 'cash-uat',
+    'saleOccurredAt': occurredAt.toIso8601String(),
+    'paymentMethod': 'cash',
+    'paymentCashAmount': totalSold,
+    'expectedTotalSold': totalSold,
+    'items': [
+      {
+        'productId': 'product-tela',
+        'productName': 'Tela azul UAT',
+        'qty': 1,
+        'priceSoldUnit': totalSold,
+        'costUnitSnapshot': 50,
+        'subtotalSold': totalSold,
+        'subtotalCost': 50,
+        'inventoryTrackedSnapshot': true,
+      },
+    ],
+  };
+  await OfflineStore.instance.saveOfflineSaleAtomically(
+    localSaleId: localSaleId,
+    companyId: 'company-offline',
+    userId: 'user-offline',
+    clientRequestId: clientRequestId,
+    salePayload: payload,
+    itemPayloads: (payload['items'] as List)
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList(growable: false),
+    paymentPayload: {
+      'paymentMethod': 'cash',
+      'paymentCashAmount': totalSold,
+      'paymentTransferAmount': 0,
+      'creditAmount': 0,
+    },
+    pendingAction: PendingSyncAction(
+      id: 'sales.create:$localSaleId',
+      type: 'sales.create',
+      scope: 'sales',
+      companyId: 'company-offline',
+      userId: 'user-offline',
+      entityType: 'sale',
+      entityId: localSaleId,
+      idempotencyKey: clientRequestId,
+      payload: payload,
+      status: 'pending',
+      attempts: 0,
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+    ),
+    totalSold: totalSold,
+    saleOccurredAt: occurredAt,
+  );
 }

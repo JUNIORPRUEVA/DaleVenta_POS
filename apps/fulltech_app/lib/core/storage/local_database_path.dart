@@ -19,7 +19,8 @@ Future<String> resolveLocalDatabasePath(String fileName) async {
   if (windowsDatabaseDir != null) {
     await windowsDatabaseDir.create(recursive: true);
     final targetPath = p.join(windowsDatabaseDir.path, fileName);
-    if (!WindowsProductPaths.isUatMayoreoBuild) {
+    if (!WindowsProductPaths.isUatMayoreoBuild &&
+        !WindowsProductPaths.hasOverrideRoot) {
       await copyLegacyDatabaseIfNeeded(
         fileName: fileName,
         targetPath: targetPath,

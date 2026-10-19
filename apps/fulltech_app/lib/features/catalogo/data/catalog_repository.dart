@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,6 +16,8 @@ import '../../../core/models/product_model.dart';
 import 'product_pages_loader.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
+import '../../../core/offline/offline_emergency_policy.dart';
+import '../../../core/usage/client_telemetry_headers.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/is_flutter_test.dart';
 
@@ -49,6 +55,7 @@ class CatalogRepository {
 
   static const String _createSyncType = 'catalog.products.create';
   static const String _updateSyncType = 'catalog.products.update';
+  static const String _stockSyncType = 'catalog.products.stock';
   static const String _deleteSyncType = 'catalog.products.delete';
   static const String _productsCacheKeyPrefix = 'catalog.products.snapshot.v2';
   static const Duration _offlineCacheTtl = Duration(days: 7);
@@ -90,6 +97,10 @@ class CatalogRepository {
             : null,
         taxPriceMode: payload['taxPriceMode']?.toString(),
         unitOfMeasureId: payload['unitOfMeasureId']?.toString(),
+        itemType: payload['itemType']?.toString(),
+        trackInventory: payload.containsKey('trackInventory')
+            ? payload['trackInventory'] == true
+            : null,
         skipLoader: true,
       );
     });
@@ -111,6 +122,26 @@ class CatalogRepository {
             : null,
         taxPriceMode: payload['taxPriceMode']?.toString(),
         unitOfMeasureId: payload['unitOfMeasureId']?.toString(),
+        itemType: payload['itemType']?.toString(),
+        trackInventory: payload.containsKey('trackInventory')
+            ? payload['trackInventory'] == true
+            : null,
+        skipLoader: true,
+      );
+    });
+
+    syncQueue.registerHandler(_stockSyncType, (payload) async {
+      await _adjustProductStockRemote(
+        id: (payload['id'] ?? '').toString(),
+        stock: payload.containsKey('stock')
+            ? _asNullableDouble(payload['stock'])
+            : null,
+        delta: payload.containsKey('delta')
+            ? _asNullableDouble(payload['delta'])
+            : null,
+        warehouseId: payload['warehouseId']?.toString(),
+        operationId: payload['operationId']?.toString(),
+        reason: payload['reason']?.toString(),
         skipLoader: true,
       );
     });
@@ -137,6 +168,115 @@ class CatalogRepository {
   bool _shouldQueueSync(ApiException error) {
     final code = error.code;
     return code == null || code >= 500;
+  }
+
+  String _newOperationId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
+  Future<String> _operationProductId(String operationId) async {
+    if (_isUuid(operationId)) return operationId;
+    final companyId = await _productsCompanyId();
+    if (companyId == null) {
+      throw ApiException('No se pudo identificar la empresa del producto.');
+    }
+    final digest = sha256
+        .convert(utf8.encode('$companyId:$operationId'))
+        .toString();
+    return '${digest.substring(0, 8)}-${digest.substring(8, 12)}-4${digest.substring(13, 16)}-8${digest.substring(17, 20)}-${digest.substring(20, 32)}';
+  }
+
+  Future<void> _assertOfflineOperation(
+    String operation, {
+    required String? originalCompanyId,
+    required String? originalUserId,
+  }) async {
+    final user = await _tokenStorage.getUserSnapshot();
+    if (user?.companyId != originalCompanyId || user?.id != originalUserId) {
+      throw ApiException(
+        'La sesión cambió durante la operación. No se guardó un pendiente en otra empresa.',
+      );
+    }
+    final headers = await ClientTelemetryHeaders.instance.headers();
+    try {
+      await OfflineEmergencyPolicy().assertOperationAllowed(
+        companyId: user?.companyId ?? '',
+        userId: user?.id ?? '',
+        deviceFingerprint: headers['x-client-device-id'] ?? '',
+        operation: operation,
+      );
+    } on StateError catch (error) {
+      throw ApiException(error.message);
+    }
+  }
+
+  Future<void> _enqueueProductMutation({
+    required String queueId,
+    required String type,
+    required String productId,
+    required String operationId,
+    required Map<String, dynamic> payload,
+    required List<ProductModel> snapshot,
+    required String companyId,
+    required String userId,
+  }) async {
+    final user = await _tokenStorage.getUserSnapshot();
+    if (user?.companyId != companyId || user?.id != userId) {
+      throw ApiException(
+        'La sesión cambió durante la operación. Se conservó su empresa original.',
+      );
+    }
+    await _syncQueue!.enqueue(
+      id: queueId,
+      type: type,
+      scope: 'catalog.$companyId',
+      companyId: companyId,
+      userId: userId,
+      entityType: 'product',
+      entityId: productId,
+      idempotencyKey: operationId,
+      payload: payload,
+      cacheKey: await _cache.storageKeyFor(
+        '$_productsCacheKeyPrefix.$companyId',
+      ),
+      cachePayload: {
+        'items': snapshot.map((product) => product.toJson()).toList(),
+      },
+      requireDatabase: true,
+    );
+  }
+
+  Future<ProductModel?> _existingLocalMutation(
+    String operationId,
+    String productId,
+    Map<String, dynamic> payload,
+  ) async {
+    final user = await _tokenStorage.getUserSnapshot();
+    if (user == null || user.companyId == null || _syncQueue == null) {
+      return null;
+    }
+    final action = await _syncQueue.pendingOperation(
+      companyId: user.companyId!,
+      userId: user.id,
+      operationId: operationId,
+    );
+    if (action == null) return null;
+    if (jsonEncode(action.payload) != jsonEncode(payload) || action.permanent) {
+      throw ApiException(
+        'Esta operación local ya existe con otros datos o necesita revisión. Se conservó el pendiente original.',
+      );
+    }
+    for (final product in await getCachedProducts()) {
+      if (product.id == productId) return product;
+    }
+    throw ApiException(
+      'El pendiente original se conservó, pero no se pudo confirmar su producto local.',
+    );
   }
 
   Future<String> _activeCompanyStorageId() async {
@@ -581,6 +721,9 @@ class CatalogRepository {
     bool? trackInventory,
     bool skipLoader = false,
   }) async {
+    final operationOwner = await _tokenStorage.getUserSnapshot();
+    operationId = (operationId ?? '').trim();
+    if (operationId.isEmpty) operationId = _newOperationId();
     final payload = _productPayload(
       nombre: nombre,
       codigo: codigo,
@@ -621,18 +764,21 @@ class CatalogRepository {
         e.response?.statusCode,
       );
       if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
-      final queueId =
-          '$_createSyncType:${operationId ?? DateTime.now().microsecondsSinceEpoch}';
-      await _syncQueue.enqueue(
-        id: queueId,
-        type: _createSyncType,
-        scope: await _syncScope(),
-        entityType: 'product',
-        idempotencyKey: operationId,
-        payload: payload,
+      await _assertOfflineOperation(
+        _createSyncType,
+        originalCompanyId: operationOwner?.companyId,
+        originalUserId: operationOwner?.id,
       );
-      return ProductModel(
-        id: 'local_product_${DateTime.now().microsecondsSinceEpoch}',
+      final localId = await _operationProductId(operationId);
+      final existingLocal = await _existingLocalMutation(
+        operationId,
+        localId,
+        payload,
+      );
+      if (existingLocal != null) return existingLocal;
+      final queueId = '$_createSyncType:$operationId';
+      final product = ProductModel(
+        id: localId,
         nombre: nombre,
         codigo: codigo?.trim().isEmpty == true ? null : codigo?.trim(),
         precio: precio,
@@ -654,7 +800,26 @@ class CatalogRepository {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
+      final cached = await getCachedProducts();
+      await _enqueueProductMutation(
+        queueId: queueId,
+        type: _createSyncType,
+        productId: localId,
+        operationId: operationId,
+        payload: payload,
+        snapshot: [...cached.where((item) => item.id != localId), product],
+        companyId: operationOwner!.companyId!,
+        userId: operationOwner.id,
+      );
+      return product;
     }
+  }
+
+  bool _isUuid(String? value) {
+    final clean = (value ?? '').trim();
+    return RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    ).hasMatch(clean);
   }
 
   Future<ProductModel> _createProductRemote({
@@ -846,6 +1011,84 @@ class CatalogRepository {
     double? stock,
     double? delta,
     String? warehouseId,
+    String? operationId,
+    String? reason,
+    bool skipLoader = false,
+  }) async {
+    final operationOwner = await _tokenStorage.getUserSnapshot();
+    operationId = (operationId ?? '').trim();
+    if (operationId.isEmpty) operationId = _newOperationId();
+    try {
+      return await _adjustProductStockRemote(
+        id: id,
+        stock: stock,
+        delta: delta,
+        warehouseId: warehouseId,
+        operationId: operationId,
+        reason: reason,
+        skipLoader: skipLoader,
+      );
+    } on DioException catch (e) {
+      final error = ApiException(
+        _extractMessage(e.response?.data, 'No se pudo ajustar el stock'),
+        e.response?.statusCode,
+      );
+      if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
+      if (stock != null || delta == null || delta <= 0) {
+        throw ApiException(
+          'Sin conexión solo se permiten entradas incrementales de mercancía. Los conteos y salidas necesitan conexión.',
+        );
+      }
+      await _assertOfflineOperation(
+        _stockSyncType,
+        originalCompanyId: operationOwner?.companyId,
+        originalUserId: operationOwner?.id,
+      );
+      final payload = {
+        'id': id,
+        'delta': delta,
+        if ((warehouseId ?? '').trim().isNotEmpty)
+          'warehouseId': warehouseId!.trim(),
+        if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
+        'operationId': operationId,
+      };
+      final existingLocal = await _existingLocalMutation(
+        operationId,
+        id,
+        payload,
+      );
+      if (existingLocal != null) return existingLocal;
+      final cached = await getCachedProducts();
+      final current = cached.cast<ProductModel?>().firstWhere(
+        (product) => product?.id == id,
+        orElse: () => null,
+      );
+      final currentStock = current?.stock ?? 0;
+      final nextStock = currentStock + delta;
+      final product =
+          (current ??
+                  ProductModel(id: id, nombre: 'Producto', precio: 0, costo: 0))
+              .copyWith(stock: nextStock, updatedAt: DateTime.now());
+      await _enqueueProductMutation(
+        queueId: '$_stockSyncType:$id:$operationId',
+        type: _stockSyncType,
+        productId: id,
+        operationId: operationId,
+        payload: payload,
+        snapshot: [...cached.where((item) => item.id != id), product],
+        companyId: operationOwner!.companyId!,
+        userId: operationOwner.id,
+      );
+      return product;
+    }
+  }
+
+  Future<ProductModel> _adjustProductStockRemote({
+    required String id,
+    double? stock,
+    double? delta,
+    String? warehouseId,
+    String? operationId,
     String? reason,
     bool skipLoader = false,
   }) async {
@@ -857,6 +1100,8 @@ class CatalogRepository {
         if (delta != null) 'delta': delta,
         if ((warehouseId ?? '').trim().isNotEmpty)
           'warehouseId': warehouseId!.trim(),
+        if ((operationId ?? '').trim().isNotEmpty)
+          'operationId': operationId!.trim(),
         if ((reason ?? '').trim().isNotEmpty) 'reason': reason!.trim(),
       },
     );
@@ -880,15 +1125,10 @@ class CatalogRepository {
         _extractMessage(e.response?.data, 'No se pudo eliminar el producto'),
         e.response?.statusCode,
       );
-      if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
-      await _syncQueue.enqueue(
-        id: '$_deleteSyncType:$id',
-        type: _deleteSyncType,
-        scope: await _syncScope(),
-        entityType: 'product',
-        entityId: id,
-        payload: {'id': id},
-      );
+      if (_shouldQueueSync(error)) {
+        throw ApiException('Eliminar productos requiere conexión.');
+      }
+      throw error;
     }
   }
 

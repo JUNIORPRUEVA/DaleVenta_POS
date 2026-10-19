@@ -1,9 +1,16 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:daleventa_pos/core/api/api_offline_circuit_breaker.dart';
+import 'package:daleventa_pos/core/offline/offline_store.dart';
+import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/core/storage/local_database_path.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizacion_models.dart';
 import 'package:daleventa_pos/modules/cotizaciones/data/cotizaciones_local_repository.dart';
+import 'package:daleventa_pos/modules/cotizaciones/data/cotizaciones_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -11,6 +18,27 @@ void main() {
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+  });
+
+  test('create DTO omite customerId local no conciliado', () {
+    final dto = _quote(
+      'q-local-client',
+      'Cliente Local',
+    ).copyWith(customerId: 'local_1791939693146043').toCreateDto();
+
+    expect(dto, isNot(contains('customerId')));
+    expect(dto, containsPair('customerName', 'Cliente Local'));
+  });
+
+  test('create DTO conserva customerId UUID remoto', () {
+    final dto = _quote('q-remote-client', 'Cliente Remoto')
+        .copyWith(customerId: '11111111-1111-4111-8111-111111111111')
+        .toCreateDto();
+
+    expect(
+      dto,
+      containsPair('customerId', '11111111-1111-4111-8111-111111111111'),
+    );
   });
 
   test('stores and reads quotations only inside the active company', () async {
@@ -158,6 +186,39 @@ void main() {
     final reopenedRepo = CotizacionesLocalRepository(databaseFileName: dbName);
     expect(await reopenedRepo.listAll(companyId: 'company-a'), isEmpty);
   });
+
+  test(
+    'historial offline devuelve cotizaciones locales sin tocar red',
+    () async {
+      final dbName =
+          'offline_quote_history_${DateTime.now().microsecondsSinceEpoch}.db';
+      final localRepo = CotizacionesLocalRepository(databaseFileName: dbName);
+      await localRepo.upsert(
+        _quote('q-local-1', 'Cliente Offline UAT'),
+        companyId: 'company-offline',
+      );
+      final circuit = ApiOfflineCircuitState()..markOffline();
+      final captured = <RequestOptions>[];
+      final repo = CotizacionesRepository(
+        Dio()
+          ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
+            captured.add(options);
+            throw StateError('historial offline no debe tocar red');
+          }),
+        localRepo,
+        SyncQueueService(OfflineStore.instance),
+        () => 'company-offline',
+        circuit,
+      );
+
+      final page = await repo.listPage(search: 'offline');
+
+      expect(captured, isEmpty);
+      expect(page.items, hasLength(1));
+      expect(page.items.single.id, 'q-local-1');
+      expect(page.total, 1);
+    },
+  );
 }
 
 CotizacionModel _quote(String id, String customerName) {
@@ -180,4 +241,22 @@ CotizacionModel _quote(String id, String customerName) {
       ),
     ],
   );
+}
+
+class _FakeHttpClientAdapter implements HttpClientAdapter {
+  _FakeHttpClientAdapter(this._handler);
+
+  final Future<ResponseBody> Function(RequestOptions options) _handler;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    return _handler(options);
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

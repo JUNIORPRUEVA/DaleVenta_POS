@@ -172,6 +172,7 @@ class AppErrorReporter {
       error,
       title: title,
       message: userMessage,
+      technicalText: technicalDetails,
     );
     final shouldNotify = notifyUser && !presentation.silent;
     final details = _buildDetails(

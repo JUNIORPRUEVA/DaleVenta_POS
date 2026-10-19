@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-enum WindowsProductFolder { app, databases, mediaCache, logs, config }
+enum WindowsProductFolder { app, databases, mediaCache, logs, config, updates }
 
 class WindowsProductPaths {
   WindowsProductPaths._();
@@ -24,6 +24,10 @@ class WindowsProductPaths {
     if (kIsWeb || !Platform.isWindows) return false;
     if (_overrideRoot().isNotEmpty) return true;
     return kReleaseMode;
+  }
+
+  static bool get hasOverrideRoot {
+    return _overrideRoot().isNotEmpty;
   }
 
   static Directory? productRoot() {
@@ -59,6 +63,7 @@ class WindowsProductPaths {
       WindowsProductFolder.mediaCache => 'media_cache',
       WindowsProductFolder.logs => 'logs',
       WindowsProductFolder.config => 'config',
+      WindowsProductFolder.updates => 'updates',
     };
   }
 }

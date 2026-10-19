@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/debug/app_error_reporter.dart';
+import '../../core/errors/operation_error_message.dart';
+import '../../core/errors/user_safe_error_text.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/fulltech_dialog.dart';
@@ -58,6 +60,11 @@ String resolveCashError(Object error) {
   text = text.replaceFirst(RegExp(r'^[A-Za-z_]*Exception: '), '');
   text = text.replaceFirst(RegExp(r'\s*\(code: [^)]*\)\s*$'), '');
   text = text.trim();
+  final operationMessage = customerOperationErrorMessage(text);
+  if (operationMessage != null) return operationMessage;
+  if (looksTechnical(text)) {
+    return 'No pudimos confirmar esta operación de caja. Revisa el historial con el encargado antes de repetirla.';
+  }
   if (text.isEmpty) return 'No se pudo completar la operación de caja.';
   return text;
 }
