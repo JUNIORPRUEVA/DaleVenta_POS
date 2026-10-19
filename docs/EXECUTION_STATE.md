@@ -1,6 +1,6 @@
 # Execution State
 
-## Active task — Installed144 startup regression / reference141 review
+## Completed — Installed144 startup regression / reference141 review
 
 Worktree C:/src/fullpos-144-fix, agent/release144-regression-audit.
 Owner reference:1.0.6-141 from original installer/output. Exact SHA8CB439B0...
@@ -13,12 +13,19 @@ Fix8dd67542 provisions updates with users-modify, preserves it on uninstall,
 leaves binary ACLs and all app logic untouched. Candidate145 compiled PASS;
 40258303 bytes, SHA FA66972E49B6E99BEE80BDA7E906ECB2C044E158E174FC7A8FFD2C6113F4201E.
 Before-fix contract FAIL; after-fix67 storage/updater tests PASS/1 skipped,
-flutter analyze clean; local Inno packaging check PASS. No production changes
-or new release publication in this correction. Standard-user installation
-acceptance still required before GO. Owner question pending for local install
-with no active sales, then unsigned publication only if acceptance passes.
-No production mutation on this correction. Review:docs/RELEASE144_REGRESSION_REVIEW.md.
-Earlier deployment history follows; it is not the current verdict.
+flutter analyze clean; local Inno packaging check PASS. Standard-user install
+145 passed: installed runtime hash matched candidate, `updates` ACL allowed a
+non-admin write, updater saved UP_TO_DATE without PathAccessException, and the
+app restored the existing Facturacion session. Owner authorized unsigned
+publication only after acceptance; release145 is now published as
+ff5a78cc-0f1b-4535-8bec-ec19404a0539 with retention dry-run. Public check maps
+144 to145 and145 to current; stable download is302/no-store then200, PE header,
+40,258,303 bytes and approved SHA. Releases142/144 remain published with their
+objects present. No API/PWA redeploy or migration was required. Login screen
+was not visually inspected because the existing session restored directly to
+Facturacion; source comparison shows login widget in141 and145 unchanged.
+Review:docs/RELEASE144_REGRESSION_REVIEW.md. Earlier deployment history follows;
+it is not the current verdict.
 
 ## Active task — Offline48h + Mayoreo production integration
 

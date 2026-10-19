@@ -35,7 +35,7 @@ No publicar otra compilacion hasta resolver ambas observaciones con evidencia.
 4. Preparar candidato y verificar instalacion estandar, acceso, startup y updater
    antes de cualquier nueva publicacion. Produccion no modificada en esta revision.
 
-Estado:NO-GO para nueva publicacion; diagnostico y correccion local en curso.
+Estado inicial antes de corregir la instalacion: NO-GO para publicar el fix.
 
 ## Reproduccion y correccion
 
@@ -81,9 +81,8 @@ Estado:NO-GO para nueva publicacion; diagnostico y correccion local en curso.
   No se instala ni eleva durante esos ensayos.
 - Widget build del login145 coincide con141 al normalizar solo espacios y
   comas finales de Dart. Ningun cambio en lib/ ni API frente al144.
-- Candidato preparado, sin publicar ni instalar. Solicitud concreta pendiente
-  para instalar sin ventas en curso y publicar unsigned solo si pasa la
-  aceptacion estandar. La excepcion anterior era especifica de144.
+- Estado al preparar la seccion: candidato aún no instalado ni publicado; los
+  resultados finales de ambas acciones se documentan en las secciones siguientes.
 
 ## Instalacion autorizada del145
 
@@ -110,10 +109,31 @@ Estado:NO-GO para nueva publicacion; diagnostico y correccion local en curso.
   instalacion arranco con la sesion ya restaurada. No se cierra sesion para no
   interrumpir la operacion del propietario; la comparacion del login145 con141
   sigue siendo la evidencia disponible.
-- Publicacion:no ejecutada. POST api/app-updates/releases y
-  POST api/app-updates/releases/:id/publish exigen JWT con rol ADMIN
-  (app-update-releases.controller.ts:15-18) y no hay token de publicacion en la
-  sesion del agente. Es el unico paso pendiente: autorizado por el propietario,
-  bloqueado por credencial.
-- No se modifico produccion, ni datos, ni la interfaz, ni la politica global de
-  firma. Sin seeds, ventas ni cobros de prueba.
+- La publicacion se autorizo condicionada a la aceptacion de instalacion;
+  resultado final documentado abajo.
+- No se modifico la politica global de firma. Sin seeds, ventas ni cobros de
+  prueba; la excepcion unsigned se limito a esta operacion de publicacion.
+
+## Resultado final de aceptacion y publicacion145
+
+- El propietario acepto el aviso UAC e instruyo instalar y publicar145 si la
+  prueba pasaba. Instalador devolvio codigo0; archivo instalado es1.0.6+145 y su
+  SHA del ejecutable coincide con el runtime candidato. Instalacion bajo
+  Program Files provisiono `updates` con Modify para BUILTIN\Usuarios; la
+  shell no administrativa pudo crear, leer y retirar un archivo de prueba.
+- Arranque del19-oct-2026 mantuvo el proceso activo; registro de AppUpdate
+  completado con `update=false` y build `none`; guardo `update_state.json` sin
+  PathAccessException. La sesion existente se restauro directamente en
+  Facturacion; no se creo ni cobro una venta. La captura visual devolvio otra
+  aplicacion; no se reclama inspeccion visual del login ni de Facturacion.
+- Publicacion aprobada:145, id `ff5a78cc-0f1b-4535-8bec-ec19404a0539`, unsigned,
+  40,258,303 bytes, SHA256
+  `FA66972E49B6E99BEE80BDA7E906ECB2C044E158E174FC7A8FFD2C6113F4201E`.
+  Retention se ejecuto como dry-run. Los releases142,144 y145 permanecen
+  publicados y los tres objetos de almacenamiento existen.
+- Check publico: build144 reporta update disponible145; build145 reporta
+  up-to-date. Descarga estable devuelve302/no-store y200, encabezado PE `MZ`,
+  tamano y SHA iguales al candidato. API health `ok`; servicios API/PWA siguen
+  en imagen offline-144, sin redeploy requerido para este cambio de instalador.
+- No se uso JWT de publicacion. Se ejecuto la operacion autorizada de release
+  desde el contexto API con una excepcion unsigned limitada a esa operacion.
