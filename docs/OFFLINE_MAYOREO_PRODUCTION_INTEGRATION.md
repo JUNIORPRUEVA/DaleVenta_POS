@@ -35,6 +35,45 @@ el nuevo pedido autoriza preparar y publicar un instalador combinado posterior.
 
 ## Estado actual
 
-AUDIT/PLAN completados. Integracion y validacion pendientes. NO-GO para publicar
-hasta ejecutar todos los gates aplicables. Los informes de la rama offline son
-evidencia historica, no una certificacion del candidato combinado.
+Integracion completada en 1c2c7a61. Validacion en curso; no publicacion nueva.
+
+## Revision y validacion observada
+
+- Siete conflictos resueltos: ignores, UAT safety, rutas SQLite, POS, ventas,
+  runner y script UAT. Conservados aislamiento Mayoreo, grants48h, intentos
+  durables y recalculo al digitar cantidad. UAT build usa ruta fisica corta;
+  rechaza salida productiva mezclada, sin borrar archivos ni usar subst.
+- sqlite3 Dart3.1.7 incluia SQLite3.52.0 retirado oficialmente. Se fija3.3.2,
+  SQLite3.53.1 estable, y su dependencia native_toolchain_c0.18.0. Referencias:
+  https://www.sqlite.org/releaselog/3_52_0.html
+  https://pub.dev/packages/sqlite3/changelog
+- Omision detectada al combinar: replay de ventas no reenviaba priceListId,
+  priceListManualOverride ni sourceQuotationId. Se conservan en el handler.
+- npm ci PASS; npm run api:build PASS; Jest completo76 suites/766 PASS/8 skips.
+  Audit npm:23 avisos,3 altos en cadena de desarrollo ts-node-dev/chokidar/braces;
+  sin fix disponible. No se aplica actualizacion masiva ajena al alcance.
+- flutter analyze --no-pub PASS. Primera suite completa1368 PASS/6 skips.
+- Clon local exclusivo: fullpos_offline_mayoreo144_uat, localhost56549;
+  API46554. Fuente UAT Mayoreo preservada, sin cambios de datos originales.
+  Migraciones20261014113000 y20261014153000 aplicadas por Prisma:PASS.
+  Primer intento uso credencial UAT obsoleta de otra copia y fue rechazado;
+  se identifico el origen correcto sin cambiar credenciales ni registrar valores.
+- Smoke HTTP/PG: grant48h;5 reintentos concurrentes de producto/stock/venta;
+  una sola operacion; rechazo de contenido distinto; stock correcto;
+  DTO online legacy compatible y venta sin turno rechazada sin reasignacion.
+  Mayoreo15x70=1050, replay tras cambiar regla devuelve la misma venta/total.
+- Flutter opt-in offline_mayoreo_http_acceptance_test:API local real, SQLite3.53.1,
+  grant real, conexion interrumpida, venta local15x70, cierre/reapertura SQLite,
+  envio de lista manual original, sincronizacion y reintento sin doble stock:PASS.
+  Se corrigio un getter incorrecto del test antes de ejecutarlo correctamente.
+
+## Limites del alcance
+
+La contingencia48h admite operaciones autorizadas y conservadas por dispositivo;
+ventas fiscales y pagos no efectivos necesitan conexion. Resolver nuevos precios
+mayoristas requiere API; el carrito mayorista ya calculado puede conservar su
+snapshot y sincronizarse. Un cambio posterior incompatible queda para revision,
+no autoriza inventar precios ni reasignar pendientes a otro turno/empresa.
+No se certifica hardware ni apagones fisicos mediante pruebas de proceso.
+
+NO-GO para publicar hasta completar los gates restantes y registrar resultados.

@@ -104,6 +104,9 @@ class VentasRepository {
       try {
         sale = await _createSaleRemote(
           customerId: payload['customerId']?.toString(),
+          sourceQuotationId: payload['sourceQuotationId']?.toString(),
+          priceListId: payload['priceListId']?.toString(),
+          priceListManualOverride: payload['priceListManualOverride'] == true,
           note: payload['note']?.toString(),
           paymentMethod: payload['paymentMethod']?.toString(),
           paymentCashAmount: _nullableDouble(payload['paymentCashAmount']),

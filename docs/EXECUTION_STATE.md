@@ -1,5 +1,24 @@
 # Execution State
 
+## Active task — Offline48h + Mayoreo production integration
+
+Worktree C:/src/fullpos-offline-prod; branch agent/offline-mayoreo-integration-20261018.
+Owner authorizes combining the offline worktree, production-main integration,
+deployment and a new Windows installer. Continuous controlled execution.
+Production currently API/PWA143, Windows142; no new production mutation yet.
+Source snapshot 8c19bbac; merge 1c2c7a61 preserves production base 2f33df45.
+Seven conflicts resolved preserving Mayoreo and offline identity/storage behavior.
+SQLite3.52.0 was officially withdrawn; candidate uses sqlite3 Dart3.3.2 / SQLite3.53.1.
+API build and766 tests PASS; Flutter analyze PASS; first full suite1368 PASS/6 skips.
+Real dedicated clone fullpos_offline_mayoreo144_uat on localhost56549, API46554.
+Both additive migrations rehearsed. HTTP concurrent product/stock/sale retries PASS.
+Combined Flutter SQLite/reopen/real HTTP wholesale sale test PASS. Sync handler
+now preserves manual price-list and source-quotation fields; final regression pending.
+Next: final analysis/regression, immutable144 artifacts, acceptance, explicit
+production migration/signature exceptions as applicable, backup/deploy/publish.
+Full record: docs/OFFLINE_MAYOREO_PRODUCTION_INTEGRATION.md.
+Historical task state below is not the current target or authorization.
+
 ## Active task — Offline Safe48H Phase17 (2026-10-14)
 
 Worktree `C:\src\fullpos-offline-safe-48h`, branch `feature/offline-safe-48h`.

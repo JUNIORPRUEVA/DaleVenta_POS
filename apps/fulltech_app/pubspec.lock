@@ -984,10 +984,10 @@ packages:
     dependency: transitive
     description:
       name: native_toolchain_c
-      sha256: "89e83885ba09da5fdf2cdacc8002a712ca238c28b7f717910b34bcd27b0d03ac"
+      sha256: "8aaead321425bd3f03bd5894aa27c8ea6993eab95531da7e59f5d39c6e5708ec"
       url: "https://pub.dev"
     source: hosted
-    version: "0.17.4"
+    version: "0.18.0"
   nested:
     dependency: transitive
     description:
@@ -1517,10 +1517,10 @@ packages:
     dependency: "direct main"
     description:
       name: sqlite3
-      sha256: f8f8ba7f9454f2761d4b416e030c4528ebc45e9290798d848f4dc08890c42a7c
+      sha256: "9488c7d2cdb1091c91cacf7e207cff81b28bff8e366f042bad3afe7d34afe189"
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.7"
+    version: "3.3.2"
   sqlite3_flutter_libs:
     dependency: "direct main"
     description:

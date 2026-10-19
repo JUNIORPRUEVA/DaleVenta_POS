@@ -53,7 +53,7 @@ Future<void> probe(String root, String stage) async {
   await store.readCacheEntry('warmup');
   final db = await databaseFactory.openDatabase('$root/databases/fulltech_offline.db');
   final version = (await db.rawQuery('SELECT sqlite_version()')).single.values.single.toString();
-  check(version == '3.52.0', 'Unexpected native SQLite version');
+  check(version == '3.53.1', 'Unexpected native SQLite version');
   final queue = SyncQueueService(store, scopeResolver:() async => OfflineSyncScope(companyId:user.companyId,userId:user.id));
   if (stage == 'prepare') {
     final cash = await transport.get('/cash/state');
