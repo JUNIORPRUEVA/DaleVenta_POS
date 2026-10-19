@@ -14,8 +14,11 @@ Real dedicated clone fullpos_offline_mayoreo144_uat on localhost56549, API46554.
 Both additive migrations rehearsed. HTTP concurrent product/stock/sale retries PASS.
 Combined Flutter SQLite/reopen/real HTTP wholesale sale test PASS. Sync handler
 now preserves manual price-list and source-quotation fields; final regression pending.
-Next: final analysis/regression, immutable144 artifacts, acceptance, explicit
-production migration/signature exceptions as applicable, backup/deploy/publish.
+Final regression1369 Flutter/766 API PASS, analysis PASS; immutable144 artifacts
+built and verified. Owner explicitly authorizes both production migrations and
+unsigned Windows144 publication (SHA8F645A04...), followed by repeated continua.
+Next: verify transferred artifacts, immediate backup, migrate/deploy/publish,
+production verification and production-main push. No further approval pending.
 Full record: docs/OFFLINE_MAYOREO_PRODUCTION_INTEGRATION.md.
 Historical task state below is not the current target or authorization.
 

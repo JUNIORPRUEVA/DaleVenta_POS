@@ -6,7 +6,9 @@ const { spawnSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const repo = path.resolve(__dirname, '../..');
 const database = 'fullpos_offline_mayoreo144_uat';
-const base = 'http://127.0.0.1:46554';
+const apiPort = process.env.FULLPOS_COMBINED_UAT_PORT || '46554';
+assert.ok(['46554', '46555'].includes(apiPort));
+const base = 'http://127.0.0.1:' + apiPort;
 const mode = process.argv[2];
 const source = process.argv[3];
 assert.ok(source && path.basename(source) === '.env.mayoreo.uat.local');
@@ -22,7 +24,7 @@ target.pathname = '/' + database;
 Object.assign(process.env, {
   DATABASE_URL: target.href, APP_ENV: 'uat', UAT_LOCAL_ONLY: 'true',
   UAT_EXPECTED_DB_NAME: database, UAT_DB_NAME: database,
-  UAT_EXPECTED_DB_PORT: '56549', PORT: '46554',
+  UAT_EXPECTED_DB_PORT: '56549', PORT: apiPort,
   RUN_SEED: 'false', RUN_MIGRATIONS: 'false', REDIS_ENABLED: 'false',
   UPLOAD_DIR: path.join(repo, '.uat/integration144/uploads'),
 });

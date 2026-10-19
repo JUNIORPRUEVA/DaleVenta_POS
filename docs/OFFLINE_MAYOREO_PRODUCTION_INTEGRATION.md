@@ -77,3 +77,54 @@ no autoriza inventar precios ni reasignar pendientes a otro turno/empresa.
 No se certifica hardware ni apagones fisicos mediante pruebas de proceso.
 
 NO-GO para publicar hasta completar los gates restantes y registrar resultados.
+
+## Candidato combinado verificado
+
+- Fuentes de runtime:53aa9bb1143168ee56697da20ff1612860e1bcfc. Commit f521df07
+  solo agrega llaves de estilo a un test; diff de API/lib/pubspec contra53aa vacio.
+- Regresion Flutter final con HTTP UAT opt-in incluido:1369 PASS/6 omitidas.
+  Analisis final limpio. Las dos incidencias de estilo del test nuevo se corrigieron.
+- API Docker offline-144: build y ensayo HTTP/PG completos PASS, healthy.
+  Dependencias comprobadas: Nest11.2.7, compression1.8.2, sharp0.35.5,
+  express5.2.1, multer2.4.0; sin regresion frente a produccion.
+  Config digest:e2884dae0fb60634f4a467551facef9749b0202a97c8236677359447d881205b.
+- PWA144: build Flutter3.41.6 PASS; nginx -t PASS; version144,
+  shell/bootstrap144-53aa9bb1, Brotli y proxy a API clon local PASS.
+  Config digest:693fa36e90188aa5b618ac5c9989f955013ce5fc9714326eaff85012886e4f9d.
+- Windows oficial144 compilado/empacado por script oficial. Archivo
+  FullPOS-Setup-1.0.6-144.exe,40257613 bytes,NotSigned,
+  SHA256:8F645A0402B8D30ADE40B58603F14AAF1469AB436ABE2C751B112B32931DFE87.
+  No certificado de firma configurado ni certificado CodeSigning personal.
+- Helper real del candidato:5 casos verify-only PASS (paquete valido bajo
+  politica unsigned, build distinto, hash distinto, fuera de raiz y firma requerida).
+  No instala, eleva ni cambia instalaciones del usuario.
+- Windows UAT144 separado: startup nativo inspeccionado por Computer Use;
+  login visible sin aviso de inicio, namespace FullPOS Offline144 UAT, datos
+  .uat/app-root y API46554. UAT142 del propietario permanece abierta/preservada.
+- Avisos offline:4 tests visuales PASS, capturas escritorio1366/mobile360 al130%
+  inspeccionadas; texto completo sin desbordamiento. Los cuadrados de iconos
+  pertenecen al banco de widgets sin fuente Material; no al ejecutable.
+- PWA local4184 cargo landing y semantica de botones en navegador. Captura CDP
+  agoto timeout; no se reclama PASS de screenshot de navegador ni login web.
+  La presentacion modificada se valido con los widgets y Windows indicados.
+- Snapshot fuente:170 archivos cotejados, ninguno cambio en el worktree offline
+  desde la captura. Los worktrees originales y sus indices permanecen intactos.
+- Paquete de imagenes:244532004 bytes, SHA256
+  36ae1030077565fd27037856da391fe0887acc879fd1b323acf77f0951a0d111.
+- Backup productivo previo: /root/fullpos-deploy-backups/offline-144-20261018/
+  database-before-offline144.dump,6346483 bytes, catalogo pg_restore validado,
+  SHA25614462f0647d9def235d3c5fca771a6f18e7d0dbe425aa7475be5e8c429ca4e1d.
+  Especificaciones API/PWA143 privadas0600 preservadas. Produccion saludable,
+  cero migraciones fallidas, solo las dos migraciones offline pendientes.
+
+## Gates productivos especificos
+
+Deploy y nueva publicacion autorizados por el pedido actual. AGENTS.md10 exige
+autorizacion explicita para las dos migraciones productivas. Ademas la politica
+del backend exige firma; publicar este instalador requiere excepcion unsigned
+limitada a144. El propietario respondio "Autorizo ambas acciones para la version
+144" a la solicitud concreta de migraciones y excepcion de firma con el hash
+8F645A04...31DFE87. Autorizacion recibida; no se modifican politicas globales.
+Rollback: conservar imagenes143 y Windows142; ante fallo de salud abortar/volver
+a imagen143. El esquema aditivo se conserva, sin downmigration ni restauracion
+automatica que descarte operaciones reales posteriores.

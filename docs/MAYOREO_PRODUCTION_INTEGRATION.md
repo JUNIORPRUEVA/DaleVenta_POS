@@ -288,8 +288,8 @@ del servidor ni se desactivo autenticacion.
   404 con mensaje correcto cuando no hay releases; no redirige al archivo viejo.
 - Se solicito aprobacion especifica para publicar Windows 143 sin firma,
   porque la autorizacion previa correspondia al instalador 142 ya publicado.
-  Este gate sigue pendiente hasta recibir respuesta. La actualizacion API/PWA
-  y el enlace estable de descarga funcionan con el release 142 mientras tanto.
+  El propietario respondio "Mantener Windows 142 publicado". Gate resuelto:
+  Windows143 no se publica. API/PWA143 y el enlace estable funcionan con142.
 
 ## Estado productivo comprobado al cierre de esta ejecucion
 
@@ -307,10 +307,10 @@ del servidor ni se desactivo autenticacion.
   actualizacion ficticia a su propia version. Autenticacion price-lists: 401.
 - Sin nuevas migraciones, seeds, ventas, cobros ni datos de prueba en produccion.
   Solo se aplico la migracion aprobada y se creo/publico el release 142 aprobado.
-- Windows 143 esta compilado y verificado, pero NO publicado. La respuesta a la
-  nueva excepcion de firma solicitada es el unico gate pendiente.
+- Windows143 compilado y verificado, NO publicado por decision del propietario.
 - Mayoreo permanece desactivado por defecto por empresa. Configuracion:
   FullPOS > Configuracion > Empresa > Mayoreo > Listas de precios.
   Administracion de listas: Inventario > Listas precios.
-- Estado del servidor: GO. Estado de la publicacion Windows 143: pendiente de
-  autorizacion, NO-GO hasta recibirla. Se conservan 142 y las imagenes anteriores.
+- Estado acordado de esta entrega: GO, API/PWA143 y Windows142 publicado.
+  El pedido posterior de integrar Offline48h y publicar un nuevo instalador
+  se gestiona en OFFLINE_MAYOREO_PRODUCTION_INTEGRATION.md; no publica143.
