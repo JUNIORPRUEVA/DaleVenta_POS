@@ -1167,12 +1167,19 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
     _hideTopNotice();
-    final topPadding = MediaQuery.viewPaddingOf(context).top + 16;
+    final media = MediaQuery.of(context);
+    // En pantallas angostas la tarjeta se ajusta al ancho real disponible
+    // (margen 12 + safe area) para que nunca quede recortada.
+    final isNarrow = media.size.width < 640;
+    final topPadding = media.viewPadding.top + (isNarrow ? 12.0 : 16.0);
+    final leftMargin = 12.0 + media.padding.left;
+    final rightMargin = isNarrow ? 12.0 + media.padding.right : 18.0;
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (context) => Positioned(
         top: topPadding,
-        right: 18,
+        left: isNarrow ? leftMargin : null,
+        right: rightMargin,
         child: _TopNoticeToast(
           title: title,
           message: message,
@@ -4746,13 +4753,20 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
     _hideTopNotice();
-    final topPadding = MediaQuery.viewPaddingOf(context).top + 16;
+    final media = MediaQuery.of(context);
+    // En pantallas angostas la tarjeta se ajusta al ancho real disponible
+    // (margen 12 + safe area) para que nunca quede recortada.
+    final isNarrow = media.size.width < 640;
+    final topPadding = media.viewPadding.top + (isNarrow ? 12.0 : 16.0);
+    final leftMargin = 12.0 + media.padding.left;
+    final rightMargin = isNarrow ? 12.0 + media.padding.right : 18.0;
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (context) {
         return Positioned(
           top: topPadding,
-          right: 18,
+          left: isNarrow ? leftMargin : null,
+          right: rightMargin,
           child: _TopNoticeToast(
             title: title,
             message: message,

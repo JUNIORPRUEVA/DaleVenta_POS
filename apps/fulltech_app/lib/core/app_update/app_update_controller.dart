@@ -244,7 +244,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
           if (persisted.lastErrorCode == 'RECOVERED_TRANSIENT_STATE') {
             final targetBuild = persisted.targetBuild;
             if (targetBuild != null) {
-              unawaited(_downloader.discardBuild(targetBuild));
+              unawaited(_discardBuildBestEffort(targetBuild));
             }
             _loaded = true;
             return _persistence.save(persisted);
@@ -304,7 +304,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
       if (!manifest.isNewerThan(installedRelease.currentBuild)) {
         final staleBuild = state.persisted.targetBuild;
         if (staleBuild != null) {
-          await _downloader.discardBuild(staleBuild);
+          await _discardBuildBestEffort(staleBuild);
         }
         await _setState(
           state.copyWith(
@@ -327,7 +327,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
 
       final previousBuild = state.persisted.targetBuild;
       if (previousBuild != null && previousBuild != manifest.buildNumber) {
-        await _downloader.discardBuild(previousBuild);
+        await _discardBuildBestEffort(previousBuild);
       }
 
       if (_hasPreparedArtifactFor(manifest)) {
@@ -452,7 +452,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
             ),
           ),
         );
-        await _downloader.discardBuild(targetBuild);
+        await _discardBuildBestEffort(targetBuild);
         _telemetry.event(
           'UPDATE_INSTALL_SUCCESS',
           installedRelease: installedRelease,
@@ -503,7 +503,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
           ),
         ),
       );
-      await _downloader.discardBuild(targetBuild);
+      await _discardBuildBestEffort(targetBuild);
       _telemetry.event(
         'UPDATE_INSTALL_SUCCESS',
         installedRelease: installedRelease,
@@ -689,7 +689,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         bytesDownloaded: download.bytesDownloaded,
       );
       if (!trustDecision.accepted) {
-        await _downloader.discardBuild(targetBuild);
+        await _discardBuildBestEffort(targetBuild);
         await _failDownload(
           manifest,
           targetBuild,
@@ -752,19 +752,32 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     } on UpdateDownloadException catch (error, stackTrace) {
       await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
     } on UpdateVerificationException catch (error, stackTrace) {
-      await _downloader.discardBuild(targetBuild);
+      await _discardBuildBestEffort(targetBuild);
       await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
     } on UpdateSignatureVerificationException catch (error, stackTrace) {
-      await _downloader.discardBuild(targetBuild);
+      await _discardBuildBestEffort(targetBuild);
       await _failDownload(manifest, targetBuild, error.code, error, stackTrace);
     } catch (error, stackTrace) {
-      await _downloader.discardBuild(targetBuild);
+      await _discardBuildBestEffort(targetBuild);
       await _failDownload(
         manifest,
         targetBuild,
         'DOWNLOAD_FAILED',
         error,
         stackTrace,
+      );
+    }
+  }
+
+  Future<void> _discardBuildBestEffort(int targetBuild) async {
+    try {
+      await _downloader.discardBuild(targetBuild);
+    } catch (error, stackTrace) {
+      TraceLog.log(
+        'AppUpdate',
+        'discard build failed after update error',
+        error: error,
+        stackTrace: stackTrace,
       );
     }
   }

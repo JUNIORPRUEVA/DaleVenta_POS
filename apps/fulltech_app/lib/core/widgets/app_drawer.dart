@@ -135,14 +135,14 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
       children: [
         Container(
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.82),
+            color: Colors.white.withValues(alpha: 0.86),
             borderRadius: BorderRadius.circular(17),
             border: Border.all(color: footerBorder),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.025),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: AppColors.primary.withValues(alpha: 0.055),
+                blurRadius: 16,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -201,62 +201,6 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
   }
 }
 
-class _MobileDrawerFooterButton extends StatelessWidget {
-  const _MobileDrawerFooterButton({
-    required this.compact,
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final bool compact;
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = selected ? AppColors.primary : AppColors.textSecondary;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          height: compact ? 42 : 46,
-          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primary.withValues(alpha: 0.08)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: foreground, size: compact ? 19 : 20),
-              SizedBox(width: compact ? 10 : 11),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body.copyWith(
-                    color: foreground,
-                    fontSize: compact ? 14.2 : 14.8,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MobileDrawerFooterIconButton extends StatelessWidget {
   const _MobileDrawerFooterIconButton({
     required this.compact,
@@ -295,6 +239,62 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: foreground, size: compact ? 20 : 21),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileDrawerFooterButton extends StatelessWidget {
+  const _MobileDrawerFooterButton({
+    required this.compact,
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final bool compact;
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.primary : AppColors.textSecondary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          height: compact ? 38 : 42,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: foreground, size: compact ? 19 : 20),
+              SizedBox(width: compact ? 10 : 11),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: foreground,
+                    fontSize: compact ? 14.2 : 14.8,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -581,39 +581,27 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFFF5FAFF),
-                    Color(0xFFFFFFFF),
-                    Color(0xFFF1F7FF),
+                    Color(0xFFF2F8FF),
+                    Color(0xFFFAFDFF),
+                    Color(0xFFEAF3FF),
+                    Color(0xFFDDEBFF),
                   ],
-                  stops: [0, 0.52, 1],
+                  stops: [0, 0.42, 0.76, 1],
                 ),
           boxShadow: [panelShadow],
         ),
         child: Stack(
           children: [
             if (!isDesktop)
+              const Positioned.fill(child: _MobileDrawerBackgroundTexture()),
+            if (!isDesktop)
               Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
-                height: 184,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0xFF2E6BFF),
-                        AppColors.primary,
-                        AppColors.primary.withValues(alpha: 0),
-                      ],
-                      stops: const [0, 0.68, 1],
-                    ),
-                  ),
-                ),
+                height: 118,
+                child: const _MobileDrawerPremiumHeaderBackground(),
               ),
-            if (!isDesktop)
-              const Positioned.fill(child: _MobileDrawerPattern()),
             SafeArea(
               child: Column(
                 children: [
@@ -676,24 +664,68 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                               ],
                             ),
                           )
-                        : Row(
-                            children: [
-                              const Spacer(),
-                              SizedBox(
-                                height: 46,
-                                width: 46,
-                                child: IconButton(
-                                  tooltip: 'Cerrar menú',
-                                  onPressed: () => Navigator.pop(context),
-                                  icon: AppIcon(
-                                    AppIcons.close,
-                                    size: 21,
-                                    color: Colors.white,
-                                    semanticLabel: 'Cerrar menú',
+                        : Container(
+                            height: isCompactMobile ? 78 : 84,
+                            padding: EdgeInsets.only(
+                              left: isCompactMobile ? 4 : 6,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'FullPOS',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTextStyles.title.copyWith(
+                                          color: Colors.white,
+                                          fontSize: isCompactMobile ? 25 : 27,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Cloud',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTextStyles.body.copyWith(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.90,
+                                          ),
+                                          fontSize: isCompactMobile ? 12 : 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
+                                SizedBox(
+                                  height: 42,
+                                  width: 42,
+                                  child: IconButton(
+                                    tooltip: 'Cerrar menú',
+                                    onPressed: () => Navigator.pop(context),
+                                    icon: AppIcon(
+                                      AppIcons.close,
+                                      size: 20,
+                                      color: Colors.white,
+                                      semanticLabel: 'Cerrar menú',
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.white.withValues(
+                                        alpha: 0.13,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                   ),
                   Expanded(
@@ -1048,6 +1080,16 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         items: turnosItems,
         openOnHover: false,
         featured: true,
+        subtitle: !cashConfirmed
+            ? 'Estado no disponible'
+            : hasOpenShift
+            ? 'Abierto y operando'
+            : 'Cerrado, listo para abrir',
+        statusColor: !cashConfirmed
+            ? AppColors.warning
+            : hasOpenShift
+            ? AppColors.success
+            : AppColors.primary,
       ),
     );
 
@@ -1220,6 +1262,8 @@ class _DrawerMenuGroup {
     required this.items,
     this.openOnHover = true,
     this.featured = false,
+    this.subtitle,
+    this.statusColor,
   });
 
   final String title;
@@ -1227,6 +1271,8 @@ class _DrawerMenuGroup {
   final List<AppNavigationItem> items;
   final bool openOnHover;
   final bool featured;
+  final String? subtitle;
+  final Color? statusColor;
 
   bool get hasSubmenu => items.length > 1;
 
@@ -1252,68 +1298,193 @@ Widget? buildAdaptiveDrawer(
   return AppDrawer(currentUser: currentUser);
 }
 
-class _MobileDrawerPattern extends StatelessWidget {
-  const _MobileDrawerPattern();
+class _MobileDrawerPremiumHeaderBackground extends StatelessWidget {
+  const _MobileDrawerPremiumHeaderBackground();
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: CustomPaint(painter: _MobileDrawerPatternPainter()),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2E6BFF), AppColors.primary, Color(0xFF1EA7F2)],
+          stops: [0, 0.55, 1],
+        ),
+      ),
+      child: CustomPaint(painter: _MobileDrawerPremiumHeaderPainter()),
     );
   }
 }
 
-class _MobileDrawerPatternPainter extends CustomPainter {
+class _MobileDrawerBackgroundTexture extends StatelessWidget {
+  const _MobileDrawerBackgroundTexture();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(painter: _MobileDrawerBackgroundTexturePainter()),
+    );
+  }
+}
+
+class _MobileDrawerBackgroundTexturePainter extends CustomPainter {
+  const _MobileDrawerBackgroundTexturePainter();
+
   @override
   void paint(Canvas canvas, Size size) {
-    final topGlow = Paint()
+    final lowerGlow = Paint()
       ..shader =
           const RadialGradient(
-            colors: [Color(0x662E9BFF), Color(0x002E9BFF)],
+            colors: [Color(0x552E6BFF), Color(0x002E6BFF)],
           ).createShader(
             Rect.fromCircle(
-              center: Offset(size.width * 0.18, size.height * 0.04),
-              radius: size.width * 0.9,
+              center: Offset(size.width * 0.72, size.height * 0.91),
+              radius: size.width * 0.74,
             ),
           );
     canvas.drawCircle(
-      Offset(size.width * 0.18, size.height * 0.04),
-      size.width * 0.9,
-      topGlow,
+      Offset(size.width * 0.72, size.height * 0.91),
+      size.width * 0.74,
+      lowerGlow,
     );
 
-    final bottomGlow = Paint()
-      ..shader =
-          const RadialGradient(
-            colors: [Color(0x553E7BFA), Color(0x003E7BFA)],
-          ).createShader(
-            Rect.fromCircle(
-              center: Offset(size.width * 0.92, size.height * 0.96),
-              radius: size.width * 0.78,
-            ),
-          );
-    canvas.drawCircle(
-      Offset(size.width * 0.92, size.height * 0.96),
-      size.width * 0.78,
-      bottomGlow,
-    );
-
-    final patternPaint = Paint()
-      ..color = const Color(0x143B82F6)
+    final linePaint = Paint()
+      ..color = const Color(0x1F3B82F6)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
+      ..strokeWidth = 0.8;
+    final accentLinePaint = Paint()
+      ..color = const Color(0x113B82F6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.15;
     const gap = 34.0;
-    for (double y = -gap; y < size.height + gap; y += gap) {
-      final path = Path();
-      path.moveTo(-20, y);
-      path.quadraticBezierTo(size.width * 0.26, y + 12, size.width * 0.55, y);
-      path.quadraticBezierTo(size.width * 0.82, y - 12, size.width + 20, y + 2);
-      canvas.drawPath(path, patternPaint);
+    for (double y = 96; y < size.height - 18; y += gap) {
+      final path = Path()
+        ..moveTo(-24, y)
+        ..cubicTo(
+          size.width * 0.18,
+          y - 10,
+          size.width * 0.48,
+          y + 13,
+          size.width + 24,
+          y - 4,
+        );
+      canvas.drawPath(path, linePaint);
+    }
+    for (double y = 128; y < size.height - 26; y += gap * 1.7) {
+      final path = Path()
+        ..moveTo(-20, y)
+        ..cubicTo(
+          size.width * 0.26,
+          y + 14,
+          size.width * 0.58,
+          y - 12,
+          size.width + 20,
+          y + 6,
+        );
+      canvas.drawPath(path, accentLinePaint);
     }
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _MobileDrawerPremiumHeaderPainter extends CustomPainter {
+  const _MobileDrawerPremiumHeaderPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final diagonal = Path()
+      ..moveTo(size.width * 0.48, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width * 0.82, size.height)
+      ..lineTo(size.width * 0.34, size.height)
+      ..close();
+    canvas.drawPath(
+      diagonal,
+      Paint()..color = Colors.white.withValues(alpha: 0.055),
+    );
+
+    final highlight = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topRight,
+        end: Alignment.bottomLeft,
+        colors: [Color(0x2EFFFFFF), Color(0x00FFFFFF)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    final highlightPath = Path()
+      ..moveTo(size.width * 0.72, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height * 0.78)
+      ..lineTo(size.width * 0.58, size.height)
+      ..close();
+    canvas.drawPath(highlightPath, highlight);
+
+    final lowerShade = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.transparent,
+          const Color(0xFF0B3AA8).withValues(alpha: 0.09),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawRect(Offset.zero & size, lowerShade);
+
+    final bottomFade = Paint()
+      ..shader =
+          const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x00F2F8FF), Color(0x9CF2F8FF)],
+          ).createShader(
+            Rect.fromLTWH(
+              0,
+              size.height * 0.72,
+              size.width,
+              size.height * 0.28,
+            ),
+          );
+    canvas.drawRect(
+      Rect.fromLTWH(0, size.height * 0.72, size.width, size.height * 0.28),
+      bottomFade,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _TurnStatusPulse extends StatelessWidget {
+  const _TurnStatusPulse({required this.color, required this.compact});
+
+  final Color color;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = compact ? 6.5 : 7.0;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(color),
+      tween: Tween(begin: 0.55, end: 1),
+      duration: const Duration(milliseconds: 650),
+      curve: Curves.easeOutCubic,
+      builder: (context, opacity, child) {
+        return Opacity(opacity: opacity, child: child);
+      },
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: color.withValues(alpha: 0.32), blurRadius: 5),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DrawerMenuGroupTile extends StatelessWidget {
@@ -1348,32 +1519,34 @@ class _DrawerMenuGroupTile extends StatelessWidget {
     final foreground = desktop
         ? AppColors.textPrimary
         : featured
-        ? Colors.white
-        : const Color(0xFF0F172A);
+        ? const Color(0xFF102A6B)
+        : const Color(0xFF0F1F45);
     final iconColor = selected && !desktop
         ? const Color(0xFF2563EB)
         : desktop
         ? foreground
         : featured
         ? Colors.white
-        : const Color(0xFF172554);
+        : const Color(0xFF155EEF);
     final headerBg = desktop
         ? (selected || expanded
               ? AppColors.primary.withValues(alpha: 0.09)
               : Colors.transparent)
         : featured
-        ? Colors.transparent
-        : (selected
-              ? const Color(0xFFE8F1FF)
-              : Colors.white.withValues(alpha: 0.76));
-    final borderColor = desktop ? Colors.transparent : const Color(0xFFE8EEF5);
-
+        ? const Color(0xFFF1F7FF)
+        : (selected ? const Color(0xFFE8F1FF) : Colors.transparent);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: onHoverOpen == null ? null : (_) => onHoverOpen!(),
       onExit: onHoverExit == null ? null : (_) => onHoverExit!(),
       child: Padding(
-        padding: EdgeInsets.only(bottom: desktop ? (compact ? 4 : 5) : 7),
+        padding: EdgeInsets.only(
+          bottom: desktop
+              ? (compact ? 4 : 5)
+              : featured
+              ? 12
+              : 5,
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
@@ -1388,78 +1561,96 @@ class _DrawerMenuGroupTile extends StatelessWidget {
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(desktop ? 15 : 14),
+                  borderRadius: BorderRadius.circular(
+                    desktop
+                        ? 15
+                        : featured
+                        ? 16
+                        : 13,
+                  ),
                   onTap: onTapHeader,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     height: desktop
                         ? (compact ? 46 : 50)
                         : featured
-                        ? (compact ? 64 : 70)
-                        : (compact ? 52 : 56),
+                        ? (compact ? 58 : 62)
+                        : (compact ? 48 : 52),
                     padding: EdgeInsets.symmetric(
-                      horizontal: desktop ? (compact ? 9 : 10) : 12,
+                      horizontal: desktop
+                          ? (compact ? 9 : 10)
+                          : featured
+                          ? 13
+                          : 10,
                     ),
                     decoration: BoxDecoration(
                       color: headerBg,
-                      gradient: featured
-                          ? const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF2563EB), Color(0xFF0F766E)],
-                            )
-                          : null,
+                      gradient: null,
                       borderRadius: BorderRadius.circular(
                         desktop
                             ? 13
                             : featured
-                            ? 18
-                            : 14,
+                            ? 16
+                            : 13,
                       ),
                       border: Border.all(
                         color: featured
-                            ? Colors.white.withValues(alpha: 0.28)
-                            : borderColor,
+                            ? const Color(0xFFE1ECFF)
+                            : selected
+                            ? AppColors.secondaryBorder
+                            : Colors.transparent,
                         width: desktop ? 0 : 0.9,
                       ),
                       boxShadow: desktop
                           ? null
-                          : [
+                          : featured
+                          ? [
                               BoxShadow(
-                                color: featured
-                                    ? const Color(
-                                        0xFF2563EB,
-                                      ).withValues(alpha: 0.24)
-                                    : Colors.black.withValues(alpha: 0.025),
-                                blurRadius: featured ? 18 : 6,
-                                offset: Offset(0, featured ? 8 : 2),
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.06,
+                                ),
+                                blurRadius: 12,
+                                offset: const Offset(0, 5),
                               ),
-                            ],
+                            ]
+                          : null,
                     ),
                     child: Row(
                       children: [
                         Container(
-                          width: desktop ? (compact ? 32 : 34) : 40,
-                          height: desktop ? (compact ? 32 : 34) : 40,
+                          width: desktop
+                              ? (compact ? 32 : 34)
+                              : featured
+                              ? 30
+                              : 36,
+                          height: desktop
+                              ? (compact ? 32 : 34)
+                              : featured
+                              ? 30
+                              : 36,
                           decoration: BoxDecoration(
                             color: desktop
                                 ? foreground.withValues(alpha: 0.10)
                                 : featured
-                                ? Colors.white.withValues(alpha: 0.18)
+                                ? AppColors.primary
                                 : selected
                                 ? const Color(0xFFE0ECFF)
-                                : const Color(0xFFF2F6FC),
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(
-                              desktop ? 10 : 11,
+                              featured ? 999 : 11,
                             ),
                           ),
                           child: Icon(
                             group.icon,
                             color: iconColor,
-                            size: desktop ? (compact ? 18 : 19) : 21,
+                            size: desktop
+                                ? (compact ? 18 : 19)
+                                : featured
+                                ? 17
+                                : 20,
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        SizedBox(width: featured ? 11 : 10),
                         Expanded(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -1473,58 +1664,73 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                                   color: foreground,
                                   fontWeight: featured || selected
                                       ? FontWeight.w800
-                                      : FontWeight.w500,
+                                      : FontWeight.w700,
                                   fontSize: desktop
                                       ? (compact ? 13.8 : 14.6)
                                       : featured
-                                      ? (compact ? 16 : 17)
-                                      : (compact ? 15.2 : 15.8),
+                                      ? (compact ? 14.4 : 15)
+                                      : (compact ? 14.7 : 15.3),
                                 ),
                               ),
                               if (featured) ...[
                                 const SizedBox(height: 2),
-                                Text(
-                                  'Abre y controla tu turno',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.body.copyWith(
-                                    color: Colors.white.withValues(alpha: 0.84),
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 11,
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0, 0.18),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: Row(
+                                    key: ValueKey(
+                                      group.subtitle ?? group.title,
+                                    ),
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _TurnStatusPulse(
+                                        color:
+                                            group.statusColor ??
+                                            AppColors.primary,
+                                        compact: compact,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Flexible(
+                                        child: Text(
+                                          group.subtitle ?? 'Estado del turno',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTextStyles.body.copyWith(
+                                            color: AppColors.textSecondary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: compact ? 10.4 : 10.8,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ],
                           ),
                         ),
-                        if (featured) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              'Inicio',
-                              style: AppTextStyles.body.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                        ],
                         Icon(
                           hasSubmenu
                               ? Icons.keyboard_arrow_down_rounded
                               : Icons.chevron_right_rounded,
                           color: desktop
                               ? AppColors.textSecondary
-                              : const Color(0xFF334155),
+                              : featured
+                              ? AppColors.primary
+                              : const Color(0xFF64748B),
                           size: desktop ? (compact ? 20 : 22) : 21,
                         ),
                       ],

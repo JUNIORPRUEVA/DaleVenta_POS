@@ -80,4 +80,34 @@ void main() {
       ),
     );
   });
+
+  test('mobile billing search can be cleared and expires after 10 minutes', () {
+    final source = File(
+      'lib/modules/cotizaciones/cotizaciones_screen.dart',
+    ).readAsStringSync();
+    final normalizedSource = source.replaceAll('\r\n', '\n');
+
+    expect(
+      normalizedSource,
+      contains(
+        'static const Duration _mobileSearchRestoreTimeout = '
+        'Duration(minutes: 10);',
+      ),
+    );
+    expect(
+      normalizedSource,
+      contains('void _clearStaleMobileSearchIfNeeded()'),
+    );
+    expect(normalizedSource, contains('_clearStaleMobileSearchIfNeeded();'));
+    expect(normalizedSource, contains("tooltip: 'Limpiar busqueda'"));
+    expect(normalizedSource, contains('onPressed: _clearSearchQuery'));
+    expect(
+      normalizedSource,
+      contains('defaultTargetPlatform == TargetPlatform.android ||'),
+    );
+    expect(
+      normalizedSource,
+      contains('defaultTargetPlatform == TargetPlatform.iOS'),
+    );
+  });
 }

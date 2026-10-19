@@ -281,10 +281,17 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
 
     _noticeEntry = OverlayEntry(
       builder: (context) {
-        final top = MediaQuery.paddingOf(context).top + 18;
+        final media = MediaQuery.of(context);
+        // En pantallas angostas la tarjeta se ajusta al ancho real disponible
+        // (margen 12 + safe area) para que nunca quede recortada.
+        final isNarrow = media.size.width < 640;
+        final top = media.padding.top + (isNarrow ? 12.0 : 18.0);
+        final leftMargin = 12.0 + media.padding.left;
+        final rightMargin = isNarrow ? 12.0 + media.padding.right : 18.0;
         return Positioned(
           top: top,
-          right: 18,
+          left: isNarrow ? leftMargin : null,
+          right: rightMargin,
           child: Material(
             color: Colors.transparent,
             child: Container(

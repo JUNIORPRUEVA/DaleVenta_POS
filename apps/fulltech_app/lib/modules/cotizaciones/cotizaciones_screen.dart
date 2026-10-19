@@ -405,6 +405,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   static const String _editorDraftCachePrefix = 'cotizaciones:editorDraft:';
   static const String _pinnedProductsCacheKey =
       'cotizaciones:billingPinnedProducts:v1';
+  static const Duration _mobileSearchRestoreTimeout = Duration(minutes: 10);
 
   final LocalJsonCache _editorDraftCache = LocalJsonCache();
   final LocalJsonCache _pinnedProductsCache = LocalJsonCache();
@@ -491,6 +492,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _remoteRefreshInFlight = false;
   DateTime? _lastSuccessfulRemoteSyncAt;
   DateTime? _lastAutoSyncAt;
+  DateTime? _mobileSearchBackgroundedAt;
   Timer? _liveSyncTimer;
   StreamSubscription<CatalogRealtimeMessage>? _realtimeSubscription;
   late final OpenSalesTicketsRepository _openTicketsRepository;
@@ -944,6 +946,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _productSearch.setQuery(_searchCtrl.text);
   }
 
+  bool get _shouldRestoreMobileSearchOnResume {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+  }
+
+  void _clearSearchQuery() {
+    if (_searchCtrl.text.isEmpty) return;
+    _commitEditorChange(() => _searchCtrl.clear());
+  }
+
+  void _clearStaleMobileSearchIfNeeded() {
+    if (!_shouldRestoreMobileSearchOnResume) return;
+    final backgroundedAt = _mobileSearchBackgroundedAt;
+    _mobileSearchBackgroundedAt = null;
+    if (backgroundedAt == null || _searchCtrl.text.trim().isEmpty) return;
+    final elapsed = DateTime.now().difference(backgroundedAt);
+    if (elapsed < _mobileSearchRestoreTimeout) return;
+    _clearSearchQuery();
+    _clearMobileSearchFocus();
+  }
+
   bool _syncEditorItemsFiscalWithLoadedProducts() {
     if (_productos.isEmpty || _items.isEmpty) return false;
     final productsById = {
@@ -1036,6 +1060,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       // que el resto de entradas de ruta (ver `_syncProductsOnEnter`).
       runOutsideBuildPhase(() {
         if (!mounted) return;
+        _clearStaleMobileSearchIfNeeded();
         _startLiveSync();
         ref.invalidate(companySettingsProvider);
         ref.invalidate(productTaxUiConfigProvider);
@@ -1047,6 +1072,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
+      if (_shouldRestoreMobileSearchOnResume &&
+          _searchCtrl.text.trim().isNotEmpty) {
+        _mobileSearchBackgroundedAt = DateTime.now();
+      }
       _writeActiveDesktopDraft();
       _schedulePersistEditorDraft(immediate: true);
       _stopLiveSync();
@@ -2384,14 +2413,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _lastSalesNoticeKey = noticeKey;
 
     _hideSalesNotice();
-    final topPadding = MediaQuery.viewPaddingOf(context).top + 20;
+    final media = MediaQuery.of(context);
+    // En pantallas angostas la tarjeta se ajusta al ancho real disponible
+    // (margen 12 + safe area) para que nunca quede recortada; en pantallas
+    // anchas conserva el ancho y la posicion originales.
+    final isNarrow = media.size.width < 640;
+    final topPadding = media.viewPadding.top + (isNarrow ? 12.0 : 20.0);
+    final leftMargin = 12.0 + media.padding.left;
+    final rightMargin = isNarrow ? 12.0 + media.padding.right : 18.0;
     final count = _salesNoticeCount;
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (context) {
         return Positioned(
           top: topPadding,
-          right: 18,
+          left: isNarrow ? leftMargin : null,
+          right: rightMargin,
           child: _SalesNoticeToast(
             title: title,
             message: message,
@@ -7161,6 +7198,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Widget _buildMobileSearchBar() {
+    final hasSearchQuery = _searchCtrl.text.trim().isNotEmpty;
+    final suffixWidth = hasSearchQuery ? 72.0 : 36.0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
       child: Container(
@@ -7212,29 +7251,85 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               minWidth: 34,
               minHeight: 34,
             ),
-            suffixIcon: Badge(
-              isLabelVisible: _hasCategoryFilter,
-              smallSize: 8,
-              child: IconButton(
-                tooltip: _hasCategoryFilter
-                    ? 'Categorias: $_selectedCategoryLabel'
-                    : 'Filtrar productos',
-                onPressed: _pickCategory,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 34,
-                  height: 34,
-                ),
-                icon: const Icon(
-                  Icons.tune_rounded,
-                  color: Color(0xFF2563EB),
-                  size: 19,
-                ),
+            suffixIcon: SizedBox(
+              width: suffixWidth,
+              height: 36,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  if (hasSearchQuery)
+                    SizedBox(
+                      width: 36,
+                      height: 34,
+                      child: IconButton(
+                        tooltip: 'Limpiar busqueda',
+                        onPressed: _clearSearchQuery,
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 36,
+                          height: 34,
+                        ),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Color(0xFF64748B),
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  SizedBox(
+                    width: 36,
+                    height: 34,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          tooltip: _hasCategoryFilter
+                              ? 'Categorias: $_selectedCategoryLabel'
+                              : 'Filtrar productos',
+                          onPressed: _pickCategory,
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 36,
+                            height: 34,
+                          ),
+                          icon: const Icon(
+                            Icons.tune_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 19,
+                          ),
+                        ),
+                        if (_hasCategoryFilter)
+                          Positioned(
+                            top: 7,
+                            right: 7,
+                            child: Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: AppColors.error,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 1.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 34,
-              minHeight: 34,
+            suffixIconConstraints: BoxConstraints.tightFor(
+              width: suffixWidth,
+              height: 36,
             ),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,6 +57,30 @@ void main() {
       expect(controller.state.phase, AppUpdatePhase.idle);
       expect(controller.state.blocksUsage, isFalse);
       expect(controller.installerLaunches, 0);
+    });
+
+    test('up to date cleanup failure still records up to date', () async {
+      final downloader = FakeUpdateDownloader(failDiscard: true);
+      final controller = _controller(
+        manifest: UpdateManifest.noUpdate(),
+        installedBuild: 139,
+        downloader: downloader,
+        persistence: FakeUpdatePersistence(
+          initial: PersistedUpdateState.initial().copyWith(
+            phase: AppUpdatePhase.readyToInstall,
+            targetBuild: 140,
+            artifactRelativePath: '140/FullPOS-Setup.exe.ready',
+          ),
+        ),
+      );
+
+      await controller.checkNow(force: true);
+
+      expect(downloader.discardedBuilds, contains(140));
+      expect(controller.state.phase, AppUpdatePhase.idle);
+      expect(controller.state.persisted.lastUpdateResult, 'UP_TO_DATE');
+      expect(controller.state.persisted.targetBuild, isNull);
+      expect(controller.state.persisted.lastErrorCode, isNull);
     });
 
     test('greater build downloads and becomes ready silently', () async {
@@ -374,6 +399,27 @@ void main() {
       expect(downloader.promoted, isFalse);
     });
 
+    test(
+      'cleanup failure after verification error still records failure',
+      () async {
+        final downloader = FakeUpdateDownloader(failDiscard: true);
+        final controller = _controller(
+          manifest: UpdateManifest.fromJson(_manifestJson(build: 131)),
+          installedBuild: 130,
+          downloader: downloader,
+          verifier: const FakeUpdateVerifier(failureCode: 'HASH_MISMATCH'),
+        );
+
+        await controller.checkNow(force: true);
+        await _drainBackgroundUpdate();
+
+        expect(controller.state.phase, AppUpdatePhase.installFailed);
+        expect(controller.state.persisted.lastErrorCode, 'HASH_MISMATCH');
+        expect(controller.state.persisted.targetBuild, 131);
+        expect(downloader.discardedBuilds, contains(131));
+      },
+    );
+
     test('.part is never ready before verification and rename', () async {
       final downloader = FakeUpdateDownloader();
       final verifier = DelayedFakeUpdateVerifier();
@@ -649,6 +695,39 @@ void main() {
         expect(controller.state.persisted.targetBuild, isNull);
       },
     );
+
+    test('installer confirmation survives cleanup failure', () async {
+      final downloader = FakeUpdateDownloader(
+        failDiscard: true,
+        installerResult: const UpdateInstallerResult(
+          targetBuild: 131,
+          result: 'SUCCESS',
+          exitCode: 0,
+        ),
+      );
+      final controller = _controller(
+        manifest: UpdateManifest.noUpdate(),
+        installedBuild: 131,
+        persistence: FakeUpdatePersistence(
+          initial: PersistedUpdateState.initial().copyWith(
+            phase: AppUpdatePhase.updaterStarted,
+            targetBuild: 131,
+            artifactRelativePath: '131/setup.exe.ready',
+          ),
+        ),
+        downloader: downloader,
+      );
+
+      await controller.checkNow(force: true);
+
+      expect(downloader.discardedBuilds, contains(131));
+      expect(controller.state.phase, AppUpdatePhase.installedConfirmed);
+      expect(
+        controller.state.persisted.lastUpdateResult,
+        'INSTALLED_CONFIRMED',
+      );
+      expect(controller.state.persisted.targetBuild, isNull);
+    });
 
     test('uac cancelled keeps package ready without auto retry', () async {
       final controller = _controller(
@@ -1137,10 +1216,15 @@ class FakeSequencedRestartGuard implements UpdateRestartGuard {
 }
 
 class FakeUpdateDownloader extends UpdateDownloader {
-  FakeUpdateDownloader({this.failureCode, this.installerResult});
+  FakeUpdateDownloader({
+    this.failureCode,
+    this.installerResult,
+    this.failDiscard = false,
+  });
 
   final String? failureCode;
   final UpdateInstallerResult? installerResult;
+  final bool failDiscard;
   final List<int> discardedBuilds = [];
   int downloads = 0;
   bool promoted = false;
@@ -1184,6 +1268,9 @@ class FakeUpdateDownloader extends UpdateDownloader {
   @override
   Future<void> discardBuild(int buildNumber) async {
     discardedBuilds.add(buildNumber);
+    if (failDiscard) {
+      throw const FileSystemException('locked');
+    }
   }
 
   @override
