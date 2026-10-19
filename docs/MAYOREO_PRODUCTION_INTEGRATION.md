@@ -106,3 +106,108 @@ Estado: pruebas combinadas PASS; artefactos, publicacion y despliegue pendientes
   esa carpeta y se compilo Windows produccion desde el nuevo worktree limpio.
 - Instalador sin firma y migracion productiva: autorizaciones especificas
   solicitadas al propietario antes de publicar/aplicar.
+
+
+## Alcance publicado y estado de espera
+
+El codigo esta en origin/production-main, commit 8faba13b235316a201aaef4065b8354ed777da09.
+EasyPanel backend/PWA apunta a production-main con autoDeploy=false; no se
+activa una compilacion en el servidor al hacer push.
+El ejecutable oficial es fullpos_cloud.exe 1.0.6+142, sin ejecutable UAT en
+su carpeta de distribucion y con destino API productivo verificado.
+Las versiones de las siete dependencias de runtime comparadas coinciden
+exactamente con la API actualmente desplegada; los avisos npm audit del
+lockfile local no representan una degradacion de esas versiones del runtime.
+No se modificaron servicios ni esquema productivo. Quedan pendientes las
+respuestas explicitas sobre migracion productiva y excepcion de firma Windows.
+
+Relacion de 83 rutas integradas respecto de 6b3e38ed; incluye las ocho
+mejoras previas de production-main preservadas, no atribuidas como cambios
+nuevos de Mayoreo:
+
+```text
+.gitignore
+apps/api/prisma/migrations/20261013180000_wholesale_price_lists/migration.sql
+apps/api/prisma/schema.prisma
+apps/api/src/app.module.ts
+apps/api/src/auth/tenant-context.ts
+apps/api/src/common/uat-safety.ts
+apps/api/src/cotizaciones/cotizaciones.module.ts
+apps/api/src/cotizaciones/cotizaciones.service.ts
+apps/api/src/cotizaciones/dto/create-cotizacion.dto.ts
+apps/api/src/price-lists/dto/price-list.dto.ts
+apps/api/src/price-lists/price-lists.controller.ts
+apps/api/src/price-lists/price-lists.e2e-spec.ts
+apps/api/src/price-lists/price-lists.module.ts
+apps/api/src/price-lists/price-lists.service.ts
+apps/api/src/price-lists/pricing-engine.service.spec.ts
+apps/api/src/price-lists/pricing-engine.service.ts
+apps/api/src/sales/dto/create-sale.dto.ts
+apps/api/src/sales/sales.module.ts
+apps/api/src/sales/sales.service.ts
+apps/api/src/settings/settings.service.spec.ts
+apps/api/src/settings/settings.service.ts
+apps/fulltech_app/Dockerfile
+apps/fulltech_app/lib/core/api/api_routes.dart
+apps/fulltech_app/lib/core/api/env.dart
+apps/fulltech_app/lib/core/app_update/app_update_controller.dart
+apps/fulltech_app/lib/core/app_update/app_update_installer_io.dart
+apps/fulltech_app/lib/core/app_update/app_update_persistence_store_io.dart
+apps/fulltech_app/lib/core/app_update/update_downloader_io.dart
+apps/fulltech_app/lib/core/auth/app_permissions.dart
+apps/fulltech_app/lib/core/company/company_settings_model.dart
+apps/fulltech_app/lib/core/company/company_settings_repository.dart
+apps/fulltech_app/lib/core/debug/trace_log_sink_io.dart
+apps/fulltech_app/lib/core/routing/app_router.dart
+apps/fulltech_app/lib/core/routing/route_access.dart
+apps/fulltech_app/lib/core/routing/routes.dart
+apps/fulltech_app/lib/core/storage/local_database_path.dart
+apps/fulltech_app/lib/core/storage/windows_product_paths.dart
+apps/fulltech_app/lib/core/widgets/app_drawer.dart
+apps/fulltech_app/lib/core/widgets/app_navigation.dart
+apps/fulltech_app/lib/core/widgets/responsive_shell.dart
+apps/fulltech_app/lib/features/account/account_menu_screens.dart
+apps/fulltech_app/lib/features/catalogo/catalogo_screen.dart
+apps/fulltech_app/lib/features/price_lists/data/price_lists_repository.dart
+apps/fulltech_app/lib/features/price_lists/ui/price_lists_screen.dart
+apps/fulltech_app/lib/features/products/ui/inventory_module_pages.dart
+apps/fulltech_app/lib/modules/clientes/cliente_form_screen.dart
+apps/fulltech_app/lib/modules/clientes/cliente_model.dart
+apps/fulltech_app/lib/modules/clientes/clientes_screen.dart
+apps/fulltech_app/lib/modules/cotizaciones/cotizacion_models.dart
+apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_screen.dart
+apps/fulltech_app/lib/modules/ventas/data/ventas_repository.dart
+apps/fulltech_app/lib/modules/ventas/registrar_venta_screen.dart
+apps/fulltech_app/lib/modules/ventas/sales_models.dart
+apps/fulltech_app/pubspec.yaml
+apps/fulltech_app/test/core/app_update/app_update_controller_test.dart
+apps/fulltech_app/test/features/price_lists/billing_wholesale_async_test.dart
+apps/fulltech_app/test/features/price_lists/price_lists_screen_test.dart
+apps/fulltech_app/test/features/ventas/ventas_controller_dispose_test.dart
+apps/fulltech_app/test/modules/cotizaciones/mobile_quick_sale_submit_test.dart
+apps/fulltech_app/windows/CMakeLists.txt
+apps/fulltech_app/windows/runner/CMakeLists.txt
+apps/fulltech_app/windows/runner/Runner.rc
+apps/fulltech_app/windows/runner/main.cpp
+apps/fulltech_app/windows/runner/win32_window.cpp
+apps/fulltech_app/windows/updater/CMakeLists.txt
+apps/fulltech_app/windows/updater/main.cpp
+docs/MAYOREO_PRICE_LISTS_RUNBOOK.md
+docs/MAYOREO_PRODUCTION_INTEGRATION.md
+installer/README.md
+installer/find_and_build_inno.ps1
+installer/run_inno_build.ps1
+installer/setup.iss
+scripts/build/build_windows_uat_release.ps1
+scripts/isolated-uat/_common.ps1
+scripts/isolated-uat/docker-compose.yml
+scripts/isolated-uat/migrate.ps1
+scripts/isolated-uat/start-api.ps1
+scripts/isolated-uat/start-db.ps1
+scripts/isolated-uat/start-windows.ps1
+scripts/isolated-uat/status.ps1
+scripts/isolated-uat/stop-db.ps1
+scripts/isolated-uat/test-mayoreo.ps1
+scripts/isolated-uat/verify.ps1
+```
+
