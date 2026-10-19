@@ -84,3 +84,36 @@ Estado:NO-GO para nueva publicacion; diagnostico y correccion local en curso.
 - Candidato preparado, sin publicar ni instalar. Solicitud concreta pendiente
   para instalar sin ventas en curso y publicar unsigned solo si pasa la
   aceptacion estandar. La excepcion anterior era especifica de144.
+
+## Instalacion autorizada del145
+
+- Autorizacion del propietario: instalar el candidato, comprobar el arranque y
+  publicarlo sin firma solo si pasa, con la condicion de no tener ventas en
+  curso. La aceptacion del aviso de Control de cuentas de usuario la realizo el
+  propietario; el agente no eleva ni acepta avisos de seguridad.
+- Instalacion estandar completada en el equipo del propietario el2026-10-19 a
+  las08:07. Registro de aplicaciones instaladas:FullPOS1.0.6(build145) en
+  C:\Program Files\DaleVentas POS\. Proceso fullpos_cloud arrancado a las
+  08:07:02 con la sesion local restaurada; no se cerro la sesion del propietario.
+- Carpeta C:\Program Files\DaleVentas POS\updates presente tras la instalacion
+  estandar, con permiso de modificacion para BUILTIN\Usuarios ademas de las
+  entradas heredadas de Administradores, SYSTEM y TrustedInstaller.
+- El actualizador escribio updates\update_state.json a las08:07:06 con
+  lastUpdateResult UP_TO_DATE, targetBuild nulo y lastErrorCode nulo: el
+  PathAccessException observado en la144 no se reproduce en la145.
+- fullpos-client.log del arranque145 sin PathAccessException ni errores de
+  permisos sobre esa ruta. El registro de la144 se conserva para comparacion.
+- Test de contrato windows_installer_storage_contract_test reejecutado sobre el
+  worktree145:PASS1/1 (carpetas mutables del cliente provisionadas para
+  usuarios estandar), tras copiar el asset .env que git ignora.
+- Verificacion visual del acceso:no realizada en esta revision porque la
+  instalacion arranco con la sesion ya restaurada. No se cierra sesion para no
+  interrumpir la operacion del propietario; la comparacion del login145 con141
+  sigue siendo la evidencia disponible.
+- Publicacion:no ejecutada. POST api/app-updates/releases y
+  POST api/app-updates/releases/:id/publish exigen JWT con rol ADMIN
+  (app-update-releases.controller.ts:15-18) y no hay token de publicacion en la
+  sesion del agente. Es el unico paso pendiente: autorizado por el propietario,
+  bloqueado por credencial.
+- No se modifico produccion, ni datos, ni la interfaz, ni la politica global de
+  firma. Sin seeds, ventas ni cobros de prueba.
