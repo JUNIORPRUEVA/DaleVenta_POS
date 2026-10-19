@@ -231,13 +231,15 @@ class _InterruptedConnection implements HttpClientAdapter {
     Stream<Uint8List>? stream,
     Future<void>? cancel,
   ) async {
-    if (offline)
+    if (offline) {
       throw DioException(
         requestOptions: options,
         type: DioExceptionType.connectionError,
       );
-    if (options.path == '/sales')
+    }
+    if (options.path == '/sales') {
       sentSales.add(Map<String, dynamic>.from(options.data as Map));
+    }
     final result = await transport.request<dynamic>(
       options.path,
       data: options.data,
