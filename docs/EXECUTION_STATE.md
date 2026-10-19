@@ -5,7 +5,7 @@
 Worktree C:/src/fullpos-offline-prod; branch agent/offline-mayoreo-integration-20261018.
 Owner authorizes combining the offline worktree, production-main integration,
 deployment and a new Windows installer. Continuous controlled execution.
-Production currently API/PWA143, Windows142; no new production mutation yet.
+Production now API/PWA144 and Windows144 published; Windows142 preserved.
 Source snapshot 8c19bbac; merge 1c2c7a61 preserves production base 2f33df45.
 Seven conflicts resolved preserving Mayoreo and offline identity/storage behavior.
 SQLite3.52.0 was officially withdrawn; candidate uses sqlite3 Dart3.3.2 / SQLite3.53.1.
@@ -17,8 +17,12 @@ now preserves manual price-list and source-quotation fields; final regression pe
 Final regression1369 Flutter/766 API PASS, analysis PASS; immutable144 artifacts
 built and verified. Owner explicitly authorizes both production migrations and
 unsigned Windows144 publication (SHA8F645A04...), followed by repeated continua.
-Next: verify transferred artifacts, immediate backup, migrate/deploy/publish,
-production verification and production-main push. No further approval pending.
+Both authorized production migrations applied; Swarm API/PWA completed,
+health ok, protected endpoints401, runtime errors0, config/mounts/ports preserved.
+Windows144 published1efef881-4c3f-4dd4-8794-fd64058a8660, retention dry-run,
+Windows142 remains published with artifact intact. Final public verification
+PASS:142->144,144 up-to-date, full external download exact SHA/size/MZ and
+stable download302/no-store. GO for agreed deployment/publication scope.
 Full record: docs/OFFLINE_MAYOREO_PRODUCTION_INTEGRATION.md.
 Historical task state below is not the current target or authorization.
 

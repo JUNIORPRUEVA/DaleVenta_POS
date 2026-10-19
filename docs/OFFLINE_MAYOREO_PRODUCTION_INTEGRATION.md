@@ -128,3 +128,42 @@ limitada a144. El propietario respondio "Autorizo ambas acciones para la version
 Rollback: conservar imagenes143 y Windows142; ante fallo de salud abortar/volver
 a imagen143. El esquema aditivo se conserva, sin downmigration ni restauracion
 automatica que descarte operaciones reales posteriores.
+
+## Ejecucion productiva autorizada
+
+- production-main actualizado a90246e01d78caad65a9c4c37586913c30550e21c,
+  descendiente de2f33df45, sin reemplazar mejoras recientes. Runtime53aa9bb1.
+- Transferencias ensambladas en servidor; ambos SHA256 exactos verificados.
+  Imagenes cargadas, no compiladas en produccion, config digests coincidentes.
+- Respaldo inmediato database-immediate-20261019T113743Z.dump,6353590 bytes,
+  catalogo validado, SHA256
+  28df640667f404fff9c6d5f8a8e89d461e237dbab36f48ed9c9351355b9554f1.
+- Primer intento de migracion P1001 por seleccionar red general easypanel;
+  no alcanzo PostgreSQL. Reejecutado en easypanel-daleventapos:Prisma PASS,
+  ambas migraciones aplicadas y verificadas por consulta de historial.
+- API offline-144 saludable. Web offline-144 en rollout. Configuracion,
+  mounts y puertos preservados; imagenes143 disponibles para rollback.
+- Windows144 borrador1efef881-4c3f-4dd4-8794-fd64058a8660 preparado con
+  clases reales del backend, DTO validado y verificacion completa R2 SHA/bytes.
+  Excepcion unsigned limitada a esta operacion; politica global intacta.
+- Sin seeds ni ventas/cobros/ajustes de prueba en produccion.
+  Publicacion completada tras ambos rollouts Swarm completed.
+
+## Cierre productivo
+
+- API y PWA offline-144:Swarm completed, health publico ok, web1.0.6/144,
+  shell/bootstrap144-53aa9bb1; endpoints Mayoreo y grant offline401 sin sesion.
+- Cero ERROR de runtime desde el despliegue. Env/mounts/EndpointSpec iguales
+  a143. No credenciales ni politicas globales cambiadas.
+- Windows144 publicado2026-10-19T11:40:32.951Z, release
+  1efef881-4c3f-4dd4-8794-fd64058a8660; hash y bytes del candidato aprobado.
+  Retencion dry-run:true;142 sigue PUBLISHED, storageDeletedAt null.
+- Entrada de descarga estable:
+  https://daleventapos-backend.gcdndd.easypanel.host/api/app-updates/windows/latest/download
+  Renueva URL firmada en cada consulta; no divulgar los enlaces R2 privados.
+- Comprobacion externa final PASS:build142 ofrece144;144 no recibe update;
+  descarga completa40257613 bytes/MZ y SHA2568f645a04...31dfe87 exactos;
+  ruta estable302/no-store hacia144. Sin enlaces antiguos en ese circuito.
+- Estado GO para integracion/despliegue/publicacion del alcance validado.
+  No se afirma instalacion automatica en el equipo del propietario, prueba
+  de hardware, corte electrico fisico ni certificacion de instaladores historicos.
