@@ -1,5 +1,25 @@
 # Execution State
 
+## Active task — Installed144 startup regression / reference141 review
+
+Worktree C:/src/fullpos-144-fix, agent/release144-regression-audit.
+Owner reference:1.0.6-141 from original installer/output. Exact SHA8CB439B0...
+matched retained141 build and selectively extracted runner/AOT. Login Widget
+build matches candidate after ignoring whitespace/trailing commas only.
+Installed runner/AOT match144. No proof of an accidentally published old binary.
+Confirmed packaging regression:144 updater uses ProgramFiles/updates; installer
+does not provision it. Installed logs show PathAccessException after silent check.
+Fix8dd67542 provisions updates with users-modify, preserves it on uninstall,
+leaves binary ACLs and all app logic untouched. Candidate145 compiled PASS;
+40258303 bytes, SHA FA66972E49B6E99BEE80BDA7E906ECB2C044E158E174FC7A8FFD2C6113F4201E.
+Before-fix contract FAIL; after-fix67 storage/updater tests PASS/1 skipped,
+flutter analyze clean; local Inno packaging check PASS. No production changes
+or new release publication in this correction. Standard-user installation
+acceptance still required before GO. Owner question pending for local install
+with no active sales, then unsigned publication only if acceptance passes.
+No production mutation on this correction. Review:docs/RELEASE144_REGRESSION_REVIEW.md.
+Earlier deployment history follows; it is not the current verdict.
+
 ## Active task — Offline48h + Mayoreo production integration
 
 Worktree C:/src/fullpos-offline-prod; branch agent/offline-mayoreo-integration-20261018.

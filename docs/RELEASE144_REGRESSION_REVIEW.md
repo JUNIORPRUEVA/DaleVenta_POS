@@ -71,3 +71,16 @@ Estado:NO-GO para nueva publicacion; diagnostico y correccion local en curso.
   se repitio con ruta relativa y completo correctamente. Sin cambios en script.
 - Siguiente candidato145:misma UI/negocio, solo provision updates y version;
   compilar desde commit conocido y verificar antes de cualquier publicacion.
+
+## Candidato145 preparado
+
+- Commit8dd67542382d4d72e2e8a37b3792c1e3787224cb, build oficial fuera de produccion.
+- FullPOS-Setup-1.0.6-145.exe,40258303 bytes,NotSigned,
+  SHA256 FA66972E49B6E99BEE80BDA7E906ECB2C044E158E174FC7A8FFD2C6113F4201E.
+- Helper del145 en verify-only:paquete/target145 PASS0, target146 rechazado9.
+  No se instala ni eleva durante esos ensayos.
+- Widget build del login145 coincide con141 al normalizar solo espacios y
+  comas finales de Dart. Ningun cambio en lib/ ni API frente al144.
+- Candidato preparado, sin publicar ni instalar. Solicitud concreta pendiente
+  para instalar sin ventas en curso y publicar unsigned solo si pasa la
+  aceptacion estandar. La excepcion anterior era especifica de144.
