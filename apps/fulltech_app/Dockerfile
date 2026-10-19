@@ -4,7 +4,7 @@
 # the nginx used at runtime (the official image is built with --with-compat).
 ARG NGINX_VERSION=1.31.6
 
-FROM ghcr.io/cirruslabs/flutter:stable AS build
+FROM ghcr.io/cirruslabs/flutter:3.41.6 AS build
 
 WORKDIR /app
 
