@@ -10,7 +10,11 @@ Esta carpeta empaqueta la aplicacion Windows con Inno Setup desde archivos del r
 - Release Flutter esperado: `apps/fulltech_app/build/windows/x64/runner/Release`
 - Raiz oficial instalada: `C:\Program Files\DaleVentas POS` (define `MyAppFolderName`)
 - Runtime Flutter instalado en: `C:\Program Files\DaleVentas POS\app`
-- Datos locales preservados: `databases`, `media_cache`, `logs`, `config`
+- Datos locales preservados: `databases`, `media_cache`, `logs`, `config`, `updates`
+
+`updates` contiene el estado y los paquetes del actualizador. El instalador debe
+crearlo con permiso de modificacion para usuarios estandar, igual que las otras
+carpetas mutables. Los permisos de `app` y `updater` no se amplian.
 - Redistributables opcionales: `installer/redist/VC_redist.x64.exe` y `installer/redist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`
 
 ### Por que el nombre visible y la carpeta difieren

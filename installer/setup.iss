@@ -88,6 +88,7 @@ Name: "{app}\databases"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\media_cache"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\logs"; Permissions: users-modify; Flags: uninsneveruninstall
 Name: "{app}\config"; Permissions: users-modify; Flags: uninsneveruninstall
+Name: "{app}\updates"; Permissions: users-modify; Flags: uninsneveruninstall
 
 [Files]
 Source: "{#MyAppSourceDir}\*"; DestDir: "{app}\app"; Excludes: "*.pdb,*.ilk,*.exp,*.lib,updater\*"; Flags: ignoreversion recursesubdirs createallsubdirs
