@@ -3,7 +3,11 @@ import 'dart:typed_data';
 
 import 'package:daleventa_pos/core/debug/app_error_reporter.dart';
 import 'package:daleventa_pos/core/errors/api_exception.dart';
+import 'package:daleventa_pos/core/api/api_offline_circuit_breaker.dart';
+import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
+import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/modules/cash/cash_repository.dart';
 import 'package:daleventa_pos/modules/cash/cash_turn_menu_button.dart';
@@ -135,13 +139,16 @@ void main() {
   });
 
   CashRepository repositoryWith(
-    Future<ResponseBody> Function(RequestOptions options) handler,
-  ) {
+    Future<ResponseBody> Function(RequestOptions options) handler, {
+    ApiOfflineCircuitState? offlineCircuitState,
+  }) {
     final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
       ..httpClientAdapter = _FakeHttpClientAdapter(handler);
     return CashRepository(
       dio,
       SyncQueueService(store, scopeResolver: () async => scope),
+      offlineStore: store,
+      offlineCircuitState: offlineCircuitState,
     );
   }
 
@@ -220,10 +227,14 @@ void main() {
     expect(
       AppErrorReporter.instance.lastError.value,
       isNull,
-      reason: 'no hay turno abierto: es un estado de negocio, no un error del '
+      reason:
+          'no hay turno abierto: es un estado de negocio, no un error del '
           'sistema global',
     );
-    expect(find.text('No tienes un turno abierto actualmente.'), findsOneWidget);
+    expect(
+      find.text('No tienes un turno abierto actualmente.'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
     await unmountTree(tester);
   });
@@ -248,51 +259,55 @@ void main() {
     await unmountTree(tester);
   });
 
-  testWidgets('CASH_SESSION_REQUIRES_REVIEW no ofrece detalle operativo normal', (
-    tester,
-  ) async {
-    final repository = repositoryWith((options) async {
-      if (options.path == '/cash/state') {
-        return _jsonResponse(const {
-          'code': 'CASH_SESSION_REQUIRES_REVIEW',
-          'errorCode': 'CASH_SESSION_REQUIRES_REVIEW',
-          'message':
-              'Este turno abierto necesita revisión antes de operar. '
-              'Contacta a un administrador.',
-        }, 409);
-      }
-      return _jsonResponse(const {}, 200);
-    });
+  testWidgets(
+    'CASH_SESSION_REQUIRES_REVIEW no ofrece detalle operativo normal',
+    (tester) async {
+      final repository = repositoryWith((options) async {
+        if (options.path == '/cash/state') {
+          return _jsonResponse(const {
+            'code': 'CASH_SESSION_REQUIRES_REVIEW',
+            'errorCode': 'CASH_SESSION_REQUIRES_REVIEW',
+            'message':
+                'Este turno abierto necesita revisión antes de operar. '
+                'Contacta a un administrador.',
+          }, 409);
+        }
+        return _jsonResponse(const {}, 200);
+      });
 
-    await pumpTurnMenu(tester, repository);
-    await openTurnMenu(tester);
+      await pumpTurnMenu(tester, repository);
+      await openTurnMenu(tester);
 
-    expect(find.text('Requiere revisión de caja'), findsOneWidget);
-    expect(find.text('Turno actual'), findsNothing);
-    expect(find.text('Hacer corte de turno'), findsNothing);
-    expect(find.text('Abrir caja'), findsNothing);
-    expect(AppErrorReporter.instance.lastError.value, isNull);
-    await unmountTree(tester);
-  });
+      expect(find.text('Requiere revisión de caja'), findsOneWidget);
+      expect(find.text('Turno actual'), findsNothing);
+      expect(find.text('Hacer corte de turno'), findsNothing);
+      expect(find.text('Abrir caja'), findsNothing);
+      expect(AppErrorReporter.instance.lastError.value, isNull);
+      await unmountTree(tester);
+    },
+  );
 
-  testWidgets('con turno abierto confirmado el menú sigue ofreciendo el detalle '
-      'y el corte (sin regresión)', (tester) async {
-    final repository = repositoryWith((options) async {
-      if (options.path == '/cash/state') {
-        return _jsonResponse(_stateWithOpenShift(), 200);
-      }
-      return _jsonResponse(const {}, 200);
-    });
+  testWidgets(
+    'con turno abierto confirmado el menú sigue ofreciendo el detalle '
+    'y el corte (sin regresión)',
+    (tester) async {
+      final repository = repositoryWith((options) async {
+        if (options.path == '/cash/state') {
+          return _jsonResponse(_stateWithOpenShift(), 200);
+        }
+        return _jsonResponse(const {}, 200);
+      });
 
-    await pumpTurnMenu(tester, repository);
-    await openTurnMenu(tester);
+      await pumpTurnMenu(tester, repository);
+      await openTurnMenu(tester);
 
-    expect(find.text('Turno actual'), findsOneWidget);
-    expect(find.text('Hacer corte de turno'), findsOneWidget);
-    expect(find.text('Abrir caja'), findsNothing);
-    expect(AppErrorReporter.instance.lastError.value, isNull);
-    await unmountTree(tester);
-  });
+      expect(find.text('Turno actual'), findsOneWidget);
+      expect(find.text('Hacer corte de turno'), findsOneWidget);
+      expect(find.text('Abrir caja'), findsNothing);
+      expect(AppErrorReporter.instance.lastError.value, isNull);
+      await unmountTree(tester);
+    },
+  );
 
   testWidgets('carrera: el turno ya se cerró en otro dispositivo -> aviso '
       'informativo, sin error global', (tester) async {
@@ -330,10 +345,14 @@ void main() {
     expect(
       AppErrorReporter.instance.lastError.value,
       isNull,
-      reason: 'ver el turno sin turno abierto es un estado de negocio, no un '
+      reason:
+          'ver el turno sin turno abierto es un estado de negocio, no un '
           'error del sistema global',
     );
-    expect(find.text('No tienes un turno abierto actualmente.'), findsOneWidget);
+    expect(
+      find.text('No tienes un turno abierto actualmente.'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
 
     await unmountTree(tester);
@@ -379,4 +398,259 @@ void main() {
       contains('No encontramos un turno abierto'),
     );
   });
+
+  test('summary() offline suma ventas locales del turno activo', () async {
+    await TokenStorage().saveUserSnapshot(
+      UserModel(
+        id: _userId,
+        email: 'uat.admin@daleventa.local',
+        nombreCompleto: 'Usuario UAT',
+        telefono: '',
+        companyId: _companyId,
+      ),
+    );
+    final repository = repositoryWith((options) async {
+      if (options.path == '/cash/state') {
+        return _jsonResponse({
+          ..._stateWithOpenShift(),
+          'userOpenShift': {
+            ...(_stateWithOpenShift()['userOpenShift'] as Map),
+            'initialAmount': 25,
+          },
+        }, 200);
+      }
+      if (options.path == '/cash/summary') {
+        return _jsonResponse(const {'message': 'offline'}, 503);
+      }
+      return _jsonResponse(const {}, 200);
+    });
+
+    await repository.state();
+    await store.saveOfflineSaleAtomically(
+      localSaleId: 'local_sale_1',
+      companyId: _companyId,
+      userId: _userId,
+      clientRequestId: 'sale_req_1',
+      salePayload: {
+        'originCashSessionId': _legacyShiftId,
+        'expectedTotalSold': 270,
+        'paymentCashAmount': 270,
+      },
+      itemPayloads: const [
+        {
+          'productId': 'p1',
+          'productName': 'Tela Azul UAT',
+          'qty': 1,
+          'priceSoldUnit': 120,
+        },
+        {
+          'productId': 'p2',
+          'productName': 'Producto Peso UAT',
+          'qty': 1,
+          'priceSoldUnit': 150,
+        },
+      ],
+      paymentPayload: const {
+        'paymentMethod': 'cash',
+        'paymentCashAmount': 270,
+        'paymentTransferAmount': 0,
+        'creditAmount': 0,
+      },
+      pendingAction: PendingSyncAction(
+        id: 'sales.create:local_sale_1',
+        type: 'sales.create',
+        scope: 'sales',
+        companyId: _companyId,
+        userId: _userId,
+        entityType: 'sale',
+        entityId: 'local_sale_1',
+        idempotencyKey: 'sale_req_1',
+        payload: const {},
+        status: 'pending',
+        attempts: 0,
+        createdAt: DateTime.utc(2026, 10, 13, 20),
+        updatedAt: DateTime.utc(2026, 10, 13, 20),
+      ),
+      totalSold: 270,
+      saleOccurredAt: DateTime.utc(2026, 10, 13, 20),
+    );
+
+    final summary = await repository.summary();
+
+    expect(summary.openingAmount, 25);
+    expect(summary.totalSales, 270);
+    expect(summary.salesCashTotal, 270);
+    expect(summary.expectedCash, 295);
+    expect(summary.totalTickets, 1);
+  });
+
+  test(
+    'summary() usa SQLite inmediato si el circuito API esta offline',
+    () async {
+      var networkCalls = 0;
+      final circuit = ApiOfflineCircuitState();
+      circuit.markOffline();
+      await TokenStorage().saveUserSnapshot(
+        UserModel(
+          id: _userId,
+          email: 'uat.admin@daleventa.local',
+          nombreCompleto: 'Usuario UAT',
+          telefono: '',
+          companyId: _companyId,
+        ),
+      );
+      final repository = repositoryWith((options) async {
+        networkCalls += 1;
+        if (options.path == '/cash/state') {
+          return _jsonResponse({
+            ..._stateWithOpenShift(),
+            'userOpenShift': {
+              ...(_stateWithOpenShift()['userOpenShift'] as Map),
+              'initialAmount': 100,
+            },
+          }, 200);
+        }
+        throw StateError('summary no debe esperar red con circuito offline');
+      }, offlineCircuitState: circuit);
+
+      await repository.state();
+      await store.saveOfflineSaleAtomically(
+        localSaleId: 'local_sale_fast',
+        companyId: _companyId,
+        userId: _userId,
+        clientRequestId: 'sale_req_fast',
+        salePayload: {
+          'originCashSessionId': _legacyShiftId,
+          'expectedTotalSold': 50,
+          'paymentCashAmount': 50,
+        },
+        itemPayloads: const [
+          {
+            'productId': 'p1',
+            'productName': 'Producto UAT',
+            'qty': 1,
+            'priceSoldUnit': 50,
+          },
+        ],
+        paymentPayload: const {
+          'paymentMethod': 'cash',
+          'paymentCashAmount': 50,
+          'paymentTransferAmount': 0,
+          'creditAmount': 0,
+        },
+        pendingAction: PendingSyncAction(
+          id: 'sales.create:local_sale_fast',
+          type: 'sales.create',
+          scope: 'sales',
+          companyId: _companyId,
+          userId: _userId,
+          entityType: 'sale',
+          entityId: 'local_sale_fast',
+          idempotencyKey: 'sale_req_fast',
+          payload: const {},
+          status: 'pending',
+          attempts: 0,
+          createdAt: DateTime.utc(2026, 10, 13, 20),
+          updatedAt: DateTime.utc(2026, 10, 13, 20),
+        ),
+        totalSold: 50,
+        saleOccurredAt: DateTime.utc(2026, 10, 13, 20),
+      );
+
+      final before = networkCalls;
+      final summary = await repository.summary();
+
+      expect(networkCalls, before);
+      expect(summary.totalSales, 50);
+      expect(summary.expectedCash, 150);
+    },
+  );
+
+  test(
+    'historial offline devuelve el turno local activo sin tocar red',
+    () async {
+      var networkCalls = 0;
+      final circuit = ApiOfflineCircuitState();
+      circuit.markOffline();
+      await TokenStorage().saveUserSnapshot(
+        UserModel(
+          id: _userId,
+          email: 'uat.admin@daleventa.local',
+          nombreCompleto: 'Usuario UAT',
+          telefono: '',
+          companyId: _companyId,
+        ),
+      );
+      final repository = repositoryWith((options) async {
+        networkCalls += 1;
+        if (options.path == '/cash/state') {
+          return _jsonResponse({
+            ..._stateWithOpenShift(),
+            'userOpenShift': {
+              ...(_stateWithOpenShift()['userOpenShift'] as Map),
+              'initialAmount': 1000,
+            },
+          }, 200);
+        }
+        throw StateError('historial no debe esperar red con circuito offline');
+      }, offlineCircuitState: circuit);
+
+      await repository.state();
+      await store.saveOfflineSaleAtomically(
+        localSaleId: 'local_sale_history',
+        companyId: _companyId,
+        userId: _userId,
+        clientRequestId: 'sale_req_history',
+        salePayload: {
+          'originCashSessionId': _legacyShiftId,
+          'expectedTotalSold': 270,
+          'paymentCashAmount': 270,
+        },
+        itemPayloads: const [
+          {
+            'productId': 'p1',
+            'productName': 'Producto UAT',
+            'qty': 1,
+            'priceSoldUnit': 270,
+          },
+        ],
+        paymentPayload: const {
+          'paymentMethod': 'cash',
+          'paymentCashAmount': 270,
+          'paymentTransferAmount': 0,
+          'creditAmount': 0,
+        },
+        pendingAction: PendingSyncAction(
+          id: 'sales.create:local_sale_history',
+          type: 'sales.create',
+          scope: 'sales',
+          companyId: _companyId,
+          userId: _userId,
+          entityType: 'sale',
+          entityId: 'local_sale_history',
+          idempotencyKey: 'sale_req_history',
+          payload: const {},
+          status: 'pending',
+          attempts: 0,
+          createdAt: DateTime.utc(2026, 10, 13, 20),
+          updatedAt: DateTime.utc(2026, 10, 13, 20),
+        ),
+        totalSold: 270,
+        saleOccurredAt: DateTime.utc(2026, 10, 13, 20),
+      );
+
+      final before = networkCalls;
+      final rows = await repository.closedSessions();
+      final detail = await repository.sessionDetail(_legacyShiftId);
+
+      expect(networkCalls, before);
+      expect(rows, hasLength(1));
+      expect(rows.single.id, _legacyShiftId);
+      expect(rows.single.status, 'OPEN');
+      expect(rows.single.initialAmount, 1000);
+      expect(rows.single.expectedAmount, 1270);
+      expect(detail.summary.totalSales, 270);
+      expect(detail.summary.expectedCash, 1270);
+    },
+  );
 }

@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../api/env.dart';
+import '../storage/windows_product_paths.dart';
 import 'app_update_models.dart';
 
 final updateDownloaderProvider = Provider<UpdateDownloader>((ref) {
@@ -254,6 +255,12 @@ class UpdateDownloader {
 
   Future<Directory> _defaultRoot() async {
     if (Platform.isWindows) {
+      final productUpdates = WindowsProductPaths.folder(
+        WindowsProductFolder.updates,
+      );
+      if (productUpdates != null) {
+        return productUpdates;
+      }
       final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
       if (localAppData.isNotEmpty) {
         return Directory(p.join(localAppData, 'DaleVentas POS', 'updates'));

@@ -6,13 +6,16 @@ import '../debug/trace_log.dart';
 import '../offline/offline_store.dart';
 
 typedef OfflineCacheScopeResolver = Future<String> Function();
+typedef OfflineCacheFastFailResolver = bool Function();
 
 class ApiOfflineCacheInterceptor extends Interceptor {
   ApiOfflineCacheInterceptor({
     required OfflineStore store,
     OfflineCacheScopeResolver? scopeResolver,
+    OfflineCacheFastFailResolver? fastFailActive,
   }) : _store = store,
-       _scopeResolver = scopeResolver;
+       _scopeResolver = scopeResolver,
+       _fastFailActive = fastFailActive;
 
   static const Duration defaultMaxAge = Duration(days: 7);
   static const String cacheHitExtraKey = '__offline_cache_hit';
@@ -20,6 +23,38 @@ class ApiOfflineCacheInterceptor extends Interceptor {
 
   final OfflineStore _store;
   final OfflineCacheScopeResolver? _scopeResolver;
+  final OfflineCacheFastFailResolver? _fastFailActive;
+
+  Future<Response<dynamic>?> cachedResponseFor(RequestOptions options) async {
+    if (!_canServeCachedPreflightRequest(options)) return null;
+    final cached = await _readResponse(options);
+    if (cached == null) return null;
+    return _cachedResponse(options, cached);
+  }
+
+  @override
+  void onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    if (_fastFailActive?.call() != true ||
+        !_canServeCachedPreflightRequest(options)) {
+      handler.next(options);
+      return;
+    }
+
+    final response = await cachedResponseFor(options);
+    if (response == null) {
+      handler.next(options);
+      return;
+    }
+
+    TraceLog.log(
+      'offline_cache',
+      'preflight cached ${options.method.toUpperCase()} ${options.uri}',
+    );
+    handler.resolve(response);
+  }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) async {
@@ -47,29 +82,7 @@ class ApiOfflineCacheInterceptor extends Interceptor {
       'offline_cache',
       'serving cached ${options.method.toUpperCase()} ${options.uri}',
     );
-    handler.resolve(
-      Response<dynamic>(
-        requestOptions: options,
-        data: cached['data'],
-        statusCode: (cached['statusCode'] as num?)?.toInt() ?? 200,
-        statusMessage: 'OFFLINE_CACHE',
-        headers: Headers.fromMap(
-          ((cached['headers'] as Map?) ?? const <String, dynamic>{}).map(
-            (key, value) => MapEntry(
-              key.toString(),
-              value is List
-                  ? value.map((item) => item.toString()).toList()
-                  : [value.toString()],
-            ),
-          ),
-        ),
-        extra: {
-          ...options.extra,
-          cacheHitExtraKey: true,
-          cacheKeyExtraKey: await _cacheKey(options),
-        },
-      ),
-    );
+    handler.resolve(await _cachedResponse(options, cached));
   }
 
   bool _shouldCache(RequestOptions options, int? statusCode) {
@@ -82,14 +95,24 @@ class ApiOfflineCacheInterceptor extends Interceptor {
   }
 
   bool _canServeCached(RequestOptions options, DioException error) {
-    if (options.extra['disableOfflineCache'] == true) return false;
-    if (options.method.toUpperCase() != 'GET') return false;
-    if (!_isJsonLike(options.responseType)) return false;
+    if (!_canServeCachedRequest(options)) return false;
     if (error.response?.statusCode != null &&
         error.response!.statusCode! < 500) {
       return false;
     }
     return true;
+  }
+
+  bool _canServeCachedRequest(RequestOptions options) {
+    if (options.extra['disableOfflineCache'] == true) return false;
+    if (options.method.toUpperCase() != 'GET') return false;
+    if (!_isJsonLike(options.responseType)) return false;
+    return true;
+  }
+
+  bool _canServeCachedPreflightRequest(RequestOptions options) {
+    if (options.extra['disableOfflineCache'] == true) return false;
+    return options.method.toUpperCase() == 'GET';
   }
 
   bool _isJsonLike(ResponseType responseType) {
@@ -170,5 +193,32 @@ class ApiOfflineCacheInterceptor extends Interceptor {
       );
     }
     return 'public';
+  }
+
+  Future<Response<dynamic>> _cachedResponse(
+    RequestOptions options,
+    Map<String, dynamic> cached,
+  ) async {
+    return Response<dynamic>(
+      requestOptions: options,
+      data: cached['data'],
+      statusCode: (cached['statusCode'] as num?)?.toInt() ?? 200,
+      statusMessage: 'OFFLINE_CACHE',
+      headers: Headers.fromMap(
+        ((cached['headers'] as Map?) ?? const <String, dynamic>{}).map(
+          (key, value) => MapEntry(
+            key.toString(),
+            value is List
+                ? value.map((item) => item.toString()).toList()
+                : [value.toString()],
+          ),
+        ),
+      ),
+      extra: {
+        ...options.extra,
+        cacheHitExtraKey: true,
+        cacheKeyExtraKey: await _cacheKey(options),
+      },
+    );
   }
 }

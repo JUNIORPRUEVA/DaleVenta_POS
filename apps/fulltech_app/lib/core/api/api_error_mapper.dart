@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../config/product_config.dart';
 import '../errors/api_exception.dart';
+import '../errors/operation_error_message.dart';
 import '../network/network_reachability.dart';
 
 class ApiErrorMapper {
@@ -27,7 +28,14 @@ class ApiErrorMapper {
     if (status != null) {
       final machineCode = _extractMachineCode(error.response?.data);
       return ApiException.detailed(
-        message: _httpMessage(status, rawMessage, fallbackMessage),
+        message:
+            customerOperationErrorMessage(
+              error.response?.data,
+              // Authentication and plan-limit messages keep their existing
+              // endpoint-specific explanation. Only conflicts need this fallback.
+              statusCode: status == 409 ? status : null,
+            ) ??
+            _httpMessage(status, rawMessage, fallbackMessage),
         code: status,
         type: _httpType(status),
         displayCode: machineCode ?? status.toString(),

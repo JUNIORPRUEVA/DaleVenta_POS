@@ -81,7 +81,32 @@ class AppErrorPolicy {
     String? title,
     String? message,
     String? helpText,
+    String? technicalText,
   }) {
+    final hasPresentationOverride =
+        (title?.trim().isNotEmpty ?? false) ||
+        (message?.trim().isNotEmpty ?? false) ||
+        (helpText?.trim().isNotEmpty ?? false);
+    final incidentText = [
+      error?.toString() ?? '',
+      technicalText ?? '',
+    ].join('\n');
+    if (!hasPresentationOverride &&
+        error is! ApiException &&
+        isSilent(error, incidentText)) {
+      if (isMediaFailure(incidentText)) {
+        return UserFacingError.media();
+      }
+      return const UserFacingError(
+        title: 'Sin conexión',
+        message: 'Seguimos trabajando en modo local.',
+        helpText: 'Se sincronizará al volver la conexión.',
+        autoRetry: true,
+        kind: AppErrorKind.network,
+        silent: true,
+      );
+    }
+
     final base = UserFacingError.from(error ?? Object());
     return UserFacingError(
       title: _pick(title, base.title),

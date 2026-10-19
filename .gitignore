@@ -10,6 +10,7 @@ dist/
 apps/api/.env
 apps/api/.env.docker
 apps/api/.env.uat.local
+apps/api/.env.offline-safe-48h.uat.local
 apps/fulltech_app/.env
 .env.uat.local
 
@@ -33,6 +34,7 @@ installer/inno-build-report.txt
 
 # Temporary audit / E2E capture artifacts (not source, not test assets)
 release_artifacts/
+.uat/
 .codex-img-e2e/
 .codex-mobile-visual-audit/
 .codex-pwa-smoke/

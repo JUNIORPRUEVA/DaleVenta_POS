@@ -241,30 +241,29 @@ void main() {
       },
     );
 
-    test(
-      'seleccionar ticket publica el footer antes de persistencia o IA',
-      () {
-        final switchStart = source.indexOf(
-          'void _switchDesktopTicket(String id) {',
-        );
-        final switchEnd = source.indexOf(
-          'Future<void> _renameDesktopTicket(String id) async {',
-        );
-        expect(switchStart, greaterThanOrEqualTo(0));
-        expect(switchEnd, greaterThan(switchStart));
+    test('seleccionar ticket publica el footer antes de persistencia o IA', () {
+      final switchStart = source.indexOf(
+        'void _switchDesktopTicket(String id) {',
+      );
+      final switchEnd = source.indexOf(
+        'Future<void> _renameDesktopTicket(String id) async {',
+      );
+      expect(switchStart, greaterThanOrEqualTo(0));
+      expect(switchEnd, greaterThan(switchStart));
 
-        final body = source.substring(switchStart, switchEnd);
-        final stateSet = body.indexOf("trace?.step('state_set');");
-        final footer = body.indexOf('_publishDesktopShellFooterImmediately(trace);');
-        final persist = body.indexOf('_schedulePersistEditorDraft();');
-        final ai = body.indexOf('unawaited(_syncQuotationAi());');
+      final body = source.substring(switchStart, switchEnd);
+      final stateSet = body.indexOf("trace?.step('state_set');");
+      final footer = body.indexOf(
+        '_publishDesktopShellFooterImmediately(trace);',
+      );
+      final persist = body.indexOf('_schedulePersistEditorDraft();');
+      final ai = body.indexOf('unawaited(_syncQuotationAi());');
 
-        expect(stateSet, greaterThanOrEqualTo(0));
-        expect(footer, greaterThan(stateSet));
-        expect(persist, greaterThan(footer));
-        expect(ai, greaterThan(persist));
-      },
-    );
+      expect(stateSet, greaterThanOrEqualTo(0));
+      expect(footer, greaterThan(stateSet));
+      expect(persist, greaterThan(footer));
+      expect(ai, greaterThan(persist));
+    });
 
     test(
       'crear ticket publica el footer antes de persistir en cache/backend',
@@ -278,8 +277,12 @@ void main() {
 
         final body = source.substring(createStart, createEnd);
         final stateSet = body.indexOf("trace?.step('local_state_set');");
-        final footer = body.indexOf('_publishDesktopShellFooterImmediately(trace);');
-        final persist = body.indexOf('_schedulePersistEditorDraft(immediate: true);');
+        final footer = body.indexOf(
+          '_publishDesktopShellFooterImmediately(trace);',
+        );
+        final persist = body.indexOf(
+          '_schedulePersistEditorDraft(immediate: true);',
+        );
 
         expect(stateSet, greaterThanOrEqualTo(0));
         expect(footer, greaterThan(stateSet));
@@ -308,8 +311,10 @@ void main() {
       'lib/modules/cotizaciones/cotizaciones_screen.dart',
     ).readAsStringSync();
 
-    test("'Venta guardada' se muestra ANTES de imprimir", () {
-      final successNotice = source.indexOf("title: 'Venta guardada'");
+    test('el aviso de venta guardada se muestra ANTES de imprimir', () {
+      final successNotice = source.indexOf(
+        'title: _saleSavedNoticeTitle(createdSale)',
+      );
       final printCall = source.indexOf('.printSaleTicket(');
       final uiStep = source.indexOf("trace?.step('ui_updated');");
 
@@ -325,6 +330,26 @@ void main() {
         lessThan(printCall),
         reason:
             'Las invalidaciones/limpieza del ticket preceden a la impresión.',
+      );
+    });
+
+    test('venta offline no promete stock confirmado en servidor', () {
+      expect(source, contains('String _saleSavedNoticeTitle(SaleModel sale)'));
+      expect(source, contains("'Venta local'"));
+      expect(source, contains("'Venta guardada'"));
+      expect(
+        source,
+        contains('Guardada en este equipo. Pendiente de sincronizar.'),
+      );
+      expect(
+        source,
+        contains("'La venta fue guardada y el stock quedó actualizado.'"),
+      );
+      expect(
+        source,
+        contains('final saleToPrint = _isLocalSale(createdSale)'),
+        reason:
+            'Una venta local no debe consultar getById remoto antes de imprimir.',
       );
     });
 

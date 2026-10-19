@@ -1,6 +1,10 @@
 import { Client } from "pg";
 
 function requiredDbName() {
+  const explicit = (process.env.UAT_EXPECTED_DB_NAME ?? "").trim();
+  if (explicit) return explicit;
+  const local = (process.env.UAT_DB_NAME ?? "").trim();
+  if (local === "daleventa_offline_safe_48h_uat") return local;
   return (process.env.UAT_SERVER_MODE ?? "").trim().toLowerCase() === "true"
     ? "daleventa_uat"
     : "daleventa_uat_local";

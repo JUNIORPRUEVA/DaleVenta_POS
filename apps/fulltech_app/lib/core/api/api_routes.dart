@@ -7,6 +7,7 @@ class ApiRoutes {
   static const resetPassword = '/auth/reset-password';
   static const refresh = '/auth/refresh';
   static const me = '/auth/me';
+  static const offlineEmergencyAuthorize = '/auth/offline-emergency/authorize';
   static const accountDeletionPreview = '/auth/account/deletion-preview';
   static const accountDelete = '/auth/account';
   static const settings = '/settings';

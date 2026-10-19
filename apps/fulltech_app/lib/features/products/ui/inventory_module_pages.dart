@@ -4687,7 +4687,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
         selected,
         nextStock,
         warehouseId: warehouseId,
-        currentWarehouseStock: currentWarehouseStock,
+        currentWarehouseStock: currentWarehouseStock ?? _stockOf(selected),
       );
       if (!mounted) return;
       _showTopNotice(

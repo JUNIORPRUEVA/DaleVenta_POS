@@ -30,6 +30,12 @@ function buildService(
     assertCanCreateProductInTransaction: jest.fn().mockResolvedValue(undefined),
   },
 ) {
+  const transaction = prisma.$transaction as jest.Mock;
+  const implementation = transaction?.getMockImplementation();
+  if (implementation) transaction.mockImplementation((fn) => implementation((tx: Record<string, unknown>) => {
+    tx.$executeRaw ??= jest.fn().mockResolvedValue(1);
+    return fn(tx);
+  }));
   const service = new ProductsService(
     prisma as never,
     {} as never,
@@ -50,6 +56,113 @@ function buildService(
 }
 
 describe("ProductsService stock hardening", () => {
+  it("rejects product create replay when operationId payload changed", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          companyId: companyA,
+          nombre: "Producto UAT",
+          codigo: "SKU-1",
+          categoria: "General",
+          costo: new Prisma.Decimal("50"),
+          precio: new Prisma.Decimal("100"),
+          stock: new Prisma.Decimal("0"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+        }),
+      },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const service = buildService(prisma);
+
+    await expect(
+      service.create(userA as never, {
+        nombre: "Producto UAT",
+        codigo: "SKU-1",
+        categoria: "General",
+        costo: 50,
+        precio: 101,
+        stock: 0,
+        operationId: "product-op-1",
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "PRODUCT_IDEMPOTENCY_PAYLOAD_MISMATCH",
+      }),
+    });
+  });
+
+  it("returns the product without applying stock twice when operationId already exists", async () => {
+    const tx = {
+      product: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "product-1",
+          stock: new Prisma.Decimal("14.5"),
+          itemType: "PRODUCT",
+          trackInventory: true,
+          unitOfMeasureId: "UNIT",
+          unitOfMeasure: {
+            id: "UNIT",
+            code: "UNIT",
+            name: "Unidad",
+            symbol: "u",
+            category: "COUNT",
+            allowDecimals: false,
+            precision: 0,
+            active: true,
+          },
+        }),
+      },
+      inventoryMovement: {
+        findFirst: jest.fn().mockResolvedValue({
+          productId: "product-1",
+          warehouseId: "warehouse-1",
+          quantityDelta: new Prisma.Decimal("5"),
+          type: "ADJUSTMENT_IN",
+          reason: "Ajuste offline",
+          sourceType: "PRODUCT_STOCK_ADJUSTMENT",
+        }),
+      },
+      warehouse: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+      },
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ inventoryEnabled: true }),
+      },
+    };
+    const prisma = { $transaction: jest.fn((fn) => fn(tx)) };
+    const inventory = {
+      increaseStockInTransaction: jest.fn(),
+      setCountedStockInTransaction: jest.fn(),
+    };
+    const service = buildService(prisma, inventory);
+
+    const result = await service.adjustStock(userA as never, "product-1", {
+      delta: 5,
+      operationId: "stock-op-1",
+      reason: "Ajuste offline",
+    });
+
+    expect(result).toEqual({ id: "product-1", stock: 15 });
+    expect(tx.inventoryMovement.findFirst).toHaveBeenCalledWith({
+      where: { companyId: companyA, operationId: "stock-op-1" },
+      select: {
+        productId: true,
+        warehouseId: true,
+        quantityDelta: true,
+        type: true,
+        reason: true,
+        sourceType: true,
+        operationPayloadHash: true,
+      },
+    });
+    expect(inventory.increaseStockInTransaction).not.toHaveBeenCalled();
+    expect(inventory.setCountedStockInTransaction).not.toHaveBeenCalled();
+  });
+
   it("rejects direct stock mutation through normal product update", async () => {
     const tx = {
       product: {
@@ -957,7 +1070,9 @@ describe("ProductsService stock hardening", () => {
   it("checks product quota before reactivating an archived product", async () => {
     const licenses = {
       assertCanCreateProduct: jest.fn().mockResolvedValue(undefined),
-      assertCanCreateProductInTransaction: jest.fn().mockResolvedValue(undefined),
+      assertCanCreateProductInTransaction: jest
+        .fn()
+        .mockResolvedValue(undefined),
     };
     const tx = {
       product: {
@@ -979,7 +1094,11 @@ describe("ProductsService stock hardening", () => {
       companyA,
     );
     expect(tx.product.updateMany).toHaveBeenCalledWith({
-      where: { id: "product-1", companyId: companyA, archivedAt: { not: null } },
+      where: {
+        id: "product-1",
+        companyId: companyA,
+        archivedAt: { not: null },
+      },
       data: { archivedAt: null },
     });
   });

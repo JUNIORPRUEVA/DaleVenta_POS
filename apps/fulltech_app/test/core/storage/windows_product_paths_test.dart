@@ -26,5 +26,9 @@ void main() {
       WindowsProductPaths.pathForRoot(root, WindowsProductFolder.config),
       p.join(root, 'config'),
     );
+    expect(
+      WindowsProductPaths.pathForRoot(root, WindowsProductFolder.updates),
+      p.join(root, 'updates'),
+    );
   });
 }

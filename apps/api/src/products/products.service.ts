@@ -558,6 +558,13 @@ export class ProductsService {
   private operationProductId(companyId: string, operationId?: string | null) {
     const cleanOperationId = (operationId ?? "").trim();
     if (!cleanOperationId) return null;
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        cleanOperationId,
+      )
+    ) {
+      return cleanOperationId;
+    }
     const digest = createHash("sha256")
       .update(`${companyId}:${cleanOperationId}`)
       .digest("hex");
@@ -659,6 +666,82 @@ export class ProductsService {
       canArchive: true,
       details,
     });
+  }
+
+  private normalizeNullableText(value?: string | null) {
+    const clean = (value ?? "").trim();
+    return clean.length === 0 ? null : clean;
+  }
+
+  private decimalEquals(
+    left?: Prisma.Decimal | number | string | null,
+    right?: Prisma.Decimal | number | string | null,
+  ) {
+    return new Prisma.Decimal(left ?? 0).equals(new Prisma.Decimal(right ?? 0));
+  }
+
+  private productCreateReplayMatches(existing: Product, dto: CreateProductDto) {
+    if (existing.createPayloadHash) {
+      return existing.createPayloadHash === this.productCreatePayloadHash(dto);
+    }
+    const normalizedCode = this.normalizeProductCode(dto) ?? null;
+    const expectedItemType = dto.itemType ?? ProductItemType.PRODUCT;
+    const expectedTrackInventory =
+      dto.trackInventory ??
+      (expectedItemType === ProductItemType.SERVICE ? false : undefined);
+    const trackInventoryMatches =
+      expectedTrackInventory === undefined ||
+      (existing.trackInventory ?? true) === expectedTrackInventory;
+    return (
+      this.normalizeTextKey(existing.nombre) ===
+        this.normalizeTextKey(dto.nombre) &&
+      this.normalizeTextKey(existing.categoria) ===
+        this.normalizeTextKey(dto.categoria) &&
+      this.normalizeProductCodeForLookup((existing as any).codigo) ===
+        this.normalizeProductCodeForLookup(normalizedCode) &&
+      this.decimalEquals(existing.precio, dto.precio) &&
+      this.decimalEquals(existing.costo, dto.costo) &&
+      (existing.unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID) ===
+        (dto.unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID) &&
+      (existing.itemType ?? ProductItemType.PRODUCT) === expectedItemType &&
+      trackInventoryMatches
+    );
+  }
+
+  private productCreateReplayMismatch(operationId?: string | null) {
+    return new ConflictException({
+      code: "PRODUCT_IDEMPOTENCY_PAYLOAD_MISMATCH",
+      message:
+        "Esta operacion de producto ya fue aplicada con datos distintos.",
+      operationId: this.normalizeNullableText(operationId),
+    });
+  }
+
+  private productCreatePayloadHash(dto: CreateProductDto) {
+    return createHash("sha256").update(JSON.stringify({
+      nombre: dto.nombre,
+      codigo: this.normalizeProductCode(dto) ?? null,
+      categoria: dto.categoria,
+      precio: new Prisma.Decimal(dto.precio).toString(),
+      costo: new Prisma.Decimal(dto.costo).toString(),
+      stock: new Prisma.Decimal(dto.stock ?? 0).toString(),
+      warehouseId: this.normalizeNullableText(dto.warehouseId),
+      unitOfMeasureId: dto.unitOfMeasureId ?? DEFAULT_UNIT_OF_MEASURE_ID,
+      itemType: dto.itemType ?? ProductItemType.PRODUCT,
+      trackInventory: dto.trackInventory ?? dto.itemType !== "SERVICE",
+      taxTreatment: dto.taxTreatment ?? "INHERIT",
+      taxRate: dto.taxRate == null ? null : new Prisma.Decimal(dto.taxRate).toString(),
+      taxPriceMode: dto.taxPriceMode ?? null,
+      fotoUrl: dto.fotoUrl ?? null,
+      imageKey: dto.imageKey ?? null,
+      storageProvider: dto.storageProvider ?? null,
+      imageMimeType: dto.imageMimeType ?? null,
+      imageOriginalFileName: dto.imageOriginalFileName ?? null,
+    })).digest("hex");
+  }
+
+  private async lockOfflineOperation(tx: Prisma.TransactionClient, companyId: string, type: string, operationId: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${companyId}), hashtext(${`${type}:${operationId}`}))`;
   }
 
   private async protectedProductReferenceCounts(
@@ -838,10 +921,25 @@ export class ProductsService {
           dto.operationId,
         );
         if (operationProductId) {
+          await this.lockOfflineOperation(tx, companyId, "product.create", operationProductId);
           const existingOperationProduct = await tx.product.findFirst({
             where: { id: operationProductId, companyId },
           });
           if (existingOperationProduct) {
+            if (
+              !this.productCreateReplayMatches(existingOperationProduct, dto)
+            ) {
+              this.logProductSave({
+                action: "create",
+                decision: "reject-operation-payload-mismatch",
+                companyId,
+                productId: existingOperationProduct.id,
+                normalizedCode: normalizedCodeForLookup,
+                operationId: dto.operationId,
+                result: "conflict",
+              });
+              throw this.productCreateReplayMismatch(dto.operationId);
+            }
             this.logProductSave({
               action: "create",
               decision: "idempotent-return-existing",
@@ -954,6 +1052,7 @@ export class ProductsService {
             : undefined,
           imageUpdatedAt: imageKey ? new Date() : undefined,
           companyId,
+          createPayloadHash: operationProductId ? this.productCreatePayloadHash(dto) : undefined,
         };
 
         if (dto.fotoUrl !== normalizedImagePath) {
@@ -975,7 +1074,7 @@ export class ProductsService {
             productCode === null || productCode === normalizedCodeForLookup
           );
         });
-        if (reusableEquivalent) {
+        if (reusableEquivalent && !operationProductId) {
           const updateData = { ...data };
           delete (updateData as { id?: string }).id;
           delete (updateData as { stock?: Prisma.Decimal }).stock;
@@ -1012,13 +1111,7 @@ export class ProductsService {
             tx,
             companyId,
           );
-          const product = operationProductId
-            ? await tx.product.upsert({
-                where: { id: operationProductId },
-                create: data,
-                update: {},
-              })
-            : await tx.product.create({ data });
+          const product = await tx.product.create({ data });
           if (tracksPhysicalInventory) {
             const warehouse = await this.resolveInventoryWarehouse(
               tx,
@@ -1057,7 +1150,7 @@ export class ProductsService {
             operationId: dto.operationId,
             result: "created",
           });
-          await this.pruneSafeDuplicateProducts(tx, companyId, product);
+          if (!operationProductId) await this.pruneSafeDuplicateProducts(tx, companyId, product);
           await this.enqueueProductTelemetry(tx, {
             companyId,
             actorUserId: user.id,
@@ -1104,7 +1197,7 @@ export class ProductsService {
               );
             }
           }
-          await this.pruneSafeDuplicateProducts(tx, companyId, product);
+          if (!operationProductId) await this.pruneSafeDuplicateProducts(tx, companyId, product);
           await this.enqueueProductTelemetry(tx, {
             companyId,
             actorUserId: user.id,
@@ -1122,6 +1215,9 @@ export class ProductsService {
             where: { id: operationProductIdForRecovery, companyId },
           });
           if (existing) {
+            if (!this.productCreateReplayMatches(existing, dto)) {
+              throw this.productCreateReplayMismatch(dto.operationId);
+            }
             this.logProductSave({
               action: "create",
               decision: "idempotent-recovered-after-conflict",
@@ -1359,8 +1455,8 @@ export class ProductsService {
       if (!filters.includeArchived && (item.archived || item.archivedAt)) {
         return false;
       }
-      const itemCategory = `${item.categoria ?? item.categoriaNombre ?? ""}`
-        .toLowerCase();
+      const itemCategory =
+        `${item.categoria ?? item.categoriaNombre ?? ""}`.toLowerCase();
       if (category && itemCategory !== category) {
         return false;
       }
@@ -1368,12 +1464,7 @@ export class ProductsService {
         return false;
       }
       if (!search) return true;
-      return [
-        item.nombre,
-        item.codigo,
-        item.categoria,
-        item.categoriaNombre,
-      ]
+      return [item.nombre, item.codigo, item.categoria, item.categoriaNombre]
         .join(" ")
         .toLowerCase()
         .includes(search);
@@ -1732,6 +1823,48 @@ export class ProductsService {
           "Indica stock contado o delta, pero no ambos.",
         );
       }
+      const operationId = this.normalizeNullableText(dto.operationId);
+      const operationPayloadHash = operationId ? createHash("sha256").update(JSON.stringify({
+        productId: id,
+        stock: hasCountedStock ? new Prisma.Decimal(dto.stock!).toString() : null,
+        delta: hasDelta ? new Prisma.Decimal(dto.delta!).toString() : null,
+        warehouseId: this.normalizeNullableText(dto.warehouseId),
+        reason: this.normalizeNullableText(dto.reason),
+        expectedCurrentStock: dto.expectedCurrentStock == null ? null : new Prisma.Decimal(dto.expectedCurrentStock).toString(),
+      })).digest("hex") : null;
+      if (operationId) {
+        await this.lockOfflineOperation(tx, companyId, "inventory.adjust", operationId);
+        const existingMovement = await tx.inventoryMovement.findFirst({
+          where: { companyId, operationId },
+          select: {
+            productId: true,
+            warehouseId: true,
+            quantityDelta: true,
+            type: true,
+            reason: true,
+            sourceType: true,
+            operationPayloadHash: true,
+          },
+        });
+        if (existingMovement) {
+          const matches = existingMovement.operationPayloadHash
+            ? existingMovement.operationPayloadHash === operationPayloadHash
+            : hasDelta && existingMovement.productId === id &&
+              this.decimalEquals(existingMovement.quantityDelta, dto.delta) &&
+              (!dto.warehouseId || existingMovement.warehouseId === dto.warehouseId) &&
+              existingMovement.reason === (dto.reason?.trim() || "Ajuste manual de stock") &&
+              existingMovement.sourceType === "PRODUCT_STOCK_ADJUSTMENT";
+          if (!matches) {
+            throw new ConflictException({
+              code: "INVENTORY_OPERATION_PAYLOAD_MISMATCH",
+              message:
+                "Esta operacion de inventario ya fue aplicada con datos distintos.",
+              operationId,
+            });
+          }
+          return this.productResponse(tx, companyId, id);
+        }
+      }
       const warehouse = await this.resolveInventoryWarehouse(
         tx,
         companyId,
@@ -1768,6 +1901,8 @@ export class ProductsService {
               expectedCurrentQuantity: expectedCurrentStock,
               sourceType: "PRODUCT_STOCK_COUNT",
               sourceId: id,
+              operationId,
+              operationPayloadHash,
               reason: dto.reason?.trim() || "Conteo fisico de stock",
               createdByUserId: user.id,
             },
@@ -1793,6 +1928,8 @@ export class ProductsService {
             : InventoryMovementType.ADJUSTMENT_OUT,
           sourceType: "PRODUCT_STOCK_ADJUSTMENT",
           sourceId: id,
+          operationId,
+          operationPayloadHash,
           reason: dto.reason?.trim() || "Ajuste manual de stock",
           createdByUserId: user.id,
         };

@@ -87,6 +87,10 @@ class Env {
       );
       if (v.trim().isNotEmpty) return v;
     }
+    if (key == 'DISABLE_APP_UPDATES') {
+      const v = String.fromEnvironment('DISABLE_APP_UPDATES', defaultValue: '');
+      if (v.trim().isNotEmpty) return v;
+    }
 
     // 2) Runtime values for Web (injected via env.js)
     if (kIsWeb) {
@@ -263,8 +267,15 @@ class Env {
         .toSet();
   }
 
+  static bool get appUpdatesDisabled {
+    final raw = (_readEnv('DISABLE_APP_UPDATES') ?? '').trim().toLowerCase();
+    return raw == '1' || raw == 'true' || raw == 'yes' || raw == 'on';
+  }
+
   static bool get releasesEnabled {
-    return releasesApiBaseUrl != null && releasesApiKey.isNotEmpty;
+    return !appUpdatesDisabled &&
+        releasesApiBaseUrl != null &&
+        releasesApiKey.isNotEmpty;
   }
 
   static int get apiTimeoutMs {

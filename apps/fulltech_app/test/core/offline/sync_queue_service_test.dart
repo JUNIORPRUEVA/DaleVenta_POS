@@ -165,6 +165,55 @@ void main() {
     service.dispose();
   });
 
+  test(
+    'permanent independent failure survives while another sale syncs',
+    () async {
+      const scope = OfflineSyncScope(
+        companyId: 'company-independent',
+        userId: 'user-independent',
+      );
+      final failed = _action(
+        id: 'quotes.create:historical-fixture',
+        type: 'quotes.create',
+        companyId: scope.companyId!,
+        userId: scope.userId!,
+        clientRequestId: 'quote-fixture',
+        payload: {'customerId': 'local_customer_fixture'},
+      ).copyWith(status: 'failed', permanent: true, attempts: 41);
+      await store.putPendingAction(failed);
+      await store.putPendingAction(
+        _action(
+          id: 'sales.create:independent-fixture',
+          companyId: scope.companyId!,
+          userId: scope.userId!,
+          clientRequestId: 'sale-independent-fixture',
+        ),
+      );
+      final service = SyncQueueService(store, scopeResolver: () async => scope);
+      var quoteCalls = 0;
+      var saleCalls = 0;
+      service.registerHandler('quotes.create', (_) async {
+        quoteCalls++;
+      });
+      service.registerHandler('sales.create', (_) async {
+        saleCalls++;
+      });
+      await service.processPending();
+      final remaining = await store.listPendingActions(
+        companyId: scope.companyId,
+        userId: scope.userId,
+      );
+      expect(quoteCalls, 0);
+      expect(saleCalls, 1);
+      expect(remaining, hasLength(1));
+      expect(remaining.single.id, failed.id);
+      expect(remaining.single.payload, failed.payload);
+      expect(remaining.single.attempts, 41);
+      expect(remaining.single.permanent, isTrue);
+      service.dispose();
+    },
+  );
+
   test('retryable failure preserves action and schedules backoff', () async {
     const scope = OfflineSyncScope(
       companyId: 'company-retry',

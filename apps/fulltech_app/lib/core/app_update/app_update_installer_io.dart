@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api/env.dart';
 import '../debug/trace_log.dart';
+import '../storage/windows_product_paths.dart';
 import 'app_update_installer_contract.dart';
 import 'app_update_models.dart';
 
@@ -23,6 +25,11 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
         'La instalación automática solo está disponible en Windows.',
       );
     }
+    if (Env.appUpdatesDisabled) {
+      throw const AppUpdateInstallException(
+        'Las actualizaciones están deshabilitadas para esta instalación.',
+      );
+    }
     final targetBuild = persisted.targetBuild;
     final artifactRelativePath = persisted.artifactRelativePath;
     final expectedSha256 = persisted.sha256Expected;
@@ -34,8 +41,22 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
       );
     }
 
+    final installed = await PackageInfo.fromPlatform();
+    final currentBuild = int.tryParse(installed.buildNumber.trim());
+    if (currentBuild == null || currentBuild <= 0) {
+      throw const AppUpdateInstallException(
+        'No se pudo verificar la versión instalada. No se inició la actualización.',
+      );
+    }
+    if (targetBuild <= currentBuild) {
+      throw const AppUpdateInstallException(
+        'El paquete preparado debe ser de una versión más reciente que la instalada.',
+      );
+    }
+
     final publisher = Env.expectedUpdatePublisher;
     final acceptedByProductionPolicy =
+        Env.allowUnsignedUpdatesForProduction &&
         persisted.signatureAcceptedBy == 'ProductionUnsignedPolicy' &&
         persisted.signatureStatus == 'NotSigned';
     final allowUnsigned =
@@ -111,6 +132,14 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
   }
 
   Directory _defaultUpdateRoot() {
+    if (Platform.isWindows) {
+      final productUpdates = WindowsProductPaths.folder(
+        WindowsProductFolder.updates,
+      );
+      if (productUpdates != null) {
+        return productUpdates;
+      }
+    }
     final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
     if (localAppData.isNotEmpty) {
       return Directory(p.join(localAppData, 'DaleVentas POS', 'updates'));
@@ -158,6 +187,12 @@ class WindowsAppUpdateInstaller implements AppUpdateInstaller {
   }
 
   String _updateLogPath(int targetBuild) {
+    if (Platform.isWindows) {
+      final productLogs = WindowsProductPaths.folder(WindowsProductFolder.logs);
+      if (productLogs != null) {
+        return p.join(productLogs.path, 'updates', 'update-$targetBuild.log');
+      }
+    }
     final localAppData = (Platform.environment['LOCALAPPDATA'] ?? '').trim();
     final root = localAppData.isNotEmpty
         ? localAppData

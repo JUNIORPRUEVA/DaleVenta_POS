@@ -31,19 +31,20 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('el resumen pinta la pantalla aunque las comparativas no lleguen', (
-    tester,
-  ) async {
-    final repo = _FakeReportsRepository(comparisonsNeverComplete: true);
-    await _pumpReports(tester, repo);
+  testWidgets(
+    'el resumen pinta la pantalla aunque las comparativas no lleguen',
+    (tester) async {
+      final repo = _FakeReportsRepository(comparisonsNeverComplete: true);
+      await _pumpReports(tester, repo);
 
-    expect(
-      find.textContaining('999'),
-      findsWidgets,
-      reason: 'los KPIs del backend deben verse sin esperar comparaciones',
-    );
-    expect(find.text('No se pudieron cargar los reportes'), findsNothing);
-  });
+      expect(
+        find.textContaining('999'),
+        findsWidgets,
+        reason: 'los KPIs del backend deben verse sin esperar comparaciones',
+      );
+      expect(find.text('No se pudieron cargar los reportes'), findsNothing);
+    },
+  );
 
   testWidgets('un detalle lento no bloquea el primer render', (tester) async {
     final repo = _FakeReportsRepository(salesNeverComplete: true);
@@ -74,6 +75,24 @@ void main() {
     await _pumpReports(tester, repo);
 
     expect(find.text('No se pudieron cargar los reportes'), findsOneWidget);
+    expect(find.textContaining('999'), findsNothing);
+  });
+
+  testWidgets('sin internet muestra mensaje discreto de conexión', (
+    tester,
+  ) async {
+    final repo = _FakeReportsRepository(
+      overviewError: const ApiException.detailed(
+        message: 'offline',
+        type: ApiErrorType.noInternet,
+        displayCode: 'NETWORK_OFFLINE',
+        retryable: true,
+      ),
+    );
+    await _pumpReports(tester, repo);
+
+    expect(find.text('Conecta internet para ver reportes.'), findsOneWidget);
+    expect(find.text('No se pudieron cargar los reportes'), findsNothing);
     expect(find.textContaining('999'), findsNothing);
   });
 

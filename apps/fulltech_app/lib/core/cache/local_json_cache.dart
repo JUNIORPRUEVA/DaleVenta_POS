@@ -9,6 +9,8 @@ class LocalJsonCache {
   final OfflineStore _store = OfflineStore.instance;
   final TokenStorage _tokenStorage = TokenStorage();
 
+  Future<String> storageKeyFor(String key) => _key(key);
+
   Future<String> _key(String key) async {
     if (isFlutterTest) return '${_prefix}default:$key';
 

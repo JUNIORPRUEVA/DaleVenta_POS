@@ -4,11 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  InventoryMovementType,
-  Prisma,
-  ProductSource,
-} from "@prisma/client";
+import { InventoryMovementType, Prisma, ProductSource } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 type Tx = Prisma.TransactionClient;
@@ -19,6 +15,8 @@ type MovementSource = {
   sourceType?: string | null;
   sourceId?: string | null;
   sourceItemId?: string | null;
+  operationId?: string | null;
+  operationPayloadHash?: string | null;
   reason?: string | null;
   createdByUserId?: string | null;
 };
@@ -173,9 +171,13 @@ export class InventoryMutationService {
       select: { id: true, name: true, code: true },
     });
     if (!warehouse) {
-      throw this.conflict("WAREHOUSE_INACTIVE", "Almacen activo no encontrado", {
-        warehouseId: input.warehouseId,
-      });
+      throw this.conflict(
+        "WAREHOUSE_INACTIVE",
+        "Almacen activo no encontrado",
+        {
+          warehouseId: input.warehouseId,
+        },
+      );
     }
 
     // 1 consulta total para todos los productos distintos de la venta
@@ -411,9 +413,13 @@ export class InventoryMutationService {
         select: { id: true, name: true, code: true },
       }));
     if (!warehouse) {
-      throw this.conflict("WAREHOUSE_INACTIVE", "Almacen activo no encontrado", {
-        warehouseId: input.warehouseId,
-      });
+      throw this.conflict(
+        "WAREHOUSE_INACTIVE",
+        "Almacen activo no encontrado",
+        {
+          warehouseId: input.warehouseId,
+        },
+      );
     }
 
     this.validateQuantityForUnit(
@@ -490,6 +496,8 @@ export class InventoryMutationService {
         sourceType: input.sourceType ?? null,
         sourceId: input.sourceId ?? null,
         sourceItemId: input.sourceItemId ?? null,
+        operationId: input.operationId ?? null,
+        operationPayloadHash: input.operationPayloadHash ?? null,
         reason: input.reason ?? null,
         createdByUserId: input.createdByUserId ?? null,
       },
@@ -520,7 +528,12 @@ export class InventoryMutationService {
 
   private updateWarehouseStockByDelta(
     tx: Tx,
-    input: { companyId: string; warehouseId: string; productId: string; quantityDelta: Prisma.Decimal },
+    input: {
+      companyId: string;
+      warehouseId: string;
+      productId: string;
+      quantityDelta: Prisma.Decimal;
+    },
   ) {
     return tx.$queryRaw<StockUpdateRow[]>`
       UPDATE warehouse_stocks
@@ -588,7 +601,12 @@ export class InventoryMutationService {
 
   private updateWarehouseStockWithExpectedQuantity(
     tx: Tx,
-    input: { companyId: string; warehouseId: string; productId: string; quantityDelta: Prisma.Decimal },
+    input: {
+      companyId: string;
+      warehouseId: string;
+      productId: string;
+      quantityDelta: Prisma.Decimal;
+    },
     expectedCurrentQuantity: Prisma.Decimal,
   ) {
     return tx.$queryRaw<StockUpdateRow[]>`

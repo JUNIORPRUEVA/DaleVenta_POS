@@ -62,6 +62,9 @@ class _FakeCashRepository implements CashRepository {
   }
 
   @override
+  Future<CashSummaryModel?> cachedSummary() async => _summary;
+
+  @override
   Future<List<CashMovementModel>> movements() {
     final override = movementsOverride;
     if (override != null) return override();

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/debug/trace_log.dart';
+import '../../../core/errors/api_exception.dart';
 import '../../../core/realtime/operations_refresh_signals.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
@@ -303,7 +304,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   ReportsFilterState _filters = ReportsFilterState.initial;
   bool _loading = true;
   bool _generatingPdf = false;
-  String? _error;  ProviderSubscription<int>? _salesRefreshSubscription;
+  String? _error;
+  ProviderSubscription<int>? _salesRefreshSubscription;
   ProviderSubscription<int>? _cashRefreshSubscription;
   Timer? _realtimeReloadDebounce;
   // Protección contra races y tormentas de recarga:
@@ -434,7 +436,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       setState(() {
         _loading = false;
         _loadingSections = false;
-        _error = 'No se pudieron cargar los reportes';
+        _error = _reportsErrorMessage(e);
       });
     } finally {
       _releaseMainLoad();
@@ -827,7 +829,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                 if (_loading || _loadingSections)
                   const LinearProgressIndicator(minHeight: 2),
                 if (_error != null)
-                  Expanded(child: Center(child: Text(_error!)))
+                  Expanded(
+                    child: Center(child: _ReportsOfflineMessage(_error!)),
+                  )
                 else
                   Expanded(
                     child: LayoutBuilder(
@@ -2872,6 +2876,52 @@ class _EmptyPeriodNotice extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+String _reportsErrorMessage(Object error) {
+  if (error is ApiException && error.isNetworkError) {
+    return 'Conecta internet para ver reportes.';
+  }
+  return 'No se pudieron cargar los reportes';
+}
+
+class _ReportsOfflineMessage extends StatelessWidget {
+  const _ReportsOfflineMessage(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderSoft),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.cloud_off_outlined,
+              color: _textSecondary,
+              size: 17,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              message,
+              style: const TextStyle(
+                color: _textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

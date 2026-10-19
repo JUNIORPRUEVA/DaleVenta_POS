@@ -107,7 +107,11 @@ class _ResilientLocalDatabase {
         version: version,
         onCreate: onCreate,
         onUpgrade: onUpgrade,
-        onDowngrade: onDowngrade,
+        onDowngrade: onDowngrade ?? (database, oldVersion, newVersion) async {
+          throw StateError(
+            'La base local pertenece a una versión posterior. No se modificó; utiliza una versión compatible antes de continuar.',
+          );
+        },
         onConfigure: onConfigure,
         onOpen: onOpen,
       );
@@ -118,6 +122,22 @@ class _ResilientLocalDatabase {
         error: error,
         stackTrace: stackTrace,
       );
+
+      // A Windows database may contain the only durable copy of pending money
+      // operations. An open/lock/I/O error is not permission to reset it.
+      if (Platform.isWindows || !allowInMemoryFallback) {
+        AppErrorReporter.instance.record(
+          error,
+          stackTrace,
+          context: 'LocalDatabase.Preserved',
+          title: 'Almacenamiento local no disponible',
+          userMessage:
+              'No se pudo abrir la base local ni confirmar un nuevo guardado. Conserva los archivos y revisa las operaciones pendientes antes de continuar.',
+          technicalDetails: 'file=$fileName; original database preserved; no reset or fallback',
+          dedupeKey: 'local-db-preserved-$fileName',
+        );
+        rethrow;
+      }
 
       if (!_looksRecoverable(error)) {
         rethrow;

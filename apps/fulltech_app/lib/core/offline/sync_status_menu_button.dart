@@ -8,6 +8,7 @@ import '../api/api_routes.dart';
 import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
 import '../errors/user_safe_error_text.dart';
+import '../errors/operation_error_message.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
 import 'sync_queue_service.dart';
@@ -22,11 +23,14 @@ SyncHeaderStatus resolveSyncHeaderStatus(SyncQueueState state) {
   if (state.isProcessing || state.syncingCount > 0) {
     return SyncHeaderStatus.syncing;
   }
-  if (state.errorCount > 0 || (state.lastError ?? '').trim().isNotEmpty) {
+  if (state.errorCount > 0) {
     return SyncHeaderStatus.error;
   }
   if (state.conflictCount > 0) {
     return SyncHeaderStatus.attention;
+  }
+  if ((state.lastError ?? '').trim().isNotEmpty) {
+    return SyncHeaderStatus.error;
   }
   if (state.pendingCount > 0) {
     return SyncHeaderStatus.pending;
@@ -270,6 +274,8 @@ class _SyncStatusPopover extends StatelessWidget {
         ? 'Sincronizando...'
         : hasRetryableWork
         ? 'Sincronizar ahora'
+        : state.conflictCount > 0 || lastError.isNotEmpty
+        ? 'Revisión pendiente'
         : 'Todo sincronizado';
 
     return SizedBox(
@@ -357,8 +363,7 @@ class _SyncStatusPopover extends StatelessWidget {
                 ),
                 child: Text(
                   lastError,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+                  softWrap: true,
                   style: const TextStyle(
                     color: Color(0xFF123A75),
                     fontSize: 10.5,
@@ -460,11 +465,11 @@ class _SyncStatusPopover extends StatelessWidget {
 
   static String _subtitle(SyncHeaderStatus status) {
     return switch (status) {
-      SyncHeaderStatus.synced => 'La cola local está al día',
+      SyncHeaderStatus.synced => 'No hay cambios pendientes de enviar',
       SyncHeaderStatus.syncing => 'Procesando cambios guardados',
-      SyncHeaderStatus.pending => 'Se enviarán al recuperar conexión',
-      SyncHeaderStatus.attention => 'Hay un conflicto que requiere decisión',
-      SyncHeaderStatus.error => 'Tus datos están guardados y se reintentará',
+      SyncHeaderStatus.pending => 'Hay cambios guardados por enviar',
+      SyncHeaderStatus.attention => 'Consulta las operaciones por revisar',
+      SyncHeaderStatus.error => 'Consulta el motivo y el siguiente paso',
     };
   }
 }
@@ -472,21 +477,10 @@ class _SyncStatusPopover extends StatelessWidget {
 String friendlySyncStatusMessage(String? raw) {
   final text = raw?.trim() ?? '';
   if (text.isEmpty) return '';
+  final operationMessage = customerOperationErrorMessage(text);
+  if (operationMessage != null) return operationMessage;
   final lower = text.toLowerCase();
-
-  if (lower.contains('origin_session_closed')) {
-    return 'Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.';
-  }
-  if (lower.contains('origin_session_not_found')) {
-    return 'Esta operación pertenece a un turno que necesita revisión antes de sincronizarse.';
-  }
-  if (lower.contains('insufficient_warehouse_stock')) {
-    return 'No hay existencia suficiente para completar esta venta.';
-  }
-  if (lower.contains('legacy_missing_session')) {
-    return 'Actualiza Fullpos para completar esta operación.';
-  }
-  if (_containsTechnicalSyncDetail(lower)) {
+  if (_containsTechnicalSyncDetail(lower) || looksTechnical(text)) {
     if (lower.contains('status code of 401') ||
         lower.contains('status code 401') ||
         lower.contains('statuscode: 401') ||
@@ -501,7 +495,12 @@ String friendlySyncStatusMessage(String? raw) {
         lower.contains('server error')) {
       return 'Algunas ventas están pendientes de enviarse al servidor. Tus datos permanecen guardados en este dispositivo y volveremos a intentarlo.';
     }
-    return 'No pudimos comunicarnos con el servidor. Tus cambios permanecen guardados y se sincronizarán cuando vuelva la conexión.';
+    if (lower.contains('timeout') ||
+        lower.contains('connection error') ||
+        lower.contains('socketexception')) {
+      return 'No pudimos conectar para enviar los cambios pendientes. Revisa internet y vuelve a sincronizar cuando tengas conexión.';
+    }
+    return 'No se pudo completar la sincronización. Abre las operaciones por revisar y pide ayuda al encargado antes de repetirlas.';
   }
 
   return text;
@@ -526,12 +525,17 @@ bool _containsTechnicalSyncDetail(String lower) {
       lower.contains('replay') ||
       lower.contains('queue') ||
       lower.contains('backend') ||
-      lower.contains('statuscode:');
+      lower.contains('statuscode:') ||
+      lower.trim().startsWith('{') ||
+      RegExp(r'^[a-z][a-z0-9_]*_[a-z0-9_]+$').hasMatch(lower.trim()) ||
+      RegExp(r'\b[0-9a-f]{8}-[0-9a-f-]{27,}\b').hasMatch(lower);
 }
 
 String customerSyncActionLabel(String type) {
   return switch (type.trim()) {
     'sales.create' => 'Venta pendiente',
+    'sales.attempt' => 'Cobro por confirmar',
+    'cash.open' => 'Apertura de turno pendiente',
     'cash.close' => 'Cierre de turno pendiente',
     'cash.movement' => 'Movimiento de caja pendiente',
     'refund' || 'sales.return' || 'sale.return' => 'Devolución pendiente',
@@ -671,7 +675,7 @@ class _SyncAttentionItem {
         title: 'Producto no eliminado',
         message:
             'No se pudo eliminar un producto porque tiene movimientos de inventario asociados.',
-        detail: entityId.isEmpty ? '' : 'Producto: $entityId',
+        detail: '',
         actionId: action.id,
         productId: entityId.isEmpty ? null : entityId,
         canArchive: entityId.isNotEmpty,
@@ -699,31 +703,20 @@ class _SyncAttentionItem {
       data = decoded.cast<String, dynamic>();
     } catch (_) {
       return _SyncAttentionItem(
-        title: 'Venta offline sin sincronizar',
+        title: 'Venta pendiente de revisión',
         message: friendlySyncStatusMessage(raw),
         detail: '',
       );
     }
-    final details = data['details'] is Map
-        ? (data['details'] as Map).cast<String, dynamic>()
-        : const <String, dynamic>{};
-    final code = (data['code'] ?? data['errorCode'] ?? '').toString();
-    final message = friendlySyncStatusMessage(
-      code.isNotEmpty
-          ? code
-          : (data['message']?.toString() ??
-                'Esta venta no pudo sincronizarse porque el stock cambió mientras el dispositivo estaba sin conexión.'),
-    );
-    final product = (details['productName'] ?? 'Producto').toString();
-    final requested = details['requestedQuantity']?.toString();
-    final available = details['availableQuantity']?.toString();
-    final productLine = requested == null || available == null
-        ? product
-        : '$product: solicitado $requested, disponible $available';
+    final message =
+        customerOperationErrorMessage(data) ??
+        friendlySyncStatusMessage(
+          data['message']?.toString() ?? 'OFFLINE_SYNC_CONFLICT',
+        );
     return _SyncAttentionItem(
-      title: 'Venta offline sin sincronizar',
+      title: 'Venta pendiente de revisión',
       message: message,
-      detail: productLine,
+      detail: '',
     );
   }
 }

@@ -4,6 +4,25 @@
   "workspaces": [
     "apps/*"
   ],
+  "overrides": {
+    "body-parser": {
+      "qs": "6.16.0"
+    },
+    "engine.io": "6.6.11",
+    "express": {
+      "proxy-addr": "2.0.8",
+      "qs": "6.16.0"
+    },
+    "multer": "2.4.0",
+    "proxy-addr": "2.0.8",
+    "qs": "6.16.0",
+    "socket.io": {
+      "engine.io": "6.6.11"
+    },
+    "superagent": {
+      "qs": "6.16.0"
+    }
+  },
   "scripts": {
     "api:dev": "npm --workspace apps/api run start:dev",
     "api:build": "npm --workspace apps/api run build",

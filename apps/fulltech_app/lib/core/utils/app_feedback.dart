@@ -11,11 +11,13 @@ class AppFeedbackNotification {
     required this.title,
     required this.body,
     this.kind = AppFeedbackKind.info,
+    this.compact = false,
   });
 
   final String title;
   final String body;
   final AppFeedbackKind kind;
+  final bool compact;
 }
 
 class AppFeedback {
@@ -95,6 +97,11 @@ class AppFeedback {
     );
     _persistentEntry = entry;
     overlay.insert(entry);
+  }
+
+  static void dismissPersistentNotification() {
+    _persistentEntry?.remove();
+    _persistentEntry = null;
   }
 
   static Future<void> _showMessage(
@@ -214,8 +221,9 @@ class _PersistentFeedbackCard extends StatelessWidget {
     final leftMargin = isNarrow ? 12.0 : 24.0;
     final top = media.padding.top + kToolbarHeight + (isNarrow ? 8.0 : 12.0);
     final availableWidth = media.size.width - rightMargin - leftMargin;
-    final cardWidth = (isNarrow ? availableWidth : 420.0)
-        .clamp(0.0, 420.0)
+    final maxWidth = notification.compact ? 280.0 : 420.0;
+    final cardWidth = (isNarrow ? availableWidth : maxWidth)
+        .clamp(0.0, maxWidth)
         .toDouble();
     final color = AppFeedback._colorFor(notification.kind);
     final background = _backgroundFor(notification.kind);
@@ -236,46 +244,66 @@ class _PersistentFeedbackCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: color.withValues(alpha: 0.34)),
           ),
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 14),
+          padding: notification.compact
+              ? const EdgeInsets.fromLTRB(10, 7, 4, 7)
+              : const EdgeInsets.fromLTRB(14, 12, 8, 14),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: notification.compact
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.only(top: 2),
+                padding: EdgeInsets.only(top: notification.compact ? 0 : 2),
                 child: Icon(
                   AppFeedback._iconFor(notification.kind),
                   color: color,
-                  size: 22,
+                  size: notification.compact ? 16 : 22,
                 ),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: notification.compact ? 7 : 10),
               Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      notification.title,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w800,
+                child: notification.compact
+                    ? Text(
+                        '${notification.title}: ${notification.body}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            notification.title,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            notification.body,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      notification.body,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
               ),
               IconButton(
                 tooltip: 'Cerrar notificación',
                 icon: const Icon(Icons.close_rounded),
                 color: AppColors.textMuted,
                 visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tightFor(
+                  width: notification.compact ? 28 : 40,
+                  height: notification.compact ? 28 : 40,
+                ),
+                iconSize: notification.compact ? 16 : 24,
                 onPressed: onClose,
               ),
             ],

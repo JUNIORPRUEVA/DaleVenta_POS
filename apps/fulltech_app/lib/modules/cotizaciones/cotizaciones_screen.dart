@@ -27,6 +27,7 @@ import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/design_system/icons/app_icon.dart';
 import '../../core/design_system/icons/app_icons.dart';
+import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/license/license_repository.dart';
@@ -60,11 +61,13 @@ import '../../features/catalogo/application/catalog_controller.dart';
 import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
+import '../../features/catalogo/data/product_pages_loader.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../cash/cash_repository.dart';
 import '../cash/cash_models.dart';
 import '../cash/cash_turn_menu_button.dart';
+import '../clientes/data/clientes_repository.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
 import '../ventas/data/ventas_repository.dart';
@@ -96,6 +99,68 @@ enum _CheckoutPaymentMethod {
   const _CheckoutPaymentMethod(this.label, this.icon);
   final String label;
   final IconData icon;
+}
+
+@visibleForTesting
+Map<String, dynamic>? selectBillingDraftSnapshotForRestore({
+  required Map<String, dynamic>? remote,
+  required Map<String, dynamic>? local,
+}) {
+  if (remote == null) return local;
+  if (local == null) return remote;
+
+  final remoteScore = _billingDraftSnapshotScore(remote);
+  final localScore = _billingDraftSnapshotScore(local);
+  if (localScore > remoteScore) return local;
+  if (remoteScore > localScore) return remote;
+
+  final localUpdatedAt = _billingDraftUpdatedAt(local);
+  final remoteUpdatedAt = _billingDraftUpdatedAt(remote);
+  if (localUpdatedAt != null && remoteUpdatedAt != null) {
+    return localUpdatedAt.isAfter(remoteUpdatedAt) ? local : remote;
+  }
+  if (localUpdatedAt != null && remoteUpdatedAt == null && localScore > 0) {
+    return local;
+  }
+  return remote;
+}
+
+int _billingDraftSnapshotScore(Map<String, dynamic> snapshot) {
+  final rawTickets = snapshot['tickets'];
+  if (rawTickets is! List || rawTickets.isEmpty) return 0;
+  var score = rawTickets.length;
+  for (final rawTicket in rawTickets.whereType<Map>()) {
+    final items = rawTicket['items'];
+    if (items is List && items.isNotEmpty) score += items.length * 4;
+    final clientId = (rawTicket['selectedClientId'] ?? '').toString().trim();
+    final clientName = (rawTicket['selectedClientName'] ?? '')
+        .toString()
+        .trim();
+    if (clientId.isNotEmpty ||
+        (clientName.isNotEmpty && clientName != 'Sin cliente')) {
+      score += 3;
+    }
+    if ((rawTicket['selectedClientPhone'] ?? '').toString().trim().isNotEmpty) {
+      score += 1;
+    }
+    if ((rawTicket['note'] ?? '').toString().trim().isNotEmpty) score += 1;
+    if ((rawTicket['fiscalVoucherType'] ?? '').toString().trim().isNotEmpty) {
+      score += 1;
+    }
+    if (((rawTicket['globalDiscountAmount'] as num?)?.toDouble() ?? 0) != 0) {
+      score += 1;
+    }
+    final categories = rawTicket['selectedCategories'];
+    if (categories is List && categories.isNotEmpty) score += 1;
+    if ((rawTicket['searchQuery'] ?? '').toString().trim().isNotEmpty) {
+      score += 1;
+    }
+  }
+  return score;
+}
+
+DateTime? _billingDraftUpdatedAt(Map<String, dynamic> snapshot) {
+  return DateTime.tryParse((snapshot['updatedAt'] ?? '').toString());
 }
 
 class _QuoteTaxSummary {
@@ -570,6 +635,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _applyInitialClient();
     _applyInitialQuotation();
     unawaited(_loadPinnedProducts());
+    unawaited(
+      _seedProductsFromLocalSources(
+        companyId: _activeCompanyId(),
+        generation: _lifecycleGeneration,
+      ),
+    );
     unawaited(_bootstrapCatalog());
     _startLiveSync();
     if (!widget.returnSavedQuotation) {
@@ -755,6 +826,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     ref.invalidate(ventasControllerProvider);
     unawaited(_loadPinnedProducts(companyId: companyId));
     if (companyId.trim().isNotEmpty) {
+      unawaited(
+        _seedProductsFromLocalSources(
+          companyId: companyId,
+          generation: _lifecycleGeneration,
+        ),
+      );
       unawaited(_productSearch.reset());
       unawaited(_loadServerCategories());
     }
@@ -1147,9 +1224,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _resolveClientIdByPhone(String phone) async {
     try {
-      final clients = await ref
-          .read(ventasRepositoryProvider)
-          .searchClients(phone);
+      final clients = await _searchBillingClients(phone);
       if (!mounted) return;
 
       ClienteModel? match;
@@ -1179,6 +1254,64 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     } catch (_) {
       // Silencioso: si no se puede resolver, el usuario puede escoger cliente.
     }
+  }
+
+  String _billingClientsOwnerId() {
+    final userId = (_sessionUserId ?? '').trim();
+    return userId.isEmpty ? 'default_owner' : userId;
+  }
+
+  Future<List<ClienteModel>> _searchBillingClients(String search) async {
+    final ownerId = _billingClientsOwnerId();
+    final repo = ref.read(clientesRepositoryProvider);
+    final page = await repo.listClientsPage(
+      ownerId: ownerId,
+      search: search,
+      order: ClientesOrder.az,
+      correoFilter: CorreoFilter.todos,
+      estadoFilter: EstadoFilter.activos,
+      ownerFilter: OwnerFilter.todos,
+      page: 1,
+      pageSize: 100,
+      skipLoader: true,
+    );
+    if (page.items.isNotEmpty) {
+      await repo.saveClientsSnapshot(
+        ownerId: ownerId,
+        search: search,
+        order: ClientesOrder.az,
+        correoFilter: CorreoFilter.todos,
+        estadoFilter: EstadoFilter.activos,
+        ownerFilter: OwnerFilter.todos,
+        items: page.items,
+      );
+    }
+    return page.items;
+  }
+
+  Future<void> _rememberBillingClient(ClienteModel client) async {
+    final ownerId = _billingClientsOwnerId();
+    final repo = ref.read(clientesRepositoryProvider);
+    final cached = await repo.getCachedClients(ownerId: ownerId);
+    final normalizedClient = client.ownerId.isEmpty
+        ? client.copyWith(ownerId: ownerId)
+        : client;
+    final byId = <String, ClienteModel>{
+      for (final item in cached) item.id: item,
+      normalizedClient.id: normalizedClient,
+    };
+    final items = byId.values.toList(
+      growable: false,
+    )..sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+    await repo.saveClientsSnapshot(
+      ownerId: ownerId,
+      search: '',
+      order: ClientesOrder.az,
+      correoFilter: CorreoFilter.todos,
+      estadoFilter: EstadoFilter.activos,
+      ownerFilter: OwnerFilter.todos,
+      items: items,
+    );
   }
 
   @override
@@ -1342,6 +1475,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         'v': 2,
         'companyId': normalizedCompanyId,
         'activeId': activeId,
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
         'tickets': tickets.map((t) => t.toMap()).toList(),
       };
       await _editorDraftCache.writeMap(
@@ -1389,14 +1523,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         }
         return;
       }
-      final cached =
-          remote ??
-          await _editorDraftCache.readMap(
-            _editorDraftCacheKeyForCompany(
-              companyId: requestCompanyId,
-              userId: requestUserId,
-            ),
-          );
+      final local = await _editorDraftCache.readMap(
+        _editorDraftCacheKeyForCompany(
+          companyId: requestCompanyId,
+          userId: requestUserId,
+        ),
+      );
+      final cached = selectBillingDraftSnapshotForRestore(
+        remote: remote,
+        local: local,
+      );
       if (!_isCurrentTenantGeneration(
         companyId: requestCompanyId,
         generation: requestGeneration,
@@ -1434,7 +1570,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       });
       _applyClientPrefillFromRoute(force: true);
       unawaited(_applyQuotationPrefillFromRoute());
-      if (remote == null) {
+      if (identical(cached, local)) {
         _schedulePersistEditorDraft(immediate: true);
       }
       unawaited(_syncQuotationAi(triggerAi: false));
@@ -1504,29 +1640,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _remoteRefreshInFlight = true;
     }
 
-    if (_productos.isEmpty) {
-      final cached = await ref
-          .read(catalogRepositoryProvider)
-          .getCachedProducts();
-      if (cached.isNotEmpty &&
-          _isCurrentTenantGeneration(
-            companyId: requestCompanyId,
-            generation: requestGeneration,
-          )) {
-        final catalogVersion = buildCatalogSyncVersion(cached);
-        final syncedRows = applyCatalogSyncVersion(cached, catalogVersion);
-        setState(() {
-          _productos = syncedRows;
-          _loadingProducts = false;
-          _error = null;
-        });
-        Future<void>.microtask(
-          () => FulltechImageCacheManager.warmImageUrls(
-            syncedRows.map((item) => item.displayFotoUrl),
-          ),
-        );
-      }
-    }
+    await _seedProductsFromLocalSources(
+      companyId: requestCompanyId,
+      generation: requestGeneration,
+    );
 
     if (!silent &&
         _productSearch.snapshot.items.isEmpty &&
@@ -1591,6 +1708,67 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         _remoteRefreshInFlight = false;
       }
     }
+  }
+
+  Future<void> _seedProductsFromLocalSources({
+    required String companyId,
+    required int generation,
+  }) async {
+    final requestCompanyId = companyId.trim();
+    if (requestCompanyId.isEmpty) return;
+
+    final controllerRows = ref.read(catalogControllerProvider).items;
+    if (controllerRows.isNotEmpty) {
+      _applyLocalProductsSnapshot(
+        controllerRows,
+        companyId: requestCompanyId,
+        generation: generation,
+      );
+    }
+
+    final cached = await ref
+        .read(catalogRepositoryProvider)
+        .getCachedProducts();
+    if (cached.isEmpty) return;
+    _applyLocalProductsSnapshot(
+      cached,
+      companyId: requestCompanyId,
+      generation: generation,
+    );
+  }
+
+  void _applyLocalProductsSnapshot(
+    List<ProductModel> rows, {
+    required String companyId,
+    required int generation,
+  }) {
+    if (rows.isEmpty ||
+        !mounted ||
+        !_isCurrentTenantGeneration(
+          companyId: companyId,
+          generation: generation,
+        )) {
+      return;
+    }
+    final syncedRows = applyCatalogSyncVersion(
+      rows,
+      buildCatalogSyncVersion(rows),
+    );
+    if (areCatalogProductsEquivalent(_productos, syncedRows) &&
+        !_loadingProducts &&
+        _error == null) {
+      return;
+    }
+    setState(() {
+      _productos = syncedRows;
+      _loadingProducts = false;
+      _error = null;
+    });
+    Future<void>.microtask(
+      () => FulltechImageCacheManager.warmImageUrls(
+        syncedRows.map((item) => item.displayFotoUrl),
+      ),
+    );
   }
 
   Future<void> _bootstrapCatalog() async {
@@ -1669,10 +1847,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   List<ProductModel> get _visibleProducts {
-    return sortBillingProductsWithPinnedFirst(
-      _productSearch.snapshot.items,
-      _pinnedProductIds,
-    );
+    final snapshot = _productSearch.snapshot;
+    final snapshotItems = snapshot.items;
+    final shouldUseStableLocalSnapshot =
+        snapshotItems.isEmpty &&
+        _productos.isNotEmpty &&
+        (snapshot.isOffline ||
+            snapshot.error != null ||
+            snapshot.isInitialLoading ||
+            snapshot.isRefreshing);
+    final source = shouldUseStableLocalSnapshot
+        ? filterProductSnapshot(
+            _productos,
+            query: snapshot.query,
+            categories: _selectedCategories.toList(growable: false),
+          )
+        : snapshotItems;
+    return sortBillingProductsWithPinnedFirst(source, _pinnedProductIds);
   }
 
   bool get _companyInventoryEnabled =>
@@ -2392,7 +2583,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         return Positioned(
           top: topPadding,
           right: 18,
-          child: _SalesNoticeToast(
+          child: SalesNoticeToast(
             title: title,
             message: message,
             icon: icon,
@@ -4735,7 +4926,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openClientDialog() async {
-    final repo = ref.read(ventasRepositoryProvider);
     final searchCtrl = TextEditingController();
 
     List<ClienteModel> clients = const [];
@@ -4836,7 +5026,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   error = null;
                 });
                 try {
-                  final rows = await repo.searchClients(searchCtrl.text.trim());
+                  final rows = await _searchBillingClients(
+                    searchCtrl.text.trim(),
+                  );
                   if (!mounted || !dialogOpen) return;
                   if (currentRequest != requestId) return;
                   setStateDialog(() {
@@ -4874,9 +5066,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   final idx = clients.indexWhere((c) => c.id == updated.id);
                   if (idx >= 0) {
                     clients = [...clients]..[idx] = updated;
+                  } else {
+                    clients = [updated, ...clients];
                   }
                   detailClient = null;
                 });
+                unawaited(_rememberBillingClient(updated));
                 if ((_selectedClientId ?? '').trim() == updated.id) {
                   _commitEditorChange(() {
                     _selectedClientName = updated.nombre;
@@ -5009,6 +5204,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                     _selectedClientPhone = created.telefono;
                                     _applyClientFiscalPrefill(created);
                                   });
+                                  unawaited(_rememberBillingClient(created));
                                   Navigator.pop(context);
                                 },
                                 tooltip: 'Agregar cliente',
@@ -5293,6 +5489,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         _selectedClientPhone = updated.telefono;
                         _applyClientFiscalPrefill(updated);
                       });
+                      unawaited(_rememberBillingClient(updated));
                       Navigator.pop(context);
                     },
                     icon: const Icon(Icons.edit_outlined),
@@ -6533,6 +6730,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   String _checkoutPaymentLabel(_CheckoutPaymentMethod method) => method.label;
 
+  bool _isLocalSale(SaleModel sale) => sale.id.startsWith('local_');
+
+  String _saleSavedNoticeTitle(SaleModel sale) =>
+      _isLocalSale(sale) ? 'Venta local' : 'Venta guardada';
+
+  String _saleSavedNoticeMessage(SaleModel sale) => _isLocalSale(sale)
+      ? 'Guardada en este equipo. Pendiente de sincronizar.'
+      : 'La venta fue guardada y el stock quedó actualizado.';
+
   Future<void> _openCheckoutDialog() async {
     if (_finalizingCheckout) return;
     if (!_validateCheckoutReady()) return;
@@ -6651,8 +6857,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       unawaited(_loadProducts(forceRemote: true, silent: true));
 
       _showSalesNotice(
-        title: 'Venta guardada',
-        message: 'La venta fue guardada y el stock quedó actualizado.',
+        title: _saleSavedNoticeTitle(createdSale),
+        message: _saleSavedNoticeMessage(createdSale),
         icon: Icons.check_circle_outline_rounded,
         accent: const Color(0xFF1957E6),
       );
@@ -6666,7 +6872,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       // ============================================================
       if (checkout != null) {
         final printer = ref.read(unifiedTicketPrinterProvider);
-        final saleToPrint = createdSale.items.isNotEmpty
+        final saleToPrint = _isLocalSale(createdSale)
+            ? createdSale
+            : createdSale.items.isNotEmpty
             ? createdSale
             : await ref.read(ventasRepositoryProvider).getById(createdSale.id);
         trace?.step('print_prepare');
@@ -6693,12 +6901,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         }
       }
       trace?.finish(outcome: 'ok');
-    } catch (e) {
+    } catch (e, stackTrace) {
+      TraceLog.log('checkout', 'sale could not be confirmed', error: e, stackTrace: stackTrace);
       trace?.finish(outcome: 'error');
       if (!mounted) return;
       _showSalesNotice(
         title: 'No se pudo completar',
-        message: e is ApiException ? e.message : '$e',
+        duration: const Duration(seconds: 15),
+        message: userSafeErrorMessage(e, fallback:
+          'No pudimos confirmar el resultado del cobro. Revisa el historial con el encargado antes de volver a cobrar.'),
         icon: Icons.error_outline_rounded,
         accent: const Color(0xFFDC2626),
       );
@@ -8985,8 +9196,10 @@ class _MobileHeaderIconButton extends StatelessWidget {
   }
 }
 
-class _SalesNoticeToast extends StatelessWidget {
-  const _SalesNoticeToast({
+@visibleForTesting
+class SalesNoticeToast extends StatelessWidget {
+  const SalesNoticeToast({
+    super.key,
     required this.title,
     required this.message,
     required this.icon,
@@ -9007,7 +9220,9 @@ class _SalesNoticeToast extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 430, minWidth: 360),
+        constraints: BoxConstraints(
+          maxWidth: (MediaQuery.sizeOf(context).width - 36).clamp(0.0, 430.0),
+        ),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -9091,8 +9306,7 @@ class _SalesNoticeToast extends StatelessWidget {
                             const SizedBox(height: 3),
                             Text(
                               message,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
+                              softWrap: true,
                               style: const TextStyle(
                                 color: Color(0xFF475569),
                                 fontWeight: FontWeight.w600,

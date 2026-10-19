@@ -83,6 +83,9 @@ class _CashRepo implements CashRepository {
   Future<CashSummaryModel> summary() async => throw UnimplementedError();
 
   @override
+  Future<CashSummaryModel?> cachedSummary() async => null;
+
+  @override
   Future<List<CashMovementModel>> movements() async => const [];
 
   @override

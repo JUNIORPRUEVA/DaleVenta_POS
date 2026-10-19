@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import '../debug/app_error_reporter.dart';
 import '../debug/trace_log.dart';
 import '../storage/resilient_local_database.dart';
+import '../storage/local_migration_backup.dart';
 import 'pending_sync_action.dart';
 
 class OfflineStore {
@@ -36,6 +38,7 @@ class OfflineStore {
       try {
         return await _opening!;
       } catch (_) {
+        if (!kIsWeb && Platform.isWindows) rethrow;
         return null;
       }
     }
@@ -46,6 +49,7 @@ class OfflineStore {
       _database = db;
       return db;
     } catch (error, stackTrace) {
+      if (!kIsWeb && Platform.isWindows) rethrow;
       _enablePreferencesFallback(error, stackTrace);
       return null;
     } finally {
@@ -93,6 +97,8 @@ class OfflineStore {
         await _createIndexes(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        await backupLocalDatabaseBeforeMigration(
+          fileName: _databaseFileName, label: 'offline_outbox', targetVersion: newVersion);
         if (oldVersion < 2) {
           await _addColumnIfMissing(db, 'pending_actions', 'company_id TEXT');
           await _addColumnIfMissing(db, 'pending_actions', 'user_id TEXT');
@@ -263,9 +269,9 @@ class OfflineStore {
       error,
       stackTrace,
       context: 'OfflineStore.SQLite',
-      title: 'Modo offline limitado',
+      title: 'Trabajo sin internet limitado',
       userMessage:
-          'No pudimos iniciar la base local del dispositivo. La app seguira funcionando con almacenamiento alternativo y sincronizacion protegida.',
+          'No pudimos abrir los datos guardados en este equipo. Algunas operaciones sin internet no estarán disponibles. Pide ayuda a soporte antes de continuar; no borres los datos de la aplicación.',
       technicalDetails:
           'SQLite no pudo abrir el archivo local; se activo el fallback de SharedPreferences para evitar bloqueo del sistema.',
       severity: AppErrorSeverity.warning,
@@ -449,6 +455,7 @@ class OfflineStore {
     required PendingSyncAction pendingAction,
     required double totalSold,
     DateTime? saleOccurredAt,
+    String? remoteAttemptId,
   }) async {
     final cleanCompanyId = companyId.trim();
     final cleanUserId = userId.trim();
@@ -615,6 +622,42 @@ class OfflineStore {
         'created_at': pendingAction.createdAt.millisecondsSinceEpoch,
         'updated_at': pendingAction.updatedAt.millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (remoteAttemptId != null) {
+        await txn.delete('pending_actions',
+          where: 'id = ? AND company_id = ? AND user_id = ? AND type = ?',
+          whereArgs: [remoteAttemptId, cleanCompanyId, cleanUserId, 'sales.attempt']);
+      }
+    });
+  }
+
+  /// Durable intent, not a completed sale. An unknown remote outcome requires
+  /// supervised resolution, never execution by the generic sync worker.
+  Future<void> reserveRemoteSaleAttempt(PendingSyncAction attempt) async {
+    final db = await _dbOrNull();
+    if (db == null) throw StateError('No pudimos guardar el intento de cobro en este equipo. No continúes con el cobro y pide ayuda a soporte.');
+    if (attempt.type != 'sales.attempt' ||
+        (attempt.companyId ?? '').isEmpty || (attempt.userId ?? '').isEmpty ||
+        (attempt.idempotencyKey ?? '').isEmpty || attempt.status != 'requires_action') {
+      throw StateError('Faltan datos para comprobar este cobro. Verifica tu sesión y pide ayuda al encargado antes de continuar.');
+    }
+    await db.transaction((txn) async {
+      final previous = await txn.query('pending_actions', columns: ['id'],
+        where: 'company_id = ? AND user_id = ? AND type = ?',
+        whereArgs: [attempt.companyId, attempt.userId, 'sales.attempt'], limit: 1);
+      if (previous.isNotEmpty) {
+        throw StateError('Existe un cobro pendiente de verificar. Revisa su resultado antes de iniciar otro.');
+      }
+      await txn.insert('pending_actions', {
+        'id': attempt.id, 'type': attempt.type, 'scope': attempt.scope,
+        'company_id': attempt.companyId, 'user_id': attempt.userId,
+        'terminal_id': attempt.terminalId, 'entity_type': 'sale_attempt',
+        'entity_id': attempt.entityId, 'idempotency_key': attempt.idempotencyKey,
+        'payload': jsonEncode(attempt.payload), 'status': 'requires_action',
+        'attempts': 0, 'permanent': 0,
+        'error': 'No pudimos confirmar el resultado de este cobro. Revisa el historial con el encargado antes de volver a cobrar; conserva el intento original.',
+        'created_at': attempt.createdAt.millisecondsSinceEpoch,
+        'updated_at': attempt.updatedAt.millisecondsSinceEpoch,
+      });
     });
   }
 
@@ -1005,7 +1048,17 @@ class OfflineStore {
     _preferencesFallbackEnabled = false;
   }
 
-  Future<void> putPendingAction(PendingSyncAction action) async {
+  Future<void> putPendingAction(
+    PendingSyncAction action, {
+    String? cacheKey,
+    Map<String, dynamic>? cachePayload,
+    bool requireDatabase = false,
+  }) async {
+    if (requireDatabase && kIsWeb) {
+      throw StateError(
+        'Esta operación sin internet necesita la aplicación instalada. Abre la aplicación o conéctate a internet para continuar.',
+      );
+    }
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
       final items = await listPendingActions();
@@ -1023,6 +1076,9 @@ class OfflineStore {
 
     final db = await _dbOrNull();
     if (db == null) {
+      if (requireDatabase) {
+        throw StateError('No pudimos guardar esta operación en el equipo. No la des por completada; conserva la pantalla y pide ayuda a soporte.');
+      }
       final prefs = await SharedPreferences.getInstance();
       final items = await listPendingActions();
       final next = [
@@ -1037,26 +1093,35 @@ class OfflineStore {
       return;
     }
 
-    await db.insert('pending_actions', {
-      'id': action.id,
-      'type': action.type,
-      'scope': action.scope,
-      'company_id': action.companyId,
-      'user_id': action.userId,
-      'terminal_id': action.terminalId,
-      'entity_type': action.entityType,
-      'entity_id': action.entityId,
-      'idempotency_key': action.idempotencyKey,
-      'payload': jsonEncode(action.payload),
-      'status': action.status,
-      'attempts': action.attempts,
-      'error': action.error,
-      'next_attempt_at': action.nextAttemptAt?.millisecondsSinceEpoch,
-      'last_attempt_at': action.lastAttemptAt?.millisecondsSinceEpoch,
-      'permanent': action.permanent ? 1 : 0,
-      'created_at': action.createdAt.millisecondsSinceEpoch,
-      'updated_at': action.updatedAt.millisecondsSinceEpoch,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.transaction((tx) async {
+      await tx.insert('pending_actions', {
+        'id': action.id,
+        'type': action.type,
+        'scope': action.scope,
+        'company_id': action.companyId,
+        'user_id': action.userId,
+        'terminal_id': action.terminalId,
+        'entity_type': action.entityType,
+        'entity_id': action.entityId,
+        'idempotency_key': action.idempotencyKey,
+        'payload': jsonEncode(action.payload),
+        'status': action.status,
+        'attempts': action.attempts,
+        'error': action.error,
+        'next_attempt_at': action.nextAttemptAt?.millisecondsSinceEpoch,
+        'last_attempt_at': action.lastAttemptAt?.millisecondsSinceEpoch,
+        'permanent': action.permanent ? 1 : 0,
+        'created_at': action.createdAt.millisecondsSinceEpoch,
+        'updated_at': action.updatedAt.millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      if (cacheKey != null && cachePayload != null) {
+        await tx.insert('cache_entries', {
+          'cache_key': cacheKey,
+          'payload': jsonEncode(cachePayload),
+          'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 
   Future<List<PendingSyncAction>> listPendingActions({

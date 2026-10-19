@@ -206,6 +206,23 @@ void main() {
       expect(details.endpointUrl, contains('https://'));
     });
 
+    test('background socket failures stay silent', () {
+      AppErrorReporter.instance.record(
+        StateError('SocketException: Failed host lookup: backend.example.com'),
+        StackTrace.current,
+        context: 'Zone',
+        technicalDetails:
+            'SocketException: Failed host lookup: backend.example.com',
+      );
+
+      expect(AppErrorReporter.instance.lastError.value, isNull);
+      final recorded = AppErrorReporter.instance.history.single;
+      expect(recorded.silent, isTrue);
+      expect(recorded.kind, AppErrorKind.network);
+      expect(recorded.title, 'Sin conexión');
+      expect(recorded.userMessage, 'Seguimos trabajando en modo local.');
+    });
+
     test('unknown flutter error uses generic human copy', () {
       AppErrorReporter.instance.recordFlutterError(
         FlutterErrorDetails(

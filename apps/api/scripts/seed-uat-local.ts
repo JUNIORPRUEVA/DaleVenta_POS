@@ -12,6 +12,10 @@ import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 function requiredDbName() {
+  const explicit = (process.env.UAT_EXPECTED_DB_NAME ?? "").trim();
+  if (explicit) return explicit;
+  const local = (process.env.UAT_DB_NAME ?? "").trim();
+  if (local === "daleventa_offline_safe_48h_uat") return local;
   return (process.env.UAT_SERVER_MODE ?? "").trim().toLowerCase() === "true"
     ? "daleventa_uat"
     : "daleventa_uat_local";
@@ -400,6 +404,36 @@ async function upsertProducts() {
   }
 }
 
+async function ensureOpenCashSession() {
+  const companyId = companies.enabled.id;
+  const { terminal } = await ensureDefaultInventory(companyId);
+  const existing = await prisma.cashSession.findFirst({
+    where: {
+      companyId,
+      openedByUserId: uatUserId,
+      terminalId: terminal.id,
+      status: "OPEN",
+      note: "offline-safe-48h-uat-open-shift",
+    },
+  });
+  if (existing) return existing;
+
+  return prisma.cashSession.create({
+    data: {
+      companyId,
+      openedByUserId: uatUserId,
+      terminalId: terminal.id,
+      terminalNameSnapshot: terminal.name,
+      terminalCodeSnapshot: terminal.code,
+      userName: "Administrador UAT Local",
+      initialAmount: new Prisma.Decimal("1000"),
+      status: "OPEN",
+      requiresClosure: true,
+      note: "offline-safe-48h-uat-open-shift",
+    },
+  });
+}
+
 async function syncWarehouseStock() {
   for (const company of Object.values(companies)) {
     const { warehouse } = await ensureDefaultInventory(company.id);
@@ -731,6 +765,7 @@ async function main() {
   await upsertAdmin();
   await upsertProducts();
   await syncWarehouseStock();
+  await ensureOpenCashSession();
   await seedVisualDocuments();
 
   const productCount = await prisma.product.count();

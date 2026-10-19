@@ -2021,6 +2021,7 @@ model Product {
   imageOriginalFileName String?             @map("image_original_file_name")
   imageUpdatedAt        DateTime?           @map("image_updated_at")
   archivedAt            DateTime?           @map("archived_at")
+  createPayloadHash     String?             @map("create_payload_hash") @db.VarChar(64)
 
   saleItems              SaleItem[]
   cotizacionItems        CotizacionItem[]
@@ -2129,6 +2130,8 @@ model InventoryMovement {
   sourceType             String?               @map("source_type") @db.VarChar(64)
   sourceId               String?               @map("source_id") @db.Uuid
   sourceItemId           String?               @map("source_item_id") @db.Uuid
+  operationId            String?               @map("operation_id")
+  operationPayloadHash   String?               @map("operation_payload_hash") @db.VarChar(64)
   reason                 String?               @db.Text
   createdByUserId        String?               @map("created_by_user_id") @db.Uuid
   createdAt              DateTime              @default(now()) @map("created_at")
@@ -2140,6 +2143,7 @@ model InventoryMovement {
   destinationWarehouse Warehouse? @relation("InventoryMovementDestinationWarehouse", fields: [companyId, destinationWarehouseId], references: [companyId, id], onDelete: Restrict)
   createdBy            User?      @relation("InventoryMovementCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
+  @@unique([companyId, operationId], map: "inventory_movements_company_operation_key")
   @@index([companyId, productId, createdAt], map: "inventory_movements_company_product_created_idx")
   @@index([companyId, warehouseId, createdAt], map: "inventory_movements_company_warehouse_created_idx")
   @@index([companyId, createdAt], map: "inventory_movements_company_created_idx")

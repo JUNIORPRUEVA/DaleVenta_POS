@@ -186,6 +186,7 @@ class _FakeCatalogRepository extends CatalogRepository {
     double? stock,
     double? delta,
     String? warehouseId,
+    String? operationId,
     String? reason,
     bool skipLoader = false,
   }) async {

@@ -11,6 +11,7 @@ import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/registrar_venta_screen.dart';
+import 'package:daleventa_pos/modules/ventas/sales_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,17 @@ import 'package:flutter_test/flutter_test.dart';
 /// loadMore, busca en el servidor con debounce y, si la red falla, cae al
 /// snapshot local COMPLETO avisando que esta en modo offline.
 void main() {
+  test('mensaje de venta distingue sincronizada y pendiente local', () {
+    expect(
+      saleSavedConfirmationMessage(_saleWithId('sale-server-1')),
+      'Venta confirmada por el servidor.',
+    );
+    expect(
+      saleSavedConfirmationMessage(_saleWithId('local_sale-1')),
+      'Venta guardada en este equipo. Pendiente de sincronización.',
+    );
+  });
+
   testWidgets('POS pide SOLO la pagina 1 y no descarga el catalogo completo', (
     tester,
   ) async {
@@ -241,7 +253,7 @@ void main() {
     },
   );
 
-  testWidgets('POS sin conexion usa el snapshot local y lo avisa', (
+  testWidgets('POS sin conexion usa snapshot local con indicador discreto', (
     tester,
   ) async {
     final server = _PagedProductsServer(_catalog80, offline: true);
@@ -251,12 +263,13 @@ void main() {
       localSnapshot: [_beverageProduct, _snackProduct],
     );
 
+    expect(find.text('Catálogo local'), findsOneWidget);
     expect(
       find.text(
         'Sin conexión: mostrando los productos guardados en este dispositivo',
       ),
-      findsOneWidget,
-      reason: 'la UI no debe fingir que son datos del servidor',
+      findsNothing,
+      reason: 'la UI no debe mostrar un banner grande de conectividad',
     );
     expect(find.text('Coca Cola'), findsOneWidget);
     expect(find.text('Galletas'), findsOneWidget);
@@ -266,6 +279,33 @@ void main() {
       reason: 'el fallback offline evita el estado de error',
     );
   });
+}
+
+SaleModel _saleWithId(String id) {
+  return SaleModel(
+    id: id,
+    userId: 'user-1',
+    userName: 'Cajero UAT',
+    customerId: null,
+    customerName: null,
+    customerPhone: null,
+    saleDate: DateTime.utc(2026, 10, 13),
+    note: null,
+    totalSold: 100,
+    totalCost: 0,
+    totalProfit: 100,
+    commissionAmount: 0,
+    paymentMethod: 'cash',
+    paymentCashAmount: 100,
+    paymentTransferAmount: 0,
+    creditAmount: 0,
+    creditPaidAmount: 0,
+    creditBalance: 0,
+    creditStatus: 'PAID',
+    isDeleted: false,
+    deletedAt: null,
+    items: const [],
+  );
 }
 
 Future<void> _pumpPos(

@@ -14,9 +14,19 @@ constexpr wchar_t kWindowTitle[] = L"FullPOS Cloud - Sistema de facturacion";
 constexpr wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\DaleVentasPOSSingleInstance";
+constexpr wchar_t kUatWindowTitle[] =
+    L"FullPOS Cloud - Sistema de facturacion [UAT]";
+constexpr wchar_t kUatSingleInstanceMutexName[] =
+    L"Local\\DaleVentasPOSSingleInstance-UAT";
 
-bool FocusExistingWindow() {
-  HWND existing_window = ::FindWindow(kWindowClassName, kWindowTitle);
+bool IsUatMode() {
+  wchar_t value[64];
+  DWORD length = ::GetEnvironmentVariable(L"FULLPOS_UAT_MODE", value, 64);
+  return length > 0;
+}
+
+bool FocusExistingWindow(const wchar_t* title) {
+  HWND existing_window = ::FindWindow(kWindowClassName, title);
   if (!existing_window) {
     return false;
   }
@@ -33,10 +43,14 @@ bool FocusExistingWindow() {
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  const bool uat_mode = IsUatMode();
+  const wchar_t* window_title = uat_mode ? kUatWindowTitle : kWindowTitle;
+  const wchar_t* mutex_name =
+      uat_mode ? kUatSingleInstanceMutexName : kSingleInstanceMutexName;
   HANDLE single_instance_mutex =
-      ::CreateMutex(nullptr, TRUE, kSingleInstanceMutexName);
+      ::CreateMutex(nullptr, TRUE, mutex_name);
   if (single_instance_mutex && ::GetLastError() == ERROR_ALREADY_EXISTS) {
-    FocusExistingWindow();
+    FocusExistingWindow(window_title);
     ::CloseHandle(single_instance_mutex);
     return EXIT_SUCCESS;
   }
@@ -61,7 +75,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(kWindowTitle, origin, size)) {
+  if (!window.Create(window_title, origin, size)) {
     if (single_instance_mutex) {
       ::CloseHandle(single_instance_mutex);
     }

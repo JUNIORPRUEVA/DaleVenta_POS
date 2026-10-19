@@ -679,7 +679,20 @@ describe("SalesService optional inventory tracking", () => {
   });
 
   it("returns existing sale on clientRequestId retry without duplicate movement", async () => {
-    const existing = { id: "sale-existing", items: [] };
+    const existing = {
+      id: "sale-existing",
+      paymentMethod: "cash",
+      items: [
+        {
+          productId: "tracked",
+          productSource: null,
+          sourceProductId: null,
+          productNameSnapshot: null,
+          qty: new Prisma.Decimal(1),
+          priceSoldUnit: new Prisma.Decimal(10),
+        },
+      ],
+    };
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(existing) },
     };

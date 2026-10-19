@@ -211,7 +211,17 @@ describe("SalesService tenant isolation", () => {
       id: "33333333-3333-4333-8333-333333333333",
       companyId: user.companyId,
       clientRequestId: "sale-request-1",
-      items: [],
+      paymentMethod: "cash",
+      items: [
+        {
+          productId: null,
+          productSource: null,
+          sourceProductId: null,
+          productNameSnapshot: "Servicio",
+          qty: new Prisma.Decimal(1),
+          priceSoldUnit: new Prisma.Decimal(100),
+        },
+      ],
     };
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(existingSale) },
@@ -235,6 +245,49 @@ describe("SalesService tenant isolation", () => {
     expect(prisma.sale.findFirst).toHaveBeenCalledWith({
       where: { companyId: user.companyId, clientRequestId: "sale-request-1" },
       include: expect.any(Object),
+    });
+  });
+
+  it("rejects the same clientRequestId when the sale payload is different", async () => {
+    const existingSale = {
+      id: "33333333-3333-4333-8333-333333333333",
+      companyId: user.companyId,
+      clientRequestId: "sale-request-1",
+      paymentMethod: "cash",
+      totalSold: new Prisma.Decimal(100),
+      items: [
+        {
+          productId: null,
+          productSource: null,
+          sourceProductId: null,
+          productNameSnapshot: "Servicio",
+          qty: new Prisma.Decimal(1),
+          priceSoldUnit: new Prisma.Decimal(100),
+        },
+      ],
+    };
+    const prisma = {
+      sale: { findFirst: jest.fn().mockResolvedValue(existingSale) },
+    };
+    const service = serviceWith(prisma);
+
+    await expect(
+      service.create(user as never, {
+        clientRequestId: "sale-request-1",
+        expectedTotalSold: 125,
+        items: [
+          {
+            productName: "Servicio",
+            qty: 1,
+            priceSoldUnit: 125,
+            costUnitSnapshot: 50,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "IDEMPOTENCY_PAYLOAD_MISMATCH",
+      }),
     });
   });
 

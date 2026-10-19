@@ -36,6 +36,8 @@ import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.servic
 const PASSWORD_RESET_GENERIC_MESSAGE =
   "Si tu cuenta permite recuperación por correo, recibirás las instrucciones correspondientes. De lo contrario, contacta al administrador de tu empresa.";
 const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+const OFFLINE_EMERGENCY_POLICY_VERSION = "offline-safe-48h.v1";
+const OFFLINE_EMERGENCY_TTL_MS = 48 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -202,6 +204,115 @@ export class AuthService {
     const user = await this.findUserForMe(userId);
     if (!user) throw new UnauthorizedException("No autorizado");
     return user;
+  }
+
+  async authorizeOfflineEmergency(
+    user: {
+      id?: string | null;
+      companyId?: string | null;
+      role?: Role | string | null;
+      memberRole?: string | null;
+      sessionId?: string | null;
+    },
+    client: {
+      deviceFingerprint?: string | null;
+      platform?: string | null;
+      appVersion?: string | null;
+    },
+  ) {
+    const userId = (user.id ?? "").trim();
+    const companyId = (user.companyId ?? "").trim();
+    const sessionId = (user.sessionId ?? "").trim();
+    const deviceFingerprint = (client.deviceFingerprint ?? "").trim();
+    if (!userId || !companyId || !sessionId) {
+      throw new UnauthorizedException("Sesión incompleta");
+    }
+    if (!deviceFingerprint) {
+      throw new BadRequestException(
+        "Este dispositivo no pudo identificarse para operar offline.",
+      );
+    }
+
+    const now = new Date();
+    const [session, activeUser] = await Promise.all([
+      this.prisma.authSession.findFirst({
+        where: {
+          id: sessionId,
+          userId,
+          companyId,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        select: { id: true, expiresAt: true },
+      }),
+      this.prisma.user.findFirst({
+        where: {
+          id: userId,
+          blocked: false,
+          OR: [
+            { companyId },
+            {
+              companyMemberships: {
+                some: { companyId, status: CompanyMemberStatus.ACTIVE },
+              },
+            },
+          ],
+        },
+        select: { id: true, userPermissions: true },
+      }),
+    ]);
+    if (!session || !activeUser) {
+      throw new UnauthorizedException("Sesión no autorizada para offline");
+    }
+
+    await this.licenses.assertCompanyCanUseApp(companyId);
+    // Advertise the protocol only when the additive database expansion exists.
+    // No tenant data is queried here; permissions remain in allowedOperations.
+    const schema = await this.prisma.$queryRaw<{ ready: boolean }[]>`
+      SELECT (
+        (SELECT count(*) FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND ((table_name = 'Product' AND column_name = 'create_payload_hash')
+             OR (table_name = 'inventory_movements' AND column_name IN ('operation_id', 'operation_payload_hash')))) = 3
+        AND EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = current_schema()
+          AND indexname = 'inventory_movements_company_operation_key')
+      ) AS ready
+    `;
+    const advancedReady = schema[0]?.ready === true;
+    const validUntil = new Date(now.getTime() + OFFLINE_EMERGENCY_TTL_MS);
+
+    return {
+      authorized: true,
+      policyVersion: OFFLINE_EMERGENCY_POLICY_VERSION,
+      companyId,
+      userId,
+      sessionId,
+      deviceFingerprint,
+      serverUtc: now.toISOString(),
+      validUntilUtc: validUntil.toISOString(),
+      maxOfflineHours: 48,
+      capabilities: {
+        protocolVersion: 2,
+        minimumClientProtocol: 2,
+        productOperationId: advancedReady,
+        productPayloadHash: advancedReady,
+        inventoryOperationId: advancedReady,
+        inventoryPayloadHash: advancedReady,
+        stableProductIdentity: advancedReady,
+        dependentSync: advancedReady,
+      },
+      allowedOperations: [
+        "sales.create",
+        ...(["ADMIN", "ASISTENTE"].includes(`${user.role}`) ||
+        (activeUser.userPermissions as Record<string, unknown> | null)?.editProducts === true
+          ? ["catalog.products.create"] : []),
+        ...(["ADMIN", "ASISTENTE"].includes(`${user.role}`) ||
+        (activeUser.userPermissions as Record<string, unknown> | null)?.addStock === true
+          ? ["catalog.products.stock"] : []),
+      ],
+      platform: (client.platform ?? "").trim() || null,
+      appVersion: (client.appVersion ?? "").trim() || null,
+    };
   }
 
   async forgotPassword(

@@ -1,4 +1,5 @@
 import 'api_exception.dart';
+import 'operation_error_message.dart';
 
 /// Returns a message that is safe to display to an end user.
 ///
@@ -7,10 +8,17 @@ import 'api_exception.dart';
 /// exception (`'No se pudo guardar: $e'`).
 String userSafeErrorMessage(Object? error, {required String fallback}) {
   if (error is ApiException) {
+    final operationMessage = customerOperationErrorMessage(error.message);
+    if (operationMessage != null) return operationMessage;
     final message = error.message.trim();
     if (message.isNotEmpty && !looksTechnical(message)) {
       return message;
     }
+    final statusMessage = customerOperationErrorMessage(
+      null,
+      statusCode: error.code,
+    );
+    if (statusMessage != null) return statusMessage;
   }
   return fallback;
 }
@@ -24,7 +32,12 @@ bool looksTechnical(String value) {
   if (normalized.contains('http://') || normalized.contains('https://')) {
     return true;
   }
-  return _containsStackTrace(normalized);
+  return _containsStackTrace(normalized) ||
+      RegExp(r'^[A-Z][A-Z0-9_]*_[A-Z0-9_]+$').hasMatch(value.trim()) ||
+      RegExp(
+        r'\b[0-9a-f]{8}-[0-9a-f-]{27,}\b',
+        caseSensitive: false,
+      ).hasMatch(value);
 }
 
 const List<String> _technicalMarkers = <String>[

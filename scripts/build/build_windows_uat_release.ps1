@@ -1,6 +1,7 @@
 param(
-  [string]$ApiBaseUrl = 'http://31.97.99.70:4001',
-  [string]$AppBaseUrl = 'http://31.97.99.70:4001',
+  [string]$ApiBaseUrl = 'http://127.0.0.1:46548',
+  [string]$AppBaseUrl = 'http://127.0.0.1:46548',
+  [string]$WindowsAppRoot = '',
   [switch]$SkipPubGet
 )
 
@@ -16,41 +17,13 @@ function Get-RepoRoot {
   return (Resolve-Path -LiteralPath (Join-Path $scriptDir '..\..')).Path
 }
 
-function Test-DriveLetterAvailable {
-  param([char]$Letter)
-
-  $driveRoot = "${Letter}:\"
-  $driveName = "${Letter}:"
-  if (Get-PSDrive -Name ([string]$Letter) -ErrorAction SilentlyContinue) {
-    return $false
-  }
-  if (Test-Path -LiteralPath $driveRoot) {
-    return $false
-  }
-  $substLines = @(cmd /c subst 2>$null)
-  foreach ($line in $substLines) {
-    if ($line.TrimStart().StartsWith($driveName, [StringComparison]::OrdinalIgnoreCase)) {
-      return $false
-    }
-  }
-  return $true
-}
-
-function Get-AvailableDriveLetter {
-  $preferred = @('X', 'Y', 'Z', 'W', 'V', 'U', 'T', 'S', 'R', 'Q', 'P', 'O', 'N', 'M', 'L', 'K')
-  foreach ($letter in $preferred) {
-    if (Test-DriveLetterAvailable -Letter $letter) {
-      return $letter
-    }
-  }
-  throw 'No unused drive letter is available for the temporary short-path build mapping.'
-}
-
 if ([string]::IsNullOrWhiteSpace($ApiBaseUrl) -or [string]::IsNullOrWhiteSpace($AppBaseUrl)) {
   throw 'UAT API/App URLs are required.'
 }
 if ($ApiBaseUrl -like '*daleventapos-backend.gcdndd.easypanel.host*' -or
-    $AppBaseUrl -like '*daleventapos-backend.gcdndd.easypanel.host*') {
+    $AppBaseUrl -like '*daleventapos-backend.gcdndd.easypanel.host*' -or
+    $ApiBaseUrl -like '*31.97.99.70*' -or
+    $AppBaseUrl -like '*31.97.99.70*') {
   throw 'Refusing to build a UAT client with the production DaleVentas backend.'
 }
 
@@ -62,24 +35,20 @@ if (-not (Test-Path -LiteralPath (Join-Path $appRoot 'pubspec.yaml'))) {
   throw "Flutter app root not found: $appRoot"
 }
 
-$letter = Get-AvailableDriveLetter
-$driveName = "${letter}:"
-$driveRoot = "${driveName}\"
-$mappedAppRoot = "$driveRoot$appRelativePath"
-$createdMapping = $false
 $exitCode = 1
 
 try {
   Write-Step "Repo root: $repoRoot"
   Write-Step "UAT API_BASE_URL: $ApiBaseUrl"
-  Write-Step "Creating temporary mapping $driveName => $repoRoot"
-  & subst $driveName $repoRoot
-  if ($LASTEXITCODE -ne 0) {
-    throw "subst failed with exit code $LASTEXITCODE"
+  if (-not [string]::IsNullOrWhiteSpace($WindowsAppRoot)) {
+    $resolvedWindowsAppRoot = (New-Item -ItemType Directory -Force -Path $WindowsAppRoot).FullName
+    [Environment]::SetEnvironmentVariable("DALEVENTAS_POS_ROOT", $resolvedWindowsAppRoot, "Process")
+    [Environment]::SetEnvironmentVariable("FULLPOS_UAT_MODE", "offline-safe-48h", "Process")
+    Write-Step "Windows UAT data root for launched child processes: $resolvedWindowsAppRoot"
   }
-  $createdMapping = $true
+  Write-Step "Building from physical short worktree path: $appRoot"
 
-  Push-Location -LiteralPath $mappedAppRoot
+  Push-Location -LiteralPath $appRoot
   try {
     if (-not $SkipPubGet) {
       Write-Step 'Running flutter pub get'
@@ -93,7 +62,10 @@ try {
     Write-Step 'Running flutter build windows --release for UAT'
     & flutter build windows --release `
       --dart-define=API_BASE_URL=$ApiBaseUrl `
-      --dart-define=APP_BASE_URL=$AppBaseUrl
+      --dart-define=APP_BASE_URL=$AppBaseUrl `
+      --dart-define=DISABLE_APP_UPDATES=true `
+      --dart-define=ALLOW_UNSIGNED_UPDATES_FOR_UAT=false `
+      --dart-define=ALLOW_UNSIGNED_UPDATES_FOR_PRODUCTION=false
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
       throw "flutter build windows --release failed with exit code $exitCode"
@@ -106,17 +78,6 @@ try {
   $exitCode = 0
 } catch {
   Write-Error $_
-} finally {
-  if ($createdMapping) {
-    Write-Step "Removing temporary mapping $driveName"
-    & subst $driveName /D
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Could not remove temporary mapping $driveName; run 'subst $driveName /D' manually."
-      if ($exitCode -eq 0) {
-        $exitCode = 1
-      }
-    }
-  }
 }
 
 exit $exitCode

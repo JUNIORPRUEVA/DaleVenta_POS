@@ -167,6 +167,7 @@ class _FakeVentasRepository implements VentasRepository {
     double? optimisticExemptAmount,
     double? optimisticDiscountAmount,
     bool? optimisticFiscalTaxEnabled,
+    String? clientRequestId,
     required List<SaleDraftItem> items,
   }) {
     throw UnimplementedError();

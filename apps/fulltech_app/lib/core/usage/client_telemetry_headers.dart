@@ -33,19 +33,28 @@ class ClientTelemetryHeaders {
     final platform = _platformCode();
     final family = _deviceFamily(platform);
     final installId = await _installId();
-    final packageInfo = await PackageInfo.fromPlatform();
+    final packageInfo = await _packageInfo();
     final details = await _deviceDetails(platform);
 
     return {
       'x-client-platform': platform,
       'x-client-device-family': family,
       'x-client-device-id': installId,
-      'x-client-app-version':
-          '${packageInfo.version}+${packageInfo.buildNumber}',
+      if (packageInfo != null)
+        'x-client-app-version':
+            '${packageInfo.version}+${packageInfo.buildNumber}',
       if (details.osVersion.isNotEmpty)
         'x-client-os-version': details.osVersion,
       if (details.model.isNotEmpty) 'x-client-device-model': details.model,
     };
+  }
+
+  Future<PackageInfo?> _packageInfo() async {
+    try {
+      return await PackageInfo.fromPlatform();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String> _installId() async {
