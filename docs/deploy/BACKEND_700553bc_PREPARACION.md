@@ -179,3 +179,142 @@ comprobaciones totales = 163 · fallos = 0
 `run-phase6` incluye: 3 cierres concurrentes con agregado exacto, 3 replays sin doble contabilización, **3 muertes del proceso con `SIGKILL` a mitad del cierre** (turno queda OPEN, agregado intacto, reintento posterior converge), **muerte inmediatamente después del commit** (agregado exacto), auto-sanación de un agregado corrupto y verificación de que los cierres históricos no cambian.
 
 Otras validaciones sobre el mismo árbol: `npm run api:build` exit 0; `npm --workspace apps/api test` → 797 passed, 8 skipped, 0 failed (78 suites). Sin cambios en Dart respecto al árbol ya validado (1394 tests Flutter + `flutter analyze` sin errores).
+
+## 10. Artefacto construido y verificado (release candidate)
+
+Imagen construida localmente, en aislamiento, desde el commit exacto (`apps/api` limpio vs `700553bc`):
+
+```
+docker build -f apps/api/Dockerfile \
+  --label org.opencontainers.image.revision=700553bc0c8b442853e762eccaa833a0b3bbe416 \
+  --label org.opencontainers.image.version=1.0.6-700553bc \
+  --label com.fullpos.baseline=offline-144 \
+  -t fullpos/daleventapos-backend:cash-turnos-700553bc apps/api
+```
+
+| Dato | Valor |
+| --- | --- |
+| Tag | `fullpos/daleventapos-backend:cash-turnos-700553bc` |
+| Image Id | `sha256:a2ad5f318892cc73771d2aed8d2c5f095eda1a6d1f7e8806ffaa61556a17b380` |
+| Plataforma | `linux/amd64` (Node `v20.20.2`, `linux x64`) |
+| Tamaño | 760 MB (igual que `offline-144`) |
+| Entrypoint | `sh scripts/start-prod.sh` · `HEALTHCHECK /health` |
+
+Prueba de humo con PostgreSQL UAT aislado (contenedor real, no `node` local):
+
+```
+run-uat (64) + preprod (27) + phase5 (31) + phase4 (15) = 137/137 · fallos 0
+tras cada suite: docker restart → /health = 200 en las 4 suites
+run-phase6 con docker kill/docker start = 26/26 · fallos 0
+```
+
+La prueba de fase 6 se ejecutó con `PHASE6_DOCKER=1`: mata el contenedor (`docker kill`) a mitad del cierre y lo reinicia (`docker start`), confirmando que el turno queda OPEN con el agregado intacto y que el reintento converge sin duplicar.
+
+## 11. Paridad funcional con `offline-144`
+
+Comparación de inventario compilado entre ambas imágenes:
+
+- `dist`: base **226** archivos → candidato **227**; la única diferencia es `=> ./cash/cash-operation-window.js` (nuevo). **Cero archivos eliminados.**
+- Módulos compilados idénticos (34): `ai-assistant, app-updates, auth, backups, cash, clients, common, contabilidad, cotizaciones, health, inventory, license, locations, notifications, onboarding, payroll, price-lists, products, purchases, reports, sales, service-orders, settings, storage, tax, terminals, usage-telemetry, users, warehouses, warranty-configs, work-scheduling …`
+- Rutas HTTP extraídas del artefacto: 75 en ambas imágenes, **0 rutas de `offline-144` ausentes** en el candidato. Las dos rutas nuevas (`GET /cash/sessions/stale`, `POST /cash/sessions/:id/admin-close`) son adicionales.
+- No se toca `package.json`, `Dockerfile`, `tsconfig` ni dependencias.
+
+## 12. Migraciones y esquema
+
+- Local: 32 carpetas de migración · Producción: 172 aplicadas (174 filas con 2 históricas ya resueltas).
+- **Migraciones locales no aplicadas en producción: 0.** La última en ambos lados coincide: `20261014153000_offline_operation_payload_hash`.
+- Columnas clave verificadas en producción (4/4). `RUN_MIGRATIONS=false` puede mantenerse: `prisma migrate deploy` en el arranque sería un no-op.
+
+## 13. Respaldo
+
+Procedimiento probado de verdad sobre la base UAT (aislada):
+
+```
+pg_dump -h <host> -p <puerto> -U <usuario> -Fc -f daleventa-<fecha>.dump daleventa
+sha256sum daleventa-<fecha>.dump          # → C6474008…C293F (prueba UAT: 558 KB)
+pg_restore --list daleventa-<fecha>.dump  # → 1201 entradas TOC verificadas
+```
+
+Para producción (a ejecutar **solo con autorización**, sin restaurar):
+
+```
+ssh root@31.97.99.70 "docker exec daleventapos_database.1.<id> pg_dump -U daleventa_user -Fc daleventa" > daleventa-prod-<fecha>.dump
+sha256sum daleventa-prod-<fecha>.dump
+pg_restore --list daleventa-prod-<fecha>.dump | head
+```
+
+Criterio de aceptación: dump > 100 MB, `pg_restore --list` sin errores, hash y tamaño registrados en el ticket.
+
+## 14. Rollback probado en aislamiento
+
+La imagen `fullpos/daleventapos-backend:offline-144` **existe y es ejecutable localmente**. Se arrancó contra la base con el esquema actual y respondió:
+
+```
+/health      → 200
+/auth/login  → token emitido
+/cash/state  → 200
+```
+
+Rollback en producción: `docker service rollback daleventapos_backend` (o `docker service update --image fullpos/daleventapos-backend:offline-144`). Sin migraciones que deshacer; esquema común, así que el rollback es seguro en cualquier momento.
+
+## 15. Ventana de despliegue
+
+Actividad real (últimos 14/30 días, hora local America/Santo_Domingo):
+
+| Franja | % de ventas |
+| --- | --- |
+| 00:00–01:59 | 22.7 % |
+| **04:00–05:59** | **0.9 %** |
+| 06:00–10:59 | 0 % |
+| 11:00–15:59 | 6.7 % |
+| 17:00–23:59 | 60.1 % |
+
+- **Ventana recomendada: 04:30–06:00 hora local**, cualquier día (el martes es el día más bajo: 155 ventas/30 d frente a 402 del domingo).
+- Alternativa si se necesita horario laboral: 11:00–12:30 (0.8 % por hora), aceptando algo más de riesgo.
+- **El negocio activo es Siarah Beer & Café** (última venta hoy 16:59, 91 ventas en 48 h, 188 en 7 d): su despliegue y su regularización deben ir en la ventana baja o coordinados con el dueño. FULLTECH SRL tiene actividad esporádica (2 ventas/48 h). Los otros cinco están inactivos desde hace semanas.
+
+## 16. Fichas de conciliación (una por negocio, sin cerrar nada)
+
+Alcance real de las ventas que quedaron fuera de la ventana de su turno:
+
+| Negocio | Usuario | Ventas fuera | Desde | Hasta | Días con ventas | Efectivo fuera | Acción |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Puerta y Ventana. Aquino | Nandy Aquino | 12 | 2026-09-25 | 2026-10-09 | 5 | 66 446 | Conteo físico + depósitos; cierre admin con el conteo |
+| FULLTECH, SRL | Yunior Lopez | 9 | 2026-10-12 | 2026-10-26 | 6 | 61 150 | Igual (activo esporádico: coordinar) |
+| Siarah Beer & Café | Juan Núñez | 150 | 2026-10-23 | 2026-10-26 | 4 | 27 750 | **Prioridad**: negocio activo; ventana baja |
+| Solimac | Prueva123 | 7 | 2026-09-22 | 2026-10-01 | 3 | 13 380 | Cuenta de prueba; confirmar con el cliente |
+| yahaPublicidad | Yahaira rodriguez | 0 | — | — | — | 0 | Cierre directo con el fondo (0) |
+| jc distribuidores | JOEL CASTILLO | 0 | — | — | — | 0 | Cierre con el conteo del fondo (500) |
+| pureva7 | pureva7 | 0 | — | — | — | 0 | Sin importes; cierre con 0 |
+
+Nota: el `saleDate` de esas ventas es la fecha real de la operación, así que los reportes de ventas por fecha no están distorsionados; lo que quedó mal atribuido es la caja (turno y caja diaria).
+
+Pasos por negocio (nunca en bloque): (1) conteo físico y depósitos declarados por el negocio; (2) `GET /cash/sessions/stale`; (3) `POST /cash/sessions/:id/admin-close` con el conteo como `closingAmount` — el servidor calcula `expectedAmount` y registra `difference`; (4) verificar que la caja diaria de esa fecha = suma de sus cierres; (5) el usuario abre turno y sigue vendiendo. Los demás empleados no se ven afectados en ningún momento.
+
+## 17. Requisitos GO/NO-GO
+
+| # | Requisito | Evidencia | Estado | Responsable |
+| --- | --- | --- | --- | --- |
+| 1 | Imagen inmutable desde `700553bc` | Id `sha256:a2ad5f31…`, labels de revisión, `linux/amd64`, Node 20.20.2 | ✅ GO | Build/DevOps |
+| 2 | Humo del contenedor con PostgreSQL UAT | 137/137 + 26/26 + `/health` 200 tras reinicio | ✅ GO | QA |
+| 3 | Paridad funcional con `offline-144` | dist 226→227 (+1 nuevo, 0 eliminados), 34 módulos, 0 rutas perdidas | ✅ GO | Dev |
+| 4 | Provisiones de esquema | 0 migraciones locales pendientes; última coincidente | ✅ GO | DBA |
+| 5 | Respaldo verificable | Procedimiento probado en UAT (dump 558 KB, hash, 1201 TOC) | ⚠️ Preparado, **requiere autorización** para ejecutarlo sobre producción | DBA |
+| 6 | Rollback disponible y probado | `offline-144` arranca contra el esquema actual: health/login/state 200 | ✅ GO | DevOps |
+| 7 | Regularización de 7 negocios | Fichas §16 con cifras reales y orden de riesgo | ⚠️ Pendiente de confirmación de cada negocio (no se cierra nada) | Soporte + cliente |
+| 8 | Ventana y comprobaciones | §15 (04:30–06:00) y §6/§7 | ✅ GO | Operaciones |
+| 9 | Umbrales de rollback | §7 (6 señales) | ✅ GO | Operaciones |
+| 10 | Sin tocar producción | Servicio sigue en `offline-144`, running 7 days; solo lecturas | ✅ GO | Todos |
+
+## 18. Pasos exactos después de la autorización
+
+1. `T-24 h`: avisar a Siarah Beer & Café y FULLTECH SRL (los dos con actividad) y ajustar la hora con ellos.
+2. `T-30 min`: respaldo de producción (§13) + verificación de hash y listado. **Sin respaldo válido no se continúa.**
+3. `T-10 min`: `docker service inspect daleventapos_backend` (imagen y réplicas) y `npx prisma migrate status` de solo lectura.
+4. `T-0`: `docker service update --image fullpos/daleventapos-backend:cash-turnos-700553bc --update-order start-first --update-parallelism 1 daleventapos_backend`.
+5. `T+2 min`: `/health` 200, login interno, `/cash/state` 200, `docker service ps` sin reinicios; revisar log del contenedor sin `P2034` ni `ExceptionsHandler`.
+6. `T+10 min`: venta de prueba en cuenta interna (apertura → venta → movimiento → cierre) y comprobar caja diaria = suma de cierres.
+7. `T+15 min`: regularización de los negocios **inactivos** (pureva7, yahaPublicidad, jc distribuidores, Solimac, Puerta y Ventana).
+8. Día siguiente, ventana baja: Siarah Beer & Café y FULLTECH SRL, con conteo confirmado.
+9. `T+120 min` y al cierre del día: ejecutar las dos queries de verificación de §6 y revisar que no haya turnos vencidos nuevos.
+10. Si aparece cualquiera de las señales de §7: `docker service rollback daleventapos_backend` (segundos) y abrir incidencia con el log del contenedor.

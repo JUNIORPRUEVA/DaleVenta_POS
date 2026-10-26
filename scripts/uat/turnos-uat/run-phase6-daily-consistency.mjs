@@ -15,10 +15,14 @@
  * Requisitos: PostgreSQL aislado en 55432 con `daleventa_uat_local` migrada y
  * sembrada, puerto 4100 libre, `apps/api/dist` compilado.
  */
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { PrismaClient } from "@prisma/client";
 
-const BASE = "http://127.0.0.1:4100";
+const run = promisify(execFile);
+const BASE = process.env.UAT_API_URL ?? "http://127.0.0.1:4100";
+const DOCKER_MODE = process.env.PHASE6_DOCKER === "1";
+const CONTAINER = process.env.PHASE6_CONTAINER ?? "fullpos-cand-smoke";
 const API_DIR = "C:/src/fullpos-antonio-turnos/apps/api";
 const COMPANY_ID = "aaaaaaaa-0000-4000-8000-000000000001";
 const T1 = "dddddddd-0000-4000-8000-000000000001";
@@ -70,6 +74,12 @@ async function waitForApi(timeoutMs = 45000) {
   throw new Error("la API no respondió a tiempo");
 }
 async function startApi() {
+  if (DOCKER_MODE) {
+    // Contenedor real: `docker start` equivale a reiniciar el proceso.
+    await run("docker", ["start", CONTAINER]);
+    await waitForApi();
+    return;
+  }
   api = spawn("node", ["dist/main.js"], {
     cwd: API_DIR,
     env: {
@@ -87,6 +97,12 @@ async function startApi() {
   await waitForApi();
 }
 async function killApi() {
+  if (DOCKER_MODE) {
+    // Muerte abrupta del contenedor (SIGKILL a PID 1).
+    await run("docker", ["kill", CONTAINER]).catch(() => {});
+    await sleep(1200);
+    return;
+  }
   if (!api) return;
   const victim = api;
   api = null;
