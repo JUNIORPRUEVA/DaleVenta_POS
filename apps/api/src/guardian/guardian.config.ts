@@ -17,6 +17,12 @@ export type GuardianConfig = {
   alertsFallbackEmail: string;
   alertGroupWindowMinutes: number;
   diagnosisMaxAttempts: number;
+  /** Presupuesto diario de tokens de IA por empresa (0 = sin límite). */
+  aiTokensPerCompanyDay: number;
+  /** Máximo de llamadas simultáneas al proveedor de IA. */
+  aiMaxConcurrency: number;
+  /** Interruptor explícito del canal Evolution reutilizando el outbox. */
+  alertsEvolutionEnabled: boolean;
   platformToken: string;
 };
 
@@ -48,6 +54,9 @@ export function resolveGuardianConfig(env: NodeJS.ProcessEnv = process.env): Gua
     alertsFallbackEmail: String(env.GUARDIAN_ALERT_FALLBACK_EMAIL ?? '').trim(),
     alertGroupWindowMinutes: readInt(env.GUARDIAN_ALERT_GROUP_WINDOW_MINUTES, 30, 1, 720),
     diagnosisMaxAttempts: readInt(env.GUARDIAN_DIAGNOSIS_MAX_ATTEMPTS, 4, 1, 10),
+    aiTokensPerCompanyDay: readInt(env.GUARDIAN_AI_TOKENS_PER_COMPANY_DAY, 200_000, 0, 100_000_000),
+    aiMaxConcurrency: readInt(env.GUARDIAN_AI_MAX_CONCURRENCY, 2, 1, 10),
+    alertsEvolutionEnabled: readBool(env.GUARDIAN_ALERTS_EVOLUTION_ENABLED, false),
     platformToken: String(env.GUARDIAN_PLATFORM_TOKEN ?? '').trim(),
   };
 }

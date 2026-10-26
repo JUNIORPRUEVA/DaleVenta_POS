@@ -50,13 +50,13 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     // --- Caso 2: dos turnos abiertos en el mismo terminal (DUPLICATE)
     await prisma.$executeRawUnsafe(
       `INSERT INTO cash_sessions (id, company_id, "openedByUserId", "openedAt", "status", "updatedAt")
-       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, now() - interval '30 hours', 'OPEN', now())`,
+       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') - interval '30 hours', 'OPEN', (now() AT TIME ZONE 'UTC'))`,
       dirty.id,
       userId,
     );
     await prisma.$executeRawUnsafe(
       `INSERT INTO cash_sessions (id, company_id, "openedByUserId", "openedAt", "status", "updatedAt")
-       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, now() - interval '2 hours', 'OPEN', now())`,
+       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') - interval '2 hours', 'OPEN', (now() AT TIME ZONE 'UTC'))`,
       dirty.id,
       userId,
     );
@@ -64,7 +64,7 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     // --- Caso 3: sesión cerrada con venta posterior (patrón de cierre contaminado)
     await prisma.$executeRawUnsafe(
       `INSERT INTO cash_sessions (id, company_id, "openedByUserId", "openedAt", "closedAt", "status", "updatedAt")
-       VALUES ('11111111-1111-4111-8111-111111111111'::uuid, $1::uuid, $2::uuid, now() - interval '8 hours', now() - interval '4 hours', 'CLOSED', now())`,
+       VALUES ('11111111-1111-4111-8111-111111111111'::uuid, $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') - interval '8 hours', (now() AT TIME ZONE 'UTC') - interval '4 hours', 'CLOSED', (now() AT TIME ZONE 'UTC'))`,
       dirty.id,
       userId,
     );
@@ -72,8 +72,8 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
       `INSERT INTO "Sale" (id, company_id, "userId", "saleDate", "createdAt", "totalSold", "totalCost", "totalProfit",
                            "commissionAmount", "paymentCashAmount", "paymentTransferAmount", "creditAmount",
                            "isDeleted", "cashSessionId", "updatedAt")
-       VALUES ('22222222-2222-4222-8222-222222222222'::uuid, $1::uuid, $2::uuid, now() - interval '5 hours', now() - interval '1 hour',
-               100, 0, 0, 0, 80, 0, 0, false, '11111111-1111-4111-8111-111111111111'::uuid, now())`,
+       VALUES ('22222222-2222-4222-8222-222222222222'::uuid, $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') - interval '5 hours', (now() AT TIME ZONE 'UTC') - interval '1 hour',
+               100, 0, 0, 0, 80, 0, 0, false, '11111111-1111-4111-8111-111111111111'::uuid, (now() AT TIME ZONE 'UTC'))`,
       dirty.id,
       userId,
     );
@@ -81,7 +81,7 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     // Turno sano para la empresa limpia (sin hallazgos).
     await prisma.$executeRawUnsafe(
       `INSERT INTO cash_sessions (id, company_id, "openedByUserId", "openedAt", "status", "updatedAt")
-       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, now() - interval '1 hour', 'OPEN', now())`,
+       VALUES (gen_random_uuid(), $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') - interval '1 hour', 'OPEN', (now() AT TIME ZONE 'UTC'))`,
       clean.id,
       userId,
     );
@@ -90,8 +90,8 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     await prisma.$executeRawUnsafe(
       `INSERT INTO "Sale" (id, company_id, "userId", "saleDate", "createdAt", "totalSold", "totalCost", "totalProfit",
                            "commissionAmount", "paymentCashAmount", "isDeleted", "updatedAt")
-       VALUES ('44444444-4444-4444-8444-444444444444'::uuid, $1::uuid, $2::uuid, now() + interval '2 hours', now() + interval '2 hours',
-               70, 0, 0, 0, 70, false, now())`,
+       VALUES ('44444444-4444-4444-8444-444444444444'::uuid, $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') + interval '2 hours', (now() AT TIME ZONE 'UTC') + interval '2 hours',
+               70, 0, 0, 0, 70, false, (now() AT TIME ZONE 'UTC'))`,
       dirty.id,
       userId,
     );
@@ -100,8 +100,8 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     await prisma.$executeRawUnsafe(
       `INSERT INTO "Sale" (id, company_id, "userId", "saleDate", "createdAt", "totalSold", "totalCost", "totalProfit",
                            "commissionAmount", "paymentCashAmount", "cancelled_at", "isDeleted", "updatedAt")
-       VALUES ('55555555-5555-4555-8555-555555555555'::uuid, $1::uuid, $2::uuid, now() - interval '3 hours', now() - interval '3 hours',
-               90, 0, 0, 0, 90, now() - interval '2 hours', false, now())`,
+       VALUES ('55555555-5555-4555-8555-555555555555'::uuid, $1::uuid, $2::uuid, (now() AT TIME ZONE 'UTC') - interval '3 hours', (now() AT TIME ZONE 'UTC') - interval '3 hours',
+               90, 0, 0, 0, 90, (now() AT TIME ZONE 'UTC') - interval '2 hours', false, (now() AT TIME ZONE 'UTC'))`,
       dirty.id,
       userId,
     );

@@ -4462,6 +4462,7 @@ enum GuardianAlertState {
   SENDING
   SENT
   DELIVERED
+  READ
   FAILED_PERMANENT
   DEAD
 }
@@ -4474,6 +4475,8 @@ model GuardianAlert {
   incidentId    String             @map("incident_id") @db.Uuid
   channel       String             @db.VarChar(40)
   recipientHash String             @map("recipient_hash") @db.VarChar(80)
+  /// Número administrativo destino (E.164, sin `+`). Interno, nunca de cliente.
+  recipientNumber String?          @map("recipient_number") @db.VarChar(32)
   dedupeKey     String             @unique @map("dedupe_key") @db.VarChar(200)
   kind          String             @default("initial") @db.VarChar(20)
   state         GuardianAlertState @default(PENDING)
@@ -4482,9 +4485,12 @@ model GuardianAlert {
   lockedAt      DateTime?          @map("locked_at")
   lockedBy      String?            @map("locked_by") @db.VarChar(120)
   providerMessageId String?        @map("provider_message_id") @db.VarChar(200)
+  /// Último estado reportado por el proveedor (sent/delivered/read/failed/accepted).
+  lastProviderStatus String?       @map("last_provider_status") @db.VarChar(20)
   lastError     String?            @map("last_error") @db.VarChar(600)
   sentAt        DateTime?          @map("sent_at")
   deliveredAt   DateTime?          @map("delivered_at")
+  readAt        DateTime?          @map("read_at")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
 
@@ -4494,6 +4500,7 @@ model GuardianAlert {
   @@index([state, nextAttemptAt])
   @@index([incidentId])
   @@index([lockedAt])
+  @@index([providerMessageId])
   @@map("guardian_alerts")
 }
 

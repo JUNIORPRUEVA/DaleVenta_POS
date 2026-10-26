@@ -2,6 +2,8 @@ import { Controller, Get, HttpCode, Post, Query, Req, Res } from '@nestjs/common
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Request, Response } from 'express';
 import { GuardianAlertService } from './guardian.alert.service';
+import { mapMetaStatus } from './guardian.alert.delivery';
+import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
 
 /**
  * Webhook de estados de WhatsApp Cloud API (Meta).
@@ -10,6 +12,8 @@ import { GuardianAlertService } from './guardian.alert.service';
  * - Verificación GET con `hub.verify_token` (`GUARDIAN_WA_VERIFY_TOKEN`).
  * - POST con firma `X-Hub-Signature-256` (HMAC SHA-256 del cuerpo CRUDO).
  * - Sin `GUARDIAN_WA_APP_SECRET` configurado se rechaza (fail-closed).
+ * - Solo se procesan estados del Phone Number ID propio: un webhook de otra
+ *   WABA no puede alterar alertas de APPYRA.
  */
 @Controller('guardian/webhooks')
 export class GuardianWebhookController {
@@ -61,16 +65,40 @@ export class GuardianWebhookController {
     }
 
     const results: Array<{ id: string; status: string; updated: number }> = [];
+    const configuredPhoneId = resolveGuardianWhatsAppProfile().sender.phoneNumberId;
+    let ignored = 0;
+
     for (const entry of payload?.entry ?? []) {
+      if (entry?.id && configuredPhoneId && String(entry.id) !== configuredPhoneId) {
+        ignored += 1;
+        continue;
+      }
       for (const change of entry?.changes ?? []) {
+        const metadataPhoneId = change?.value?.metadata?.phone_number_id;
+        if (configuredPhoneId && metadataPhoneId && String(metadataPhoneId) !== configuredPhoneId) {
+          ignored += 1;
+          continue;
+        }
+
         for (const status of change?.value?.statuses ?? []) {
-          const mapped = status.status === 'read' ? 'read' : status.status === 'delivered' ? 'delivered' : 'failed';
-          const outcome = await this.alerts.markDelivery(String(status.id ?? ''), mapped);
+          const mapped = mapMetaStatus(status?.status);
+          if (mapped === 'unknown') {
+            // Estados no relacionados con entrega: se confirman sin tocar la alerta.
+            ignored += 1;
+            continue;
+          }
+          const providerError =
+            status?.errors?.[0]?.message ?? status?.errors?.[0]?.title ?? null;
+          const outcome = await this.alerts.markDelivery(
+            String(status.id ?? ''),
+            mapped,
+            providerError ? String(providerError) : null,
+          );
           results.push({ id: String(status.id ?? ''), status: mapped, updated: outcome.updated });
         }
       }
     }
 
-    return res.status(200).json({ ok: true, processed: results.length, results });
+    return res.status(200).json({ ok: true, processed: results.length, ignored, results });
   }
 }

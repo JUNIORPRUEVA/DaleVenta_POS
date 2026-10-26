@@ -44,7 +44,7 @@ const CHECKS: CheckDefinition[] = [
       FROM cash_sessions
       WHERE company_id = $1::uuid
         AND "status" = 'OPEN'
-        AND "openedAt" < now() - interval '24 hours'
+        AND "openedAt" < (now() AT TIME ZONE 'UTC') - interval '24 hours'
       ORDER BY "openedAt" ASC
       LIMIT 20
     `,
@@ -131,7 +131,7 @@ const CHECKS: CheckDefinition[] = [
       FROM "Sale" s
       WHERE s.company_id = $1::uuid
         AND s."isDeleted" = false
-        AND s."createdAt" > now() + interval '1 hour'
+        AND s."createdAt" > (now() AT TIME ZONE 'UTC') + interval '1 hour'
       ORDER BY s."createdAt" DESC
       LIMIT 20
     `,
@@ -169,7 +169,7 @@ const CHECKS: CheckDefinition[] = [
       FROM telemetry_outbox
       WHERE company_id = $1::uuid
         AND "status" IN ('PENDING', 'FAILED')
-        AND "next_attempt_at" < now() - interval '6 hours'
+        AND "next_attempt_at" < (now() AT TIME ZONE 'UTC') - interval '6 hours'
       ORDER BY "next_attempt_at" ASC
       LIMIT 20
     `,

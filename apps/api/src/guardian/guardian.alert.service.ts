@@ -15,6 +15,11 @@ import {
   WhatsAppCloudChannel,
   hashRecipient,
 } from './guardian.alert.channels';
+import {
+  GuardianDeliveryStatus,
+  advanceAlertDelivery,
+} from './guardian.alert.delivery';
+import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
 
 const WORKER_ID = `guardian-alerts-${hostname()}-${process.pid}`;
 const LOCK_TTL_MS = 2 * 60_000;
@@ -144,32 +149,23 @@ export class GuardianAlertService {
   /** Canales disponibles en este entorno (en orden de preferencia). */
   buildChannels(): GuardianAlertChannel[] {
     const config = resolveGuardianConfig();
-    const firstNonEmpty = (...values: Array<string | undefined>) =>
-      values.map((value) => String(value ?? '').trim()).find((value) => value.length > 0) ?? '';
+    // Identidad del remitente oficial APPYRA. Solo variables `GUARDIAN_WA_*`:
+    // nunca se hereda el número ni el token de otro producto.
+    const profile = resolveGuardianWhatsAppProfile();
 
     const cloud = new WhatsAppCloudChannel({
-      // Se reutilizan los nombres de configuración Meta ya usados en el
-      // ecosistema FULLTECH; los `GUARDIAN_*` tienen prioridad.
-      token: firstNonEmpty(
-        process.env.GUARDIAN_WA_CLOUD_TOKEN,
-        process.env.META_WHATSAPP_TOKEN,
-        process.env.META_ACCESS_TOKEN,
-      ),
-      phoneNumberId: firstNonEmpty(
-        process.env.GUARDIAN_WA_PHONE_NUMBER_ID,
-        process.env.META_PHONE_NUMBER_ID,
-      ),
-      apiVersion: firstNonEmpty(process.env.GUARDIAN_WA_API_VERSION, process.env.META_GRAPH_VERSION) || undefined,
-      templateName: firstNonEmpty(process.env.GUARDIAN_WA_TEMPLATE_NAME) || undefined,
-      templateLanguage: firstNonEmpty(process.env.GUARDIAN_WA_TEMPLATE_LANG) || 'es',
+      token: String(process.env.GUARDIAN_WA_CLOUD_TOKEN ?? '').trim(),
+      phoneNumberId: profile.sender.phoneNumberId ?? '',
+      apiVersion: profile.sender.apiVersion,
+      templateName: profile.templates.incidentAlert.name,
+      templateLanguage: profile.templates.incidentAlert.language,
       timeoutMs: Number(process.env.GUARDIAN_WA_TIMEOUT_MS ?? 12_000),
     });
 
     const evolution = new EvolutionOutboxChannel({
-      enabled: () => {
-        const flag = String(process.env.NOTIFICATIONS_ENABLED ?? '').trim().toLowerCase();
-        return flag !== '0' && flag !== 'false';
-      },
+      // Fail-closed: reutilizar el outbox de mensajes comerciales exige un
+      // interruptor explícito. `NOTIFICATIONS_ENABLED` no implica permiso.
+      enabled: () => config.alertsEvolutionEnabled,
       enqueue: async (input) => {
         const row = await this.notifications.enqueueWhatsAppRawText({
           toNumber: input.toNumber,
@@ -183,7 +179,7 @@ export class GuardianAlertService {
     });
 
     const webhook = new HttpWebhookChannel({
-      url: String(process.env.GUARDIAN_ALERT_FALLBACK_WEBHOOK_URL ?? config.alertsFallbackEmail ?? ''),
+      url: String(process.env.GUARDIAN_ALERT_FALLBACK_WEBHOOK_URL ?? '').trim(),
       secret: process.env.GUARDIAN_ALERT_FALLBACK_SECRET,
       timeoutMs: Number(process.env.GUARDIAN_WEBHOOK_TIMEOUT_MS ?? 12_000),
     });
@@ -209,8 +205,8 @@ export class GuardianAlertService {
     const config = resolveGuardianConfig();
     if (!config.alertsEnabled) return { created: false, skipped: 'ALERTS_DISABLED' };
 
-    const recipient = config.alertsRecipient;
-    if (!recipient) return { created: false, skipped: 'RECIPIENT_NOT_CONFIGURED' };
+    const recipients = this.resolveRecipients();
+    if (!recipients.length) return { created: false, skipped: 'RECIPIENT_NOT_CONFIGURED' };
 
     const incident = await this.prisma.guardianIncident.findUnique({
       where: { id: incidentId },
@@ -236,8 +232,12 @@ export class GuardianAlertService {
       return { created: false, skipped: 'SEV3_DISABLED', severity };
     }
 
-    const dedupeKey = `guardian:alert:initial:${incident.id}`;
-    const existing = await this.prisma.guardianAlert.findUnique({ where: { dedupeKey } });
+    const baseDedupeKey = `guardian:alert:initial:${incident.id}`;
+    const existing = await this.prisma.guardianAlert.findFirst({
+      where: { incidentId: incident.id, kind: 'initial' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, dedupeKey: true },
+    });
     if (existing) {
       return { created: false, alertId: existing.id, skipped: 'ALREADY_QUEUED', severity };
     }
@@ -249,19 +249,39 @@ export class GuardianAlertService {
     const channels = this.buildChannels();
     const primary = this.primaryChannel(channels);
 
-    const alert = await this.prisma.guardianAlert.create({
-      data: {
-        incidentId: incident.id,
-        channel: primary?.name ?? 'none',
-        recipientHash: hashRecipient(recipient),
-        dedupeKey,
-        kind: 'initial',
-        state: GuardianAlertState.PENDING,
-        nextAttemptAt: scheduledFor,
-      },
-    });
+    // Un destinatario por alerta: si un número administrativo falla, el otro
+    // sigue recibiendo el aviso y cada uno conserva su propia auditoría.
+    let firstAlertId: string | undefined;
+    for (const recipient of recipients) {
+      const dedupeKey =
+        recipients.length === 1
+          ? baseDedupeKey
+          : `${baseDedupeKey}:${hashRecipient(recipient).slice(0, 12)}`;
 
-    return { created: true, alertId: alert.id, severity, scheduledFor };
+      const alert = await this.prisma.guardianAlert.create({
+        data: {
+          incidentId: incident.id,
+          channel: primary?.name ?? 'none',
+          recipientHash: hashRecipient(recipient),
+          recipientNumber: recipient,
+          dedupeKey,
+          kind: 'initial',
+          state: GuardianAlertState.PENDING,
+          nextAttemptAt: scheduledFor,
+        },
+      });
+      firstAlertId = firstAlertId ?? alert.id;
+    }
+
+    return { created: true, alertId: firstAlertId, severity, scheduledFor };
+  }
+
+  /** Destinatarios administrativos configurados (lista oficial). */
+  private resolveRecipients(): string[] {
+    const profile = resolveGuardianWhatsAppProfile();
+    if (profile.adminRecipients.length) return profile.adminRecipients;
+    const legacy = String(resolveGuardianConfig().alertsRecipient ?? '').trim();
+    return legacy ? [legacy] : [];
   }
 
   /** Reclama alertas vencidas con compare-and-swap (seguro multi-worker). */
@@ -381,13 +401,29 @@ export class GuardianAlertService {
       relatedCount,
     });
 
-    const recipient = resolveGuardianConfig().alertsRecipient;
+    const recipient =
+      String((alert as { recipientNumber?: string | null }).recipientNumber ?? '').trim() ||
+      this.resolveRecipients()[0] ||
+      '';
+    if (!recipient) {
+      await this.recordFailure(
+        alert.id,
+        'sin destinatario administrativo configurado',
+        'permanent',
+        null,
+        alert.attempts,
+        channel.name,
+      );
+      return { ok: false as const, reason: 'NO_RECIPIENT' };
+    }
+
     const result = await channel.send({
       to: recipient,
       text,
       dedupeKey: alert.dedupeKey,
       allowOutsideBusinessHours: true,
-      templateName: process.env.GUARDIAN_WA_TEMPLATE_NAME,
+      templateName: resolveGuardianWhatsAppProfile().templates.incidentAlert.name,
+      templateLanguage: resolveGuardianWhatsAppProfile().templates.incidentAlert.language,
       templateParams: buildGuardianAlertTemplateParams({
         severity: incident.severity,
         companyName: incident.company.name,
@@ -414,6 +450,7 @@ export class GuardianAlertService {
             lockedBy: null,
             lastError: null,
             providerMessageId: result.providerMessageId ?? null,
+            lastProviderStatus: 'accepted',
           },
         }),
         this.prisma.guardianAlertAttempt.create({
@@ -438,6 +475,7 @@ export class GuardianAlertService {
       result.httpStatus ?? null,
       alert.attempts,
       channel.name,
+      result.retryAfterMs,
     );
 
     if (result.classification === 'permanent' && fallback && channel.name !== fallback.name) {
@@ -454,9 +492,11 @@ export class GuardianAlertService {
     httpStatus: number | null,
     previousAttempts: number,
     channel: string,
+    retryAfterMs?: number,
   ) {
     const attempts = previousAttempts + 1;
     const dead = classification === 'permanent' || attempts >= MAX_ATTEMPTS;
+    const delay = Math.max(this.backoffMs(attempts), Number(retryAfterMs) || 0);
 
     await this.prisma.$transaction([
       this.prisma.guardianAlert.update({
@@ -464,7 +504,7 @@ export class GuardianAlertService {
         data: {
           state: dead ? GuardianAlertState.FAILED_PERMANENT : GuardianAlertState.PENDING,
           attempts,
-          nextAttemptAt: new Date(Date.now() + this.backoffMs(attempts)),
+          nextAttemptAt: new Date(Date.now() + delay),
           lockedAt: null,
           lockedBy: null,
           lastError: error.slice(0, 600),
@@ -503,8 +543,14 @@ export class GuardianAlertService {
     });
   }
 
-  /** Marca la alerta como entregada/leída a partir del id del proveedor. */
-  async markDelivery(providerMessageId: string, status: 'delivered' | 'read' | 'failed') {
+  /**
+   * Aplica un estado de entrega reportado por el proveedor.
+   *
+   * Es idempotente y monótono: los webhooks pueden llegar repetidos o
+   * desordenados (`read` antes que `delivered`) y el estado nunca retrocede.
+   * Un `failed` posterior a la entrega conserva la evidencia de entrega.
+   */
+  async markDelivery(providerMessageId: string, status: GuardianDeliveryStatus, error?: string | null) {
     const normalized = String(providerMessageId ?? '').trim();
     if (!normalized) return { updated: 0 };
 
@@ -514,22 +560,19 @@ export class GuardianAlertService {
     });
     if (!alert) return { updated: 0 };
 
-    if (status === 'failed') {
-      await this.prisma.guardianAlert.update({
-        where: { id: alert.id },
-        data: { state: GuardianAlertState.FAILED_PERMANENT, lastError: 'proveedor reportó fallo' },
-      });
-      return { updated: 1, state: 'FAILED_PERMANENT' };
+    const now = new Date();
+    const transition = advanceAlertDelivery(alert.state, status, now, { error });
+
+    const data: Prisma.GuardianAlertUpdateInput = { lastProviderStatus: status };
+    if (transition.state) data.state = transition.state;
+    if (transition.deliveredAt) data.deliveredAt = transition.deliveredAt;
+    if (transition.readAt) data.readAt = transition.readAt;
+    if (transition.lastError !== undefined) {
+      data.lastError = transition.lastError ? transition.lastError.slice(0, 600) : null;
     }
 
-    await this.prisma.guardianAlert.update({
-      where: { id: alert.id },
-      data: {
-        state: GuardianAlertState.DELIVERED,
-        deliveredAt: new Date(),
-      },
-    });
-    return { updated: 1, state: 'DELIVERED' };
+    await this.prisma.guardianAlert.update({ where: { id: alert.id }, data });
+    return { updated: 1, state: String(transition.state ?? alert.state) };
   }
 
   private problemText(module: string, operation: string): string {

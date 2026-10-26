@@ -6,6 +6,7 @@ import {
   GuardianSeverity,
   Prisma,
 } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveGuardianConfig } from './guardian.config';
 import {
@@ -14,9 +15,11 @@ import {
   GuardianAiRequest,
   GuardianToolCallTrace,
 } from './ai/guardian-ai.provider';
+import { sanitizeUntrustedText, sanitizeUntrustedValue } from './ai/guardian.ai.sanitizer';
 import { GuardianToolsService } from './guardian.tools.service';
 
 const MAX_BACKOFF_MS = 30 * 60_000;
+const BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class GuardianDiagnosisService {
@@ -94,6 +97,41 @@ export class GuardianDiagnosisService {
     const incident = await this.prisma.guardianIncident.findUnique({ where: { id: incidentId } });
     if (!incident) return { ok: false as const, reason: 'NOT_FOUND' };
 
+    // Presupuesto por empresa: evita que un bucle de errores de un solo cliente
+    // consuma el saldo de IA de toda la plataforma.
+    if (await this.isCompanyBudgetExhausted(incident.companyId, config.aiTokensPerCompanyDay)) {
+      await this.prisma.$transaction([
+        this.prisma.guardianIncident.update({
+          where: { id: incidentId },
+          data: {
+            processingState: GuardianProcessingState.SKIPPED,
+            nextDiagnosisAt: new Date(Date.now() + BUDGET_WINDOW_MS),
+          },
+        }),
+        this.prisma.guardianDiagnosis.create({
+          data: {
+            incidentId,
+            status: GuardianDiagnosisStatus.DONE,
+            verdict: GuardianDiagnosisVerdict.INSUFFICIENT,
+            confidence: new Prisma.Decimal('0.00'),
+            summary: 'El presupuesto diario de IA de la empresa está agotado; no se emitió diagnóstico.',
+            explanation:
+              'Guardian no llamó al proveedor de IA para no exceder el presupuesto configurado. ' +
+              'El incidente queda registrado y la alerta administrativa ya fue planificada.',
+            nextSteps: [
+              'Revisar el presupuesto de IA de la empresa',
+              'Reprocesar el incidente cuando se restablezca el presupuesto',
+            ],
+            evidenceRefs: [] as unknown as Prisma.InputJsonValue,
+            toolCalls: [] as unknown as Prisma.InputJsonValue,
+            model: 'budget-guard',
+          },
+        }),
+      ]);
+      this.logger.warn(`Diagnóstico omitido por presupuesto incident=${incidentId}`);
+      return { ok: true as const, skipped: 'AI_BUDGET_EXCEEDED' as const };
+    }
+
     const diagnosis = await this.prisma.guardianDiagnosis.create({
       data: {
         incidentId,
@@ -106,6 +144,10 @@ export class GuardianDiagnosisService {
     const toolCalls: GuardianToolCallTrace[] = [];
     try {
       const request = await this.buildRequest(incident, toolCalls);
+      const promptHash = createHash('sha256')
+        .update(JSON.stringify(request))
+        .digest('hex')
+        .slice(0, 64);
       const result = await this.provider.analyze(request);
 
       const enforced = this.enforceVerdictRules(result);
@@ -125,6 +167,7 @@ export class GuardianDiagnosisService {
             evidenceRefs: enforced.evidenceRefs as unknown as Prisma.InputJsonValue,
             toolCalls: [...toolCalls, ...result.toolCalls] as unknown as Prisma.InputJsonValue,
             model: result.model,
+            promptHash,
             tokensUsed: result.tokensUsed,
             durationMs: result.durationMs,
             error: null,
@@ -143,7 +186,16 @@ export class GuardianDiagnosisService {
     } catch (error) {
       const attempts = incident.diagnosisAttempts;
       const maxAttempts = config.diagnosisMaxAttempts;
-      const backoffMs = Math.min(MAX_BACKOFF_MS, 60_000 * Math.pow(2, Math.max(0, attempts - 1)));
+      const providerRetryAfterMs = Number(
+        (error as { retryAfterMs?: number } | null)?.retryAfterMs ?? 0,
+      );
+      const backoffMs = Math.min(
+        MAX_BACKOFF_MS,
+        Math.max(
+          Number.isFinite(providerRetryAfterMs) ? providerRetryAfterMs : 0,
+          60_000 * Math.pow(2, Math.max(0, attempts - 1)),
+        ),
+      );
       const message = error instanceof Error ? error.message : String(error);
 
       await this.prisma.$transaction([
@@ -209,6 +261,27 @@ export class GuardianDiagnosisService {
     }
 
     return { ...result, confidence, evidenceRefs };
+  }
+
+  /**
+   * Presupuesto diario de tokens por empresa.
+   *
+   * Se calcula con la suma real de `tokens_used` de los diagnósticos de la
+   * empresa (vía la relación con el incidente), no con contadores en memoria:
+   * sobrevive reinicios y es correcto con varios workers.
+   */
+  private async isCompanyBudgetExhausted(companyId: string, dailyLimit: number): Promise<boolean> {
+    if (!Number.isFinite(dailyLimit) || dailyLimit <= 0) return false;
+    const since = new Date(Date.now() - BUDGET_WINDOW_MS);
+    const aggregate = await this.prisma.guardianDiagnosis.aggregate({
+      _sum: { tokensUsed: true },
+      where: {
+        createdAt: { gte: since },
+        incident: { companyId },
+      },
+    });
+    const used = Number(aggregate._sum.tokensUsed ?? 0);
+    return used >= dailyLimit;
   }
 
   private async buildRequest(
@@ -287,9 +360,13 @@ export class GuardianDiagnosisService {
         platform: incident.platform,
         appVersion: incident.appVersion,
         occurredAt: incident.occurredAt.toISOString(),
-        message: this.messageFromPayload(incident.payload),
-        stack: incident.stack,
-        impactSummary: incident.impactSummary,
+        message: this.messageFromPayload(incident.payload)
+          ? sanitizeUntrustedText(this.messageFromPayload(incident.payload), 600)
+          : null,
+        stack: incident.stack ? sanitizeUntrustedText(incident.stack, 8_000) : null,
+        impactSummary: incident.impactSummary
+          ? sanitizeUntrustedText(incident.impactSummary, 400)
+          : null,
       },
       similarIncidents: similarIncidents.map((row) => ({
         id: row.id,
@@ -305,8 +382,12 @@ export class GuardianDiagnosisService {
             createdAt: company.createdAt.toISOString(),
           }
         : null,
-      businessFacts,
-      codeMatches: code.matches,
+      businessFacts: sanitizeUntrustedValue(businessFacts) as Record<string, unknown>,
+      codeMatches: code.matches.map((match) => ({
+        file: match.file,
+        line: match.line,
+        snippet: sanitizeUntrustedText(match.snippet, 160),
+      })),
       versionTimeline: versionTimeline.map((row) => ({
         version: row.version,
         platform: String(row.platform),

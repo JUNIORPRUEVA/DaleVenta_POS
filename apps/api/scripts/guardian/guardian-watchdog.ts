@@ -98,30 +98,30 @@ async function collectSnapshot(
     base.databaseReachable = true;
     base.alertsPendingStuck = await count(
       `SELECT COUNT(*)::bigint AS n FROM "guardian_alerts"
-       WHERE state = 'PENDING' AND created_at < now() - ($1 || ' minutes')::interval`,
+       WHERE state = 'PENDING' AND created_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
       String(stuckMinutes),
     );
     base.diagnosesPendingStuck = await count(
       `SELECT COUNT(*)::bigint AS n FROM "guardian_diagnoses"
-       WHERE status = 'PENDING' AND created_at < now() - ($1 || ' minutes')::interval`,
+       WHERE status = 'PENDING' AND created_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
       String(stuckMinutes),
     );
     base.incidentsUnprocessed = await count(
       `SELECT COUNT(*)::bigint AS n FROM "guardian_incidents"
        WHERE processing_state NOT IN ('DIAGNOSED', 'SKIPPED')
-         AND next_diagnosis_at < now() - ($1 || ' minutes')::interval`,
+         AND next_diagnosis_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
       String(stuckMinutes),
     );
     base.alertProviderFailures = await count(
       `SELECT COUNT(*)::bigint AS n FROM "guardian_alerts"
        WHERE state = 'PENDING' AND last_error IS NOT NULL
-         AND updated_at < now() - ($1 || ' minutes')::interval`,
+         AND updated_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
       String(stuckMinutes),
     );
     base.sev1Unacknowledged = await count(
       `SELECT COUNT(*)::bigint AS n FROM "guardian_incidents"
        WHERE severity = 'SEV1' AND status = 'OPEN' AND acknowledged_at IS NULL
-         AND occurred_at < now() - ($1 || ' minutes')::interval`,
+         AND occurred_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
       String(base.sev1UnackMinutes),
     );
 
@@ -129,14 +129,14 @@ async function collectSnapshot(
     if (workers.length > 0) {
       const activeRecently = await count(
         `SELECT COUNT(*)::bigint AS n FROM "guardian_incidents"
-         WHERE received_at > now() - ($1 || ' minutes')::interval`,
+         WHERE received_at > (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
         String(Math.max(heartbeatStaleMinutes, 60)),
       );
       const heartbeats = await prisma.$queryRawUnsafe<
         Array<{ worker_name: string; age_minutes: number }>
       >(
         `SELECT worker_name,
-                EXTRACT(EPOCH FROM (now() - last_seen_at)) / 60 AS age_minutes
+                EXTRACT(EPOCH FROM ((now() AT TIME ZONE 'UTC') - last_seen_at)) / 60 AS age_minutes
          FROM "guardian_worker_heartbeats"
          WHERE worker_name = ANY($1::text[])`,
         workers,

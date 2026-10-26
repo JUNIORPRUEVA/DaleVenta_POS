@@ -61,4 +61,34 @@ export interface GuardianAiProvider {
   analyze(request: GuardianAiRequest): Promise<GuardianAiResult>;
 }
 
+export type GuardianAiErrorCode =
+  | 'AI_INVALID_RESPONSE'
+  | 'AI_TIMEOUT'
+  | 'AI_RATE_LIMITED'
+  | 'AI_PROVIDER_ERROR'
+  | 'AI_NOT_CONFIGURED';
+
+/**
+ * Error tipado del proveedor. Permite que el worker distinga un fallo
+ * transitorio (429/5xx/timeout) de una respuesta inválida y aplique backoff
+ * con la espera que indique el proveedor.
+ */
+export class GuardianAiError extends Error {
+  readonly code: GuardianAiErrorCode;
+  readonly httpStatus?: number;
+  readonly retryAfterMs?: number;
+
+  constructor(
+    code: GuardianAiErrorCode,
+    message: string,
+    options: { httpStatus?: number; retryAfterMs?: number } = {},
+  ) {
+    super(message);
+    this.name = 'GuardianAiError';
+    this.code = code;
+    this.httpStatus = options.httpStatus;
+    this.retryAfterMs = options.retryAfterMs;
+  }
+}
+
 export const GUARDIAN_AI_PROVIDER = Symbol('GUARDIAN_AI_PROVIDER');

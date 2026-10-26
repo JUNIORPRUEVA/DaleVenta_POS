@@ -21,9 +21,13 @@ import { OpenAiGuardianAiProvider } from './ai/openai-guardian-ai.provider';
 /**
  * Proveedor de IA según entorno: sin credenciales usa el mock determinista,
  * de modo que el circuito funciona en UAT sin inventar credenciales externas.
+ *
+ * Solo se acepta `GUARDIAN_AI_API_KEY`: una clave de otro producto (por ejemplo
+ * `OPENAI_API_KEY` de un proyecto distinto) nunca se reutiliza sin autorización
+ * explícita, porque mezclaría facturación y cuotas de dos negocios.
  */
 export function createGuardianAiProvider() {
-  const apiKey = String(process.env.GUARDIAN_AI_API_KEY ?? process.env.OPENAI_API_KEY ?? '').trim();
+  const apiKey = String(process.env.GUARDIAN_AI_API_KEY ?? '').trim();
   if (!apiKey) return new MockGuardianAiProvider();
   return new OpenAiGuardianAiProvider({
     apiKey,
@@ -31,6 +35,7 @@ export function createGuardianAiProvider() {
     model: process.env.GUARDIAN_AI_MODEL,
     timeoutMs: Number(process.env.GUARDIAN_AI_TIMEOUT_MS ?? 20_000),
     maxTokens: Number(process.env.GUARDIAN_AI_MAX_TOKENS ?? 900),
+    maxConcurrent: Number(process.env.GUARDIAN_AI_MAX_CONCURRENCY ?? 2),
   });
 }
 

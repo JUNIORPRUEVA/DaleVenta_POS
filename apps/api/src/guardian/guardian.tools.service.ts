@@ -15,15 +15,15 @@ const PREDEFINED_QUERIES: Record<string, string> = {
     SELECT
       COUNT(*) FILTER (WHERE "status" = 'OPEN') AS open_sessions,
       COUNT(*) AS total_sessions,
-      COUNT(*) FILTER (WHERE "closedAt" IS NULL AND "openedAt" < now() - interval '12 hours') AS stale_sessions
+      COUNT(*) FILTER (WHERE "closedAt" IS NULL AND "openedAt" < (now() AT TIME ZONE 'UTC') - interval '12 hours') AS stale_sessions
     FROM cash_sessions
-    WHERE "company_id" = $1::uuid AND "openedAt" >= now() - interval '24 hours'
+    WHERE "company_id" = $1::uuid AND "openedAt" >= (now() AT TIME ZONE 'UTC') - interval '24 hours'
     LIMIT 1
   `,
   sales_activity_24h: `
     SELECT COUNT(*) AS sales_count, COALESCE(SUM("totalSold"), 0) AS total_amount
     FROM "Sale"
-    WHERE "company_id" = $1::uuid AND "createdAt" >= now() - interval '24 hours'
+    WHERE "company_id" = $1::uuid AND "createdAt" >= (now() AT TIME ZONE 'UTC') - interval '24 hours'
     LIMIT 1
   `,
   sync_recent_errors: `

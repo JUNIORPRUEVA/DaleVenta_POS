@@ -6,6 +6,8 @@ export type GuardianAlertPayload = {
   dedupeKey: string;
   allowOutsideBusinessHours: boolean;
   templateName?: string;
+  /** Idioma de la plantilla (`es`, `es_DO`, `en_US`…). */
+  templateLanguage?: string;
   /** Parámetros posicionales del cuerpo de la plantilla HSM. */
   templateParams?: string[];
 };
@@ -18,7 +20,67 @@ export type GuardianChannelResult = {
   httpStatus?: number;
   error?: string;
   classification?: GuardianChannelClassification;
+  /** Espera indicada por el proveedor (`Retry-After`) cuando aplica. */
+  retryAfterMs?: number;
 };
+
+/**
+ * Interpreta `Retry-After` (segundos o fecha HTTP) con un límite superior para
+ * que un proveedor no pueda aparcar una alerta crítica durante horas.
+ */
+export function parseRetryAfterMs(raw: unknown, now = Date.now(), maxMs = 15 * 60_000): number | undefined {
+  const value = String(raw ?? '').trim();
+  if (!value) return undefined;
+
+  if (/^\d+$/.test(value)) {
+    const seconds = Number.parseInt(value, 10);
+    if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
+    return Math.min(maxMs, seconds * 1_000);
+  }
+
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return undefined;
+  const delta = timestamp - now;
+  if (delta <= 0) return undefined;
+  return Math.min(maxMs, delta);
+}
+
+/**
+ * Traduce un error de Meta a un motivo accionable y estable.
+ * No se registra el cuerpo completo de la respuesta (puede contener datos del
+ * destinatario); solo el código y una descripción acotada.
+ */
+export function describeMetaError(httpStatus: number, bodyText: string): string {
+  const KNOWN: Record<number, string> = {
+    190: 'token de acceso inválido o expirado',
+    100: 'parámetro inválido en la petición',
+    131000: 'error genérico de Meta',
+    131026: 'el destinatario no puede recibir mensajes (sin WhatsApp o ventana cerrada)',
+    131047: 'fuera de la ventana de 24 h: se requiere plantilla aprobada',
+    131051: 'tipo de mensaje no soportado',
+    132000: 'la plantilla no está aprobada o no existe',
+    132001: 'la plantilla aún no existe en el idioma solicitado',
+    133010: 'el número de teléfono no está registrado en la WABA',
+  };
+
+  let code: number | undefined;
+  let message = '';
+  try {
+    const parsed = JSON.parse(bodyText);
+    code = Number(parsed?.error?.code ?? Number.NaN);
+    message = String(parsed?.error?.message ?? '').slice(0, 160);
+  } catch {
+    message = bodyText.slice(0, 160);
+  }
+
+  if (Number.isFinite(code) && KNOWN[code!]) {
+    return `HTTP ${httpStatus} (${code}): ${KNOWN[code!]}`;
+  }
+  if (Number.isFinite(code)) {
+    return `HTTP ${httpStatus} (${code}): ${message || 'error del proveedor'}`;
+  }
+  return `HTTP ${httpStatus}: ${message || 'error del proveedor'}`;
+}
 
 export interface GuardianAlertChannel {
   readonly name: string;
@@ -89,7 +151,10 @@ export class WhatsAppCloudChannel implements GuardianAlertChannel {
       type: 'template',
       template: {
         name: templateName,
-        language: { code: String(this.options.templateLanguage ?? 'es').trim() || 'es' },
+        language: {
+          code:
+            String(payload.templateLanguage ?? this.options.templateLanguage ?? 'es').trim() || 'es',
+        },
         ...(params.length ? { components: [{ type: 'body', parameters: params }] } : {}),
       },
     };
@@ -121,11 +186,15 @@ export class WhatsAppCloudChannel implements GuardianAlertChannel {
 
       const bodyText = await response.text().catch(() => '');
       if (!response.ok) {
+        const retryAfterMs = parseRetryAfterMs(
+          typeof response.headers?.get === 'function' ? response.headers.get('retry-after') : null,
+        );
         return {
           ok: false,
           httpStatus: response.status,
-          error: bodyText.slice(0, 400) || `HTTP ${response.status}`,
+          error: describeMetaError(response.status, bodyText),
           classification: classifyHttpStatus(response.status),
+          ...(retryAfterMs ? { retryAfterMs } : {}),
         };
       }
 
@@ -137,6 +206,7 @@ export class WhatsAppCloudChannel implements GuardianAlertChannel {
         providerMessageId = undefined;
       }
 
+      // Un 200 con `messages[].id` significa aceptado por Meta, no entregado.
       return { ok: true, httpStatus: response.status, providerMessageId };
     } catch (error) {
       return {
