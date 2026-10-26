@@ -111,13 +111,42 @@ describe('UsageTelemetryService reliable outbox', () => {
     ).resolves.toBeNull();
   });
 
+  /**
+   * Regresión del defecto detectado en UAT con PostgreSQL real: bajo
+   * concurrencia (4 aperturas de turno simultáneas) el `telemetry_outbox.create`
+   * dentro de la transacción SERIALIZABLE fallaba con P2034 y convertía una
+   * apertura válida en un 500. La telemetría es auxiliar: debe descartarse el
+   * evento, no romper la caja.
+   */
+  it('never fails the business transaction when the outbox write conflicts', async () => {
+    const { service, prisma } = buildService();
+    prisma.telemetryOutbox.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('write conflict', {
+        code: 'P2034',
+        clientVersion: 'test',
+      }),
+    );
+    const tx = prisma as any;
+
+    await expect(
+      service.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: 'user-1',
+        eventType: 'CASH_SESSION_OPENED',
+        entityType: 'cash_session',
+        entityId: 'session-1',
+        feature: 'CASH',
+      }),
+    ).resolves.toBeNull();
+    expect(prisma.telemetryOutbox.create).toHaveBeenCalledTimes(1);
+  });
+
   it('promotes client device headers into the Appyra payload', async () => {
     const { service, prisma } = buildService();
     prisma.telemetryOutbox.create.mockImplementation(async (args: any) => ({
       id: 'outbox-client-1',
       ...args.data,
     }));
-
     service.recordRequestUsage({
       user: { id: 'user-1', companyId },
       headers: {

@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/uat_identity.dart';
+
 import '../debug/trace_log.dart';
 import '../models/user_model.dart';
 
@@ -20,9 +22,10 @@ class TokenStorageLaunchSnapshot {
 }
 
 class TokenStorage {
-  static const _accessTokenKey = 'accessToken';
-  static const _refreshTokenKey = 'refreshToken';
-  static const _userSnapshotKey = 'authUserSnapshot';
+  static String get _accessTokenKey => UatIdentity.storageKey('accessToken');
+  static String get _refreshTokenKey => UatIdentity.storageKey('refreshToken');
+  static String get _userSnapshotKey =>
+      UatIdentity.storageKey('authUserSnapshot');
   final _secureStorage = const FlutterSecureStorage();
   String? _memoryAccessToken;
   String? _memoryRefreshToken;

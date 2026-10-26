@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from 'class-validator';
 
 export class OpenCashSessionDto {
   @Type(() => Number)
@@ -95,4 +95,41 @@ export class CreateCashMovementDto {
 
   @IsOptional()
   affectsProfit?: boolean;
+
+  /**
+   * Fecha REAL de la operación en el dispositivo (ISO 8601 con zona).
+   *
+   * Separa fecha de operación de fecha de recepción: un movimiento encolado
+   * offline se valida contra su turno con el instante en que ocurrió, no con el
+   * instante en que se sincroniza. Si no llega (clientes viejos), se usa el
+   * instante de recepción, que es el comportamiento histórico.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  occurredAt?: string;
+}
+
+/**
+ * Cierre administrativo de un turno ajeno (ADMIN/OWNER de la empresa).
+ *
+ * Se exige motivo y monto declarado: el cierre administrativo NUNCA inventa el
+ * efectivo contado (no hay cierre automático sin conciliación). La diferencia
+ * contra el efectivo esperado queda registrada en el turno.
+ */
+export class AdminCloseCashSessionDto {
+  @IsString()
+  @MinLength(10)
+  @MaxLength(300)
+  reason!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  closingAmount!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
 }

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Req,
@@ -107,7 +108,10 @@ export class SalesController {
 
   @Delete(":id")
   @Permissions("cancelSales")
-  remove(@Req() req: Request, @Param("id") id: string) {
+  remove(
+    @Req() req: Request,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ) {
     const user = req.user as TenantUser;
     return this.sales.remove(user, id);
   }
@@ -115,7 +119,7 @@ export class SalesController {
   @Post(":id/credit-payments")
   addCreditPayment(
     @Req() req: Request,
-    @Param("id") id: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: AddCreditPaymentDto,
   ) {
     const user = req.user as TenantUser;
@@ -131,7 +135,7 @@ export class SalesController {
   @Permissions("refundSales")
   returnSale(
     @Req() req: Request,
-    @Param("id") id: string,
+    @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: CreateSaleReturnDto,
   ) {
     const user = req.user as TenantUser;

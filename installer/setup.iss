@@ -49,6 +49,21 @@
 #define MyAppOutputBaseFilename "FullPOS-UAT-Mayoreo-Setup"
 #endif
 
+#ifdef MyAppUat
+;
+; Variante UAT (aislada): AppId, carpeta y entrada de desinstalación PROPIAS.
+; Objetivo: una instalación UAT nunca puede sobrescribir la instalación real
+; de FullPOS Cloud en el mismo equipo.
+#undef MyAppName
+#define MyAppName "FullPOS UAT"
+#undef MyAppFolderName
+#define MyAppFolderName "DaleVentas POS UAT"
+#undef MyAppId
+#define MyAppId "{{4C1F9E6A-2D74-4E33-9B57-7A0E5F1C8D21}"
+#undef MyAppOutputBaseFilename
+#define MyAppOutputBaseFilename "FullPOS-UAT-Setup"
+#endif
+
 #ifndef MyAppSourceDir
 #define MyAppSourceDir "..\apps\fulltech_app\build\windows\x64\runner\Release"
 #endif

@@ -232,18 +232,37 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Encola un evento de negocio dentro de la transacción del dominio.
+   *
+   * La telemetría es auxiliar: NUNCA debe abortar la operación de negocio.
+   * Antes, un conflicto de escritura (P2034) en `telemetry_outbox` dentro de
+   * una transacción SERIALIZABLE propagaba y convertía una apertura de turno
+   * válida en un 500 (reproducido en UAT con 4 aperturas concurrentes). Ahora
+   * el fallo se registra y se descarta: el turno/venta/movimiento se confirma
+   * igual y el evento se pierde (asumible) en lugar de bloquear la caja.
+   */
   async enqueueBusinessEvent(
     tx: Prisma.TransactionClient,
     input: Omit<TelemetryEventInput, 'deviceId' | 'platform'>,
   ) {
-    return this.enqueueEvent(
-      {
-        ...input,
-        deviceId: `daleventas-api-${input.companyId}`,
-        platform: 'api',
-      },
-      tx,
-    );
+    try {
+      return await this.enqueueEvent(
+        {
+          ...input,
+          deviceId: `daleventas-api-${input.companyId}`,
+          platform: 'api',
+        },
+        tx,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `telemetry.enqueue.skipped event=${input.eventType} entity=${input.entityType ?? 'n/a'} company=${input.companyId} code=${
+          (error as any)?.code ?? 'n/a'
+        } error=${this.errorMessage(error)}`,
+      );
+      return null;
+    }
   }
 
   async processOutboxBatch(limit = this.batchSize) {

@@ -10,7 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
-import 'core/api/env.dart';
+import 'core/config/uat_identity.dart';import 'core/api/env.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -368,7 +368,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final role = authState.user?.appRole ?? AppRole.unknown;
 
     return MaterialApp.router(
-      title: 'FullPOS Cloud - Sistema de facturacion',
+      title: UatIdentity.appTitle(),
       debugShowCheckedModeBanner: false,
       locale: const Locale('es', 'DO'),
       supportedLocales: const [Locale('es', 'DO'), Locale('es')],

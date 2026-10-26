@@ -67,7 +67,17 @@ describe("CashService multi-device consistency", () => {
           .fn()
           .mockResolvedValue({ nombreCompleto: "Cajero", email: "c@x.com", blocked: false }),
       },
-      cashSession: { findFirst: jest.fn() },
+      cashSession: {
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+        aggregate: jest
+          .fn()
+          .mockResolvedValue({
+            _count: { _all: 0 },
+            _sum: { closingAmount: 0, initialAmount: 0 },
+          }),
+      },
       cashboxDaily: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
       cashMovement: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       sale: { findMany: jest.fn().mockResolvedValue([]) },
@@ -212,40 +222,25 @@ describe("CashService multi-device consistency", () => {
     ).rejects.toThrow(/sin empresa/i);
   });
 
-  it("no presenta como actual un turno legacy si existe otro OPEN operativo del día", async () => {
+  it("devuelve el turno legacy MARCADO como vencido (cerrable) en lugar de 409", async () => {
     const legacyOpen = {
       ...existingSession,
       id: "2222aaaa-2222-4222-8222-222222222222",
       openedAt: new Date("2026-09-17T02:31:17.443Z"),
       businessDate: "2026-09-16",
     };
-    const operativeOpen = {
-      id: "3333aaaa-3333-4333-8333-333333333333",
-      openedByUserId: "user-b",
-      openedAt: new Date("2026-10-08T13:42:33.109Z"),
-    };
     const { prisma, service } = buildHarness();
     (prisma.cashboxDaily.findFirst as jest.Mock).mockResolvedValue(null);
-    (prisma.cashSession.findFirst as jest.Mock)
-      .mockResolvedValueOnce(legacyOpen)
-      .mockResolvedValueOnce(operativeOpen);
+    // Sólo el turno propio del usuario: el turno operativo del día pertenece a
+    // otro empleado y no entra en la consulta por usuario.
+    (prisma.cashSession.findMany as jest.Mock).mockResolvedValue([legacyOpen]);
 
-    await expect(service.gateState(user)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
-    expect(prisma.cashSession.findFirst).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        where: expect.objectContaining({
-          companyId: user.companyId,
-          status: "OPEN",
-          closedAt: null,
-          businessDate: currentBusinessDay(),
-          id: { not: legacyOpen.id },
-          openedAt: { gt: legacyOpen.openedAt },
-        }),
-      }),
-    );
+    const state = await service.gateState(user);
+
+    expect(state.activeSession?.shiftId).toBe(legacyOpen.id);
+    expect(state.staleBusinessDate).toBe(true);
+    expect(state.requiresClosure).toBe(true);
+    expect(state.canOperate).toBe(false);
   });
 
   it("no resume silenciosamente un turno legacy para calcular resumen actual", async () => {

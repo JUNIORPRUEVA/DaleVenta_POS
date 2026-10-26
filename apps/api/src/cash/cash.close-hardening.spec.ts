@@ -1,5 +1,6 @@
 import { ConflictException, Logger, NotFoundException } from "@nestjs/common";
 import { CashService } from "./cash.service";
+import { currentBusinessDay } from "../common/utils/business-time.util";
 
 /**
  * Blindaje del cierre de turno (incidente Asadero Pacheco).
@@ -34,6 +35,7 @@ type Session = {
   closedAt: Date | null;
   note: string | null;
   businessDate: string | null;
+  openedAt: Date;
   userName: string | null;
   initialAmount: number;
   closingAmount?: number | null;
@@ -49,7 +51,8 @@ function makeSession(overrides: Partial<Session> & { id: string }): Session {
     status: "OPEN",
     closedAt: null,
     note: null,
-    businessDate: "2026-10-03",
+    businessDate: currentBusinessDay(),
+    openedAt: new Date(),
     userName: "Cajero",
     initialAmount: 0,
     ...overrides,

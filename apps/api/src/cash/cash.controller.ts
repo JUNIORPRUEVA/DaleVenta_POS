@@ -16,6 +16,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { financialMetadataFromRequest } from '../common/financial-legacy-compat';
 import { CashService } from './cash.service';
 import {
+  AdminCloseCashSessionDto,
   CloseCashSessionDto,
   CreateCashMovementDto,
   OpenCashSessionDto,
@@ -82,6 +83,33 @@ export class CashController {
     return this.cash.closedSessions(
       req.user as { id: string; role: Role },
       query,
+    );
+  }
+
+  /** Turnos abiertos de días comerciales anteriores (sólo ADMIN). */
+  @Get('sessions/stale')
+  @Roles(Role.ADMIN)
+  staleSessions(@Req() req: Request) {
+    return this.cash.staleSessions(req.user as { id: string; role: Role });
+  }
+
+  /**
+   * Cierre administrativo de un turno ajeno (sólo ADMIN).
+   *
+   * Declarado ANTES de `sessions/:id` para que la ruta literal no sea capturada
+   * por el parámetro.
+   */
+  @Post('sessions/:id/admin-close')
+  @Roles(Role.ADMIN)
+  adminClose(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: AdminCloseCashSessionDto,
+  ) {
+    return this.cash.adminCloseSession(
+      req.user as { id: string; role: Role },
+      id,
+      dto,
     );
   }
 

@@ -45,6 +45,13 @@ final cashStateUnverifiedProvider = StateProvider<bool>((ref) => false);
 final cashStateRequiresReviewProvider = StateProvider<bool>((ref) => false);
 final cashStateReviewMessageProvider = StateProvider<String?>((ref) => null);
 
+/// `true` cuando el turno abierto es de un día comercial anterior.
+///
+/// El servidor lo devuelve para poder CERRARLO (antes respondía 409 y el
+/// usuario quedaba sin acción). La UI muestra el aviso y permite cerrar, pero
+/// nunca presentar el turno como operativo para hoy.
+final cashStateStaleShiftProvider = StateProvider<bool>((ref) => false);
+
 class ActiveCashSessionController
     extends StateNotifier<AsyncValue<ActiveCashSession?>> {
   ActiveCashSessionController(this.ref) : super(const AsyncLoading()) {
@@ -98,6 +105,11 @@ class ActiveCashSessionController
         : null;
   }
 
+  void _markCashStateStaleShift(bool value) {
+    if (!mounted) return;
+    ref.read(cashStateStaleShiftProvider.notifier).state = value;
+  }
+
   void _invalidateCashReadsAfterRefresh() {
     if (!mounted) return;
     ref.invalidate(cashGateStateProvider);
@@ -134,6 +146,8 @@ class ActiveCashSessionController
       _markCashStateUnverified(gate.fromCache);
       if (!_canApplyRefresh(generation)) return;
       _markCashStateRequiresReview(gate.requiresReview, gate.reviewMessage);
+      if (!_canApplyRefresh(generation)) return;
+      _markCashStateStaleShift(gate.staleBusinessDate || gate.requiresClosure);
       if (!_canApplyRefresh(generation)) return;
       _invalidateCashReadsAfterRefresh();
       debugPrint('[CashController] refresh complete');
