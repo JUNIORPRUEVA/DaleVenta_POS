@@ -588,6 +588,16 @@ export class CashService {
     const difference = closingAmount.minus(expectedAmount);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Serializa los cierres de la MISMA caja diaria: el bloqueo de fila se
+      // toma al principio y siempre en el mismo orden, así que no hay ciclos de
+      // espera. Con el bloqueo, la comprobación de "quedan turnos abiertos" y
+      // la suma de cierres se hacen sobre datos ya confirmados: el agregado no
+      // puede perderse si el proceso muere (todo va en la MISMA transacción que
+      // el cierre del turno) ni quedar por debajo del real por concurrencia.
+      if (session.cashboxDailyId) {
+        await this.lockCashboxDaily(tx, session.cashboxDailyId);
+      }
+
       // Transición atómica OPEN -> CLOSED condicionada por identidad. Sólo UNA
       // solicitud (doble clic, dos dispositivos, replay + cierre manual) puede
       // efectuar la transición; el resto obtiene count 0.
@@ -623,35 +633,15 @@ export class CashService {
         throw new NotFoundException("No encontramos el turno cerrado.");
       }
 
-      const otherOpen = await tx.cashSession.findFirst({
-        where: {
-          cashboxDailyId: session.cashboxDailyId,
-          companyId,
-          status: "OPEN",
-          closedAt: null,
-          id: { not: session.id },
-        },
-        select: { id: true },
-      });
-
-      if (!otherOpen && session.cashboxDailyId) {
-        // Caja diaria COMPARTIDA por todos los empleados del día: el importe se
-        // deriva de las operaciones reales (suma de los cierres del día) en vez
-        // de sobrescribirse con el cierre del último empleado.
-        const dailyTotal = await this.sumDailyClosedAmounts(
+      if (session.cashboxDailyId) {
+        await this.refreshDailyCashbox(
           tx,
           session.cashboxDailyId,
           companyId,
+          user.id,
+          session.id,
+          closingAmount,
         );
-        await tx.cashboxDaily.update({
-          where: { id: session.cashboxDailyId },
-          data: {
-            status: "CLOSED",
-            closedAt: new Date(),
-            closedByUserId: user.id,
-            currentAmount: dailyTotal ?? closingAmount,
-          },
-        });
       }
 
       await this.telemetry?.enqueueBusinessEvent(tx, {
@@ -675,14 +665,6 @@ export class CashService {
         (dto.sessionId ?? "").trim() ? "identified" : "legacy"
       } expected=${expectedAmount.toFixed(2)} closing=${closingAmount.toFixed(2)} difference=${difference.toFixed(2)} cashbox=${session.cashboxDailyId ?? "none"}`,
     );
-
-    if (session.cashboxDailyId) {
-      await this.finalizeDailyCashboxAfterClose(
-        companyId,
-        session.cashboxDailyId,
-        user.id,
-      );
-    }
 
     this.emitCashEvent(companyId, "cash.session.closed", session.id, {
       userId: user.id,
@@ -1098,6 +1080,10 @@ export class CashService {
     }`;
 
     const result = await this.prisma.$transaction(async (tx) => {
+      if (session.cashboxDailyId) {
+        await this.lockCashboxDaily(tx, session.cashboxDailyId);
+      }
+
       const closeResult = await tx.cashSession.updateMany({
         where: {
           id: session.id,
@@ -1127,12 +1113,13 @@ export class CashService {
       }
 
       if (session.cashboxDailyId) {
-        await this.closeDailyIfNoOpenSessions(
+        await this.refreshDailyCashbox(
           tx,
           session.cashboxDailyId,
           companyId,
           user.id,
           session.id,
+          closingAmount,
         );
       }
 
@@ -1151,13 +1138,6 @@ export class CashService {
     this.logger.warn(
       `cash.admin_close.ok company=${companyId} session=${session.id} actor=${user.id} owner=${session.openedByUserId} expected=${expectedAmount.toFixed(2)} closing=${closingAmount.toFixed(2)} difference=${difference.toFixed(2)} reason=${reason.slice(0, 80)}`,
     );
-    if (session.cashboxDailyId) {
-      await this.finalizeDailyCashboxAfterClose(
-        companyId,
-        session.cashboxDailyId,
-        user.id,
-      );
-    }
     this.emitCashEvent(companyId, "cash.session.closed", session.id, {
       userId: user.id,
       adminClose: true,
@@ -1172,79 +1152,53 @@ export class CashService {
   }
 
   /**
-   * Finaliza la caja diaria compartida cuando ya no quedan turnos abiertos.
+   * Toma el bloqueo de fila de la caja diaria dentro de la transacción actual.
    *
-   * Se ejecuta DESPUÉS de confirmar el cierre del turno y con la fila de la
-   * caja bloqueada (`SELECT ... FOR UPDATE`). Sin el bloqueo, si varios
-   * empleados cierran casi al mismo tiempo cada uno veía a los demás todavía
-   * OPEN, nadie finalizaba la caja y el importe diario se quedaba en el inicial
-   * (reproducido en UAT con 3 cierres simultáneos: caja = 100 en vez de 1800).
-   * Con el bloqueo, la comprobación y la suma se serializan y el último en
-   * cerrar deja el total real (suma de los cierres del día).
+   * Cualquier cierre de turno de la misma caja pasa por aquí, así que los
+   * cierres concurrentes se serializan en un orden único (la fila de la caja) y
+   * la comprobación "¿quedan turnos abiertos?" + la suma de cierres se calculan
+   * siempre sobre datos confirmados. Sin el bloqueo, dos cierres simultáneos
+   * podían verse mutuamente como OPEN y ninguno actualizaba el agregado.
+   *
+   * Si el cliente Prisma no expone `$queryRaw` (mocks de prueba), se degrada
+   * sin bloqueo: el resultado sigue siendo correcto en el caso de un solo turno.
    */
-  private async finalizeDailyCashboxAfterClose(
-    companyId: string,
+  private async lockCashboxDaily(
+    tx: Prisma.TransactionClient,
     cashboxDailyId: string,
-    userId: string,
   ) {
-    try {
-      return await this.retryOnWriteConflict(() =>
-        this.prisma.$transaction(async (tx) => {
-          const raw = (tx as unknown as { $queryRaw?: unknown }).$queryRaw;
-          if (typeof raw === "function") {
-            await tx.$queryRaw`SELECT id FROM "cashbox_daily" WHERE id = ${cashboxDailyId}::uuid FOR UPDATE`;
-          }
-
-          const otherOpen = await tx.cashSession.findFirst({
-            where: {
-              cashboxDailyId,
-              companyId,
-              status: "OPEN",
-              closedAt: null,
-            },
-            select: { id: true },
-          });
-          if (otherOpen) return null;
-
-          const dailyTotal = await this.sumDailyClosedAmounts(
-            tx,
-            cashboxDailyId,
-            companyId,
-          );
-          if (!dailyTotal) return null;
-
-          await tx.cashboxDaily.update({
-            where: { id: cashboxDailyId },
-            data: {
-              status: "CLOSED",
-              closedAt: new Date(),
-              closedByUserId: userId,
-              currentAmount: dailyTotal,
-            },
-          });
-          return dailyTotal;
-        }),
-      );
-    } catch (error) {
-      // La caja diaria es un agregado derivado: si no se puede finalizar ahora,
-      // el cierre del turno (ya confirmado) sigue siendo válido y no se debe
-      // convertir en un error para el usuario. Se registra para seguimiento.
-      this.logger.warn(
-        `cash.daily.finalize_failed company=${companyId} cashbox=${cashboxDailyId} error=${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      return null;
-    }
+    const raw = (tx as unknown as { $queryRaw?: unknown }).$queryRaw;
+    if (typeof raw !== "function") return;
+    await tx.$queryRaw`SELECT id FROM "cashbox_daily" WHERE id = ${cashboxDailyId}::uuid FOR UPDATE`;
   }
 
-  private async closeDailyIfNoOpenSessions(
+  /**
+   * Recalcula el agregado de la caja diaria a partir de los cierres reales.
+   *
+   * - El importe SIEMPRE se deriva de `SUM(closingAmount)` de los turnos CLOSED
+   *   de esa caja (nunca "el último cierre gana"), de modo que es idempotente:
+   *   ejecutarlo dos veces da el mismo resultado.
+   * - El estado pasa a CLOSED solo cuando ya no queda ningún turno abierto.
+   * - Se ejecuta dentro de la MISMA transacción que el cierre del turno, así que
+   *   o se confirman los dos cambios o ninguno: un fallo, reinicio o caída del
+   *   proceso no puede dejar el agregado desactualizado de forma permanente.
+   * - Nunca toca los cierres históricos: solo lee `cash_sessions` y escribe el
+   *   importe/estado de la caja diaria.
+   */
+  private async refreshDailyCashbox(
     tx: Prisma.TransactionClient,
     cashboxDailyId: string,
     companyId: string,
     userId: string,
     excludeSessionId: string,
+    fallbackAmount: Prisma.Decimal,
   ) {
+    const dailyTotal = await this.sumDailyClosedAmounts(
+      tx,
+      cashboxDailyId,
+      companyId,
+    );
+
     const otherOpen = await tx.cashSession.findFirst({
       where: {
         cashboxDailyId,
@@ -1255,25 +1209,35 @@ export class CashService {
       },
       select: { id: true },
     });
-    if (otherOpen) return;
 
-    // Importe DERIVADO de las operaciones reales del día (suma de cierres), no
-    // "el último cierre gana". Para una caja con un solo turno el resultado es
-    // idéntico al comportamiento anterior, así que no cambia nada histórico.
-    const dailyTotal = await this.sumDailyClosedAmounts(
+    const data: Record<string, unknown> = {
+      currentAmount: dailyTotal ?? fallbackAmount,
+    };
+    if (!otherOpen) {
+      data.status = "CLOSED";
+      data.closedAt = new Date();
+      data.closedByUserId = userId;
+    }
+
+    await tx.cashboxDaily.update({ where: { id: cashboxDailyId }, data });
+  }
+
+  private async closeDailyIfNoOpenSessions(
+    tx: Prisma.TransactionClient,
+    cashboxDailyId: string,
+    companyId: string,
+    userId: string,
+    excludeSessionId: string,
+  ) {
+    await this.lockCashboxDaily(tx, cashboxDailyId);
+    await this.refreshDailyCashbox(
       tx,
       cashboxDailyId,
       companyId,
+      userId,
+      excludeSessionId,
+      new Prisma.Decimal(0),
     );
-    await tx.cashboxDaily.update({
-      where: { id: cashboxDailyId },
-      data: {
-        status: "CLOSED",
-        closedAt: new Date(),
-        closedByUserId: userId,
-        currentAmount: dailyTotal ?? 0,
-      },
-    });
   }
 
   /**

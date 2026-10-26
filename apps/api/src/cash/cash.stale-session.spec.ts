@@ -493,7 +493,11 @@ describe("cierre administrativo (D6)", () => {
       closingAmount: 0,
     });
 
-    expect(db.cashboxUpdates).toHaveLength(0);
+    // El importe se refresca siempre (para que la caja diaria sea exacta), pero
+    // el estado NO se cierra mientras otro empleado siga con turno abierto.
+    expect(db.cashboxUpdates).toHaveLength(1);
+    expect(db.cashboxUpdates[0].data).not.toHaveProperty("status");
+    expect(db.cashboxUpdates[0].data.currentAmount).toBe(0);
     expect(db.cashboxes[0].status).toBe("OPEN");
   });
 
