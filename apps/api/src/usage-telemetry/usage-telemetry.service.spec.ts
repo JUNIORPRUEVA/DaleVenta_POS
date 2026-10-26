@@ -111,13 +111,63 @@ describe('UsageTelemetryService reliable outbox', () => {
     ).resolves.toBeNull();
   });
 
+  /**
+   * Regresión del defecto detectado en UAT con PostgreSQL real: bajo
+   * concurrencia (4 aperturas de turno simultáneas) el `telemetry_outbox.create`
+   * dentro de la transacción SERIALIZABLE fallaba con P2034.
+   *
+   * Capturarlo NO basta: en PostgreSQL una sentencia fallida deja la
+   * transacción abortada y el COMMIT se comporta como ROLLBACK (se observó la
+   * API respondiendo 201 sin fila del turno = pérdida silenciosa). Por eso el
+   * evento debe escribirse SIEMPRE fuera de la transacción del dominio.
+   */
+  it('escribe el evento fuera de la transacción del negocio aunque reciba un tx', async () => {
+    const { service, prisma } = buildService();
+    prisma.telemetryOutbox.create.mockResolvedValue({ id: 'outbox-1' });
+    const tx = { telemetryOutbox: { create: jest.fn() } } as any;
+
+    await service.enqueueBusinessEvent(tx, {
+      companyId,
+      actorUserId: 'user-1',
+      eventType: 'CASH_SESSION_OPENED',
+      entityType: 'cash_session',
+      entityId: 'session-1',
+      feature: 'CASH',
+    });
+
+    expect(prisma.telemetryOutbox.create).toHaveBeenCalledTimes(1);
+    expect(tx.telemetryOutbox.create).not.toHaveBeenCalled();
+  });
+
+  it('nunca falla la operación de negocio cuando el outbox conflicta', async () => {
+    const { service, prisma } = buildService();
+    prisma.telemetryOutbox.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('write conflict', {
+        code: 'P2034',
+        clientVersion: 'test',
+      }),
+    );
+    const tx = { telemetryOutbox: { create: jest.fn() } } as any;
+
+    await expect(
+      service.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: 'user-1',
+        eventType: 'CASH_SESSION_OPENED',
+        entityType: 'cash_session',
+        entityId: 'session-1',
+        feature: 'CASH',
+      }),
+    ).resolves.toBeNull();
+    expect(prisma.telemetryOutbox.create).toHaveBeenCalledTimes(1);
+  });
+
   it('promotes client device headers into the Appyra payload', async () => {
     const { service, prisma } = buildService();
     prisma.telemetryOutbox.create.mockImplementation(async (args: any) => ({
       id: 'outbox-client-1',
       ...args.data,
     }));
-
     service.recordRequestUsage({
       user: { id: 'user-1', companyId },
       headers: {

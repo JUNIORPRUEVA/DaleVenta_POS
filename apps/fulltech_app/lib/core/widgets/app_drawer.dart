@@ -554,6 +554,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     // reconstruye sin necesidad de cerrar/reabrir el drawer.
     final cashSession = ref.watch(activeCashSessionControllerProvider);
     final cashUnverified = ref.watch(cashStateUnverifiedProvider);
+    final cashStaleShift = ref.watch(cashStateStaleShiftProvider);
     final hasOpenShift = cashSession.valueOrNull?.isOpen == true;
     // Estado confirmado contra el backend (no loading, no error, no caché
     // no sincronizada). Regla #28: un error de red NO es "turno cerrado".
@@ -564,6 +565,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       role: role,
       hasOpenShift: hasOpenShift,
       cashConfirmed: cashConfirmed,
+      cashStaleShift: cashStaleShift,
     );
     final location = safeCurrentLocation(context);
     final expandedGroupIndex = isDesktop
@@ -860,6 +862,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   required AppRole role,
   required bool hasOpenShift,
   required bool cashConfirmed,
+  bool cashStaleShift = false,
 }) {
   final itemsByRoute = <String, AppNavigationItem>{};
   for (final section in sections) {
@@ -1094,7 +1097,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         items: turnosItems,
         openOnHover: false,
         featured: true,
-        subtitle: !cashConfirmed
+        subtitle: cashStaleShift
+            ? 'Turno de otro día — ciérralo'
+            : !cashConfirmed
             ? 'Estado no disponible'
             : hasOpenShift
             ? 'Abierto y operando'

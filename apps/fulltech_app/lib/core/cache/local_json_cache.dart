@@ -1,10 +1,11 @@
 import '../auth/token_storage.dart';
+import '../config/uat_identity.dart';
 import '../debug/trace_log.dart';
 import '../offline/offline_store.dart';
 import '../utils/is_flutter_test.dart';
 
 class LocalJsonCache {
-  static const String _prefix = 'ft_cache:';
+  static String get _prefix => UatIdentity.cachePrefix();
 
   final OfflineStore _store = OfflineStore.instance;
   final TokenStorage _tokenStorage = TokenStorage();

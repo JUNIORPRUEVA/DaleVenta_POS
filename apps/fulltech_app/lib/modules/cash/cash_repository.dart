@@ -673,6 +673,10 @@ class CashRepository {
     final resolvedSessionId = (sessionId ?? '').trim();
     final localId = 'local_cash_${DateTime.now().microsecondsSinceEpoch}';
     final operationId = 'cash.movement:$localId';
+    // Fecha REAL de la operación: el servidor la usa para validar que el
+    // movimiento pertenece a la vida del turno y no a un día posterior, sin
+    // depender del momento de sincronización (offline).
+    final occurredAt = DateTime.now().toUtc().toIso8601String();
     try {
       await _addMovementRemote(
         type: type,
@@ -682,6 +686,7 @@ class CashRepository {
         operationId: operationId,
         movementType: movementType,
         affectsProfit: affectsProfit,
+        occurredAt: occurredAt,
       );
     } on DioException catch (e) {
       if (!_shouldQueueNetworkFailure(e)) {
@@ -705,7 +710,8 @@ class CashRepository {
         'reason': reason,
         'movementType': movementType,
         if (affectsProfit != null) 'affectsProfit': affectsProfit,
-        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'occurredAt': occurredAt,
+        'createdAt': occurredAt,
       };
       await _appendPendingMovement(payload);
       await _syncQueue.enqueue(
@@ -728,6 +734,7 @@ class CashRepository {
     String? operationId,
     String movementType = 'expense',
     bool? affectsProfit,
+    String? occurredAt,
   }) {
     return _dio.post(
       ApiRoutes.cashMovements,
@@ -740,6 +747,7 @@ class CashRepository {
         if ((sessionId ?? '').trim().isNotEmpty) 'sessionId': sessionId!.trim(),
         'movementType': movementType,
         if (affectsProfit != null) 'affectsProfit': affectsProfit,
+        if ((occurredAt ?? '').trim().isNotEmpty) 'occurredAt': occurredAt!.trim(),
       },
     );
   }

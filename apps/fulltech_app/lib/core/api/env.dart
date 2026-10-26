@@ -207,6 +207,13 @@ class Env {
         host.contains('ventas-fullpos-backend');
   }
 
+  /// Expuesto únicamente para pruebas negativas de aislamiento (Fase 1).
+  ///
+  /// Un build UAT jamás debe aceptar un host productivo o compartido.
+  @visibleForTesting
+  static bool isBlockedUatApiHostForTest(String host) =>
+      _isBlockedUatApiHost(host.trim().toLowerCase());
+
   static String get appBaseUrl {
     final raw = (_readEnv('APP_BASE_URL') ?? '').trim();
 

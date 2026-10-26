@@ -59,6 +59,10 @@ import {
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
 import { PriceListsService } from "../price-lists/price-lists.service";
 import {
+  evaluateShiftOperationWindow,
+  shiftWindowRejected,
+} from "../cash/cash-operation-window";
+import {
   normalizePagePagination,
   type PagePagination,
   type PageResult,
@@ -1949,6 +1953,7 @@ export class SalesService {
         originTerminalId: dto.originTerminalId,
         clientRequestId,
       },
+      saleOccurredAt,
     );
     perf?.mark("cash_gate");
 
@@ -2457,6 +2462,7 @@ export class SalesService {
       originTerminalId?: string | null;
       clientRequestId?: string | null;
     } = {},
+    occurredAt: Date = new Date(),
   ) {
     const path = classifyFinancialContract(
       {
@@ -2480,6 +2486,7 @@ export class SalesService {
         user,
         companyId,
         "sales.create",
+        occurredAt,
       );
       this.logLegacyFinancialRequest({
         operation: "sales.create",
@@ -2517,6 +2524,19 @@ export class SalesService {
         message:
           "Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.",
       });
+    }
+    // Ventana operativa: la venta debe haber ocurrido dentro de la vida del
+    // turno y de su día comercial (o del siguiente, si el turno cruzó
+    // medianoche). Impide que ventas de días posteriores se imputen al turno y
+    // al cierre diario de un día anterior.
+    const window = evaluateShiftOperationWindow({ occurredAt, session });
+    if (!window.allowed) {
+      this.logger.warn(
+        `OFFLINE_SALE_ORIGIN_SESSION_OUT_OF_WINDOW company=${companyId} userId=${user.id} originSessionId=${requested} code=${window.code} sessionBusinessDate=${session.businessDate ?? "null"} occurredAt=${occurredAt.toISOString()}`,
+      );
+      throw new ConflictException(
+        shiftWindowRejected(window.code, window.reason, session.id),
+      );
     }
     return session;
   }
@@ -2758,11 +2778,13 @@ export class SalesService {
               companyId,
               dto.operationCashSessionId,
               "REFUND",
+              this.resolveSaleOccurredAt(dto.operationOccurredAt),
             )
           : await this.resolveLegacyCurrentOpenSession(
               requestUser,
               companyId,
               "refund",
+              this.resolveSaleOccurredAt(dto.operationOccurredAt),
             );
       if (refundPath === "LEGACY_COMPAT_PATH") {
         this.logLegacyFinancialRequest({
@@ -3254,11 +3276,13 @@ export class SalesService {
             companyId,
             dto.operationCashSessionId,
             "CREDIT_PAYMENT",
+            this.resolveSaleOccurredAt(dto.paidAt),
           )
         : await this.resolveLegacyCurrentOpenSession(
             user,
             companyId,
             "credit.payment",
+            this.resolveSaleOccurredAt(dto.paidAt),
           );
     if (paymentPath === "LEGACY_COMPAT_PATH") {
       this.logLegacyFinancialRequest({
@@ -3350,6 +3374,7 @@ export class SalesService {
     companyId: string,
     operationCashSessionId: string | undefined,
     operationType: "REFUND" | "CREDIT_PAYMENT",
+    occurredAt: Date = new Date(),
   ) {
     const requested = operationCashSessionId?.trim();
     if (!requested) {
@@ -3388,6 +3413,15 @@ export class SalesService {
           "Esta operación pertenece a un turno que ya fue cerrado y necesita revisión.",
       });
     }
+    const window = evaluateShiftOperationWindow({ occurredAt, session });
+    if (!window.allowed) {
+      this.logger.warn(
+        `OFFLINE_${operationType}_SESSION_OUT_OF_WINDOW company=${companyId} userId=${user.id} operationSessionId=${requested} code=${window.code} sessionBusinessDate=${session.businessDate ?? "null"} occurredAt=${occurredAt.toISOString()}`,
+      );
+      throw new ConflictException(
+        shiftWindowRejected(window.code, window.reason, session.id),
+      );
+    }
     return session;
   }
 
@@ -3395,6 +3429,7 @@ export class SalesService {
     user: TenantUser,
     companyId: string,
     operation: string,
+    occurredAt: Date = new Date(),
   ) {
     const session = await this.prisma.cashSession.findFirst({
       where: {
@@ -3412,6 +3447,18 @@ export class SalesService {
           : operation === "credit.payment"
             ? "Debes abrir caja antes de registrar un abono."
             : "Debes abrir caja antes de facturar.",
+      );
+    }
+    // El fallback legacy (cliente antiguo sin sessionId) NO puede seguir
+    // imputando operaciones a un turno de días anteriores: mismo blindaje que
+    // el camino nuevo, para que un cliente viejo quede protegido sin actualizar.
+    const window = evaluateShiftOperationWindow({ occurredAt, session });
+    if (!window.allowed) {
+      this.logger.warn(
+        `LEGACY_${operation}_SESSION_OUT_OF_WINDOW company=${companyId} userId=${user.id} session=${session.id} code=${window.code} sessionBusinessDate=${session.businessDate ?? "null"} occurredAt=${occurredAt.toISOString()}`,
+      );
+      throw new ConflictException(
+        shiftWindowRejected(window.code, window.reason, session.id),
       );
     }
     return session;

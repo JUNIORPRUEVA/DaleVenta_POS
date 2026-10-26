@@ -44,6 +44,10 @@ import {
   currentBusinessDay,
   businessDateRange,
 } from "../common/utils/business-time.util";
+import {
+  evaluateShiftOperationWindow,
+  shiftWindowRejected,
+} from "./cash-operation-window";
 
 type RequestUser = TenantUser;
 
@@ -92,11 +96,11 @@ export class CashService {
   async gateState(user: RequestUser) {
     const companyId = requireTenant(user);
     const businessDate = this.businessDate();
-    const [cashboxToday, userOpenShift] = await Promise.all([
+    const [cashboxToday, openShifts] = await Promise.all([
       this.prisma.cashboxDaily.findFirst({
         where: { companyId, businessDate },
       }),
-      this.prisma.cashSession.findFirst({
+      this.prisma.cashSession.findMany({
         where: {
           openedByUserId: user.id,
           companyId,
@@ -104,25 +108,56 @@ export class CashService {
           closedAt: null,
         },
         orderBy: { openedAt: "desc" },
+        take: 2,
       }),
     ]);
-    if (userOpenShift) {
-      await this.rejectAmbiguousLegacyOpenSession(
-        user.id,
-        companyId,
-        userOpenShift,
-        "cash.state",
+
+    // Ambigüedad REAL: más de un turno abierto del mismo usuario. Sólo este
+    // caso conserva el 409 histórico (código intacto para los clientes
+    // 1.0.6+130/132) porque no hay una elección segura de turno.
+    if (openShifts.length > 1) {
+      this.logger.warn(
+        `cash.state.ambiguous company=${companyId} userId=${user.id} open=${openShifts.length}`,
+      );
+      throw new ConflictException({
+        code: "CASH_SESSION_REQUIRES_REVIEW",
+        errorCode: "CASH_SESSION_REQUIRES_REVIEW",
+        reason: "MULTIPLE_OPEN_SESSIONS",
+        message:
+          "Hay más de un turno abierto para tu usuario. Contacta a un administrador.",
+      });
+    }
+
+    const userOpenShift = openShifts[0] ?? null;
+    // Turno vencido = turno abierto de un día comercial anterior. Se devuelve
+    // para que el usuario pueda CERRARLO (antes el 409 lo dejaba sin salida),
+    // pero queda bloqueado para operar (`canOperate: false`).
+    const staleBusinessDate = userOpenShift
+      ? (userOpenShift.businessDate ?? businessDate) !== businessDate
+      : false;
+    if (userOpenShift && staleBusinessDate) {
+      // Observabilidad: turno vencido detectado antes de que bloquee ventas.
+      this.logger.warn(
+        `cash.state.stale_shift company=${companyId} userId=${user.id} session=${userOpenShift.id} sessionBusinessDate=${userOpenShift.businessDate ?? "null"} currentBusinessDate=${businessDate}`,
       );
     }
+    const cashboxTotals = await this.cashboxTotals(
+      cashboxToday?.id ?? null,
+      companyId,
+    );
 
     return {
       businessDate,
       cashboxToday,
+      cashboxTotals,
       userOpenShift,
       activeSession: userOpenShift
         ? this.mapActiveSession(userOpenShift)
         : null,
-      canOperate: userOpenShift?.status === "OPEN",
+      canOperate: Boolean(userOpenShift) && !staleBusinessDate,
+      staleBusinessDate,
+      requiresClosure: staleBusinessDate,
+      requiresReview: false,
     };
   }
 
@@ -159,13 +194,25 @@ export class CashService {
             orderBy: { openedAt: "desc" },
           });
           if (existing) {
-            await this.rejectAmbiguousLegacyOpenSession(
-              user.id,
-              companyId,
-              existing,
-              "cash.open.existing",
-              tx,
-            );
+            // Nunca se reutiliza en silencio un turno de otro día comercial:
+            // eso permitía que ventas de días posteriores cayeran en el cierre
+            // anterior. El cliente recibe la identidad del turno a cerrar.
+            const existingStale =
+              (existing.businessDate ?? businessDate) !== businessDate;
+            if (existingStale) {
+              this.logger.warn(
+                `cash.open.rejected reason=previous_shift_open company=${companyId} userId=${user.id} session=${existing.id} sessionBusinessDate=${existing.businessDate ?? "null"} currentBusinessDate=${businessDate}`,
+              );
+              throw new ConflictException({
+                code: "CASH_CLOSE_PREVIOUS_REQUIRED",
+                errorCode: "CASH_CLOSE_PREVIOUS_REQUIRED",
+                sessionId: existing.id,
+                businessDate: existing.businessDate,
+                message: `Tienes un turno abierto del ${
+                  existing.businessDate ?? "día anterior"
+                }. Ciérralo antes de abrir uno nuevo.`,
+              });
+            }
             return this.mapActiveSession(existing);
           }
 
@@ -278,10 +325,14 @@ export class CashService {
    * (P2034, típico de aislamiento SERIALIZABLE bajo concurrencia real). El
    * reintento es seguro: la transacción es idempotente (si el turno ya existe
    * se devuelve el existente).
+   *
+   * Se reintenta con espera exponencial y jitter: varios empleados abriendo
+   * turno en el mismo instante reintentaban sincronizados y volvían a chocar
+   * hasta agotar los intentos (reproducido en UAT con 4 aperturas simultáneas).
    */
   private async retryOnWriteConflict<T>(
     task: () => Promise<T>,
-    attempts = 3,
+    attempts = 5,
   ): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       try {
@@ -291,6 +342,12 @@ export class CashService {
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2034";
         if (!isConflict || attempt >= attempts) throw error;
+        const backoffMs =
+          Math.min(50 * 2 ** (attempt - 1), 400) + Math.floor(Math.random() * 60);
+        this.logger.warn(
+          `cash.tx.retry reason=write_conflict attempt=${attempt}/${attempts} backoffMs=${backoffMs}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
@@ -349,6 +406,7 @@ export class CashService {
       user.id,
       companyId,
       movementPath === "SAFE_NEW_PATH" ? dto.sessionId : undefined,
+      this.parseOccurredAt(dto.occurredAt),
     );
     if (movementPath === "LEGACY_COMPAT_PATH") {
       this.logger.warn(
@@ -530,6 +588,16 @@ export class CashService {
     const difference = closingAmount.minus(expectedAmount);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Serializa los cierres de la MISMA caja diaria: el bloqueo de fila se
+      // toma al principio y siempre en el mismo orden, así que no hay ciclos de
+      // espera. Con el bloqueo, la comprobación de "quedan turnos abiertos" y
+      // la suma de cierres se hacen sobre datos ya confirmados: el agregado no
+      // puede perderse si el proceso muere (todo va en la MISMA transacción que
+      // el cierre del turno) ni quedar por debajo del real por concurrencia.
+      if (session.cashboxDailyId) {
+        await this.lockCashboxDaily(tx, session.cashboxDailyId);
+      }
+
       // Transición atómica OPEN -> CLOSED condicionada por identidad. Sólo UNA
       // solicitud (doble clic, dos dispositivos, replay + cierre manual) puede
       // efectuar la transición; el resto obtiene count 0.
@@ -565,27 +633,15 @@ export class CashService {
         throw new NotFoundException("No encontramos el turno cerrado.");
       }
 
-      const otherOpen = await tx.cashSession.findFirst({
-        where: {
-          cashboxDailyId: session.cashboxDailyId,
+      if (session.cashboxDailyId) {
+        await this.refreshDailyCashbox(
+          tx,
+          session.cashboxDailyId,
           companyId,
-          status: "OPEN",
-          closedAt: null,
-          id: { not: session.id },
-        },
-        select: { id: true },
-      });
-
-      if (!otherOpen && session.cashboxDailyId) {
-        await tx.cashboxDaily.update({
-          where: { id: session.cashboxDailyId },
-          data: {
-            status: "CLOSED",
-            closedAt: new Date(),
-            closedByUserId: user.id,
-            currentAmount: closingAmount,
-          },
-        });
+          user.id,
+          session.id,
+          closingAmount,
+        );
       }
 
       await this.telemetry?.enqueueBusinessEvent(tx, {
@@ -843,6 +899,7 @@ export class CashService {
     userId: string,
     companyId: string,
     sessionId?: string,
+    occurredAt: Date = new Date(),
   ) {
     const requested = (sessionId ?? "").trim();
     // Con identidad explícita se exige ESA sesión abierta: un movimiento
@@ -871,13 +928,342 @@ export class CashService {
         "No encontramos un turno abierto para operar.",
       );
     }
-    await this.rejectAmbiguousLegacyOpenSession(
-      userId,
-      companyId,
-      session,
-      requested ? "cash.operation.identified" : "cash.operation.current",
-    );
+    // Ventana operativa: la operación debe haber ocurrido dentro de la vida del
+    // turno y dentro de su día comercial (o del siguiente, para turnos
+    // nocturnos). Reemplaza al rechazo por "turno legacy ambiguo" en este
+    // camino: es más preciso (mismo 409, motivo distinto) y cubre también el
+    // caso de turno vencido sin turno más nuevo del día.
+    const verdict = evaluateShiftOperationWindow({ occurredAt, session });
+    if (!verdict.allowed) {
+      this.logger.warn(
+        `cash.operation.rejected code=${verdict.code} company=${companyId} userId=${userId} session=${session.id} sessionBusinessDate=${session.businessDate ?? "null"} occurredAt=${occurredAt.toISOString()}`,
+      );
+      throw new ConflictException(
+        shiftWindowRejected(verdict.code, verdict.reason, session.id),
+      );
+    }
     return session;
+  }
+
+  private parseOccurredAt(value?: string | null): Date {
+    const text = `${value ?? ""}`.trim();
+    if (!text) return new Date();
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return new Date();
+    return parsed;
+  }
+
+  /**
+   * Totales DERIVADOS de la caja diaria compartida.
+   *
+   * `cashbox_daily` es única por (empresa, fecha) y la comparten todos los
+   * empleados del día; sus columnas históricas no se reescriben. Estos totales
+   * se calculan sobre las operaciones reales para que la UI no presente el
+   * cierre del último empleado como si fuera el total del día.
+   */
+  private async cashboxTotals(
+    cashboxDailyId: string | null,
+    companyId: string,
+  ) {
+    if (!cashboxDailyId) {
+      return {
+        cashboxDailyId: null,
+        sessions: 0,
+        openSessions: 0,
+        openedTotal: 0,
+        closedTotal: 0,
+      };
+    }
+    const [aggregate, openSessions] = await Promise.all([
+      this.prisma.cashSession.aggregate({
+        where: { cashboxDailyId, companyId },
+        _count: { _all: true },
+        _sum: { initialAmount: true, closingAmount: true },
+      }),
+      this.prisma.cashSession.count({
+        where: {
+          cashboxDailyId,
+          companyId,
+          status: "OPEN",
+          closedAt: null,
+        },
+      }),
+    ]);
+    return {
+      cashboxDailyId,
+      sessions: aggregate._count?._all ?? 0,
+      openSessions,
+      openedTotal: this.toNumber(aggregate._sum?.initialAmount),
+      closedTotal: this.toNumber(aggregate._sum?.closingAmount),
+    };
+  }
+
+  private assertCompanyAdmin(user: RequestUser) {
+    const role = (user as { role?: Role }).role;
+    if (role !== Role.ADMIN) {
+      throw new ForbiddenException(
+        "Solo un administrador puede administrar los turnos de otros usuarios.",
+      );
+    }
+  }
+
+  /**
+   * Turnos abiertos de días comerciales anteriores (sólo ADMIN).
+   *
+   * Da visibilidad antes de que el turno vencido bloquee al empleado. No
+   * modifica nada.
+   */
+  async staleSessions(user: RequestUser) {
+    const companyId = requireTenant(user);
+    this.assertCompanyAdmin(user);
+    const businessDate = this.businessDate();
+    const rows = await this.prisma.cashSession.findMany({
+      where: {
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+        businessDate: { not: businessDate },
+      },
+      orderBy: { openedAt: "asc" },
+    });
+    return {
+      businessDate,
+      items: rows.map((session) => ({
+        ...this.mapActiveSession(session),
+        openedByUserId: session.openedByUserId,
+        userName: session.userName ?? "Usuario",
+        terminalName: session.terminalNameSnapshot ?? null,
+        requiresClosure: true,
+      })),
+    };
+  }
+
+  /**
+   * Cierre administrativo de un turno ajeno.
+   *
+   * Requisitos no negociables:
+   * - ADMIN de la empresa (tenant del JWT).
+   * - Motivo obligatorio y monto declarado: el cierre NO inventa efectivo
+   *   contado; la diferencia contra el esperado queda registrada.
+   * - Transición atómica OPEN -> CLOSED (una sola gana) y cierre de la caja
+   *   diaria sólo si no quedan otros turnos abiertos de ese día.
+   * - Auditoría: log estructurado + telemetría + nota con actor y motivo.
+   */
+  async adminCloseSession(
+    user: RequestUser,
+    sessionId: string,
+    dto: { reason: string; closingAmount: number; note?: string },
+  ) {
+    const companyId = requireTenant(user);
+    this.assertCompanyAdmin(user);
+    const requested = this.validUuidOrNull(sessionId);
+    if (!requested) {
+      throw new NotFoundException("El turno indicado no existe.");
+    }
+    const session = await this.prisma.cashSession.findFirst({
+      where: { id: requested, companyId },
+    });
+    if (!session) {
+      throw new NotFoundException("El turno indicado no existe.");
+    }
+    if (session.status !== "OPEN" || session.closedAt != null) {
+      throw new ConflictException("Este turno ya fue cerrado.");
+    }
+
+    const summary = await this.buildSummaryForSession(session.id, companyId);
+    const closingAmount = new Prisma.Decimal(dto.closingAmount);
+    const expectedAmount = new Prisma.Decimal(summary.expectedCash);
+    const difference = closingAmount.minus(expectedAmount);
+    const reason = dto.reason.trim();
+    const note = `[CIERRE ADMINISTRATIVO] ${reason}${
+      dto.note?.trim() ? ` — ${dto.note.trim()}` : ""
+    }`;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (session.cashboxDailyId) {
+        await this.lockCashboxDaily(tx, session.cashboxDailyId);
+      }
+
+      const closeResult = await tx.cashSession.updateMany({
+        where: {
+          id: session.id,
+          companyId,
+          status: "OPEN",
+          closedAt: null,
+        },
+        data: {
+          status: "CLOSED",
+          closingAmount,
+          expectedAmount,
+          difference,
+          closedAt: new Date(),
+          closedByUserId: user.id,
+          note,
+        },
+      });
+      if (closeResult.count !== 1) {
+        throw new ConflictException("Este turno ya fue cerrado.");
+      }
+
+      const closed = await tx.cashSession.findFirst({
+        where: { id: session.id, companyId },
+      });
+      if (!closed) {
+        throw new NotFoundException("No encontramos el turno cerrado.");
+      }
+
+      if (session.cashboxDailyId) {
+        await this.refreshDailyCashbox(
+          tx,
+          session.cashboxDailyId,
+          companyId,
+          user.id,
+          session.id,
+          closingAmount,
+        );
+      }
+
+      await this.telemetry?.enqueueBusinessEvent(tx, {
+        companyId,
+        actorUserId: user.id,
+        eventType: "CASH_SESSION_ADMIN_CLOSED",
+        entityType: "cash_session",
+        entityId: closed.id,
+        feature: "CASH",
+      });
+
+      return closed;
+    });
+
+    this.logger.warn(
+      `cash.admin_close.ok company=${companyId} session=${session.id} actor=${user.id} owner=${session.openedByUserId} expected=${expectedAmount.toFixed(2)} closing=${closingAmount.toFixed(2)} difference=${difference.toFixed(2)} reason=${reason.slice(0, 80)}`,
+    );
+    this.emitCashEvent(companyId, "cash.session.closed", session.id, {
+      userId: user.id,
+      adminClose: true,
+      businessDate: session.businessDate,
+    });
+
+    return {
+      session: result,
+      summary,
+      difference: this.toNumber(difference),
+    };
+  }
+
+  /**
+   * Toma el bloqueo de fila de la caja diaria dentro de la transacción actual.
+   *
+   * Cualquier cierre de turno de la misma caja pasa por aquí, así que los
+   * cierres concurrentes se serializan en un orden único (la fila de la caja) y
+   * la comprobación "¿quedan turnos abiertos?" + la suma de cierres se calculan
+   * siempre sobre datos confirmados. Sin el bloqueo, dos cierres simultáneos
+   * podían verse mutuamente como OPEN y ninguno actualizaba el agregado.
+   *
+   * Si el cliente Prisma no expone `$queryRaw` (mocks de prueba), se degrada
+   * sin bloqueo: el resultado sigue siendo correcto en el caso de un solo turno.
+   */
+  private async lockCashboxDaily(
+    tx: Prisma.TransactionClient,
+    cashboxDailyId: string,
+  ) {
+    const raw = (tx as unknown as { $queryRaw?: unknown }).$queryRaw;
+    if (typeof raw !== "function") return;
+    await tx.$queryRaw`SELECT id FROM "cashbox_daily" WHERE id = ${cashboxDailyId}::uuid FOR UPDATE`;
+  }
+
+  /**
+   * Recalcula el agregado de la caja diaria a partir de los cierres reales.
+   *
+   * - El importe SIEMPRE se deriva de `SUM(closingAmount)` de los turnos CLOSED
+   *   de esa caja (nunca "el último cierre gana"), de modo que es idempotente:
+   *   ejecutarlo dos veces da el mismo resultado.
+   * - El estado pasa a CLOSED solo cuando ya no queda ningún turno abierto.
+   * - Se ejecuta dentro de la MISMA transacción que el cierre del turno, así que
+   *   o se confirman los dos cambios o ninguno: un fallo, reinicio o caída del
+   *   proceso no puede dejar el agregado desactualizado de forma permanente.
+   * - Nunca toca los cierres históricos: solo lee `cash_sessions` y escribe el
+   *   importe/estado de la caja diaria.
+   */
+  private async refreshDailyCashbox(
+    tx: Prisma.TransactionClient,
+    cashboxDailyId: string,
+    companyId: string,
+    userId: string,
+    excludeSessionId: string,
+    fallbackAmount: Prisma.Decimal,
+  ) {
+    const dailyTotal = await this.sumDailyClosedAmounts(
+      tx,
+      cashboxDailyId,
+      companyId,
+    );
+
+    const otherOpen = await tx.cashSession.findFirst({
+      where: {
+        cashboxDailyId,
+        companyId,
+        status: "OPEN",
+        closedAt: null,
+        id: { not: excludeSessionId },
+      },
+      select: { id: true },
+    });
+
+    const data: Record<string, unknown> = {
+      currentAmount: dailyTotal ?? fallbackAmount,
+    };
+    if (!otherOpen) {
+      data.status = "CLOSED";
+      data.closedAt = new Date();
+      data.closedByUserId = userId;
+    }
+
+    await tx.cashboxDaily.update({ where: { id: cashboxDailyId }, data });
+  }
+
+  private async closeDailyIfNoOpenSessions(
+    tx: Prisma.TransactionClient,
+    cashboxDailyId: string,
+    companyId: string,
+    userId: string,
+    excludeSessionId: string,
+  ) {
+    await this.lockCashboxDaily(tx, cashboxDailyId);
+    await this.refreshDailyCashbox(
+      tx,
+      cashboxDailyId,
+      companyId,
+      userId,
+      excludeSessionId,
+      new Prisma.Decimal(0),
+    );
+  }
+
+  /**
+   * Suma de los cierres del día (turnos CLOSED de la misma caja diaria).
+   *
+   * Devuelve `null` si el cliente Prisma no expone `aggregate` (mocks de prueba
+   * o clientes desactualizados); en ese caso el llamador conserva el importe
+   * del cierre actual, que es el comportamiento anterior.
+   */
+  private async sumDailyClosedAmounts(
+    tx: Prisma.TransactionClient,
+    cashboxDailyId: string,
+    companyId: string,
+  ): Promise<Prisma.Decimal | null> {
+    const model = tx.cashSession as unknown as { aggregate?: unknown };
+    if (typeof model.aggregate !== "function") return null;
+    const totals = await tx.cashSession.aggregate({
+      where: {
+        cashboxDailyId,
+        companyId,
+        status: "CLOSED",
+        closedAt: { not: null },
+      },
+      _sum: { closingAmount: true },
+    });
+    return totals._sum?.closingAmount ?? null;
   }
 
   async buildSummaryForSession(sessionId: string, companyId: string) {

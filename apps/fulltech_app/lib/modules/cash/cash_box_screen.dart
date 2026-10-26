@@ -149,6 +149,7 @@ class CashBoxScreen extends ConsumerWidget {
     final unverified = ref.watch(cashStateUnverifiedProvider);
     final requiresReview = ref.watch(cashStateRequiresReviewProvider);
     final reviewMessage = ref.watch(cashStateReviewMessageProvider);
+    final staleShift = ref.watch(cashStateStaleShiftProvider);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     return Scaffold(
@@ -202,6 +203,8 @@ class CashBoxScreen extends ConsumerWidget {
         children: [
           if (requiresReview)
             _CashReviewRequiredBanner(message: reviewMessage)
+          else if (staleShift)
+            const _CashStaleShiftBanner()
           else if (unverified)
             const _CashUnverifiedBanner(),
           Expanded(
@@ -325,9 +328,44 @@ class _CashUnverifiedBanner extends StatelessWidget {
   }
 }
 
+/// Aviso de turno vencido: hay un turno abierto de un día comercial anterior.
+///
+/// El turno se puede cerrar (la acción "Cerrar turno" del panel activo queda
+/// disponible) pero NO se debe operar con él: las ventas y movimientos de hoy
+/// deben ir a un turno del día actual.
+class _CashStaleShiftBanner extends StatelessWidget {
+  const _CashStaleShiftBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF7E6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.event_busy_rounded, size: 16, color: Color(0xFFB54708)),
+          SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Tienes un turno abierto de un día anterior. Ciérralo para '
+              'poder abrir el turno de hoy.',
+              style: TextStyle(
+                color: Color(0xFF7A4D04),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CashReviewRequiredBanner extends StatelessWidget {
   const _CashReviewRequiredBanner({this.message});
-
   final String? message;
 
   @override

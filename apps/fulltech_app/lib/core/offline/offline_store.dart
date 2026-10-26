@@ -4,16 +4,17 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
-
 import '../debug/app_error_reporter.dart';
+import '../config/uat_identity.dart';
 import '../debug/trace_log.dart';
 import '../storage/resilient_local_database.dart';
 import '../storage/local_migration_backup.dart';
 import 'pending_sync_action.dart';
 
 class OfflineStore {
-  OfflineStore._({String databaseFileName = 'fulltech_offline.db'})
-    : _databaseFileName = databaseFileName;
+  OfflineStore._({String? databaseFileName})
+    : _databaseFileName =
+          databaseFileName ?? UatIdentity.offlineDatabaseFileName();
 
   static final OfflineStore instance = OfflineStore._();
 
@@ -22,9 +23,10 @@ class OfflineStore {
     return OfflineStore._(databaseFileName: databaseFileName);
   }
 
-  static const String _webCachePrefix = 'ft_db_cache:';
-  static const String _webPendingKey = 'ft_db_pending_actions';
-  static const String _webOfflineSalesKey = 'ft_db_offline_sales';
+  static String get _webCachePrefix => UatIdentity.webCachePrefix();
+  static String get _webPendingKey => UatIdentity.storageKey('ft_db_pending_actions');
+  static String get _webOfflineSalesKey =>
+      UatIdentity.storageKey('ft_db_offline_sales');
 
   final String _databaseFileName;
   Database? _database;

@@ -52,6 +52,8 @@ class CashGateState {
     this.pendingClose = false,
     this.requiresReview = false,
     this.reviewMessage,
+    this.staleBusinessDate = false,
+    this.requiresClosure = false,
   });
 
   final String businessDate;
@@ -73,6 +75,14 @@ class CashGateState {
   /// Mensaje seguro enviado por el servidor para el caso [requiresReview].
   final String? reviewMessage;
 
+  /// `true` cuando el turno abierto pertenece a un día comercial anterior al
+  /// actual. Se puede consultar y CERRAR (para eso se devuelve activeSession),
+  /// pero no operar: sustituye al 409 que dejaba al usuario sin salida.
+  final bool staleBusinessDate;
+
+  /// `true` cuando el servidor exige cerrar ese turno antes de abrir otro.
+  final bool requiresClosure;
+
   factory CashGateState.fromJson(Map<String, dynamic> json) {
     final active = json['activeSession'];
     return CashGateState(
@@ -83,6 +93,8 @@ class CashGateState {
           : null,
       fromCache: json['fromCache'] == true,
       pendingClose: json['pendingClose'] == true,
+      staleBusinessDate: json['staleBusinessDate'] == true,
+      requiresClosure: json['requiresClosure'] == true,
     );
   }
 }
