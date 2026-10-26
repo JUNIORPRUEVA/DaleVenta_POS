@@ -13,6 +13,7 @@ import {
 } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { describeListenFailure, shouldFallbackToIpv4 } from './common/listen-host';
 import { requestIdMiddleware } from './common/request-id/request-id.middleware';
 import { assertSafeUatEnvironment, buildSafeUatBanner } from './common/uat-safety';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
@@ -131,10 +132,19 @@ async function bootstrap() {
 
   // Bind to IPv6 (dual-stack) when available so `localhost` (often ::1 on Windows)
   // works reliably; fall back to IPv4-only environments.
+  //
+  // El fallback se aplica SOLO si la pila IPv6 no existe. Si el puerto está
+  // ocupado (EADDRINUSE) se aborta: reintentar en IPv4 dejaba dos instancias
+  // sirviendo el mismo puerto sin ningún error visible.
   let host = '::';
   try {
     await app.listen(port, host);
-  } catch {
+  } catch (error) {
+    if (!shouldFallbackToIpv4(error)) {
+      // eslint-disable-next-line no-console
+      console.error(describeListenFailure(port, host, error));
+      throw error;
+    }
     host = '0.0.0.0';
     await app.listen(port, host);
   }
