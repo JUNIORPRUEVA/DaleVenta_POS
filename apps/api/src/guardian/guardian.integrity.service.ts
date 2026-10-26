@@ -122,6 +122,43 @@ const CHECKS: CheckDefinition[] = [
     `,
   },
   {
+    code: 'SALE_FUTURE_DATED',
+    severity: 'SEV2',
+    title: 'Venta con fecha futura',
+    description: 'Existe una venta registrada con fecha posterior a la actual (reloj o sincronización incorrectos).',
+    sql: `
+      SELECT s.id AS sale_id, s."createdAt", s."totalSold"
+      FROM "Sale" s
+      WHERE s.company_id = $1::uuid
+        AND s."isDeleted" = false
+        AND s."createdAt" > now() + interval '1 hour'
+      ORDER BY s."createdAt" DESC
+      LIMIT 20
+    `,
+  },
+  {
+    code: 'SALE_CANCELLED_WITH_PAYMENT',
+    severity: 'SEV1',
+    title: 'Venta anulada con pagos registrados',
+    description:
+      'Una venta marcada como anulada conserva montos de pago, lo que puede indicar un cobro sin reverso.',
+    sql: `
+      SELECT s.id AS sale_id, s."status", s."cancelled_at",
+             COALESCE(s."paymentCashAmount", 0)
+           + COALESCE(s."paymentTransferAmount", 0)
+           + COALESCE(s."creditAmount", 0) AS pagos
+      FROM "Sale" s
+      WHERE s.company_id = $1::uuid
+        AND s."isDeleted" = false
+        AND (s."cancelled_at" IS NOT NULL OR s."status"::text = 'CANCELLED')
+        AND (COALESCE(s."paymentCashAmount", 0)
+           + COALESCE(s."paymentTransferAmount", 0)
+           + COALESCE(s."creditAmount", 0)) > 0.01
+      ORDER BY s."cancelled_at" DESC NULLS LAST
+      LIMIT 20
+    `,
+  },
+  {
     code: 'SYNC_OUTBOX_STUCK',
     severity: 'SEV2',
     title: 'Cola de sincronización detenida',

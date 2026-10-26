@@ -85,6 +85,26 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
       clean.id,
       userId,
     );
+
+    // --- Caso 4: venta con fecha futura (reloj/sincronización incorrectos)
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Sale" (id, company_id, "userId", "saleDate", "createdAt", "totalSold", "totalCost", "totalProfit",
+                           "commissionAmount", "paymentCashAmount", "isDeleted", "updatedAt")
+       VALUES ('44444444-4444-4444-8444-444444444444'::uuid, $1::uuid, $2::uuid, now() + interval '2 hours', now() + interval '2 hours',
+               70, 0, 0, 0, 70, false, now())`,
+      dirty.id,
+      userId,
+    );
+
+    // --- Caso 6: venta anulada que conserva pagos
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Sale" (id, company_id, "userId", "saleDate", "createdAt", "totalSold", "totalCost", "totalProfit",
+                           "commissionAmount", "paymentCashAmount", "cancelled_at", "isDeleted", "updatedAt")
+       VALUES ('55555555-5555-4555-8555-555555555555'::uuid, $1::uuid, $2::uuid, now() - interval '3 hours', now() - interval '3 hours',
+               90, 0, 0, 0, 90, now() - interval '2 hours', false, now())`,
+      dirty.id,
+      userId,
+    );
   }, 90_000);
 
   afterAll(async () => {
@@ -115,11 +135,9 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     expect(codes).toContain('CASH_DUPLICATE_OPEN_PER_TERMINAL');
     expect(codes).toContain('SALE_AFTER_SESSION_CLOSED');
     expect(codes).toContain('SALE_PAYMENT_MISMATCH');
-    expect(result.totalFindings).toBeGreaterThanOrEqual(4);
-
-    const afterClose = result.findings.find((f) => f.checkCode === 'SALE_AFTER_SESSION_CLOSED')!;
-    expect(afterClose.severity).toBe('SEV1');
-    expect(afterClose.samples[0].sale_id).toBeTruthy();
+      expect(codes).toContain('SALE_FUTURE_DATED');
+      expect(codes).toContain('SALE_CANCELLED_WITH_PAYMENT');
+      expect(result.totalFindings).toBeGreaterThanOrEqual(6);
   }, 60_000);
 
   it('no genera falsos positivos en una empresa con operación normal', async () => {

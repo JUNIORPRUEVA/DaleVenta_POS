@@ -13,6 +13,7 @@ import { GuardianBackendCaptureService } from './guardian.backend-capture.servic
 import { GuardianToolsService } from './guardian.tools.service';
 import { GuardianDiagnosisService } from './guardian.diagnosis.service';
 import { GuardianAlertService } from './guardian.alert.service';
+import { GuardianRetentionService } from './guardian.retention.service';
 import { GUARDIAN_AI_PROVIDER } from './ai/guardian-ai.provider';
 import { MockGuardianAiProvider } from './ai/mock-guardian-ai.provider';
 import { OpenAiGuardianAiProvider } from './ai/openai-guardian-ai.provider';
@@ -52,6 +53,7 @@ export function createGuardianAiProvider() {
     { provide: GUARDIAN_AI_PROVIDER, useFactory: createGuardianAiProvider },
     GuardianPlatformService,
     GuardianPlatformGuard,
+    GuardianRetentionService,
   ],
   exports: [
     GuardianQuotaService,
