@@ -119,6 +119,29 @@ describe('canales de respaldo', () => {
     expect(JSON.parse(init.body).source).toBe('appyra-guardian');
   });
 
+  it('el webhook de respaldo devuelve un acuse único por alerta', async () => {
+    const fetchImpl = fetchDouble({ ok: true, status: 202 });
+    const channel = new HttpWebhookChannel({ url: 'https://respaldo.example.com/hook', fetchImpl });
+
+    const first = await channel.send({
+      to: '18095550000',
+      text: 'alerta 1',
+      dedupeKey: 'guardian:alert:initial:a',
+      allowOutsideBusinessHours: true,
+    });
+    const second = await channel.send({
+      to: '18095550000',
+      text: 'alerta 2',
+      dedupeKey: 'guardian:alert:initial:b',
+      allowOutsideBusinessHours: true,
+    });
+
+    expect(first.providerMessageId).toMatch(/^webhook:[0-9a-f]{24}$/);
+    expect(second.providerMessageId).toMatch(/^webhook:[0-9a-f]{24}$/);
+    // Sin ids distintos, un acuse de entrega se aplicaría a la alerta equivocada.
+    expect(first.providerMessageId).not.toBe(second.providerMessageId);
+  });
+
   it('el canal Evolution reutiliza el outbox y respeta 24/7', async () => {
     const enqueue = jest.fn(async () => ({ id: 'outbox-9' }));
     const channel = new EvolutionOutboxChannel({ enabled: () => true, enqueue });

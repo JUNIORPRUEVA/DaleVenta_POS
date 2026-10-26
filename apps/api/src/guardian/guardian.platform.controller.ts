@@ -40,6 +40,11 @@ export class GuardianPlatformController {
     return { companies: await this.platform.companies() };
   }
 
+  @Get('workers')
+  workers() {
+    return this.platform.workers();
+  }
+
   @Get('incidents')
   async list(
     @Query('companyId') companyId?: string,

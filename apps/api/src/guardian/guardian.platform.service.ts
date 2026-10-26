@@ -6,6 +6,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
+import { classifyWorkerHeartbeat } from './guardian.watchdog.checks';
+import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
 
 export type PlatformIncidentFilters = {
   companyId?: string;
@@ -98,7 +100,7 @@ export class GuardianPlatformService {
           orderBy: { receivedAt: 'desc' },
           select: { receivedAt: true },
         }),
-        this.prisma.guardianAlert.count({ where: { state: { in: ['PENDING', 'SENDING'] } } }),
+        this.prisma.guardianAlert.count({ where: { state: { in: ['PENDING', 'SENDING', 'QUEUED'] } } }),
       ]);
 
     return {
@@ -194,7 +196,23 @@ export class GuardianPlatformService {
         alerts: {
           orderBy: { createdAt: 'desc' },
           take: 10,
-          include: { attemptsLog: { orderBy: { createdAt: 'desc' }, take: 10 } },
+          include: {
+            // `GuardianAlertAttempt.id` es BigInt (autoincrement): incluirlo tal
+            // cual rompe la serialización JSON del endpoint. Se seleccionan solo
+            // los campos del contrato que consume el panel.
+            attemptsLog: {
+              orderBy: { createdAt: 'desc' },
+              take: 10,
+              select: {
+                attempt: true,
+                channel: true,
+                outcome: true,
+                httpStatus: true,
+                detail: true,
+                createdAt: true,
+              },
+            },
+          },
         },
         group: true,
       },
@@ -260,7 +278,7 @@ export class GuardianPlatformService {
 
   async health() {
     const [pendingAlerts, failedAlerts, pendingDiagnosis, lastIncident] = await Promise.all([
-      this.prisma.guardianAlert.count({ where: { state: { in: ['PENDING', 'SENDING'] } } }),
+      this.prisma.guardianAlert.count({ where: { state: { in: ['PENDING', 'SENDING', 'QUEUED'] } } }),
       this.prisma.guardianAlert.count({ where: { state: 'FAILED_PERMANENT' } }),
       this.prisma.guardianIncident.count({
         where: { processingState: { in: ['PENDING', 'DIAGNOSING'] } },
@@ -272,19 +290,17 @@ export class GuardianPlatformService {
     ]);
 
     const now = Date.now();
+    const whatsapp = resolveGuardianWhatsAppProfile();
     return {
       guardianEnabled: String(process.env.GUARDIAN_ENABLED ?? '').toLowerCase() === 'true',
-      whatsappCloudConfigured: Boolean(
-        (process.env.GUARDIAN_WA_CLOUD_TOKEN ?? process.env.META_WHATSAPP_TOKEN ?? '').trim() &&
-          (process.env.GUARDIAN_WA_PHONE_NUMBER_ID ?? process.env.META_PHONE_NUMBER_ID ?? '').trim(),
-      ),
+      // Solo identidad propia de APPYRA: nunca se reporta configurado por
+      // heredar credenciales Meta de otro producto.
+      whatsappCloudConfigured: whatsapp.provider === 'meta_cloud',
       whatsappTemplateConfigured: Boolean((process.env.GUARDIAN_WA_TEMPLATE_NAME ?? '').trim()),
       fallbackConfigured: Boolean(
         (process.env.GUARDIAN_ALERT_FALLBACK_WEBHOOK_URL ?? '').trim(),
       ),
-      aiProvider: (process.env.GUARDIAN_AI_API_KEY ?? process.env.OPENAI_API_KEY ?? '').trim()
-        ? 'openai'
-        : 'mock',
+      aiProvider: (process.env.GUARDIAN_AI_API_KEY ?? '').trim() ? 'openai' : 'mock',
       pendingAlerts,
       failedAlerts,
       pendingDiagnosis,
@@ -292,6 +308,56 @@ export class GuardianPlatformService {
       lastIncidentAgeSeconds: lastIncident
         ? Math.floor((now - lastIncident.receivedAt.getTime()) / 1000)
         : null,
+    };
+  }
+
+  /**
+   * Estado de los workers para el panel.
+   *
+   * Reutiliza el mismo clasificador que el watchdog. Solo expone datos de
+   * plataforma (nombre, latido, ciclos); nunca credenciales ni datos de empresas.
+   */
+  async workers() {
+    const parsedThreshold = Number.parseInt(
+      String(process.env.GUARDIAN_WATCHDOG_HEARTBEAT_MINUTES ?? '').trim(),
+      10,
+    );
+    const staleMinutes = Number.isFinite(parsedThreshold) ? parsedThreshold : 10;
+    const expected = String(process.env.GUARDIAN_WATCHDOG_WORKERS ?? 'alerts,diagnosis')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    const rows = await this.prisma.guardianWorkerHeartbeat.findMany({
+      where: { workerName: { in: expected } },
+      select: {
+        workerName: true,
+        lastSeenAt: true,
+        cycleCount: true,
+        processedLastCycle: true,
+      },
+    });
+
+    const now = Date.now();
+    const byName = new Map(rows.map((row) => [row.workerName, row]));
+    const workers = expected.map((name) => {
+      const row = byName.get(name);
+      const ageSeconds = row ? Math.max(0, Math.floor((now - row.lastSeenAt.getTime()) / 1000)) : null;
+      return {
+        name,
+        status: classifyWorkerHeartbeat(ageSeconds === null ? null : ageSeconds / 60, staleMinutes),
+        lastHeartbeatAt: row?.lastSeenAt ?? null,
+        ageSeconds,
+        cycles: row ? Number(row.cycleCount) : 0,
+        processedLastCycle: row?.processedLastCycle ?? 0,
+      };
+    });
+
+    return {
+      checkedAt: new Date().toISOString(),
+      staleMinutes,
+      available: workers.every((worker) => worker.status === 'ok'),
+      workers,
     };
   }
 }

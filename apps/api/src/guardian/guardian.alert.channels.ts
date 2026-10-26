@@ -275,7 +275,16 @@ export class HttpWebhookChannel implements GuardianAlertChannel {
         };
       }
 
-      return { ok: true, httpStatus: response.status, providerMessageId: 'webhook-accepted' };
+      return {
+        ok: true,
+        httpStatus: response.status,
+        // Id único por alerta: un identificador constante haría que un acuse de
+        // entrega se aplicara a la primera alerta encontrada, no a la suya.
+        providerMessageId: `webhook:${createHash('sha256')
+          .update(String(payload.dedupeKey ?? ''))
+          .digest('hex')
+          .slice(0, 24)}`,
+      };
     } catch (error) {
       return {
         ok: false,

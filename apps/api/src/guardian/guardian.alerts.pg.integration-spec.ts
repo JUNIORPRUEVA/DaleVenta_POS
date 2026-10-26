@@ -205,6 +205,7 @@ describeOnPg('Guardian alertas sobre PostgreSQL real', () => {
     const row = await prisma.guardianAlert.findUniqueOrThrow({ where: { id: plan.alertId! } });
     expect(row.state).toBe('SENT');
     expect(row.channel).toBe('http_webhook');
+    // El canal es un doble de prueba: se conserva el id que devuelve el doble.
     expect(row.providerMessageId).toBe('webhook-accepted');
   }, 60_000);
 

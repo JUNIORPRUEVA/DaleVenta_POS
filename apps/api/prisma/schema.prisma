@@ -4460,8 +4460,14 @@ model GuardianCompanyQuota {
 enum GuardianAlertState {
   PENDING
   SENDING
+  /// Encolada en el outbox local; el proveedor aún no la ha recibido.
+  QUEUED
+  /// El proveedor confirmó la recepción con un id de mensaje.
+  ACCEPTED
+  /// Enviada sin id de proveedor (significado histórico, se conserva).
   SENT
   DELIVERED
+  /// El destinatario la abrió (confirmación de lectura del proveedor).
   READ
   FAILED_PERMANENT
   DEAD
@@ -4489,6 +4495,7 @@ model GuardianAlert {
   lastProviderStatus String?       @map("last_provider_status") @db.VarChar(20)
   lastError     String?            @map("last_error") @db.VarChar(600)
   sentAt        DateTime?          @map("sent_at")
+  acceptedAt    DateTime?          @map("accepted_at")
   deliveredAt   DateTime?          @map("delivered_at")
   readAt        DateTime?          @map("read_at")
   createdAt     DateTime           @default(now()) @map("created_at")

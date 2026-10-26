@@ -35,7 +35,9 @@ export function mapMetaStatus(raw: unknown): GuardianDeliveryStatus | 'unknown' 
  */
 const FORWARD_RANK: Record<string, number> = {
   PENDING: 0,
+  QUEUED: 1,
   SENDING: 1,
+  ACCEPTED: 2,
   SENT: 2,
   DELIVERED: 3,
   READ: 4,

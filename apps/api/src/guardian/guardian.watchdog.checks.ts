@@ -17,6 +17,28 @@ export type WatchdogFinding = {
 
 export type StaleWorker = { workerName: string; ageMinutes: number };
 
+/** Estado de un worker según la antigüedad de su latido. */
+export type WorkerHeartbeatStatus = 'ok' | 'stale' | 'missing';
+
+/**
+ * Clasifica el latido de un worker. Es puro y compartido por el watchdog y el
+ * panel de plataforma para que ambos no discrepen al informar del mismo estado.
+ *
+ * - `missing`: no hay latido registrado (el worker nunca arrancó o se borró).
+ * - `stale`: el último latido supera el umbral configurado.
+ * - `ok`: latido dentro del umbral.
+ */
+export function classifyWorkerHeartbeat(
+  ageMinutes: number | null | undefined,
+  staleMinutes: number,
+): WorkerHeartbeatStatus {
+  if (ageMinutes === null || ageMinutes === undefined || !Number.isFinite(ageMinutes)) {
+    return 'missing';
+  }
+  const threshold = Number.isFinite(staleMinutes) && staleMinutes > 0 ? staleMinutes : 10;
+  return ageMinutes > threshold ? 'stale' : 'ok';
+}
+
 export type WatchdogSnapshot = {
   /** false cuando la consulta a PostgreSQL falló. */
   databaseReachable: boolean;

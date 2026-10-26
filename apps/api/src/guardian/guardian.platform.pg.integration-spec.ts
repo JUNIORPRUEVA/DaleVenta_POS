@@ -172,4 +172,113 @@ describeOnPg('Guardian API de plataforma — PostgreSQL real', () => {
     expect(['mock', 'openai']).toContain(health.aiProvider);
     expect(health.pendingAlerts).toBeGreaterThanOrEqual(0);
   }, 60_000);
+
+  it('el detalle es serializable a JSON (intentos sin BigInt) y conserva el contrato del panel', async () => {
+    // La alerta del incidente A necesita al menos un intento para reproducir el
+    // caso: `GuardianAlertAttempt.id` es BigInt y no puede viajar en la respuesta.
+    const alert = await prisma.guardianAlert.create({
+      data: {
+        incidentId: incidentA,
+        channel: 'whatsapp_cloud',
+        recipientHash: 'hash-panel',
+        dedupeKey: `guardian:alert:contract:${RUN_ID}`,
+        kind: 'initial',
+        state: 'SENT',
+      },
+    });
+    await prisma.guardianAlertAttempt.create({
+      data: {
+        alertId: alert.id,
+        attempt: 1,
+        channel: 'whatsapp_cloud',
+        outcome: 'ok',
+        httpStatus: 200,
+        detail: 'provider=wamid.contract',
+      },
+    });
+
+    const detail = await platform.detail(incidentA);
+    const serialized = JSON.stringify(detail);
+    expect(serialized.length).toBeGreaterThan(0);
+
+    const attempts = detail!.alerts.flatMap((row) => row.attemptsLog);
+    expect(attempts.length).toBeGreaterThan(0);
+    expect(Object.keys(attempts[0])).toEqual(
+      expect.arrayContaining(['attempt', 'channel', 'outcome', 'httpStatus', 'detail', 'createdAt']),
+    );
+    expect(attempts[0]).not.toHaveProperty('id');
+
+    await prisma.guardianAlert.delete({ where: { id: alert.id } });
+  }, 60_000);
+
+  it('la salud no declara WhatsApp configurado por heredar credenciales de otro producto', async () => {
+    const previous = {
+      waToken: process.env.GUARDIAN_WA_CLOUD_TOKEN,
+      waPhone: process.env.GUARDIAN_WA_PHONE_NUMBER_ID,
+      metaToken: process.env.META_WHATSAPP_TOKEN,
+      metaPhone: process.env.META_PHONE_NUMBER_ID,
+      openai: process.env.OPENAI_API_KEY,
+      guardianAi: process.env.GUARDIAN_AI_API_KEY,
+    };
+
+    try {
+      delete process.env.GUARDIAN_WA_CLOUD_TOKEN;
+      delete process.env.GUARDIAN_WA_PHONE_NUMBER_ID;
+      delete process.env.GUARDIAN_AI_API_KEY;
+      process.env.META_WHATSAPP_TOKEN = 'token-de-otro-producto';
+      process.env.META_PHONE_NUMBER_ID = '999999';
+      process.env.OPENAI_API_KEY = 'clave-de-otro-producto';
+
+      const health = await platform.health();
+      expect(health.whatsappCloudConfigured).toBe(false);
+      expect(health.aiProvider).toBe('mock');
+
+      process.env.GUARDIAN_WA_CLOUD_TOKEN = 'token-propio-appyra';
+      process.env.GUARDIAN_WA_PHONE_NUMBER_ID = '123456789';
+      const configured = await platform.health();
+      expect(configured.whatsappCloudConfigured).toBe(true);
+    } finally {
+      const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      };
+      restore('GUARDIAN_WA_CLOUD_TOKEN', previous.waToken);
+      restore('GUARDIAN_WA_PHONE_NUMBER_ID', previous.waPhone);
+      restore('META_WHATSAPP_TOKEN', previous.metaToken);
+      restore('META_PHONE_NUMBER_ID', previous.metaPhone);
+      restore('OPENAI_API_KEY', previous.openai);
+      restore('GUARDIAN_AI_API_KEY', previous.guardianAi);
+    }
+  }, 60_000);
+
+  it('reporta el estado de los workers y la disponibilidad global', async () => {
+    const staleAt = new Date(Date.now() - 45 * 60_000);
+    await prisma.guardianWorkerHeartbeat.upsert({
+      where: { workerName: 'alerts' },
+      create: { workerName: 'alerts', lastSeenAt: new Date(), cycleCount: BigInt(3), processedLastCycle: 1 },
+      update: { lastSeenAt: new Date(), cycleCount: { increment: 1 }, processedLastCycle: 1 },
+    });
+    await prisma.guardianWorkerHeartbeat.upsert({
+      where: { workerName: 'diagnosis' },
+      create: { workerName: 'diagnosis', lastSeenAt: staleAt, cycleCount: BigInt(2), processedLastCycle: 0 },
+      update: { lastSeenAt: staleAt },
+    });
+
+    const degraded = await platform.workers();
+    expect(degraded.available).toBe(false);
+    const alerts = degraded.workers.find((worker) => worker.name === 'alerts')!;
+    const diagnosis = degraded.workers.find((worker) => worker.name === 'diagnosis')!;
+    expect(alerts.status).toBe('ok');
+    expect(diagnosis.status).toBe('stale');
+    expect(JSON.stringify(degraded)).not.toContain('BigInt');
+
+    await prisma.guardianWorkerHeartbeat.update({
+      where: { workerName: 'diagnosis' },
+      data: { lastSeenAt: new Date() },
+    });
+    const healthy = await platform.workers();
+    expect(healthy.available).toBe(true);
+
+    await prisma.guardianWorkerHeartbeat.deleteMany({ where: { workerName: { in: ['alerts', 'diagnosis'] } } });
+  }, 60_000);
 });

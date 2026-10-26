@@ -1,4 +1,5 @@
 import {
+  classifyWorkerHeartbeat,
   emptyWatchdogState,
   evaluateGuardianHealth,
   planWatchdogNotifications,
@@ -145,5 +146,27 @@ describe('guardian watchdog — deduplicación y recuperación', () => {
     const second = planWatchdogNotifications([stuck, other], first.nextState, t0, { reAlertMinutes: 60 });
     expect(second.send.map((finding) => finding.code)).toEqual(['SEV1_UNACKNOWLEDGED']);
     expect(second.nextState.activeCodes).toEqual(['ALERTS_STUCK', 'SEV1_UNACKNOWLEDGED']);
+  });
+});
+
+describe('guardian watchdog — clasificación de latidos para el panel', () => {
+  it('sin latido devuelve missing', () => {
+    expect(classifyWorkerHeartbeat(null, 10)).toBe('missing');
+    expect(classifyWorkerHeartbeat(undefined, 10)).toBe('missing');
+  });
+
+  it('dentro del umbral devuelve ok', () => {
+    expect(classifyWorkerHeartbeat(0, 10)).toBe('ok');
+    expect(classifyWorkerHeartbeat(10, 10)).toBe('ok');
+  });
+
+  it('fuera del umbral devuelve stale', () => {
+    expect(classifyWorkerHeartbeat(10.01, 10)).toBe('stale');
+    expect(classifyWorkerHeartbeat(45, 10)).toBe('stale');
+  });
+
+  it('un umbral inválido cae en 10 minutos y nunca marca ok por defecto', () => {
+    expect(classifyWorkerHeartbeat(5, Number.NaN)).toBe('ok');
+    expect(classifyWorkerHeartbeat(15, 0)).toBe('stale');
   });
 });
