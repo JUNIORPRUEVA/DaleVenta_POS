@@ -131,22 +131,29 @@ export class GuardianIncidentsService {
     incidentId: string;
     userId: string | null;
     note?: string | null;
+    actor?: string;
   }) {
     return this.transition(params, {
       toStatus: GuardianIncidentStatus.ACKNOWLEDGED,
       data: { acknowledgedAt: new Date(), acknowledgedByUserId: params.userId },
-      actor: 'admin:ack',
+      actor: params.actor ?? 'admin:ack',
     });
   }
 
-  async investigate(params: { companyId: string; incidentId: string; userId: string | null; note?: string | null }) {
+  async investigate(params: {
+    companyId: string;
+    incidentId: string;
+    userId: string | null;
+    note?: string | null;
+    actor?: string;
+  }) {
     return this.transition(params, {
       toStatus: GuardianIncidentStatus.INVESTIGATING,
       data: {
         acknowledgedAt: new Date(),
         acknowledgedByUserId: params.userId,
       },
-      actor: 'admin:investigate',
+      actor: params.actor ?? 'admin:investigate',
     });
   }
 
@@ -155,6 +162,7 @@ export class GuardianIncidentsService {
     incidentId: string;
     userId: string | null;
     note?: string | null;
+    actor?: string;
   }) {
     return this.transition(params, {
       toStatus: GuardianIncidentStatus.RESOLVED,
@@ -163,15 +171,21 @@ export class GuardianIncidentsService {
         resolvedByUserId: params.userId,
         resolutionNote: (params.note ?? '').toString().slice(0, 600) || null,
       },
-      actor: 'admin:resolve',
+      actor: params.actor ?? 'admin:resolve',
     });
   }
 
-  async close(params: { companyId: string; incidentId: string; userId: string | null; note?: string | null }) {
+  async close(params: {
+    companyId: string;
+    incidentId: string;
+    userId: string | null;
+    note?: string | null;
+    actor?: string;
+  }) {
     return this.transition(params, {
       toStatus: GuardianIncidentStatus.CLOSED,
       data: { resolvedAt: new Date(), resolvedByUserId: params.userId },
-      actor: 'admin:close',
+      actor: params.actor ?? 'admin:close',
     });
   }
 

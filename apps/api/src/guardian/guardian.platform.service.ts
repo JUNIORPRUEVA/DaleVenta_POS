@@ -211,7 +211,7 @@ export class GuardianPlatformService {
   }) {
     const incident = await this.prisma.guardianIncident.findUnique({
       where: { id: params.incidentId },
-      select: { companyId: true },
+      select: { companyId: true, status: true },
     });
     if (!incident) return null;
 
@@ -220,6 +220,9 @@ export class GuardianPlatformService {
       incidentId: params.incidentId,
       userId: null,
       note: params.note ?? null,
+      // El historial debe reflejar el origen real de la accion, no el generico
+      // de administrador: asi el expediente es fiel sin registrar dos entradas.
+      actor: `platform:${params.action}`,
     };
 
     let updated;
@@ -235,7 +238,7 @@ export class GuardianPlatformService {
       await this.prisma.guardianIncidentEvent.create({
         data: {
           incidentId: params.incidentId,
-          fromStatus: null,
+          fromStatus: incident.status,
           toStatus: 'OPEN',
           actor: 'platform:reopen',
           note: (params.note ?? '').slice(0, 600) || null,
