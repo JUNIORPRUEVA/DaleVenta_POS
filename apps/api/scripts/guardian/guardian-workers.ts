@@ -14,7 +14,9 @@
  */
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
+import { hostname } from 'node:os';
 import { AppModule } from '../../src/app.module';
+import { PrismaService } from '../../src/prisma/prisma.service';
 import { GuardianAlertService } from '../../src/guardian/guardian.alert.service';
 import { GuardianDiagnosisService } from '../../src/guardian/guardian.diagnosis.service';
 
@@ -26,10 +28,42 @@ async function main() {
 
   const alerts = app.get(GuardianAlertService);
   const diagnosis = app.get(GuardianDiagnosisService);
+  const prisma = app.get(PrismaService);
 
   const intervalMs = Math.max(2_000, Number(process.env.GUARDIAN_WORKER_INTERVAL_SECONDS ?? 5) * 1_000);
   let running = false;
   let stopping = false;
+
+  // Latido real: el watchdog independiente no puede distinguir "sin trabajo" de
+  // "proceso muerto" solo con contadores, así que cada worker deja su marca.
+  let heartbeatCycle = 0;
+  const beat = async (workerName: string, processedLastCycle: number) => {
+    heartbeatCycle += 1;
+    await prisma.guardianWorkerHeartbeat
+      .upsert({
+        where: { workerName },
+        create: {
+          workerName,
+          lastSeenAt: new Date(),
+          cycleCount: BigInt(1),
+          processedLastCycle,
+          host: hostname(),
+          pid: process.pid,
+        },
+        update: {
+          lastSeenAt: new Date(),
+          cycleCount: { increment: 1 },
+          processedLastCycle,
+          host: hostname(),
+          pid: process.pid,
+        },
+      })
+      .catch((error) => {
+        logger.warn(
+          `latido ${workerName} no registrado: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  };
 
   const tick = async () => {
     if (running || stopping) return;
@@ -43,6 +77,9 @@ async function main() {
         logger.error(`Diagnóstico: ${error instanceof Error ? error.message : String(error)}`);
         return null;
       });
+
+      await beat('alerts', alertOutcome?.processed ?? 0);
+      await beat('diagnosis', diagnosisOutcome?.processed ?? 0);
 
       if (alertOutcome && (alertOutcome.processed > 0 || alertOutcome.failed > 0)) {
         logger.log(

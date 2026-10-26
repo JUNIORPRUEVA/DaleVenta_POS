@@ -138,4 +138,35 @@ describeOnPg('Guardian retención — PostgreSQL real', () => {
     const stillThere = await prisma.guardianIncident.findUnique({ where: { id: incidentId } });
     expect(stillThere).not.toBeNull();
   }, 60_000);
+
+  it('borra en lotes acotados y es reanudable entre ejecuciones', async () => {
+    // Dos candidatos claramente fuera de retención, borrados con lote de 1.
+    await seedIncident({ key: 'batch-a', severity: 'SEV4', status: 'CLOSED', daysAgo: 400 });
+    await seedIncident({ key: 'batch-b', severity: 'SEV4', status: 'CLOSED', daysAgo: 401 });
+
+    const previousBatch = process.env.GUARDIAN_RETENTION_BATCH_SIZE;
+    const previousMax = process.env.GUARDIAN_RETENTION_MAX_BATCHES;
+    process.env.GUARDIAN_RETENTION_BATCH_SIZE = '1';
+    process.env.GUARDIAN_RETENTION_MAX_BATCHES = '1';
+    try {
+      // Primera ejecución: un solo lote de un incidente.
+      const first = await service.run({ dryRun: false });
+      expect(first.batches).toBe(1);
+      expect(first.deletedInBatches).toBe(1);
+
+      // Segunda ejecución: continúa donde quedó, sin repetir trabajo.
+      const second = await service.run({ dryRun: false });
+      expect(second.deletedInBatches).toBe(1);
+      expect(second.batches).toBe(1);
+
+      // Tercera: ya no queda nada que borrar en ese predicado.
+      const third = await service.run({ dryRun: false });
+      expect(third.deletedInBatches).toBe(0);
+    } finally {
+      if (previousBatch === undefined) delete process.env.GUARDIAN_RETENTION_BATCH_SIZE;
+      else process.env.GUARDIAN_RETENTION_BATCH_SIZE = previousBatch;
+      if (previousMax === undefined) delete process.env.GUARDIAN_RETENTION_MAX_BATCHES;
+      else process.env.GUARDIAN_RETENTION_MAX_BATCHES = previousMax;
+    }
+  }, 120_000);
 });

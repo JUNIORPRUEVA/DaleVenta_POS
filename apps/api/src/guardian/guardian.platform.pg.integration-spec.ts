@@ -43,6 +43,12 @@ function event(overrides: Partial<GuardianIngestEventDto> = {}): GuardianIngestE
 describe('GuardianPlatformGuard', () => {
   const guard = new GuardianPlatformGuard();
 
+  // Aislamiento: la suite no debe depender de si el entorno de ejecución tiene
+  // o no configurado GUARDIAN_PLATFORM_TOKEN.
+  beforeEach(() => {
+    delete process.env.GUARDIAN_PLATFORM_TOKEN;
+  });
+
   afterEach(() => {
     delete process.env.GUARDIAN_PLATFORM_TOKEN;
   });

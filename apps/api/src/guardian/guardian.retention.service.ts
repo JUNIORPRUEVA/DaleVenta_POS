@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 const DEFAULT_RETENTION_DAYS = 90;
 const DEFAULT_CRITICAL_DAYS = 365;
 const DEFAULT_MAX_PER_COMPANY = 5_000;
+const DEFAULT_BATCH_SIZE = 500;
+const DEFAULT_MAX_BATCHES = 20;
 
 function readInt(raw: string | undefined, fallback: number, min: number): number {
   const parsed = Number.parseInt(String(raw ?? '').trim(), 10);
@@ -19,6 +21,10 @@ export type GuardianRetentionResult = {
   overLimitIncidents: number;
   purgedAccessLogs: number;
   keptForInvestigation: number;
+  /** Lotes de borrado ejecutados en esta corrida. */
+  batches: number;
+  /** Incidentes borrados por lotes acotados. */
+  deletedInBatches: number;
 };
 
 /**
@@ -50,6 +56,43 @@ export class GuardianRetentionService {
 
   private get apply() {
     return String(process.env.GUARDIAN_RETENTION_APPLY ?? '').trim().toLowerCase() === 'true';
+  }
+
+  /** Tamano de lote: acota la duracion de cada transaccion de borrado. */
+  private get batchSize() {
+    return readInt(process.env.GUARDIAN_RETENTION_BATCH_SIZE, DEFAULT_BATCH_SIZE, 1);
+  }
+
+  /** Maximo de lotes por ejecucion (cada ejecucion es corta y repetible). */
+  private get maxBatches() {
+    return readInt(process.env.GUARDIAN_RETENTION_MAX_BATCHES, DEFAULT_MAX_BATCHES, 1);
+  }
+
+  /**
+   * Borra en lotes pequenos en lugar de una sola sentencia masiva: mantiene
+   * cortas las transacciones (menos bloqueos) y es reanudable, porque la
+   * seleccion se recalcula con el mismo predicado en cada lote. Si el proceso se
+   * interrumpe, la siguiente ejecucion continua donde quedo sin duplicar trabajo.
+   */
+  private async deleteInBatches(
+    where: Prisma.GuardianIncidentWhereInput,
+    counters: { batches: number; deleted: number },
+  ): Promise<void> {
+    for (let batch = 0; batch < this.maxBatches; batch++) {
+      const rows = await this.prisma.guardianIncident.findMany({
+        where,
+        orderBy: { occurredAt: 'asc' },
+        take: this.batchSize,
+        select: { id: true },
+      });
+      if (rows.length === 0) return;
+      const result = await this.prisma.guardianIncident.deleteMany({
+        where: { id: { in: rows.map((row) => row.id) } },
+      });
+      counters.batches += 1;
+      counters.deleted += result.count;
+      if (rows.length < this.batchSize) return;
+    }
   }
 
   /** Métricas de almacenamiento por tabla (para panel y watchdog). */
@@ -144,9 +187,10 @@ export class GuardianRetentionService {
     }
 
     let purgedAccessLogs = 0;
+    const batches = { batches: 0, deleted: 0 };
     if (!dryRun) {
       if (expiredIncidents > 0) {
-        await this.prisma.guardianIncident.deleteMany({ where: expiredWhere });
+        await this.deleteInBatches(expiredWhere, batches);
       }
       const logCutoff = new Date(now - this.criticalDays * 24 * 60 * 60 * 1000);
       const purged = await this.prisma.guardianAccessLog.deleteMany({
@@ -163,6 +207,8 @@ export class GuardianRetentionService {
       overLimitIncidents,
       purgedAccessLogs,
       keptForInvestigation,
+      batches: batches.batches,
+      deletedInBatches: batches.deleted,
     };
 
     this.logger.log(`Retención Guardian ${dryRun ? '(dry-run)' : '(aplicada)'}: ${JSON.stringify(result)}`);

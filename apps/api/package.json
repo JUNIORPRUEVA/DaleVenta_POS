@@ -40,6 +40,7 @@
     "auth:reset-password": "node scripts/reset-password.cjs",
     "test:smoke": "ts-node scripts/smoke-test.ts",
     "guardian:workers": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-workers.ts",
+    "guardian:retention": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-retention.ts",
     "guardian:watchdog": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-watchdog.ts",
     "guardian:scale": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-scale-check.ts",
     "whatsapp:inbox:repair": "ts-node scripts/repair-whatsapp-inbox-duplicates.ts",

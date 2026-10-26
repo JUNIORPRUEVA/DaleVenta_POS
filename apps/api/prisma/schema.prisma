@@ -4511,3 +4511,21 @@ model GuardianAlertAttempt {
   @@index([alertId, createdAt])
   @@map("guardian_alert_attempts")
 }
+
+/// Latido de los workers de Guardian.
+///
+/// Permite que el watchdog independiente detecte un worker detenido incluso
+/// cuando la cola esta vacia (sin latido no hay forma de distinguir "sin
+/// trabajo" de "proceso muerto").
+model GuardianWorkerHeartbeat {
+  workerName   String   @id @map("worker_name") @db.VarChar(60)
+  lastSeenAt   DateTime @map("last_seen_at")
+  cycleCount   BigInt   @default(0) @map("cycle_count")
+  processedLastCycle Int @default(0) @map("processed_last_cycle")
+  host         String?  @db.VarChar(120)
+  pid          Int?
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([lastSeenAt])
+  @@map("guardian_worker_heartbeats")
+}
