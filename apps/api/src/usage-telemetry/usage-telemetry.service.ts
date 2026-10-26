@@ -233,28 +233,35 @@ export class UsageTelemetryService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Encola un evento de negocio dentro de la transacción del dominio.
+   * Encola un evento de negocio (telemetría auxiliar).
    *
-   * La telemetría es auxiliar: NUNCA debe abortar la operación de negocio.
-   * Antes, un conflicto de escritura (P2034) en `telemetry_outbox` dentro de
-   * una transacción SERIALIZABLE propagaba y convertía una apertura de turno
-   * válida en un 500 (reproducido en UAT con 4 aperturas concurrentes). Ahora
-   * el fallo se registra y se descarta: el turno/venta/movimiento se confirma
-   * igual y el evento se pierde (asumible) en lugar de bloquear la caja.
+   * IMPORTANTE — por qué NO se escribe con el cliente de la transacción:
+   *
+   * 1. Un `P2034` en `telemetry_outbox` dentro de la transacción SERIALIZABLE
+   *    del dominio propagaba y convertía una apertura de turno válida en un 500
+   *    (reproducido en UAT con 4 aperturas concurrentes).
+   * 2. Capturar ese error NO es suficiente en PostgreSQL: una sentencia fallida
+   *    deja la transacción en estado abortado y el `COMMIT` posterior se
+   *    comporta como `ROLLBACK`. Se observó en UAT que la API respondía 201 y
+   *    emitía `cash.session.opened` mientras la fila del turno NO existía: una
+   *    pérdida silenciosa de datos financieros mucho peor que el 500.
+   *
+   * Por eso el evento se escribe SIEMPRE fuera de la transacción, con la
+   * conexión propia del servicio, y cualquier fallo se registra y se descarta.
+   * Se prefiere un evento de telemetría perdido antes que una operación de caja
+   * perdida. El parámetro `tx` se mantiene por compatibilidad de las llamadas,
+   * pero deliberadamente no se usa para escribir.
    */
   async enqueueBusinessEvent(
-    tx: Prisma.TransactionClient,
+    _tx: Prisma.TransactionClient,
     input: Omit<TelemetryEventInput, 'deviceId' | 'platform'>,
   ) {
     try {
-      return await this.enqueueEvent(
-        {
-          ...input,
-          deviceId: `daleventas-api-${input.companyId}`,
-          platform: 'api',
-        },
-        tx,
-      );
+      return await this.enqueueEvent({
+        ...input,
+        deviceId: `daleventas-api-${input.companyId}`,
+        platform: 'api',
+      });
     } catch (error) {
       this.logger.warn(
         `telemetry.enqueue.skipped event=${input.eventType} entity=${input.entityType ?? 'n/a'} company=${input.companyId} code=${

@@ -114,11 +114,32 @@ describe('UsageTelemetryService reliable outbox', () => {
   /**
    * Regresión del defecto detectado en UAT con PostgreSQL real: bajo
    * concurrencia (4 aperturas de turno simultáneas) el `telemetry_outbox.create`
-   * dentro de la transacción SERIALIZABLE fallaba con P2034 y convertía una
-   * apertura válida en un 500. La telemetría es auxiliar: debe descartarse el
-   * evento, no romper la caja.
+   * dentro de la transacción SERIALIZABLE fallaba con P2034.
+   *
+   * Capturarlo NO basta: en PostgreSQL una sentencia fallida deja la
+   * transacción abortada y el COMMIT se comporta como ROLLBACK (se observó la
+   * API respondiendo 201 sin fila del turno = pérdida silenciosa). Por eso el
+   * evento debe escribirse SIEMPRE fuera de la transacción del dominio.
    */
-  it('never fails the business transaction when the outbox write conflicts', async () => {
+  it('escribe el evento fuera de la transacción del negocio aunque reciba un tx', async () => {
+    const { service, prisma } = buildService();
+    prisma.telemetryOutbox.create.mockResolvedValue({ id: 'outbox-1' });
+    const tx = { telemetryOutbox: { create: jest.fn() } } as any;
+
+    await service.enqueueBusinessEvent(tx, {
+      companyId,
+      actorUserId: 'user-1',
+      eventType: 'CASH_SESSION_OPENED',
+      entityType: 'cash_session',
+      entityId: 'session-1',
+      feature: 'CASH',
+    });
+
+    expect(prisma.telemetryOutbox.create).toHaveBeenCalledTimes(1);
+    expect(tx.telemetryOutbox.create).not.toHaveBeenCalled();
+  });
+
+  it('nunca falla la operación de negocio cuando el outbox conflicta', async () => {
     const { service, prisma } = buildService();
     prisma.telemetryOutbox.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('write conflict', {
@@ -126,7 +147,7 @@ describe('UsageTelemetryService reliable outbox', () => {
         clientVersion: 'test',
       }),
     );
-    const tx = prisma as any;
+    const tx = { telemetryOutbox: { create: jest.fn() } } as any;
 
     await expect(
       service.enqueueBusinessEvent(tx, {
