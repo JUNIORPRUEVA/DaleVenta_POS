@@ -18,6 +18,7 @@ import {
 import {
   GuardianDeliveryStatus,
   advanceAlertDelivery,
+  stateForAcceptance,
 } from './guardian.alert.delivery';
 import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
 
@@ -438,19 +439,24 @@ export class GuardianAlertService {
     });
 
     if (result.ok) {
+      // El estado depende de la evidencia real: encolar en el outbox local no
+      // equivale a enviar, y un 2xx sin id no equivale a aceptación del proveedor.
+      const state = stateForAcceptance(result.acceptance);
+      const now = new Date();
       await this.prisma.$transaction([
         this.prisma.guardianAlert.update({
           where: { id: alert.id },
           data: {
-            state: GuardianAlertState.SENT,
+            state,
             channel: channel.name,
             attempts: { increment: 1 },
-            sentAt: new Date(),
+            sentAt: now,
+            acceptedAt: state === GuardianAlertState.ACCEPTED ? now : null,
             lockedAt: null,
             lockedBy: null,
             lastError: null,
             providerMessageId: result.providerMessageId ?? null,
-            lastProviderStatus: 'accepted',
+            lastProviderStatus: result.acceptance ?? 'sent',
           },
         }),
         this.prisma.guardianAlertAttempt.create({
@@ -458,13 +464,19 @@ export class GuardianAlertService {
             alertId: alert.id,
             attempt: alert.attempts + 1,
             channel: channel.name,
-            outcome: 'ok',
+            outcome: state === GuardianAlertState.QUEUED ? 'queued' : 'ok',
             httpStatus: result.httpStatus ?? null,
-            detail: result.providerMessageId ? `provider=${result.providerMessageId}` : null,
+            detail: [
+              result.providerMessageId ? `provider=${result.providerMessageId}` : null,
+              `acceptance=${result.acceptance ?? 'sent'}`,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .slice(0, 600) || null,
           },
         }),
       ]);
-      return { ok: true as const, channel: channel.name };
+      return { ok: true as const, channel: channel.name, state };
     }
 
     const attempts = alert.attempts + 1;

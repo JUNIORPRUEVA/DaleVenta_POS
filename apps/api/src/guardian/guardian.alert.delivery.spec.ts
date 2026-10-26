@@ -1,5 +1,5 @@
 import { GuardianAlertState } from '@prisma/client';
-import { advanceAlertDelivery, mapMetaStatus } from './guardian.alert.delivery';
+import { advanceAlertDelivery, mapMetaStatus, stateForAcceptance } from './guardian.alert.delivery';
 
 describe('mapMetaStatus', () => {
   it('mapea los estados reales de WhatsApp Cloud API', () => {
@@ -18,6 +18,19 @@ describe('mapMetaStatus', () => {
 
 describe('advanceAlertDelivery', () => {
   const now = new Date('2026-10-26T12:00:00.000Z');
+
+  it('cada evidencia de envío produce su estado real', () => {
+    expect(stateForAcceptance('accepted')).toBe(GuardianAlertState.ACCEPTED);
+    expect(stateForAcceptance('queued')).toBe(GuardianAlertState.QUEUED);
+    expect(stateForAcceptance('sent')).toBe(GuardianAlertState.SENT);
+    expect(stateForAcceptance(undefined)).toBe(GuardianAlertState.SENT);
+  });
+
+  it('una alerta encolada avanza a entregada cuando llega el acuse', () => {
+    const transition = advanceAlertDelivery(GuardianAlertState.QUEUED, 'delivered', now);
+    expect(transition.state).toBe(GuardianAlertState.DELIVERED);
+    expect(transition.deliveredAt).toEqual(now);
+  });
 
   it('un envío aceptado pasa de SENDING a SENT', () => {
     const transition = advanceAlertDelivery(GuardianAlertState.SENDING, 'sent', now);

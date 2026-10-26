@@ -43,6 +43,7 @@ describe('WhatsAppCloudChannel', () => {
 
     expect(result.ok).toBe(true);
     expect(result.providerMessageId).toBe('wamid.ABC');
+    expect(result.acceptance).toBe('accepted');
 
     const body = JSON.parse((fetchImpl as jest.Mock).mock.calls[0][1].body);
     expect(body.type).toBe('template');
@@ -56,7 +57,7 @@ describe('WhatsAppCloudChannel', () => {
     const fetchImpl = fetchDouble({ ok: true, status: 200, body: '{}' });
     const channel = new WhatsAppCloudChannel({ ...baseOptions, fetchImpl });
 
-    await channel.send({
+    const result = await channel.send({
       to: '18095550000',
       text: 'hola',
       dedupeKey: 'k2',
@@ -66,6 +67,8 @@ describe('WhatsAppCloudChannel', () => {
     const body = JSON.parse((fetchImpl as jest.Mock).mock.calls[0][1].body);
     expect(body.type).toBe('text');
     expect(body.text.body).toBe('hola');
+    // 2xx sin id de mensaje: no se puede afirmar aceptación del proveedor.
+    expect(result.acceptance).toBe('sent');
   });
 
   it('clasifica 429/5xx como transitorio y 400 como permanente', async () => {
@@ -113,6 +116,7 @@ describe('canales de respaldo', () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result.acceptance).toBe('accepted');
     const [url, init] = (fetchImpl as jest.Mock).mock.calls[0];
     expect(url).toBe('https://respaldo.example.com/hook');
     expect(init.headers['x-guardian-secret']).toBe('secreto-uat');
@@ -155,6 +159,8 @@ describe('canales de respaldo', () => {
 
     expect(result.ok).toBe(true);
     expect(result.providerMessageId).toBe('outbox:outbox-9');
+    // Encolar en el outbox local no es enviar: el despachador puede fallar.
+    expect(result.acceptance).toBe('queued');
     expect(enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ allowOutsideBusinessHours: true, dedupeKey: 'k6' }),
     );

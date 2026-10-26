@@ -14,12 +14,21 @@ export type GuardianAlertPayload = {
 
 export type GuardianChannelClassification = 'transient' | 'permanent';
 
+/**
+ * Evidencia real del envío, tal como la puede demostrar cada capa:
+ * - `accepted`: el proveedor devolvió un identificador de mensaje.
+ * - `queued`: la alerta solo quedó en una cola local; ningún proveedor la ha visto.
+ * - `sent`: hubo respuesta correcta sin identificador (significado histórico de SENT).
+ */
+export type GuardianChannelAcceptance = 'accepted' | 'queued' | 'sent';
+
 export type GuardianChannelResult = {
   ok: boolean;
   providerMessageId?: string;
   httpStatus?: number;
   error?: string;
   classification?: GuardianChannelClassification;
+  acceptance?: GuardianChannelAcceptance;
   /** Espera indicada por el proveedor (`Retry-After`) cuando aplica. */
   retryAfterMs?: number;
 };
@@ -207,7 +216,12 @@ export class WhatsAppCloudChannel implements GuardianAlertChannel {
       }
 
       // Un 200 con `messages[].id` significa aceptado por Meta, no entregado.
-      return { ok: true, httpStatus: response.status, providerMessageId };
+      return {
+        ok: true,
+        httpStatus: response.status,
+        providerMessageId,
+        acceptance: providerMessageId ? 'accepted' : 'sent',
+      };
     } catch (error) {
       return {
         ok: false,
@@ -284,6 +298,8 @@ export class HttpWebhookChannel implements GuardianAlertChannel {
           .update(String(payload.dedupeKey ?? ''))
           .digest('hex')
           .slice(0, 24)}`,
+        // El relay confirmó la recepción del payload, no la entrega al humano.
+        acceptance: 'accepted',
       };
     } catch (error) {
       return {
@@ -331,7 +347,12 @@ export class EvolutionOutboxChannel implements GuardianAlertChannel {
         dedupeKey: payload.dedupeKey,
         allowOutsideBusinessHours: true,
       });
-      return { ok: true, providerMessageId: `outbox:${row.id}` };
+      return {
+        ok: true,
+        providerMessageId: `outbox:${row.id}`,
+        // Encolar en el outbox local NO es enviar: el despachador puede fallar.
+        acceptance: 'queued',
+      };
     } catch (error) {
       return {
         ok: false,

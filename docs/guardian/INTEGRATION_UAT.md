@@ -33,6 +33,25 @@ unión:
 Orden monotónico: `PENDING < QUEUED ≈ SENDING < ACCEPTED ≈ SENT < DELIVERED < READ`.
 Nunca retrocede; un `failed` posterior a la entrega conserva la evidencia.
 
+### Evidencia real por estado (capa que lo demuestra)
+
+| Estado | Evidencia que lo produce |
+| --- | --- |
+| `PENDING` | Alerta persistida esperando turno del worker. |
+| `QUEUED` | `notification_outbox` local aceptó la fila; **ningún proveedor la ha visto**. |
+| `SENDING` | Worker la reclamó (lock). |
+| `ACCEPTED` | El proveedor devolvió `messages[].id` (Meta) o el relay confirmó el payload. |
+| `SENT` | 2xx sin identificador (significado histórico; no se reescriben filas antiguas). |
+| `DELIVERED` | Webhook `delivered` firmado del proveedor. |
+| `READ` | Webhook `read` firmado del proveedor. |
+| `FAILED_PERMANENT` / `DEAD` | Error permanente o reintentos agotados. |
+
+Reglas verificadas: acuses repetidos no cambian nada, eventos desordenados no
+retroceden (un `delivered` tardío sobre `READ` se ignora), `failed` posterior a la
+entrega conserva la evidencia y anota el error, y `QUEUED` cuenta como pendiente
+en `health`, retención y watchdog (una cola atascada se detecta).
+
+
 ## Comprobaciones ejecutadas
 
 - Migraciones desde base nueva y sobre UAT existente (Fullpos y Appyra).

@@ -1,4 +1,5 @@
 import { GuardianAlertState } from '@prisma/client';
+import type { GuardianChannelAcceptance } from './guardian.alert.channels';
 
 /**
  * Estados de entrega reales de WhatsApp Cloud API.
@@ -44,6 +45,19 @@ const FORWARD_RANK: Record<string, number> = {
   FAILED_PERMANENT: -1,
   DEAD: -2,
 };
+
+/**
+ * Estado tras un envío correcto, según la evidencia real disponible.
+ *
+ * - `accepted` (el proveedor devolvió id) → ACCEPTED.
+ * - `queued` (solo quedó en el outbox local) → QUEUED: encolar no es enviar.
+ * - `sent`/sin evidencia (2xx sin id) → SENT, significado histórico intacto.
+ */
+export function stateForAcceptance(acceptance?: GuardianChannelAcceptance): GuardianAlertState {
+  if (acceptance === 'accepted') return GuardianAlertState.ACCEPTED;
+  if (acceptance === 'queued') return GuardianAlertState.QUEUED;
+  return GuardianAlertState.SENT;
+}
 
 export type AlertDeliveryTransition = {
   /** null cuando no hay cambio de estado (solo se actualiza el último estado del proveedor). */

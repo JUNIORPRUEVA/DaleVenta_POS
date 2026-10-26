@@ -209,6 +209,49 @@ describeOnPg('Guardian alertas sobre PostgreSQL real', () => {
     expect(row.providerMessageId).toBe('webhook-accepted');
   }, 60_000);
 
+  it('un canal de outbox deja la alerta en QUEUED y no la marca como enviada', async () => {
+    const incidentId = await seedIncident({ severity: 'SEV1' });
+    const plan = await alerts.planForIncident(incidentId);
+
+    const queued = fakeChannel('whatsapp_evolution', { ok: true, providerMessageId: 'outbox-123', acceptance: 'queued' });
+    const outcome = await alerts.attempt(plan.alertId!, [queued]);
+    expect(outcome.ok).toBe(true);
+
+    const row = await prisma.guardianAlert.findUniqueOrThrow({ where: { id: plan.alertId! } });
+    expect(row.state).toBe('QUEUED');
+    expect(row.acceptedAt).toBeNull();
+    expect(row.providerMessageId).toBe('outbox-123');
+
+    const attemptLog = await prisma.guardianAlertAttempt.findFirst({
+      where: { alertId: plan.alertId! },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(attemptLog?.outcome).toBe('queued');
+    expect(attemptLog?.detail).toContain('acceptance=queued');
+
+    // El acuse real del proveedor sigue avanzando el ciclo desde QUEUED.
+    const delivered = await alerts.markDelivery('outbox-123', 'delivered');
+    expect(delivered.state).toBe('DELIVERED');
+  }, 60_000);
+
+  it('un proveedor que confirma con id deja la alerta en ACCEPTED', async () => {
+    const incidentId = await seedIncident({ severity: 'SEV1' });
+    const plan = await alerts.planForIncident(incidentId);
+
+    const accepted = fakeChannel('whatsapp_cloud', {
+      ok: true,
+      providerMessageId: `wamid.accepted.${RUN_ID}`,
+      acceptance: 'accepted',
+    });
+    const outcome = await alerts.attempt(plan.alertId!, [accepted]);
+    expect(outcome.ok).toBe(true);
+
+    const row = await prisma.guardianAlert.findUniqueOrThrow({ where: { id: plan.alertId! } });
+    expect(row.state).toBe('ACCEPTED');
+    expect(row.acceptedAt).toBeTruthy();
+    expect(row.sentAt).toBeTruthy();
+  }, 60_000);
+
   it('un fallo permanente marca la alerta y genera escalamiento', async () => {
     const incidentId = await seedIncident({ severity: 'SEV1' });
     const plan = await alerts.planForIncident(incidentId);

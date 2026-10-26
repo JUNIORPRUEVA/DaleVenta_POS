@@ -7,7 +7,7 @@
  *
  * Requiere el API en ejecución apuntando a la base aislada de UAT:
  *   $env:DATABASE_URL='postgresql://postgres@127.0.0.1:55661/daleventa_pos_uat'
- *   $env:JWT_SECRET='guardian-uat-secret'; $env:PORT='4010'
+ *   $env:JWT_SECRET='<secreto-local-uat>'; $env:PORT='4010'
  *   $env:GUARDIAN_ENABLED='true'; $env:GUARDIAN_INGEST_ENABLED='true'
  *   $env:GUARDIAN_DIAGNOSIS_ENABLED='true'; $env:GUARDIAN_ALERTS_ENABLED='true'
  *   $env:GUARDIAN_ALERT_RECIPIENT='18095550000'

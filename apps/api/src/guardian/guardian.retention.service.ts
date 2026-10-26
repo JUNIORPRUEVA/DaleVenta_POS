@@ -134,7 +134,7 @@ export class GuardianRetentionService {
 
     const expiredWhere: Prisma.GuardianIncidentWhereInput = {
       status: { in: closableStatuses },
-      alerts: { none: { state: { in: ['PENDING', 'SENDING'] } } },
+      alerts: { none: { state: { in: ['PENDING', 'SENDING', 'QUEUED'] } } },
       OR: [
         {
           severity: { in: [GuardianSeverity.SEV3, GuardianSeverity.SEV4] },
@@ -170,7 +170,7 @@ export class GuardianRetentionService {
           companyId: company.companyId,
           status: { in: closableStatuses },
           severity: { in: [GuardianSeverity.SEV3, GuardianSeverity.SEV4] },
-          alerts: { none: { state: { in: ['PENDING', 'SENDING'] } } },
+          alerts: { none: { state: { in: ['PENDING', 'SENDING', 'QUEUED'] } } },
         },
         orderBy: { occurredAt: 'asc' },
         take: overflow,

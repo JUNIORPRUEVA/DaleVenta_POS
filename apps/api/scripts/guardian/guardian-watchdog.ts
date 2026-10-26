@@ -98,7 +98,7 @@ async function collectSnapshot(
     base.databaseReachable = true;
     base.alertsPendingStuck = await count(
       `SELECT COUNT(*)::bigint AS n FROM "guardian_alerts"
-       WHERE state = 'PENDING' AND created_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
+       WHERE state IN ('PENDING', 'QUEUED') AND created_at < (now() AT TIME ZONE 'UTC') - ($1 || ' minutes')::interval`,
       String(stuckMinutes),
     );
     base.diagnosesPendingStuck = await count(
