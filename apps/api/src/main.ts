@@ -13,6 +13,7 @@ import {
 } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { requestIdMiddleware } from './common/request-id/request-id.middleware';
 import { assertSafeUatEnvironment, buildSafeUatBanner } from './common/uat-safety';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
 
@@ -33,17 +34,22 @@ async function bootstrap() {
   );
   app.set('trust proxy', 1);
 
-  // Basic request logging (method/url/status/duration).
+  // Request correlation: accepts/propagates x-request-id (or x-correlation-id)
+  // and always echoes a sanitized identifier in the response headers.
+  app.use(requestIdMiddleware);
+
+  // Basic request logging (request id/method/url/status/duration).
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     const method = req.method;
     const url = req.originalUrl || req.url;
+    const requestId = (req as Request & { requestId?: string }).requestId ?? '-';
 
     res.on('finish', () => {
       const durationMs = Date.now() - start;
       const status = res.statusCode;
       // eslint-disable-next-line no-console
-      console.log(`[req] ${method} ${url} -> ${status} (${durationMs}ms)`);
+      console.log(`[req] ${requestId} ${method} ${url} -> ${status} (${durationMs}ms)`);
     });
 
     next();
@@ -71,6 +77,18 @@ async function bootstrap() {
   );
   // eslint-disable-next-line no-console
   console.log('[http] compression enabled (gzip/deflate/br, threshold=1024)');
+
+  // Guardian webhook de WhatsApp Cloud API: necesita el cuerpo CRUDO para
+  // verificar X-Hub-Signature-256 con HMAC SHA-256. Debe ir antes del json parser.
+  app.use(
+    '/guardian/webhooks/whatsapp',
+    express.raw({ type: 'application/json', limit: bodySizeLimit }),
+    (req: Request, _res: Response, next: NextFunction) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = req.body as Buffer;
+      req.body = {};
+      next();
+    },
+  );
 
   app.use(express.json({ limit: bodySizeLimit }));
   app.use(express.urlencoded({ extended: true, limit: bodySizeLimit }));

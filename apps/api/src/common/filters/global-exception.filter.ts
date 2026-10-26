@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { GuardianCaptureRegistry } from '../../guardian/guardian.capture.registry';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -29,6 +30,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       originalUrl?: string;
       url?: string;
       ip?: string;
+      requestId?: string;
+      user?: { id?: string; companyId?: string | null };
     }>();
     const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any }>();
 
@@ -81,7 +84,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         : safeString(exception);
 
     const stack = exception instanceof Error ? exception.stack : undefined;
+    const requestId = req?.requestId ?? null;
     const logPayload = {
+      requestId,
       method,
       url,
       status,
@@ -98,6 +103,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       console.warn('[warn]', logPayload);
     }
 
+    // Captura Guardian (best-effort, fire-and-forget). Nunca lanza ni bloquea la
+    // respuesta; ignora rutas /guardian para no capturarse a sí misma.
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      GuardianCaptureRegistry.capture({
+        companyId: req?.user?.companyId ?? null,
+        userId: req?.user?.id ?? null,
+        requestId,
+        method,
+        path: url,
+        status,
+        exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
+        message: exception instanceof Error ? exception.message : message,
+        stack,
+      });
+    }
+
     // Safe error response for clients.
     const responseBody: Record<string, unknown> = {
       statusCode: status,
@@ -106,6 +127,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
     };
 
+    if (requestId) {
+      responseBody.requestId = requestId;
+    }
     if (isHttp && isObject(rawResponse)) {
       Object.assign(responseBody, rawResponse);
     } else {

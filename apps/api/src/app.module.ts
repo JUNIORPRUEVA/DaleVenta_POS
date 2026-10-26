@@ -32,6 +32,7 @@ import { BackupsModule } from './backups/backups.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ServiceOrdersModule } from './service-orders/service-orders.module';
 import { AppUpdatesModule } from './app-updates/app-updates.module';
+import { GuardianModule } from './guardian/guardian.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { AppUpdatesModule } from './app-updates/app-updates.module';
     OnboardingModule,
     ServiceOrdersModule,
     AppUpdatesModule,
+    GuardianModule,
   ],
 })
 export class AppModule {}

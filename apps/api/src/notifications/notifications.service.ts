@@ -1,16 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { NotificationOutbox, Prisma } from '@prisma/client';
 import { hostname } from 'os';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildNotificationMessage } from './notification-templates';
 import { EvolutionWhatsAppService } from './evolution-whatsapp.service';
 import {
-  alignToNotificationBusinessHours,
   isWithinNotificationBusinessHours,
+  resolveInitialAttemptAt,
 } from './notification-business-hours.util';
 import { NotificationPayload } from './notification.types';
 
 const WORKER_ID = `${hostname()}-${process.pid}`;
+
+/**
+ * Vigencia del lock de un intento de envío. Si un worker muere durante el envío,
+ * la fila queda reclamable por otro worker pasado este margen.
+ */
+const OUTBOX_LOCK_TTL_MS = 2 * 60_000;
 
 @Injectable()
 export class NotificationsService {
@@ -25,8 +31,8 @@ export class NotificationsService {
     return this.evolution.normalizeWhatsAppNumber(raw);
   }
 
-  private getInitialAttemptAt(date: Date = new Date()) {
-    return alignToNotificationBusinessHours(date);
+  private getInitialAttemptAt(date: Date = new Date(), allowOutsideBusinessHours = false) {
+    return resolveInitialAttemptAt(date, allowOutsideBusinessHours);
   }
 
   private pad2(n: number) {
@@ -173,6 +179,33 @@ export class NotificationsService {
     return this.normalizeSenderUserId(typeof raw === 'string' ? raw : null);
   }
 
+  /**
+   * Crea una fila del outbox de forma idempotente.
+   *
+   * `dedupeKey` es único en la base: dos llamadas concurrentes con la misma clave
+   * hacen que una gane el INSERT y la otra reciba P2002. En ese caso devolvemos la
+   * fila ya existente en lugar de propagar el error al flujo de negocio que encola.
+   */
+  private async createOutboxEntry(args: {
+    data: Prisma.NotificationOutboxUncheckedCreateInput;
+  }): Promise<NotificationOutbox> {
+    try {
+      return await this.prisma.notificationOutbox.create(args);
+    } catch (error) {
+      const rawDedupeKey = args.data.dedupeKey;
+      const dedupeKey = typeof rawDedupeKey === 'string' ? rawDedupeKey.trim() : '';
+      if (
+        dedupeKey &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.prisma.notificationOutbox.findUnique({ where: { dedupeKey } });
+        if (existing) return existing;
+      }
+      throw error;
+    }
+  }
+
   private formatLocalYmdHm(d: Date) {
     const yyyy = d.getFullYear();
     const mm = this.pad2(d.getMonth() + 1);
@@ -209,6 +242,11 @@ export class NotificationsService {
     dedupeKey?: string;
     payload?: unknown;
     senderUserId?: string | null;
+    /**
+     * Alertas operativas críticas (APPYRA Guardian): el primer intento no se
+     * desplaza a la ventana comercial y el despachador no las retiene.
+     */
+    allowOutsideBusinessHours?: boolean;
   }) {
     const dedupeKey = (params.dedupeKey ?? '').toString().trim();
     if (dedupeKey) {
@@ -224,17 +262,26 @@ export class NotificationsService {
     const normalized = this.evolution.normalizeWhatsAppNumber(rawPhone);
     let messageText = (params.messageText ?? '').toString();
     messageText = await this.maybeInjectOrderNumber(messageText, params.payload);
-    const nextAttemptAt = this.getInitialAttemptAt();
+    const allowOutsideBusinessHours = params.allowOutsideBusinessHours === true;
+    const nextAttemptAt = this.getInitialAttemptAt(new Date(), allowOutsideBusinessHours);
+    const payload = allowOutsideBusinessHours
+      ? {
+          ...((params.payload && typeof params.payload === 'object' && !Array.isArray(params.payload))
+            ? params.payload as Record<string, unknown>
+            : { payload: params.payload }),
+          allowOutsideBusinessHours: true,
+        }
+      : params.payload;
 
     if (!normalized) {
-      return this.prisma.notificationOutbox.create({
+      return this.createOutboxEntry({
         data: {
           channel: 'WHATSAPP',
           status: 'FAILED',
           templateKey: 'custom_text',
           dedupeKey: dedupeKey || null,
           messageText,
-          payload: this.attachSenderUserId(params.payload, params.senderUserId),
+          payload: this.attachSenderUserId(payload, params.senderUserId),
           recipientUserId: null,
           toNumber: rawPhone,
           toNumberNormalized: '',
@@ -246,14 +293,14 @@ export class NotificationsService {
     }
 
     if (!messageText.trim()) {
-      return this.prisma.notificationOutbox.create({
+      return this.createOutboxEntry({
         data: {
           channel: 'WHATSAPP',
           status: 'FAILED',
           templateKey: 'custom_text',
           dedupeKey: dedupeKey || null,
           messageText,
-          payload: this.attachSenderUserId(params.payload, params.senderUserId),
+          payload: this.attachSenderUserId(payload, params.senderUserId),
           recipientUserId: null,
           toNumber: rawPhone,
           toNumberNormalized: normalized,
@@ -264,7 +311,7 @@ export class NotificationsService {
       });
     }
 
-    return this.prisma.notificationOutbox.create({
+    return this.createOutboxEntry({
       data: {
         channel: 'WHATSAPP',
         contentType: 'TEXT' as any,
@@ -272,7 +319,7 @@ export class NotificationsService {
         templateKey: 'custom_text',
         dedupeKey: dedupeKey || null,
         messageText,
-        payload: this.attachSenderUserId(params.payload, params.senderUserId),
+        payload: this.attachSenderUserId(payload, params.senderUserId),
         recipientUserId: null,
         toNumber: rawPhone,
         toNumberNormalized: normalized,
@@ -307,7 +354,7 @@ export class NotificationsService {
       : null;
     const nextAttemptAt = scheduledFor && !Number.isNaN(scheduledFor.getTime())
       ? scheduledFor
-      : this.getInitialAttemptAt();
+      : this.getInitialAttemptAt(new Date(), params.allowOutsideBusinessHours === true);
     const payload = params.allowOutsideBusinessHours
       ? {
           ...((params.payload && typeof params.payload === 'object' && !Array.isArray(params.payload))
@@ -380,7 +427,7 @@ export class NotificationsService {
     const nextAttemptAt = this.getInitialAttemptAt();
 
     if (!user || user.blocked) {
-      return this.prisma.notificationOutbox.create({
+      return this.createOutboxEntry({
         data: {
           channel: 'WHATSAPP',
           contentType: 'TEXT' as any,
@@ -400,7 +447,7 @@ export class NotificationsService {
     }
 
     if (!normalized) {
-      return this.prisma.notificationOutbox.create({
+      return this.createOutboxEntry({
         data: {
           channel: 'WHATSAPP',
           contentType: 'TEXT' as any,
@@ -419,7 +466,7 @@ export class NotificationsService {
       });
     }
 
-    return this.prisma.notificationOutbox.create({
+    return this.createOutboxEntry({
       data: {
         channel: 'WHATSAPP',
         contentType: 'TEXT' as any,
@@ -446,34 +493,56 @@ export class NotificationsService {
     return 3 * 60 * 60_000;
   }
 
-  async processOutboxBatch(limit = 25) {
-    const now = new Date();
-    const lockExpiry = new Date(now.getTime() - 2 * 60_000);
+  /**
+   * Reclama filas del outbox de forma atómica.
+   *
+   * Cada fila se reclama con un compare-and-swap: el `updateMany` incluye el
+   * predicado de elegibilidad (estado, `nextAttemptAt` y lock libre o vencido),
+   * por lo que PostgreSQL reevalúa la condición sobre la versión actualizada de
+   * la fila. Si otro worker la reclamó primero, el conteo es 0 y se descarta.
+   * Así dos workers o dos réplicas no pueden procesar la misma notificación.
+   */
+  private async claimDueRows(limit: number, now: Date) {
+    const lockExpiry = new Date(now.getTime() - OUTBOX_LOCK_TTL_MS);
+    const claimableWhere: Prisma.NotificationOutboxWhereInput = {
+      status: { in: ['PENDING', 'SENDING'] },
+      nextAttemptAt: { lte: now },
+      OR: [{ lockedAt: null }, { lockedAt: { lt: lockExpiry } }],
+    };
 
-    const claimed = await this.prisma.$transaction(async (tx) => {
-      const rows = await tx.notificationOutbox.findMany({
-        where: {
-          status: { in: ['PENDING', 'SENDING'] },
-          nextAttemptAt: { lte: now },
-          OR: [{ lockedAt: null }, { lockedAt: { lt: lockExpiry } }],
-        },
-        orderBy: [{ nextAttemptAt: 'asc' }, { createdAt: 'asc' }],
-        take: limit,
-      });
+    const candidates = await this.prisma.notificationOutbox.findMany({
+      where: claimableWhere,
+      select: { id: true },
+      orderBy: [{ nextAttemptAt: 'asc' }, { createdAt: 'asc' }],
+      take: limit,
+    });
 
-      if (!rows.length) return [];
+    if (!candidates.length) return [];
 
-      await tx.notificationOutbox.updateMany({
-        where: { id: { in: rows.map((r) => r.id) } },
+    const claimedIds: string[] = [];
+    for (const candidate of candidates) {
+      const claim = await this.prisma.notificationOutbox.updateMany({
+        where: { id: candidate.id, ...claimableWhere },
         data: {
           status: 'SENDING',
           lockedAt: now,
           lockedBy: WORKER_ID,
         },
       });
+      if (claim.count === 1) claimedIds.push(candidate.id);
+    }
 
-      return rows;
+    if (!claimedIds.length) return [];
+
+    return this.prisma.notificationOutbox.findMany({
+      where: { id: { in: claimedIds } },
+      orderBy: [{ nextAttemptAt: 'asc' }, { createdAt: 'asc' }],
     });
+  }
+
+  async processOutboxBatch(limit = 25) {
+    const now = new Date();
+    const claimed = await this.claimDueRows(limit, now);
 
     for (const row of claimed) {
       try {

@@ -792,6 +792,8 @@ model Company {
   warehouseTransferItems           WarehouseTransferItem[]
   inventoryZeroConfigState         InventoryZeroConfigState?
   telemetryOutbox                  TelemetryOutbox[]
+  guardianIncidents                GuardianIncident[]
+  guardianQuota                    GuardianCompanyQuota?
 
   @@index([status])
   @@index([licenseStatus])
@@ -4244,4 +4246,268 @@ model AiAssistantMemory {
   @@index([ownerId, userId, module])
   @@index([ownerId, userId, lastSourceAt])
   @@map("ai_assistant_memories")
+}
+
+// ==========================================
+// APPYRA GUARDIAN AI — Fase 1
+// Detección temprana de incidentes. Aditivo: no modifica tablas existentes.
+// ==========================================
+
+enum GuardianSeverity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
+enum GuardianIncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+  WONT_FIX
+}
+
+enum GuardianProcessingState {
+  PENDING
+  DIAGNOSING
+  DIAGNOSED
+  FAILED
+  SKIPPED
+}
+
+enum GuardianDiagnosisVerdict {
+  CONFIRMED
+  PROBABLE
+  INSUFFICIENT
+}
+
+enum GuardianDiagnosisStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// Agrupación de incidentes con la misma firma (deduplicación de patrones).
+model GuardianIncidentGroup {
+  id            String           @id @default(uuid()) @db.Uuid
+  fingerprint   String           @unique @db.VarChar(80)
+  module        String           @db.VarChar(40)
+  operation     String           @db.VarChar(80)
+  exceptionType String?          @map("exception_type") @db.VarChar(120)
+  severity      GuardianSeverity
+  firstSeenAt   DateTime         @map("first_seen_at")
+  lastSeenAt    DateTime         @map("last_seen_at")
+  incidentCount Int              @default(0) @map("incident_count")
+  companyCount  Int              @default(0) @map("company_count")
+  companies     Json             @default("[]")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  incidents     GuardianIncident[]
+
+  @@index([lastSeenAt])
+  @@map("guardian_incident_groups")
+}
+
+/// Incidente capturado. `companyId` siempre se resuelve en servidor.
+model GuardianIncident {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  eventId              String                   @map("event_id") @db.VarChar(120)
+  companyId            String                   @map("company_id") @db.Uuid
+  groupId              String?                  @map("group_id") @db.Uuid
+  fingerprint          String                   @db.VarChar(80)
+  module               String                   @db.VarChar(40)
+  operation            String                   @db.VarChar(80)
+  platform             String?                  @db.VarChar(24)
+  appVersion           String?                  @map("app_version") @db.VarChar(40)
+  deviceId             String?                  @map("device_id") @db.VarChar(120)
+  userId               String?                  @map("user_id") @db.Uuid
+  severity             GuardianSeverity
+  exceptionType        String?                  @map("exception_type") @db.VarChar(120)
+  status               GuardianIncidentStatus   @default(OPEN)
+  processingState      GuardianProcessingState  @default(PENDING) @map("processing_state")
+  diagnosisAttempts    Int                      @default(0) @map("diagnosis_attempts")
+  nextDiagnosisAt      DateTime                 @default(now()) @map("next_diagnosis_at")
+  correlationId        String?                  @map("correlation_id") @db.VarChar(128)
+  stack                String?                  @db.Text
+  occurredAt           DateTime                 @map("occurred_at")
+  receivedAt           DateTime                 @default(now()) @map("received_at")
+  offlineMinutes       Int?                     @map("offline_minutes")
+  schemaVersion        Int                      @default(1) @map("schema_version")
+  payload              Json                     @default("{}")
+  impactSummary        String?                  @map("impact_summary") @db.VarChar(400)
+  acknowledgedAt       DateTime?                @map("acknowledged_at")
+  acknowledgedByUserId String?                  @map("acknowledged_by_user_id") @db.Uuid
+  resolvedAt           DateTime?                @map("resolved_at")
+  resolvedByUserId     String?                  @map("resolved_by_user_id") @db.Uuid
+  resolutionNote       String?                  @map("resolution_note") @db.VarChar(600)
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+
+  company   Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  group     GuardianIncidentGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  evidences GuardianEvidence[]
+  diagnoses GuardianDiagnosis[]
+  history   GuardianIncidentEvent[]
+  alerts    GuardianAlert[]
+
+  @@unique([companyId, eventId])
+  @@index([companyId, occurredAt])
+  @@index([companyId, receivedAt])
+  @@index([fingerprint, occurredAt])
+  @@index([status, severity, occurredAt])
+  @@index([processingState, nextDiagnosisAt])
+  @@map("guardian_incidents")
+}
+
+/// Evidencias sanitizadas del incidente (stack, contexto, metadatos acotados).
+model GuardianEvidence {
+  id         String   @id @default(uuid()) @db.Uuid
+  incidentId String   @map("incident_id") @db.Uuid
+  kind       String   @db.VarChar(40)
+  label      String   @db.VarChar(120)
+  sizeBytes  Int      @default(0) @map("size_bytes")
+  content    Json     @default("{}")
+  redacted   Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  incident   GuardianIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId, kind])
+  @@map("guardian_evidences")
+}
+
+/// Resultado del diagnóstico automático (3 estados, con evidencia obligatoria).
+model GuardianDiagnosis {
+  id           String                  @id @default(uuid()) @db.Uuid
+  incidentId   String                  @map("incident_id") @db.Uuid
+  status       GuardianDiagnosisStatus @default(PENDING)
+  verdict      GuardianDiagnosisVerdict?
+  confidence   Decimal?                @db.Decimal(3, 2)
+  summary      String?                 @db.Text
+  impact       String?                 @db.VarChar(600)
+  causeCategory String?                @map("cause_category") @db.VarChar(60)
+  explanation  String?                 @db.Text
+  nextSteps    Json                     @default("[]") @map("next_steps")
+  evidenceRefs Json                     @default("[]") @map("evidence_refs")
+  toolCalls    Json                     @default("[]") @map("tool_calls")
+  model        String?                 @db.VarChar(60)
+  promptHash   String?                 @map("prompt_hash") @db.VarChar(80)
+  tokensUsed   Int                     @default(0) @map("tokens_used")
+  durationMs   Int                     @default(0) @map("duration_ms")
+  attempts     Int                     @default(0)
+  error        String?                 @db.VarChar(600)
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
+  incident     GuardianIncident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId, createdAt])
+  @@index([status])
+  @@map("guardian_diagnoses")
+}
+
+/// Historial de cambios de estado del incidente (auditoría funcional).
+model GuardianIncidentEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  incidentId String   @map("incident_id") @db.Uuid
+  fromStatus String?  @map("from_status") @db.VarChar(24)
+  toStatus   String   @map("to_status") @db.VarChar(24)
+  actor      String   @db.VarChar(60)
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  note       String?  @db.VarChar(600)
+  createdAt  DateTime @default(now()) @map("created_at")
+  incident   GuardianIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId, createdAt])
+  @@map("guardian_incident_events")
+}
+
+/// Auditoría de accesos a incidentes y evidencias (quién vio qué).
+model GuardianAccessLog {
+  id           BigInt   @id @default(autoincrement())
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  actorRole    String?  @map("actor_role") @db.VarChar(40)
+  action       String   @db.VarChar(40)
+  incidentId   String?  @map("incident_id") @db.Uuid
+  companyId    String?  @map("company_id") @db.Uuid
+  ip           String?  @db.VarChar(64)
+  requestId    String?  @map("request_id") @db.VarChar(128)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([incidentId])
+  @@map("guardian_access_logs")
+}
+
+/// Cuotas por empresa para evitar tormentas de eventos.
+model GuardianCompanyQuota {
+  companyId        String   @id @map("company_id") @db.Uuid
+  enabled          Boolean  @default(true)
+  incidentsPerHour Int      @default(60) @map("incidents_per_hour")
+  incidentsPerDay  Int      @default(500) @map("incidents_per_day")
+  bytesPerDay      Int      @default(5242880) @map("bytes_per_day")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("guardian_company_quotas")
+}
+
+// ==========================================
+// APPYRA GUARDIAN AI — Fase 4 (alertas administrativas 24/7)
+// ==========================================
+
+enum GuardianAlertState {
+  PENDING
+  SENDING
+  SENT
+  DELIVERED
+  FAILED_PERMANENT
+  DEAD
+}
+
+/// Cola persistente de alertas administrativas Guardian.
+/// Independiente de `notification_outbox`: las alertas administrativas se envían
+/// a cualquier hora y necesitan su propia auditoría de intentos y escalamiento.
+model GuardianAlert {
+  id            String             @id @default(uuid()) @db.Uuid
+  incidentId    String             @map("incident_id") @db.Uuid
+  channel       String             @db.VarChar(40)
+  recipientHash String             @map("recipient_hash") @db.VarChar(80)
+  dedupeKey     String             @unique @map("dedupe_key") @db.VarChar(200)
+  kind          String             @default("initial") @db.VarChar(20)
+  state         GuardianAlertState @default(PENDING)
+  attempts      Int                @default(0)
+  nextAttemptAt DateTime           @default(now()) @map("next_attempt_at")
+  lockedAt      DateTime?          @map("locked_at")
+  lockedBy      String?            @map("locked_by") @db.VarChar(120)
+  providerMessageId String?        @map("provider_message_id") @db.VarChar(200)
+  lastError     String?            @map("last_error") @db.VarChar(600)
+  sentAt        DateTime?          @map("sent_at")
+  deliveredAt   DateTime?          @map("delivered_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  attemptsLog GuardianAlertAttempt[]
+  incident    GuardianIncident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([state, nextAttemptAt])
+  @@index([incidentId])
+  @@index([lockedAt])
+  @@map("guardian_alerts")
+}
+
+model GuardianAlertAttempt {
+  id           BigInt   @id @default(autoincrement())
+  alertId      String   @map("alert_id") @db.Uuid
+  attempt      Int
+  channel      String   @db.VarChar(40)
+  outcome      String   @db.VarChar(20)
+  httpStatus   Int?     @map("http_status")
+  detail       String?  @db.VarChar(600)
+  createdAt    DateTime @default(now()) @map("created_at")
+  alert        GuardianAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId, createdAt])
+  @@map("guardian_alert_attempts")
 }
