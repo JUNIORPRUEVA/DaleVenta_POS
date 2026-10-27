@@ -234,7 +234,10 @@ class FakeOutboxPrisma {
       mediaBase64: null,
       mediaFileName: null,
       mediaMimeType: null,
-      payload: null,
+      // Determinismo: estas pruebas miden el claim concurrente, no el horario
+      // comercial. Sin esta marca, fuera de 09:00-18:00 (America/Santo_Domingo)
+      // el despachador reprograma las filas y la prueba falla por la hora.
+      payload: { allowOutsideBusinessHours: true },
       recipientUserId: null,
       toNumber: '+18095551234',
       toNumberNormalized: '18095551234',
@@ -427,11 +430,14 @@ describe('notification_outbox — deduplicación', () => {
       toNumber: '+18095551234',
       messageText: 'hola',
       dedupeKey: 'guardian:incident:1',
+      // Igual que las alertas de Guardian: envio 24/7, sin ventana comercial.
+      allowOutsideBusinessHours: true,
     });
     const second = await service.enqueueWhatsAppRawText({
       toNumber: '+18095551234',
       messageText: 'hola',
       dedupeKey: 'guardian:incident:1',
+      allowOutsideBusinessHours: true,
     });
 
     expect(prisma.rows).toHaveLength(1);
@@ -448,8 +454,8 @@ describe('notification_outbox — deduplicación', () => {
 describe('notification_outbox — aislamiento entre empresas', () => {
   it('entrega exactamente una vez las filas de dos empresas y aísla el fallo de una', async () => {
     const prisma = new FakeOutboxPrisma();
-    prisma.seedRow({ messageText: 'empresa-A-ok', payload: { companyId: 'company-a' } });
-    prisma.seedRow({ messageText: 'empresa-B-falla', payload: { companyId: 'company-b' } });
+    prisma.seedRow({ messageText: 'empresa-A-ok', payload: { companyId: 'company-a', allowOutsideBusinessHours: true } });
+    prisma.seedRow({ messageText: 'empresa-B-falla', payload: { companyId: 'company-b', allowOutsideBusinessHours: true } });
 
     const evolution = createEvolutionDouble(async (message: string) => {
       if (message.includes('empresa-B')) {

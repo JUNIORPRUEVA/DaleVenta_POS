@@ -87,6 +87,10 @@ describeOnPg('notification_outbox sobre PostgreSQL real — claim concurrente', 
         toNumberNormalized: '18095550000',
         attempts: 0,
         nextAttemptAt: new Date(now - 60_000),
+        // Determinismo: la prueba mide el claim concurrente, no el horario
+        // comercial. Sin esta marca, fuera de 09:00-18:00 (America/Santo_Domingo)
+        // el despachador reprograma las filas y la prueba fallaria por la hora.
+        payload: { allowOutsideBusinessHours: true },
       })),
     });
   }
@@ -164,6 +168,9 @@ describeOnPg('notification_outbox sobre PostgreSQL real — claim concurrente', 
           nextAttemptAt: new Date(now - 60_000),
           lockedAt: new Date(now - 5 * 60_000),
           lockedBy: 'worker-muerto',
+          // Determinismo: la prueba mide la recuperación de un lock vencido, no
+          // el horario comercial del despachador.
+          payload: { allowOutsideBusinessHours: true },
         },
       ],
     });
