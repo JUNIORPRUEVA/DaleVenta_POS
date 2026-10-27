@@ -18,6 +18,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
 import { resolveGuardianConfig } from './guardian.config';
+import { guardianSecretValue } from './guardian.secret';
 
 type GuardianRequestUser = { id: string; role: Role; companyId?: string | null };
 
@@ -154,7 +155,7 @@ export class GuardianAdminController {
       diagnosisEnabled: resolveGuardianConfig().diagnosisEnabled,
       alertsEnabled: resolveGuardianConfig().alertsEnabled,
       whatsappCloudConfigured: Boolean(
-        String(process.env.GUARDIAN_WA_CLOUD_TOKEN ?? '').trim() &&
+        guardianSecretValue(process.env, 'GUARDIAN_WA_CLOUD_TOKEN') &&
           String(process.env.GUARDIAN_WA_PHONE_NUMBER_ID ?? '').trim(),
       ),
       fallbackWebhookConfigured: Boolean(

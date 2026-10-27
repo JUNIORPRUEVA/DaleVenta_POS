@@ -23,6 +23,7 @@ import {
   GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAMS,
   resolveGuardianWhatsAppProfile,
 } from '../../src/guardian/guardian.whatsapp.config';
+import { resolveGuardianSecret } from '../../src/guardian/guardian.secret';
 
 type Check = {
   key: string;
@@ -34,6 +35,21 @@ type Check = {
 
 function has(env: NodeJS.ProcessEnv, name: string): boolean {
   return String(env[name] ?? '').trim().length > 0;
+}
+
+/**
+ * Presencia de una credencial admitiendo `NAME` o `NAME_FILE` (Docker Secrets).
+ * Devuelve además el origen para que el informe diga de dónde salió el valor.
+ */
+function secretOrigin(env: NodeJS.ProcessEnv, name: string): string {
+  const resolved = resolveGuardianSecret(env, name);
+  if (resolved.source === 'env') return `${name} presente (variable)`;
+  if (resolved.source === 'file') return `${name} presente (archivo de secreto)`;
+  return resolved.problem ?? `${name} ausente`;
+}
+
+function hasSecret(env: NodeJS.ProcessEnv, name: string): boolean {
+  return resolveGuardianSecret(env, name).value.length > 0;
 }
 
 function buildChecks(env: NodeJS.ProcessEnv): Check[] {
@@ -86,18 +102,18 @@ function buildChecks(env: NodeJS.ProcessEnv): Check[] {
 
   checks.push({
     key: 'wa.app_secret',
-    ok: has(env, 'GUARDIAN_WA_APP_SECRET'),
-    detail: has(env, 'GUARDIAN_WA_APP_SECRET')
-      ? 'GUARDIAN_WA_APP_SECRET presente (el webhook validará la firma)'
+    ok: hasSecret(env, 'GUARDIAN_WA_APP_SECRET'),
+    detail: hasSecret(env, 'GUARDIAN_WA_APP_SECRET')
+      ? `${secretOrigin(env, 'GUARDIAN_WA_APP_SECRET')} (el webhook validará la firma)`
       : 'sin GUARDIAN_WA_APP_SECRET el webhook responde 503 (fail-closed)',
     kind: 'external',
   });
 
   checks.push({
     key: 'wa.verify_token',
-    ok: has(env, 'GUARDIAN_WA_VERIFY_TOKEN'),
-    detail: has(env, 'GUARDIAN_WA_VERIFY_TOKEN')
-      ? 'GUARDIAN_WA_VERIFY_TOKEN presente'
+    ok: hasSecret(env, 'GUARDIAN_WA_VERIFY_TOKEN'),
+    detail: hasSecret(env, 'GUARDIAN_WA_VERIFY_TOKEN')
+      ? secretOrigin(env, 'GUARDIAN_WA_VERIFY_TOKEN')
       : 'sin GUARDIAN_WA_VERIFY_TOKEN Meta no puede verificar el webhook (403)',
     kind: 'external',
   });

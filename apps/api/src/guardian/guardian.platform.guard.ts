@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { guardianSecretValue } from './guardian.secret';
 
 /**
  * Autenticación de plataforma para el panel Appyra.
@@ -19,7 +20,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 @Injectable()
 export class GuardianPlatformGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const expected = String(process.env.GUARDIAN_PLATFORM_TOKEN ?? '').trim();
+    const expected = guardianSecretValue(process.env, 'GUARDIAN_PLATFORM_TOKEN');
     if (!expected) {
       throw new ServiceUnavailableException({
         code: 'GUARDIAN_PLATFORM_DISABLED',

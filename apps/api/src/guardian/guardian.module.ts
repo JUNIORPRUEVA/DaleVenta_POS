@@ -14,6 +14,7 @@ import { GuardianToolsService } from './guardian.tools.service';
 import { GuardianDiagnosisService } from './guardian.diagnosis.service';
 import { GuardianAlertService } from './guardian.alert.service';
 import { GuardianRetentionService } from './guardian.retention.service';
+import { guardianSecretValue } from './guardian.secret';
 import { GUARDIAN_AI_PROVIDER } from './ai/guardian-ai.provider';
 import { MockGuardianAiProvider } from './ai/mock-guardian-ai.provider';
 import { OpenAiGuardianAiProvider } from './ai/openai-guardian-ai.provider';
@@ -42,7 +43,7 @@ export function createGuardianAiProvider() {
   if (runtime.adapter === 'mock') return new MockGuardianAiProvider();
 
   return new OpenAiGuardianAiProvider({
-    apiKey: String(process.env.GUARDIAN_AI_API_KEY ?? '').trim(),
+    apiKey: guardianSecretValue(process.env, 'GUARDIAN_AI_API_KEY'),
     baseUrl: runtime.baseUrl ?? undefined,
     model: runtime.model,
     timeoutMs: runtime.timeoutMs,

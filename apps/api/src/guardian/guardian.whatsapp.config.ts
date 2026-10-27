@@ -13,6 +13,8 @@
  * identidad de dos negocios y rompería el aislamiento.
  */
 
+import { guardianSecretValue } from './guardian.secret';
+
 export type GuardianWhatsAppProvider = 'meta_cloud' | 'none';
 
 export type GuardianWhatsAppSender = {
@@ -191,7 +193,9 @@ export function parseAdminRecipients(raw: string | undefined | null): string[] {
 export function resolveGuardianWhatsAppProfile(
   env: NodeJS.ProcessEnv = process.env,
 ): GuardianWhatsAppProfile {
-  const token = read(env, 'GUARDIAN_WA_CLOUD_TOKEN');
+  // El token es la única credencial de este perfil: admite `*_FILE` (Docker
+  // Secrets) sin cambiar el resto del contrato `GUARDIAN_WA_*`.
+  const token = guardianSecretValue(env, 'GUARDIAN_WA_CLOUD_TOKEN');
   const phoneNumberId = read(env, 'GUARDIAN_WA_PHONE_NUMBER_ID');
   const configuredRecipients =
     read(env, 'GUARDIAN_ALERT_RECIPIENTS') || read(env, 'GUARDIAN_ALERT_RECIPIENT');

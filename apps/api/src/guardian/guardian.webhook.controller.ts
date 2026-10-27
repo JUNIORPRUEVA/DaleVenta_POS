@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Request, Response } from 'express';
 import { GuardianAlertService } from './guardian.alert.service';
 import { mapMetaStatus } from './guardian.alert.delivery';
+import { guardianSecretValue } from './guardian.secret';
 import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
 
 /**
@@ -26,7 +27,7 @@ export class GuardianWebhookController {
     @Query('hub.challenge') challenge?: string,
     @Res() res?: Response,
   ) {
-    const expected = String(process.env.GUARDIAN_WA_VERIFY_TOKEN ?? '').trim();
+    const expected = guardianSecretValue(process.env, 'GUARDIAN_WA_VERIFY_TOKEN');
     if (!expected || mode !== 'subscribe' || String(token ?? '').trim() !== expected) {
       return res!.status(403).json({ ok: false });
     }
@@ -36,7 +37,7 @@ export class GuardianWebhookController {
   @Post('whatsapp')
   @HttpCode(200)
   async receive(@Req() req: Request, @Res() res: Response) {
-    const secret = String(process.env.GUARDIAN_WA_APP_SECRET ?? '').trim();
+    const secret = guardianSecretValue(process.env, 'GUARDIAN_WA_APP_SECRET');
     const raw = (req as Request & { rawBody?: Buffer }).rawBody;
     const signature = String(req.header('x-hub-signature-256') ?? '').trim();
 

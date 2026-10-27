@@ -30,6 +30,8 @@
  * `deepseek-flash` y `deepseek-v4-pro`.
  */
 
+import { guardianSecretValue } from '../guardian.secret';
+
 export type GuardianAiAdapterKind = 'mock' | 'openai' | 'deepseek';
 
 export type GuardianAiRuntimeErrorCode =
@@ -113,7 +115,7 @@ function hostMatches(host: string, allowed: readonly string[]): boolean {
 export function resolveGuardianAiRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): GuardianAiRuntime {
-  const apiKey = read(env, 'GUARDIAN_AI_API_KEY');
+  const apiKey = guardianSecretValue(env, 'GUARDIAN_AI_API_KEY');
   const rawProvider = read(env, 'GUARDIAN_AI_PROVIDER');
   const providerVariable = rawProvider || null;
   const rawBaseUrl = read(env, 'GUARDIAN_AI_BASE_URL');

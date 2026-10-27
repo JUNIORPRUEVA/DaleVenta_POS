@@ -8,6 +8,7 @@ import { hostname } from 'node:os';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { resolveGuardianConfig } from './guardian.config';
+import { guardianSecretValue } from './guardian.secret';
 import {
   EvolutionOutboxChannel,
   GuardianAlertChannel,
@@ -170,7 +171,7 @@ export class GuardianAlertService {
     const profile = resolveGuardianWhatsAppProfile();
 
     const cloud = new WhatsAppCloudChannel({
-      token: String(process.env.GUARDIAN_WA_CLOUD_TOKEN ?? '').trim(),
+      token: guardianSecretValue(process.env, 'GUARDIAN_WA_CLOUD_TOKEN'),
       phoneNumberId: profile.sender.phoneNumberId ?? '',
       apiVersion: profile.sender.apiVersion,
       templateName: profile.templates.incidentAlert.name,
@@ -196,7 +197,7 @@ export class GuardianAlertService {
 
     const webhook = new HttpWebhookChannel({
       url: String(process.env.GUARDIAN_ALERT_FALLBACK_WEBHOOK_URL ?? '').trim(),
-      secret: process.env.GUARDIAN_ALERT_FALLBACK_SECRET,
+      secret: guardianSecretValue(process.env, 'GUARDIAN_ALERT_FALLBACK_SECRET') || undefined,
       timeoutMs: Number(process.env.GUARDIAN_WEBHOOK_TIMEOUT_MS ?? 12_000),
     });
 
