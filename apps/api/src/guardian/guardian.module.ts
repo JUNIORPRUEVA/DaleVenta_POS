@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { GuardianIngestController } from './guardian.ingest.controller';
 import { GuardianAdminController } from './guardian.admin.controller';
@@ -17,6 +17,7 @@ import { GuardianRetentionService } from './guardian.retention.service';
 import { GUARDIAN_AI_PROVIDER } from './ai/guardian-ai.provider';
 import { MockGuardianAiProvider } from './ai/mock-guardian-ai.provider';
 import { OpenAiGuardianAiProvider } from './ai/openai-guardian-ai.provider';
+import { describeGuardianAiRuntime } from './guardian.config';
 
 /**
  * Proveedor de IA según entorno: sin credenciales usa el mock determinista,
@@ -28,6 +29,16 @@ import { OpenAiGuardianAiProvider } from './ai/openai-guardian-ai.provider';
  */
 export function createGuardianAiProvider() {
   const apiKey = String(process.env.GUARDIAN_AI_API_KEY ?? '').trim();
+  const runtime = describeGuardianAiRuntime();
+  const logger = new Logger('GuardianAi');
+  // Se registra el adaptador efectivo (sin credenciales) para que ninguna
+  // variable sugiera un proveedor que el código no está usando.
+  logger.log(
+    `adaptador=${runtime.adapter} host=${runtime.baseUrlHost ?? 'por defecto'} ` +
+      `modelo=${runtime.model || 'por defecto'} provider_var=${runtime.providerVariable ?? 'no definida'}`,
+  );
+  for (const warning of runtime.warnings) logger.warn(warning);
+
   if (!apiKey) return new MockGuardianAiProvider();
   return new OpenAiGuardianAiProvider({
     apiKey,

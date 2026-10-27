@@ -60,3 +60,75 @@ export function resolveGuardianConfig(env: NodeJS.ProcessEnv = process.env): Gua
     platformToken: String(env.GUARDIAN_PLATFORM_TOKEN ?? '').trim(),
   };
 }
+
+/**
+ * Descripción del adaptador de IA realmente efectivo.
+ *
+ * Motivo: existe `GUARDIAN_AI_PROVIDER`, pero la fábrica del módulo decide
+ * únicamente por `GUARDIAN_AI_API_KEY` y usa siempre el adaptador
+ * OpenAI-compatible. Sin esta descripción, definir
+ * `GUARDIAN_AI_PROVIDER=deepseek` daba la falsa impresión de activar un
+ * proveedor distinto. Aquí se declara explícitamente que la variable es
+ * informativa y se emiten las advertencias necesarias.
+ */
+export type GuardianAiRuntime = {
+  /** Adaptador que se instancia de verdad. */
+  adapter: 'openai-compatible' | 'mock';
+  apiKeyPresent: boolean;
+  /** Host configurado; nunca la URL completa con credenciales. */
+  baseUrlHost: string | null;
+  model: string;
+  /** Valor declarado de `GUARDIAN_AI_PROVIDER`, si existe. */
+  providerVariable: string | null;
+  /** `false` siempre: la variable no cambia el adaptador. */
+  providerVariableHonored: false;
+  warnings: string[];
+};
+
+export function describeGuardianAiRuntime(
+  env: NodeJS.ProcessEnv = process.env,
+): GuardianAiRuntime {
+  const apiKey = String(env.GUARDIAN_AI_API_KEY ?? '').trim();
+  const rawBaseUrl = String(env.GUARDIAN_AI_BASE_URL ?? '').trim();
+  const providerVariable = String(env.GUARDIAN_AI_PROVIDER ?? '').trim() || null;
+  const model = String(env.GUARDIAN_AI_MODEL ?? '').trim();
+  const warnings: string[] = [];
+
+  let baseUrlHost: string | null = null;
+  if (rawBaseUrl) {
+    try {
+      baseUrlHost = new URL(rawBaseUrl).host;
+    } catch {
+      baseUrlHost = null;
+      warnings.push('GUARDIAN_AI_BASE_URL no es una URL válida: se usará el valor por defecto del adaptador');
+    }
+  }
+
+  if (providerVariable && providerVariable.toLowerCase() !== 'openai') {
+    warnings.push(
+      `GUARDIAN_AI_PROVIDER=${providerVariable} no se usa: el adaptador efectivo es OpenAI-compatible ` +
+        `y se selecciona solo por presencia de GUARDIAN_AI_API_KEY` +
+        (baseUrlHost ? ` (host ${baseUrlHost})` : ''),
+    );
+  }
+
+  if (!apiKey) {
+    warnings.push('sin GUARDIAN_AI_API_KEY: se usará el proveedor mock y no se hará ninguna llamada externa');
+  } else if (!rawBaseUrl) {
+    warnings.push('sin GUARDIAN_AI_BASE_URL: el adaptador usará https://api.openai.com/v1 por defecto');
+  }
+
+  if (apiKey && !model) {
+    warnings.push('sin GUARDIAN_AI_MODEL: el adaptador usará el modelo por defecto (gpt-4o-mini)');
+  }
+
+  return {
+    adapter: apiKey ? 'openai-compatible' : 'mock',
+    apiKeyPresent: apiKey.length > 0,
+    baseUrlHost,
+    model,
+    providerVariable,
+    providerVariableHonored: false,
+    warnings,
+  };
+}
