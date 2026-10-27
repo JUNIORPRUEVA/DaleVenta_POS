@@ -91,6 +91,31 @@ describe('plantilla administrativa guardian_incident_alert', () => {
     expect(params[7]).toBe('INC-4F2A9C');
   });
 
+  it('recorta cada parámetro al maxChars declarado sin tocar los que ya caben', () => {
+    const params = buildGuardianAlertTemplateParams({
+      severity: GuardianSeverity.SEV2,
+      companyName: 'E'.repeat(300),
+      module: 'M'.repeat(120),
+      operation: 'O'.repeat(120),
+      occurredAt: new Date('2026-10-26T03:15:00.000Z'),
+      problem: 'P'.repeat(900),
+      diagnosis: 'D'.repeat(900),
+      impact: 'I'.repeat(900),
+      incidentId: '4f2a9c11-2222-3333-4444-555566667777',
+    });
+
+    // Ningún valor puede superar el límite de su posición: Meta rechaza el envío
+    // con error permanente y la alerta se perdería sin reintento.
+    params.forEach((value, index) => {
+      expect(value.length).toBeLessThanOrEqual(
+        GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAMS[index].maxChars,
+      );
+    });
+    expect(params[0]).toBe('ALTO');
+    expect(params[3]).toMatch(/^\d{2}\/\d{2}, \d{2}:\d{2} [ap]\. m\.$/);
+    expect(params[7]).toBe('INC-4F2A9C');
+  });
+
   it('el perfil de WhatsApp expone el mismo número de parámetros que el contrato', () => {
     const profile = resolveGuardianWhatsAppProfile({
       GUARDIAN_WA_CLOUD_TOKEN: 'token-uat',

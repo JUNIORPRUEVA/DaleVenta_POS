@@ -20,7 +20,10 @@ import {
   advanceAlertDelivery,
   stateForAcceptance,
 } from './guardian.alert.delivery';
-import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
+import {
+  GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAMS,
+  resolveGuardianWhatsAppProfile,
+} from './guardian.whatsapp.config';
 
 const WORKER_ID = `guardian-alerts-${hostname()}-${process.pid}`;
 const LOCK_TTL_MS = 2 * 60_000;
@@ -126,7 +129,7 @@ export function buildGuardianAlertTemplateParams(input: {
     day: '2-digit',
     month: '2-digit',
   });
-  return [
+  const values = [
     severityLabel,
     input.companyName,
     `${input.module} / ${input.operation}`,
@@ -136,6 +139,18 @@ export function buildGuardianAlertTemplateParams(input: {
     input.impact ?? 'Pendiente de determinar.',
     `INC-${input.incidentId.replace(/-/g, '').slice(0, 6).toUpperCase()}`,
   ];
+
+  // Contrato de la plantilla: cada posición respeta el `maxChars` declarado en
+  // `guardian.whatsapp.config.ts`. Sin este recorte, un nombre de empresa o un
+  // módulo/operación largos superan el límite y Meta rechaza el envío con un
+  // error permanente (clasificación `permanent`, sin reintento): la alerta se
+  // perdería. Los valores que ya están dentro del límite no cambian.
+  return values.map((value, index) => {
+    const limit = GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAMS[index]?.maxChars;
+    return typeof limit === 'number' && value.length > limit
+      ? value.slice(0, limit)
+      : value;
+  });
 }
 
 @Injectable()
