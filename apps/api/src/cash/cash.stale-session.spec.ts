@@ -622,3 +622,80 @@ describe("performCloseSession · caja diaria aditiva (D4)", () => {
     expect(lastUpdate.data.status).toBe("CLOSED");
   });
 });
+
+/**
+ * Regresión del bloqueo detectado en producción con la build 145:
+ * `GET /cash/summary` y `GET /cash/movements` aplicaban la ventana operativa y
+ * devolvían 409 en un turno vencido. El cliente consulta ambos ANTES de enviar
+ * el cierre, así que el usuario no podía cerrar su turno desde la app.
+ *
+ * Invariante: la ventana operativa limita OPERACIONES FINANCIERAS nuevas, no
+ * las lecturas del propio turno ni los datos de autorización/pertenencia.
+ */
+describe("lecturas de caja · turno vencido consultable (hotfix cierre)", () => {
+  it("summary() devuelve el resumen de un turno vencido sin lanzar", async () => {
+    const { openedAt, businessDate } = staleDates();
+    const db = makeDb([
+      makeSession({ id: STALE_SESSION, openedAt, businessDate }),
+    ]);
+    const { service } = buildService(db);
+
+    const summary = await service.summary(CASHIER as never);
+
+    expect(summary).toBeTruthy();
+    expect(summary.sessionId).toBe(STALE_SESSION);
+  });
+
+  it("movements() devuelve los movimientos de un turno vencido sin lanzar", async () => {
+    const { openedAt, businessDate } = staleDates();
+    const db = makeDb([
+      makeSession({ id: STALE_SESSION, openedAt, businessDate }),
+    ]);
+    const { service } = buildService(db);
+
+    await expect(service.movements(CASHIER as never)).resolves.toEqual([]);
+    expect(db.prisma.cashMovement.findMany).toHaveBeenCalled();
+  });
+
+  it("el cierre de un turno vencido sigue permitido tras consultar sus lecturas", async () => {
+    const { openedAt, businessDate } = staleDates();
+    const db = makeDb([
+      makeSession({ id: STALE_SESSION, openedAt, businessDate }),
+    ]);
+    const { service } = buildService(db);
+
+    await service.summary(CASHIER as never);
+    await service.movements(CASHIER as never);
+    const result = await service.closeSession(CASHIER as never, {
+      sessionId: STALE_SESSION,
+      closingAmount: 0,
+    } as never);
+
+    expect(result.session.status).toBe("CLOSED");
+    expect(db.sessions.find((row) => row.id === STALE_SESSION)?.status).toBe(
+      "CLOSED",
+    );
+  });
+
+  it("una operación financiera nueva en el turno vencido SIGUE rechazada (409)", async () => {
+    const { openedAt, businessDate } = staleDates();
+    const db = makeDb([
+      makeSession({ id: STALE_SESSION, openedAt, businessDate }),
+    ]);
+    const { service } = buildService(db);
+    // Cliente antiguo (sin sessionId) sobre un turno vencido: debe rechazarse
+    // por ventana operativa, no aceptarse en silencio.
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
+
+    await expect(
+      service.addMovement(CASHIER as never, {
+        type: "IN",
+        amount: 10,
+        reason: "prueba de bloqueo financiero",
+      } as never),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "CASH_SESSION_STALE" }),
+    });
+    expect(db.movements).toHaveLength(0);
+  });
+});

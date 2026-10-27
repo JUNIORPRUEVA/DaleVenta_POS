@@ -243,7 +243,7 @@ describe("CashService multi-device consistency", () => {
     expect(state.canOperate).toBe(false);
   });
 
-  it("no resume silenciosamente un turno legacy para calcular resumen actual", async () => {
+  it("permite consultar el resumen del turno vencido PROPIO sin mezclar el turno de otro empleado", async () => {
     const legacyOpen = {
       ...existingSession,
       id: "4444aaaa-4444-4444-8444-444444444444",
@@ -260,9 +260,16 @@ describe("CashService multi-device consistency", () => {
       .mockResolvedValueOnce(legacyOpen)
       .mockResolvedValueOnce(operativeOpen);
 
-    await expect(service.summary(user)).rejects.toBeInstanceOf(
-      ConflictException,
+    // Hotfix: las LECTURAS de caja no aplican la ventana operativa (sin esto el
+    // cliente 145 no puede cerrar su turno vencido). Sigue sin resumir el turno
+    // de otro empleado: se resuelve siempre por el turno del usuario.
+    const summary = await service.summary(user);
+
+    expect(summary.sessionId).toBe(legacyOpen.id);
+    expect(prisma.cashSession.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ openedByUserId: user.id }),
+      }),
     );
-    expect(prisma.sale.findMany).not.toHaveBeenCalled();
   });
 });

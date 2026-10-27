@@ -675,13 +675,20 @@ export class CashService {
 
   async summary(user: RequestUser) {
     const companyId = requireTenant(user);
-    const session = await this.requireOpenSession(user.id, companyId);
+    // Lectura: NO se aplica la ventana operativa. Un turno vencido debe poder
+    // consultarse (y cerrarse) por su titular; la ventana solo limita
+    // operaciones financieras nuevas.
+    const session = await this.requireOpenSession(user.id, companyId, undefined, undefined, {
+      enforceWindow: false,
+    });
     return this.buildSummaryForSession(session.id, companyId);
   }
 
   async movements(user: RequestUser) {
     const companyId = requireTenant(user);
-    const session = await this.requireOpenSession(user.id, companyId);
+    const session = await this.requireOpenSession(user.id, companyId, undefined, undefined, {
+      enforceWindow: false,
+    });
     return this.prisma.cashMovement.findMany({
       where: { sessionId: session.id, companyId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -900,6 +907,7 @@ export class CashService {
     companyId: string,
     sessionId?: string,
     occurredAt: Date = new Date(),
+    options: { enforceWindow?: boolean } = {},
   ) {
     const requested = (sessionId ?? "").trim();
     // Con identidad explícita se exige ESA sesión abierta: un movimiento
@@ -933,6 +941,15 @@ export class CashService {
     // nocturnos). Reemplaza al rechazo por "turno legacy ambiguo" en este
     // camino: es más preciso (mismo 409, motivo distinto) y cubre también el
     // caso de turno vencido sin turno más nuevo del día.
+    //
+    // Se aplica SOLO a operaciones financieras. Las lecturas (resumen y
+    // movimientos) la desactivan con `enforceWindow: false`: un turno vencido
+    // debe poder consultarse para poder cerrarse desde la app; de lo contrario
+    // el cliente aborta antes de enviar el cierre (regresión detectada en
+    // producción con la build 145).
+    if (options.enforceWindow === false) {
+      return session;
+    }
     const verdict = evaluateShiftOperationWindow({ occurredAt, session });
     if (!verdict.allowed) {
       this.logger.warn(
