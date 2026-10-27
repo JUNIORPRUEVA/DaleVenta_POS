@@ -65,11 +65,17 @@ export class GuardianWebhookController {
     }
 
     const results: Array<{ id: string; status: string; updated: number }> = [];
-    const configuredPhoneId = resolveGuardianWhatsAppProfile().sender.phoneNumberId;
+    const profile = resolveGuardianWhatsAppProfile();
+    const configuredPhoneId = profile.sender.phoneNumberId;
+    // `entry[].id` de Meta es el **WABA ID**, no el Phone Number ID: compararlo
+    // contra el número descartaba todos los eventos reales. El filtro por número
+    // se aplica en `value.metadata.phone_number_id`, que es el campo correcto.
+    const configuredWabaId = profile.sender.wabaId;
     let ignored = 0;
 
     for (const entry of payload?.entry ?? []) {
-      if (entry?.id && configuredPhoneId && String(entry.id) !== configuredPhoneId) {
+      const entryId = entry?.id ? String(entry.id) : '';
+      if (configuredWabaId && entryId && entryId !== configuredWabaId) {
         ignored += 1;
         continue;
       }

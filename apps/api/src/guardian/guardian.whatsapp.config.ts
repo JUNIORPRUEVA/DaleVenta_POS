@@ -54,6 +54,113 @@ export const GUARDIAN_WHATSAPP_DEFAULT_API_VERSION = 'v21.0';
 export const GUARDIAN_WHATSAPP_DEFAULT_TEMPLATE = 'guardian_incident_alert';
 export const GUARDIAN_WHATSAPP_DEFAULT_LANGUAGE = 'es';
 
+/**
+ * Contrato EXACTO de la plantilla administrativa `guardian_incident_alert`.
+ *
+ * Fuente única de verdad compartida por:
+ * - el texto que se introduce en WhatsApp Manager (ver
+ *   `docs/guardian/WHATSAPP_TEMPLATE_GUARDIAN_INCIDENT_ALERT.md`),
+ * - `buildGuardianAlertTemplateParams` en `guardian.alert.service.ts`,
+ * - las pruebas que vigilan que el número y el orden de parámetros no cambien.
+ *
+ * Los ejemplos son SINTÉTICOS y no contienen datos fiscales, datos de clientes
+ * finales ni información sensible: el cuerpo de la plantilla tampoco los pide.
+ */
+export const GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAMS = [
+  {
+    position: 1,
+    key: 'severity',
+    label: 'Nivel',
+    sample: 'CRÍTICO',
+    maxChars: 40,
+    description: 'CRÍTICO | ALTO | MEDIO | BAJO',
+  },
+  {
+    position: 2,
+    key: 'company',
+    label: 'Empresa',
+    sample: 'Comercial Ejemplo SRL',
+    maxChars: 120,
+    description: 'Nombre comercial de la empresa afectada',
+  },
+  {
+    position: 3,
+    key: 'moduleOperation',
+    label: 'Módulo / operación',
+    sample: 'caja / cierre de sesión',
+    maxChars: 120,
+    description: 'Módulo y operación donde ocurrió el incidente',
+  },
+  {
+    position: 4,
+    key: 'occurredAtLocal',
+    label: 'Fecha y hora',
+    sample: '26/10, 03:15 a. m.',
+    maxChars: 60,
+    description: 'Día/mes y hora local en es-DO, formato corto (dd/MM, hh:mm a. m.)',
+  },
+  {
+    position: 5,
+    key: 'problem',
+    label: 'Problema',
+    sample: 'El cierre de caja no completa el cálculo del efectivo esperado',
+    maxChars: 400,
+    description: 'Resumen sanitizado del síntoma (sin datos de clientes)',
+  },
+  {
+    position: 6,
+    key: 'diagnosis',
+    label: 'Diagnóstico',
+    sample: 'Información pendiente de confirmar.',
+    maxChars: 400,
+    description: 'Hipótesis con evidencia o texto de pendiente',
+  },
+  {
+    position: 7,
+    key: 'impact',
+    label: 'Impacto',
+    sample: 'La sesión de caja queda abierta y no se puede facturar con turno cerrado',
+    maxChars: 400,
+    description: 'Impacto operativo estimado',
+  },
+  {
+    position: 8,
+    key: 'incidentShortId',
+    label: 'ID corto',
+    sample: 'INC-4F2A9C',
+    maxChars: 20,
+    description: 'Identificador corto del incidente (formato INC-XXXXXX)',
+  },
+] as const;
+
+export const GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAM_COUNT =
+  GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAMS.length;
+
+/**
+ * Cuerpo exacto de la plantilla, listo para WhatsApp Manager.
+ *
+ * Se usa categoría UTILITY: es un aviso operativo solicitado por el negocio, no
+ * marketing. El estado del incidente va en texto fijo, no como parámetro, para
+ * no alterar el contrato de 8 variables ya probado.
+ */
+export const GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_BODY = [
+  'APPYRA Guardian — alerta de incidente',
+  '',
+  'Nivel: {{1}}',
+  'Empresa: {{2}}',
+  'Módulo: {{3}}',
+  'Fecha y hora: {{4}}',
+  '',
+  'Problema: {{5}}',
+  'Diagnóstico: {{6}}',
+  'Impacto: {{7}}',
+  '',
+  'Estado: incidente registrado, investigación en curso.',
+  'ID: {{8}}',
+  '',
+  'Mensaje automático de monitoreo. No se modificó información de tus clientes.',
+].join('\n');
+
 function read(env: NodeJS.ProcessEnv, name: string): string {
   return String(env[name] ?? '').trim();
 }
@@ -108,7 +215,7 @@ export function resolveGuardianWhatsAppProfile(
     name: read(env, 'GUARDIAN_WA_TEMPLATE_NAME') || GUARDIAN_WHATSAPP_DEFAULT_TEMPLATE,
     language: read(env, 'GUARDIAN_WA_TEMPLATE_LANG') || GUARDIAN_WHATSAPP_DEFAULT_LANGUAGE,
     category: 'UTILITY',
-    paramCount: 8,
+    paramCount: GUARDIAN_WHATSAPP_INCIDENT_TEMPLATE_PARAM_COUNT,
     description: 'Alerta administrativa de incidente Guardian (24/7).',
   };
 

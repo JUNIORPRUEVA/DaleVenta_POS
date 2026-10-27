@@ -22,6 +22,7 @@
  */
 import * as fs from 'node:fs';
 import * as dotenv from 'dotenv';
+import { resolveGuardianAiRuntime } from '../../src/guardian/ai/guardian.ai.runtime';
 
 const CONFIRM_FLAG = '--confirm';
 
@@ -44,11 +45,26 @@ async function main(): Promise<void> {
   }
 
   const apiKey = String(process.env.GUARDIAN_AI_API_KEY ?? '').trim();
-  const baseUrl = String(process.env.GUARDIAN_AI_BASE_URL ?? '').trim().replace(/\/+$/, '');
-  const configuredModel = String(process.env.GUARDIAN_AI_MODEL ?? '').trim();
+  // Resolucion unica del proveedor: si el runtime degrada a mock, la sonda no
+  // hace ninguna peticion (no tendria credencial efectiva que probar).
+  const runtime = resolveGuardianAiRuntime();
+  const baseUrl = String(runtime.baseUrl ?? '').replace(/\/+$/, '');
+  const configuredModel = runtime.model;
 
-  if (!apiKey || !baseUrl) {
-    console.log('ERROR: faltan GUARDIAN_AI_API_KEY o GUARDIAN_AI_BASE_URL');
+  if (runtime.adapter === 'mock' || !apiKey || !baseUrl) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: false,
+          reason: 'AI_NOT_CONFIGURED_EFFECTIVE',
+          adapter: runtime.adapter,
+          errors: runtime.errors,
+          warnings: runtime.warnings,
+        },
+        null,
+        2,
+      ),
+    );
     process.exitCode = 1;
     return;
   }
@@ -78,9 +94,12 @@ async function main(): Promise<void> {
         {
           httpStatus: response.status,
           ok: response.ok,
+          adapter: runtime.adapter,
+          host: runtime.baseUrlHost,
           modelCount: ids.length,
           models: ids,
           configuredModel,
+          configuredModelSupportedByCode: runtime.modelSupported,
           configuredModelPresent: ids.length > 0 ? ids.includes(configuredModel) : null,
         },
         null,

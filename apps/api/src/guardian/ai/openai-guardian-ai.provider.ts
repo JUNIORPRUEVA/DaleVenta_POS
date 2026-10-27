@@ -78,9 +78,17 @@ export function extractJsonObject(raw: string): any {
  *
  * No se añade SDK: se usa `fetch` nativo para no introducir dependencias.
  * Si no hay credenciales, `isConfigured()` es false y el worker usa el mock.
+ *
+ * Sirve para dos proveedores reales, con diferencias declaradas:
+ * - `openai`: cuerpo estándar de Chat Completions.
+ * - `deepseek`: mismo contrato (base `https://api.deepseek.com/v1`) pero
+ *   desactiva el modo razonamiento (`reasoning_effort: "none"`), porque el
+ *   diagnóstico debe ser barato, determinista y devolver solo JSON.
  */
+export type OpenAiCompatibleAdapter = 'openai' | 'deepseek';
+
 export class OpenAiGuardianAiProvider implements GuardianAiProvider {
-  readonly name = 'openai';
+  private readonly adapter: OpenAiCompatibleAdapter;
   private readonly semaphore: ReturnType<typeof createSemaphore>;
 
   constructor(
@@ -91,9 +99,51 @@ export class OpenAiGuardianAiProvider implements GuardianAiProvider {
       timeoutMs?: number;
       maxTokens?: number;
       maxConcurrent?: number;
+      /** Adaptador real. Por compatibilidad, el valor por defecto es `openai`. */
+      adapter?: OpenAiCompatibleAdapter;
     },
   ) {
+    this.adapter = options.adapter ?? 'openai';
     this.semaphore = createSemaphore(options.maxConcurrent ?? 2);
+  }
+
+  /** Nombre del adaptador efectivo; se persiste en `guardian_diagnoses.model`. */
+  get name(): string {
+    return this.adapter;
+  }
+
+  /** Host real de la llamada, sin credenciales (solo para diagnóstico/logs). */
+  get endpointHost(): string {
+    const baseUrl = (this.options.baseUrl ?? this.defaultBaseUrl).replace(/\/+$/, '');
+    try {
+      return new URL(baseUrl).host;
+    } catch {
+      return 'invalido';
+    }
+  }
+
+  /**
+   * Base URL por defecto según el adaptador.
+   * DeepSeek publica su API OpenAI-compatible en `https://api.deepseek.com/v1`.
+   */
+  private get defaultBaseUrl(): string {
+    return this.adapter === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
+  }
+
+  /**
+   * Cuerpo de la petición por proveedor.
+   * DeepSeek acepta `response_format: json_object` (exige instrucción JSON en el
+   * prompt, que el prompt de sistema ya incluye) y `reasoning_effort: "none"`
+   * para desactivar el modo razonamiento.
+   */
+  private buildRequestBody(model: string) {
+    const base = {
+      model,
+      temperature: 0,
+      max_tokens: this.options.maxTokens ?? 900,
+      response_format: { type: 'json_object' as const },
+    };
+    return this.adapter === 'deepseek' ? { ...base, reasoning_effort: 'none' } : base;
   }
 
   isConfigured(): boolean {
@@ -106,8 +156,9 @@ export class OpenAiGuardianAiProvider implements GuardianAiProvider {
     }
 
     const startedAt = Date.now();
-    const baseUrl = (this.options.baseUrl ?? 'https://api.openai.com/v1').replace(/\/+$/, '');
-    const model = this.options.model ?? 'gpt-4o-mini';
+    const baseUrl = (this.options.baseUrl ?? this.defaultBaseUrl).replace(/\/+$/, '');
+    const model =
+      this.options.model ?? (this.adapter === 'deepseek' ? 'deepseek-flash' : 'gpt-4o-mini');
     const controller = new AbortController();
     const timeoutMs = this.options.timeoutMs ?? 20_000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -122,10 +173,7 @@ export class OpenAiGuardianAiProvider implements GuardianAiProvider {
           Authorization: `Bearer ${this.options.apiKey}`,
         },
         body: JSON.stringify({
-          model,
-          temperature: 0,
-          max_tokens: this.options.maxTokens ?? 900,
-          response_format: { type: 'json_object' },
+          ...this.buildRequestBody(model),
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             {

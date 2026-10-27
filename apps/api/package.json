@@ -44,6 +44,8 @@
     "guardian:retention": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-retention.ts",
     "guardian:watchdog": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-watchdog.ts",
     "guardian:scale": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-scale-check.ts",
+    "guardian:integraciones-check": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-integraciones-check.ts",
+    "guardian:first-real-test": "ts-node --transpile-only -P tsconfig.scripts.json scripts/guardian/guardian-first-real-test.ts",
     "whatsapp:inbox:repair": "ts-node scripts/repair-whatsapp-inbox-duplicates.ts",
     "whatsapp:inbox:repair:execute": "ts-node scripts/repair-whatsapp-inbox-duplicates.ts --execute",
     "whatsapp:media:audit": "ts-node scripts/audit-whatsapp-media.ts",

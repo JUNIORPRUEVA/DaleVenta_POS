@@ -13,8 +13,10 @@
 import * as fs from 'node:fs';
 import * as dotenv from 'dotenv';
 import { resolveGuardianWhatsAppProfile } from '../../src/guardian/guardian.whatsapp.config';
-import { describeGuardianAiRuntime } from '../../src/guardian/guardian.config';
-import { OpenAiGuardianAiProvider } from '../../src/guardian/ai/openai-guardian-ai.provider';
+import {
+  describeGuardianAiRuntime,
+  resolveGuardianAiRuntime,
+} from '../../src/guardian/ai/guardian.ai.runtime';
 
 const AI_KEYS = ['GUARDIAN_AI_API_KEY', 'GUARDIAN_AI_BASE_URL', 'GUARDIAN_AI_MODEL'];
 const WA_IDENTITY = ['GUARDIAN_WA_CLOUD_TOKEN', 'GUARDIAN_WA_PHONE_NUMBER_ID', 'GUARDIAN_WA_WABA_ID'];
@@ -63,28 +65,15 @@ function main(): void {
 
   const profileName = resolveProfileName();
   const required = PROFILE_REQUIRED[profileName];
-  const missing = required.filter((key) => !String(process.env[key] ?? '').trim());  const emptyOrMissingOptional = OPTIONAL_WITH_DEFAULT.filter(
+  const missing = required.filter((key) => !String(process.env[key] ?? '').trim());
+  const emptyOrMissingOptional = OPTIONAL_WITH_DEFAULT.filter(
     (key) => !String(process.env[key] ?? '').trim(),
   );
 
   const profile = resolveGuardianWhatsAppProfile();
-  const ai = new OpenAiGuardianAiProvider({
-    apiKey: String(process.env.GUARDIAN_AI_API_KEY ?? ''),
-    baseUrl: process.env.GUARDIAN_AI_BASE_URL,
-    model: process.env.GUARDIAN_AI_MODEL,
-    timeoutMs: Number(process.env.GUARDIAN_AI_TIMEOUT_MS ?? 20_000),
-    maxTokens: Number(process.env.GUARDIAN_AI_MAX_TOKENS ?? 900),
-    maxConcurrent: Number(process.env.GUARDIAN_AI_MAX_CONCURRENCY ?? 1),
-  });
-
-  let aiHost = 'n/a';
-  try {
-    aiHost = new URL(String(process.env.GUARDIAN_AI_BASE_URL ?? '')).host;
-  } catch {
-    aiHost = 'URL_INVALIDA';
-  }
-
-  const modelName = String(process.env.GUARDIAN_AI_MODEL ?? '');
+  // Unico mecanismo de seleccion de proveedor (imperativo: no reimplementar).
+  const aiRuntime = resolveGuardianAiRuntime();
+  const modelName = aiRuntime.model;
   const platformTokenLength = String(process.env.GUARDIAN_PLATFORM_TOKEN ?? '').length;
 
   console.log(
@@ -114,16 +103,18 @@ function main(): void {
           watchdogParamCount: profile.templates.watchdogAlert.paramCount,
         },
         ai: {
-          adapter: describeGuardianAiRuntime().adapter,
-          providerVariableHonored: describeGuardianAiRuntime().providerVariableHonored,
-          warnings: describeGuardianAiRuntime().warnings,
-          compatibleOpenAiStyle: true,
-          isConfigured: ai.isConfigured(),
-          host: aiHost,
-          modelLength: modelName.length,
-          modelFormatPlausible: /^[a-z0-9][a-z0-9._-]*$/i.test(modelName),
-          timeoutMs: Number(process.env.GUARDIAN_AI_TIMEOUT_MS ?? 20_000),
-          maxTokens: Number(process.env.GUARDIAN_AI_MAX_TOKENS ?? 900),
+          adapter: aiRuntime.adapter,
+          providerVariable: aiRuntime.providerVariable,
+          providerHonored: true,
+          host: aiRuntime.baseUrlHost,
+          model: modelName,
+          modelSupported: aiRuntime.modelSupported,
+          apiKeyPresent: aiRuntime.apiKeyPresent,
+          errors: aiRuntime.errors,
+          warnings: aiRuntime.warnings,
+          summary: describeGuardianAiRuntime(aiRuntime),
+          timeoutMs: aiRuntime.timeoutMs,
+          maxTokens: aiRuntime.maxTokens,
         },
         platformToken: {
           present: platformTokenLength > 0,

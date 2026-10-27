@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
 import { classifyWorkerHeartbeat } from './guardian.watchdog.checks';
 import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
+import { resolveGuardianAiRuntime } from './ai/guardian.ai.runtime';
 
 export type PlatformIncidentFilters = {
   companyId?: string;
@@ -291,6 +292,10 @@ export class GuardianPlatformService {
 
     const now = Date.now();
     const whatsapp = resolveGuardianWhatsAppProfile();
+    // El proveedor de IA se reporta tal como lo resuelve el runtime: si algo
+    // está mal configurado se dice explícitamente, en vez de anunciar un
+    // proveedor real que el código no está usando.
+    const aiRuntime = resolveGuardianAiRuntime();
     return {
       guardianEnabled: String(process.env.GUARDIAN_ENABLED ?? '').toLowerCase() === 'true',
       // Solo identidad propia de APPYRA: nunca se reporta configurado por
@@ -300,7 +305,9 @@ export class GuardianPlatformService {
       fallbackConfigured: Boolean(
         (process.env.GUARDIAN_ALERT_FALLBACK_WEBHOOK_URL ?? '').trim(),
       ),
-      aiProvider: (process.env.GUARDIAN_AI_API_KEY ?? '').trim() ? 'openai' : 'mock',
+      aiProvider: aiRuntime.adapter,
+      aiModel: aiRuntime.adapter === 'mock' ? null : aiRuntime.model,
+      aiConfigurationIssues: aiRuntime.errors,
       pendingAlerts,
       failedAlerts,
       pendingDiagnosis,
