@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { isGuardianEnabledForCompany } from './guardian.company.policy';
 
 /**
  * Autenticación de máquina (servidor a servidor) para la ingesta de telemetría.
@@ -80,6 +81,10 @@ export class GuardianMachineService {
     if (!credential.enabled) return null;
     if (credential.revokedAt) return null;
     if (credential.expiresAt && credential.expiresAt.getTime() <= now.getTime()) return null;
+
+    // Fase 7 — una credencial válida NO basta: la empresa debe tener Guardian
+    // activado explícitamente.
+    if (!(await isGuardianEnabledForCompany(this.prisma, credential.companyId))) return null;
 
     return {
       credentialId: credential.id,

@@ -11,6 +11,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { resolveGuardianConfig } from './guardian.config';
 import { guardianSecretValue } from './guardian.secret';
 import {
+  GUARDIAN_COMPANY_DISABLED,
+  isGuardianEnabledForCompany,
+} from './guardian.company.policy';
+import {
   EvolutionOutboxChannel,
   GuardianAlertChannel,
   HttpWebhookChannel,
@@ -241,6 +245,11 @@ export class GuardianAlertService {
       },
     });
     if (!incident) return { created: false, skipped: 'INCIDENT_NOT_FOUND' };
+
+    // Fase 7 — una empresa con Guardian desactivado no genera alertas nuevas.
+    if (!(await isGuardianEnabledForCompany(this.prisma, incident.companyId))) {
+      return { created: false, skipped: GUARDIAN_COMPANY_DISABLED };
+    }
 
     const severity = incident.severity;
     if (severity === GuardianSeverity.SEV4 && String(process.env.GUARDIAN_ALERT_SEV4_ENABLED ?? 'false') !== 'true') {

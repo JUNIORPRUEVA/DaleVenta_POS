@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  GUARDIAN_COMPANY_DISABLED,
+  isGuardianEnabledForCompany,
+} from './guardian.company.policy';
 
 /**
  * Enrolamiento de instalaciones (POS de escritorio y móvil).
@@ -112,6 +116,16 @@ export class GuardianEnrollmentService {
 
     if (!record) {
       return { ok: false, code: 'ENROLLMENT_CODE_INVALID', message: 'Código de enrolamiento inválido' };
+    }
+
+    // Fase 7 — el código pertenece a una empresa, pero la empresa debe tener
+    // Guardian activado para que el canje prospere.
+    if (!(await isGuardianEnabledForCompany(this.prisma, record.companyId))) {
+      return {
+        ok: false,
+        code: GUARDIAN_COMPANY_DISABLED,
+        message: 'La empresa no tiene APPYRA Guardian activado',
+      };
     }
     if (record.revokedAt) {
       return { ok: false, code: 'ENROLLMENT_CODE_REVOKED', message: 'Código de enrolamiento revocado' };

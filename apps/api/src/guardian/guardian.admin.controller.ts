@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
   Param,
@@ -89,6 +90,20 @@ export class GuardianAdminController {
     }
   }
 
+  /** Fase 7 — sin activación de la empresa, el panel no muestra nada. */
+  private async assertCompanyEnabled(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { guardianEnabled: true },
+    });
+    if (company?.guardianEnabled !== true) {
+      throw new ForbiddenException({
+        code: 'GUARDIAN_NOT_ENABLED',
+        message: 'APPYRA Guardian no está activado para esta empresa',
+      });
+    }
+  }
+
   @Get('summary')
   @Roles(Role.ADMIN)
   async summary(
@@ -97,6 +112,7 @@ export class GuardianAdminController {
     @Query('companyId') requestedCompanyId?: string,
   ) {
     const scope = this.resolveCompanyId(req, platformToken, requestedCompanyId);
+    await this.assertCompanyEnabled(scope.companyId);
     return this.incidents.summary(scope.companyId);
   }
 
@@ -108,6 +124,7 @@ export class GuardianAdminController {
     @Query('companyId') requestedCompanyId?: string,
   ) {
     const scope = this.resolveCompanyId(req, platformToken, requestedCompanyId);
+    await this.assertCompanyEnabled(scope.companyId);
     const now = Date.now();
     const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
 

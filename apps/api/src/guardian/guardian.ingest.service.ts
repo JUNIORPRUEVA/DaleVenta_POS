@@ -7,6 +7,10 @@ import { GuardianIngestResultItem, GuardianIngestEventDto } from './dto/guardian
 import { redactContext, redactText } from './guardian.redaction';
 import { GuardianQuotaService } from './guardian.quota.service';
 import { GuardianAlertService } from './guardian.alert.service';
+import {
+  GUARDIAN_COMPANY_DISABLED,
+  isGuardianEnabledForCompany,
+} from './guardian.company.policy';
 
 const IMPACT_BY_MODULE: Record<string, string> = {
   cash: 'Posible impacto en caja o turnos',
@@ -31,6 +35,8 @@ export type GuardianIngestOutcome = {
   duplicates: number;
   rejected: number;
   results: GuardianIngestResultItem[];
+  /** `true` cuando la empresa no tiene Guardian activado (Fase 7). */
+  disabled?: boolean;
 };
 
 /**
@@ -60,6 +66,24 @@ export class GuardianIngestService {
   }): Promise<GuardianIngestOutcome> {
     const config = resolveGuardianConfig();
     const events = params.events.slice(0, config.maxBatchEvents);
+
+    // Fase 7 — política por empresa: sin activación explícita no se persiste
+    // nada. Se responde sin error para no romper al cliente (fail-open).
+    if (!(await isGuardianEnabledForCompany(this.prisma, params.companyId))) {
+      return {
+        ok: true,
+        accepted: 0,
+        duplicates: 0,
+        rejected: 0,
+        results: events.map((event) => ({
+          eventId: event.eventId,
+          status: 'rejected' as const,
+          reason: GUARDIAN_COMPANY_DISABLED,
+          severity: event.severity,
+        })),
+        disabled: true,
+      };
+    }
 
     const deviceIds = events
       .map((event) => String(event.deviceId ?? '').trim())

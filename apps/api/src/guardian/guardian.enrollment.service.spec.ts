@@ -47,6 +47,10 @@ describe('enrolamiento de instalaciones Guardian', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       guardianAccessLog: { create: jest.fn().mockResolvedValue({}) },
+      // Fase 7: el canje exige la empresa con Guardian activado.
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ guardianEnabled: true }),
+      },
     } as any;
     return prisma;
   };

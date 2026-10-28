@@ -40,6 +40,26 @@ export class GuardianPlatformController {
     return { companies: await this.platform.companies() };
   }
 
+  /**
+   * Fase 7 — activación de Guardian por empresa.
+   *
+   * Solo accesible con el token de plataforma (GuardianPlatformGuard): ni un
+   * usuario de empresa ni una credencial de máquina pueden activarlo. El
+   * historial existente nunca se borra al desactivar.
+   */
+  @Post('companies/:companyId/guardian')
+  async setCompanyGuardian(
+    @Param('companyId') companyId: string,
+    @Body() body: { enabled?: boolean },
+  ) {
+    if (typeof body?.enabled !== 'boolean') {
+      throw new BadRequestException('`enabled` debe ser booleano');
+    }
+    const company = await this.platform.setCompanyGuardianEnabled(companyId, body.enabled);
+    if (!company) throw new NotFoundException('Empresa no encontrada');
+    return { company };
+  }
+
   @Get('workers')
   workers() {
     return this.platform.workers();

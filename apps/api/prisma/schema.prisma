@@ -805,6 +805,12 @@ model Company {
   guardianQuota                    GuardianCompanyQuota?
   guardianMachineCredentials       GuardianMachineCredential[]
   guardianEnrollmentCodes          GuardianEnrollmentCode[]
+  /// Fase 7: activación de APPYRA Guardian por empresa. DESACTIVADO por
+  /// defecto; ninguna empresa existente ni nueva queda instrumentada sin una
+  /// activación explícita de un administrador de plataforma.
+  guardianEnabled                  Boolean                  @default(false) @map("guardian_enabled")
+  guardianEnabledAt                DateTime?                @map("guardian_enabled_at")
+  guardianEnabledBy                String?                  @map("guardian_enabled_by") @db.VarChar(120)
 
   @@index([status])
   @@index([licenseStatus])

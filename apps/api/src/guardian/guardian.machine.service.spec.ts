@@ -18,6 +18,10 @@ describe('servicio de credenciales de máquina Guardian', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       guardianAccessLog: { create: jest.fn().mockResolvedValue({}) },
+      // Fase 7: la empresa debe tener Guardian activado.
+      company: {
+        findUnique: jest.fn().mockResolvedValue({ guardianEnabled: true }),
+      },
     }) as any;
 
   const baseRow = {

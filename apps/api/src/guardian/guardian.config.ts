@@ -25,6 +25,10 @@ export type GuardianConfig = {
   diagnosisMaxAttempts: number;
   /** Presupuesto diario de tokens de IA por empresa (0 = sin límite). */
   aiTokensPerCompanyDay: number;
+  /** Presupuesto diario GLOBAL de tokens de IA (0 = sin límite). */
+  aiTokensGlobalDay: number;
+  /** Presupuesto mensual GLOBAL de tokens de IA (0 = sin límite). */
+  aiTokensGlobalMonth: number;
   /** Máximo de llamadas simultáneas al proveedor de IA. */
   aiMaxConcurrency: number;
   /** Interruptor explícito del canal Evolution reutilizando el outbox. */
@@ -62,6 +66,8 @@ export function resolveGuardianConfig(env: NodeJS.ProcessEnv = process.env): Gua
     alertDiagnosisWaitSeconds: readInt(env.GUARDIAN_ALERT_DIAGNOSIS_WAIT_SECONDS, 90, 0, 900),
     diagnosisMaxAttempts: readInt(env.GUARDIAN_DIAGNOSIS_MAX_ATTEMPTS, 4, 1, 10),
     aiTokensPerCompanyDay: readInt(env.GUARDIAN_AI_TOKENS_PER_COMPANY_DAY, 200_000, 0, 100_000_000),
+    aiTokensGlobalDay: readInt(env.GUARDIAN_AI_TOKENS_GLOBAL_DAY, 0, 0, 1_000_000_000),
+    aiTokensGlobalMonth: readInt(env.GUARDIAN_AI_TOKENS_GLOBAL_MONTH, 0, 0, 10_000_000_000),
     aiMaxConcurrency: readInt(env.GUARDIAN_AI_MAX_CONCURRENCY, 2, 1, 10),
     alertsEvolutionEnabled: readBool(env.GUARDIAN_ALERTS_EVOLUTION_ENABLED, false),
     platformToken: String(env.GUARDIAN_PLATFORM_TOKEN ?? '').trim(),

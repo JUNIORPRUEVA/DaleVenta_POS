@@ -38,6 +38,43 @@ export class GuardianPlatformService {
     private readonly incidents: GuardianIncidentsService,
   ) {}
 
+  /**
+   * Fase 7 — activa o desactiva Guardian para una empresa.
+   *
+   * - Solo lo alcanza el token de plataforma (guard del controlador).
+   * - Desactivar NO borra historial: los incidentes pasan a no procesarse.
+   * - Deja rastro de quién y cuándo en la propia empresa.
+   */
+  async setCompanyGuardianEnabled(companyId: string, enabled: boolean) {
+    const id = String(companyId ?? '').trim();
+    if (!id) return null;
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    });
+    if (!company) return null;
+
+    const updated = await this.prisma.company.update({
+      where: { id },
+      data: {
+        guardianEnabled: enabled,
+        guardianEnabledAt: enabled ? new Date() : null,
+        guardianEnabledBy: enabled ? 'platform-token' : null,
+      },
+      select: { id: true, name: true, guardianEnabled: true, guardianEnabledAt: true },
+    });
+
+    if (!enabled) {
+      // Coherencia inmediata: los incidentes en cola dejan de consumir IA.
+      await this.prisma.guardianIncident.updateMany({
+        where: { companyId: id, processingState: 'PENDING' },
+        data: { processingState: 'SKIPPED' },
+      });
+    }
+
+    return updated;
+  }
+
   async companies() {
     const companies = await this.prisma.company.findMany({
       where: { status: { not: 'ARCHIVED' } },
