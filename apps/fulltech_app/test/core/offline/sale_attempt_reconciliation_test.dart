@@ -375,4 +375,24 @@ void main() {
       SaleAttemptDecision.manualMoneyReceived,
     );
   });
+
+  test('autorizar una venta nueva NO cierra la incidencia', () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response('UNKNOWN'),
+    );
+
+    final resolved = await reconciler.resolveManually(
+      action: _attempt(),
+      decision: SaleAttemptDecision.manualAuthorizedNewSale,
+      actorRole: 'OWNER',
+      note: 'Compra nueva del mismo cliente',
+    );
+
+    expect(resolved, isFalse);
+    expect(recorder.resolvedIds, isEmpty);
+    expect(
+      recorder.decisions.single,
+      SaleAttemptDecision.manualAuthorizedNewSale,
+    );
+  });
 }

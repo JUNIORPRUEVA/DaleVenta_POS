@@ -142,7 +142,7 @@ void main() {
   }
 
   for (final legacy in [1, 2, 3]) {
-    test('outbox v$legacy migra a v4, conserva datos y crea la auditoría',
+    test('outbox v$legacy migra a la versión actual y crea la auditoría',
         () async {
       final name = 'legacy-v$legacy.db';
       final db = await openLegacy(name, legacy);
@@ -246,7 +246,7 @@ void main() {
         options: OpenDatabaseOptions(readOnly: true),
       );
       try {
-        expect(await check.getVersion(), 4);
+        expect(await check.getVersion(), 5);
         final integrity = await check.rawQuery('PRAGMA integrity_check');
         expect(integrity.single.values.single, 'ok');
       } finally {

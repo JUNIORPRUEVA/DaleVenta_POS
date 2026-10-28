@@ -30,7 +30,12 @@ enum SaleAttemptDecision {
   manualMoneyReceived,
 
   /// Se solicitó revisión técnica/soporte.
-  manualEscalated;
+  manualEscalated,
+
+  /// El encargado autoriza una venta NUEVA con el mismo contenido que un
+  /// intento sin resolver. NO cierra el incidente ni toca el intento original:
+  /// solo habilita una operación independiente con un `clientRequestId` nuevo.
+  manualAuthorizedNewSale;
 
   static SaleAttemptDecision? parse(String? raw) {
     switch ((raw ?? '').trim().toUpperCase()) {
@@ -46,6 +51,8 @@ enum SaleAttemptDecision {
         return SaleAttemptDecision.manualMoneyReceived;
       case 'MANUAL_ESCALATED':
         return SaleAttemptDecision.manualEscalated;
+      case 'MANUAL_AUTHORIZED_NEW_SALE':
+        return SaleAttemptDecision.manualAuthorizedNewSale;
       default:
         return null;
     }
@@ -61,12 +68,14 @@ extension SaleAttemptDecisionLabel on SaleAttemptDecision {
     SaleAttemptDecision.manualNotPerformed => 'MANUAL_NOT_PERFORMED',
     SaleAttemptDecision.manualMoneyReceived => 'MANUAL_MONEY_RECEIVED',
     SaleAttemptDecision.manualEscalated => 'MANUAL_ESCALATED',
+    SaleAttemptDecision.manualAuthorizedNewSale => 'MANUAL_AUTHORIZED_NEW_SALE',
   };
 
   bool get isManual =>
       this == SaleAttemptDecision.manualNotPerformed ||
       this == SaleAttemptDecision.manualMoneyReceived ||
-      this == SaleAttemptDecision.manualEscalated;
+      this == SaleAttemptDecision.manualEscalated ||
+      this == SaleAttemptDecision.manualAuthorizedNewSale;
 
   /// Solo estas decisiones retiran el aviso del intento.
   bool get resolvesIncident =>

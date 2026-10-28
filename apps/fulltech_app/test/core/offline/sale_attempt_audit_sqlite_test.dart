@@ -1,9 +1,16 @@
+import 'package:daleventa_pos/core/config/uat_identity.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_audit.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+Future<String> _databasePath() async {
+  final dir = await getDatabasesPath();
+  return p.join(dir, UatIdentity.offlineDatabaseFileName());
+}
 
 /// Pruebas contra SQLite REAL (no mocks): reserva por operación, auditoría
 /// append-only y resolución atómica.
@@ -249,6 +256,117 @@ void main() {
           fingerprint: 'carrito-igual',
           createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 2)),
         ),
+      );
+
+      await expectLater(
+        OfflineStore.instance.reserveRemoteSaleAttempt(
+          attempt(requestId: 'req-2', fingerprint: 'carrito-igual'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
+  group('venta nueva autorizada con el mismo carrito', () {
+    test('sin autorización se bloquea; con autorización entra una sola vez',
+        () async {
+      final action = attempt(
+        requestId: 'req-1',
+        fingerprint: 'carrito-igual',
+        createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 3)),
+      );
+      await OfflineStore.instance.reserveRemoteSaleAttempt(action);
+
+      await expectLater(
+        OfflineStore.instance.reserveRemoteSaleAttempt(
+          attempt(requestId: 'req-2', fingerprint: 'carrito-igual'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await OfflineStore.instance.grantSameCartOverride(
+        companyId: company,
+        operationFingerprint: 'carrito-igual',
+        actorUserId: 'owner-1',
+        actorRole: 'OWNER',
+        note: 'El cliente confirmó que es una compra nueva',
+      );
+
+      // Primera venta nueva: pasa y consume la autorización.
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(requestId: 'req-2', fingerprint: 'carrito-igual'),
+      );
+
+      // Segunda: ya no hay autorización válida, se vuelve a bloquear.
+      await expectLater(
+        OfflineStore.instance.reserveRemoteSaleAttempt(
+          attempt(requestId: 'req-3', fingerprint: 'carrito-igual'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      // El intento original sigue intacto y sin resolver.
+      final unresolved = await OfflineStore.instance.listUnresolvedSaleAttempts(
+        companyId: company,
+        userId: user,
+      );
+      expect(
+        unresolved.map((a) => a.idempotencyKey),
+        containsAll(<String>['req-1', 'req-2']),
+      );
+    });
+
+    test('una autorización caducada no habilita nada', () async {
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(
+          requestId: 'req-1',
+          fingerprint: 'carrito-igual',
+          createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 3)),
+        ),
+      );
+      await OfflineStore.instance.grantSameCartOverride(
+        companyId: company,
+        operationFingerprint: 'carrito-igual',
+        actorRole: 'OWNER',
+      );
+      // Simula el paso del tiempo reescribiendo la concesión. Se abre una
+      // conexión INDEPENDIENTE (`singleInstance: false`) para no cerrar la que
+      // usa OfflineStore.
+      final db = await databaseFactoryFfi.openDatabase(
+        await _databasePath(),
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      await db.update(
+        'sale_cart_override',
+        {
+          'granted_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(minutes: 30))
+              .millisecondsSinceEpoch,
+        },
+      );
+      await db.close();
+
+      await expectLater(
+        OfflineStore.instance.reserveRemoteSaleAttempt(
+          attempt(requestId: 'req-2', fingerprint: 'carrito-igual'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('la autorización de otra empresa no sirve', () async {
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(
+          requestId: 'req-1',
+          fingerprint: 'carrito-igual',
+          createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 3)),
+        ),
+      );
+      await OfflineStore.instance.grantSameCartOverride(
+        companyId: 'company-b',
+        operationFingerprint: 'carrito-igual',
+        actorRole: 'OWNER',
       );
 
       await expectLater(

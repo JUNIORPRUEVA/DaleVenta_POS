@@ -319,7 +319,8 @@ class _SaleAttemptRecoveryScreenState
   }
 
   Future<void> _showNewSaleGuidance(PendingSyncAction action) async {
-    await showDialog<void>(
+    final fingerprint = (action.operationFingerprint ?? '').trim();
+    final authorize = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Preparar la venta de nuevo'),
@@ -358,18 +359,91 @@ class _SaleAttemptRecoveryScreenState
                       ),
                     ),
                   ),
+                if (fingerprint.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Si el carrito es exactamente el mismo y el intento anterior '
+                    'sigue sin resolver, el sistema pedirá autorización del '
+                    'encargado antes de dejarte cobrar. Esa autorización dura 10 '
+                    'minutos y sirve para una sola venta.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ],
               ],
             ),
           ),
         ),
         actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Entendido'),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cerrar'),
           ),
+          if (fingerprint.isNotEmpty)
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Autorizar venta nueva'),
+            ),
         ],
       ),
     );
+    if (authorize != true || !mounted) return;
+    await _authorizeNewSale(action, fingerprint);
+  }
+
+  /// Autorización supervisada para vender OTRA VEZ el mismo contenido.
+  ///
+  /// No resuelve el incidente y no reenvía el intento: crea un permiso de un
+  /// solo uso, de 10 minutos, con el actor registrado. La venta nueva llevará su
+  /// propio `clientRequestId`.
+  Future<void> _authorizeNewSale(
+    PendingSyncAction action,
+    String fingerprint,
+  ) async {
+    final authorized = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: AppPermission.cancelSales,
+      reason: 'Autorizar una venta nueva con el mismo contenido',
+    );
+    if (!authorized || !mounted) return;
+
+    final user = await ref.read(tokenStorageProvider).getUserSnapshot();
+    if (!mounted) return;
+    setState(() => _busy.add(action.id));
+    try {
+      await OfflineStore.instance.grantSameCartOverride(
+        companyId: action.companyId ?? '',
+        operationFingerprint: fingerprint,
+        actorUserId: user?.id,
+        actorRole: user?.role,
+        note: 'Autorización de venta nueva independiente',
+      );
+      await ref.read(saleAttemptReconcilerProvider).resolveManually(
+        action: action,
+        decision: SaleAttemptDecision.manualAuthorizedNewSale,
+        actorUserId: user?.id,
+        actorRole: user?.role,
+        note: 'Autorización de venta nueva independiente',
+      );
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      await _showInfo(
+        title: 'Venta nueva autorizada',
+        body:
+            'Puedes cobrar el mismo contenido una vez, con un identificador '
+            'nuevo. La autorización caduca en 10 minutos y no reenvía el intento '
+            'anterior, que sigue registrado y sin resolver.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      await _showInfo(
+        title: 'No se pudo autorizar',
+        body: 'No se registró ningún permiso. El intento sigue intacto.',
+      );
+    } finally {
+      if (mounted) setState(() => _busy.remove(action.id));
+    }
   }
 
   Future<void> _showInfo({required String title, required String body}) {
@@ -913,6 +987,8 @@ class _IncidentCardState extends State<_IncidentCard> {
         'Declarada como no realizada',
       SaleAttemptDecision.manualMoneyReceived => 'Dinero recibido declarado',
       SaleAttemptDecision.manualEscalated => 'Revisión solicitada',
+      SaleAttemptDecision.manualAuthorizedNewSale =>
+        'Venta nueva autorizada',
     };
   }
 }

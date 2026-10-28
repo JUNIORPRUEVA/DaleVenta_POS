@@ -201,15 +201,6 @@ void main() {
     );
   }
 
-  /// Espera E/S real (SQLite) y repinta.
-  Future<void> settle(WidgetTester tester) async {
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    });
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-  }
-
   /// Monta la pantalla DENTRO de `runAsync`: así el `initState` crea sus
   /// futuros en la zona real y SQLite puede terminar (si se monta en la zona
   /// simulada, la carga se queda pendiente para siempre).

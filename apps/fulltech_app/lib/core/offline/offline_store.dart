@@ -67,7 +67,7 @@ class OfflineStore {
     TraceLog.log('offline_store', 'opening sqlite db path=$_databaseFileName');
     return openResilientLocalDatabase(
       fileName: _databaseFileName,
-      version: 4,
+      version: 5,
       allowInMemoryFallback: false,
       onCreate: (db, version) async {
         await db.execute('''
@@ -102,6 +102,7 @@ class OfflineStore {
         ''');
         await _createOfflineSalesTables(db);
         await _createSaleAttemptAuditTable(db);
+        await _createSaleCartOverrideTable(db);
         await _createIndexes(db);
         await _createPendingActionFingerprintIndex(db);
       },
@@ -148,6 +149,9 @@ class OfflineStore {
           );
           await _createSaleAttemptAuditTable(db);
           await _createPendingActionFingerprintIndex(db);
+        }
+        if (oldVersion < 5) {
+          await _createSaleCartOverrideTable(db);
         }
       },
     );
@@ -257,10 +261,92 @@ class OfflineStore {
     ''');
   }
 
+  /// Autoriza, con rastro del encargado, una venta NUEVA con el mismo contenido
+  /// que un intento sin resolver. No cierra el incidente ni toca el intento.
+  Future<void> grantSameCartOverride({
+    required String companyId,
+    required String operationFingerprint,
+    String? actorUserId,
+    String? actorRole,
+    String? note,
+  }) async {
+    final cleanCompany = companyId.trim();
+    final cleanFingerprint = operationFingerprint.trim();
+    if (cleanCompany.isEmpty || cleanFingerprint.isEmpty) return;
+
+    final db = await _dbOrNull();
+    if (db == null) {
+      throw StateError('No pudimos registrar la autorización en este equipo. Pide ayuda a soporte.');
+    }
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await db.insert('sale_cart_override', {
+      'id': 'override_${cleanCompany}_${cleanFingerprint}_$now',
+      'company_id': cleanCompany,
+      'operation_fingerprint': cleanFingerprint,
+      'granted_by_user_id': actorUserId,
+      'granted_by_role': actorRole,
+      'note': note,
+      'granted_at': now,
+      'consumed_at': null,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Consume (un solo uso) una autorización vigente. Debe ejecutarse dentro de
+  /// la misma transacción de la reserva para que no pueda usarse dos veces.
+  Future<bool> _consumeSameCartOverrideInTxn(
+    DatabaseExecutor txn, {
+    required String companyId,
+    required String fingerprint,
+    required DateTime nowUtc,
+  }) async {
+    final cutoff = nowUtc
+        .subtract(sameCartOverrideWindow)
+        .millisecondsSinceEpoch;
+    final rows = await txn.query(
+      'sale_cart_override',
+      columns: ['id'],
+      where:
+          'company_id = ? AND operation_fingerprint = ? '
+          'AND consumed_at IS NULL AND granted_at >= ?',
+      whereArgs: [companyId, fingerprint, cutoff],
+      orderBy: 'granted_at DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    final updated = await txn.update(
+      'sale_cart_override',
+      {'consumed_at': nowUtc.millisecondsSinceEpoch},
+      where: 'id = ? AND consumed_at IS NULL',
+      whereArgs: [rows.first['id']],
+    );
+    return updated == 1;
+  }
+
   Future<void> _createPendingActionFingerprintIndex(Database db) async {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_pending_actions_attempt_fingerprint
       ON pending_actions(company_id, type, operation_fingerprint, status)
+    ''');
+  }
+
+  /// Autorizaciones de un encargado para iniciar una venta NUEVA con el mismo
+  /// contenido que un intento sin resolver. De un solo uso y con caducidad.
+  Future<void> _createSaleCartOverrideTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_cart_override (
+        id TEXT PRIMARY KEY,
+        company_id TEXT NOT NULL,
+        operation_fingerprint TEXT NOT NULL,
+        granted_by_user_id TEXT,
+        granted_by_role TEXT,
+        note TEXT,
+        granted_at INTEGER NOT NULL,
+        consumed_at INTEGER
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sale_cart_override_lookup
+      ON sale_cart_override(company_id, operation_fingerprint, consumed_at)
     ''');
   }
 
@@ -720,6 +806,10 @@ class OfflineStore {
   /// inmediato sin impedir que el mismo cliente compre lo mismo más tarde.
   static const Duration sameCartBlockWindow = Duration(minutes: 30);
 
+  /// Validez de una autorización del encargado para vender el mismo contenido
+  /// mientras el intento anterior sigue sin resolver.
+  static const Duration sameCartOverrideWindow = Duration(minutes: 10);
+
   /// Duradero: es un INTENTO, no una venta. Un resultado remoto desconocido
   /// exige resolución supervisada y nunca lo ejecuta el worker genérico.
   ///
@@ -747,12 +837,14 @@ class OfflineStore {
 
       // 2) El MISMO carrito tiene un intento RECIENTE sin resolver. Se bloquea
       //    solo esa repetición accidental (doble toque, reintento inmediato).
-      //    Pasada la ventana, el mismo carrito vuelve a venderse con normalidad:
-      //    dos ventas legítimas iguales son un caso real del POS y una huella
-      //    igual NO demuestra por sí sola un doble cobro.
+      //    Excepción: si un encargado autorizó una venta NUEVA (un solo uso y
+      //    con caducidad), se consume la autorización y se permite. La venta
+      //    nueva lleva su propio `clientRequestId`: el intento original NO se
+      //    reenvía ni se modifica.
+      //    Pasada la ventana, el mismo carrito vuelve a venderse sin trámite.
       if (fingerprint.isNotEmpty) {
-        final cutoff = DateTime.now()
-            .toUtc()
+        final nowUtc = DateTime.now().toUtc();
+        final cutoff = nowUtc
             .subtract(sameCartBlockWindow)
             .millisecondsSinceEpoch;
         final sameCart = await txn.query('pending_actions', columns: ['id'],
@@ -768,7 +860,15 @@ class OfflineStore {
           ],
           limit: 1);
         if (sameCart.isNotEmpty) {
-          throw StateError('Ya hay un cobro sin confirmar con este mismo contenido. Verifica su resultado en el centro de recuperación antes de cobrar de nuevo.');
+          final authorized = await _consumeSameCartOverrideInTxn(
+            txn,
+            companyId: attempt.companyId!,
+            fingerprint: fingerprint,
+            nowUtc: nowUtc,
+          );
+          if (!authorized) {
+            throw StateError('Ya hay un cobro sin confirmar con este mismo contenido. Verifica su resultado, o pide al encargado que autorice una venta nueva.');
+          }
         }
       }
 
