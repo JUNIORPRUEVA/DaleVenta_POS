@@ -794,6 +794,8 @@ model Company {
   telemetryOutbox                  TelemetryOutbox[]
   guardianIncidents                GuardianIncident[]
   guardianQuota                    GuardianCompanyQuota?
+  guardianMachineCredentials       GuardianMachineCredential[]
+  guardianEnrollmentCodes          GuardianEnrollmentCode[]
 
   @@index([status])
   @@index([licenseStatus])
@@ -4526,8 +4528,62 @@ model GuardianAlertAttempt {
   @@map("guardian_alert_attempts")
 }
 
-/// Latido de los workers de Guardian.
+/// Credencial de maquina (servidor a servidor) para ingesta de telemetria.
 ///
+/// La clave en claro NUNCA se guarda: solo su SHA-256. La empresa se resuelve
+/// SIEMPRE por esta credencial, jamas por el cuerpo de la peticion, de modo que
+/// una instalacion no puede declarar incidentes de otra empresa.
+model GuardianMachineCredential {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  label      String    @db.VarChar(120)
+  /// SHA-256 hexadecimal de la clave entregada al cliente.
+  keyHash    String    @unique @map("key_hash") @db.VarChar(64)
+  /// Prefijo publico (8 caracteres) para identificar la credencial en soporte.
+  keyPrefix  String    @map("key_prefix") @db.VarChar(12)
+  /// Identificador de la instalacion que usa la credencial (no sensible).
+  installId  String?   @map("install_id") @db.VarChar(120)
+  scopes     Json      @default("[]")
+  enabled    Boolean   @default(true)
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, enabled])
+  @@map("guardian_machine_credentials")
+}
+
+/// Código de enrolamiento de instalación (POS de escritorio, móvil).
+///
+/// Permite que una instalación obtenga su propia credencial de máquina sin
+/// incrustar ningún secreto compartido en el instalador ni reutilizar un JWT de
+/// usuario. El código es de un solo uso (o de usos acotados), caduca y es
+/// revocable; la credencial resultante también caduca y es revocable.
+model GuardianEnrollmentCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  /// SHA-256 hexadecimal del código. El código en claro nunca se almacena.
+  codeHash   String    @unique @map("code_hash") @db.VarChar(64)
+  codePrefix String    @map("code_prefix") @db.VarChar(12)
+  label      String    @db.VarChar(120)
+  maxUses    Int       @default(1) @map("max_uses")
+  uses       Int       @default(0)
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, expiresAt])
+  @@map("guardian_enrollment_codes")
+}
+
+/// Latido de los workers de Guardian.///
 /// Permite que el watchdog independiente detecte un worker detenido incluso
 /// cuando la cola esta vacia (sin latido no hay forma de distinguir "sin
 /// trabajo" de "proceso muerto").
