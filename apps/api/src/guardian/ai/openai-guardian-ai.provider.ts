@@ -1,14 +1,17 @@
 import { GuardianDiagnosisVerdict } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import {
   GuardianAiError,
   GuardianAiProvider,
   GuardianAiRequest,
+  GuardianAiResponseDiagnostic,
   GuardianAiResult,
   GuardianEvidenceRef,
 } from './guardian-ai.provider';
 import {
   buildUntrustedEvidenceBlock,
 } from './guardian.ai.sanitizer';
+import { GUARDIAN_AI_DEFAULT_MAX_TOKENS } from './guardian.ai.runtime';
 
 const SYSTEM_PROMPT = [
   'Eres un ingeniero de confiabilidad que diagnostica incidentes de un POS.',
@@ -46,31 +49,173 @@ function createSemaphore(max: number) {
   return { acquire, release, limit };
 }
 
-/** Extrae el primer objeto JSON de una respuesta (tolera vallas de código). */
-export function extractJsonObject(raw: string): any {
-  const text = String(raw ?? '').trim();
-  if (!text) throw new Error('respuesta vacía');
+/** Resultado estructurado del análisis de la respuesta del proveedor. */
+export type GuardianJsonParseResult =
+  | { ok: true; value: unknown; fenced: boolean }
+  | { ok: false; reason: 'EMPTY' | 'NO_JSON' | 'TRUNCATED'; fenced: boolean };
 
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
-  const candidates = [fenced?.[1], text].filter((value): value is string => Boolean(value));
+/** Vallas de código: ```json ... ``` o ``` ... ``` */
+function fencedBody(text: string): string | null {
+  const match = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Detecta un objeto/array JSON estructuralmente incompleto.
+ *
+ * Sirve para distinguir «el proveedor cortó la respuesta» (fin de tokens,
+ * JSON abierto) de «el proveedor devolvió texto que no es JSON». Se ignora lo
+ * que aparezca dentro de cadenas y sus escapes.
+ */
+export function looksTruncatedJson(raw: string): boolean {
+  const text = String(raw ?? '');
+  const start = text.indexOf('{');
+  if (start < 0) return false;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{' || char === '[') depth += 1;
+    else if (char === '}' || char === ']') depth -= 1;
+  }
+  return depth !== 0 || inString;
+}
+
+/**
+ * Parsea la respuesta del proveedor sin lanzar.
+ *
+ * Tolera JSON puro, JSON con texto alrededor y JSON dentro de vallas de código.
+ * Devolve el motivo exacto del fallo: `EMPTY` (sin contenido), `TRUNCATED`
+ * (estructura abierta, típico de `finish_reason=length`) o `NO_JSON` (texto
+ * libre). No inventa ni completa campos.
+ */
+export function parseGuardianJson(raw: string): GuardianJsonParseResult {
+  const text = String(raw ?? '').trim();
+  if (!text) return { ok: false, reason: 'EMPTY', fenced: false };
+
+  const fenced = fencedBody(text);
+  const candidates = [fenced, text].filter((value): value is string => Boolean(value));
+  let sawObjectStart = false;
 
   for (const candidate of candidates) {
     const direct = candidate.trim();
+    if (!direct) continue;
     try {
-      return JSON.parse(direct);
+      return { ok: true, value: JSON.parse(direct), fenced: Boolean(fenced) };
     } catch {
       const start = direct.indexOf('{');
+      if (start < 0) continue;
+      sawObjectStart = true;
       const end = direct.lastIndexOf('}');
-      if (start >= 0 && end > start) {
+      if (end > start) {
         try {
-          return JSON.parse(direct.slice(start, end + 1));
+          return { ok: true, value: JSON.parse(direct.slice(start, end + 1)), fenced: Boolean(fenced) };
         } catch {
           // se sigue probando
         }
       }
     }
   }
-  throw new Error('respuesta sin JSON válido');
+
+  if (sawObjectStart && looksTruncatedJson(fenced ?? text)) {
+    return { ok: false, reason: 'TRUNCATED', fenced: Boolean(fenced) };
+  }
+  return { ok: false, reason: 'NO_JSON', fenced: Boolean(fenced) };
+}
+
+/**
+ * Compatibilidad: extrae el primer objeto JSON o lanza.
+ * Preferir `parseGuardianJson` cuando haga falta distinguir el motivo.
+ */
+export function extractJsonObject(raw: string): any {
+  const result = parseGuardianJson(raw);
+  if (!result.ok) {
+    throw new Error(result.reason === 'TRUNCATED' ? 'respuesta con JSON incompleto' : 'respuesta sin JSON válido');
+  }
+  return result.value;
+}
+
+/** Campos obligatorios del diagnóstico. Sin ellos no hay diagnóstico válido. */
+export const GUARDIAN_DIAGNOSIS_REQUIRED_FIELDS = [
+  'verdict',
+  'confidence',
+  'summary',
+  'explanation',
+] as const;
+
+export type GuardianSchemaCheck =
+  | { ok: true }
+  | { ok: false; missing: string[]; invalid: string[] };
+
+/**
+ * Valida el esquema mínimo del diagnóstico sin inventar valores.
+ *
+ * - Obligatorios: `verdict`, `confidence`, `summary`, `explanation`.
+ * - Opcionales tipados: `impact`, `causeCategory`, `nextSteps`, `evidenceRefs`.
+ *
+ * Un texto vacío en `summary` o `explanation` cuenta como ausente: el contrato
+ * prohíbe rellenarlos con contenido inventado.
+ */
+export function validateDiagnosisPayload(parsed: unknown): GuardianSchemaCheck {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, missing: [...GUARDIAN_DIAGNOSIS_REQUIRED_FIELDS], invalid: ['root'] };
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const present = (key: string) => record[key] !== undefined && record[key] !== null;
+  const nonEmptyString = (key: string) =>
+    typeof record[key] === 'string' && String(record[key]).trim().length > 0;
+
+  const missing: string[] = [];
+  const invalid: string[] = [];
+
+  for (const key of GUARDIAN_DIAGNOSIS_REQUIRED_FIELDS) {
+    if (!present(key)) missing.push(key);
+  }
+
+  if (present('verdict') && typeof record.verdict !== 'string') invalid.push('verdict');
+  if (present('confidence') && !Number.isFinite(Number(record.confidence))) invalid.push('confidence');
+  if (present('summary') && !nonEmptyString('summary')) invalid.push('summary');
+  if (present('explanation') && !nonEmptyString('explanation')) invalid.push('explanation');
+  if (present('nextSteps') && !Array.isArray(record.nextSteps)) invalid.push('nextSteps');
+  if (present('evidenceRefs') && !Array.isArray(record.evidenceRefs)) invalid.push('evidenceRefs');
+  if (present('impact') && typeof record.impact !== 'string') invalid.push('impact');
+  if (present('causeCategory') && typeof record.causeCategory !== 'string') invalid.push('causeCategory');
+
+  return missing.length > 0 || invalid.length > 0 ? { ok: false, missing, invalid } : { ok: true };
+}
+
+/** Metadatos seguros de una respuesta (sin contenido crudo). */
+export function describeAiContent(
+  raw: string,
+  finishReason: string | null,
+  maxTokens: number | null,
+): GuardianAiResponseDiagnostic {
+  const text = String(raw ?? '').trim();
+  return {
+    finishReason,
+    contentLength: text.length,
+    contentSha256: text
+      ? createHash('sha256').update(text).digest('hex').slice(0, 16)
+      : null,
+    startsWithJson: /^[[{]/.test(text),
+    // Solo tiene sentido con un objeto/array presente: el texto libre no es
+    // «JSON balanceado», es ausencia de JSON.
+    jsonBalanced: text.includes('{') && !looksTruncatedJson(text),
+    fenced: /```(?:json)?\s*[\s\S]*?```/i.test(text),
+    missingFields: [],
+    invalidFields: [],
+    maxTokens,
+  };
 }
 
 /**
@@ -140,10 +285,15 @@ export class OpenAiGuardianAiProvider implements GuardianAiProvider {
     const base = {
       model,
       temperature: 0,
-      max_tokens: this.options.maxTokens ?? 900,
+      max_tokens: this.options.maxTokens ?? GUARDIAN_AI_DEFAULT_MAX_TOKENS,
       response_format: { type: 'json_object' as const },
     };
     return this.adapter === 'deepseek' ? { ...base, reasoning_effort: 'none' } : base;
+  }
+
+  /** `max_tokens` efectivo de la petición: se registra en los metadatos. */
+  get maxTokens(): number {
+    return this.options.maxTokens ?? GUARDIAN_AI_DEFAULT_MAX_TOKENS;
   }
 
   isConfigured(): boolean {
@@ -202,18 +352,72 @@ export class OpenAiGuardianAiProvider implements GuardianAiProvider {
         );
       }
 
-      const body: any = await response.json();
-      const raw = String(body?.choices?.[0]?.message?.content ?? '{}');
-
-      let parsed: any;
+      // El sobre HTTP debe ser JSON; un 2xx con cuerpo no JSON tampoco se
+      // arregla reintentando, así que se clasifica como respuesta inválida.
+      let body: any;
       try {
-        parsed = extractJsonObject(raw);
+        body = await response.json();
       } catch {
         throw new GuardianAiError(
           'AI_INVALID_RESPONSE',
-          'el proveedor devolvió una respuesta que no es JSON utilizable',
+          'el proveedor devolvió un cuerpo HTTP que no es JSON',
+          { diagnostic: describeAiContent('', null, this.maxTokens) },
         );
       }
+
+      const choice = body?.choices?.[0];
+      const finishReason =
+        typeof choice?.finish_reason === 'string' ? (choice.finish_reason as string) : null;
+      const raw = String(choice?.message?.content ?? '');
+      const maxTokens = this.maxTokens;
+      const diagnostic = describeAiContent(raw, finishReason, maxTokens);
+
+      // 1. Contenido vacío: no hay nada que interpretar.
+      if (!raw.trim()) {
+        throw new GuardianAiError(
+          'AI_INVALID_RESPONSE',
+          `el proveedor devolvió una respuesta vacía (finish_reason=${finishReason ?? 'n/a'})`,
+          { diagnostic },
+        );
+      }
+
+      // 2. Parseo estructurado: distingue truncamiento de «no es JSON».
+      const parseResult = parseGuardianJson(raw);
+      if (!parseResult.ok) {
+        const truncated =
+          parseResult.reason === 'TRUNCATED' || finishReason === 'length';
+        if (truncated) {
+          throw new GuardianAiError(
+            'AI_OUTPUT_TRUNCATED',
+            `el proveedor cortó la respuesta antes de cerrar el JSON (finish_reason=${finishReason ?? 'n/a'}, max_tokens=${maxTokens})`,
+            { diagnostic },
+          );
+        }
+        throw new GuardianAiError(
+          'AI_INVALID_RESPONSE',
+          'el proveedor devolvió una respuesta que no es JSON utilizable',
+          { diagnostic },
+        );
+      }
+
+      // 3. Esquema obligatorio: nunca se rellenan campos ausentes con valores
+      //    inventados; se reporta el fallo y no se reintenta.
+      const schema = validateDiagnosisPayload(parseResult.value);
+      if (!schema.ok) {
+        throw new GuardianAiError(
+          'AI_SCHEMA_INVALID',
+          [
+            'el JSON del proveedor no cumple el esquema de diagnóstico',
+            schema.missing.length ? `faltan: ${schema.missing.join(', ')}` : null,
+            schema.invalid.length ? `inválidos: ${schema.invalid.join(', ')}` : null,
+          ]
+            .filter(Boolean)
+            .join('; '),
+          { diagnostic: { ...diagnostic, missingFields: schema.missing, invalidFields: schema.invalid } },
+        );
+      }
+
+      const parsed: any = parseResult.value;
 
       const verdict = this.normalizeVerdict(parsed?.verdict);
       const evidenceRefs: GuardianEvidenceRef[] = Array.isArray(parsed?.evidenceRefs)

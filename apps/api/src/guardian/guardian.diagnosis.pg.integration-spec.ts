@@ -8,7 +8,7 @@ import { GuardianIngestService } from './guardian.ingest.service';
 import { GuardianQuotaService } from './guardian.quota.service';
 import { GuardianToolsService } from './guardian.tools.service';
 import { GuardianDiagnosisService } from './guardian.diagnosis.service';
-import { GuardianAiProvider, GuardianAiRequest, GuardianAiResult } from './ai/guardian-ai.provider';
+import { GuardianAiProvider, GuardianAiRequest, GuardianAiResult, GuardianAiError } from './ai/guardian-ai.provider';
 import { MockGuardianAiProvider } from './ai/mock-guardian-ai.provider';
 import { GuardianIngestEventDto } from './dto/guardian-ingest.dto';
 
@@ -169,6 +169,60 @@ describeOnPg('Guardian diagnóstico sobre PostgreSQL real', () => {
     });
     expect(failedDiagnosis).toBeTruthy();
     expect(failedDiagnosis!.error).toContain('IA no disponible');
+  }, 60_000);
+
+  it('Fase 5A: un fallo no reintentable no se reprograma ni se vuelve a facturar', async () => {
+    // Simula lo observado en UAT: HTTP 2xx con salida no utilizable.
+    const analyze = jest.fn(async (_request: GuardianAiRequest): Promise<GuardianAiResult> => {
+      throw new GuardianAiError('AI_OUTPUT_TRUNCATED', 'el proveedor cortó la respuesta', {
+        diagnostic: {
+          finishReason: 'length',
+          contentLength: 812,
+          contentSha256: 'abcdef0123456789',
+          startsWithJson: true,
+          jsonBalanced: false,
+          fenced: false,
+          missingFields: [],
+          invalidFields: [],
+          maxTokens: 1600,
+        },
+      });
+    });
+    const truncatedProvider: GuardianAiProvider = {
+      name: 'deepseek',
+      isConfigured: () => true,
+      analyze,
+    };
+    const truncatedDiagnosis = new GuardianDiagnosisService(prisma as any, tools, truncatedProvider);
+
+    const outcome = await ingest.ingestBatch({ companyId: company.id, events: [event()] });
+    const incidentId = outcome.results[0].incidentId!;
+
+    const result = await truncatedDiagnosis.diagnose(incidentId);
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'PROVIDER_OUTPUT_INVALID',
+      retryable: false,
+      errorCode: 'AI_OUTPUT_TRUNCATED',
+    });
+    // Exactamente una llamada al proveedor: sin reintento automático.
+    expect(analyze).toHaveBeenCalledTimes(1);
+
+    const stored = await prisma.guardianIncident.findUniqueOrThrow({ where: { id: incidentId } });
+    expect(stored.processingState).toBe('FAILED');
+    // Fuera de la cola: no puede volver a llamarse a la IA en horas.
+    expect(stored.nextDiagnosisAt.getTime()).toBeGreaterThan(Date.now() + 60 * 60 * 1000);
+
+    const failedDiagnosis = await prisma.guardianDiagnosis.findFirst({
+      where: { incidentId, status: 'FAILED' },
+    });
+    expect(failedDiagnosis).toBeTruthy();
+    expect(failedDiagnosis!.error).toContain('cortó la respuesta');
+    // Metadatos seguros persistidos, sin contenido crudo del proveedor.
+    expect(failedDiagnosis!.error).toContain('[meta finish=length');
+    expect(failedDiagnosis!.error).toContain('sha=abcdef0123456789');
+    const traced = failedDiagnosis!.toolCalls as Array<{ tool: string }>;
+    expect(traced.some((entry) => entry.tool === 'ai_response')).toBe(true);
   }, 60_000);
 
   it('rechaza consultas SQL fuera de la lista permitida', async () => {

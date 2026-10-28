@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { resolveGuardianConfig } from './guardian.config';
 import {
   GUARDIAN_AI_PROVIDER,
+  GuardianAiError,
   GuardianAiProvider,
   GuardianAiRequest,
   GuardianToolCallTrace,
@@ -20,6 +21,8 @@ import { GuardianToolsService } from './guardian.tools.service';
 
 const MAX_BACKOFF_MS = 30 * 60_000;
 const BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Aplazamiento de un incidente con fallo irreversible: fuera de la cola. */
+const TERMINAL_DEFER_MS = BUDGET_WINDOW_MS;
 
 @Injectable()
 export class GuardianDiagnosisService {
@@ -186,32 +189,46 @@ export class GuardianDiagnosisService {
     } catch (error) {
       const attempts = incident.diagnosisAttempts;
       const maxAttempts = config.diagnosisMaxAttempts;
+      const aiError = error instanceof GuardianAiError ? error : null;
+      // Un fallo determinista (respuesta vacía, JSON truncado, esquema
+      // incompleto o proveedor sin credenciales) NO se reintenta: repetiría la
+      // misma llamada facturable con la misma entrada y el mismo resultado.
+      const deterministic = aiError !== null && aiError.retryable === false;
       const providerRetryAfterMs = Number(
         (error as { retryAfterMs?: number } | null)?.retryAfterMs ?? 0,
       );
-      const backoffMs = Math.min(
-        MAX_BACKOFF_MS,
-        Math.max(
-          Number.isFinite(providerRetryAfterMs) ? providerRetryAfterMs : 0,
-          60_000 * Math.pow(2, Math.max(0, attempts - 1)),
-        ),
-      );
-      const message = error instanceof Error ? error.message : String(error);
+      const backoffMs = deterministic
+        ? TERMINAL_DEFER_MS
+        : Math.min(
+            MAX_BACKOFF_MS,
+            Math.max(
+              Number.isFinite(providerRetryAfterMs) ? providerRetryAfterMs : 0,
+              60_000 * Math.pow(2, Math.max(0, attempts - 1)),
+            ),
+          );
+      const baseMessage = error instanceof Error ? error.message : String(error);
+      // Metadatos seguros de la respuesta (sin contenido crudo del proveedor).
+      const meta = aiError?.diagnosticSummary ?? '';
+      const message = [baseMessage, meta].filter(Boolean).join(' ').slice(0, 600);
+      const trace: GuardianToolCallTrace | null =
+        meta.length > 0
+          ? { tool: 'ai_response', status: 'error', detail: meta.slice(0, 300) }
+          : null;
 
       await this.prisma.$transaction([
         this.prisma.guardianDiagnosis.update({
           where: { id: diagnosis.id },
           data: {
             status: GuardianDiagnosisStatus.FAILED,
-            error: message.slice(0, 600),
-            toolCalls: toolCalls as unknown as Prisma.InputJsonValue,
+            error: message,
+            toolCalls: [...toolCalls, ...(trace ? [trace] : [])] as unknown as Prisma.InputJsonValue,
           },
         }),
         this.prisma.guardianIncident.update({
           where: { id: incidentId },
           data: {
             processingState:
-              attempts >= maxAttempts
+              deterministic || attempts >= maxAttempts
                 ? GuardianProcessingState.FAILED
                 : GuardianProcessingState.PENDING,
             nextDiagnosisAt: new Date(Date.now() + backoffMs),
@@ -219,8 +236,16 @@ export class GuardianDiagnosisService {
         }),
       ]);
 
-      this.logger.warn(`Diagnóstico reprogramado incident=${incidentId} attempts=${attempts} error=${message}`);
-      return { ok: false as const, reason: 'PROVIDER_ERROR' };
+      this.logger.warn(
+        `Diagnóstico ${deterministic ? 'descartado (no reintentable)' : 'reprogramado'} incident=${incidentId} attempts=${attempts}` +
+          `${aiError ? ` codigo=${aiError.code}` : ''} error=${baseMessage}${meta ? ` ${meta}` : ''}`,
+      );
+      return {
+        ok: false as const,
+        reason: deterministic ? ('PROVIDER_OUTPUT_INVALID' as const) : ('PROVIDER_ERROR' as const),
+        retryable: !deterministic,
+        errorCode: aiError?.code ?? null,
+      };
     }
   }
 

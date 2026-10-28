@@ -220,7 +220,17 @@ describe('OpenAiGuardianAiProvider con adaptador deepseek', () => {
 
   it('un veredicto desconocido se degrada a INSUFFICIENT', async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse(deepseekAnswer(JSON.stringify({ verdict: 'SEGURO', confidence: 0.9, evidenceRefs: [] }))),
+      jsonResponse(
+        deepseekAnswer(
+          JSON.stringify({
+            verdict: 'SEGURO',
+            confidence: 0.9,
+            summary: 'resumen',
+            explanation: 'explicación',
+            evidenceRefs: [],
+          }),
+        ),
+      ),
     ) as unknown as typeof fetch;
 
     const provider = new OpenAiGuardianAiProvider({ apiKey: 'clave-uat', adapter: 'deepseek' });

@@ -1,6 +1,12 @@
 import { Logger, Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { GuardianIngestController } from './guardian.ingest.controller';
+import { GuardianEnrollmentController } from './guardian.enrollment.controller';
+import { GuardianEnrollmentService } from './guardian.enrollment.service';
+import { GuardianMachineController } from './guardian.machine.controller';
+import { GuardianMachineGuard } from './guardian.machine.guard';
+import { GuardianMachineService } from './guardian.machine.service';
+import { GuardianTelemetryBridgeService } from './telemetry/guardian.telemetry.bridge.service';
 import { GuardianAdminController } from './guardian.admin.controller';
 import { GuardianWebhookController } from './guardian.webhook.controller';
 import { GuardianPlatformController } from './guardian.platform.controller';
@@ -57,6 +63,8 @@ export function createGuardianAiProvider() {
   imports: [NotificationsModule],
   controllers: [
     GuardianIngestController,
+    GuardianEnrollmentController,
+    GuardianMachineController,
     GuardianAdminController,
     GuardianWebhookController,
     GuardianPlatformController,
@@ -64,6 +72,10 @@ export function createGuardianAiProvider() {
   providers: [
     GuardianQuotaService,
     GuardianIngestService,
+    GuardianEnrollmentService,
+    GuardianMachineService,
+    GuardianMachineGuard,
+    GuardianTelemetryBridgeService,
     GuardianIncidentsService,
     GuardianBackendCaptureService,
     GuardianToolsService,

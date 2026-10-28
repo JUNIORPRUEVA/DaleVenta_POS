@@ -64,7 +64,16 @@ export type GuardianAiRuntime = {
 };
 
 export const GUARDIAN_AI_DEFAULT_TIMEOUT_MS = 20_000;
-export const GUARDIAN_AI_DEFAULT_MAX_TOKENS = 900;
+/**
+ * Tope de tokens de salida por diagnóstico.
+ *
+ * Justificación (Fase 5A): el contrato de respuesta pide `summary` (600),
+ * `impact` (600), `explanation` (4 000), hasta 8 `nextSteps` y hasta 20
+ * `evidenceRefs`; con 900 el JSON se cortaba a mitad y llegaba con HTTP 2xx
+ * pero sin cerrar. 1 600 deja margen para el peor caso realista sin disparar el
+ * coste. Se puede ajustar por entorno con `GUARDIAN_AI_MAX_TOKENS` (64..8192).
+ */
+export const GUARDIAN_AI_DEFAULT_MAX_TOKENS = 1_600;
 export const GUARDIAN_AI_DEFAULT_MAX_CONCURRENCY = 2;
 
 export const GUARDIAN_DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com/v1';

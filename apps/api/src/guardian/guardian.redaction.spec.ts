@@ -43,6 +43,24 @@ describe('Guardian redaction', () => {
     expect(JSON.stringify(clean)).not.toContain('4111111111111111');
   });
 
+  it('redacta credenciales embebidas en el texto del error', () => {
+    // Caso detectado en UAT: los errores de ORM arrastran parámetros de la
+    // sentencia y ahí viajaba una contraseña en claro.
+    const raw =
+      'Fallo con usuario cliente@ejemplo.com y token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abcdefghijkl ' +
+      'password=SuperSecreta1 clave: 0traClave token=abc123 api_key=xyz789';
+
+    const clean = redactText(raw);
+    expect(clean).not.toContain('SuperSecreta1');
+    expect(clean).not.toContain('0traClave');
+    expect(clean).not.toContain('abc123');
+    expect(clean).not.toContain('xyz789');
+    expect(clean).not.toContain('cliente@ejemplo.com');
+    expect(clean).toContain('[redacted]');
+    expect(clean).toContain('[email]');
+    expect(clean).toContain('[token]');
+  });
+
   it('acota profundidad, claves y longitud', () => {
     const deep = { a: { b: { c: { d: 'muy profundo' } } } };
     const clean = redactContext(deep) as any;

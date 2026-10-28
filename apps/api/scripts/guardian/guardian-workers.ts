@@ -81,9 +81,12 @@ async function main() {
       await beat('alerts', alertOutcome?.processed ?? 0);
       await beat('diagnosis', diagnosisOutcome?.processed ?? 0);
 
-      if (alertOutcome && (alertOutcome.processed > 0 || alertOutcome.failed > 0)) {
+      if (
+        alertOutcome &&
+        (alertOutcome.processed > 0 || alertOutcome.failed > 0 || (alertOutcome.deferred ?? 0) > 0)
+      ) {
         logger.log(
-          `alertas procesadas=${alertOutcome.processed} enviadas=${alertOutcome.sent} fallidas=${alertOutcome.failed}`,
+          `alertas procesadas=${alertOutcome.processed} enviadas=${alertOutcome.sent} fallidas=${alertOutcome.failed} esperando-diagnostico=${alertOutcome.deferred ?? 0}`,
         );
       }
       if (diagnosisOutcome && diagnosisOutcome.processed > 0) {

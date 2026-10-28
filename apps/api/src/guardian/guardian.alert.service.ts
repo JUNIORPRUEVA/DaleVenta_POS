@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   GuardianAlertState,
+  GuardianDiagnosisStatus,
   GuardianSeverity,
   Prisma,
 } from '@prisma/client';
@@ -275,18 +276,38 @@ export class GuardianAlertService {
           ? baseDedupeKey
           : `${baseDedupeKey}:${hashRecipient(recipient).slice(0, 12)}`;
 
-      const alert = await this.prisma.guardianAlert.create({
-        data: {
-          incidentId: incident.id,
-          channel: primary?.name ?? 'none',
-          recipientHash: hashRecipient(recipient),
-          recipientNumber: recipient,
-          dedupeKey,
-          kind: 'initial',
-          state: GuardianAlertState.PENDING,
-          nextAttemptAt: scheduledFor,
-        },
-      });
+      let alert: { id: string };
+      try {
+        alert = await this.prisma.guardianAlert.create({
+          data: {
+            incidentId: incident.id,
+            channel: primary?.name ?? 'none',
+            recipientHash: hashRecipient(recipient),
+            recipientNumber: recipient,
+            dedupeKey,
+            kind: 'initial',
+            state: GuardianAlertState.PENDING,
+            nextAttemptAt: scheduledFor,
+          },
+        });
+      } catch (error) {
+        // Carrera entre dos workers planificando el mismo incidente: la clave
+        // única de `dedupeKey` garantiza exactamente una alerta inicial.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          const concurrent = await this.prisma.guardianAlert.findFirst({
+            where: { incidentId: incident.id, kind: 'initial' },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+          });
+          return {
+            created: false,
+            alertId: concurrent?.id,
+            skipped: 'ALREADY_QUEUED',
+            severity,
+          };
+        }
+        throw error;
+      }
       firstAlertId = firstAlertId ?? alert.id;
     }
 
@@ -304,10 +325,29 @@ export class GuardianAlertService {
   /** Reclama alertas vencidas con compare-and-swap (seguro multi-worker). */
   async claimDue(limit = 10, now = new Date()) {
     const lockExpiry = new Date(now.getTime() - LOCK_TTL_MS);
+    const waitSeconds = resolveGuardianConfig().alertDiagnosisWaitSeconds;
+    const conditions: Prisma.GuardianAlertWhereInput[] = [
+      { OR: [{ lockedAt: null }, { lockedAt: { lt: lockExpiry } }] },
+    ];
+
+    // Fase 4: SEV2/SEV3 esperan al diagnóstico hasta el plazo configurado.
+    // SEV1 nunca se bloquea. La lista de severidades que esperan viene del módulo
+    // de readiness para que la regla viva en un solo lugar.
+    if (waitSeconds > 0) {
+      const deadline = new Date(now.getTime() - waitSeconds * 1000);
+      conditions.push({
+        OR: [
+          { incident: { severity: GuardianSeverity.SEV1 } },
+          { incident: { diagnoses: { some: { status: GuardianDiagnosisStatus.DONE } } } },
+          { incident: { receivedAt: { lte: deadline } } },
+        ],
+      });
+    }
+
     const baseWhere: Prisma.GuardianAlertWhereInput = {
       state: { in: [GuardianAlertState.PENDING, GuardianAlertState.SENDING] },
       nextAttemptAt: { lte: now },
-      OR: [{ lockedAt: null }, { lockedAt: { lt: lockExpiry } }],
+      AND: conditions,
     };
 
     const candidates = await this.prisma.guardianAlert.findMany({
@@ -332,7 +372,9 @@ export class GuardianAlertService {
 
   async processDue(limit = 10, now = new Date()) {
     const config = resolveGuardianConfig();
-    if (!config.alertsEnabled) return { ok: true, enabled: false, processed: 0, sent: 0, failed: 0 };
+    if (!config.alertsEnabled) {
+      return { ok: true, enabled: false, processed: 0, sent: 0, failed: 0, deferred: 0 };
+    }
 
     const alerts = await this.claimDue(limit, now);
     const channels = this.buildChannels();
@@ -350,7 +392,30 @@ export class GuardianAlertService {
       else failed += 1;
     }
 
-    return { ok: true, enabled: true, processed: alerts.length, sent, failed };
+    const deferred = await this.countAwaitingDiagnosis(now).catch(() => 0);
+
+    return { ok: true, enabled: true, processed: alerts.length, sent, failed, deferred };
+  }
+
+  /**
+   * Alertas que ya vencieron pero siguen esperando el diagnóstico.
+   * Solo para observabilidad (no altera el despacho).
+   */
+  async countAwaitingDiagnosis(now = new Date()): Promise<number> {
+    const waitSeconds = resolveGuardianConfig().alertDiagnosisWaitSeconds;
+    if (waitSeconds <= 0) return 0;
+    const deadline = new Date(now.getTime() - waitSeconds * 1000);
+    return this.prisma.guardianAlert.count({
+      where: {
+        state: GuardianAlertState.PENDING,
+        nextAttemptAt: { lte: now },
+        incident: {
+          severity: { in: [GuardianSeverity.SEV2, GuardianSeverity.SEV3] },
+          receivedAt: { gt: deadline },
+          NOT: { diagnoses: { some: { status: GuardianDiagnosisStatus.DONE } } },
+        },
+      },
+    });
   }
 
   private backoffMs(attempts: number) {
@@ -364,6 +429,11 @@ export class GuardianAlertService {
   async attempt(alertId: string, channels?: GuardianAlertChannel[]) {
     const alert = await this.prisma.guardianAlert.findUnique({ where: { id: alertId } });
     if (!alert) return { ok: false as const, reason: 'NOT_FOUND' };
+    // Ya aceptada por el proveedor: un reintento tras un reinicio no debe
+    // reenviar el mensaje (evita duplicados en el cliente final).
+    if (alert.providerMessageId) {
+      return { ok: true as const, reason: 'ALREADY_SENT' };
+    }
 
     const incident = await this.prisma.guardianIncident.findUnique({
       where: { id: alert.incidentId },

@@ -16,6 +16,12 @@ export type GuardianConfig = {
   alertsRecipient: string;
   alertsFallbackEmail: string;
   alertGroupWindowMinutes: number;
+  /**
+   * Espera máxima (segundos) a que el diagnóstico IA termine antes de enviar la
+   * alerta en SEV2/SEV3. `0` desactiva la espera (envío inmediato). SEV1 nunca
+   * espera. Por defecto 90 s.
+   */
+  alertDiagnosisWaitSeconds: number;
   diagnosisMaxAttempts: number;
   /** Presupuesto diario de tokens de IA por empresa (0 = sin límite). */
   aiTokensPerCompanyDay: number;
@@ -53,6 +59,7 @@ export function resolveGuardianConfig(env: NodeJS.ProcessEnv = process.env): Gua
     alertsRecipient: String(env.GUARDIAN_ALERT_RECIPIENT ?? '').trim(),
     alertsFallbackEmail: String(env.GUARDIAN_ALERT_FALLBACK_EMAIL ?? '').trim(),
     alertGroupWindowMinutes: readInt(env.GUARDIAN_ALERT_GROUP_WINDOW_MINUTES, 30, 1, 720),
+    alertDiagnosisWaitSeconds: readInt(env.GUARDIAN_ALERT_DIAGNOSIS_WAIT_SECONDS, 90, 0, 900),
     diagnosisMaxAttempts: readInt(env.GUARDIAN_DIAGNOSIS_MAX_ATTEMPTS, 4, 1, 10),
     aiTokensPerCompanyDay: readInt(env.GUARDIAN_AI_TOKENS_PER_COMPANY_DAY, 200_000, 0, 100_000_000),
     aiMaxConcurrency: readInt(env.GUARDIAN_AI_MAX_CONCURRENCY, 2, 1, 10),

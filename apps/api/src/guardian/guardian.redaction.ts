@@ -16,6 +16,14 @@ const LONG_DIGITS_PATTERN = /\b\d{8,}\b/g;
 const WINDOWS_PATH_PATTERN = /[A-Za-z]:\\[^\s"')]+/g;
 const UNIX_PATH_PATTERN = /\/(?:Users|home|var|opt|srv)\/[^\s"')]+/g;
 
+/**
+ * Credenciales embebidas en texto libre: `password=...`, `clave: ...`,
+ * `token=...`. Un mensaje de error de un ORM suele incluir la sentencia o los
+ * parámetros, y ese es exactamente el caso que no puede llegar a Guardian.
+ */
+const INLINE_SECRET_PATTERN =
+  /\b(password|passwd|pwd|clave|contrasena|contraseña|secret|secreto|token|api[-_]?key|apikey|authorization)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&"'}\])]{2,})/gi;
+
 export const REDACTED = '[redacted]';
 
 /** Redacta un texto libre (mensajes de error, stack, descripciones). */
@@ -24,6 +32,7 @@ export function redactText(input: unknown, maxChars = 20_000): string {
   if (!text) return '';
 
   return text
+    .replace(INLINE_SECRET_PATTERN, (_match, name: string) => `${name}=${REDACTED}`)
     .replace(WINDOWS_PATH_PATTERN, '<ruta>')
     .replace(UNIX_PATH_PATTERN, '<ruta>')
     .replace(JWT_PATTERN, '[token]')

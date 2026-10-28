@@ -116,6 +116,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
         message: exception instanceof Error ? exception.message : message,
         stack,
+        // Metadatos de Prisma sin parámetros de consulta: permiten distinguir
+        // una caída de infraestructura (P1001) de una regla de negocio (P2002).
+        prismaCode: prismaDetails ? String(prismaDetails['code'] ?? '') || null : null,
+        prismaKind: prismaDetails ? String(prismaDetails['kind'] ?? '') || null : null,
       });
     }
 
