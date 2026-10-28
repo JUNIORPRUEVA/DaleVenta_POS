@@ -124,7 +124,11 @@ void main() {
     test('repetir el MISMO carrito mientras sigue sin resolver se bloquea',
         () async {
       await OfflineStore.instance.reserveRemoteSaleAttempt(
-        attempt(requestId: 'req-1', fingerprint: 'carrito-1'),
+        attempt(
+          requestId: 'req-1',
+          fingerprint: 'carrito-1',
+          createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 3)),
+        ),
       );
 
       await expectLater(
@@ -142,8 +146,7 @@ void main() {
     });
 
     test('tras resolver el incidente, el mismo carrito vuelve a permitirse',
-        () async {
-      final action = attempt(requestId: 'req-1', fingerprint: 'carrito-1');
+        () async {      final action = attempt(requestId: 'req-1', fingerprint: 'carrito-1');
       await OfflineStore.instance.reserveRemoteSaleAttempt(action);
 
       // El encargado declara que no se realizó: cierra con rastro.
@@ -168,8 +171,7 @@ void main() {
       expect(unresolved.single.idempotencyKey, 'req-3');
     });
 
-    test('otra empresa con el mismo carrito no se ve afectada', () async {
-      await OfflineStore.instance.reserveRemoteSaleAttempt(
+    test('otra empresa con el mismo carrito no se ve afectada', () async {      await OfflineStore.instance.reserveRemoteSaleAttempt(
         attempt(requestId: 'req-a', fingerprint: 'mismo'),
       );
 
@@ -187,6 +189,74 @@ void main() {
         userId: 'user-b',
       );
       expect(companyB.single.idempotencyKey, 'req-b');
+    });
+  });
+
+  group('dos ventas legítimas iguales', () {
+    test('el mismo carrito de hace días NO se bloquea', () async {
+      // Caso real: el cliente compra lo mismo otro día. Un intento antiguo del
+      // mismo contenido no puede impedirlo.
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(
+          requestId: 'req-hace-dias',
+          fingerprint: 'carrito-repetido',
+          createdAt: DateTime.now().toUtc().subtract(const Duration(days: 21)),
+        ),
+      );
+
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(requestId: 'req-hoy', fingerprint: 'carrito-repetido'),
+      );
+
+      final unresolved = await OfflineStore.instance.listUnresolvedSaleAttempts(
+        companyId: company,
+        userId: user,
+      );
+      expect(
+        unresolved.map((a) => a.idempotencyKey),
+        containsAll(<String>['req-hace-dias', 'req-hoy']),
+      );
+    });
+
+    test('el mismo carrito fuera de la ventana de repetición se permite',
+        () async {
+      final justoFuera = DateTime.now()
+          .toUtc()
+          .subtract(OfflineStore.sameCartBlockWindow + const Duration(minutes: 1));
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(
+          requestId: 'req-antes',
+          fingerprint: 'carrito-igual',
+          createdAt: justoFuera,
+        ),
+      );
+
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(requestId: 'req-despues', fingerprint: 'carrito-igual'),
+      );
+
+      final unresolved = await OfflineStore.instance.countUnresolvedSaleAttempts(
+        companyId: company,
+        userId: user,
+      );
+      expect(unresolved, 2);
+    });
+
+    test('una repetición inmediata del mismo carrito sí se detiene', () async {
+      await OfflineStore.instance.reserveRemoteSaleAttempt(
+        attempt(
+          requestId: 'req-1',
+          fingerprint: 'carrito-igual',
+          createdAt: DateTime.now().toUtc().subtract(const Duration(minutes: 2)),
+        ),
+      );
+
+      await expectLater(
+        OfflineStore.instance.reserveRemoteSaleAttempt(
+          attempt(requestId: 'req-2', fingerprint: 'carrito-igual'),
+        ),
+        throwsA(isA<StateError>()),
+      );
     });
   });
 

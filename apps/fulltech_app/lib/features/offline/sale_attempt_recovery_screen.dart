@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
-import '../../core/auth/token_storage.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/pending_sync_action.dart';
 import '../../core/offline/sale_attempt_audit.dart';
@@ -52,7 +52,7 @@ class _SaleAttemptRecoveryScreenState
       _error = null;
     });
     try {
-      final user = await TokenStorage().getUserSnapshot();
+      final user = await ref.read(tokenStorageProvider).getUserSnapshot();
       final companyId = user?.companyId?.trim();
       final userId = user?.id.trim();
       if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
@@ -162,7 +162,7 @@ class _SaleAttemptRecoveryScreenState
     final note = await _askNote(decision);
     if (note == null || !mounted) return;
 
-    final user = await TokenStorage().getUserSnapshot();
+    final user = await ref.read(tokenStorageProvider).getUserSnapshot();
     if (!mounted) return;
     setState(() => _busy.add(action.id));
     try {

@@ -715,6 +715,11 @@ class OfflineStore {
     });
   }
 
+  /// Ventana durante la cual se considera que un intento del MISMO carrito es
+  /// una repetición accidental. 30 minutos cubre el doble toque y el reintento
+  /// inmediato sin impedir que el mismo cliente compre lo mismo más tarde.
+  static const Duration sameCartBlockWindow = Duration(minutes: 30);
+
   /// Duradero: es un INTENTO, no una venta. Un resultado remoto desconocido
   /// exige resolución supervisada y nunca lo ejecuta el worker genérico.
   ///
@@ -740,12 +745,27 @@ class OfflineStore {
         throw StateError('Este mismo cobro ya está pendiente de verificar. Revisa su resultado antes de volver a cobrar.');
       }
 
-      // 2) El MISMO carrito tiene un intento sin resolver: se bloquea solo esa
-      //    repetición, con independencia de la antigüedad del incidente.
+      // 2) El MISMO carrito tiene un intento RECIENTE sin resolver. Se bloquea
+      //    solo esa repetición accidental (doble toque, reintento inmediato).
+      //    Pasada la ventana, el mismo carrito vuelve a venderse con normalidad:
+      //    dos ventas legítimas iguales son un caso real del POS y una huella
+      //    igual NO demuestra por sí sola un doble cobro.
       if (fingerprint.isNotEmpty) {
+        final cutoff = DateTime.now()
+            .toUtc()
+            .subtract(sameCartBlockWindow)
+            .millisecondsSinceEpoch;
         final sameCart = await txn.query('pending_actions', columns: ['id'],
-          where: 'company_id = ? AND type = ? AND operation_fingerprint = ? AND status = ?',
-          whereArgs: [attempt.companyId, 'sales.attempt', fingerprint, 'requires_action'],
+          where:
+              'company_id = ? AND type = ? AND operation_fingerprint = ? '
+              'AND status = ? AND created_at >= ?',
+          whereArgs: [
+            attempt.companyId,
+            'sales.attempt',
+            fingerprint,
+            'requires_action',
+            cutoff,
+          ],
           limit: 1);
         if (sameCart.isNotEmpty) {
           throw StateError('Ya hay un cobro sin confirmar con este mismo contenido. Verifica su resultado en el centro de recuperación antes de cobrar de nuevo.');

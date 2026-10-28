@@ -204,4 +204,27 @@ describe("SaleAttemptReconciliationService", () => {
 
     await expect(service.reconcile(sinEmpresa, REQUEST_ID)).rejects.toThrow();
   });
+
+  it("corta la consulta masiva con 429 y deja intacto el intento", async () => {
+    const { service, saleFindFirst, writes } = buildHarness();
+    saleFindFirst.mockResolvedValue(null);
+    const prisma = (service as unknown as { prisma: { cashMovement: { findFirst: jest.Mock } } }).prisma;
+    prisma.cashMovement.findFirst = jest.fn().mockResolvedValue(null);
+
+    // 60 consultas legítimas (el límite de la ventana).
+    for (let i = 0; i < 60; i += 1) {
+      await expect(service.reconcile(user, REQUEST_ID)).resolves.toBeTruthy();
+    }
+
+    await expect(service.reconcile(user, REQUEST_ID)).rejects.toMatchObject({
+      status: 429,
+    });
+
+    // Sondear el endpoint nunca escribe nada.
+    expect(writes.saleCreate).not.toHaveBeenCalled();
+    expect(writes.saleUpdate).not.toHaveBeenCalled();
+    expect(writes.saleDelete).not.toHaveBeenCalled();
+    expect(writes.movementCreate).not.toHaveBeenCalled();
+    expect(writes.movementUpdate).not.toHaveBeenCalled();
+  });
 });

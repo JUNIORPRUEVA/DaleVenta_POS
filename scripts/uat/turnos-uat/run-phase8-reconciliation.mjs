@@ -181,6 +181,27 @@ const salePayload = (requestId, productId, price) => ({
   );
   record("sin token responde 401", anon.status === 401, `status=${anon.status}`);
 
+  // Límite de consultas: un sondeo masivo debe cortarse con 429 y no escribir
+  // nada. El intento sigue intacto después del corte.
+  let sawTooMany = false;
+  let attemptsUsed = 0;
+  for (let i = 0; i < 80 && !sawTooMany; i += 1) {
+    attemptsUsed += 1;
+    const burst = await recon(random, cajeroA);
+    if (burst.status === 429) sawTooMany = true;
+  }
+  record(
+    "el sondeo masivo se corta con 429",
+    sawTooMany,
+    `peticiones hasta el corte=${attemptsUsed}`,
+  );
+  const afterLimit = await recon(reqA, adminA);
+  record(
+    "otro usuario de la empresa sigue pudiendo verificar",
+    afterLimit.status === 200 && afterLimit.data?.status === "CONFIRMED",
+    `status=${afterLimit.status} recon=${afterLimit.data?.status}`,
+  );
+
   await prisma.$disconnect();
   const failed = results.filter((r) => !r.ok);
   console.log("\n===== RESUMEN FASE 8 · CONCILIACIÓN (PostgreSQL real) =====");

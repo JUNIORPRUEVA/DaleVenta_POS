@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from "@nestjs/common";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -50,6 +55,18 @@ const MECHANISM = "sale-attempt-reconciliation-v1";
 const MAX_REQUEST_ID_LENGTH = 200;
 const MONEY_EPSILON = 0.005;
 
+/**
+ * Límite de consultas por usuario/empresa.
+ *
+ * El cliente verifica como máximo un puñado de intentos al arrancar, al
+ * reconectar y cuando el usuario pulsa «Verificar». 60 por minuto deja margen de
+ * sobra para un uso legítimo (incluso reintentos manuales) y corta bucles o
+ * sondeos automatizados. Es en memoria, igual que el limitador que ya usa el
+ * updater: suficiente para una instancia y sin infraestructura nueva.
+ */
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+
 const saleSelect = {
   id: true,
   saleDate: true,
@@ -72,6 +89,11 @@ const movementSelect = {
 
 @Injectable()
 export class SaleAttemptReconciliationService {
+  private readonly rateLimitBuckets = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async reconcile(
@@ -80,6 +102,7 @@ export class SaleAttemptReconciliationService {
     expectedTotalSoldRaw?: string,
   ) {
     const companyId = requireTenant(user);
+    this.consumeRateLimit(`${companyId}:${user.id}`);
     const requestId = `${clientRequestId ?? ""}`.trim();
 
     if (!requestId) {
@@ -163,6 +186,39 @@ export class SaleAttemptReconciliationService {
     };
   }
 
+  private consumeRateLimit(key: string) {
+    const now = Date.now();
+    const bucket = this.rateLimitBuckets.get(key);
+
+    if (!bucket || bucket.resetAt <= now) {
+      this.rateLimitBuckets.set(key, {
+        count: 1,
+        resetAt: now + RATE_LIMIT_WINDOW_MS,
+      });
+      this.pruneRateLimitBuckets(now);
+      return;
+    }
+
+    bucket.count += 1;
+    if (bucket.count > RATE_LIMIT_MAX_REQUESTS) {
+      throw new HttpException(
+        {
+          code: "SALE_ATTEMPT_RECONCILIATION_RATE_LIMITED",
+          message:
+            "Demasiadas verificaciones seguidas. Espera un momento: el intento sigue guardado y no se ha repetido ningún cobro.",
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private pruneRateLimitBuckets(now: number) {
+    if (this.rateLimitBuckets.size < 1000) return;
+    for (const [key, bucket] of this.rateLimitBuckets) {
+      if (bucket.resetAt <= now) this.rateLimitBuckets.delete(key);
+    }
+  }
+
   private resolveStatus(
     sale: { isDeleted: boolean; cancelledAt: Date | null } | null,
     movement: unknown,
@@ -204,8 +260,7 @@ export class SaleAttemptReconciliationService {
     }
   }
 
-  private parseMoney(raw?: string): number | null {
-    const text = `${raw ?? ""}`.trim();
+  private parseMoney(raw?: string): number | null {    const text = `${raw ?? ""}`.trim();
     if (!text) return null;
     const value = Number(text);
     return Number.isFinite(value) ? value : null;
