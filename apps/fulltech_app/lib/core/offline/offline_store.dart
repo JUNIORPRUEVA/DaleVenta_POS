@@ -10,6 +10,7 @@ import '../debug/trace_log.dart';
 import '../storage/resilient_local_database.dart';
 import '../storage/local_migration_backup.dart';
 import 'pending_sync_action.dart';
+import 'sale_attempt_audit.dart';
 
 class OfflineStore {
   OfflineStore._({String? databaseFileName})
@@ -27,6 +28,9 @@ class OfflineStore {
   static String get _webPendingKey => UatIdentity.storageKey('ft_db_pending_actions');
   static String get _webOfflineSalesKey =>
       UatIdentity.storageKey('ft_db_offline_sales');
+  static String get _webSaleAttemptAuditKey =>
+      UatIdentity.storageKey('ft_db_sale_attempt_audit');
+  static const int _maxWebAuditEntries = 200;
 
   final String _databaseFileName;
   Database? _database;
@@ -63,7 +67,7 @@ class OfflineStore {
     TraceLog.log('offline_store', 'opening sqlite db path=$_databaseFileName');
     return openResilientLocalDatabase(
       fileName: _databaseFileName,
-      version: 3,
+      version: 4,
       allowInMemoryFallback: false,
       onCreate: (db, version) async {
         await db.execute('''
@@ -91,12 +95,15 @@ class OfflineStore {
             next_attempt_at INTEGER,
             last_attempt_at INTEGER,
             permanent INTEGER NOT NULL DEFAULT 0,
+            operation_fingerprint TEXT,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
           )
         ''');
         await _createOfflineSalesTables(db);
+        await _createSaleAttemptAuditTable(db);
         await _createIndexes(db);
+        await _createPendingActionFingerprintIndex(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         await backupLocalDatabaseBeforeMigration(
@@ -131,6 +138,16 @@ class OfflineStore {
         if (oldVersion < 3) {
           await _createOfflineSalesTables(db);
           await _createIndexes(db);
+        }
+        if (oldVersion < 4) {
+          // Aditivo e idempotente: no toca filas existentes.
+          await _addColumnIfMissing(
+            db,
+            'pending_actions',
+            'operation_fingerprint TEXT',
+          );
+          await _createSaleAttemptAuditTable(db);
+          await _createPendingActionFingerprintIndex(db);
         }
       },
     );
@@ -199,6 +216,51 @@ class OfflineStore {
         FOREIGN KEY (sale_local_id) REFERENCES offline_sales(local_id)
           ON DELETE CASCADE
       )
+    ''');
+  }
+
+  Future<void> _createSaleAttemptAuditTable(Database db) async {
+    // Auditoría APPEND-ONLY de intentos de cobro. Nunca se actualiza ni se
+    // borra: es el rastro que impide que un cobro incierto desaparezca.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_attempt_audit (
+        id TEXT PRIMARY KEY,
+        pending_action_id TEXT NOT NULL,
+        client_request_id TEXT NOT NULL,
+        company_id TEXT,
+        user_id TEXT,
+        decision TEXT NOT NULL,
+        server_status TEXT,
+        guidance TEXT,
+        voided INTEGER NOT NULL DEFAULT 0,
+        sale_id TEXT,
+        total_sold REAL,
+        payment_method TEXT,
+        movement_id TEXT,
+        actor_user_id TEXT,
+        actor_role TEXT,
+        note TEXT,
+        operation_fingerprint TEXT,
+        mechanism TEXT NOT NULL,
+        checked_at INTEGER NOT NULL
+      )
+    ''');
+    // Los índices van DENTRO del creador de la tabla: así las migraciones
+    // antiguas (v1/v2→v3) nunca intentan indexar una tabla inexistente.
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sale_attempt_audit_scope
+      ON sale_attempt_audit(company_id, client_request_id, checked_at)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sale_attempt_audit_action
+      ON sale_attempt_audit(pending_action_id, checked_at)
+    ''');
+  }
+
+  Future<void> _createPendingActionFingerprintIndex(Database db) async {
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_pending_actions_attempt_fingerprint
+      ON pending_actions(company_id, type, operation_fingerprint, status)
     ''');
   }
 
@@ -428,6 +490,7 @@ class OfflineStore {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_webPendingKey);
       await prefs.remove(_webOfflineSalesKey);
+      await prefs.remove(_webSaleAttemptAuditKey);
       return;
     }
 
@@ -436,6 +499,7 @@ class OfflineStore {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_webPendingKey);
       await prefs.remove(_webOfflineSalesKey);
+      await prefs.remove(_webSaleAttemptAuditKey);
       return;
     }
 
@@ -444,6 +508,25 @@ class OfflineStore {
     await db.delete('offline_sale_payments');
     await db.delete('offline_sale_items');
     await db.delete('offline_sales');
+  }
+
+  /// Solo para pruebas: la auditoría de intentos es append-only y NO se borra
+  /// en [clearAll] ni al cambiar de empresa, porque es el rastro que impide que
+  /// un cobro incierto desaparezca.
+  @visibleForTesting
+  Future<void> clearSaleAttemptAuditForTests() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_webSaleAttemptAuditKey);
+      return;
+    }
+    final db = await _dbOrNull();
+    if (db == null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_webSaleAttemptAuditKey);
+      return;
+    }
+    await db.delete('sale_attempt_audit');
   }
 
   Future<void> saveOfflineSaleAtomically({
@@ -632,8 +715,13 @@ class OfflineStore {
     });
   }
 
-  /// Durable intent, not a completed sale. An unknown remote outcome requires
-  /// supervised resolution, never execution by the generic sync worker.
+  /// Duradero: es un INTENTO, no una venta. Un resultado remoto desconocido
+  /// exige resolución supervisada y nunca lo ejecuta el worker genérico.
+  ///
+  /// Aislamiento por operación (no por usuario): se rechaza repetir **la misma**
+  /// operación (mismo `clientRequestId`) o **el mismo carrito** mientras exista
+  /// un intento sin resolver de esa huella. Cualquier venta independiente sigue
+  /// permitida: un incidente antiguo ya no bloquea el POS.
   Future<void> reserveRemoteSaleAttempt(PendingSyncAction attempt) async {
     final db = await _dbOrNull();
     if (db == null) throw StateError('No pudimos guardar el intento de cobro en este equipo. No continúes con el cobro y pide ayuda a soporte.');
@@ -642,18 +730,34 @@ class OfflineStore {
         (attempt.idempotencyKey ?? '').isEmpty || attempt.status != 'requires_action') {
       throw StateError('Faltan datos para comprobar este cobro. Verifica tu sesión y pide ayuda al encargado antes de continuar.');
     }
+    final fingerprint = (attempt.operationFingerprint ?? '').trim();
     await db.transaction((txn) async {
-      final previous = await txn.query('pending_actions', columns: ['id'],
-        where: 'company_id = ? AND user_id = ? AND type = ?',
-        whereArgs: [attempt.companyId, attempt.userId, 'sales.attempt'], limit: 1);
-      if (previous.isNotEmpty) {
-        throw StateError('Existe un cobro pendiente de verificar. Revisa su resultado antes de iniciar otro.');
+      // 1) La MISMA operación ya está reservada: repetirla podría duplicar.
+      final sameOperation = await txn.query('pending_actions', columns: ['id'],
+        where: 'company_id = ? AND idempotency_key = ?',
+        whereArgs: [attempt.companyId, attempt.idempotencyKey], limit: 1);
+      if (sameOperation.isNotEmpty) {
+        throw StateError('Este mismo cobro ya está pendiente de verificar. Revisa su resultado antes de volver a cobrar.');
       }
+
+      // 2) El MISMO carrito tiene un intento sin resolver: se bloquea solo esa
+      //    repetición, con independencia de la antigüedad del incidente.
+      if (fingerprint.isNotEmpty) {
+        final sameCart = await txn.query('pending_actions', columns: ['id'],
+          where: 'company_id = ? AND type = ? AND operation_fingerprint = ? AND status = ?',
+          whereArgs: [attempt.companyId, 'sales.attempt', fingerprint, 'requires_action'],
+          limit: 1);
+        if (sameCart.isNotEmpty) {
+          throw StateError('Ya hay un cobro sin confirmar con este mismo contenido. Verifica su resultado en el centro de recuperación antes de cobrar de nuevo.');
+        }
+      }
+
       await txn.insert('pending_actions', {
         'id': attempt.id, 'type': attempt.type, 'scope': attempt.scope,
         'company_id': attempt.companyId, 'user_id': attempt.userId,
         'terminal_id': attempt.terminalId, 'entity_type': 'sale_attempt',
         'entity_id': attempt.entityId, 'idempotency_key': attempt.idempotencyKey,
+        'operation_fingerprint': fingerprint.isEmpty ? null : fingerprint,
         'payload': jsonEncode(attempt.payload), 'status': 'requires_action',
         'attempts': 0, 'permanent': 0,
         'error': 'No pudimos confirmar el resultado de este cobro. Revisa el historial con el encargado antes de volver a cobrar; conserva el intento original.',
@@ -661,6 +765,153 @@ class OfflineStore {
         'updated_at': attempt.updatedAt.millisecondsSinceEpoch,
       });
     });
+  }
+
+  /// Intentos de cobro SIN resolver del ámbito indicado.
+  Future<List<PendingSyncAction>> listUnresolvedSaleAttempts({
+    String? companyId,
+    String? userId,
+  }) async {
+    final actions = await listPendingActions(
+      limit: 200,
+      companyId: companyId,
+      userId: userId,
+      includeUnscoped: false,
+    );
+    return actions
+        .where(
+          (action) =>
+              action.type == 'sales.attempt' &&
+              action.status == 'requires_action',
+        )
+        .toList(growable: false);
+  }
+
+  Future<int> countUnresolvedSaleAttempts({
+    required String companyId,
+    required String userId,
+  }) async {
+    final actions = await listUnresolvedSaleAttempts(
+      companyId: companyId,
+      userId: userId,
+    );
+    return actions.length;
+  }
+
+  /// Escribe una fila de auditoría. IDEMPOTENTE: repetir la misma comprobación
+  /// no duplica el rastro.
+  Future<void> appendSaleAttemptAudit(SaleAttemptAuditEntry entry) async {
+    final row = entry.toRow();
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_webSaleAttemptAuditKey);
+      final decoded = raw == null || raw.trim().isEmpty
+          ? const <dynamic>[]
+          : jsonDecode(raw);
+      final rows = decoded is List ? decoded : const <dynamic>[];
+      final next = <dynamic>[row, ...rows];
+      if (next.length > _maxWebAuditEntries) {
+        next.removeRange(_maxWebAuditEntries, next.length);
+      }
+      await prefs.setString(_webSaleAttemptAuditKey, jsonEncode(next));
+      return;
+    }
+
+    final db = await _dbOrNull();
+    if (db == null) {
+      throw StateError('No pudimos registrar la evidencia en este equipo. No cierres la incidencia; pide ayuda a soporte.');
+    }
+    await db.insert(
+      'sale_attempt_audit',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// Cierra la incidencia en UNA sola transacción: guarda la evidencia y retira
+  /// el aviso. Si algo falla, no queda ni evidencia huérfana ni intento
+  /// borrado sin rastro (recuperable tras un corte de energía).
+  Future<bool> resolveSaleAttemptAtomically({
+    required String pendingActionId,
+    required SaleAttemptAuditEntry entry,
+  }) async {
+    if (kIsWeb) {
+      await appendSaleAttemptAudit(entry);
+      await removePendingAction(pendingActionId);
+      return true;
+    }
+
+    final db = await _dbOrNull();
+    if (db == null) {
+      throw StateError('No pudimos cerrar la incidencia en este equipo. Pide ayuda a soporte; no borres los datos de la aplicación.');
+    }
+
+    var removed = false;
+    await db.transaction((txn) async {
+      await txn.insert(
+        'sale_attempt_audit',
+        entry.toRow(),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      final deleted = await txn.delete(
+        'pending_actions',
+        where: 'id = ?',
+        whereArgs: [pendingActionId],
+      );
+      removed = deleted > 0;
+    });
+    return removed;
+  }
+
+  /// Historial de auditoría del ámbito. Solo lectura.
+  Future<List<SaleAttemptAuditEntry>> listSaleAttemptAudit({
+    String? companyId,
+    String? clientRequestId,
+    int limit = 100,
+  }) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_webSaleAttemptAuditKey);
+      final decoded = raw == null || raw.trim().isEmpty
+          ? const <dynamic>[]
+          : jsonDecode(raw);
+      final rows = decoded is List ? decoded : const <dynamic>[];
+      return rows
+          .whereType<Map>()
+          .map((row) => row.cast<String, Object?>())
+          .where(
+            (row) =>
+                (companyId == null ||
+                    row['company_id']?.toString() == companyId) &&
+                (clientRequestId == null ||
+                    row['client_request_id']?.toString() ==
+                        clientRequestId),
+          )
+          .take(limit)
+          .map(SaleAttemptAuditEntry.fromRow)
+          .toList(growable: false);
+    }
+
+    final db = await _dbOrNull();
+    if (db == null) return const [];
+    final where = <String>[];
+    final whereArgs = <Object?>[];
+    if (companyId != null) {
+      where.add('company_id = ?');
+      whereArgs.add(companyId);
+    }
+    if (clientRequestId != null) {
+      where.add('client_request_id = ?');
+      whereArgs.add(clientRequestId);
+    }
+    final rows = await db.query(
+      'sale_attempt_audit',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'checked_at DESC',
+      limit: limit,
+    );
+    return rows.map(SaleAttemptAuditEntry.fromRow).toList(growable: false);
   }
 
   Future<void> _saveOfflineSaleInPreferences({
@@ -1106,6 +1357,7 @@ class OfflineStore {
         'entity_type': action.entityType,
         'entity_id': action.entityId,
         'idempotency_key': action.idempotencyKey,
+        'operation_fingerprint': action.operationFingerprint,
         'payload': jsonEncode(action.payload),
         'status': action.status,
         'attempts': action.attempts,
@@ -1220,6 +1472,7 @@ class OfflineStore {
             'entityType': row['entity_type'],
             'entityId': row['entity_id'],
             'idempotencyKey': row['idempotency_key'],
+            'operationFingerprint': row['operation_fingerprint'],
             'payload': jsonDecode((row['payload'] ?? '{}').toString()),
             'status': row['status'],
             'attempts': row['attempts'],

@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
+import 'package:daleventa_pos/core/offline/sale_attempt_audit.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_reconciliation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 const _requestId = '3f2c1b90-8b1e-4b39-9b0e-6c2f5d7a1e44';
 
@@ -22,6 +22,7 @@ PendingSyncAction _attempt({
     userId: 'user-1',
     idempotencyKey: idempotencyKey,
     entityId: _requestId,
+    operationFingerprint: 'fingerprint-1',
     payload: payload,
     status: 'requires_action',
     attempts: 0,
@@ -32,30 +33,40 @@ PendingSyncAction _attempt({
   );
 }
 
-Map<String, dynamic> _response(String status, {Map<String, dynamic>? sale}) {
+Map<String, dynamic> _response(
+  String status, {
+  Map<String, dynamic>? sale,
+  String? guidance,
+  bool voided = false,
+}) {
   return {
     'status': status,
     'clientRequestId': _requestId,
     'retryAllowed': false,
+    'assertsPaymentReceived': false,
+    'guidance': guidance,
+    'voided': voided,
     'sale': sale,
     'movement': null,
   };
 }
 
+/// Registro de lo que el reconciliador pidió persistir.
+class _Recorder {
+  final List<SaleAttemptDecision> decisions = [];
+  final List<String> resolvedIds = [];
+  final List<String?> notes = [];
+  final List<String?> roles = [];
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
-    SaleAttemptReconciler.resetInFlightForTests();
-  });
-
-  final removed = <String>[];
+  late _Recorder recorder;
 
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
     SaleAttemptReconciler.resetInFlightForTests();
-    removed.clear();
+    recorder = _Recorder();
   });
 
   SaleAttemptReconciler build({
@@ -70,9 +81,36 @@ void main() {
       lookup: lookup,
       listAttempts: ({companyId, userId}) async =>
           pending ?? <PendingSyncAction>[],
-      removeAttempt: (String id) async {
-        removed.add(id);
-      },
+      recordEvidence:
+          ({
+            required action,
+            required clientRequestId,
+            required result,
+            required decision,
+            actorUserId,
+            actorRole,
+            note,
+          }) async {
+            recorder.decisions.add(decision);
+            recorder.notes.add(note);
+            recorder.roles.add(actorRole);
+          },
+      resolveAttempt:
+          ({
+            required action,
+            required clientRequestId,
+            required result,
+            required decision,
+            actorUserId,
+            actorRole,
+            note,
+          }) async {
+            recorder.decisions.add(decision);
+            recorder.notes.add(note);
+            recorder.roles.add(actorRole);
+            recorder.resolvedIds.add(action.id);
+            return true;
+          },
     );
   }
 
@@ -83,7 +121,10 @@ void main() {
         calls++;
         expect(id, _requestId);
         expect(expected, 1305.0);
-        return _response('CONFIRMED', sale: {'id': 'sale-1', 'totalSold': 1305.0});
+        return _response(
+          'CONFIRMED',
+          sale: {'id': 'sale-1', 'totalSold': 1305.0},
+        );
       },
     );
 
@@ -91,11 +132,32 @@ void main() {
 
     expect(result?.status, SaleAttemptReconciliationStatus.confirmed);
     expect(result?.saleId, 'sale-1');
-    expect(removed, ['sales.attempt:$_requestId']);
+    expect(recorder.resolvedIds, ['sales.attempt:$_requestId']);
+    expect(recorder.decisions.single, SaleAttemptDecision.autoConfirmed);
     expect(calls, 1);
   });
 
-  test('DEFINITIVELY_REJECTED también retira el aviso', () async {
+  test('una venta anulada se registra como anulada, no como rechazo', () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response(
+        'CONFIRMED',
+        sale: {'id': 'sale-2', 'totalSold': 1305.0},
+        guidance: 'REGISTERED_THEN_VOIDED',
+        voided: true,
+      ),
+    );
+
+    final result = await reconciler.verify(_attempt());
+
+    expect(result?.voided, isTrue);
+    expect(result?.guidance, 'REGISTERED_THEN_VOIDED');
+    expect(
+      recorder.decisions.single,
+      SaleAttemptDecision.autoRegisteredThenVoided,
+    );
+  });
+
+  test('DEFINITIVELY_REJECTED NO retira el aviso sin revisión', () async {
     final reconciler = build(
       lookup: (String id, double? expected) async =>
           _response('DEFINITIVELY_REJECTED'),
@@ -107,7 +169,8 @@ void main() {
       result?.status,
       SaleAttemptReconciliationStatus.definitivelyRejected,
     );
-    expect(removed, isNotEmpty);
+    expect(recorder.resolvedIds, isEmpty);
+    expect(recorder.decisions.single, SaleAttemptDecision.keptInconclusive);
   });
 
   test('NOT_FOUND conserva el intento intacto', () async {
@@ -118,7 +181,8 @@ void main() {
     final result = await reconciler.verify(_attempt());
 
     expect(result?.status, SaleAttemptReconciliationStatus.notFound);
-    expect(removed, isEmpty);
+    expect(recorder.resolvedIds, isEmpty);
+    expect(recorder.decisions.single, SaleAttemptDecision.keptInconclusive);
   });
 
   test('UNKNOWN conserva el intento intacto', () async {
@@ -129,7 +193,7 @@ void main() {
     final result = await reconciler.verify(_attempt());
 
     expect(result?.status, SaleAttemptReconciliationStatus.unknown);
-    expect(removed, isEmpty);
+    expect(recorder.resolvedIds, isEmpty);
   });
 
   test('sin respuesta del backend no se resuelve nada', () async {
@@ -140,7 +204,8 @@ void main() {
     final result = await reconciler.verify(_attempt());
 
     expect(result, isNull);
-    expect(removed, isEmpty);
+    expect(recorder.resolvedIds, isEmpty);
+    expect(recorder.decisions, isEmpty);
   });
 
   test('un error de red no resuelve nada', () async {
@@ -152,7 +217,7 @@ void main() {
     final result = await reconciler.verify(_attempt());
 
     expect(result, isNull);
-    expect(removed, isEmpty);
+    expect(recorder.resolvedIds, isEmpty);
   });
 
   test('quita el prefijo sales.attempt: antes de consultar', () async {
@@ -235,10 +300,79 @@ void main() {
 
     await reconciler.verify(_attempt());
 
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('sales.reconciliation.evidence.v1');
-    expect(raw, isNotNull);
-    expect(raw, contains('sale-9'));
-    expect(raw, contains('sale-attempt-reconciliation-v1'));
+    // La evidencia se pide SIEMPRE, y el aviso solo se retira después.
+    expect(recorder.decisions, isNotEmpty);
+    expect(recorder.resolvedIds, isNotEmpty);
+  });
+
+  test('la resolución manual del encargado cierra con rastro del actor',
+      () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response('NOT_FOUND'),
+    );
+
+    final resolved = await reconciler.resolveManually(
+      action: _attempt(),
+      decision: SaleAttemptDecision.manualNotPerformed,
+      actorUserId: 'owner-1',
+      actorRole: 'OWNER',
+      note: 'Se revisó el datáfono: no hubo cargo.',
+    );
+
+    expect(resolved, isTrue);
+    expect(recorder.resolvedIds, ['sales.attempt:$_requestId']);
+    expect(recorder.roles.single, 'OWNER');
+    expect(recorder.notes.single, contains('no hubo cargo'));
+  });
+
+  test('escalar a revisión deja el intento intacto', () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response('UNKNOWN'),
+    );
+
+    final resolved = await reconciler.resolveManually(
+      action: _attempt(),
+      decision: SaleAttemptDecision.manualEscalated,
+      actorUserId: 'owner-1',
+      actorRole: 'OWNER',
+    );
+
+    expect(resolved, isFalse);
+    expect(recorder.resolvedIds, isEmpty);
+    expect(recorder.decisions.single, SaleAttemptDecision.manualEscalated);
+  });
+
+  test('una decisión automática no se puede aplicar a mano', () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response('CONFIRMED'),
+    );
+
+    final resolved = await reconciler.resolveManually(
+      action: _attempt(),
+      decision: SaleAttemptDecision.autoConfirmed,
+    );
+
+    expect(resolved, isFalse);
+    expect(recorder.resolvedIds, isEmpty);
+  });
+
+  test('declarar dinero recibido cierra la incidencia con decisión propia',
+      () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response('UNKNOWN'),
+    );
+
+    final resolved = await reconciler.resolveManually(
+      action: _attempt(),
+      decision: SaleAttemptDecision.manualMoneyReceived,
+      actorRole: 'OWNER',
+      note: 'El comprobante del banco coincide con el importe.',
+    );
+
+    expect(resolved, isTrue);
+    expect(
+      recorder.decisions.single,
+      SaleAttemptDecision.manualMoneyReceived,
+    );
   });
 }

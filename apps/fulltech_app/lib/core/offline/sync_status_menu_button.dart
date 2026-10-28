@@ -9,6 +9,7 @@ import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
 import '../errors/user_safe_error_text.dart';
 import '../errors/operation_error_message.dart';
+import '../../features/offline/sale_attempt_recovery_screen.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
 import 'sync_queue_service.dart';
@@ -389,6 +390,41 @@ class _SyncStatusPopover extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 34,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  // Se captura el navegador ANTES de cerrar el popover: usar el
+                  // `context` del menú después de cerrarlo apunta a un contexto
+                  // ya desmontado.
+                  final navigator = Navigator.of(context);
+                  navigator.pop();
+                  navigator.push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SaleAttemptRecoveryScreen(),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1957E6),
+                  side: const BorderSide(color: Color(0xFFCFE0FF)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                icon: const Icon(Icons.health_and_safety_outlined, size: 16),
+                label: const Text(
+                  'Centro de recuperación',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               height: 34,

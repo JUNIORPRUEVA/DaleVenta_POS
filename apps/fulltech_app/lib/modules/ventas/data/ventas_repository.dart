@@ -20,6 +20,7 @@ import '../../../core/models/product_model.dart';
 import '../../../features/catalogo/data/product_pages_loader.dart';
 import '../../../core/offline/offline_emergency_policy.dart';
 import '../../../core/offline/offline_store.dart';
+import '../../../core/offline/sale_attempt_audit.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../../../core/usage/client_telemetry_headers.dart';
@@ -1032,12 +1033,32 @@ class VentasRepository {
       remoteAttemptId = 'sales.attempt:$requestId';
       remoteAttemptCompanyId = actor!.companyId;
       remoteAttemptUserId = actor.id;
+      // Huella del contenido: bloquea repetir ESTE carrito mientras siga sin
+      // resolver, sin impedir ventas independientes.
+      final operationFingerprint = SaleOperationFingerprint.compute(
+        companyId: actor.companyId!,
+        originCashSessionId: originCashSessionId,
+        paymentMethod: (paymentMethod ?? 'cash').trim().toLowerCase(),
+        customerId: normalizedCustomerId,
+        priceListId: normalizedPriceListId,
+        total: (expectedTotalSold ?? _sumItems(capturedItems))
+            .toStringAsFixed(2),
+        items: [
+          for (final item in capturedItems)
+            (
+              productId: item.productId ?? '',
+              qty: item.qty,
+              price: item.priceSoldUnit,
+            ),
+        ],
+      );
       try {
         await _offlineStore.reserveRemoteSaleAttempt(PendingSyncAction(
           id: remoteAttemptId, type: 'sales.attempt', scope: 'sales',
           companyId: actor.companyId, userId: actor.id,
           terminalId: syncIdentity.terminalId, entityId: requestId,
           idempotencyKey: requestId, payload: payload, status: 'requires_action',
+          operationFingerprint: operationFingerprint,
           attempts: 0, createdAt: occurredAt, updatedAt: occurredAt,
         ));
         await _syncQueue.refreshStats();

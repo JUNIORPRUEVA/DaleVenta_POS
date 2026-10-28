@@ -8,6 +8,12 @@ class PendingSyncAction {
   final String? entityType;
   final String? entityId;
   final String? idempotencyKey;
+
+  /// Huella del contenido del cobro (carrito + turno + medio de pago). Sirve
+  /// para impedir que se repita el MISMO cobro mientras siga sin resolver,
+  /// sin bloquear ventas independientes.
+  final String? operationFingerprint;
+
   final Map<String, dynamic> payload;
   final String status;
   final int attempts;
@@ -28,6 +34,7 @@ class PendingSyncAction {
     this.entityType,
     this.entityId,
     this.idempotencyKey,
+    this.operationFingerprint,
     required this.payload,
     required this.status,
     required this.attempts,
@@ -67,6 +74,9 @@ class PendingSyncAction {
             payload['operationId'] ??
             payload['clientRequestId'],
       ),
+      operationFingerprint: cleanString(
+        map['operationFingerprint'] ?? map['operation_fingerprint'],
+      ),
       payload: payload,
       status: (map['status'] ?? 'pending').toString(),
       attempts: (map['attempts'] as num?)?.toInt() ?? 0,
@@ -98,6 +108,7 @@ class PendingSyncAction {
       'entityType': entityType,
       'entityId': entityId,
       'idempotencyKey': idempotencyKey,
+      'operationFingerprint': operationFingerprint,
       'payload': payload,
       'status': status,
       'attempts': attempts,
@@ -117,6 +128,7 @@ class PendingSyncAction {
     String? entityType,
     String? entityId,
     String? idempotencyKey,
+    String? operationFingerprint,
     String? status,
     int? attempts,
     String? error,
@@ -137,6 +149,7 @@ class PendingSyncAction {
       entityType: entityType ?? this.entityType,
       entityId: entityId ?? this.entityId,
       idempotencyKey: idempotencyKey ?? this.idempotencyKey,
+      operationFingerprint: operationFingerprint ?? this.operationFingerprint,
       payload: payload,
       status: status ?? this.status,
       attempts: attempts ?? this.attempts,

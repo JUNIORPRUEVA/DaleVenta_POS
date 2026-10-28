@@ -1,10 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../debug/trace_log.dart';
 import 'pending_sync_action.dart';
+import 'sale_attempt_audit.dart';
 
 /// Conciliación de intentos de cobro (`sales.attempt`) con resultado incierto.
 ///
@@ -16,17 +14,16 @@ import 'pending_sync_action.dart';
 /// ese `clientRequestId` y actúa así:
 ///
 ///  - CONFIRMED            → el cobro YA está registrado: se guarda evidencia y
-///                           se retira el aviso. No se reenvía nada.
-///  - DEFINITIVELY_REJECTED→ la operación existe pero fue anulada/borrada: se
-///                           guarda evidencia y se retira el aviso.
+///                           se retira el aviso, en una sola transacción.
 ///  - NOT_FOUND / UNKNOWN  → se conserva el intento INTACTO (payload, id y
 ///                           fecha). Nunca se reintenta ni se descarta solo.
+///  - Anulado tras registrar → evidencia con `voided`, no es un cobro rechazado.
 ///
 /// Reglas de seguridad:
 ///  - Jamás reenvía el cobro ni crea ventas.
 ///  - Nunca limpia `pending_actions` en bloque.
 ///  - Una sola verificación en vuelo por intento (evita carreras).
-///  - La evidencia se conserva incluso cuando el aviso se retira.
+///  - La evidencia va a SQLite y sobrevive incluso cuando el aviso se retira.
 enum SaleAttemptReconciliationStatus {
   confirmed,
   definitivelyRejected,
@@ -125,6 +122,38 @@ typedef SaleAttemptLookup =
       double? expectedTotalSold,
     );
 
+/// Guarda evidencia en SQLite (append-only).
+typedef SaleAttemptEvidenceWriter =
+    Future<void> Function({
+      required PendingSyncAction action,
+      required String clientRequestId,
+      required SaleAttemptReconciliationResult result,
+      required SaleAttemptDecision decision,
+      String? actorUserId,
+      String? actorRole,
+      String? note,
+    });
+
+/// Evidencia + retirada del aviso en UNA transacción.
+typedef SaleAttemptResolver =
+    Future<bool> Function({
+      required PendingSyncAction action,
+      required String clientRequestId,
+      required SaleAttemptReconciliationResult result,
+      required SaleAttemptDecision decision,
+      String? actorUserId,
+      String? actorRole,
+      String? note,
+    });
+
+/// Lectura del historial de auditoría local.
+typedef SaleAttemptAuditReader =
+    Future<List<SaleAttemptAuditEntry>> Function({
+      String? companyId,
+      String? clientRequestId,
+      int limit,
+    });
+
 class SaleAttemptReconciliationSummary {
   const SaleAttemptReconciliationSummary({
     this.confirmed = 0,
@@ -146,7 +175,9 @@ class SaleAttemptReconciler {
   SaleAttemptReconciler({
     required this.lookup,
     required this.listAttempts,
-    required this.removeAttempt,
+    required this.recordEvidence,
+    required this.resolveAttempt,
+    this.readAudit,
   });
 
   final SaleAttemptLookup lookup;
@@ -158,14 +189,18 @@ class SaleAttemptReconciler {
   })
   listAttempts;
 
-  /// Retira un intento CONCILIADO. Nunca se usa para limpiar en bloque.
-  final Future<void> Function(String id) removeAttempt;
+  /// Escribe la evidencia. Nunca borra nada.
+  final SaleAttemptEvidenceWriter recordEvidence;
+
+  /// Guarda evidencia y retira el aviso de forma atómica.
+  final SaleAttemptResolver resolveAttempt;
+
+  /// Historial de auditoría local (opcional, para el centro de recuperación).
+  final SaleAttemptAuditReader? readAudit;
 
   /// Mecanismo y versión, para dejar rastro de qué concilió cada intento.
   static const String mechanism = 'sale-attempt-reconciliation-v1';
   static const String attemptType = 'sales.attempt';
-  static const String _evidenceKey = 'sales.reconciliation.evidence.v1';
-  static const int _maxEvidenceEntries = 50;
 
   /// Verificaciones en curso: evita que dos pasadas simultáneas toquen el mismo
   /// intento (doble toque del botón, arranque + reconexión, etc.).
@@ -180,7 +215,7 @@ class SaleAttemptReconciler {
   ) async {
     if (action.type != attemptType) return null;
 
-    final requestId = _requestIdOf(action);
+    final requestId = requestIdOf(action);
     if (requestId.isEmpty) {
       TraceLog.log('reconcile', 'attempt.sin.identificador id=${action.id}');
       return null;
@@ -211,16 +246,28 @@ class SaleAttemptReconciler {
         return null;
       }
 
-      await _recordEvidence(action, requestId, result);
-
-      if (result.status.resolvesAttempt) {
-        // Evidencia guardada ANTES de retirar el aviso: nunca se pierde el rastro.
-        await removeAttempt(action.id);
+      final decision = _decisionFor(result);
+      if (decision.resolvesIncident) {
+        // Evidencia + retirada del aviso en una sola transacción: si el equipo
+        // se apaga a mitad, no queda ni rastro sin intento ni intento sin
+        // rastro (el intento sigue y se vuelve a verificar).
+        await resolveAttempt(
+          action: action,
+          clientRequestId: requestId,
+          result: result,
+          decision: decision,
+        );
         TraceLog.log(
           'reconcile',
           'attempt.resuelto id=${action.id} status=${result.status.name}',
         );
       } else {
+        await recordEvidence(
+          action: action,
+          clientRequestId: requestId,
+          result: result,
+          decision: decision,
+        );
         TraceLog.log(
           'reconcile',
           'attempt.conservado id=${action.id} status=${result.status.name}',
@@ -230,6 +277,51 @@ class SaleAttemptReconciler {
     } finally {
       _inFlight.remove(action.id);
     }
+  }
+
+  /// Resolución MANUAL autorizada (dueño/encargado).
+  ///
+  /// Nunca ejecuta ni anula cobros: solo cierra la incidencia local con rastro
+  /// y la decisión declarada. `manualEscalated` deja el intento intacto.
+  Future<bool> resolveManually({
+    required PendingSyncAction action,
+    required SaleAttemptDecision decision,
+    String? actorUserId,
+    String? actorRole,
+    String? note,
+  }) async {
+    if (action.type != attemptType) return false;
+    if (!decision.isManual) return false;
+    final requestId = requestIdOf(action);
+    if (requestId.isEmpty) return false;
+
+    final result = SaleAttemptReconciliationResult(
+      status: SaleAttemptReconciliationStatus.unknown,
+      clientRequestId: requestId,
+    );
+
+    if (!decision.resolvesIncident) {
+      await recordEvidence(
+        action: action,
+        clientRequestId: requestId,
+        result: result,
+        decision: decision,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+        note: note,
+      );
+      return false;
+    }
+
+    return resolveAttempt(
+      action: action,
+      clientRequestId: requestId,
+      result: result,
+      decision: decision,
+      actorUserId: actorUserId,
+      actorRole: actorRole,
+      note: note,
+    );
   }
 
   /// Verifica todos los intentos pendientes del ámbito indicado.
@@ -269,7 +361,39 @@ class SaleAttemptReconciler {
     );
   }
 
-  String _requestIdOf(PendingSyncAction action) {
+  Future<List<SaleAttemptAuditEntry>> history({
+    String? companyId,
+    String? clientRequestId,
+    int limit = 50,
+  }) async {
+    final reader = readAudit;
+    if (reader == null) return const [];
+    return reader(
+      companyId: companyId,
+      clientRequestId: clientRequestId,
+      limit: limit,
+    );
+  }
+
+  static SaleAttemptDecision _decisionFor(
+    SaleAttemptReconciliationResult result,
+  ) {
+    switch (result.status) {
+      case SaleAttemptReconciliationStatus.confirmed:
+        return result.voided
+            ? SaleAttemptDecision.autoRegisteredThenVoided
+            : SaleAttemptDecision.autoConfirmed;
+      case SaleAttemptReconciliationStatus.definitivelyRejected:
+        // Hoy el backend no emite este estado; si algún día lo emite, la
+        // evidencia se guarda pero el intento NO se retira sin revisión.
+        return SaleAttemptDecision.keptInconclusive;
+      case SaleAttemptReconciliationStatus.notFound:
+      case SaleAttemptReconciliationStatus.unknown:
+        return SaleAttemptDecision.keptInconclusive;
+    }
+  }
+
+  static String requestIdOf(PendingSyncAction action) {
     final fromKey = (action.idempotencyKey ?? '').trim();
     if (fromKey.isNotEmpty) {
       // El id local puede venir como `sales.attempt:<requestId>`.
@@ -288,41 +412,5 @@ class SaleAttemptReconciler {
     if (raw is num) return raw.toDouble();
     return double.tryParse(raw.toString());
   }
-
-  Future<void> _recordEvidence(
-    PendingSyncAction action,
-    String requestId,
-    SaleAttemptReconciliationResult result,
-  ) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_evidenceKey);
-      final decoded = raw == null || raw.trim().isEmpty
-          ? const <dynamic>[]
-          : jsonDecode(raw);
-      final rows = decoded is List ? decoded : const <dynamic>[];
-      final entry = <String, dynamic>{
-        'actionId': action.id,
-        'clientRequestId': requestId,
-        'status': result.status.name,
-        'checkedAt': DateTime.now().toUtc().toIso8601String(),
-        'createdAt': action.createdAt.toUtc().toIso8601String(),
-        'saleId': result.saleId,
-        'totalSold': result.totalSold,
-        'paymentMethod': result.paymentMethod,
-        'movementId': result.movementId,
-        'guidance': result.guidance,
-        'voided': result.voided,
-        'mechanism': mechanism,
-      };
-      final next = <dynamic>[entry, ...rows];
-      if (next.length > _maxEvidenceEntries) {
-        next.removeRange(_maxEvidenceEntries, next.length);
-      }
-      await prefs.setString(_evidenceKey, jsonEncode(next));
-    } catch (error, stack) {
-      // La evidencia es importante, pero no debe impedir resolver el aviso.
-      debugPrint('[reconcile] no se pudo guardar evidencia: $error\n$stack');
-    }
-  }
 }
+
