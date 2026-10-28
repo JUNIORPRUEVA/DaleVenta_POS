@@ -22,6 +22,17 @@ import { PrismaService } from "../prisma/prisma.service";
  *    pago y el estado real de la fila.
  */
 
+/**
+ * Resultado del REGISTRO de la operación. Nada más.
+ *
+ * Deliberadamente NO dice si el dinero entró ni si fue rechazado:
+ *  - Una venta registrada y luego anulada sigue siendo un registro CONFIRMADO
+ *    (el cobro llegó al servidor una vez y se deshizo por el camino correcto).
+ *    Por eso la anulación se informa aparte en `voided`, no como rechazo.
+ *  - `DEFINITIVELY_REJECTED` queda reservado para cuando exista una prueba
+ *    almacenada de rechazo. Hoy no existe esa fuente, así que el servicio no lo
+ *    emite nunca; está en el contrato para no cerrar la puerta a ese dato.
+ */
 export type SaleAttemptReconciliationStatus =
   | "CONFIRMED"
   | "DEFINITIVELY_REJECTED"
@@ -30,6 +41,7 @@ export type SaleAttemptReconciliationStatus =
 
 export type SaleAttemptReconciliationGuidance =
   | "ALREADY_REGISTERED"
+  | "REGISTERED_THEN_VOIDED"
   | "VOIDED_ON_SERVER"
   | "NOT_REGISTERED"
   | "INCONCLUSIVE";
@@ -105,15 +117,21 @@ export class SaleAttemptReconciliationService {
 
     const status = this.resolveStatus(sale, movement);
     const recordedTotal = sale ? this.toNumber(sale.totalSold) : null;
+    const voided = sale ? this.isVoided(sale) : false;
 
     return {
       status,
-      guidance: this.resolveGuidance(status),
+      guidance: this.resolveGuidance(status, voided),
       mechanism: MECHANISM,
       clientRequestId: requestId,
       checkedAt: new Date().toISOString(),
       /** El servidor nunca autoriza a repetir el cobro desde esta consulta. */
       retryAllowed: false,
+      /** Una fila de venta no demuestra que el dinero entró (transferencia,
+       *  crédito o anulación posterior). Nunca se afirma aquí. */
+      assertsPaymentReceived: false,
+      voided,
+      voidReason: sale ? this.voidReason(sale) : null,
       expectedTotalSold: expectedTotal,
       recordedTotalSold: recordedTotal,
       matchesExpected:
@@ -149,22 +167,36 @@ export class SaleAttemptReconciliationService {
     sale: { isDeleted: boolean; cancelledAt: Date | null } | null,
     movement: unknown,
   ): SaleAttemptReconciliationStatus {
-    if (sale) {
-      const voided = sale.isDeleted === true || sale.cancelledAt !== null;
-      return voided ? "DEFINITIVELY_REJECTED" : "CONFIRMED";
-    }
+    /*
+     * Si la fila existe, la operación SE REGISTRÓ, aunque después se anule o se
+     * borre: eso es un hecho del registro, no un rechazo. La anulación se
+     * informa en `voided` / `voidReason` para que el cliente no la confunda con
+     * un cobro fallido.
+     */
+    if (sale) return "CONFIRMED";
     if (movement) return "UNKNOWN";
     return "NOT_FOUND";
   }
 
+  private isVoided(sale: { isDeleted: boolean; cancelledAt: Date | null }) {
+    return sale.isDeleted === true || sale.cancelledAt !== null;
+  }
+
+  private voidReason(
+    sale: { isDeleted: boolean; cancelledAt: Date | null },
+  ): "DELETED" | "CANCELLED" | null {
+    if (sale.cancelledAt !== null) return "CANCELLED";
+    if (sale.isDeleted === true) return "DELETED";
+    return null;
+  }
+
   private resolveGuidance(
     status: SaleAttemptReconciliationStatus,
+    voided: boolean,
   ): SaleAttemptReconciliationGuidance {
     switch (status) {
       case "CONFIRMED":
-        return "ALREADY_REGISTERED";
-      case "DEFINITIVELY_REJECTED":
-        return "VOIDED_ON_SERVER";
+        return voided ? "REGISTERED_THEN_VOIDED" : "ALREADY_REGISTERED";
       case "UNKNOWN":
         return "INCONCLUSIVE";
       default:

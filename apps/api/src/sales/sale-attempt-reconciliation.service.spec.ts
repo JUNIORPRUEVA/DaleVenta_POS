@@ -63,6 +63,8 @@ describe("SaleAttemptReconciliationService", () => {
     expect(result.status).toBe("CONFIRMED");
     expect(result.guidance).toBe("ALREADY_REGISTERED");
     expect(result.retryAllowed).toBe(false);
+    expect(result.assertsPaymentReceived).toBe(false);
+    expect(result.voided).toBe(false);
     expect(result.matchesExpected).toBe(true);
     expect(result.recordedTotalSold).toBe(1305);
     expect(result.sale?.id).toBe("sale-1");
@@ -89,18 +91,21 @@ describe("SaleAttemptReconciliationService", () => {
     );
   });
 
-  it("DEFINITIVELY_REJECTED cuando la venta fue borrada", async () => {
+  it("CONFIRMED y marcar anulada cuando la venta fue borrada: el registro ocurrió", async () => {
     const { service, saleFindFirst } = buildHarness();
     saleFindFirst.mockResolvedValue({ ...confirmedSale, isDeleted: true });
 
     const result = await service.reconcile(user, REQUEST_ID);
 
-    expect(result.status).toBe("DEFINITIVELY_REJECTED");
-    expect(result.guidance).toBe("VOIDED_ON_SERVER");
+    // Borrar la fila NO convierte el cobro en rechazado: se registró una vez.
+    expect(result.status).toBe("CONFIRMED");
+    expect(result.guidance).toBe("REGISTERED_THEN_VOIDED");
+    expect(result.voided).toBe(true);
+    expect(result.voidReason).toBe("DELETED");
     expect(result.retryAllowed).toBe(false);
   });
 
-  it("DEFINITIVELY_REJECTED cuando la venta fue anulada, aunque no esté borrada", async () => {
+  it("CONFIRMED y marcar anulada cuando la venta fue cancelada", async () => {
     const { service, saleFindFirst } = buildHarness();
     saleFindFirst.mockResolvedValue({
       ...confirmedSale,
@@ -109,7 +114,9 @@ describe("SaleAttemptReconciliationService", () => {
 
     const result = await service.reconcile(user, REQUEST_ID);
 
-    expect(result.status).toBe("DEFINITIVELY_REJECTED");
+    expect(result.status).toBe("CONFIRMED");
+    expect(result.voided).toBe(true);
+    expect(result.voidReason).toBe("CANCELLED");
     expect(result.sale?.cancelledAt).toBe("2026-10-08T10:00:00.000Z");
   });
 

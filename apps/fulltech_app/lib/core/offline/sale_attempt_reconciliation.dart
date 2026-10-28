@@ -64,6 +64,8 @@ class SaleAttemptReconciliationResult {
     this.paymentMethod,
     this.matchesExpected,
     this.movementId,
+    this.guidance,
+    this.voided = false,
   });
 
   final SaleAttemptReconciliationStatus status;
@@ -73,6 +75,14 @@ class SaleAttemptReconciliationResult {
   final String? paymentMethod;
   final bool? matchesExpected;
   final String? movementId;
+
+  /// Motivo que da el servidor (`ALREADY_REGISTERED`, `REGISTERED_THEN_VOIDED`,
+  /// `NOT_REGISTERED`, `INCONCLUSIVE`). Se guarda como evidencia.
+  final String? guidance;
+
+  /// La venta se registró pero después fue anulada o borrada. Sigue siendo un
+  /// registro confirmado: NO es un cobro rechazado.
+  final bool voided;
 
   static SaleAttemptReconciliationResult? fromJson(Map<String, dynamic> json) {
     final status = SaleAttemptReconciliationStatus.parse(
@@ -95,6 +105,8 @@ class SaleAttemptReconciliationResult {
           ? json['matchesExpected'] as bool
           : null,
       movementId: movementMap?['id']?.toString(),
+      guidance: json['guidance']?.toString(),
+      voided: json['voided'] == true,
     );
   }
 
@@ -299,6 +311,8 @@ class SaleAttemptReconciler {
         'totalSold': result.totalSold,
         'paymentMethod': result.paymentMethod,
         'movementId': result.movementId,
+        'guidance': result.guidance,
+        'voided': result.voided,
         'mechanism': mechanism,
       };
       final next = <dynamic>[entry, ...rows];
