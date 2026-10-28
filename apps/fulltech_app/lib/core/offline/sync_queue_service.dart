@@ -13,6 +13,7 @@ import '../errors/operation_error_message.dart';
 import '../errors/user_safe_error_text.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
+import 'sale_attempt_reconciliation_providers.dart';
 
 typedef SyncQueueHandler = Future<void> Function(Map<String, dynamic> payload);
 typedef SyncScopeResolver = Future<OfflineSyncScope?> Function();
@@ -121,6 +122,34 @@ final syncQueueServiceProvider =
 final syncQueueBootstrapProvider = Provider<void>((ref) {
   Future<void>.microtask(() {
     ref.read(syncQueueServiceProvider.notifier).start();
+  });
+  /*
+   * Conciliación de intentos de cobro con resultado incierto.
+   *
+   * Se ejecuta al arrancar y NO reenvía ningún cobro: solo pregunta al backend
+   * si ese `clientRequestId` ya está registrado. Si la consulta no es
+   * concluyente, el intento se queda intacto.
+   */
+  Future<void>.microtask(() async {
+    try {
+      final user = await TokenStorage().getUserSnapshot();
+      final summary = await ref
+          .read(saleAttemptReconcilerProvider)
+          .syncPendingAttempts(
+            companyId: user?.companyId,
+            userId: user?.id,
+          );
+      if (summary.hasChanges) {
+        await ref.read(syncQueueServiceProvider.notifier).refreshStats();
+      }
+    } catch (error, stack) {
+      TraceLog.log('reconcile', 'barrido inicial fallido: $error');
+      assert(() {
+        // ignore: avoid_print
+        print('[reconcile] barrido inicial fallido: $error\n$stack');
+        return true;
+      }());
+    }
   });
 });
 

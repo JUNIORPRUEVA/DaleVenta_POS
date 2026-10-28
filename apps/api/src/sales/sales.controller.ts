@@ -24,12 +24,17 @@ import {
   CreateSaleReturnDto,
 } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
+import { ReconcileSaleAttemptQueryDto } from "./dto/reconcile-sale-attempt.query.dto";
 import { SalesRangeQueryDto } from "./dto/sales-range-query.dto";
+import { SaleAttemptReconciliationService } from "./sale-attempt-reconciliation.service";
 
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller("sales")
 export class SalesController {
-  constructor(private readonly sales: SalesService) {}
+  constructor(
+    private readonly sales: SalesService,
+    private readonly saleAttempts: SaleAttemptReconciliationService,
+  ) {}
 
   @Get()
   listMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
@@ -69,6 +74,27 @@ export class SalesController {
   summaryMine(@Req() req: Request, @Query() query: SalesRangeQueryDto) {
     const user = req.user as TenantUser;
     return this.sales.summaryMine(user, query.from, query.to, query.customerId);
+  }
+
+  /**
+   * Conciliación de un intento de cobro cuyo resultado quedó sin confirmar.
+   *
+   * ESTRICTAMENTE DE LECTURA: no crea ni modifica ventas, pagos, movimientos ni
+   * turnos. Responde CONFIRMED / DEFINITIVELY_REJECTED / NOT_FOUND / UNKNOWN y
+   * nunca autoriza a repetir el cobro (`retryAllowed: false`).
+   */
+  @Get("attempts/:clientRequestId/reconciliation")
+  reconcileAttempt(
+    @Req() req: Request,
+    @Param("clientRequestId") clientRequestId: string,
+    @Query() query: ReconcileSaleAttemptQueryDto,
+  ) {
+    const user = req.user as TenantUser;
+    return this.saleAttempts.reconcile(
+      user,
+      clientRequestId,
+      query.expectedTotalSold,
+    );
   }
 
   @Post()
