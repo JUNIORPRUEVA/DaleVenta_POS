@@ -1,0 +1,10 @@
+// Identidad de la aplicacion, generada por CMake desde app_identity.h.in.
+//
+// Los valores por defecto son los de produccion. Un build UAT los sustituye
+// para que el ejecutable tenga titulo y mutex propios y pueda convivir con la
+// instalacion real.
+#pragma once
+
+constexpr wchar_t kWindowTitle[] = L"@FULLPOS_WINDOW_TITLE@";
+constexpr wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+constexpr wchar_t kSingleInstanceMutexName[] = L"@FULLPOS_MUTEX_NAME@";

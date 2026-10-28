@@ -11,6 +11,46 @@ set(CMAKE_ERROR_ON_ABSOLUTE_INSTALL_DESTINATION OFF)
 # the on-disk name of your application.
 set(BINARY_NAME "fullpos_cloud")
 
+# Identidad de la aplicacion parametrizable (build UAT aislada).
+#
+# Los valores por defecto son EXACTAMENTE los de produccion, asi que el build
+# oficial no cambia de identidad. Un build UAT pasa otros valores:
+#   -DFULLPOS_APP_COMPANY="DaleVentas UAT"
+#   -DFULLPOS_APP_PRODUCT="DaleVentas POS UAT"
+#   -DFULLPOS_APP_DESCRIPTION="DaleVentas POS UAT"
+#   -DFULLPOS_WINDOW_TITLE="DaleVentas POS UAT - Pilot"
+#   -DFULLPOS_MUTEX_NAME="Local\\\\DaleVentasPOSUATSingleInstance"
+#   -DBINARY_NAME="fullpos_uat"
+# Con ello Windows resuelve un directorio de datos distinto
+# (%APPDATA%\<Company>\<Product>), el ejecutable no colisiona con la
+# instalacion real y ambos pueden ejecutarse a la vez.
+set(FULLPOS_APP_COMPANY "FullPOS" CACHE STRING "CompanyName del ejecutable")
+set(FULLPOS_APP_PRODUCT "FullPOS" CACHE STRING "ProductName del ejecutable")
+set(FULLPOS_APP_DESCRIPTION "FullPOS" CACHE STRING "FileDescription del ejecutable")
+set(FULLPOS_WINDOW_TITLE "FullPOS Cloud - Sistema de facturacion" CACHE STRING "Titulo de la ventana")
+set(FULLPOS_MUTEX_NAME "Local\\\\DaleVentasPOSSingleInstance" CACHE STRING "Nombre del mutex de instancia unica")
+
+# Override por variables de entorno (build UAT aislada).
+# Sin estas variables el resultado es EXACTAMENTE el de produccion.
+if(DEFINED ENV{FULLPOS_BINARY_NAME} AND NOT "$ENV{FULLPOS_BINARY_NAME}" STREQUAL "")
+  set(BINARY_NAME "$ENV{FULLPOS_BINARY_NAME}")
+endif()
+if(DEFINED ENV{FULLPOS_APP_COMPANY} AND NOT "$ENV{FULLPOS_APP_COMPANY}" STREQUAL "")
+  set(FULLPOS_APP_COMPANY "$ENV{FULLPOS_APP_COMPANY}")
+endif()
+if(DEFINED ENV{FULLPOS_APP_PRODUCT} AND NOT "$ENV{FULLPOS_APP_PRODUCT}" STREQUAL "")
+  set(FULLPOS_APP_PRODUCT "$ENV{FULLPOS_APP_PRODUCT}")
+endif()
+if(DEFINED ENV{FULLPOS_APP_DESCRIPTION} AND NOT "$ENV{FULLPOS_APP_DESCRIPTION}" STREQUAL "")
+  set(FULLPOS_APP_DESCRIPTION "$ENV{FULLPOS_APP_DESCRIPTION}")
+endif()
+if(DEFINED ENV{FULLPOS_WINDOW_TITLE} AND NOT "$ENV{FULLPOS_WINDOW_TITLE}" STREQUAL "")
+  set(FULLPOS_WINDOW_TITLE "$ENV{FULLPOS_WINDOW_TITLE}")
+endif()
+if(DEFINED ENV{FULLPOS_MUTEX_NAME} AND NOT "$ENV{FULLPOS_MUTEX_NAME}" STREQUAL "")
+  set(FULLPOS_MUTEX_NAME "$ENV{FULLPOS_MUTEX_NAME}")
+endif()
+
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)

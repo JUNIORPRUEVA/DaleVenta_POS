@@ -3,15 +3,18 @@ import 'dart:convert';
 
 import '../debug/app_error_reporter.dart';
 import '../usage/client_telemetry_headers.dart';
+import 'guardian_agent_log.dart';
 import 'guardian_client.dart';
 import 'guardian_event.dart';
 import 'guardian_redaction.dart';
 
 /// Puente entre el reportero de errores existente y la cola de Guardian.
 ///
-/// No instala manejadores globales nuevos: escucha `AppErrorReporter.lastError`,
-/// que ya recibe `FlutterError.onError`, `PlatformDispatcher.onError` y los
-/// errores de UI/HTTP mapeados.
+/// No instala manejadores globales nuevos: escucha `AppErrorReporter.lastRecorded`,
+/// que ya recibe `FlutterError.onError`, `PlatformDispatcher.onError`, la zona
+/// raíz y los errores de UI/HTTP mapeados. Se usa `lastRecorded` (y no
+/// `lastError`) para incluir los fallos **silenciosos**, que son justamente los
+/// que la UI no muestra y la observabilidad sí necesita.
 class GuardianReporter {
   GuardianReporter({required this.client});
 
@@ -24,14 +27,14 @@ class GuardianReporter {
   void attach() {
     if (_attached) return;
     _attached = true;
-    AppErrorReporter.instance.lastError.addListener(_onError);
+    AppErrorReporter.instance.lastRecorded.addListener(_onError);
     unawaited(_loadIdentity());
   }
 
   void detach() {
     if (!_attached) return;
     _attached = false;
-    AppErrorReporter.instance.lastError.removeListener(_onError);
+    AppErrorReporter.instance.lastRecorded.removeListener(_onError);
   }
 
   Future<void> _loadIdentity() async {
@@ -43,7 +46,7 @@ class GuardianReporter {
   }
 
   void _onError() {
-    final details = AppErrorReporter.instance.lastError.value;
+    final details = AppErrorReporter.instance.lastRecorded.value;
     if (details == null) return;
     // Evita reprocesar el mismo objeto en notificaciones repetidas.
     final signature = '${details.eventId}';
@@ -52,7 +55,15 @@ class GuardianReporter {
     _lastEventAt = DateTime.now();
 
     final event = toEvent(details);
-    if (event == null) return;
+    if (event == null) {
+      unawaited(GuardianAgentLog.info(
+        'evento descartado por el reportero kind=${details.kind.name} type=${details.errorType}',
+      ));
+      return;
+    }
+    unawaited(GuardianAgentLog.info(
+      'evento convertido sev=${event.severity} mod=${event.module} op=${event.operation}',
+    ));
     unawaited(client.record(event));
   }
 

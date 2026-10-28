@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:sqflite/sqflite.dart';
 
+import '../storage/local_database_path.dart';
 import 'guardian_event.dart';
 import 'guardian_store.dart';
 
@@ -23,7 +26,11 @@ class SqfliteGuardianStore implements GuardianStore {
   @override
   Future<void> init() async {
     if (_db != null) return;
-    final path = databasePath ?? '${await getDatabasesPath()}/guardian_outbox.db';
+    // Ruta canónica de la app (directorio de datos escribible en Windows,
+    // Android e iOS). Nunca la carpeta de trabajo del ejecutable.
+    final path = databasePath ?? await resolveLocalDatabasePath(_fileName);
+    // Un archivo vacío de un intento anterior impide crear el esquema.
+    await _removeIfEmpty(path);
     _db = await openDatabase(
       path,
       version: 1,
@@ -57,6 +64,29 @@ class SqfliteGuardianStore implements GuardianStore {
         ''');
       },
     );
+  }
+
+  static const String _fileName = 'guardian_outbox.db';
+
+  /// Cierra la base local (apagado ordenado y pruebas).
+  Future<void> close() async {
+    try {
+      await _db?.close();
+    } catch (_) {
+      // Best-effort.
+    }
+    _db = null;
+  }
+
+  static Future<void> _removeIfEmpty(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists() && await file.length() == 0) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Si no se puede borrar, se intenta abrir igualmente.
+    }
   }
 
   @override

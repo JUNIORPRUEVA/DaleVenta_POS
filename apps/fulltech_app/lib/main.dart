@@ -66,6 +66,10 @@ Future<void> main([List<String> args = const []]) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Captura de fallos de arranque de Guardian: síncrona y barata. Debe ir
+      // antes de SQLite, almacenamiento y licencias para no perder los errores
+      // previos a que el agente esté listo. Sin `--dart-define` no hace nada.
+      GuardianBootstrap.installStartupCapture();
       await logFullPosRuntimeDiagnostics();
       usePathUrlStrategy();
       GoogleFonts.config.allowRuntimeFetching = false;

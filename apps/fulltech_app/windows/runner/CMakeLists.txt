@@ -6,13 +6,28 @@ project(runner LANGUAGES CXX)
 # work.
 #
 # Any new source files that you add to the application should be added here.
+# Runner.rc e identidad generados desde plantillas: permite builds UAT con
+# identidad separada sin duplicar archivos ni alterar la de produccion.
+set(FULLPOS_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${FULLPOS_GENERATED_DIR}")
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/Runner.rc.in"
+  "${FULLPOS_GENERATED_DIR}/Runner.rc"
+  @ONLY
+)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/app_identity.h.in"
+  "${FULLPOS_GENERATED_DIR}/app_identity.h"
+  @ONLY
+)
+
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
-  "Runner.rc"
+  "${FULLPOS_GENERATED_DIR}/Runner.rc"
   "runner.exe.manifest"
 )
 
@@ -35,6 +50,10 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+target_include_directories(${BINARY_NAME} PRIVATE "${FULLPOS_GENERATED_DIR}")
+# El Runner.rc generado vive en el directorio de build: el compilador de recursos
+# necesita el directorio del runner para resolver `resource.h`.
+target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

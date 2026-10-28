@@ -7,13 +7,10 @@
 
 #include "flutter_window.h"
 #include "utils.h"
+#include "app_identity.h"
 
 namespace {
 
-constexpr wchar_t kWindowTitle[] = L"FullPOS Cloud - Sistema de facturacion";
-constexpr wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
-constexpr wchar_t kSingleInstanceMutexName[] =
-    L"Local\\DaleVentasPOSSingleInstance";
 
 bool FocusExistingWindow() {
   HWND existing_window = ::FindWindow(kWindowClassName, kWindowTitle);

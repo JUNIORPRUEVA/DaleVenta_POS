@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 
+import 'guardian_agent_log.dart';
 import 'guardian_config.dart';
 import 'guardian_event.dart';
 import 'guardian_redaction.dart';
@@ -63,7 +65,12 @@ class GuardianClient {
   /// Registra un incidente. Devuelve `true` si quedó en la cola local.
   Future<bool> record(GuardianEvent event) async {
     if (!config.enabled) return false;
-    if (!config.shouldPersist(event.severity)) return false;
+    if (!config.shouldPersist(event.severity)) {
+      unawaited(GuardianAgentLog.info(
+        'descartado por severidad sev=${event.severity} minimo=${config.minSeverityToPersist}',
+      ));
+      return false;
+    }
 
     try {
       final alreadySeen = await store.wasRecentlyRecorded(
@@ -87,9 +94,13 @@ class GuardianClient {
         ),
       );
       await _enforceQuotas();
+      unawaited(GuardianAgentLog.info(
+        'evento en cola id=${event.eventId} sev=${event.severity} mod=${event.module} op=${event.operation}',
+      ));
       return true;
-    } catch (_) {
+    } catch (error) {
       // Guardian jamás puede romper el flujo que reporta.
+      unawaited(GuardianAgentLog.warn('no se pudo encolar ${event.eventId}: $error'));
       return false;
     }
   }
@@ -137,6 +148,7 @@ class GuardianClient {
         final due = await store.dueEvents(limit: config.batchSize, now: _clock());
         if (due.isEmpty) break;
         attempted += due.length;
+        unawaited(GuardianAgentLog.info('flush: ${due.length} pendientes'));
 
         GuardianSendResult result;
         try {
@@ -144,14 +156,22 @@ class GuardianClient {
         } catch (transportError) {
           result = GuardianSendResult(retryable: true, reason: transportError.toString());
         }
+        unawaited(GuardianAgentLog.info(
+          'respuesta: ok=${result.acked.length} dup=${result.duplicates.length} '
+          'rech=${result.rejected.length} retry=${result.retryable} motivo=${result.reason ?? '-'}',
+        ));
 
         final durable = <String>[...result.acked, ...result.duplicates];
         if (durable.isNotEmpty) {
           await store.removeAll(durable);
           acknowledged += durable.length;
+          unawaited(GuardianAgentLog.info('enviados=${durable.length}'));
         }
 
         if (result.rejected.isNotEmpty) {
+          unawaited(GuardianAgentLog.warn(
+            'rechazados=${result.rejected.length} motivo=${result.reason}',
+          ));
           for (final eventId in result.rejected) {
             await store.recordDiscard(
               GuardianDiscardRecord(
