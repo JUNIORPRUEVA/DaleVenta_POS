@@ -78,3 +78,23 @@ export function alignToNotificationBusinessHours(date: Date = new Date()) {
 
   return getNextNotificationBusinessStart(date);
 }
+
+/**
+ * Fecha del primer intento de envío de una notificación.
+ *
+ * Por defecto respeta la ventana comercial existente (comportamiento histórico).
+ * Las alertas operativas críticas (por ejemplo, las que emitirá APPYRA Guardian)
+ * deben pasar `allowOutsideBusinessHours: true` para no quedar retenidas hasta
+ * el siguiente horario comercial. Este helper no cambia la ventana en sí: solo
+ * decide si el primer intento se desplaza.
+ */
+export function resolveInitialAttemptAt(
+  date: Date = new Date(),
+  allowOutsideBusinessHours = false,
+) {
+  if (allowOutsideBusinessHours) {
+    return new Date(date.getTime());
+  }
+
+  return alignToNotificationBusinessHours(date);
+}

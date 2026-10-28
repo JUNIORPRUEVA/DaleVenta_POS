@@ -22,6 +22,7 @@ import 'core/company/company_settings_repository.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
 import 'core/debug/runtime_diagnostics.dart';
+import 'core/guardian/guardian_bootstrap.dart';
 import 'core/license/license_repository.dart';
 import 'core/lifecycle/app_lifecycle_coordinator.dart';
 import 'core/offline/sync_queue_service.dart';
@@ -66,6 +67,10 @@ Future<void> main([List<String> args = const []]) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Captura de fallos de arranque de Guardian: síncrona y barata. Debe ir
+      // antes de SQLite, almacenamiento y licencias para no perder los errores
+      // previos a que el agente esté listo. Sin `--dart-define` no hace nada.
+      GuardianBootstrap.installStartupCapture();
       await logFullPosRuntimeDiagnostics();
       usePathUrlStrategy();
       GoogleFonts.config.allowRuntimeFetching = false;
@@ -80,6 +85,10 @@ Future<void> main([List<String> args = const []]) async {
         FlutterError.presentError(details);
         AppErrorReporter.instance.recordFlutterError(details);
       };
+
+      // APPYRA Guardian: agente de incidentes. Desactivado por defecto y
+      // fail-closed: si no está configurado no hace nada.
+      unawaited(GuardianBootstrap.start());
 
       ErrorWidget.builder = (details) {
         return _GlobalErrorFallback(details: details);

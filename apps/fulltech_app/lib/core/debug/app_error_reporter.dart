@@ -114,6 +114,14 @@ class AppErrorReporter {
   final ValueNotifier<AppErrorDetails?> lastError =
       ValueNotifier<AppErrorDetails?>(null);
 
+  /// Último error **registrado**, incluidos los silenciosos (sin UI).
+  ///
+  /// `lastError` solo cambia cuando se avisa al usuario; la observabilidad
+  /// técnica necesita ver también los fallos silenciosos. Se emite de forma
+  /// síncrona para no perderse errores de arranque.
+  final ValueNotifier<AppErrorDetails?> lastRecorded =
+      ValueNotifier<AppErrorDetails?>(null);
+
   final List<AppErrorDetails> _history = <AppErrorDetails>[];
   final Map<String, DateTime> _recentDedupe = <String, DateTime>{};
 
@@ -153,7 +161,6 @@ class AppErrorReporter {
   }
 
   void clear() => _setLastError(null);
-
   void record(
     Object error,
     StackTrace stack, {
@@ -214,6 +221,13 @@ class AppErrorReporter {
     _history.insert(0, details);
     if (_history.length > 10) {
       _history.removeRange(10, _history.length);
+    }
+    // Observabilidad técnica: se emite SIEMPRE, también para errores
+    // silenciosos. Nunca puede romper el manejador de errores.
+    try {
+      lastRecorded.value = details;
+    } catch (_) {
+      // Ignorado a propósito.
     }
   }
 

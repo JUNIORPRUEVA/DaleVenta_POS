@@ -130,6 +130,9 @@ describe("Fiscal authenticated HTTP E2E", () => {
 
     process.env.DATABASE_URL = appUrl;
     process.env.JWT_SECRET = process.env.JWT_SECRET || "fiscal-e2e-secret";
+    // Esta suite valida el flujo LEGACY (POST /sales sin originCashSessionId);
+    // sin la bandera el contrato legacy se rechaza con 409 LEGACY_MISSING_SESSION.
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
     const prismaCli = resolve(
       process.cwd(),
       "..",

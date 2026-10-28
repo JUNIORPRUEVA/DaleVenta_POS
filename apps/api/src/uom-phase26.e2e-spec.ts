@@ -160,6 +160,9 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     process.env.DATABASE_URL = appUrl;
     process.env.PRODUCTS_SOURCE = "LOCAL";
     process.env.JWT_SECRET = process.env.JWT_SECRET || "phase26-uat-secret";
+    // Esta suite valida el flujo LEGACY (POST /sales sin originCashSessionId);
+    // sin la bandera el contrato legacy se rechaza con 409 LEGACY_MISSING_SESSION.
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
     const prismaCli = resolve(
       process.cwd(),
       "..",
@@ -354,24 +357,32 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
       costo: 100,
       unitOfMeasureId: yard.id,
     });
-    await createSale(
+    // Stock insuficiente es un conflicto de stock (409), no un error de validacion: el
+    // servicio de inventario responde INSUFFICIENT_WAREHOUSE_STOCK por diseno.
+    const overBoundary = await createSale(
       companyB.token,
       {
         paymentMethod: "cash",
         paymentCashAmount: 1100.2,
         items: [{ productId: boundary.id, qty: 5.501, priceSoldUnit: 200 }],
       },
-      400,
+      409,
     );
-    await createSale(
+    expect(overBoundary.code).toBe("INSUFFICIENT_WAREHOUSE_STOCK");
+    const overStock = await createSale(
       companyB.token,
       {
         paymentMethod: "cash",
         paymentCashAmount: 1200,
         items: [{ productId: boundary.id, qty: 6, priceSoldUnit: 200 }],
       },
-      400,
+      409,
     );
+    expect(overStock.code).toBe("INSUFFICIENT_WAREHOUSE_STOCK");
+    const boundaryDb = await prisma.product.findUniqueOrThrow({
+      where: { id: boundary.id },
+    });
+    expectDecimal(boundaryDb.stock, "5.5");
     await createSale(companyB.token, {
       paymentMethod: "cash",
       paymentCashAmount: 1100,
@@ -493,9 +504,20 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     const carneAfterDelete = await prisma.product.findUniqueOrThrow({
       where: { id: carne.id },
     });
-    expectDecimal(carneAfterDelete.stock, carneDb.stock.toString());
+    // Semantica real del endpoint: DELETE /sales/:id cancela la venta y restaura
+    // inventario una sola vez (claim por inventoryRestoredAt).
+    expectDecimal(carneAfterDelete.stock, carneDb.stock.plus(2.375).toString());
+    await request(app.getHttpServer())
+      .delete(`/sales/${cancelSale.id}`)
+      .set("Authorization", `Bearer ${companyB.token}`)
+      .expect(404);
+    const carneAfterSecondDelete = await prisma.product.findUniqueOrThrow({
+      where: { id: carne.id },
+    });
+    // Segundo DELETE no vuelve a restaurar stock (la venta ya no existe para el tenant).
+    expectDecimal(carneAfterSecondDelete.stock, carneAfterDelete.stock.toString());
     evidence.deleteSemantics =
-      "DELETE /sales marks sale deleted and does not restore inventory; POST /sales/:id/return is the inventory-restoring workflow.";
+      "DELETE /sales/:id restaura inventario una sola vez (inventoryRestoredAt) y es idempotente; POST /sales/:id/return es el flujo de devolucion parcial.";
 
     const quotation = await request(app.getHttpServer())
       .post("/cotizaciones")
