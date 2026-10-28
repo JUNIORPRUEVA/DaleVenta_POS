@@ -93,8 +93,39 @@ export class GuardianToolsService implements OnModuleDestroy {
   /**
    * Búsqueda de identificadores en el código autorizado (solo lectura, sin shell,
    * sin git). Devuelve como máximo 20 coincidencias.
+   *
+   * El directorio raíz NO depende del directorio de trabajo del proceso: se ancla
+   * a la ubicación de este módulo y se comprueba su existencia. Antes, ejecutar
+   * desde un cwd distinto de `apps/api` devolvía silenciosamente cero
+   * coincidencias, lo que degradaba el diagnóstico (el prompt se quedaba sin
+   * evidencia de código) sin ningún error visible.
    */
-  searchCode(identifiers: string[], root = process.env.GUARDIAN_CODE_ROOT ?? join(process.cwd(), 'src')) {
+  searchCode(identifiers: string[], root?: string) {
+    const searchRoot = root ?? this.resolveCodeRoot();
+    return this.searchCodeIn(identifiers, searchRoot);
+  }
+
+  /** Raíz efectiva del código autorizado (existe siempre que sea posible). */
+  resolveCodeRoot(): string {
+    const explicit = String(process.env.GUARDIAN_CODE_ROOT ?? '').trim();
+    if (explicit) return explicit;
+
+    const candidates = [
+      join(__dirname, '..'), // ejecución desde src (ts-node)
+      join(__dirname, '..', '..', 'src'), // ejecución desde dist (imagen)
+      join(process.cwd(), 'src'), // comportamiento histórico
+    ];
+    for (const candidate of candidates) {
+      try {
+        if (statSync(candidate).isDirectory()) return candidate;
+      } catch {
+        // se prueba el siguiente candidato
+      }
+    }
+    return candidates[candidates.length - 1];
+  }
+
+  private searchCodeIn(identifiers: string[], root: string) {
     const startedAt = Date.now();
     const needles = identifiers
       .map((value) => String(value ?? '').trim())
