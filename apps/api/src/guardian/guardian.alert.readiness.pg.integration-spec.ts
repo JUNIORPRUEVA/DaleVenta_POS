@@ -86,7 +86,7 @@ describeOnPg('despacho de alertas con diagnóstico (PostgreSQL real)', () => {
     alerts = new GuardianAlertService(prisma as any, notificationsStub);
 
     company = await prisma.company.create({
-      data: { name: `Alert readiness ${RUN_ID}`, slug: `alert-readiness-${RUN_ID}` },
+      data: { name: `Alert readiness ${RUN_ID}`, slug: `alert-readiness-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
   }, 60_000);

@@ -51,11 +51,11 @@ describeOnPg('Guardian ingest sobre PostgreSQL real', () => {
     incidents = new GuardianIncidentsService(prisma as any);
 
     companyA = await prisma.company.create({
-      data: { name: `Guardian UAT A ${RUN_ID}`, slug: `guardian-uat-a-${RUN_ID}` },
+      data: { name: `Guardian UAT A ${RUN_ID}`, slug: `guardian-uat-a-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
     companyB = await prisma.company.create({
-      data: { name: `Guardian UAT B ${RUN_ID}`, slug: `guardian-uat-b-${RUN_ID}` },
+      data: { name: `Guardian UAT B ${RUN_ID}`, slug: `guardian-uat-b-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
   }, 60_000);
@@ -181,6 +181,7 @@ describeOnPg('Guardian ingest sobre PostgreSQL real', () => {
           data: {
             name: `Guardian UAT bulk ${index} ${RUN_ID}`,
             slug: `guardian-uat-bulk-${index}-${RUN_ID}`,
+            guardianEnabled: true,
           },
           select: { id: true, slug: true },
         }),

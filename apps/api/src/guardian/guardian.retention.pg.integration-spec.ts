@@ -53,7 +53,7 @@ describeOnPg('Guardian retención — PostgreSQL real', () => {
     service = new GuardianRetentionService(prisma as any);
 
     company = await prisma.company.create({
-      data: { name: `Guardian Retención ${RUN_ID}`, slug: `guardian-retention-${RUN_ID}` },
+      data: { name: `Guardian Retención ${RUN_ID}`, slug: `guardian-retention-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
 

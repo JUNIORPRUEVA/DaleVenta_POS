@@ -24,11 +24,11 @@ describeOnPg('Guardian auditoría preventiva — PostgreSQL real con datos sint�
     service = new GuardianIntegrityService(prisma as any);
 
     dirty = await prisma.company.create({
-      data: { name: `Guardian Integridad ${RUN_ID}`, slug: `guardian-integrity-${RUN_ID}` },
+      data: { name: `Guardian Integridad ${RUN_ID}`, slug: `guardian-integrity-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
     clean = await prisma.company.create({
-      data: { name: `Guardian Limpia ${RUN_ID}`, slug: `guardian-clean-${RUN_ID}` },
+      data: { name: `Guardian Limpia ${RUN_ID}`, slug: `guardian-clean-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
 

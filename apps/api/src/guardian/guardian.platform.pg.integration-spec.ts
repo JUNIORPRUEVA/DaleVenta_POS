@@ -87,11 +87,11 @@ describeOnPg('Guardian API de plataforma — PostgreSQL real', () => {
     ingest = new GuardianIngestService(prisma as any, new GuardianQuotaService(prisma as any));
 
     companyA = await prisma.company.create({
-      data: { name: `Guardian Panel A ${RUN_ID}`, slug: `guardian-panel-a-${RUN_ID}` },
+      data: { name: `Guardian Panel A ${RUN_ID}`, slug: `guardian-panel-a-${RUN_ID}`, guardianEnabled: true },
       select: { id: true, name: true },
     });
     companyB = await prisma.company.create({
-      data: { name: `Guardian Panel B ${RUN_ID}`, slug: `guardian-panel-b-${RUN_ID}` },
+      data: { name: `Guardian Panel B ${RUN_ID}`, slug: `guardian-panel-b-${RUN_ID}`, guardianEnabled: true },
       select: { id: true, name: true },
     });
 

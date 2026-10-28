@@ -30,11 +30,11 @@ describeOnPg('credenciales de máquina sobre PostgreSQL real', () => {
     machine = new GuardianMachineService(prisma as any);
 
     companyA = await prisma.company.create({
-      data: { name: `Guardian Machine A ${RUN_ID}`, slug: `guardian-machine-a-${RUN_ID}` },
+      data: { name: `Guardian Machine A ${RUN_ID}`, slug: `guardian-machine-a-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
     companyB = await prisma.company.create({
-      data: { name: `Guardian Machine B ${RUN_ID}`, slug: `guardian-machine-b-${RUN_ID}` },
+      data: { name: `Guardian Machine B ${RUN_ID}`, slug: `guardian-machine-b-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
 

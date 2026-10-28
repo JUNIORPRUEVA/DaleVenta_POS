@@ -63,7 +63,7 @@ describeOnPg('Guardian entrega real de alertas sobre PostgreSQL', () => {
     ingest = new GuardianIngestService(prisma as any, new GuardianQuotaService(prisma as any));
 
     company = await prisma.company.create({
-      data: { name: `Guardian Entrega ${RUN_ID}`, slug: `guardian-delivery-${RUN_ID}` },
+      data: { name: `Guardian Entrega ${RUN_ID}`, slug: `guardian-delivery-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
   }, 60_000);

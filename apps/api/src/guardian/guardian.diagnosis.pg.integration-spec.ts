@@ -54,7 +54,7 @@ describeOnPg('Guardian diagnóstico sobre PostgreSQL real', () => {
     diagnosis = new GuardianDiagnosisService(prisma as any, tools, new MockGuardianAiProvider());
 
     company = await prisma.company.create({
-      data: { name: `Guardian Diag ${RUN_ID}`, slug: `guardian-diag-${RUN_ID}` },
+      data: { name: `Guardian Diag ${RUN_ID}`, slug: `guardian-diag-${RUN_ID}`, guardianEnabled: true },
       select: { id: true },
     });
   }, 60_000);

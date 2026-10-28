@@ -31,7 +31,7 @@ describeOnPg('guardian_reader — permisos reales en PostgreSQL', () => {
   it('no puede insertar, actualizar ni borrar', async () => {
     await expect(
       reader.company.create({
-        data: { name: 'guardian-reader-should-fail', slug: `nope-${Date.now()}` },
+        data: { name: 'guardian-reader-should-fail', slug: `nope-${Date.now()}`, guardianEnabled: true },
       }),
     ).rejects.toThrow(/permission denied|denegado/i);
 
