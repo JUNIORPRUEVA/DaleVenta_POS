@@ -142,6 +142,12 @@ class _SaleAttemptRecoveryScreenState
       case SaleAttemptReconciliationStatus.unknown:
         return 'La información es incompleta o contradictoria. El intento se '
             'conserva intacto para que el encargado decida con evidencia.';
+      case SaleAttemptReconciliationStatus.notChecked:
+        // Distinción importante: aquí el servidor NO respondió nada porque no
+        // se le preguntó (declaración manual). No es lo mismo que UNKNOWN.
+        return 'Este intento no se ha consultado al servidor. La declaración del '
+            'encargado queda registrada como evidencia, pero el cobro sigue sin '
+            'conciliar en el sistema.';
     }
   }
 

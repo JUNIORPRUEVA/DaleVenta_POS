@@ -135,10 +135,7 @@ final syncQueueBootstrapProvider = Provider<void>((ref) {
       final user = await TokenStorage().getUserSnapshot();
       final summary = await ref
           .read(saleAttemptReconcilerProvider)
-          .syncPendingAttempts(
-            companyId: user?.companyId,
-            userId: user?.id,
-          );
+          .syncPendingAttempts(companyId: user?.companyId, userId: user?.id);
       if (summary.hasChanges) {
         await ref.read(syncQueueServiceProvider.notifier).refreshStats();
       }
@@ -170,6 +167,10 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   Timer? _timer;
   bool _started = false;
   bool _processing = false;
+
+  /// Se invoca al terminar cada pasada de la cola (con éxito o con error).
+  /// Lo usa el motor de recuperación automática; nunca la venta.
+  void Function()? onSyncCompleted;
   final Random _jitter = Random();
 
   void _patchState(SyncQueueState Function(SyncQueueState current) update) {
@@ -471,6 +472,17 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       _processing = false;
       _patchState((current) => current.copyWith(isProcessing: false));
       await refreshStats();
+      // Aviso de fin de pasada: el motor de recuperación aprovecha este momento
+      // para verificar intentos inciertos con la conexión ya comprobada.
+      try {
+        onSyncCompleted?.call();
+      } catch (error) {
+        TraceLog.log(
+          'sync_queue',
+          'callback.fin.de.pasada.fallido',
+          error: error,
+        );
+      }
     }
   }
 
@@ -657,7 +669,10 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
 
   String _customerSyncMessage(Object error) {
     final operationMessage = error is DioException
-        ? customerOperationErrorMessage(error.response?.data, statusCode: error.response?.statusCode)
+        ? customerOperationErrorMessage(
+            error.response?.data,
+            statusCode: error.response?.statusCode,
+          )
         : error is ApiException
         ? customerOperationErrorMessage(error.message)
         : customerOperationErrorMessage(error.toString());
@@ -678,8 +693,11 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       if (error.type == ApiErrorType.server || error.retryable) {
         return 'Algunas ventas están pendientes de enviarse al servidor. Tus datos permanecen guardados en este dispositivo y volveremos a intentarlo.';
       }
-      return userSafeErrorMessage(error, fallback:
-          'No se pudo completar esta operación. Pide ayuda al encargado antes de repetirla.');
+      return userSafeErrorMessage(
+        error,
+        fallback:
+            'No se pudo completar esta operación. Pide ayuda al encargado antes de repetirla.',
+      );
     }
 
     if (error is DioException) {

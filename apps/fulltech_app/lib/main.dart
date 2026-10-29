@@ -10,7 +10,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
-import 'core/config/uat_identity.dart';import 'core/api/env.dart';
+import 'core/config/uat_identity.dart';
+import 'core/api/env.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -25,6 +26,8 @@ import 'core/debug/runtime_diagnostics.dart';
 import 'core/license/license_repository.dart';
 import 'core/lifecycle/app_lifecycle_coordinator.dart';
 import 'core/offline/sync_queue_service.dart';
+import 'core/offline/sale_attempt_recovery_engine.dart';
+import 'core/offline/sale_attempt_recovery_providers.dart';
 import 'core/offline/offline_sync_handlers_bootstrap.dart';
 import 'core/realtime/catalog_realtime_service.dart';
 import 'core/realtime/operations_data_refresh_service.dart';
@@ -360,6 +363,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (widget.enableBackgroundStartup && _backgroundStartupStarted) {
       ref.watch(offlineSyncHandlersBootstrapProvider);
       ref.watch(syncQueueBootstrapProvider);
+      ref.watch(recoveryEngineBootstrapProvider);
+      ref.read(syncQueueServiceProvider.notifier).onSyncCompleted = () {
+        // Al cerrar una pasada de la cola, la conexión ya está comprobada:
+        // es el mejor momento para verificar intentos inciertos.
+        ref
+            .read(recoveryEngineProvider)
+            .runOnce(trigger: RecoveryTrigger.syncCompleted);
+      };
       ref.watch(operationsDataRefreshProvider);
     }
     ref.watch(appUpdateProvider);
