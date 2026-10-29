@@ -72,6 +72,65 @@ export class GuardianPlatformService {
       });
     }
 
+    // Fase 10: la activación y la desactivación quedan registradas en el mismo
+    // rastro de auditoría que ya usan la ingesta y las acciones del panel. Sin
+    // esto, un cambio de opt-in no dejaba huella de quién y cuándo lo hizo.
+    await this.prisma.guardianAccessLog
+      .create({
+        data: {
+          actorRole: 'PLATFORM',
+          action: enabled
+            ? 'platform.company_guardian_enabled'
+            : 'platform.company_guardian_disabled',
+          companyId: id,
+        },
+      })
+      .catch(() => undefined);
+
+    return updated;
+  }
+
+  /**
+   * Fase 10 — revocación de una credencial de instalación.
+   *
+   * Vía autorizada de plataforma (mismo guard que la activación). A partir de
+   * aquí `GuardianMachineService.authenticate` la rechaza (filtra `revokedAt`),
+   * así que la instalación deja de poder ingerir telemetría. No borra el
+   * historial de incidentes ni la propia credencial: sólo la inutiliza.
+   */
+  async revokeMachineCredential(credentialId: string) {
+    const id = String(credentialId ?? '').trim();
+    if (!id) return null;
+
+    const credential = await this.prisma.guardianMachineCredential.findUnique({
+      where: { id },
+      select: { id: true, companyId: true },
+    });
+    if (!credential) return null;
+
+    const updated = await this.prisma.guardianMachineCredential.update({
+      where: { id },
+      data: { revokedAt: new Date(), enabled: false },
+      select: {
+        id: true,
+        companyId: true,
+        label: true,
+        installId: true,
+        enabled: true,
+        revokedAt: true,
+      },
+    });
+
+    await this.prisma.guardianAccessLog
+      .create({
+        data: {
+          actorRole: 'PLATFORM',
+          action: 'platform.machine_credential_revoked',
+          companyId: credential.companyId,
+        },
+      })
+      .catch(() => undefined);
+
     return updated;
   }
 

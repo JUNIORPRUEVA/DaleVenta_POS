@@ -60,6 +60,19 @@ export class GuardianPlatformController {
     return { company };
   }
 
+  /**
+   * Fase 10 — revocación de una credencial de instalación.
+   *
+   * Sólo con el token de plataforma. Tras revocarla, la instalación ya no puede
+   * ingerir telemetría; los incidentes y diagnósticos históricos se conservan.
+   */
+  @Post('credentials/:credentialId/revoke')
+  async revokeCredential(@Param('credentialId') credentialId: string) {
+    const credential = await this.platform.revokeMachineCredential(credentialId);
+    if (!credential) throw new NotFoundException('Credencial no encontrada');
+    return { credential };
+  }
+
   @Get('workers')
   workers() {
     return this.platform.workers();
