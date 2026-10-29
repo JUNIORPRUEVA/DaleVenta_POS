@@ -25,6 +25,28 @@ import { GuardianDiagnosisService } from './guardian.diagnosis.service';
  */
 export async function runGuardianWorker(): Promise<void> {
   const logger = new Logger('GuardianWorkers');
+
+  // Watchdog de arranque (fase 12). El tope por ciclo vive dentro de `tick()`,
+  // así que no cubre el caso peor: `createApplicationContext` conecta con la
+  // base de datos y, si esa conexión se queda a medias (TCP abierto, protocolo
+  // sin responder), el proceso queda vivo, sin latido y sin ciclo, y Swarm lo
+  // muestra "Running" para siempre. Verificado con inyección de fallo: sin este
+  // watchdog el worker sobrevivía más de 70 s sin escribir un solo latido.
+  const bootTimeoutMs = Math.max(
+    15_000,
+    Number(process.env.GUARDIAN_WORKER_BOOT_TIMEOUT_SECONDS ?? 120) * 1_000,
+  );
+  let firstBeatPersisted = false;
+  const bootWatchdog = setTimeout(() => {
+    if (firstBeatPersisted) return;
+    logger.error(
+      `worker sin primer latido tras ${bootTimeoutMs} ms (arranque bloqueado): se reinicia el proceso`,
+    );
+    process.exit(1);
+  }, bootTimeoutMs);
+  // No mantiene vivo el proceso por sí solo: el bucle ya lo hace.
+  bootWatchdog.unref?.();
+
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
@@ -78,6 +100,10 @@ export async function runGuardianWorker(): Promise<void> {
           pid: process.pid,
         },
       });
+      if (!firstBeatPersisted) {
+        firstBeatPersisted = true;
+        clearTimeout(bootWatchdog);
+      }
       return true;
     } catch (error: unknown) {
       logger.warn(
