@@ -4357,3 +4357,48 @@ model AiAssistantMemory {
   @@index([ownerId, userId, lastSourceAt])
   @@map("ai_assistant_memories")
 }
+
+/// Obligación de conciliación por un cobro DECLARADO como recibido sin venta
+/// confirmada en el servidor.
+///
+/// No es una venta ni un pago: es la constancia de que un encargado afirmó haber
+/// recibido el dinero y de que la contabilidad debe revisarlo. Nunca se crea,
+/// modifica ni anula un registro financiero a partir de aquí.
+model SaleReconciliationObligation {
+  id          String @id @default(uuid()) @db.Uuid
+  companyId   String @map("company_id") @db.Uuid
+
+  /// Intento original (`clientRequestId`) sobre el que se declara.
+  clientRequestId String @map("client_request_id") @db.VarChar(128)
+
+  /// Huella estable de la declaración: hace el reenvío idempotente.
+  declarationHash String @map("declaration_hash") @db.VarChar(64)
+
+  totalDeclared Decimal @map("total_declared") @db.Decimal(12, 2)
+  currency      String  @default("DOP") @db.VarChar(8)
+  paymentMethod String  @default("cash") @map("payment_method") @db.VarChar(32)
+
+  /// Hora real del cobro declarado (la pone el cliente, se guarda en UTC).
+  declaredAtUtc DateTime @map("declared_at_utc")
+
+  declaredByUserId String? @map("declared_by_user_id")
+  declaredByRole   String? @map("declared_by_role") @db.VarChar(32)
+  note             String?
+
+  operationFingerprint String? @map("operation_fingerprint") @db.VarChar(64)
+  attemptPayload       Json?   @map("attempt_payload")
+
+  /// PENDING | RECONCILED | DISMISSED
+  status           String    @default("PENDING") @db.VarChar(24)
+  resolvedAt       DateTime? @map("resolved_at")
+  resolvedByUserId String?   @map("resolved_by_user_id")
+  resolutionNote   String?   @map("resolution_note")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, clientRequestId, declarationHash])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, clientRequestId])
+  @@map("sale_reconciliation_obligations")
+}

@@ -25,8 +25,13 @@ import {
 } from "./dto/create-sale.dto";
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { ReconcileSaleAttemptQueryDto } from "./dto/reconcile-sale-attempt.query.dto";
+import {
+  CreateSaleAttemptDeclarationDto,
+  ListReconciliationObligationsQueryDto,
+} from "./dto/sale-attempt-declaration.dto";
 import { SalesRangeQueryDto } from "./dto/sales-range-query.dto";
 import { SaleAttemptReconciliationService } from "./sale-attempt-reconciliation.service";
+import { SaleReconciliationObligationService } from "./sale-reconciliation-obligation.service";
 
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller("sales")
@@ -34,6 +39,7 @@ export class SalesController {
   constructor(
     private readonly sales: SalesService,
     private readonly saleAttempts: SaleAttemptReconciliationService,
+    private readonly saleObligations: SaleReconciliationObligationService,
   ) {}
 
   @Get()
@@ -95,6 +101,34 @@ export class SalesController {
       clientRequestId,
       query.expectedTotalSold,
     );
+  }
+
+  /**
+   * Declaración del encargado: «sí recibí el dinero» de un intento que el
+   * servidor no pudo confirmar.
+   *
+   * Efecto ÚNICO: crea una obligación de conciliación administrativa.
+   * No crea venta, ni pago, ni movimiento de caja, ni deuda, ni inventario.
+   * Idempotente: reenviar la misma declaración devuelve la obligación existente.
+   */
+  @Post("attempts/:clientRequestId/declaration")
+  declareAttempt(
+    @Req() req: Request,
+    @Param("clientRequestId") clientRequestId: string,
+    @Body() dto: CreateSaleAttemptDeclarationDto,
+  ) {
+    const user = req.user as TenantUser;
+    return this.saleObligations.recordDeclaration(user, clientRequestId, dto);
+  }
+
+  /** Obligaciones de conciliación de la empresa del token. */
+  @Get("reconciliation-obligations")
+  listReconciliationObligations(
+    @Req() req: Request,
+    @Query() query: ListReconciliationObligationsQueryDto,
+  ) {
+    const user = req.user as TenantUser;
+    return this.saleObligations.list(user, query.status);
   }
 
   @Post()

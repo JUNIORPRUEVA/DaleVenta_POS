@@ -8,6 +8,7 @@ import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_audit.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_reconciliation.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_reconciliation_providers.dart';
+import 'package:daleventa_pos/features/offline/reconciliation_obligations_panel.dart';
 import 'package:daleventa_pos/features/offline/sale_attempt_recovery_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -196,6 +197,10 @@ void main() {
       overrides: [
         tokenStorageProvider.overrideWithValue(_FakeTokenStorage(_user())),
         saleAttemptReconcilerProvider.overrideWithValue(reconciler),
+        // Sin servidor en pruebas: la lista de obligaciones no debe abrir red.
+        reconciliationObligationsProvider.overrideWith(
+          (ref, companyId) async => const <ReconciliationObligation>[],
+        ),
       ],
       child: const MaterialApp(home: SaleAttemptRecoveryScreen()),
     );

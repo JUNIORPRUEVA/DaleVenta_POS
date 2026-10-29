@@ -155,6 +155,18 @@ typedef SaleAttemptResolver =
       String? note,
     });
 
+/// Registra la DECLARACIÓN «sí recibí el dinero» en la cola local.
+/// Devuelve `true` solo si quedó guardada de forma durable; en ese caso —y
+/// solo en ese caso— la incidencia local puede cerrarse.
+typedef SaleAttemptDeclarer =
+    Future<bool> Function({
+      required PendingSyncAction action,
+      required double totalDeclared,
+      String? actorUserId,
+      String? actorRole,
+      String? note,
+    });
+
 /// Lectura del historial de auditoría local.
 typedef SaleAttemptAuditReader =
     Future<List<SaleAttemptAuditEntry>> Function({
@@ -187,6 +199,7 @@ class SaleAttemptReconciler {
     required this.recordEvidence,
     required this.resolveAttempt,
     this.readAudit,
+    this.declareMoneyReceived,
   });
 
   final SaleAttemptLookup lookup;
@@ -206,6 +219,11 @@ class SaleAttemptReconciler {
 
   /// Historial de auditoría local (opcional, para el centro de recuperación).
   final SaleAttemptAuditReader? readAudit;
+
+  /// Declaración administrativa de dinero recibido (obligación de conciliación).
+  /// Si falta, la resolución manual «sí recibí el dinero» NO se autoriza: no se
+  /// puede cerrar una incidencia sin dejar registro de quién declara qué.
+  final SaleAttemptDeclarer? declareMoneyReceived;
 
   /// Mecanismo y versión, para dejar rastro de qué concilió cada intento.
   static const String mechanism = 'sale-attempt-reconciliation-v1';
@@ -320,6 +338,34 @@ class SaleAttemptReconciler {
         note: note,
       );
       return false;
+    }
+
+    if (decision == SaleAttemptDecision.manualMoneyReceived) {
+      // PRIMERO la obligación de conciliación, DESPUÉS el cierre local.
+      // Si el registro durable falla, la incidencia sigue abierta: nunca se
+      // pierde la evidencia de un cobro declarado. La declaración NO reenvía el
+      // cobro ni crea venta, caja ni inventario: solo abre la revisión
+      // administrativa en el servidor.
+      final declarer = declareMoneyReceived;
+      final total = _expectedTotalOf(action);
+      if (declarer == null || total == null || total <= 0) {
+        TraceLog.log(
+          'reconcile',
+          'declaracion.no.registrable id=${action.id} total=${total ?? 'null' }',
+        );
+        return false;
+      }
+      final registered = await declarer(
+        action: action,
+        totalDeclared: total,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+        note: note,
+      );
+      if (!registered) {
+        TraceLog.log('reconcile', 'declaracion.no.encolada id=${action.id}');
+        return false;
+      }
     }
 
     return resolveAttempt(

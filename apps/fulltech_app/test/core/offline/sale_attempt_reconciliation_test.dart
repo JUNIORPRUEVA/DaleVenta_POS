@@ -57,6 +57,7 @@ class _Recorder {
   final List<String> resolvedIds = [];
   final List<String?> notes = [];
   final List<String?> roles = [];
+  final List<double> declaredTotals = [];
 }
 
 void main() {
@@ -76,9 +77,23 @@ void main() {
     )
     lookup,
     List<PendingSyncAction>? pending,
+    bool withDeclarer = true,
+    bool declarerSucceeds = true,
   }) {
     return SaleAttemptReconciler(
       lookup: lookup,
+      declareMoneyReceived: !withDeclarer
+          ? null
+          : ({
+              required action,
+              required totalDeclared,
+              actorUserId,
+              actorRole,
+              note,
+            }) async {
+              recorder.declaredTotals.add(totalDeclared);
+              return declarerSucceeds;
+            },
       listAttempts: ({companyId, userId}) async =>
           pending ?? <PendingSyncAction>[],
       recordEvidence:
@@ -374,6 +389,25 @@ void main() {
       recorder.decisions.single,
       SaleAttemptDecision.manualMoneyReceived,
     );
+    // La obligación de conciliación se registra con el importe del intento.
+    expect(recorder.declaredTotals.single, 1305.0);
+  });
+
+  test('sin registro de la obligación la incidencia NO se cierra', () async {
+    final reconciler = build(
+      lookup: (String id, double? expected) async => _response('UNKNOWN'),
+      declarerSucceeds: false,
+    );
+
+    final resolved = await reconciler.resolveManually(
+      action: _attempt(),
+      decision: SaleAttemptDecision.manualMoneyReceived,
+      actorRole: 'OWNER',
+      note: 'El comprobante del banco coincide con el importe.',
+    );
+
+    expect(resolved, isFalse);
+    expect(recorder.decisions, isEmpty);
   });
 
   test('autorizar una venta nueva NO cierra la incidencia', () async {

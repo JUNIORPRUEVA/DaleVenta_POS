@@ -7,6 +7,7 @@ import '../../modules/cotizaciones/data/cotizaciones_repository.dart';
 import '../../modules/manual_interno/company_manual_repository.dart';
 import '../../modules/ventas/data/ventas_repository.dart';
 import '../company/company_settings_repository.dart';
+import 'sale_attempt_declaration_providers.dart';
 
 final offlineSyncHandlersBootstrapProvider = Provider<void>((ref) {
   ref.read(catalogRepositoryProvider);
@@ -16,4 +17,6 @@ final offlineSyncHandlersBootstrapProvider = Provider<void>((ref) {
   ref.read(cotizacionesRepositoryProvider);
   ref.read(companyManualRepositoryProvider);
   ref.read(companySettingsRepositoryProvider).registerSyncHandlers();
+  // Declaraciones de cobro recibido: viajan por la misma cola que el resto.
+  ref.read(saleAttemptDeclarationSyncHandlersProvider);
 });

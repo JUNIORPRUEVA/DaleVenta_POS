@@ -11,6 +11,7 @@ import '../../core/offline/sale_attempt_audit.dart';
 import '../../core/offline/sale_attempt_reconciliation.dart';
 import '../../core/offline/sale_attempt_reconciliation_providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'reconciliation_obligations_panel.dart';
 
 /// Centro de recuperación de cobros sin confirmar.
 ///
@@ -36,6 +37,7 @@ class _SaleAttemptRecoveryScreenState
     extends ConsumerState<SaleAttemptRecoveryScreen> {
   bool _loading = true;
   String? _error;
+  String? _companyId;
   List<PendingSyncAction> _attempts = const [];
   final Map<String, List<SaleAttemptAuditEntry>> _history = {};
   final Set<String> _busy = <String>{};
@@ -77,12 +79,19 @@ class _SaleAttemptRecoveryScreenState
       }
       if (!mounted) return;
       setState(() {
+        _companyId = companyId;
         _attempts = attempts;
         _history
           ..clear()
           ..addAll(history);
         _loading = false;
       });
+      // Las obligaciones de conciliación viven en el servidor: tras cualquier
+      // resolución, se vuelven a pedir (nunca se inventan localmente).
+      final scopedCompanyId = _companyId;
+      if (scopedCompanyId != null && scopedCompanyId.isNotEmpty) {
+        ref.invalidate(reconciliationObligationsProvider(scopedCompanyId));
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -146,8 +155,9 @@ class _SaleAttemptRecoveryScreenState
         // Distinción importante: aquí el servidor NO respondió nada porque no
         // se le preguntó (declaración manual). No es lo mismo que UNKNOWN.
         return 'Este intento no se ha consultado al servidor. La declaración del '
-            'encargado queda registrada como evidencia, pero el cobro sigue sin '
-            'conciliar en el sistema.';
+            'encargado queda registrada como evidencia y, si declaró que recibió '
+            'el dinero, queda una obligación de conciliación administrativa '
+            'pendiente; el cobro sigue sin conciliar en el sistema.';
     }
   }
 
@@ -184,15 +194,35 @@ class _SaleAttemptRecoveryScreenState
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      await _showInfo(
-        title: resolved ? 'Incidencia cerrada' : 'Decisión registrada',
-        body: resolved
-            ? 'Se guardó tu declaración con tu usuario y la hora, y el aviso se '
+      final moneyReceived =
+          decision == SaleAttemptDecision.manualMoneyReceived;
+      final String title;
+      final String body;
+      if (resolved) {
+        title = 'Incidencia cerrada';
+        body = moneyReceived
+            ? 'Se guardó tu declaración con tu usuario y la hora, y quedó '
+                  'registrada una OBLIGACIÓN DE CONCILIACIÓN para revisión '
+                  'administrativa. No se creó ninguna venta, pago, deuda ni '
+                  'movimiento de caja o inventario. Si el envío al servidor no '
+                  'puede completarse ahora, se reintentará automáticamente con '
+                  'la misma declaración, sin duplicarla.'
+            : 'Se guardó tu declaración con tu usuario y la hora, y el aviso se '
                   'retiró de este equipo. En el servidor no se modificó ninguna '
-                  'venta, pago, deuda ni inventario.'
+                  'venta, pago, deuda ni inventario.';
+      } else {
+        title = moneyReceived
+            ? 'No se pudo registrar la declaración'
+            : 'Decisión registrada';
+        body = moneyReceived
+            ? 'No quedó registrada la obligación de conciliación, así que el '
+                  'intento se conserva intacto y no se cerró nada. Vuelve a '
+                  'intentarlo o pide ayuda a soporte antes de cobrar de nuevo '
+                  'este contenido.'
             : 'La decisión quedó registrada pero el intento se conserva para '
-                  'revisión.',
-      );
+                  'revisión.';
+      }
+      await _showInfo(title: title, body: body);
     } catch (error) {
       if (!mounted) return;
       await _showInfo(
@@ -560,6 +590,8 @@ class _SaleAttemptRecoveryScreenState
                   'cobro o ese mismo carrito.',
             ),
             const SizedBox(height: 12),
+            if ((_companyId ?? '').isNotEmpty)
+              ReconciliationObligationsPanel(companyId: _companyId!),
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
