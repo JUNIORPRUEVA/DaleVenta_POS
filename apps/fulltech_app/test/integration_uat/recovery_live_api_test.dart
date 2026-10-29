@@ -624,4 +624,143 @@ void main() {
       reason: 'la declaración ya se envió y se retiró de la cola',
     );
   });
+
+  test('429, 500 y timeout reales: la declaración sobrevive y se envía una sola '
+      'vez cuando el servidor vuelve', () async {
+    final requestId = 'live-failures-$run';
+
+    // Servidor local que responde igual que un backend saturado o caído:
+    // 429 con Retry-After, 500 y una petición que nunca contesta (timeout).
+    final stub = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var mode = '429';
+    stub.listen((request) async {
+      try {
+        switch (mode) {
+          case '429':
+            request.response.statusCode = 429;
+            request.response.headers.set('retry-after', '1');
+          case '500':
+            request.response.statusCode = 500;
+          case 'hang':
+            // No responder: el cliente debe cortar por timeout.
+            await Future<void>.delayed(const Duration(seconds: 30));
+            return;
+        }
+        await request.response.close();
+      } catch (_) {
+        // El cliente puede cerrar antes: no es un fallo del test.
+      }
+    });
+
+    final stubDio = Dio(
+      BaseOptions(
+        baseUrl: 'http://127.0.0.1:${stub.port}',
+        connectTimeout: const Duration(seconds: 2),
+        receiveTimeout: const Duration(seconds: 2),
+      ),
+    );
+    final stubQueue = SyncQueueService(
+      OfflineStore.instance,
+      scopeResolver: () async =>
+          OfflineSyncScope(companyId: companyId, userId: userId),
+    );
+    SaleAttemptDeclarationSyncHandlers(stubQueue, stubDio).register();
+
+    final outbox = SaleAttemptDeclarationOutbox(
+      enqueueAction: (row) => stubQueue.enqueue(
+        id: row.id,
+        type: row.type,
+        scope: row.scope,
+        payload: row.payload,
+        companyId: row.companyId,
+        userId: row.userId,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        idempotencyKey: row.idempotencyKey,
+        requireDatabase: true,
+      ),
+    );
+    final declaration = await outbox.declare(
+      action: attemptRow(requestId),
+      totalDeclared: 50,
+      actorUserId: userId,
+      actorRole: 'ADMIN',
+      note: 'UAT live: declaración bajo fallos de servidor',
+    );
+    expect(declaration, isNotNull);
+
+    Future<PendingSyncAction?> current() async {
+      final rows = await OfflineStore.instance.listPendingActions(
+        companyId: companyId,
+        userId: userId,
+        limit: 200,
+      );
+      for (final row in rows) {
+        if (row.id == declaration!.localId) return row;
+      }
+      return null;
+    }
+
+    Future<PendingSyncAction> settle({int minAttempts = 1}) async {
+      for (var i = 0; i < 400; i += 1) {
+        final row = await current();
+        if (row == null) fail('la declaración desapareció de la cola');
+        if (row.attempts >= minAttempts && row.status != 'syncing') {
+          return row;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      fail('la declaración no terminó el intento');
+    }
+
+    Future<void> waitForDue(PendingSyncAction row) async {
+      final due = row.nextAttemptAt;
+      if (due == null) return;
+      final wait = due.difference(DateTime.now().toUtc());
+      if (wait > Duration.zero) {
+        await Future<void>.delayed(wait + const Duration(milliseconds: 400));
+      }
+    }
+
+    // --- 429 -------------------------------------------------------------
+    final after429 = await settle(minAttempts: 1);
+    expect(after429.status, 'error', reason: '429 es reintentable');
+
+    // --- 500 -------------------------------------------------------------
+    mode = '500';
+    await waitForDue(after429);
+    await stubQueue.processPending();
+    final after500 = await settle(minAttempts: 2);
+    expect(after500.status, 'error', reason: '500 es reintentable');
+    expect(after500.attempts, greaterThanOrEqualTo(2));
+
+    // --- timeout (el servidor no contesta) -------------------------------
+    mode = 'hang';
+    await waitForDue(after500);
+    await stubQueue.processPending();
+    final afterTimeout = await settle(minAttempts: 3);
+    expect(afterTimeout.status, 'error', reason: 'el timeout es reintentable');
+    expect(afterTimeout.attempts, greaterThanOrEqualTo(3));
+
+    // --- el servidor vuelve: la MISMA cola envía al backend real ----------
+    await waitForDue(afterTimeout);
+    await queue.processPending();
+    expect(
+      await current(),
+      isNull,
+      reason: 'cuando el backend responde, la declaración se retira de la cola',
+    );
+
+    final after = await get('/sales/reconciliation-obligations?status=PENDING');
+    final rows = (after['data']?['items'] as List?) ?? const [];
+    final mine = rows.where((row) => row['clientRequestId'] == requestId).toList();
+    expect(
+      mine,
+      hasLength(1),
+      reason: 'tres fallos reales no duplican ni pierden la obligación',
+    );
+    expect((mine.first['totalDeclared'] as num).toDouble(), 50.0);
+
+    await stub.close(force: true);
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

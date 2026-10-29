@@ -131,6 +131,16 @@ export class SalesController {
     return this.saleObligations.list(user, query.status);
   }
 
+  /** Historial de declaraciones de una obligación (solo lectura). */
+  @Get("reconciliation-obligations/:id/events")
+  listReconciliationObligationEvents(
+    @Req() req: Request,
+    @Param("id") id: string,
+  ) {
+    const user = req.user as TenantUser;
+    return this.saleObligations.listEvents(user, id);
+  }
+
   @Post()
   create(@Req() req: Request, @Body() dto: CreateSaleDto) {
     const user = req.user as TenantUser;

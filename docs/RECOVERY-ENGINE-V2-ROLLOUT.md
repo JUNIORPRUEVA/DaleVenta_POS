@@ -60,43 +60,75 @@ válido. Cualquier fallo ⇒ NO-GO.
 
 ---
 
-## 3. Migración en la base de datos
+## 3. Migraciones en la base de datos
 
-La migración `20261029190000_sale_reconciliation_obligations` es **solo
-aditiva**. No hay `ALTER`, `DROP`, `UPDATE` ni `DELETE`.
+Son **dos**, ambas aditivas en lo estructural y en este orden:
 
-Procedimiento:
+| # | Migración | Qué hace |
+| --- | --- | --- |
+| 1 | `20261029190000_sale_reconciliation_obligations` | Crea la tabla de obligaciones + 3 índices. Solo `CREATE`. |
+| 2 | `20261029210000_reconciliation_single_active_obligation` | Tabla de eventos + columnas (`declaration_count`, `version`, `last_declared_at_utc`) + índice único **parcial** `WHERE status='PENDING'`. |
 
-1. **Respaldo completo** de PostgreSQL antes de cualquier paso (el respaldo
-   existente de la plataforma o `pg_dump` a un destino fuera del servidor).
-2. Verificar el respaldo (tamaño, restauración de prueba si es posible).
-3. `npx prisma migrate deploy` en UAT primero.
-4. Comprobar que la tabla existe y está vacía:
-   ```sql
-   SELECT count(*) FROM sale_reconciliation_obligations;
+La única escritura de datos de la migración 2 marca como `SUPERSEDED` las
+obligaciones `PENDING` duplicadas de una misma operación **si ya existieran**
+(no borra filas; reserva el estado y conserva la evidencia). En una base nueva
+esa parte no toca nada.
+
+### Procedimiento con respaldo verificado
+
+1. **Respaldo completo** antes de cualquier paso:
+   ```bash
+   pg_dump --format=custom --no-owner --file=fullpos_$(date +%Y%m%d_%H%M).dump "$DATABASE_URL"
    ```
-5. Repetir en producción **en ventana de baja actividad**.
+2. **Verificar el respaldo** (no basta con que exista):
+   ```bash
+   pg_restore --list fullpos_*.dump | head -n 20          # legible y con tablas
+   pg_restore --clean --if-exists --no-owner \
+     --dbname="$RESTORE_TEST_URL" fullpos_*.dump           # restaurar en una base aparte
+   psql "$RESTORE_TEST_URL" -c 'SELECT count(*) FROM "Sale";'
+   ```
+3. `npx prisma migrate deploy` en UAT primero y repetir las comprobaciones:
+   ```sql
+   SELECT status, count(*) FROM sale_reconciliation_obligations GROUP BY status;
+   SELECT max(c) FROM (SELECT count(*) c FROM sale_reconciliation_obligations
+                        WHERE status='PENDING' GROUP BY company_id, client_request_id) x;
+   -- debe devolver 1 (o NULL si no hay filas)
+   ```
+4. Repetir en producción **en ventana de baja actividad**, con el respaldo
+   verificado y el plan de rollback leído.
 
-Rollback de la migración: **no se revierte**. La tabla puede quedarse sin uso
-(no afecta a ninguna consulta existente). Borrarla sí destruiría evidencia
-financiera, y eso está prohibido.
+Rollback de las migraciones: **no se revierten**. Las tablas pueden quedarse sin
+uso (ninguna consulta existente las toca). Borrarlas destruiría evidencia
+financiera: prohibido.
 
 ---
 
-## 4. Despliegue gradual
+## 4. Despliegue gradual (backend-first)
 
 | Paso | Alcance | Criterio de avance |
 | --- | --- | --- |
-| 0 | UAT con datos sintéticos | Todos los escenarios de `docs/TESTING.md` + los del informe |
-| 1 | Backend en producción (sin cliente nuevo) | 148 sigue vendiendo; ningún error nuevo en logs |
-| 2 | Instalador candidato en 1 equipo piloto (nunca el de un cliente crítico sin aviso) | 24–48 h: ventas, caja, NCF, inventario y arranque sin incidencias |
-| 3 | 5 % de equipos | Igual + revisar obligaciones creadas |
+| 0 | UAT con datos sintéticos (hecho: 25 casos HTTP + 4 de integración) | Todo PASS |
+| 1 | **Backend** en producción sin cliente nuevo | 148 sigue vendiendo; sin errores nuevos en logs; `/sales/reconciliation-obligations` responde 200 |
+| 2 | Instalador en 1 equipo piloto (con aviso al cliente) | 24–48 h: ventas, caja, NCF, inventario y arranque sin incidencias |
+| 3 | 5 % de equipos | Igual + revisar obligaciones creadas y eventos |
 | 4 | Resto | — |
 
-El actualizador de Windows ya está probado en 148: descarga, verifica checksum y
-preserva datos. **El instalador de esta entrega debe publicarse como DRAFT
-primero** y probarse la actualización 148 → nueva versión en un equipo real antes
-de publicar.
+El backend **debe ir primero**: un cliente nuevo contra un backend viejo recibe
+404 al declarar y la declaración queda en la cola como `failed` (visible, no se
+pierde), pero no se concilia hasta actualizar el servidor.
+
+### Instalador candidato (identidad separada de la 148)
+
+- Nombre probado: `FullPOS-UAT-Setup-1.0.7-rc.1-150000.exe`.
+- `AppId {{4C1F9E6A-2D74-4E33-9B57-7A0E5F1C8D21}}` y carpeta
+  `DaleVentas POS UAT`, **distintos** de la instalación estable
+  (`{{0ED49D5E-…}}` / `DaleVentas POS`): instalarlo no puede sobrescribir la 148.
+- Versión `1.0.7-rc.1` (build 150000): no reutiliza 148 ni reserva 149.
+- **Bloqueo:** el binario queda **NotSigned** (no hay certificado de firma de
+  código en el equipo). No se usó ningún certificado falso. La publicación debe
+esperar a un certificado real, porque SmartScreen bloqueará la instalación masiva.
+- Instalar/desinstalar para probar el rollback requiere **elevación (UAC)**, que
+  no se puede automatizar desde aquí: pendiente de una sesión manual.
 
 ---
 

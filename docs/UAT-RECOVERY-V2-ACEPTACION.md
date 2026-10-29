@@ -49,6 +49,37 @@ ruta de SQLite. Verificado con:
 - Huella de la declaración incluía la hora → dos obligaciones por un doble toque.
 - Un 401 dejaba la declaración varada para siempre.
 
+### 1.4 Dos encargados duplicaban el saldo pendiente (crítico financiero)
+
+Cada declaración con importe, nota o actor distinto creaba una obligación
+`PENDING` **independiente** para la misma operación: dos personas declarando
+RD$50 dejaban RD$100 pendientes. Encontrado al auditar el caso de dos
+dispositivos (la aceptación anterior lo daba por bueno como «2 registros
+auditables», que era precisamente el error).
+
+Corrección estructural:
+
+- Índice único **parcial** `(company_id, client_request_id) WHERE status='PENDING'`
+  → una operación, una obligación activa.
+- Tabla nueva `sale_reconciliation_declaration_events` (append-only) con `kind`
+  (`CREATED` | `AMENDED` | `RECTIFIED` | `RECTIFICATION_REJECTED`), importe
+  anterior y nuevo, actor, rol, nota y hora.
+- Cambiar el importe es una **rectificación** y exige rol administrativo; sin
+  permiso devuelve 403 y la obligación queda intacta.
+- La migración marca como `SUPERSEDED` las obligaciones `PENDING` duplicadas que
+  ya existieran (no borra ninguna fila): en el UAT, 77 filas → 41 activas y 36
+  superseded, `pending_per_operation_max = 1`.
+
+### 1.5 Concurrencia y auditoría del rechazo (encontrado al probarlo)
+
+- En PostgreSQL, un choque del índice único **aborta la transacción**; el código
+  intentaba continuar dentro de ella y 3 de 5 envíos simultáneos devolvían 500.
+  Ahora se reintenta la transacción completa (con espera + jitter) y, al existir
+  ya la obligación, se aplica como `AMENDED`/`DUPLICATE`.
+- El evento `RECTIFICATION_REJECTED` se escribía **dentro** de la transacción que
+  luego se revertía, así que el rechazo se perdía. Ahora se escribe en una
+  transacción nueva tras el rollback.
+
 ---
 
 ## 1bis. Seguridad de los datos locales (demostrada ANTES de abrir la app)
@@ -113,8 +144,11 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | AUTH-01 | Sin token | HTTP 401 |
 | VALID-01 | Importe 0 | HTTP 400 |
 | VALID-02 | Fecha no ISO-8601 UTC | HTTP 400 |
-| DEV-01 | Dos dispositivos, misma declaración | 2 registros auditables (actores distintos) |
-| DEV-02 | Rectificación desde el dispositivo B | 3.º registro, `duplicate=false` |
+| DEV-01 | Dos encargados declaran el MISMO importe | **UNA** obligación, `declarationCount=2`, `AMENDED` |
+| DEV-02 | Un cajero intenta cambiar el importe | 403 `RECTIFICATION_REQUIRES_ADMIN`, importe sigue 50 |
+| DEV-03 | Rectificación autorizada por el administrativo | mismo id, importe 55, `version=2`, `RECTIFIED` |
+| EVT-01 | Historial de la obligación | `[CREATED, AMENDED, RECTIFICATION_REJECTED, RECTIFIED]`, anterior=50 nuevo=55 |
+| TENANT-02 | Historial de otra empresa | 403, sin filtrar datos |
 | CONC-01 | 5 envíos simultáneos de la misma declaración | 1 creada, 4 duplicadas, 1 solo id |
 | RECON-01 | Operación inexistente | `NOT_FOUND`, `NOT_REGISTERED`, `retryAllowed=false` |
 | RECON-02 | Consulta repetida | idéntica, sin efectos |
@@ -129,7 +163,13 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | BUILD-03 | El actualizador no ofrece nada | `app_update_check … result=none` (canal stable intacto) |
 | SUITE-01 | `flutter analyze` | No issues found (exit 0) |
 | SUITE-02 | `flutter test` (suite completa) | **1483 PASS, 8 skip, 0 FAIL** |
-| SUITE-03 | API `npm run api:build` + tests | build 0 · 80 suites / 819 tests PASS, 8 skip |
+| SUITE-03 | API `npm run api:build` + tests | build 0 · 80 suites / **822 tests** PASS, 8 skip |
+| FAIL-01 | 429 real con `Retry-After` | declaración conservada, `status=error`, reintentable |
+| FAIL-02 | 500 real del servidor | declaración conservada, `attempts≥2` |
+| FAIL-03 | Timeout real (servidor que no contesta) | declaración conservada, `attempts≥3` |
+| FAIL-04 | El servidor vuelve | la MISMA cola la envía y queda **una** obligación; cola vacía |
+| IMP-01 | Importación histórica en dry-run | 93 obligaciones antes y después; 0 filas de Siarah; fila sin importe rechazada |
+| INST-01 | Instalador candidato UAT | `FullPOS-UAT-Setup-1.0.7-rc.1-150000.exe` (38,4 MB), AppId y carpeta propios |
 
 ### NO EJECUTADO (declarado, no se presenta como PASS)
 
