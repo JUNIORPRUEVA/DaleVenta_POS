@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
+import 'guardian_agent_log.dart';
 import 'guardian_install_credential_store.dart';
 
 /// Enrolamiento de la instalación contra Guardian.
@@ -80,14 +84,34 @@ class GuardianEnrollmentService {
           .timeout(timeout);
 
       final status = response.statusCode ?? 0;
-      if (status < 200 || status >= 300) return null;
+      if (status < 200 || status >= 300) {
+        // El servidor pudo consumir el código y rechazar la respuesta: dejar
+        // rastro es obligatorio para no diagnosticar esto a ciegas.
+        unawaited(GuardianAgentLog.warn(
+          'enrolamiento rechazado http=$status motivo=${_describeBody(response.data)}',
+        ));
+        return null;
+      }
 
-      final data = response.data;
-      if (data is! Map) return null;
+      final data = _asJsonMap(response.data);
+      if (data == null) {
+        // Defecto corregido (fase 13): antes se exigía `Map` y, si el proxy
+        // devolvía el cuerpo como texto, el código ya consumido se perdía sin
+        // una sola traza en el log. Ahora se decodifica y se deja evidencia.
+        unawaited(GuardianAgentLog.warn(
+          'enrolamiento con cuerpo no interpretable: ${_describeBody(response.data)}',
+        ));
+        return null;
+      }
       final credential = data['credential']?.toString() ?? '';
       final resolvedInstallId = data['installId']?.toString() ?? installId;
       final expiresAt = DateTime.tryParse(data['expiresAt']?.toString() ?? '');
-      if (credential.isEmpty || expiresAt == null) return null;
+      if (credential.isEmpty || expiresAt == null) {
+        unawaited(GuardianAgentLog.warn(
+          'enrolamiento sin credencial utilizable (credential=${credential.isNotEmpty} expiresAt=${expiresAt != null})',
+        ));
+        return null;
+      }
 
       final issued = GuardianInstallCredential(
         installId: resolvedInstallId,
@@ -95,12 +119,57 @@ class GuardianEnrollmentService {
         expiresAt: expiresAt.toUtc(),
       );
       await store.write(issued);
+
+      // Verificación de persistencia: si el almacén seguro no guarda, el código
+      // ya está consumido y la instalación se quedaría sin credencial al
+      // reiniciar. Se usa la credencial en memoria y se deja constancia.
+      final persisted = await store.read();
+      if (persisted == null || persisted.credential != issued.credential) {
+        unawaited(GuardianAgentLog.warn(
+          'credencial emitida pero NO persistida: se usa solo en memoria (revisar almacén seguro)',
+        ));
+      }
+
       await _consumeCode();
       return issued;
-    } catch (_) {
+    } catch (error) {
       // Guardian no disponible: no se reintenta en el arranque, no se bloquea.
+      unawaited(GuardianAgentLog.warn('enrolamiento fallido: $error'));
       return null;
     }
+  }
+
+  /// Decodifica el cuerpo aunque llegue como texto (proxies, compresión).
+  static Map<String, dynamic>? _asJsonMap(dynamic raw) {
+    if (raw is Map) {
+      try {
+        return Map<String, dynamic>.from(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (raw is String) {
+      try {
+        final dynamic decoded = jsonDecode(raw);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Resumen del cuerpo para el log: nunca incluye la credencial.
+  static String _describeBody(dynamic raw) {
+    if (raw == null) return 'vacio';
+    if (raw is Map) {
+      final code = raw['code']?.toString() ?? '';
+      final message = raw['message']?.toString() ?? '';
+      if (code.isNotEmpty || message.isNotEmpty) return '${code.isEmpty ? 'sin_code' : code} ${message.isEmpty ? '' : message}'.trim();
+      return 'mapa(${raw.length} claves)';
+    }
+    final text = raw.toString();
+    return 'texto(${text.length}) ${text.length > 120 ? text.substring(0, 120) : text}';
   }
 
   Future<String?> _readCode() async {
