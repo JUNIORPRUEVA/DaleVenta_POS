@@ -162,7 +162,7 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | BUILD-02 | La build solo habla con la API UAT | `GET /api/app-updates/check?…version=1.0.6-uat.2&build=148900` → 200 en `127.0.0.1:4010`; 0 conexiones remotas |
 | BUILD-03 | El actualizador no ofrece nada | `app_update_check … result=none` (canal stable intacto) |
 | SUITE-01 | `flutter analyze` | No issues found (exit 0) |
-| SUITE-02 | `flutter test` (suite completa) | **1483 PASS, 8 skip, 0 FAIL** |
+| SUITE-02 | `flutter test` (suite completa) | **1483 PASS, 9 skip, 0 FAIL** (el 9.º skip es `sqlite_durability_test`, que exige `DALEVENTAS_POS_ROOT` y `UAT_API_BASE`) |
 | SUITE-03 | API `npm run api:build` + tests | build 0 · 80 suites / **822 tests** PASS, 8 skip |
 | FAIL-01 | 429 real con `Retry-After` | declaración conservada, `status=error`, reintentable |
 | FAIL-02 | 500 real del servidor | declaración conservada, `attempts≥2` |
@@ -170,17 +170,23 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | FAIL-04 | El servidor vuelve | la MISMA cola la envía y queda **una** obligación; cola vacía |
 | IMP-01 | Importación histórica en dry-run | 93 obligaciones antes y después; 0 filas de Siarah; fila sin importe rechazada |
 | INST-01 | Instalador candidato UAT | `FullPOS-UAT-Setup-1.0.7-rc.1-150000.exe` (38,4 MB), AppId y carpeta propios |
+| INST-02 | Ciclo **instalar → abrir/cerrar → reinstalar → desinstalar** (variante per-usuario con la misma carga, para no requerir UAC) | install exit 0 (83 archivos) · abre y cierra · 0 conexiones remotas · reinstala con `db`/`-wal`/`-shm` intactos · desinstala y **conserva** `databases/logs/config/media_cache/updates` |
+| INST-03 | Identidad del candidato real | `ProductName=FullPOS UAT`, `FileVersion=1.0.7.1500`, AppId `4C1F9E6A…` ≠ estable `0ED49D5E…` |
+| DURA-01 | Cierre forzado con declaración pendiente | copia de `.db`+`-wal` **con la conexión abierta** (`SNAPSHOT files=2 bytes=185408 skipped=[-shm]`: el `-shm` está mapeado por el proceso vivo y SQLite lo reconstruye del WAL) → una conexión nueva lee `sales.declaration` y `sales.attempt` → al reconectar se envía **una sola obligación de 50,00** |
+| MIG-01 | Migración sobre la **COPIA** de la base real de 148 (84,8 MB) | `user_version 5→5`, 8 tablas, `integrity ok`, **481 filas antes y después**; el original conserva `SHA256` y `mtime` idénticos (nunca se abrió) |
+| PGBK-01 | Respaldo + **restauración probada** | dump 637.105 B, 127 bloques `TABLE DATA`, restore en base aparte exit 0, conteos idénticos (95/24/19/55) |
+| STABLE-01 | Canal estable intacto | sigue ofreciendo **solo** `releases/windows/stable/1.0.6-148/…` |
 
 ### NO EJECUTADO (declarado, no se presenta como PASS)
 
 | ID | Caso | Motivo |
 | --- | --- | --- |
 | UAT-NE-01 | Dos equipos físicos simultáneos de la misma empresa | solo hay un escritorio; el aislamiento se probó por tenant y la concurrencia en proceso |
-| UAT-NE-02 | Reinicio de Windows y cierre forzado del proceso a mitad de sincronización | requiere intervención sobre la máquina; el backoff y la persistencia están cubiertos por tests de cola real |
+| UAT-NE-02 | Reinicio de **Windows** y cierre forzado del proceso real a mitad de sincronización | requiere intervención sobre la máquina; la durabilidad del archivo se probó a nivel de fichero (DURA-01) y el backoff con tests de cola real |
 | UAT-NE-03 | Reconexión tras varias horas de desconexión | se probó el backoff real (5–8 s), no horas de espera |
 | UAT-NE-04 | HTTP 429 real | este UAT no tiene rate limiter que lo produzca; se cubrió a nivel unitario (Retry-After respetado) |
 | UAT-NE-05 | HTTP 500 real del servidor | no se inyectó fallo en el proceso; se probó red caída y puerto muerto |
-| UAT-NE-06 | Copia de base SQLite real de 145–148 con WAL/SHM y regresión de NCF/clientes | no se localizó una base real aislada; la migración se validó con las suites `sale_attempt_schema_migration_test` (v2/v3→actual, con auditoría) |
+| UAT-NE-06 | Regresión funcional de NCF/clientes sobre la copia migrada | la migración se ensayó sobre copia real (MIG-01) pero **no** se levantó la app contra esa copia para revisar NCF/clientes |
 | UAT-NE-07 | Importación del caso Siarah | el importador está en dry-run por defecto y exige importe con evidencia + autorización; no se ejecutó sobre datos reales |
 | UAT-NE-08 | Instalador `.exe` (Inno Setup) firmado | se entregó la carpeta `Release` empaquetada, no un instalador |
 
@@ -219,11 +225,23 @@ C:\src\fullpos-recovery-v2\uat-artifacts\FullPOS-UAT-1.0.6-uat.2-148900\
    ```
 6. Pruebas automáticas reproducibles:
    ```powershell
-   node scripts/uat/recovery-v2-acceptance.cjs          # 23 casos HTTP
+   node scripts/uat/recovery-v2-acceptance.cjs          # 25 casos HTTP
    cd apps\fulltech_app
    flutter test test\integration_uat\recovery_live_api_test.dart `
-     --dart-define=UAT_API_BASE=http://127.0.0.1:4010   # 3 casos cliente↔servidor
+     --dart-define=UAT_API_BASE=http://127.0.0.1:4010   # 4 casos cliente↔servidor
    ```
+7. Durabilidad y migración (escriben en disco, por eso exigen raíz aislada;
+   sin `DALEVENTAS_POS_ROOT` la prueba se OMITE y no toca la carpeta compartida):
+   ```powershell
+   cd apps\fulltech_app
+   $env:DALEVENTAS_POS_ROOT = 'C:\src\fullpos-recovery-v2\uat-artifacts\durability-root'
+   # opcional: copia de una base real para el ensayo de migración (nunca la original)
+   $env:UAT_LEGACY_DB = 'C:\src\fullpos-recovery-v2\uat-artifacts\legacy-copy\fulltech_offline.db'
+   flutter test test\integration_uat\sqlite_durability_test.dart `
+     --dart-define=UAT_API_BASE=http://127.0.0.1:4010   # DURA-01 + MIG-01
+   ```
+   Evidencia esperada: `SNAPSHOT files=2 … skipped=[-shm]` y
+   `REHEARSAL {user_version_before: 5, user_version_after: 5, … rows_after: 481}`.
 
 ---
 

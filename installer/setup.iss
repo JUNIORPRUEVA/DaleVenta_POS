@@ -36,6 +36,14 @@
 #define MyAppOutputBaseFilename "FullPOS-Setup"
 #endif
 
+; Nivel de privilegios del instalador. Por defecto `admin` (instalación por
+; equipo, la del cliente real). Se puede compilar una variante per-usuario
+; (`/DMyAppPrivileges=lowest`) para ensayar el ciclo instalar/reinstalar/
+; desinstalar sin UAC; esa variante NO es el candidato de publicación.
+#ifndef MyAppPrivileges
+#define MyAppPrivileges "admin"
+#endif
+
 #ifdef MyAppUatMayoreo
 #undef MyAppName
 #define MyAppName "FullPOS UAT Mayoreo"
@@ -93,7 +101,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile={#BrandSetupIcon}
-PrivilegesRequired=admin
+PrivilegesRequired={#MyAppPrivileges}
 UninstallDisplayIcon={app}\app\{#MyAppExeName}
 
 [Dirs]
