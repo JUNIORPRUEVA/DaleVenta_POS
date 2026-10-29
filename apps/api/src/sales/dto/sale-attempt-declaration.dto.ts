@@ -49,11 +49,16 @@ export class CreateSaleAttemptDeclarationDto {
   @MaxLength(500)
   note?: string;
 
+  /**
+   * Huella del intento original. Es un dato de CORRELACIÓN, no financiero: si un
+   * cliente antiguo o un registro legado trae otro formato, la declaración debe
+   * registrarse igual. Rechazarla por esto perdería una obligación real de
+   * conciliación (defecto detectado en UAT: un valor no hexadecimal devolvía 400
+   * y la cola marcaba la declaración como fallo permanente).
+   */
   @IsOptional()
   @IsString()
-  @Matches(/^[0-9a-fA-F]{16,64}$/, {
-    message: "operationFingerprint debe ser hexadecimal",
-  })
+  @MaxLength(64)
   operationFingerprint?: string;
 
   @IsOptional()

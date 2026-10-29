@@ -13,6 +13,18 @@ class WindowsProductPaths {
     defaultValue: false,
   );
 
+  /// Perfil UAT (misma bandera que usa `UatApiConfig` para exigir una API local).
+  ///
+  /// En una build UAT el almacenamiento DEBE estar aislado: si no se indica una
+  /// carpeta propia, la app falla cerrada en vez de abrir las bases reales de
+  /// `C:\Program Files\DaleVentas POS\databases`. Ocurrió en la aceptación UAT:
+  /// una build de prueba, al no llevar la variable, resolvía exactamente la
+  /// misma ruta que la instalación real del cliente.
+  static const bool isUatProfile = bool.fromEnvironment(
+    'FULLPOS_UAT_PROFILE',
+    defaultValue: false,
+  );
+
   static String get productName =>
       isUatMayoreoBuild ? 'DaleVentas POS UAT Mayoreo' : 'DaleVentas POS';
 
@@ -35,6 +47,16 @@ class WindowsProductPaths {
 
     final override = _overrideRoot();
     if (override.isNotEmpty) return Directory(override);
+
+    // Fail-closed: una build UAT sin carpeta propia nunca debe tocar los datos
+    // reales del cliente.
+    if (isUatProfile) {
+      throw StateError(
+        'Build UAT sin almacenamiento aislado: define $overrideRootEnv con una '
+        'carpeta exclusiva de pruebas antes de abrir la aplicación.',
+      );
+    }
+
     if (!kReleaseMode) return null;
 
     final programFiles = (Platform.environment['ProgramFiles'] ?? '').trim();

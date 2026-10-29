@@ -1,1 +1,5 @@
 concurrency: 1
+tags:
+  uat:
+    # Pruebas de integración contra una API UAT real. No se ejecutan con
+    # `flutter test` normal: requieren --dart-define=UAT_API_BASE=...
