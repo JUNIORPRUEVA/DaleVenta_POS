@@ -218,6 +218,44 @@ export class GuardianAlertService {
   }
 
   /**
+   * Fase 13 — cierra el hueco de orquestación detectado en la aceptación real.
+   *
+   * La alerta se planifica en la ingesta. Si en ese instante las alertas estaban
+   * apagadas, el incidente quedaba diagnosticado sin aviso para siempre, porque
+   * nadie volvía a planificarlo. Este barrido idempotente (lo garantiza
+   * `dedupeKey`) planifica la alerta de incidentes ya diagnosticados, pero solo
+   * dentro de una ventana reciente: nunca reenvía historia antigua.
+   */
+  async planMissingForDiagnosed(limit = 5, sinceMinutes = 10): Promise<number> {
+    if (!resolveGuardianConfig().alertsEnabled) return 0;
+    const since = new Date(Date.now() - Math.max(1, sinceMinutes) * 60_000);
+    const pending = await this.prisma.guardianIncident
+      .findMany({
+        where: {
+          alerts: { none: { kind: 'initial' } },
+          diagnoses: {
+            some: { status: GuardianDiagnosisStatus.DONE, createdAt: { gte: since } },
+          },
+          company: { guardianEnabled: true },
+        },
+        select: { id: true },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(1, limit),
+      })
+      .catch(() => [] as Array<{ id: string }>);
+
+    let planned = 0;
+    for (const incident of pending) {
+      const plan = await this.planForIncident(incident.id).catch(() => null);
+      if (plan?.created) planned += 1;
+    }
+    if (planned > 0) {
+      this.logger.log(`alertas planificadas tras diagnóstico=${planned}`);
+    }
+    return planned;
+  }
+
+  /**
    * Crea (idempotentemente) la alerta de un incidente.
    *
    * Política 24/7: SEV1 y SEV2 se envían a cualquier hora, incluso madrugada,

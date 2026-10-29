@@ -139,9 +139,19 @@ export async function runGuardianWorker(): Promise<void> {
       // varios ciclos seguidos sin latido se sale con código != 0 para que la
       // política `--restart-condition any` lo levante de nuevo.
       // No se considera fallo "processed=0": con Guardian desactivado es normal.
+      // Fase 13: si la alerta no pudo planificarse en la ingesta (alertas
+      // apagadas en ese instante), se planifica ahora que ya existe diagnóstico.
+      // El dedupeKey la hace idempotente: nunca duplica un aviso existente.
+      if (diagnosisOutcome && (diagnosisOutcome.diagnosed ?? 0) > 0) {
+        await alerts.planMissingForDiagnosed(5).catch((error: unknown) => {
+          logger.error(
+            `planificación de alertas: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      }
+
       const beatAlerts = await beat('alerts', alertOutcome?.processed ?? 0);
       const beatDiagnosis = await beat('diagnosis', diagnosisOutcome?.processed ?? 0);
-
       if (!beatAlerts && !beatDiagnosis) {
         consecutiveFailures += 1;
         logger.warn(
