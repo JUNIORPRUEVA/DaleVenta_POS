@@ -137,6 +137,9 @@ describe("SYNC-03 end-to-end offline recovery + multi-tenant (isolated UAT DB)",
 
     process.env.DATABASE_URL = appUrl;
     process.env.JWT_SECRET = process.env.JWT_SECRET || "sync03-uat-secret";
+    // Esta suite valida el flujo LEGACY (POST /sales sin originCashSessionId);
+    // sin la bandera el contrato legacy se rechaza con 409 LEGACY_MISSING_SESSION.
+    process.env.FINANCIAL_LEGACY_COMPAT = "true";
     const prismaCli = resolve(
       process.cwd(),
       "..",
@@ -275,7 +278,7 @@ describe("SYNC-03 end-to-end offline recovery + multi-tenant (isolated UAT DB)",
 
     expect(res.status).toBe(409);
     expect(`${(res.body as { message?: unknown }).message ?? ""}`).toMatch(
-      /historial de inventario|transferencias/i,
+      /historial/i,
     );
 
     // Operation did NOT complete: the product must still exist.

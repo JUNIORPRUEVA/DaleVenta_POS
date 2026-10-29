@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { ServiceOrderNotificationJobsProcessor } from './service-order-notification-jobs.processor';
+import { reportGuardianJobFailure } from '../guardian/telemetry/guardian.telemetry.reporter';
 
 @Injectable()
 export class NotificationsDispatcher implements OnModuleInit, OnModuleDestroy {
@@ -23,8 +24,14 @@ export class NotificationsDispatcher implements OnModuleInit, OnModuleDestroy {
         this.serviceOrderJobs.processDueJobsBatch(10),
         this.notifications.processOutboxBatch(25),
       ])
-        .catch(() => {
-          // best-effort
+        .catch((error) => {
+          // best-effort: el ciclo no se interrumpe, pero el fallo ya no se pierde.
+          // La telemetría es asíncrona y fail-open: no altera este flujo.
+          reportGuardianJobFailure({
+            module: 'network',
+            operation: 'notificationsOutboxCycle',
+            error,
+          });
         })
         .finally(() => {
           this.running = false;

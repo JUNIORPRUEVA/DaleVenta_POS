@@ -26,6 +26,13 @@ else()
   set(BINARY_NAME "fullpos_cloud")
 endif()
 
+# NOTA DE INTEGRACION (Fase 7): la parametrizacion de identidad por CMake que
+# introdujo la rama de Guardian (FULLPOS_APP_*, FULLPOS_WINDOW_TITLE,
+# FULLPOS_MUTEX_NAME, app_identity.h y Runner.rc.in) se retiro aqui. Produccion
+# resolvio el mismo problema con FULLPOS_WINDOWS_CHANNEL / FULLPOS_UAT_MODE y
+# define la identidad dentro de Runner.rc; mantener las dos vias creaba dos
+# fuentes de verdad para el nombre del ejecutable y el mutex.
+
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)

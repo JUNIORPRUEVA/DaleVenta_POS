@@ -33,6 +33,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { ServiceOrdersModule } from './service-orders/service-orders.module';
 import { AppUpdatesModule } from './app-updates/app-updates.module';
 import { PriceListsModule } from './price-lists/price-lists.module';
+import { GuardianModule } from './guardian/guardian.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { PriceListsModule } from './price-lists/price-lists.module';
     ServiceOrdersModule,
     AppUpdatesModule,
     PriceListsModule,
+    GuardianModule,
   ],
 })
 export class AppModule {}

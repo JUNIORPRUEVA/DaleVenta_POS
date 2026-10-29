@@ -20,8 +20,17 @@ class WindowsProductPaths {
       ? 'DALEVENTAS_POS_UAT_MAYOREO_ROOT'
       : 'DALEVENTAS_POS_ROOT';
 
+  /// Build UAT aislada: **prohibe** usar el directorio de datos de produccion
+  /// (`C:\Program Files\DaleVentas POS`). Con esta bandera, si no hay
+  /// `DALEVENTAS_POS_ROOT` explicito, se devuelve `null` y los consumidores caen
+  /// al directorio de datos de la propia aplicacion (que en UAT es otro por
+  /// tener identidad de ejecutable distinta).
+  static const bool uatIsolation =
+      bool.fromEnvironment('DALEVENTAS_POS_UAT_ISOLATION', defaultValue: false);
+
   static bool get isOfficialWindowsStorageEnabled {
     if (kIsWeb || !Platform.isWindows) return false;
+    if (uatIsolation) return _overrideRoot().isNotEmpty;
     if (_overrideRoot().isNotEmpty) return true;
     return kReleaseMode;
   }
@@ -35,6 +44,8 @@ class WindowsProductPaths {
 
     final override = _overrideRoot();
     if (override.isNotEmpty) return Directory(override);
+    // Aislamiento UAT: nunca se usa la raiz de produccion.
+    if (uatIsolation) return null;
     if (!kReleaseMode) return null;
 
     final programFiles = (Platform.environment['ProgramFiles'] ?? '').trim();

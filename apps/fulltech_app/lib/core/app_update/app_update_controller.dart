@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/env.dart';
+import '../debug/app_error_reporter.dart';
 import '../debug/trace_log.dart';
 import 'app_update_installer.dart';
 import 'app_update_installer_contract.dart';
@@ -209,6 +210,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         error: error,
         stackTrace: stackTrace,
       );
+      _reportUpdaterFailure(error, stackTrace, 'UPDATER_LAUNCH_FAILED');
       persisted = state.persisted.copyWith(
         phase: AppUpdatePhase.installFailed,
         lastUpdateResult: 'UPDATER_LAUNCH_FAILED',
@@ -385,6 +387,7 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
         error: error,
         stackTrace: stackTrace,
       );
+      _reportUpdaterFailure(error, stackTrace, 'CHECK_ERROR');
       await _setState(
         state.copyWith(
           phase: AppUpdatePhase.idle,
@@ -402,8 +405,29 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     }
   }
 
-  bool _hasPreparedArtifactFor(UpdateManifest manifest) {
-    final persisted = state.persisted;
+  /// Reporta un fallo técnico del actualizador al sistema de errores.
+  ///
+  /// Silencioso para el usuario (la UI del updater ya comunica su estado) pero
+  /// visible para la observabilidad: Guardian lo clasifica en `module=updater`.
+  /// Nunca puede alterar el flujo del actualizador.
+  void _reportUpdaterFailure(Object error, StackTrace stackTrace, String code) {
+    try {
+      AppErrorReporter.instance.record(
+        error,
+        stackTrace,
+        context: 'actualizacion:$code',
+        title: 'Actualización',
+        userMessage: 'No se pudo completar la actualización.',
+        severity: AppErrorSeverity.error,
+        notifyUser: false,
+        dedupeKey: 'updater:$code',
+      );
+    } catch (_) {
+      // Ignorado a propósito: la telemetría no puede romper el updater.
+    }
+  }
+
+  bool _hasPreparedArtifactFor(UpdateManifest manifest) {    final persisted = state.persisted;
     final targetBuild = manifest.buildNumber;
     final artifact = persisted.artifactRelativePath;
     if (targetBuild == null || artifact == null || artifact.trim().isEmpty) {
