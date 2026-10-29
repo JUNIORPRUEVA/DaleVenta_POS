@@ -40,13 +40,27 @@ export async function runGuardianWorker(): Promise<void> {
   let running = false;
   let stopping = false;
 
+  // Supervisión propia (fase 12). Ver el comentario dentro de `tick()`.
+  const maxConsecutiveFailures = Math.max(
+    2,
+    Number(process.env.GUARDIAN_WORKER_MAX_FAILED_CYCLES ?? 3),
+  );
+  const cycleTimeoutMs = Math.max(
+    15_000,
+    Number(process.env.GUARDIAN_WORKER_CYCLE_TIMEOUT_SECONDS ?? 120) * 1_000,
+  );
+  let consecutiveFailures = 0;
+
   // Latido real: el watchdog independiente no puede distinguir "sin trabajo" de
   // "proceso muerto" solo con contadores, así que cada worker deja su marca.
+  // Devuelve `true` solo si el latido se persistió: es la señal de vida que usa
+  // el autoguardado (ver `tick()`), porque los servicios de dominio capturan sus
+  // propios errores y no siempre propagan un fallo de base de datos.
   let heartbeatCycle = 0;
-  const beat = async (workerName: string, processedLastCycle: number) => {
+  const beat = async (workerName: string, processedLastCycle: number): Promise<boolean> => {
     heartbeatCycle += 1;
-    await prisma.guardianWorkerHeartbeat
-      .upsert({
+    try {
+      await prisma.guardianWorkerHeartbeat.upsert({
         where: { workerName },
         create: {
           workerName,
@@ -63,17 +77,26 @@ export async function runGuardianWorker(): Promise<void> {
           host: hostname(),
           pid: process.pid,
         },
-      })
-      .catch((error: unknown) => {
-        logger.warn(
-          `latido ${workerName} no registrado: ${error instanceof Error ? error.message : String(error)}`,
-        );
       });
+      return true;
+    } catch (error: unknown) {
+      logger.warn(
+        `latido ${workerName} no registrado: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
   };
 
   const tick = async () => {
     if (running || stopping) return;
     running = true;
+    // Si un ciclo se queda colgado (conexión a medio abrir, driver bloqueado),
+    // el healthcheck solo marcaría "unhealthy" sin reiniciar nada. Este tope
+    // duro devuelve el proceso a Swarm para que lo levante de nuevo.
+    const stallGuard = setTimeout(() => {
+      logger.error(`ciclo bloqueado más de ${cycleTimeoutMs} ms: se reinicia el proceso`);
+      process.exit(1);
+    }, cycleTimeoutMs);
     try {
       const alertOutcome = await alerts.processDue(10).catch((error: unknown) => {
         logger.error(`Alertas: ${error instanceof Error ? error.message : String(error)}`);
@@ -84,8 +107,29 @@ export async function runGuardianWorker(): Promise<void> {
         return null;
       });
 
-      await beat('alerts', alertOutcome?.processed ?? 0);
-      await beat('diagnosis', diagnosisOutcome?.processed ?? 0);
+      // Autoguardado (fase 12): un healthcheck en rojo NO reinicia el contenedor
+      // en Swarm. La señal de vida fiable es el LATIDO persistido: si no se
+      // puede escribir, el worker está inútil aunque el proceso siga vivo. Tras
+      // varios ciclos seguidos sin latido se sale con código != 0 para que la
+      // política `--restart-condition any` lo levante de nuevo.
+      // No se considera fallo "processed=0": con Guardian desactivado es normal.
+      const beatAlerts = await beat('alerts', alertOutcome?.processed ?? 0);
+      const beatDiagnosis = await beat('diagnosis', diagnosisOutcome?.processed ?? 0);
+
+      if (!beatAlerts && !beatDiagnosis) {
+        consecutiveFailures += 1;
+        logger.warn(
+          `latido no persistido (${consecutiveFailures}/${maxConsecutiveFailures})`,
+        );
+        if (consecutiveFailures >= maxConsecutiveFailures) {
+          logger.error('worker sin latido: se reinicia el proceso para recuperar el servicio');
+          clearInterval(timer);
+          await app.close().catch(() => undefined);
+          process.exit(1);
+        }
+      } else {
+        consecutiveFailures = 0;
+      }
 
       if (
         alertOutcome &&
@@ -101,6 +145,7 @@ export async function runGuardianWorker(): Promise<void> {
         );
       }
     } finally {
+      clearTimeout(stallGuard);
       running = false;
     }
   };
