@@ -19,4 +19,7 @@ final offlineSyncHandlersBootstrapProvider = Provider<void>((ref) {
   ref.read(companySettingsRepositoryProvider).registerSyncHandlers();
   // Declaraciones de cobro recibido: viajan por la misma cola que el resto.
   ref.read(saleAttemptDeclarationSyncHandlersProvider);
+  // Si una declaración quedó bloqueada por sesión caducada, se reintenta al
+  // volver a entrar.
+  ref.read(saleAttemptDeclarationAuthRecoveryProvider);
 });

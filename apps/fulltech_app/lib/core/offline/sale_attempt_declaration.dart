@@ -57,12 +57,18 @@ class SaleAttemptDeclaration {
   String get declaredAtIso =>
       declaredAtUtc.toUtc().toIso8601String();
 
-  /// Huella del contenido declarado. Misma declaración → misma huella.
+  /// Huella del contenido declarado: identidad de la operación, importe, medio
+  /// de pago, actor y nota.
+  ///
+  /// NO incluye la hora a propósito. Repetir la MISMA declaración (doble toque,
+  /// reintento, reapertura de la pantalla) debe seguir siendo la misma
+  /// obligación; si la hora entrara aquí, cada intento crearía una obligación
+  /// distinta por unos segundos de diferencia. La hora se fija la primera vez y
+  /// viaja en el cuerpo.
   String get contentHash {
     final payload = [
       clientRequestId.trim(),
       normalizedTotal,
-      declaredAtIso,
       (paymentMethod ?? '').trim().toLowerCase(),
       (declaredByUserId ?? '').trim().toLowerCase(),
       (declaredByRole ?? '').trim().toLowerCase(),
@@ -71,8 +77,8 @@ class SaleAttemptDeclaration {
     return sha256.convert(utf8.encode(payload)).toString();
   }
 
-  /// Identidad local de la declaración. Incluye la huella para que una
-  /// corrección no se confunda con la declaración anterior.
+  /// Identidad local de la declaración. Una corrección de importe, de medio de
+  /// pago o de nota es una declaración NUEVA; repetir lo mismo no lo es.
   String get localId => '$_localPrefix$clientRequestId:${contentHash.substring(0, 12)}';
 
   /// `válida` exige identidad, importe positivo y hora.
@@ -182,10 +188,16 @@ class SaleAttemptDeclaration {
 class SaleAttemptDeclarationOutbox {
   SaleAttemptDeclarationOutbox({
     required this.enqueueAction,
+    this.findExisting,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
   final Future<void> Function(PendingSyncAction action) enqueueAction;
+
+  /// Busca una declaración ya guardada con la misma identidad. Si existe, NO se
+  /// vuelve a encolar: la primera hora declarada es la que vale.
+  final Future<PendingSyncAction?> Function(String id)? findExisting;
+
   final DateTime Function() _clock;
 
   /// Encola la declaración. Devuelve `null` si la declaración no es válida.
@@ -218,6 +230,15 @@ class SaleAttemptDeclarationOutbox {
       attemptPayload: action.payload,
     );
     if (!declaration.isValid) return null;
+
+    // Repetir la misma declaración no crea una segunda obligación ni cambia la
+    // hora de la primera.
+    final existing = await findExisting?.call(declaration.localId);
+    if (existing != null) {
+      return SaleAttemptDeclaration.fromQueuePayload(existing.payload) ??
+          declaration;
+    }
+
     await enqueueAction(
       declaration.toPendingAction(
         companyId: action.companyId,

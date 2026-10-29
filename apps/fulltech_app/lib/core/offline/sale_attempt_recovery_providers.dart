@@ -109,3 +109,16 @@ extension RecoveryEngineRefTriggers on WidgetRef {
     ).runOnce(trigger: RecoveryTrigger.connectivityRestored);
   }
 }
+
+/// Estado del motor para la interfaz (solo lectura).
+///
+/// Se emite con el estado inicial y luego con cada cambio del motor, para que la
+/// pantalla muestre «en curso», «sin conexión», «última verificación», etc. sin
+/// abrir ninguna ventana emergente.
+final recoveryEngineStateProvider = StreamProvider<RecoveryEngineState>((
+  ref,
+) async* {
+  final engine = ref.watch(recoveryEngineProvider);
+  yield engine.state;
+  yield* engine.states;
+});

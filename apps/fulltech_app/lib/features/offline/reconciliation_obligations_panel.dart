@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_routes.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/offline/pending_sync_action.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Obligación de conciliación registrada en el servidor.
@@ -92,26 +93,40 @@ final reconciliationObligationsProvider = FutureProvider.autoDispose
     });
 
 /// Panel informativo de obligaciones de conciliación pendientes.
+///
+/// [pendingDeclarations] son las declaraciones que aún no se han podido enviar
+/// al servidor. Se muestran igual de visibles: una declaración guardada en el
+/// equipo NO puede desaparecer de la vista mientras espera la red.
 class ReconciliationObligationsPanel extends ConsumerWidget {
-  const ReconciliationObligationsPanel({super.key, required this.companyId});
+  const ReconciliationObligationsPanel({
+    super.key,
+    required this.companyId,
+    this.pendingDeclarations = const [],
+  });
 
   final String companyId;
+  final List<PendingSyncAction> pendingDeclarations;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(reconciliationObligationsProvider(companyId));
     return async.when(
-      loading: () => const SizedBox.shrink(),
-      error: (error, stack) => _ObligationsNotice(
-        icon: Icons.cloud_off_rounded,
-        title: 'Conciliación no disponible ahora',
-        body:
-            'No pudimos consultar las obligaciones de conciliación. No se ha '
-            'perdido ninguna declaración: se enviará sola cuando vuelva la '
-            'conexión.',
+      loading: () => _localOnly(context),
+      error: (error, stack) => _localOnly(
+        context,
+        notice: const _ObligationsNotice(
+          icon: Icons.cloud_off_rounded,
+          title: 'Conciliación no disponible ahora',
+          body:
+              'No pudimos consultar las obligaciones de conciliación. No se ha '
+              'perdido ninguna declaración: se enviará sola cuando vuelva la '
+              'conexión.',
+        ),
       ),
       data: (obligations) {
-        if (obligations.isEmpty) return const SizedBox.shrink();
+        if (obligations.isEmpty && pendingDeclarations.isEmpty) {
+          return const SizedBox.shrink();
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -124,6 +139,10 @@ class ReconciliationObligationsPanel extends ConsumerWidget {
                   'la revisión se hace por el flujo oficial.',
             ),
             const SizedBox(height: 10),
+            for (final declaration in pendingDeclarations) ...[
+              _PendingDeclarationCard(action: declaration),
+              const SizedBox(height: 8),
+            ],
             for (final obligation in obligations) ...[
               _ObligationCard(obligation: obligation),
               const SizedBox(height: 8),
@@ -132,6 +151,113 @@ class ReconciliationObligationsPanel extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+
+  /// Solo lo que hay guardado en el equipo (sin servidor disponible).
+  Widget _localOnly(BuildContext context, {Widget? notice}) {
+    if (pendingDeclarations.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        notice ??
+            const _ObligationsNotice(
+              icon: Icons.outbox_rounded,
+              title: 'Declaraciones por enviar',
+              body:
+                  'Están guardadas en este equipo y se enviarán solas cuando '
+                  'vuelva la conexión. Reintentar no crea duplicados.',
+            ),
+        const SizedBox(height: 10),
+        for (final declaration in pendingDeclarations) ...[
+          _PendingDeclarationCard(action: declaration),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _PendingDeclarationCard extends StatelessWidget {
+  const _PendingDeclarationCard({required this.action});
+
+  final PendingSyncAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = action.payload['totalDeclared'];
+    final amount = total is num
+        ? total.toDouble()
+        : double.tryParse('${total ?? ''}');
+    final note = (action.payload['note'] ?? '').toString().trim();
+    // El estado real de la cola se dice tal cual: nunca se presenta como
+    // «enviada» algo que todavía no llegó al servidor.
+    final label = switch (action.status) {
+      'failed' => 'Requiere revisión',
+      'auth_blocked' => 'Inicia sesión',
+      'error' => 'Reintentando',
+      'syncing' => 'Enviando',
+      _ => 'Por enviar',
+    };
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.outbox_rounded,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  amount == null ? 'Importe en revisión' : 'RD\$ ${amount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Operación ${(action.payload['clientRequestId'] ?? action.entityId ?? '').toString()}',
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              note,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

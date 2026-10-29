@@ -13,7 +13,6 @@ import '../errors/operation_error_message.dart';
 import '../errors/user_safe_error_text.dart';
 import 'offline_store.dart';
 import 'pending_sync_action.dart';
-import 'sale_attempt_reconciliation_providers.dart';
 
 typedef SyncQueueHandler = Future<void> Function(Map<String, dynamic> payload);
 typedef SyncScopeResolver = Future<OfflineSyncScope?> Function();
@@ -124,30 +123,15 @@ final syncQueueBootstrapProvider = Provider<void>((ref) {
     ref.read(syncQueueServiceProvider.notifier).start();
   });
   /*
-   * Conciliación de intentos de cobro con resultado incierto.
+   * La conciliación de intentos de cobro con resultado incierto YA NO se hace
+   * aquí. La hace `recoveryEngineBootstrapProvider` con disparadores, backoff y
+   * single-flight.
    *
-   * Se ejecuta al arrancar y NO reenvía ningún cobro: solo pregunta al backend
-   * si ese `clientRequestId` ya está registrado. Si la consulta no es
-   * concluyente, el intento se queda intacto.
+   * Motivo del cambio: al arrancar, este barrido y el motor corrían a la vez
+   * sobre los mismos intentos. El segundo llegaba cuando el primero tenía el
+   * intento «en vuelo», recibía `null` y lo contaba como servidor inalcanzable,
+   * aplicando un backoff inexistente. Un solo dueño, una sola pasada.
    */
-  Future<void>.microtask(() async {
-    try {
-      final user = await TokenStorage().getUserSnapshot();
-      final summary = await ref
-          .read(saleAttemptReconcilerProvider)
-          .syncPendingAttempts(companyId: user?.companyId, userId: user?.id);
-      if (summary.hasChanges) {
-        await ref.read(syncQueueServiceProvider.notifier).refreshStats();
-      }
-    } catch (error, stack) {
-      TraceLog.log('reconcile', 'barrido inicial fallido: $error');
-      assert(() {
-        // ignore: avoid_print
-        print('[reconcile] barrido inicial fallido: $error\n$stack');
-        return true;
-      }());
-    }
-  });
 });
 
 class SyncQueueService extends StateNotifier<SyncQueueState> {
@@ -192,6 +176,49 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
 
   void registerHandler(String type, SyncQueueHandler handler) {
     _handlers[type] = handler;
+  }
+
+  /// Rehabilita acciones `auth_blocked` de UN tipo concreto.
+  ///
+  /// Solo se usa para operaciones que no dependen del turno ni del estado de una
+  /// sesión concreta (por ejemplo, la declaración de un cobro recibido). Tras
+  /// volver a iniciar sesión son seguras de reintentar; dejarlas bloqueadas para
+  /// siempre sería perder una obligación financiera.
+  Future<int> releaseAuthBlocked({
+    required String type,
+    String? companyId,
+    String? userId,
+  }) async {
+    if (type.trim().isEmpty) return 0;
+    final scope = await _resolveScope();
+    final resolvedCompany = _clean(companyId) ?? scope?.companyId;
+    final resolvedUser = _clean(userId) ?? scope?.userId;
+    final actions = await _store.listPendingActions(
+      companyId: resolvedCompany,
+      userId: resolvedUser,
+      limit: 500,
+    );
+    var released = 0;
+    for (final action in actions) {
+      if (action.type != type) continue;
+      if (action.status != 'auth_blocked') continue;
+      await _store.updatePendingAction(
+        action.copyWith(
+          status: 'pending',
+          permanent: false,
+          clearError: true,
+          clearNextAttemptAt: true,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      );
+      released++;
+    }
+    if (released > 0) {
+      TraceLog.log('sync_queue', 'released auth_blocked type=$type n=$released');
+      await refreshStats();
+      unawaited(processPending());
+    }
+    return released;
   }
 
   Future<PendingSyncAction?> pendingOperation({

@@ -221,9 +221,15 @@ void main() {
   }
 
   Future<void> tapAndSettle(WidgetTester tester, String label) async {
+    // La pantalla creció (tarjeta de estado del motor): el botón puede quedar
+    // fuera del viewport de prueba. Se desplaza hasta él antes de pulsar, igual
+    // que haría la persona que usa la aplicación.
+    final target = find.textContaining(label).first;
+    await tester.ensureVisible(target);
+    await tester.pump();
     await tester.runAsync(() async {
       // `textContaining`: algunos botones añaden contadores («Historial (1)»).
-      await tester.tap(find.textContaining(label).first);
+      await tester.tap(target);
       await Future<void>.delayed(const Duration(milliseconds: 600));
     });
     await tester.pump();

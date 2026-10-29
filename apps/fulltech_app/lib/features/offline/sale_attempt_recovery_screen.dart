@@ -8,10 +8,15 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/pending_sync_action.dart';
 import '../../core/offline/sale_attempt_audit.dart';
+import '../../core/offline/sale_attempt_declaration.dart';
 import '../../core/offline/sale_attempt_reconciliation.dart';
 import '../../core/offline/sale_attempt_reconciliation_providers.dart';
+import '../../core/offline/sale_attempt_recovery_engine.dart';
+import '../../core/offline/sale_attempt_recovery_providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'declaration_export.dart';
 import 'reconciliation_obligations_panel.dart';
+import 'recovery_status_card.dart';
 
 /// Centro de recuperación de cobros sin confirmar.
 ///
@@ -38,6 +43,8 @@ class _SaleAttemptRecoveryScreenState
   bool _loading = true;
   String? _error;
   String? _companyId;
+  int _pendingDeclarations = 0;
+  List<PendingSyncAction> _queuedDeclarations = const [];
   List<PendingSyncAction> _attempts = const [];
   final Map<String, List<SaleAttemptAuditEntry>> _history = {};
   final Set<String> _busy = <String>{};
@@ -68,6 +75,15 @@ class _SaleAttemptRecoveryScreenState
         companyId: companyId,
         userId: userId,
       );
+      // Declaraciones «sí recibí el dinero» todavía no enviadas al servidor.
+      final queued = await OfflineStore.instance.listPendingActions(
+        companyId: companyId,
+        userId: userId,
+        limit: 500,
+      );
+      final declarations = queued
+          .where((action) => action.type == SaleAttemptDeclaration.actionType)
+          .toList(growable: false);
       final history = <String, List<SaleAttemptAuditEntry>>{};
       for (final action in attempts) {
         final requestId = SaleAttemptReconciler.requestIdOf(action);
@@ -81,6 +97,8 @@ class _SaleAttemptRecoveryScreenState
       setState(() {
         _companyId = companyId;
         _attempts = attempts;
+        _pendingDeclarations = declarations.length;
+        _queuedDeclarations = declarations;
         _history
           ..clear()
           ..addAll(history);
@@ -482,6 +500,54 @@ class _SaleAttemptRecoveryScreenState
     }
   }
 
+  /// Exporta la auditoría de declaraciones «dinero recibido» para poder
+  /// importarlas al servidor como obligaciones de conciliación.
+  ///
+  /// Solo copia texto al portapapeles: no envía nada, no escribe nada y deja el
+  /// importe en `null` para que lo complete una persona con evidencia.
+  Future<void> _copyDeclarationImportTemplate() async {
+    final companyId = _companyId;
+    if (companyId == null || companyId.isEmpty) {
+      await _showInfo(
+        title: 'Sin empresa activa',
+        body: 'Vuelve a iniciar sesión para poder preparar la importación.',
+      );
+      return;
+    }
+    try {
+      final audit = await OfflineStore.instance.listSaleAttemptAudit(
+        companyId: companyId,
+        limit: 500,
+      );
+      final template = buildDeclarationImportTemplate(
+        companyId: companyId,
+        audit: audit,
+      );
+      await Clipboard.setData(ClipboardData(text: template));
+      if (!mounted) return;
+      final count = audit
+          .where((entry) => entry.decision == SaleAttemptDecision.manualMoneyReceived)
+          .map((entry) => entry.clientRequestId)
+          .toSet()
+          .length;
+      await _showInfo(
+        title: 'Plantilla copiada',
+        body: count == 0
+            ? 'No hay declaraciones históricas de «dinero recibido» en este '
+                  'equipo; la plantilla se copió vacía.'
+            : 'Se copiaron $count declaraciones. Completa el importe de cada una '
+                  'con evidencia antes de importarlas: el sistema nunca inventa '
+                  'un monto. La importación no crea ventas ni movimientos de caja.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      await _showInfo(
+        title: 'No se pudo preparar la plantilla',
+        body: 'No se modificó nada. Inténtalo de nuevo o pide apoyo a soporte.',
+      );
+    }
+  }
+
   Future<void> _showInfo({required String title, required String body}) {
     return showDialog<void>(
       context: context,
@@ -575,6 +641,18 @@ class _SaleAttemptRecoveryScreenState
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
+          PopupMenuButton<String>(
+            tooltip: 'Más acciones',
+            onSelected: (value) {
+              if (value == 'export') _copyDeclarationImportTemplate();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'export',
+                child: Text('Copiar plantilla de importación'),
+              ),
+            ],
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -582,6 +660,20 @@ class _SaleAttemptRecoveryScreenState
         child: ListView(
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
           children: [
+            Consumer(
+              builder: (context, ref, _) {
+                final engine = ref.watch(recoveryEngineStateProvider);
+                return RecoveryStatusCard(
+                  state: engine.maybeWhen(
+                    data: (value) => value,
+                    orElse: () => const RecoveryEngineState(),
+                  ),
+                  openIncidents: _attempts.length,
+                  pendingDeclarations: _pendingDeclarations,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
             const _Notice(
               icon: Icons.storefront_rounded,
               text:
@@ -591,7 +683,10 @@ class _SaleAttemptRecoveryScreenState
             ),
             const SizedBox(height: 12),
             if ((_companyId ?? '').isNotEmpty)
-              ReconciliationObligationsPanel(companyId: _companyId!),
+              ReconciliationObligationsPanel(
+                companyId: _companyId!,
+                pendingDeclarations: _queuedDeclarations,
+              ),
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
