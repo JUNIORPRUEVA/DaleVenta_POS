@@ -120,9 +120,10 @@ pierde), pero no se concilia hasta actualizar el servidor.
 ### Instalador candidato final (identidad de producción)
 
 - Versión definitiva: **`1.0.7+150`** (ver §7.1). Artefacto:
-  `installer/output/FullPOS-Setup-1.0.7-150.exe` — 40.305.531 B ·
-  SHA256 `CA8BD38420917E7BD2EF6CE3A04BEBDE5AB912AF2C23E54338D6CADBEA2F4E96`
-  (recompilado desde `3bba9ce6`; sustituye al hash anterior, no se reutiliza).
+  `installer/output/FullPOS-Setup-1.0.7-150.exe` — 40.301.542 B ·
+  SHA256 `D86E726FAD169DA79011568DF91A73CB2FA74D87DA8C00B37D2B9F4B5974688C`
+  (recompilado tras el aislamiento de credenciales desde `cebd9aa6`; sustituye a
+  todos los hashes anteriores, que no se reutilizan).
 - Identidad estable de siempre: AppId `{{0ED49D5E-6E78-4F11-8E78-6D37FDE2078A}}`
   y carpeta `DaleVentas POS` (actualiza la instalación del cliente, no crea una
   segunda). **No ejecutar este artefacto en el equipo de desarrollo**: existe
@@ -297,6 +298,49 @@ escribir las credenciales sintéticas. Recomendación: usar un espacio de nombre
 Causa del «exit 0 sin ventana» que se había observado: el paquete instalado no era una
 build con el perfil UAT ni con `DALEVENTAS_POS_ROOT`, de modo que el arranque abortaba
 antes de `runApp`. Con la build y los defines correctos la aplicación abre normalmente.
+
+### 8.3ter Aislamiento de credenciales de la build UAT (2026-10-29)
+
+Problema encontrado en la aceptación: la build UAT usaba **las mismas claves** de
+`flutter_secure_storage` y de `shared_preferences` que la app real, porque ambas
+comparten ejecutable y, por tanto, la carpeta de soporte
+(`%APPDATA%\FullPOS Cloud\FullPOS Cloud - Sistema de facturacion`). Resultado:
+el login de la build UAT aparecía el **usuario real** guardado en el equipo, y un
+`clearTokens()` desde la build de ensayo podría haber borrado la sesión real.
+
+Corrección (`cebd9aa6`): el perfil de aceptación `FULLPOS_UAT_PROFILE` activa la
+misma identidad aislada que el interruptor histórico `FULLPOS_UAT_BUILD` →
+claves con prefijo `uat.`, base `fulltech_offline.uat.db`, prefijos de caché
+`_uat:` y título marcado como entorno de pruebas. Producción no cambia.
+
+Evidencia (build instalada `1.0.7-rc.5-150005`):
+
+| Comprobación | Resultado |
+| --- | --- |
+| Pantalla de login | **vacía** (sin usuario autocompletado) |
+| `_bootstrap()` | `no local session` |
+| Base local | `fulltech_offline.uat.db` (nombre aislado) |
+| `flutter_secure_storage.dat` de la app real | SHA256 `1B64041D…2E06` **idéntico** antes y después |
+| `shared_preferences.json` de la app real | SHA256 `F7F687E4…2839` **idéntico** antes y después |
+
+### 8.3quater Ensayo del piloto 148 → 150 sobre datos REALES (copia)
+
+Sin tocar la instalación del cliente: se copió `fulltech_offline.db` (84,8 MB,
+`user_version=5`) a una raíz aislada y se abrió con el **código candidato**.
+
+| Dato | Antes | Después de abrir con el candidato |
+| --- | --- | --- |
+| `user_version` / tablas | 5 / 8 | **5 / 8** |
+| `offline_sales` | 1 | **1** |
+| `offline_sale_items` | 2 | **2** |
+| `offline_sale_payments` | 1 | **1** |
+| `offline_inventory_intents` | 2 | **2** |
+| `pending_actions` | 0 | **0** |
+| Base original del cliente | SHA256 `A0D2AEEE…1D89`, 88.961.024 B | **idénticos** (nunca se abrió) |
+
+WAL y SHM se copiaron junto al `.db` y la app generó los suyos propios sin tocar
+los originales. El piloto con el **instalador** sobre un equipo real sigue
+pendiente de autorización (§8.5).
 
 ### 8.4 Estado de firma digital
 

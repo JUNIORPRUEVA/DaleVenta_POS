@@ -183,6 +183,8 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | WIN-02 | POS desde la app instalada | Facturación con catálogo, búsqueda, Venta rápida, `Turno: Abierto` y ticket; chip `UAT` |
 | WIN-03 | Centro de recuperación desde la app instalada | con 1 cobro sintético muestra `Requiere intervención`, `RD$ 75,00` y las acciones; la declaración «sí recibimos el dinero» devuelve **201** y crea **1 obligación PENDING** de 75,00 en el servidor |
 | WIN-04 | Build de producción sin restos de UAT | `app.so`: `easypanel`×7, `daleventapos-backend`×5, `127.0.0.1:4010`=0, `FULLPOS_UAT_PROFILE`=0, `C:\src\fullpos`=0, `guardian`=0 |
+| WIN-05 | Credenciales de la build UAT aisladas de la instalación real | login vacío, `_bootstrap() no local session`, base `fulltech_offline.uat.db`; `flutter_secure_storage.dat` (`1B64041D…`) y `shared_preferences.json` (`F7F687E4…`) de la app real con el **mismo SHA256** antes y después |
+| PILOT-01 | Ensayo del piloto 148→150 sobre **copia** de la base real | `user_version 5`, 8 tablas, `offline_sales=1`, items=2, payments=1, inventario=2, pendientes=0 → **idénticos**; base original con SHA256 y tamaño sin cambios |
 | PGBK-01 | Respaldo + **restauración probada** | dump 637.105 B, 127 bloques `TABLE DATA`, restore en base aparte exit 0, conteos idénticos (95/24/19/55) |
 | STABLE-01 | Canal estable intacto | sigue ofreciendo **solo** `releases/windows/stable/1.0.6-148/…` |
 
