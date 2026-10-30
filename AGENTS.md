@@ -117,9 +117,9 @@ If the user asks for a **fix or implementation**: audit enough to know the real 
 
 **No leftovers**: no debug prints, no temporary `TODO`s, no commented-out code, no hardcoded test values in committed code.
 
-**High-risk change protocol** (auth, payments, cash, inventory, credits, accounting, permissions, migrations, multi-company/tenant, sync, offline, printing/fiscal, release, production): AUDIT → PLAN → IMPLEMENT → VALIDATE → REVIEW DIFF → REVALIDATE → REPORT GO/NO-GO. Do not skip the plan step, and do not advance to another phase automatically.
+**High-risk change protocol** (auth, payments, cash, inventory, credits, accounting, permissions, migrations, multi-company/tenant, sync, offline, printing/fiscal, release, production): AUDIT → PLAN → IMPLEMENT → VALIDATE → REVIEW DIFF → REVALIDATE → REPORT GO/NO-GO. Do not skip the plan step. Advance across phases only when the user has expressly requested autonomous multi-phase execution under the Phases policy below.
 
-**Phases**: if the task describes phases, complete and validate the current phase only, then stop and report. Do not continue to the next phase without approval.
+**Phases**: by default, if the task describes phases, complete and validate the current phase only, then stop and report. When the user expressly requests executing multiple development phases in one task, the agent may continue automatically from one phase to the next without requesting individual confirmation after each phase, provided that it respects the authorized scope, preserves all safety restrictions, verifies each phase's acceptance criteria, records each phase as PASS, PARTIAL, or BLOCKED, continues with independent phases when one phase is blocked, does not invent results, does not disable tests, does not modify production without express authorization, does not execute sensitive external operations without express authorization, does not perform real or Sandbox fiscal emission without specific authorization, does not expose credentials, does not perform destructive changes without authorization, stops only the affected operation when a critical risk or blocker appears, preserves technical evidence, and delivers a consolidated final report. This policy permits continuity of work, not expansion of permissions.
 
 ## 7. UI/UX Rules
 

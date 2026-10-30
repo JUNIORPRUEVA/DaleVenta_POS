@@ -10,6 +10,11 @@ dist/
 apps/api/.env
 apps/api/.env.docker
 apps/api/.env.uat.local
+apps/api/.env.alanube.uat.local
+apps/api/.env.alanube.sandbox.local
+apps/api/.env.*.uat.local
+apps/api/.env.*.sandbox.local
+apps/api/.secrets/
 apps/fulltech_app/.env
 .env.uat.local
 

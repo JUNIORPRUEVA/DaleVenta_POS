@@ -1,0 +1,23 @@
+# Ephemeral PostgreSQL dedicated to AUTOMATED e-CF tests. Never the historical UAT.
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: fullpos_alanube_ecf_test_postgres
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${TEST_DB_NAME:?TEST_DB_NAME is required}
+      POSTGRES_USER: ${TEST_DB_USER:?TEST_DB_USER is required}
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:?TEST_DB_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${TEST_DB_PORT:?TEST_DB_PORT is required}:5432"
+    volumes:
+      - fullpos_alanube_ecf_test_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_DB_USER} -d ${TEST_DB_NAME}"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  fullpos_alanube_ecf_test_postgres_data:
+    name: fullpos_alanube_ecf_test_postgres_data
