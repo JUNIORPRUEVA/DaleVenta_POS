@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { resolveGuardianConfig } from './guardian.config';
 import { guardianSecretValue } from './guardian.secret';
+import { formatGuardianDateTime } from './guardian.time';
 import {
   GUARDIAN_COMPANY_DISABLED,
   isGuardianEnabledForCompany,
@@ -68,13 +69,7 @@ export function buildGuardianAlertMessage(input: {
           ? 'MEDIO'
           : 'BAJO';
 
-  const time = input.occurredAt.toLocaleString('es-DO', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-    day: '2-digit',
-    month: '2-digit',
-  });
+  const time = formatGuardianDateTime(input.occurredAt);
 
   const shortId = `INC-${input.incidentId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
   const related =
@@ -128,13 +123,7 @@ export function buildGuardianAlertTemplateParams(input: {
         : input.severity === GuardianSeverity.SEV3
           ? 'MEDIO'
           : 'BAJO';
-  const time = input.occurredAt.toLocaleString('es-DO', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-    day: '2-digit',
-    month: '2-digit',
-  });
+  const time = formatGuardianDateTime(input.occurredAt);
   const values = [
     severityLabel,
     input.companyName,

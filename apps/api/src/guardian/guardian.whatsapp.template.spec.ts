@@ -85,7 +85,7 @@ describe('plantilla administrativa guardian_incident_alert', () => {
     expect(params[0]).toBe('CRÍTICO');
     expect(params[1]).toBe('Comercial Ejemplo SRL');
     expect(params[2]).toBe('caja / cierre de sesión');
-    expect(params[3]).toMatch(/^\d{2}\/\d{2}, \d{2}:\d{2} [ap]\. m\.$/);
+    expect(params[3]).toMatch(/^\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2} [ap]\. m\.$/);
     expect(params[5]).toBe('Información pendiente de confirmar.');
     expect(params[6]).toBe('Pendiente de determinar.');
     expect(params[7]).toBe('INC-4F2A9C');
@@ -112,7 +112,7 @@ describe('plantilla administrativa guardian_incident_alert', () => {
       );
     });
     expect(params[0]).toBe('ALTO');
-    expect(params[3]).toMatch(/^\d{2}\/\d{2}, \d{2}:\d{2} [ap]\. m\.$/);
+    expect(params[3]).toMatch(/^\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2} [ap]\. m\.$/);
     expect(params[7]).toBe('INC-4F2A9C');
   });
 
