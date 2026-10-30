@@ -202,9 +202,12 @@ Remove-Item '.dart_tool\sqflite_common_ffi\databases\*' -Recurse -Force -ErrorAc
 flutter test
 ```
 
-Además, `test/modules/cash/turn_current_no_session_test.dart` puede fallar de
-forma intermitente por un bloqueo de SQLite de 10 s bajo carga
-(`Warning database has been locked for 0:00:10`); pasa siempre en aislamiento.
+Además, `test/modules/cash/turn_current_no_session_test.dart` y las pruebas de
+migración de 85 MB pueden fallar de forma intermitente por bloqueos de SQLite de
+10 s bajo carga (`Warning database has been locked for 0:00:10`): pasan siempre en
+aislamiento y en su carpeta (`test/core/offline` → 125 PASS). Se observaron
+corridas con 28 y 29 fallos mientras se compilaba o se ejecutaban apps en paralelo;
+con la máquina libre la suite da **1483 PASS / 9 skip / 0 FAIL** sobre `cebd9aa6`.
 
 ### NO EJECUTADO (declarado, no se presenta como PASS)
 
