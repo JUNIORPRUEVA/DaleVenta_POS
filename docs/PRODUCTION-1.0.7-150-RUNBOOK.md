@@ -3,6 +3,16 @@
 Documento operativo. **Nada de esto se ejecutó todavía**: cada paso requiere
 autorización explícita del propietario en la tarea en curso.
 
+> **Aviso (2026-10-30, posterior a este documento).** Producción ya ejecuta
+> Guardian AI (`easypanel/daleventapos/backend:autoenroll-5d8a5f98`, desplegada a
+> las 03:35 UTC) con DeepSeek y WhatsApp activos. Por tanto, **el §3 de este
+> runbook (despliegue backend con la imagen `1.0.7-150-c0f983b6`) queda
+> SUPERSEDED**: esa imagen no contiene Guardian y desplegarla lo eliminaría.
+> El despliegue del backend se hace con la imagen integrada del runbook
+> `PRODUCTION-1.0.7-151-RUNBOOK.md`. El §1 (respaldo/restauración) y el §2
+> (migraciones) siguen siendo válidos; el instalador 150 del §0 sigue siendo el
+> artefacto de recuperación, no el de publicación final.
+
 ---
 
 ## 0. Datos de la release
