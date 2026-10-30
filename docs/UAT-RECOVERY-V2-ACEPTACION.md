@@ -179,6 +179,10 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | SEC-01 | El instalador UAT no puede tocar la estable | AppId, carpeta, ejecutable y accesos directos propios; el bloque `[InstallDelete]` que borraba los accesos de `DaleVentas POS` ya no se compila en las variantes UAT (verificado en el binario) |
 | INT-01 | Integración sobre la línea con Guardian AI | rama `agent/integrate-recovery-v2-guardian` desde `agent/guardian-phase12`: 2 conflictos resueltos (schema Prisma y rutas de almacenamiento), `api:build` OK, **1125 tests API** y **1517 tests Flutter** PASS, `analyze` sin issues |
 | SIG-01 | Estado de firma de los artefactos | `FullPOS-Setup-1.0.7-150.exe`, `…UAT…rc.2-150002.exe` y `…rc.3-150003.exe`: **NotSigned** (sin certificado; no se fabrificó ninguno) |
+| WIN-01 | La app **instalada** abre y se mantiene viva | ventana `FullPOS Cloud - Sistema de facturacion`, proceso vivo, base y log en la raíz aislada; todas las peticiones a `127.0.0.1:4010` |
+| WIN-02 | POS desde la app instalada | Facturación con catálogo, búsqueda, Venta rápida, `Turno: Abierto` y ticket; chip `UAT` |
+| WIN-03 | Centro de recuperación desde la app instalada | con 1 cobro sintético muestra `Requiere intervención`, `RD$ 75,00` y las acciones; la declaración «sí recibimos el dinero» devuelve **201** y crea **1 obligación PENDING** de 75,00 en el servidor |
+| WIN-04 | Build de producción sin restos de UAT | `app.so`: `easypanel`×7, `daleventapos-backend`×5, `127.0.0.1:4010`=0, `FULLPOS_UAT_PROFILE`=0, `C:\src\fullpos`=0, `guardian`=0 |
 | PGBK-01 | Respaldo + **restauración probada** | dump 637.105 B, 127 bloques `TABLE DATA`, restore en base aparte exit 0, conteos idénticos (95/24/19/55) |
 | STABLE-01 | Canal estable intacto | sigue ofreciendo **solo** `releases/windows/stable/1.0.6-148/…` |
 

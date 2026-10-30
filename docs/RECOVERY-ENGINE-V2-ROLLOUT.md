@@ -120,8 +120,9 @@ pierde), pero no se concilia hasta actualizar el servidor.
 ### Instalador candidato final (identidad de producción)
 
 - Versión definitiva: **`1.0.7+150`** (ver §7.1). Artefacto:
-  `installer/output/FullPOS-Setup-1.0.7-150.exe` — 40.304.215 B ·
-  SHA256 `3530BBDB61415254D70522EC8285A2F540B701E73436B2B581BE63CA818592DF`.
+  `installer/output/FullPOS-Setup-1.0.7-150.exe` — 40.305.531 B ·
+  SHA256 `CA8BD38420917E7BD2EF6CE3A04BEBDE5AB912AF2C23E54338D6CADBEA2F4E96`
+  (recompilado desde `3bba9ce6`; sustituye al hash anterior, no se reutiliza).
 - Identidad estable de siempre: AppId `{{0ED49D5E-6E78-4F11-8E78-6D37FDE2078A}}`
   y carpeta `DaleVentas POS` (actualiza la instalación del cliente, no crea una
   segunda). **No ejecutar este artefacto en el equipo de desarrollo**: existe
@@ -268,6 +269,34 @@ Ahora está excluido también para `MyAppUat`.
 Nota menor: tras desinstalar queda la carpeta vacía `C:\Program Files\DaleVentas POS UAT`
 (sin contenido) porque el proceso no elevado no puede eliminar el directorio;
 se borra con una sesión elevada.
+
+### 8.3bis Aplicación instalada: validación real de la UI (2026-10-29)
+
+Build UAT reconstruida desde el candidato con
+`--dart-define=FULLPOS_UAT_PROFILE=true --dart-define=API_BASE_URL=http://127.0.0.1:4010
+--dart-define=APP_BASE_URL=http://127.0.0.1:4010 --dart-define=DISABLE_APP_UPDATES=true`,
+instalada con `FullPOS-UAT-Setup-1.0.7-rc.4-150004.exe` (identidad y carpeta propias).
+
+| Comprobación | Resultado |
+| --- | --- |
+| La app instalada abre y permanece viva | **SÍ** — ventana `FullPOS Cloud - Sistema de facturacion`, proceso vivo, base y log creados en la raíz aislada |
+| Habla solo con el backend UAT | **SÍ** — todas las peticiones del log van a `http://127.0.0.1:4010` |
+| Inicio de sesión | **SÍ** — entra al POS con el usuario sintético; el chip superior indica `UAT` |
+| POS | **SÍ** — Facturación con catálogo, búsqueda, Venta rápida, Agregar stock/cliente, `Turno: Abierto`, ticket |
+| Centro de recuperación | **SÍ** — `Sync ▸ Centro de recuperación` abre la pantalla; con 1 cobro sembrado muestra `Requiere intervención`, `RD$ 75,00`, `Verificar ahora`, `Preparar venta nueva`, `Solicitar revisión`, `Historial` |
+| Declaración «sí recibimos el dinero» | **SÍ** — nota escrita, `Registrar declaración` → «Incidencia cerrada»; log: `POST /sales/attempts/uat-visual-obligation-1/declaration` → **201**, `sync success` |
+| Obligación en el servidor | **SÍ** — `GET /sales/reconciliation-obligations` devuelve 1 obligación `PENDING`, 75.00, rol `ADMIN`, `declarationCount=1`, `version=1`; cola local vacía |
+| Efectos colaterales | **NINGUNO** — 0 ventas, 0 pagos, 0 movimientos de caja creados por la declaración |
+
+Hallazgo del entorno de ensayo (no del producto): la build UAT comparte el almacén de
+credenciales de Windows con la app real, así que la pantalla de login **autocompletó el
+correo de un usuario real**. Por eso se reemplazó el contenido del campo antes de
+escribir las credenciales sintéticas. Recomendación: usar un espacio de nombres propio
+(servicio de credenciales distinto) en las builds de aceptación.
+
+Causa del «exit 0 sin ventana» que se había observado: el paquete instalado no era una
+build con el perfil UAT ni con `DALEVENTAS_POS_ROOT`, de modo que el arranque abortaba
+antes de `runApp`. Con la build y los defines correctos la aplicación abre normalmente.
 
 ### 8.4 Estado de firma digital
 
