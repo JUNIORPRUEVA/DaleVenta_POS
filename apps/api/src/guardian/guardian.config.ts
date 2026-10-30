@@ -23,12 +23,16 @@ export type GuardianConfig = {
    */
   alertDiagnosisWaitSeconds: number;
   diagnosisMaxAttempts: number;
-  /** Presupuesto diario de tokens de IA por empresa (0 = sin límite). */
-  aiTokensPerCompanyDay: number;
-  /** Presupuesto diario GLOBAL de tokens de IA (0 = sin límite). */
-  aiTokensGlobalDay: number;
-  /** Presupuesto mensual GLOBAL de tokens de IA (0 = sin límite). */
-  aiTokensGlobalMonth: number;
+  /**
+   * Umbral de saldo (en la moneda que informe el proveedor) por debajo del cual
+   * se considera saldo bajo y se avisa al administrador. No es una cuota: no
+   * bloquea llamadas, solo decide cuándo avisar.
+   */
+  aiBalanceLowThreshold: number;
+  /** Cada cuántos minutos se consulta el saldo del proveedor (worker). */
+  aiBalanceCheckMinutes: number;
+  /** Ventana anti-ruido entre avisos del mismo estado de saldo. */
+  aiBalanceAlertCooldownMinutes: number;
   /** Máximo de llamadas simultáneas al proveedor de IA. */
   aiMaxConcurrency: number;
   /** Interruptor explícito del canal Evolution reutilizando el outbox. */
@@ -44,6 +48,12 @@ function readBool(raw: string | undefined, fallback = false): boolean {
 
 function readInt(raw: string | undefined, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(String(raw ?? '').trim(), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function readFloat(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseFloat(String(raw ?? '').trim().replace(',', '.'));
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
 }
@@ -65,9 +75,14 @@ export function resolveGuardianConfig(env: NodeJS.ProcessEnv = process.env): Gua
     alertGroupWindowMinutes: readInt(env.GUARDIAN_ALERT_GROUP_WINDOW_MINUTES, 30, 1, 720),
     alertDiagnosisWaitSeconds: readInt(env.GUARDIAN_ALERT_DIAGNOSIS_WAIT_SECONDS, 90, 0, 900),
     diagnosisMaxAttempts: readInt(env.GUARDIAN_DIAGNOSIS_MAX_ATTEMPTS, 4, 1, 10),
-    aiTokensPerCompanyDay: readInt(env.GUARDIAN_AI_TOKENS_PER_COMPANY_DAY, 200_000, 0, 100_000_000),
-    aiTokensGlobalDay: readInt(env.GUARDIAN_AI_TOKENS_GLOBAL_DAY, 0, 0, 1_000_000_000),
-    aiTokensGlobalMonth: readInt(env.GUARDIAN_AI_TOKENS_GLOBAL_MONTH, 0, 0, 10_000_000_000),
+    aiBalanceLowThreshold: readFloat(env.GUARDIAN_AI_BALANCE_LOW_THRESHOLD, 5, 0, 1_000_000),
+    aiBalanceCheckMinutes: readInt(env.GUARDIAN_AI_BALANCE_CHECK_MINUTES, 30, 5, 1_440),
+    aiBalanceAlertCooldownMinutes: readInt(
+      env.GUARDIAN_AI_BALANCE_ALERT_COOLDOWN_MINUTES,
+      360,
+      15,
+      10_080,
+    ),
     aiMaxConcurrency: readInt(env.GUARDIAN_AI_MAX_CONCURRENCY, 2, 1, 10),
     alertsEvolutionEnabled: readBool(env.GUARDIAN_ALERTS_EVOLUTION_ENABLED, false),
     platformToken: String(env.GUARDIAN_PLATFORM_TOKEN ?? '').trim(),

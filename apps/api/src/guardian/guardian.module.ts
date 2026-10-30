@@ -17,6 +17,7 @@ import { GuardianPlatformGuard } from './guardian.platform.guard';
 import { GuardianIngestService } from './guardian.ingest.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
 import { GuardianQuotaService } from './guardian.quota.service';
+import { GuardianAiBalanceMonitor } from './guardian.ai.balance.monitor';
 import { GuardianBackendCaptureService } from './guardian.backend-capture.service';
 import { GuardianToolsService } from './guardian.tools.service';
 import { GuardianDiagnosisService } from './guardian.diagnosis.service';
@@ -74,6 +75,7 @@ export function createGuardianAiProvider() {
   ],
   providers: [
     GuardianQuotaService,
+    GuardianAiBalanceMonitor,
     GuardianIngestService,
     GuardianEnrollmentService,
     GuardianAutoEnrollmentService,

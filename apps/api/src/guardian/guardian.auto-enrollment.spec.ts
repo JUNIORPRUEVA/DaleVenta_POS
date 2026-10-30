@@ -191,7 +191,9 @@ describe('configuracion del auto-enrolamiento', () => {
     setEnv({ GUARDIAN_AUTO_ENROLL_GRANT_TTL_SECONDS: '1', GUARDIAN_MAX_INSTALLATIONS_PER_COMPANY: '9999' });
     const config = resolveGuardianAutoEnrollmentConfig();
     expect(config.grantTtlSeconds).toBe(60);
-    expect(config.maxInstallationsPerCompany).toBe(200);
+    // La capacidad por empresa subió a 500 (antes 200) para no dejar equipos sin
+    // monitoreo en negocios con muchas estaciones.
+    expect(config.maxInstallationsPerCompany).toBe(500);
   });
 
   it('la elegibilidad exige empresa activa, sin bloqueo y con licencia vigente', () => {

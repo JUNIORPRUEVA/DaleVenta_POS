@@ -62,11 +62,15 @@ export function resolveGuardianAutoEnrollmentConfig(
     allowedCompanyIds: readList(env.GUARDIAN_AUTO_ENROLL_COMPANIES),
     activateOnGrant: readBool(env.GUARDIAN_AUTO_ENROLL_ACTIVATE, true),
     grantTtlSeconds: readInt(env.GUARDIAN_AUTO_ENROLL_GRANT_TTL_SECONDS, 300, 60, 1_800),
+    // Capacidad por empresa: el valor anterior (10) bloqueaba negocios con más
+    // terminales que el promedio y dejaba equipos sin monitoreo
+    // (`INSTALLATION_LIMIT_REACHED`). El coste real se controla por el saldo del
+    // proveedor de IA, no limitando equipos.
     maxInstallationsPerCompany: readInt(
       env.GUARDIAN_MAX_INSTALLATIONS_PER_COMPANY,
-      10,
+      50,
       1,
-      200,
+      500,
     ),
     grantsPerCompanyHour: readInt(env.GUARDIAN_AUTO_ENROLL_GRANTS_PER_HOUR, 12, 1, 120),
   };
