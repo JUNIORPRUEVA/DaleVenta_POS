@@ -16,6 +16,227 @@ enum Role {
   TECNICO
 }
 
+enum EcfProvider {
+  ALANUBE
+
+  @@map("ecf_provider")
+}
+
+enum EcfEnvironment {
+  SANDBOX
+  PRODUCTION
+
+  @@map("ecf_environment")
+}
+
+enum EcfCertificationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  READY_FOR_REVIEW
+  AUTHORIZED_SANDBOX
+  PRODUCTION_READY
+  SUSPENDED
+
+  @@map("ecf_certification_status")
+}
+
+enum EcfOnboardingStepKey {
+  REQUIREMENTS
+  FISCAL_CONFIG
+  DIGITAL_CERTIFICATE
+  ALANUBE_REGISTRATION
+  DGII_POSTULATION
+  XML_SIGNATURE
+  SET_TESTS
+  SIMULATIONS
+  PRINTED_REPRESENTATION
+  SERVICE_URLS
+  SWORN_DECLARATION
+  FINAL_AUTHORIZATION
+  ENCF_REQUEST
+  ROLE_ASSIGNMENT
+  PRODUCTION_ENABLEMENT
+
+  @@map("ecf_onboarding_step_key")
+}
+
+/// Alcance de una concesión de asistencia a FULLTECH.
+enum EcfSupportScope {
+  VIEW_DOSSIER
+  REVIEW_EVIDENCE
+  REQUEST_CORRECTION
+
+  @@map("ecf_support_scope")
+}
+
+/// Concesión de asistencia otorgada por la EMPRESA al personal de plataforma.
+///
+/// El acceso de FULLTECH a un expediente exige dos condiciones: identidad de
+/// staff Y una concesión vigente que cubra el alcance solicitado. Sin relación
+/// con `Company`/`User` a propósito: son identificadores y no se necesita
+/// cascada, lo que mantiene la migración estrictamente aditiva.
+model EcfSupportGrant {
+  id              String            @id @default(uuid())
+  companyId       String            @map("company_id")
+  grantedByUserId String            @map("granted_by_user_id")
+  scopes          EcfSupportScope[]
+  reason          String?
+  createdAt       DateTime          @default(now()) @map("created_at")
+  expiresAt       DateTime          @map("expires_at")
+  revokedAt       DateTime?         @map("revoked_at")
+  revokedByUserId String?           @map("revoked_by_user_id")
+
+  @@index([companyId, createdAt])
+  @@map("ecf_support_grants")
+}
+
+enum EcfOnboardingStepStatus {
+  PENDING
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CONFIRMED
+  FAILED
+
+  @@map("ecf_onboarding_step_status")
+}
+
+enum EcfOnboardingStepMode {
+  AUTOMATIC
+  ASSISTED
+  MANUAL
+  PENDING_CONFIRMATION
+
+  @@map("ecf_onboarding_step_mode")
+}
+
+enum EcfCertificationAttemptStatus {
+  REGISTERED
+  IN_PROGRESS
+  SUCCEEDED
+  FAILED
+  BLOCKED
+
+  @@map("ecf_certification_attempt_status")
+}
+
+enum EcfAuditAction {
+  CONFIG_CREATED
+  CONFIG_UPDATED
+  ONBOARDING_STARTED
+  STEP_CREATED
+  STEP_UPDATED
+  EVIDENCE_LINKED
+  ATTEMPT_REGISTERED
+  DGII_EVIDENCE_REGISTERED
+  DGII_EVIDENCE_REVIEWED
+  DGII_HABILITATION_UPDATED
+  DGII_AUTHORIZATION_RECORDED
+  DGII_AUTHORIZATION_REVOKED
+  DGII_APPLICATION_DRAFT_SAVED
+  DGII_APPLICATION_SUBMITTED
+  DGII_CONSENT_ACCEPTED
+  LINE_CLASSIFICATION_CONFIRMED
+  SUPPORT_GRANT_CREATED
+  SUPPORT_GRANT_REVOKED
+  SUPPORT_GRANT_EXPIRED
+  SUPPORT_ACCESS_GRANTED
+  SUPPORT_ACCESS_DENIED
+
+  @@map("ecf_audit_action")
+}
+
+/// Estado del proceso de habilitación DGII de una empresa. Es un estado de
+/// SEGUIMIENTO interno: no es, por sí mismo, una resolución oficial de la DGII.
+enum EcfDgiiHabilitationState {
+  NOT_STARTED
+  PREPARING_REQUIREMENTS
+  APPLICATION_PENDING
+  IN_PROGRESS
+  TESTS_PENDING
+  IN_CERTIFICATION
+  APPROVED
+  REJECTED
+  REQUIRES_CORRECTION
+
+  @@map("ecf_dgii_habilitation_state")
+}
+
+/// Origen de una evidencia. Separa de forma explícita una DECLARACIÓN manual del
+/// operador de un DOCUMENTO OFICIAL verificable: nunca se confunden.
+enum EcfEvidenceSource {
+  MANUAL_DECLARATION
+  OFFICIAL_DOCUMENT
+  PROVIDER_ARTIFACT
+
+  @@map("ecf_evidence_source")
+}
+
+/// Revisión INTERNA de una evidencia.
+///
+/// Es una dimensión distinta del origen (`EcfEvidenceSource`): «quién lo
+/// entregó» y «si alguien lo revisó» son dos hechos separados. Ninguna revisión
+/// interna convierte una evidencia en autorización oficial.
+enum EcfEvidenceReviewStatus {
+  PENDING
+  REVIEWED
+  REJECTED
+
+  @@map("ecf_evidence_review_status")
+}
+
+/// Fuente que sustenta la autorización de emisión. Solo `DGII_OFFICIAL_RECORD`
+/// puede respaldar una emisión real; el resto son registros internos que no
+/// autorizan nada por sí mismos.
+enum EcfDgiiVerificationSource {
+  NONE
+  MANUAL_OPERATOR_DECLARATION
+  PROVIDER_CONFIRMATION
+  DGII_OFFICIAL_RECORD
+
+  @@map("ecf_dgii_verification_source")
+}
+
+enum EcfElectronicDocumentType {
+  E31
+  E32
+  E34
+
+  @@map("ecf_electronic_document_type")
+}
+
+enum EcfElectronicDocumentStatus {
+  LOCAL_DRAFT
+  LOCAL_VALIDATION_PENDING
+  LOCAL_VALIDATED
+  READY_TO_SEND
+  SEND_PENDING
+  SEND_IN_PROGRESS
+  UNKNOWN_RESULT
+  PROVIDER_ACCEPTED
+  PROVIDER_REJECTED
+  DGII_STATUS_PENDING
+  DGII_ACCEPTED
+  DGII_REJECTED
+  HUMAN_REVIEW_REQUIRED
+  CANCELLED
+
+  @@map("ecf_electronic_document_status")
+}
+
+enum EcfElectronicDocumentOperation {
+  PREPARE
+  VALIDATE_LOCAL
+  SEND_TO_PROVIDER
+  QUERY_PROVIDER
+  QUERY_DGII_STATUS
+  CANCEL_LOCAL
+  MARK_HUMAN_REVIEW
+
+  @@map("ecf_electronic_document_operation")
+}
+
 enum CompanyStatus {
   ACTIVE
   SUSPENDED
@@ -792,6 +1013,19 @@ model Company {
   warehouseTransferItems           WarehouseTransferItem[]
   inventoryZeroConfigState         InventoryZeroConfigState?
   telemetryOutbox                  TelemetryOutbox[]
+  ecfConfiguration                 EcfCompanyConfiguration?
+  ecfOnboardingSteps               EcfOnboardingStep[]
+  ecfDgiiHabilitation              EcfDgiiHabilitation?
+  ecfCertificationAttempts         EcfCertificationAttempt[]
+  ecfEvidences                     EcfEvidence[]
+  ecfAuditLogs                     EcfAuditLog[]
+  ecfDgiiApplicationSnapshots      EcfDgiiApplicationSnapshot[]
+  ecfElectronicDocuments           EcfElectronicDocument[]
+  ecfElectronicDocumentAttempts    EcfElectronicDocumentAttempt[]
+  ecfElectronicDocumentStatusLogs  EcfElectronicDocumentStatusLog[]
+  ecfSequences                     EcfSequence[]
+  ecfSequenceAuditLogs             EcfSequenceAuditLog[]
+  ecfLineClassifications           EcfLineClassification[]
 
   @@index([status])
   @@index([licenseStatus])
@@ -830,6 +1064,422 @@ model CompanyLicenseAuditLog {
   @@index([companyId, createdAt])
   @@index([action])
   @@map("company_license_audit_logs")
+}
+
+model EcfCompanyConfiguration {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  companyId            String                 @unique @map("company_id") @db.Uuid
+  enabled              Boolean                @default(false)
+  provider             EcfProvider            @default(ALANUBE)
+  environment          EcfEnvironment         @default(SANDBOX)
+  certificationStatus  EcfCertificationStatus @default(NOT_STARTED) @map("certification_status")
+  productionEnabled    Boolean                @default(false) @map("production_enabled")
+  alanubeCompanyId     String?                @map("alanube_company_id") @db.VarChar(64)
+  credentialsSecretRef String?                @map("credentials_secret_ref") @db.VarChar(256)
+  certificateSecretRef String?                @map("certificate_secret_ref") @db.VarChar(256)
+  webhookSecretRef     String?                @map("webhook_secret_ref") @db.VarChar(256)
+  allowedTypes         Json?                  @map("allowed_types")
+  notes                String?                @db.Text
+  createdByUserId      String?                @map("created_by_user_id") @db.Uuid
+  updatedByUserId      String?                @map("updated_by_user_id") @db.Uuid
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, enabled])
+  @@index([companyId, certificationStatus])
+  @@map("ecf_company_configurations")
+}
+
+model EcfOnboardingStep {
+  id              String                  @id @default(uuid()) @db.Uuid
+  companyId       String                  @map("company_id") @db.Uuid
+  stepKey         EcfOnboardingStepKey    @map("step_key")
+  status          EcfOnboardingStepStatus @default(PENDING)
+  mode            EcfOnboardingStepMode   @default(MANUAL)
+  evidenceId      String?                 @map("evidence_id") @db.Uuid
+  resultSummary   String?                 @map("result_summary") @db.Text
+  lastErrorCode   String?                 @map("last_error_code") @db.VarChar(64)
+  lastError       String?                 @map("last_error") @db.Text
+  blockedReason   String?                 @map("blocked_reason") @db.Text
+  startedAt       DateTime?               @map("started_at")
+  completedAt     DateTime?               @map("completed_at")
+  confirmedAt     DateTime?               @map("confirmed_at")
+  updatedByUserId String?                 @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  evidence EcfEvidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, stepKey])
+  @@index([companyId, status])
+  @@index([companyId, updatedAt])
+  @@map("ecf_onboarding_steps")
+}
+
+model EcfCertificationAttempt {
+  id              String                        @id @default(uuid()) @db.Uuid
+  companyId       String                        @map("company_id") @db.Uuid
+  stepKey         EcfOnboardingStepKey?         @map("step_key")
+  provider        EcfProvider                   @default(ALANUBE)
+  environment     EcfEnvironment                @default(SANDBOX)
+  operation       String                        @db.VarChar(64)
+  status          EcfCertificationAttemptStatus @default(REGISTERED)
+  idempotencyKey  String                        @map("idempotency_key") @db.VarChar(128)
+  requestRef      String?                       @map("request_ref") @db.VarChar(256)
+  responseRef     String?                       @map("response_ref") @db.VarChar(256)
+  externalId      String?                       @map("external_id") @db.VarChar(128)
+  errorCode       String?                       @map("error_code") @db.VarChar(64)
+  errorMessage    String?                       @map("error_message") @db.Text
+  createdByUserId String?                       @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                      @default(now()) @map("created_at")
+  updatedAt       DateTime                      @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, stepKey, status])
+  @@index([companyId, operation, createdAt])
+  @@map("ecf_certification_attempts")
+}
+
+model EcfEvidence {
+  id               String            @id @default(uuid()) @db.Uuid
+  companyId        String            @map("company_id") @db.Uuid
+  source           EcfEvidenceSource @default(MANUAL_DECLARATION)
+  kind             String            @db.VarChar(64)
+  storageRef       String            @map("storage_ref") @db.VarChar(512)
+  fileName         String?           @map("file_name") @db.VarChar(255)
+  mimeType         String?           @map("mime_type") @db.VarChar(120)
+  sha256           String?           @db.VarChar(64)
+  description      String?           @db.Text
+  reviewStatus     EcfEvidenceReviewStatus @default(PENDING) @map("review_status")
+  reviewedByUserId String?           @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt       DateTime?         @map("reviewed_at")
+  reviewNote       String?           @map("review_note") @db.Text
+  uploadedByUserId String?           @map("uploaded_by_user_id") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at")
+
+  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  steps              EcfOnboardingStep[]
+  dgiiAuthorizations EcfDgiiHabilitation[] @relation("EcfDgiiAuthorizationEvidence")
+
+  @@index([companyId, kind, createdAt])
+  @@index([companyId, source])
+  @@index([companyId, reviewStatus])
+  @@index([companyId, storageRef])
+  @@map("ecf_evidences")
+}
+
+model EcfAuditLog {
+  id          String         @id @default(uuid()) @db.Uuid
+  companyId   String         @map("company_id") @db.Uuid
+  actorUserId String?        @map("actor_user_id") @db.Uuid
+  action      EcfAuditAction
+  targetType  String?        @map("target_type") @db.VarChar(64)
+  targetId    String?        @map("target_id") @db.Uuid
+  before      Json?
+  after       Json?
+  metadata    Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, action])
+  @@index([targetType, targetId])
+  @@map("ecf_audit_logs")
+}
+
+/// Habilitación DGII POR EMPRESA: seguimiento del proceso de incorporación a la
+/// facturación electrónica.
+///
+/// Es un registro de SEGUIMIENTO interno y multiempresa (`companyId` único).
+/// Anotar un estado aquí NUNCA concede autorización oficial de emisión: la
+/// autorización solo se reconoce cuando existe evidencia oficial referenciada
+/// (`authorizationSource = DGII_OFFICIAL_RECORD` + `authorizationEvidenceId`), y
+/// aun así la emisión real permanece bloqueada por política hasta que exista
+/// aprobación explícita fuera de este módulo.
+model EcfDgiiHabilitation {
+  id                      String                    @id @default(uuid()) @db.Uuid
+  companyId               String                    @unique @map("company_id") @db.Uuid
+  state                   EcfDgiiHabilitationState @default(NOT_STARTED)
+  reviewState             String?                   @map("review_state") @db.VarChar(64)
+  requirements            Json?
+  externalId              String?                   @map("external_id") @db.VarChar(128)
+  observations            String?                   @db.Text
+  responsibleUserId       String?                   @map("responsible_user_id") @db.Uuid
+  startedAt               DateTime?                 @map("started_at")
+  authorizedAt            DateTime?                 @map("authorized_at")
+  authorizationSource     EcfDgiiVerificationSource @default(NONE) @map("authorization_source")
+  authorizationEvidenceId String?                   @map("authorization_evidence_id") @db.Uuid
+  // Borrador PERSISTENTE del expediente. Es trabajo en curso del cliente: no
+  // alimenta ningún documento fiscal ni la configuración comercial.
+  draftPayload            Json?                     @map("draft_payload")
+  draftUpdatedAt          DateTime?                 @map("draft_updated_at")
+  draftUpdatedByUserId    String?                   @map("draft_updated_by_user_id") @db.Uuid
+  // Revisión del borrador para control de concurrencia OPTIMISTA. El cliente
+  // envía la revisión que leyó; el servidor solo escribe si sigue siendo la
+  // vigente (compare-and-set). Impide que una petición lenta pise un borrador
+  // más reciente.
+  draftRevision           Int                       @default(0) @map("draft_revision")
+  // Consentimiento del titular del expediente sobre el tratamiento documental.
+  // No es un poder de representación ante la DGII.
+  consentVersion          String?                   @map("consent_version") @db.VarChar(32)
+  consentAcceptedAt       DateTime?                 @map("consent_accepted_at")
+  consentAcceptedByUserId String?                   @map("consent_accepted_by_user_id") @db.Uuid
+  // Última versión de snapshot enviada a revisión (0 = nunca enviado).
+  currentSnapshotVersion  Int                       @default(0) @map("current_snapshot_version")
+  createdByUserId         String?                   @map("created_by_user_id") @db.Uuid
+  updatedByUserId         String?                   @map("updated_by_user_id") @db.Uuid
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+
+  company               Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  authorizationEvidence EcfEvidence? @relation("EcfDgiiAuthorizationEvidence", fields: [authorizationEvidenceId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, state])
+  @@index([companyId, updatedAt])
+  @@map("ecf_dgii_habilitations")
+}
+
+/// Snapshot INMUTABLE de un envío del expediente a revisión.
+///
+/// Guarda exactamente lo que el cliente presentó: datos, referencias y hashes de
+/// los documentos, la versión del texto de consentimiento aceptado y quién lo
+/// envió. Una corrección no reescribe la versión anterior: crea otra.
+///
+/// La inmutabilidad no depende del código: un trigger de base de datos rechaza
+/// `UPDATE` y `DELETE` sobre esta tabla.
+model EcfDgiiApplicationSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  version           Int
+  payload           Json
+  payloadHash       String   @map("payload_hash") @db.VarChar(64)
+  documents         Json
+  documentsHash     String   @map("documents_hash") @db.VarChar(64)
+  consentVersion    String   @map("consent_version") @db.VarChar(32)
+  consentAcceptedAt DateTime @map("consent_accepted_at")
+  submittedByUserId String   @map("submitted_by_user_id") @db.Uuid
+  submittedAt       DateTime @default(now()) @map("submitted_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, version])
+  @@index([companyId, submittedAt])
+  @@map("ecf_dgii_application_snapshots")
+}
+
+model EcfElectronicDocument {
+  id                     String                      @id @default(uuid()) @db.Uuid
+  companyId              String                      @map("company_id") @db.Uuid
+  documentType           EcfElectronicDocumentType   @map("document_type")
+  status                 EcfElectronicDocumentStatus @default(LOCAL_DRAFT)
+  internalDocumentNumber String?                     @map("internal_document_number") @db.VarChar(64)
+  sourceType             String?                     @map("source_type") @db.VarChar(32)
+  sourceId               String?                     @map("source_id") @db.Uuid
+  externalProviderId     String?                     @map("external_provider_id") @db.VarChar(128)
+  externalDocumentNumber String?                     @map("external_document_number") @db.VarChar(128)
+  originalDocumentId     String?                     @map("original_document_id") @db.Uuid
+  payloadFingerprint     String                      @map("payload_fingerprint") @db.VarChar(64)
+  idempotencyKey         String                      @map("idempotency_key") @db.VarChar(160)
+  payloadSummary         Json?                       @map("payload_summary")
+  fiscalSnapshot         Json?                       @map("fiscal_snapshot")
+  // Documento fiscal COMPLETO tal como se preparó. Inmutable una vez escrito
+  // (trigger `ecf_protect_fiscal_document`): permite reconstruir y verificar el
+  // comprobante contra su huella. Nunca se devuelve por las rutas de lectura.
+  fiscalDocument         Json?                       @map("fiscal_document")
+  safeErrorCode          String?                     @map("safe_error_code") @db.VarChar(64)
+  safeErrorMessage       String?                     @map("safe_error_message") @db.Text
+  createdByUserId        String?                     @map("created_by_user_id") @db.Uuid
+  updatedByUserId        String?                     @map("updated_by_user_id") @db.Uuid
+  createdAt              DateTime                    @default(now()) @map("created_at")
+  updatedAt              DateTime                    @updatedAt @map("updated_at")
+
+  company          Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  originalDocument EcfElectronicDocument?          @relation("EcfOriginalDocument", fields: [companyId, originalDocumentId], references: [companyId, id], onDelete: Restrict)
+  relatedDocuments EcfElectronicDocument[]         @relation("EcfOriginalDocument")
+  attempts         EcfElectronicDocumentAttempt[]
+  evidenceReceipts EcfEvidenceReceipt[]
+  sandboxE32Trial EcfSandboxE32Trial?
+  statusLogs       EcfElectronicDocumentStatusLog[]
+  reservedCredits  EcfCreditReservation[]           @relation("EcfCreditOriginal")
+  creditReservation EcfCreditReservation?           @relation("EcfCreditNote")
+
+  @@unique([companyId, id])
+  @@unique([companyId, externalDocumentNumber], map: "ecf_electronic_documents_company_id_external_document_number_ke")
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, payloadFingerprint])
+  @@index([companyId, status])
+  @@index([companyId, documentType, createdAt], map: "ecf_electronic_documents_company_id_document_type_created_at_id")
+  @@index([companyId, sourceType, sourceId])
+  @@index([companyId, externalProviderId])
+  @@index([originalDocumentId])
+  @@map("ecf_electronic_documents")
+}
+
+enum EcfCreditReservationState {
+  RESERVED
+  UNKNOWN_RESULT
+  APPLIED
+  REJECTED
+  CANCELLED
+
+  @@map("ecf_credit_reservation_state")
+}
+
+model EcfCreditReservation {
+  id                 String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String                    @map("company_id") @db.Uuid
+  originalDocumentId String                    @map("original_document_id") @db.Uuid
+  creditDocumentId   String                    @map("credit_document_id") @db.Uuid
+  amount             Decimal                   @db.Decimal(20, 2)
+  state              EcfCreditReservationState @default(RESERVED)
+  requestFingerprint String                    @map("request_fingerprint") @db.VarChar(64)
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @updatedAt @map("updated_at")
+
+  original EcfElectronicDocument @relation("EcfCreditOriginal", fields: [companyId, originalDocumentId], references: [companyId, id], onDelete: Restrict)
+  credit EcfElectronicDocument @relation("EcfCreditNote", fields: [companyId, creditDocumentId], references: [companyId, id], onDelete: Restrict)
+  events EcfCreditReservationEvent[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, creditDocumentId])
+  @@index([companyId, originalDocumentId, state], map: "ecf_credit_reservations_company_id_original_document_id_state_i")
+  @@map("ecf_credit_reservations")
+}
+
+model EcfCreditReservationEvent {
+  id            String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String                    @map("company_id") @db.Uuid
+  reservationId String                    @map("reservation_id") @db.Uuid
+  stateBefore   EcfCreditReservationState? @map("state_before")
+  stateAfter    EcfCreditReservationState  @map("state_after")
+  reasonCode    String                    @map("reason_code") @db.VarChar(64)
+  actorUserId   String?                   @map("actor_user_id") @db.Uuid
+  createdAt     DateTime                  @default(now()) @map("created_at")
+
+  reservation EcfCreditReservation @relation(fields: [companyId, reservationId], references: [companyId, id], onDelete: Restrict)
+
+  @@index([companyId, reservationId, createdAt], map: "ecf_credit_reservation_events_company_id_reservation_id_created")
+  @@map("ecf_credit_reservation_events")
+}
+
+model EcfElectronicDocumentAttempt {
+  id                   String                         @id @default(uuid()) @db.Uuid
+  companyId            String                         @map("company_id") @db.Uuid
+  documentId           String                         @map("document_id") @db.Uuid
+  operation            EcfElectronicDocumentOperation
+  statusBefore         EcfElectronicDocumentStatus?   @map("status_before")
+  statusAfter          EcfElectronicDocumentStatus?   @map("status_after")
+  idempotencyKey       String                         @map("idempotency_key") @db.VarChar(160)
+  requestFingerprint   String?                        @map("request_fingerprint") @db.VarChar(64)
+  responseRef          String?                        @map("response_ref") @db.VarChar(256)
+  providerRequestId    String?                        @map("provider_request_id") @db.VarChar(128)
+  safeErrorCode        String?                        @map("safe_error_code") @db.VarChar(64)
+  safeErrorMessage     String?                        @map("safe_error_message") @db.Text
+  createdByUserId      String?                        @map("created_by_user_id") @db.Uuid
+  createdAt            DateTime                       @default(now()) @map("created_at")
+
+  company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  document EcfElectronicDocument @relation(fields: [companyId, documentId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+  evidenceReceipts EcfEvidenceReceipt[]
+
+  @@unique([companyId, documentId, id], map: "ecf_attempt_tenant_document_id_key")
+  // Nombres fijados a los reales de la base: los creó una migración escrita a
+  // mano y PostgreSQL los truncó a 63 bytes. Declararlos evita que Prisma
+  // proponga renombrarlos en cada `migrate diff`.
+  @@unique([companyId, operation, idempotencyKey], map: "ecf_electronic_document_attempts_company_id_operation_idempoten")
+  @@index([companyId, documentId, createdAt], map: "ecf_electronic_document_attempts_company_id_document_id_created")
+  @@index([companyId, operation, createdAt], map: "ecf_electronic_document_attempts_company_id_operation_created_a")
+  @@map("ecf_electronic_document_attempts")
+}
+
+// Quarantined observations only. No raw body, token, signature or fiscal authority.
+model EcfEvidenceReceipt {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String   @map("company_id") @db.Uuid
+  documentId          String   @map("document_id") @db.Uuid
+  attemptId           String   @map("attempt_id") @db.Uuid
+  source              String   @db.VarChar(32)
+  eventKey            String   @map("event_key") @db.VarChar(128)
+  rawSha256           String   @map("raw_sha256") @db.VarChar(64)
+  correlationHash     String   @map("correlation_hash") @db.VarChar(64)
+  operationKeyHash     String   @map("operation_key_hash") @db.VarChar(64)
+  documentFingerprint String   @map("document_fingerprint") @db.VarChar(64)
+  requestFingerprint  String   @map("request_fingerprint") @db.VarChar(64)
+  trustLevel          String   @map("trust_level") @db.VarChar(32)
+  authenticity        String   @db.VarChar(64)
+  validationCode      String   @map("validation_code") @db.VarChar(64)
+  observationCode     String   @map("observation_code") @db.VarChar(64)
+  schemaSha256        String?  @map("schema_sha256") @db.VarChar(64)
+  httpStatus          Int?     @map("http_status")
+  receivedAt          DateTime @default(now()) @map("received_at")
+  actorUserId         String   @map("actor_user_id") @db.Uuid
+
+  document EcfElectronicDocument @relation(fields: [companyId, documentId], references: [companyId, id], onDelete: Restrict, onUpdate: NoAction, map: "ecf_evidence_document_fk")
+  attempt EcfElectronicDocumentAttempt @relation(fields: [companyId, documentId, attemptId], references: [companyId, documentId, id], onDelete: Restrict, onUpdate: NoAction, map: "ecf_evidence_attempt_fk")
+
+  @@unique([companyId, source, eventKey], map: "ecf_evidence_tenant_source_event_key")
+  @@index([companyId, documentId, receivedAt], map: "ecf_evidence_tenant_document_received_idx")
+  @@map("ecf_evidence_receipts")
+}
+
+// Isolated first E32 trial only. SANDBOX slot is global; MOCK_ONLY slots cannot send.
+model EcfSandboxE32Trial {
+  id                  String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String @map("company_id") @db.Uuid
+  documentId          String @map("document_id") @db.Uuid
+  slot                String @unique @db.VarChar(80)
+  mode                String @db.VarChar(16)
+  state               String @default("PREPARED") @db.VarChar(32)
+  manifest            Json
+  manifestFingerprint String @map("manifest_fingerprint") @db.VarChar(64)
+  payload             Json
+  payloadFingerprint  String @map("payload_fingerprint") @db.VarChar(64)
+  createdAt           DateTime @default(now()) @map("created_at")
+  document EcfElectronicDocument @relation(fields: [companyId, documentId], references: [companyId, id], onDelete: Restrict, onUpdate: NoAction)
+  events EcfSandboxE32TrialEvent[]
+  @@unique([companyId, id])
+  @@unique([companyId, documentId])
+  @@map("ecf_sandbox_e32_trials")
+}
+
+model EcfSandboxE32TrialEvent {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+  trialId String @map("trial_id") @db.Uuid
+  kind String @db.VarChar(32)
+  safeCode String @map("safe_code") @db.VarChar(64)
+  bodySha256 String? @map("body_sha256") @db.VarChar(64)
+  httpStatus Int? @map("http_status")
+  createdAt DateTime @default(now()) @map("created_at")
+  trial EcfSandboxE32Trial @relation(fields: [companyId, trialId], references: [companyId, id], onDelete: Restrict, onUpdate: NoAction)
+  @@index([companyId, trialId])
+  @@map("ecf_sandbox_e32_trial_events")
+}
+
+model EcfElectronicDocumentStatusLog {
+  id              String                       @id @default(uuid()) @db.Uuid
+  companyId       String                       @map("company_id") @db.Uuid
+  documentId      String                       @map("document_id") @db.Uuid
+  statusBefore    EcfElectronicDocumentStatus? @map("status_before")
+  statusAfter     EcfElectronicDocumentStatus  @map("status_after")
+  reasonCode      String?                      @map("reason_code") @db.VarChar(64)
+  safeMessage     String?                      @map("safe_message") @db.Text
+  metadata        Json?
+  changedByUserId String?                      @map("changed_by_user_id") @db.Uuid
+  createdAt       DateTime                     @default(now()) @map("created_at")
+
+  company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  document EcfElectronicDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, documentId, createdAt], map: "ecf_electronic_document_status_logs_company_id_document_id_crea")
+  @@index([companyId, statusAfter, createdAt], map: "ecf_electronic_document_status_logs_company_id_status_after_cre")
+  @@map("ecf_electronic_document_status_logs")
 }
 
 model CompanyMember {
@@ -1070,6 +1720,9 @@ model AppRelease {
 
   @@unique([platform, channel, buildNumber])
   @@index([platform, channel, status, buildNumber])
+  // Ya existe en la base (lo creó una migración) y el esquema no lo declaraba:
+  // sin esta línea Prisma propondría ELIMINARLO.
+  @@index([storageKey], map: "app_releases_storage_key_idx")
   @@map("app_releases")
 }
 
@@ -2923,6 +3576,11 @@ model SaleItem {
   productId                String?        @db.Uuid
   productSource            ProductSource? @map("product_source")
   sourceProductId          String?        @map("source_product_id")
+  // Clasificación fiscal CONGELADA al registrar la venta. No se deriva del
+  // producto actual: editar el producto después no puede cambiar la
+  // clasificación de una venta ya realizada. NULL = no confirmada (ventas
+  // anteriores a esta migración, o partidas sin producto asociado).
+  itemTypeSnapshot         ProductItemType? @map("item_type_snapshot")
   warehouseId              String?        @map("warehouse_id") @db.Uuid
   warehouseNameSnapshot    String?        @map("warehouse_name_snapshot")
   warehouseCodeSnapshot    String?        @map("warehouse_code_snapshot")
@@ -3003,6 +3661,56 @@ model NcfAuditLog {
   @@index([companyId, type, createdAt])
   @@index([saleId])
   @@map("ncf_audit_logs")
+}
+
+// e-CF (electronic fiscal receipt) numbering: E31 and E34 are allocated from a
+// company range by the server. A number is consumed permanently at allocation
+// time (next_number only ever increases), so it can never be reused even when
+// the document is cancelled or the emission fails. E32 keeps its own single-use
+// sandbox slot and is NOT part of this range mechanism.
+model EcfSequence {
+  id           String    @id @default(uuid()) @db.Uuid
+  companyId    String    @map("company_id") @db.Uuid
+  documentType String    @map("document_type") // E31 | E34
+  prefix       String
+  startNumber  Int       @default(1) @map("start_number")
+  nextNumber   Int       @default(1) @map("next_number")
+  endNumber    Int       @map("end_number")
+  validUntil   DateTime? @map("valid_until")
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  company   Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  auditLogs EcfSequenceAuditLog[]
+
+  // One ACTIVE range per company/documentType/prefix is enforced by the partial
+  // unique index created in the migration; inactive history must remain. Prisma
+  // cannot express a partial index, so it is not declared here.
+  @@index([companyId, documentType, active])
+  @@map("ecf_sequences")
+}
+
+model EcfSequenceAuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  sequenceId   String?  @map("sequence_id") @db.Uuid
+  documentId   String?  @map("document_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  operationKey String?  @map("operation_key")
+  encf         String
+  type         String
+  action       String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sequence EcfSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, operationKey])
+  @@index([companyId, encf])
+  @@index([companyId, type, createdAt])
+  @@index([documentId])
+  @@map("ecf_sequence_audit_logs")
 }
 
 model Close {
@@ -4244,4 +4952,35 @@ model AiAssistantMemory {
   @@index([ownerId, userId, module])
   @@index([ownerId, userId, lastSourceAt])
   @@map("ai_assistant_memories")
+}
+
+/// Clasificación fiscal SUPERVISADA de una partida de venta.
+///
+/// Existe por un caso concreto: una partida fuera de inventario no tiene producto
+/// del que heredar si es bien o servicio, y el sistema se niega —con razón— a
+/// adivinarlo a partir del nombre. Sin este registro, esa venta **nunca** podría
+/// facturarse electrónicamente.
+///
+/// Es APPEND-ONLY: no se modifica ni se borra (lo impone un *trigger*). Si alguien
+/// se equivoca, se añade otro registro y manda el más reciente, de modo que el
+/// valor anterior y el confirmado quedan ambos auditados. La venta y su `SaleItem`
+/// **no se tocan**: la clasificación supervisada es un hecho aparte y fechado.
+model EcfLineClassification {
+  id                     String           @id @default(uuid()) @db.Uuid
+  companyId              String           @map("company_id") @db.Uuid
+  saleId                 String           @map("sale_id") @db.Uuid
+  saleItemId             String           @map("sale_item_id") @db.Uuid
+  classification         ProductItemType
+  /// Valor previo de la partida, para auditar el cambio sin inferirlo.
+  previousClassification ProductItemType? @map("previous_classification")
+  reason                 String           @db.VarChar(300)
+  decidedByUserId        String           @map("decided_by_user_id") @db.Uuid
+  decidedAt              DateTime         @default(now()) @map("decided_at")
+  createdAt              DateTime         @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, saleItemId, decidedAt])
+  @@index([companyId, saleId])
+  @@map("ecf_line_classifications")
 }

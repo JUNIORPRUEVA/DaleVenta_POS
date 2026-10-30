@@ -143,10 +143,17 @@ export class SettingsService {
         ncfEnabled: this.boolValue(dto, "ncfEnabled") ?? undefined,
       });
     }
+    // La respuesta de la escritura también expone el interruptor: si faltara,
+    // guardar datos de empresa dejaría al cliente con un valor por defecto.
+    const ecfEnabled = await this.ecfEnabledFor(companyId);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
     const productSource =
       await this.productSourceResolver.resolveForCompany(companyId);
-    return this.toPublicSettings(config, fiscal, productSource);
+    return this.toPublicSettings(
+      { ...config, ecfEnabled },
+      fiscal,
+      productSource,
+    );
   }
 
   async updateCompanyName(user: TenantUser, dto: { companyName?: unknown }) {
@@ -189,10 +196,15 @@ export class SettingsService {
       return updated;
     });
     this.emitCompanyNameUpdated(companyId, companyName);
+    const ecfEnabled = await this.ecfEnabledFor(companyId);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
     const productSource =
       await this.productSourceResolver.resolveForCompany(companyId);
-    return this.toPublicSettings(config, fiscal, productSource);
+    return this.toPublicSettings(
+      { ...config, ecfEnabled },
+      fiscal,
+      productSource,
+    );
   }
 
   private withoutCompanyName(
@@ -330,12 +342,15 @@ export class SettingsService {
         select: { id: true },
       });
     }
+    // Interruptor e-CF de la EMPRESA: una sola lectura para toda la carga útil.
+    const ecfEnabled = await this.ecfEnabledFor(companyId);
     return {
       ...config,
       companyName,
       inventoryEnabled: company?.inventoryEnabled !== false,
       measurementUnitsEnabled: company?.measurementUnitsEnabled === true,
       multiWarehouseEnabled: company?.multiWarehouseEnabled === true,
+      ecfEnabled,
     };
   }
 
@@ -544,6 +559,20 @@ export class SettingsService {
     };
   }
 
+  /**
+   * Interruptor e-CF de la EMPRESA: ÚNICA lectura del flag. La carga útil de
+   * configuración lo incluye siempre —GET y respuestas de escritura— para que la
+   * navegación no dependa de una petición aparte ni reciba un valor distinto
+   * según la ruta. Se lee con el ámbito de la empresa autenticada.
+   */
+  private async ecfEnabledFor(companyId: string): Promise<boolean> {
+    const config = await this.prisma.ecfCompanyConfiguration.findUnique({
+      where: { companyId },
+      select: { enabled: true },
+    });
+    return config?.enabled === true;
+  }
+
   private toPublicSettings(
     config: {
       companyName: string;
@@ -573,6 +602,7 @@ export class SettingsService {
       inventoryEnabled?: boolean;
       measurementUnitsEnabled?: boolean;
       multiWarehouseEnabled?: boolean;
+      ecfEnabled?: boolean;
       adminAuthorizationPinHash: string | null;
     },
     fiscal: {
@@ -616,6 +646,9 @@ export class SettingsService {
       inventoryEnabled: config.inventoryEnabled !== false,
       measurementUnitsEnabled: config.measurementUnitsEnabled === true,
       multiWarehouseEnabled: config.multiWarehouseEnabled === true,
+      // Interruptor e-CF de la EMPRESA. Debe salir en la carga útil pública:
+      // es lo que consume la navegación para mostrar u ocultar el módulo.
+      ecfEnabled: config.ecfEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
       productsSource: productSource.source,
       productsReadOnly: productSource.readOnly,

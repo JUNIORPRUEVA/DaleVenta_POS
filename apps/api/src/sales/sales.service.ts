@@ -92,6 +92,8 @@ type NormalizedSaleItem = {
   taxExempt?: boolean;
   lineTotal?: Prisma.Decimal;
   inventoryTrackedSnapshot?: boolean;
+  /** Clasificación fiscal congelada en la venta (fuente: producto en BD). */
+  itemTypeSnapshot?: ProductItemType | null;
 };
 
 type ResolvedSaleWarehouse = {
@@ -1582,6 +1584,10 @@ export class SalesService {
             taxIncluded: item.taxIncluded,
             taxExempt: item.taxExempt,
             lineTotal,
+            // Congelado desde el producto en BD si aún existe; si no, queda sin
+            // confirmar (no se inventa a partir de otros datos).
+            itemTypeSnapshot:
+              productMap.get(item.productId ?? "")?.itemType ?? null,
             inventoryTrackedSnapshot: this.resolveInventoryTrackedSnapshot(
               {
                 productId: item.productId ?? undefined,
@@ -2000,6 +2006,7 @@ export class SalesService {
             priceSoldUnit: item.priceSoldUnit,
             costUnitSnapshot: item.costUnitSnapshot,
             subtotalCost: item.subtotalCost,
+            itemTypeSnapshot: item.itemTypeSnapshot ?? null,
           };
         });
 
@@ -3328,6 +3335,9 @@ export class SalesService {
         taxTreatment: product.taxTreatment,
         taxRate: product.taxRate,
         taxPriceMode: product.taxPriceMode,
+        // Fuente autoritativa: el producto leído de la BD en esta operación.
+        // Nunca se toma del DTO del cliente.
+        itemTypeSnapshot: product.itemType ?? null,
         inventoryTrackedSnapshot: this.resolveInventoryTrackedSnapshot(
           item,
           product,
@@ -3386,6 +3396,9 @@ export class SalesService {
       taxTreatment: "INHERIT" as const,
       taxRate: null,
       taxPriceMode: null,
+      // Partida fuera de inventario: no hay producto que declare una
+      // clasificación, así que queda sin confirmar.
+      itemTypeSnapshot: null,
       inventoryTrackedSnapshot: false,
     };
   }

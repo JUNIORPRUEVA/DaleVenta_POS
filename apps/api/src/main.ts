@@ -113,10 +113,12 @@ async function bootstrap() {
 
   // Bind to IPv6 (dual-stack) when available so `localhost` (often ::1 on Windows)
   // works reliably; fall back to IPv4-only environments.
-  let host = '::';
+  const isolatedUat = process.env.APP_ENV === 'uat' && process.env.UAT_LOCAL_ONLY === 'true';
+  let host = isolatedUat ? '127.0.0.1' : '::';
   try {
     await app.listen(port, host);
-  } catch {
+  } catch (error) {
+    if (isolatedUat) throw error;
     host = '0.0.0.0';
     await app.listen(port, host);
   }

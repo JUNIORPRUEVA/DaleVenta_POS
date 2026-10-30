@@ -43,6 +43,16 @@ describe("SettingsService company master data protection", () => {
   }
 
   function buildService(prisma: any) {
+    // `SettingsService` lee el interruptor e-CF de la empresa en TODA carga útil
+    // (GET y respuestas de escritura). Se modela aquí una sola vez para que las
+    // pruebas que no lo declaren obtengan el valor seguro `false` en vez de un
+    // mock incompleto. Un mock explícito siempre tiene prioridad.
+    const prismaWithEcf = {
+      ecfCompanyConfiguration: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      ...prisma,
+    };
     const productSourceResolver = {
       resolveForCompany: jest.fn(async (companyId: string) => ({
         companyId,
@@ -58,7 +68,7 @@ describe("SettingsService company master data protection", () => {
       })),
     };
     return new SettingsService(
-      prisma,
+      prismaWithEcf,
       {} as any,
       { emitCompany: jest.fn() } as any,
       productSourceResolver as any,
@@ -136,6 +146,11 @@ describe("SettingsService company master data protection", () => {
         }),
         update: jest.fn().mockResolvedValue({ id: "company_company-a" }),
       },
+      // La carga útil de configuración expone el interruptor e-CF de la empresa.
+      // Sin fila de configuración e-CF el valor seguro es `false`.
+      ecfCompanyConfiguration: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
     };
     const service = buildService(prisma);
 
@@ -145,6 +160,7 @@ describe("SettingsService company master data protection", () => {
       companyId: "company-a",
     });
 
+    expect(settings.ecfEnabled).toBe(false);
     expect(settings.companyName).toBe("Nombre Nuevo");
     expect(settings.inventoryEnabled).toBe(true);
     expect(prisma.company.findUnique).toHaveBeenCalledWith({
@@ -404,6 +420,11 @@ describe("SettingsService company master data protection", () => {
     };
     const prisma = {
       $transaction: jest.fn((callback) => callback(tx)),
+      // El interruptor e-CF se lee fuera de la transacción, con el ámbito de la
+      // empresa autenticada.
+      ecfCompanyConfiguration: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
     };
     const service = new SettingsService(
       prisma as any,
@@ -486,6 +507,9 @@ describe("SettingsService company master data protection", () => {
     };
     const prisma = {
       $transaction: jest.fn(async (callback) => callback(tx)),
+      ecfCompanyConfiguration: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
     };
     const service = new SettingsService(
       prisma as any,
@@ -905,6 +929,9 @@ describe("SettingsService company master data protection", () => {
         }),
         update: jest.fn(),
       },
+      ecfCompanyConfiguration: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
     };
     const service = buildService(prisma);
 
@@ -915,6 +942,65 @@ describe("SettingsService company master data protection", () => {
     });
 
     expect(response.multiWarehouseEnabled).toBe(false);
+  });
+
+  it("exposes the company e-CF switch as ecfEnabled, scoped to the authenticated company", async () => {
+    const prisma = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue({
+          companyName: "FullPOS Cloud",
+          rnc: "",
+          phone: "",
+          phonePreferential: "",
+          address: "",
+          description: "",
+          instagramUrl: "",
+          facebookUrl: "",
+          websiteUrl: "",
+          gpsLocationUrl: "",
+          businessHours: "",
+          bankAccounts: [],
+          legalRepresentativeName: "",
+          legalRepresentativeCedula: "",
+          legalRepresentativeRole: "",
+          legalRepresentativeNationality: "",
+          legalRepresentativeCivilStatus: "",
+          logoBase64: null,
+          openAiApiKey: null,
+          openAiModel: "gpt-4o-mini",
+          evolutionApiBaseUrl: "",
+          evolutionApiInstanceName: "",
+          evolutionApiApiKey: null,
+          whatsappWebhookEnabled: false,
+          adminAuthorizationPinHash: null,
+        }),
+        update: jest.fn(),
+      },
+      ecfCompanyConfiguration: {
+        findUnique: jest.fn().mockResolvedValue({ enabled: true }),
+      },
+    };
+    const service = buildService(prisma);
+
+    const response = await service.getSettings({
+      id: "admin-a",
+      role: Role.ADMIN,
+      companyId: "company-a",
+    });
+
+    expect(response.ecfEnabled).toBe(true);
+    // El interruptor se lee SIEMPRE con el ámbito de la empresa autenticada.
+    expect(prisma.ecfCompanyConfiguration.findUnique).toHaveBeenCalledWith({
+      where: { companyId: "company-a" },
+      select: { enabled: true },
+    });
   });
 
   it("issues tenant-bound admin PIN authorization for the requested scope only", async () => {

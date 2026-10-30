@@ -274,8 +274,12 @@ describe("SYNC-03 end-to-end offline recovery + multi-tenant (isolated UAT DB)",
       .expect(409);
 
     expect(res.status).toBe(409);
+    // El comportamiento vigente responde «Este producto tiene historial y no
+    // puede eliminarse definitivamente.»: mismo contrato (409 + motivo), texto
+    // más reciente. Se acepta cualquier mensaje que declare el historial como
+    // causa; no se relaja la comprobación del estado ni la del producto.
     expect(`${(res.body as { message?: unknown }).message ?? ""}`).toMatch(
-      /historial de inventario|transferencias/i,
+      /historial|transferencias/i,
     );
 
     // Operation did NOT complete: the product must still exist.

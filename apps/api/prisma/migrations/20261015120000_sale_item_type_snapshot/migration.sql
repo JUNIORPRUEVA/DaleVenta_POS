@@ -1,0 +1,11 @@
+-- Clasificación fiscal histórica por partida de venta.
+--
+-- Aditiva y NULLABLE a propósito:
+--   * las ventas existentes quedan en NULL = "no confirmada";
+--   * NO se rellenan con el valor actual del producto, porque eso no es
+--     evidencia de cómo se clasificó la partida cuando se emitió la venta;
+--   * sin DEFAULT y sin NOT NULL, así que es seguro aplicarla sobre datos reales
+--     y reversible con un simple DROP COLUMN.
+-- Nota: el modelo Prisma `SaleItem` no declara `@@map`, así que la tabla real es
+-- "SaleItem" (con mayúsculas y entre comillas).
+ALTER TABLE "SaleItem" ADD COLUMN "item_type_snapshot" "product_item_type";
