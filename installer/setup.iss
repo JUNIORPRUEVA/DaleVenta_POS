@@ -36,6 +36,14 @@
 #define MyAppOutputBaseFilename "FullPOS-Setup"
 #endif
 
+; Nivel de privilegios del instalador. Por defecto `admin` (instalación por
+; equipo, la del cliente real). Se puede compilar una variante per-usuario
+; (`/DMyAppPrivileges=lowest`) para ensayar el ciclo instalar/reinstalar/
+; desinstalar sin UAC; esa variante NO es el candidato de publicación.
+#ifndef MyAppPrivileges
+#define MyAppPrivileges "admin"
+#endif
+
 #ifdef MyAppUatMayoreo
 #undef MyAppName
 #define MyAppName "FullPOS UAT Mayoreo"
@@ -93,7 +101,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile={#BrandSetupIcon}
-PrivilegesRequired=admin
+PrivilegesRequired={#MyAppPrivileges}
 UninstallDisplayIcon={app}\app\{#MyAppExeName}
 
 [Dirs]
@@ -115,6 +123,10 @@ Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#WebView2RedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 #endif
 
+; IMPORTANTE: este bloque SOLO aplica a la instalacion estable. Las variantes
+; UAT tienen identidad propia y no deben borrar jamas los accesos directos de la
+; instalacion real del cliente (aqui `{commonprograms}` es de todos los usuarios).
+#ifndef MyAppUat
 #ifndef MyAppUatMayoreo
 [InstallDelete]
 ; El nombre visible cambio de "DaleVentas POS" a "FullPOS": al actualizar una
@@ -122,6 +134,7 @@ Source: "{#WebView2RedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 ; huerfanas duplicadas en el Menu Inicio ni en el escritorio.
 Type: filesandordirs; Name: "{commonprograms}\DaleVentas POS"
 Type: files; Name: "{commondesktop}\DaleVentas POS.lnk"
+#endif
 #endif
 
 [Icons]

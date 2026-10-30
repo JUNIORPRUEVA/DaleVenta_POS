@@ -46,3 +46,7 @@ docs/onboarding-phase2b-uat-evidence/*.png
 .uat-windows-storage/
 __pycache__/
 *.pyc
+
+uat-artifacts/
+uat-api.log
+uat-runtime-sandbox/
