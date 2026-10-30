@@ -198,6 +198,36 @@ Solo `daleventapos_backend`, con `docker service update --image daleventapos-pro
 
 **Pendiente:** `daleventapos_guardian_worker` sigue con `autoenroll-5d8a5f98` (ver. 52392475, sin tocar). Su código Guardian es idéntico al ya desplegado, así que su comportamiento no cambia; su actualización requiere autorización aparte.
 
+### Worker desplegado (2026-10-30 13:27 UTC) — con `stop-first` a propósito
+
+```bash
+docker service update --image daleventapos-prod-api:1.0.7-151-2fd7be4d \
+  --no-resolve-image --update-order stop-first --update-parallelism 1 \
+  daleventapos_guardian_worker
+```
+
+**Por qué `stop-first` y no `start-first`:** el worker procesa diagnósticos, alertas y
+tareas periódicas sin bloqueo distribuido, con intervalo de 5 s. Con `start-first`
+habría dos workers vivos a la vez y riesgo real de **trabajo duplicado**. `stop-first`
+detiene el antiguo antes de arrancar el nuevo (≈5 s sin worker; el backend y los
+clientes no se ven afectados) y deja la política persistida en el servicio.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Servicio | `daleventapos-prod-api:1.0.7-151-2fd7be4d` · ver. **52392529** · `order=stop-first` · 1/1 |
+| Tareas | nueva `Running` y anterior `Shutdown` **sin solapamiento** |
+| Huella del entorno | `7e21d405e6582237596ce5996b9da58c9ac06ceb85e9a94f5c8718dee871418a` — **idéntica antes y después** |
+| Flags y secretos | `GUARDIAN_ENABLED=true` · `GUARDIAN_DIAGNOSIS_ENABLED=true` · `GUARDIAN_ALERTS_ENABLED=true` · `GUARDIAN_AI_PROVIDER=deepseek` · `GUARDIAN_AI_MODEL=deepseek-flash` · `GUARDIAN_WA_TEMPLATE_NAME=guardian_incident_alert` · intervalo 5 s · secretos `ai_key` y `wa_token` intactos |
+| Código Guardian en el contenedor nuevo | `14e8b89c83245a8edafb2b5fddeb4b35` = **idéntico** al que estaba activo |
+| Sin duplicados | `guardian_worker_heartbeats`: `alerts|1` y `diagnosis|1` · 4 diagnósticos · 2 alertas · 2 intentos · 6 incidentes · 1 opt-in — **sin crecimiento anómalo** |
+| Latido | `13:27:54` (al día) |
+| Logs | `GuardianWorkers` + `GuardianAiBalanceMonitor` a las 13:27:14–16 · sin errores reales |
+| Backend y clientes | `/health` 200 · `/api/app-updates/check…build=148` 200 · ventas 11.828 · 8 cajas abiertas · 8.541 movimientos · 183 migraciones |
+
+**Estado final:** `daleventapos_backend` y `daleventapos_guardian_worker` corren la
+misma imagen 151. Rollback del worker: `docker service rollback daleventapos_guardian_worker`
+(snapshot `/root/rollback-worker-20261030T132658Z.json`).
+
 ### [1] Respaldo fresco (obligatorio: los datos cambiaron desde el 03:02)
 
 ```bash
