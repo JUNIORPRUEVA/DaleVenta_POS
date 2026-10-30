@@ -63,10 +63,65 @@ Criterio de avance: el dump se lista, restaura sin errores y los conteos de
 
 ## 2. Migraciones (dos, aditivas)
 
+### Estado verificado de producción (2026-10-30 03:00 UTC)
+
+- Base `daleventa` · PostgreSQL 17.11 · 66 MB · contenedor `daleventapos_database.1.…`
+- `_prisma_migrations`: **183 filas** = 181 aplicadas + **2 con `rolled_back_at`**
+  (`20260814232000_open_sales_ticket_states`, `20260818190000_phase6_baseline`,
+  ya resueltas: **no bloquean**).
+- Última migración aplicada: `20261028180000_guardian_company_optin`.
+- Pendientes según el repo: **exactamente las dos de V2**.
+- `RUN_MIGRATIONS=false` en el servicio → la migración **hay que ejecutarla a mano**.
+
+### Deuda histórica aceptada: `20260329140000_add_fifteen_minutes_pending_job`
+
+Existe en producción y no en el repositorio. Fila: checksum `ace03ac6…77b8`,
+aplicada 2026-08-07 02:42:39Z, `applied_steps_count = 0`, **no creó ninguna tabla**
+(se marcó como aplicada sin ejecutar SQL: migración vacía o `migrate resolve --applied`).
+
+**Tratamiento correcto: no tocarla.**
+
+- `prisma migrate deploy` solo aplica carpetas pendientes; las filas extra se
+  informan como *“not found locally”* y no afectan al despliegue.
+- Prohibido: borrar la fila, crear una carpeta falsa con ese nombre (falsearía la
+  historia), `migrate reset`, o `migrate resolve --rolled-back` sobre ella.
+- Si en el futuro se quiere conciliar, se documenta en este runbook; no se altera
+  la tabla de migraciones.
+
+### Comando exacto para aplicar las dos migraciones (autorización aparte)
+
 ```bash
-cd apps/api
-npx prisma migrate status        # deben aparecer 2 pendientes
-npx prisma migrate deploy
+# 1) URL de la base leída del propio servicio, SIN imprimirla
+DU=$(docker service inspect daleventapos_backend \
+  --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^DATABASE_URL=//p')
+# 2) red del contenedor de PostgreSQL
+DBNET=$(docker inspect "$(docker ps --format '{{.ID}} {{.Names}}' \
+  | awk '/daleventapos_database\.1\./ {print $1; exit}')" \
+  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' | awk '{print $1}')
+# 3) aplicar con la IMAGEN NUEVA (que sí contiene las dos carpetas)
+docker run --rm --network "$DBNET" -e "DATABASE_URL=$DU" -e RUN_MIGRATIONS=false \
+  daleventapos-prod-api:1.0.7-150-c0f983b6 npx prisma migrate deploy
+# 4) confirmar
+docker run --rm --network "$DBNET" -e "DATABASE_URL=$DU" \
+  daleventapos-prod-api:1.0.7-150-c0f983b6 npx prisma migrate status
+```
+
+### Verificación posterior (mismos números que en el clon)
+
+```sql
+select count(*) from _prisma_migrations where finished_at is not null;          -- 183
+select count(*) from information_schema.tables
+ where table_name in ('sale_reconciliation_obligations',
+                      'sale_reconciliation_declaration_events');                -- 2
+select count(*) from "Sale";                 -- 11.828
+select count(*) from "SaleItem";             -- 17.884
+select count(*) from "Product";              -- 526
+select count(*) from inventory_movements;    -- 8.541
+select count(*) from cash_sessions;          -- 279
+select count(*) from cashbox_daily;          -- 179
+select count(*) from information_schema.tables
+ where table_name like 'guardian%';          -- 12 (Guardian intacto)
 ```
 
 | Migración | Efecto |
@@ -74,34 +129,67 @@ npx prisma migrate deploy
 | `20261029190000_sale_reconciliation_obligations` | `CREATE TABLE` + 3 índices |
 | `20261029210000_reconciliation_single_active_obligation` | tabla de eventos + 3 columnas + índice único parcial `WHERE status='PENDING'`; un `UPDATE` marca `SUPERSEDED` duplicados existentes (no borra filas) |
 
-Verificación inmediata:
-
-```sql
-SELECT count(*) FROM sale_reconciliation_obligations;
-SELECT max(c) FROM (
-  SELECT count(*) c FROM sale_reconciliation_obligations
-   WHERE status='PENDING' GROUP BY company_id, client_request_id
-) x;   -- debe ser 1 o NULL
-```
-
-**Rollback de migraciones: no se revierten.** Las tablas quedan sin uso y ningún
-código antiguo las consulta. Borrarlas destruiría evidencia financiera: prohibido.
+La única sentencia `ALTER TABLE` de las dos migraciones apunta a la tabla **nueva**
+de la migración 1: ninguna tabla existente (ventas, caja, inventario, Guardian)
+se modifica.
 
 ---
 
 ## 3. Despliegue backend-first + rollback
 
-```bash
-# 3.1 Imagen nueva (mismo backend, código con las 2 migraciones)
-docker service update --image <registry>/fullpos-api:1.0.7-150 --update-order start-first fullpos_api
-docker service ps fullpos_api --filter desired-state=running
+### Imagen preparada y probada (sin tocar el servicio activo)
 
-# 3.2 Rollback si falla
-docker service rollback fullpos_api
+| Dato | Valor |
+| --- | --- |
+| Imagen | `daleventapos-prod-api:1.0.7-150-c0f983b6` |
+| Image ID | `sha256:a47a0f94bf58997f4598a9074fbef3072fe2e1c75864cf79864dd2ef3b77aa34` |
+| Tamaño | 763 MB |
+| Base | `node:20-bookworm-slim` (Dockerfile de `apps/api`) |
+| En producción ahora | `easypanel/daleventapos/backend:guardian-tz-05e0761c-20261030T003159Z` (**rollback = esta etiqueta**) |
+
+**Smoke test completo ejecutado en clon local** (misma imagen, misma base restaurada):
+
+| Check | Resultado |
+| --- | --- |
+| Arranque del contenedor | `healthy`, `Nest application successfully started` |
+| `/health` | **200** |
+| Migraciones al arrancar (`RUN_MIGRATIONS=true`) | 181 → **183** |
+| `tablas_v2` | **2** |
+| Datos | Sale 11.828 · SaleItem 17.884 · Product 526 · inventario 8.541 · caja 279 · caja diaria 179 · sesiones 21.061 → **idénticos** |
+| Tablas de Guardian | **12** (sin cambios) |
+| `/sales/open-tickets` (ruta que usan los 148) | **401** (existe y sigue protegida) |
+| `/sales/reconciliation-obligations` (nueva) | **401** (existe) |
+
+### Pasos
+
+```bash
+# 3.0 Etiquetar la imagen actual como referencia de rollback (no la borra)
+IMG_ACTUAL=$(docker service inspect daleventapos_backend \
+  --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+docker image tag "$IMG_ACTUAL" daleventapos-prod-api:rollback-pre-150
+
+# 3.1 Llevar la imagen nueva al servidor (construida en local, NO en el servidor)
+#     en el equipo de build:
+docker save daleventapos-prod-api:1.0.7-150-c0f983b6 | gzip > api-150.tgz
+scp api-150.tgz root@31.97.99.70:/root/
+#     en el servidor:
+gunzip -c /root/api-150.tgz | docker load
+
+# 3.2 Desplegar (start-first: el servicio no se cae durante el cambio)
+docker service update --image daleventapos-prod-api:1.0.7-150-c0f983b6 \
+  --update-order start-first --no-resolve-image daleventapos_backend
+docker service update --image daleventapos-prod-api:1.0.7-150-c0f983b6 \
+  --update-order start-first --no-resolve-image daleventapos_guardian_worker
+docker service ps daleventapos_backend --filter desired-state=running
+
+# 3.3 Rollback
+docker service rollback daleventapos_backend
+docker service rollback daleventapos_guardian_worker
 ```
 
-El backend va **primero**: un cliente 150 contra un backend viejo recibe 404 al
-declarar (la declaración queda en cola, visible y reintentable, sin perderse).
+Alternativa oficial: push del merge a `production-main` y build desde EasyPanel.
+**No recomendada ahora**: el servidor tiene 1 vCPU y 25 contenedores; el `docker build`
+(npm install + tsc) puede afectar a los vecinos. La imagen ya está construida y probada.
 
 ---
 
