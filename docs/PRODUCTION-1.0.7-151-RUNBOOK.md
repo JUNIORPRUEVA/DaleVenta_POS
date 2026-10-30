@@ -34,6 +34,21 @@ Discrepancia menor detectada (informativa): el env `GIT_SHA` del servicio sigue 
 `20e862680eb2fac42c3a1fca2b92b92b52906f1c`, valor anterior al build `autoenroll-5d8a5f98`.
 No afecta al funcionamiento, pero conviene corregirlo al desplegar el 151.
 
+### Verificación pre-migración (2026-10-30 12:49 UTC, solo lectura)
+
+| Comprobación | Resultado |
+| --- | --- |
+| `_prisma_migrations` | **181** aplicadas · 0 filas V2 · 0 fallidas sin `rolled_back_at` · última `20261028180000_guardian_company_optin` |
+| Tablas V2 | **0** |
+| `prisma migrate status` (imagen 151, solo lectura) | «The migrations have not yet been applied» → **exactamente las dos** `20261029190000_sale_reconciliation_obligations` y `20261029210000_reconciliation_single_active_obligation` |
+| Filas «not found locally» | deuda histórica ya aceptada (`*_init`, `20260329140000_add_fifteen_minutes_pending_job`): **no bloquean** |
+| Respaldo vigente | `fullpos_prod_20261030T120434Z.dump` · 6.784.464 B · SHA256 `77e7deb8…0f2d9e5` (y el anterior `fullpos_prod_20261030_030249.dump` · `9f544e54…76b8a2`) |
+| Backend | `/health` 200 · `RUN_MIGRATIONS=false` · `RUN_SEED=false` · `GUARDIAN_ENABLED=true` · `GUARDIAN_ALERTS_ENABLED=true` · `GUARDIAN_DIAGNOSIS_ENABLED=false` en el backend |
+| Worker Guardian | `GUARDIAN_DIAGNOSIS_ENABLED=true` · `GUARDIAN_AI_PROVIDER=deepseek` · `GUARDIAN_AI_MODEL=deepseek-flash` · plantilla WhatsApp `guardian_incident_alert` (es) · secretos montados `ai_api_key` y `wa_cloud_token` · latido `12:49:07` |
+| Operación | última venta `2026-10-30 00:05:10` · **8 cajas abiertas** · último movimiento de inventario `2026-10-29 21:42:38` · Guardian: 6 incidentes, 4 diagnósticos, 2 alertas, 1 opt-in |
+| Otro despliegue | **ninguno**: ver. 52392490 / 52392475, `UpdateStatus=completed`, sin `docker build/push/load` |
+
+
 ---
 
 ## 1. Imagen integrada definitiva
@@ -43,9 +58,25 @@ No afecta al funcionamiento, pero conviene corregirlo al desplegar el 151.
 | Rama | `agent/guardian-151-release` |
 | Commit | **`2fd7be4d`** (`fix(guardian): la consulta de estado del panel…`), padre `f6fdbce4` (merge) sobre `3b5fabdb` |
 | Tag local | `daleventapos-prod-api:1.0.7-151-2fd7be4d` |
-| Digest | `sha256:14af9bd01c13fdc03bdae70afcb0c6b63957a3b2e229af3e25b89a09cc8273bc` |
-| Tamaño | 762.811.961 B (763 MB) |
+| Digest del manifest list (builder local) | `sha256:14af9bd01c13fdc03bdae70afcb0c6b63957a3b2e229af3e25b89a09cc8273bc` (763 MB en el builder, incluye atestaciones) |
+| **ID real cargado en el servidor** | **`sha256:1d2d6ea1be76ec8669e836d88a8a54a0dd3113d3c0a62d6b00501a2d8fd29f4b`** (502 MB) |
+| Archivo transferido | `/root/151-2fd7be4d.tar` · 160.504.320 B · SHA256 `d1b2e62e099d4f889444456b1db2209352420816a4c24dbeb23dde7ce3565250` (mismo valor en build y servidor) |
 | Base | `node:20-bookworm-slim`, CMD `sh scripts/start-prod.sh`, healthcheck `/health` |
+
+### Por qué el ID cargado no coincide con el digest del builder (aceptado, opción A)
+
+`14af9bd0…` es el digest del **manifest list** que produce el builder local
+(buildx/containerd, con manifiestos de plataforma y atestaciones → los 763 MB).
+Al exportar con `docker save` y cargar con `docker load` en el almacén clásico del
+servidor, Docker materializa la imagen de una sola plataforma y su ID pasa a ser
+`1d2d6ea1…` (502 MB). **Es el mismo artefacto**; la equivalencia se comprobó así:
+
+| Comprobación | Builder | Servidor |
+| --- | --- | --- |
+| 14 capas de `RootFS.Layers` (digests y orden) | `0da811fd…`, `4337a9b7…`, `631e9f79…`, `f991bcce…`, `d592f6b2…`, `374336c4…`, `cc9db6be…`, `89095408…`, `0250f059…`, `0059527d…`, `c41ad862…`, `8c9463ed…`, `317745ba…`, `408e4496…` | **idénticas** |
+| Huella de `/app/dist` + `/app/prisma` (480 ficheros) | `b837dc6a9c2566cbe65a68a89364ce1d` | `b837dc6a9c2566cbe65a68a89364ce1d` |
+| Carpetas de migración `20261029…` | 2 | **2** |
+
 
 ### Contenido comprobado
 
@@ -158,11 +189,12 @@ Si el digest no coincide, **detenerse**.
 DU=$(docker service inspect daleventapos_backend \
   --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
   | sed -n 's/^DATABASE_URL=//p')
-DBNET=$(docker inspect "$(docker ps --format '{{.ID}} {{.Names}}' \
-  | awk '/daleventapos_database\.1\./ {print $1; exit}')" \
-  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' | awk '{print $1}')
+BCID=$(docker ps -q -f name=daleventapos_backend)
 
-docker run --rm --network "$DBNET" -e "DATABASE_URL=$DU" \
+# La red overlay del panel NO resuelve el alias `database` para contenedores
+# efímeros (probado: P1001). Se comparte el espacio de red del backend en marcha,
+# que es el único sitio donde `database:5432` resuelve sin tocar credenciales.
+docker run --rm --network "container:$BCID" -e "DATABASE_URL=$DU" \
   daleventapos-prod-api:1.0.7-151-2fd7be4d npx prisma migrate deploy
 ```
 
