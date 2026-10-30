@@ -3,6 +3,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { GuardianIngestController } from './guardian.ingest.controller';
 import { GuardianEnrollmentController } from './guardian.enrollment.controller';
 import { GuardianEnrollmentService } from './guardian.enrollment.service';
+import { GuardianAutoEnrollmentController } from './guardian.auto-enrollment.controller';
+import { GuardianAutoEnrollmentService } from './guardian.auto-enrollment.service';
 import { GuardianMachineController } from './guardian.machine.controller';
 import { GuardianMachineGuard } from './guardian.machine.guard';
 import { GuardianMachineService } from './guardian.machine.service';
@@ -15,6 +17,7 @@ import { GuardianPlatformGuard } from './guardian.platform.guard';
 import { GuardianIngestService } from './guardian.ingest.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
 import { GuardianQuotaService } from './guardian.quota.service';
+import { GuardianAiBalanceMonitor } from './guardian.ai.balance.monitor';
 import { GuardianBackendCaptureService } from './guardian.backend-capture.service';
 import { GuardianToolsService } from './guardian.tools.service';
 import { GuardianDiagnosisService } from './guardian.diagnosis.service';
@@ -64,6 +67,7 @@ export function createGuardianAiProvider() {
   controllers: [
     GuardianIngestController,
     GuardianEnrollmentController,
+    GuardianAutoEnrollmentController,
     GuardianMachineController,
     GuardianAdminController,
     GuardianWebhookController,
@@ -71,8 +75,10 @@ export function createGuardianAiProvider() {
   ],
   providers: [
     GuardianQuotaService,
+    GuardianAiBalanceMonitor,
     GuardianIngestService,
     GuardianEnrollmentService,
+    GuardianAutoEnrollmentService,
     GuardianMachineService,
     GuardianMachineGuard,
     GuardianTelemetryBridgeService,

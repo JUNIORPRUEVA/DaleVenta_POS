@@ -51,6 +51,8 @@ export type GuardianAlertPlan = {
 export function buildGuardianAlertMessage(input: {
   severity: GuardianSeverity;
   companyName: string;
+  /** Identificación del equipo que reportó el incidente (no sensible). */
+  deviceId?: string | null;
   module: string;
   operation: string;
   occurredAt: Date;
@@ -72,6 +74,8 @@ export function buildGuardianAlertMessage(input: {
   const time = formatGuardianDateTime(input.occurredAt);
 
   const shortId = `INC-${input.incidentId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  const deviceId = String(input.deviceId ?? '').trim();
+  const deviceIdLine = deviceId ? `Equipo: ${deviceId.slice(0, 60)}` : null;
   const related =
     input.relatedCount && input.relatedCount > 1
       ? `Eventos similares en curso: ${input.relatedCount}`
@@ -82,6 +86,7 @@ export function buildGuardianAlertMessage(input: {
     '',
     `Empresa: ${input.companyName}`,
     `Sistema: Fullpos Cloud`,
+    ...(deviceIdLine ? [deviceIdLine] : []),
     `Módulo: ${input.module} / ${input.operation}`,
     `Hora: ${time}`,
     '',
@@ -481,6 +486,7 @@ export class GuardianAlertService {
         occurredAt: true,
         impactSummary: true,
         fingerprint: true,
+        deviceId: true,
         company: { select: { name: true } },
         diagnoses: {
           where: { status: 'DONE' },
@@ -514,6 +520,7 @@ export class GuardianAlertService {
     const text = buildGuardianAlertMessage({
       severity: incident.severity,
       companyName: incident.company.name,
+      deviceId: incident.deviceId,
       module: incident.module,
       operation: incident.operation,
       occurredAt: incident.occurredAt,

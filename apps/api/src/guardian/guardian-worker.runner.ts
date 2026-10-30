@@ -5,7 +5,9 @@ import { hostname } from 'node:os';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardianAlertService } from './guardian.alert.service';
+import { GuardianAiBalanceMonitor } from './guardian.ai.balance.monitor';
 import { GuardianDiagnosisService } from './guardian.diagnosis.service';
+import { resolveGuardianConfig } from './guardian.config';
 
 /**
  * APPYRA Guardian AI — bucle de workers.
@@ -54,6 +56,14 @@ export async function runGuardianWorker(): Promise<void> {
   const alerts = app.get(GuardianAlertService);
   const diagnosis = app.get(GuardianDiagnosisService);
   const prisma = app.get(PrismaService);
+  const balanceMonitor = app.get(GuardianAiBalanceMonitor);
+
+  // Saldo de IA: se consulta el endpoint oficial del proveedor (no consume
+  // tokens ni genera coste) y solo se avisa cuando hace falta. El intervalo se
+  // controla con `GUARDIAN_AI_BALANCE_CHECK_MINUTES` (30 min por defecto).
+  const balanceIntervalMs =
+    Math.max(5, Number(resolveGuardianConfig().aiBalanceCheckMinutes || 30)) * 60_000;
+  let lastBalanceCheckAt = 0;
 
   const intervalMs = Math.max(
     2_000,
@@ -179,6 +189,17 @@ export async function runGuardianWorker(): Promise<void> {
         logger.log(
           `diagnósticos procesados=${diagnosisOutcome.processed} ok=${diagnosisOutcome.diagnosed} fallidos=${diagnosisOutcome.failed}`,
         );
+      }
+
+      // Monitor de saldo/coste real de la IA. Nunca bloquea el ciclo: cualquier
+      // fallo se registra y el bucle continúa.
+      if (Date.now() - lastBalanceCheckAt >= balanceIntervalMs) {
+        lastBalanceCheckAt = Date.now();
+        await balanceMonitor.check().catch((error: unknown) => {
+          logger.error(
+            `saldo IA: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
       }
     } finally {
       clearTimeout(stallGuard);

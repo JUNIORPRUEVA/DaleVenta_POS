@@ -104,6 +104,11 @@ SetupIconFile={#BrandSetupIcon}
 PrivilegesRequired={#MyAppPrivileges}
 UninstallDisplayIcon={app}\app\{#MyAppExeName}
 
+[Messages]
+; Revelación explícita del monitoreo técnico (APPYRA Guardian AI) antes de instalar.
+; Solo describe lo que el agente envía: diagnósticos de errores depurados.
+WelcomeLabel2=Este asistente instalará [name/ver] en su equipo.%n%nAl usar FullPOS Cloud se activa el monitoreo técnico APPYRA Guardian AI: se envían únicamente diagnósticos de errores (tipo de error, módulo, mensaje y traza depurada) para detectar fallos y avisar al equipo de soporte. No se envían ventas, clientes, inventario ni datos fiscales.%n%nPuede desactivarlo en Ajustes > Actualizaciones > Monitoreo APPYRA Guardian AI.
+
 [Dirs]
 Name: "{app}\app"
 Name: "{app}\updater"
