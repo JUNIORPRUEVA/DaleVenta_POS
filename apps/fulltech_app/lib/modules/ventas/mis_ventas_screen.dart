@@ -23,6 +23,7 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
+import '../../features/ecf/ui/ecf_prepare_action.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import '../cash/cash_dialogs.dart';
 import 'application/ventas_controller.dart';
@@ -983,6 +984,14 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  // Acción e-CF: se oculta sola si la empresa no tiene e-CF
+                  // habilitado o el usuario carece del permiso.
+                  const SizedBox(height: 10),
+                  EcfPrepareAction(
+                    saleId: sale.id,
+                    total: _money(sale.totalSold),
+                    customerName: sale.customerName,
                   ),
                 ],
               ),

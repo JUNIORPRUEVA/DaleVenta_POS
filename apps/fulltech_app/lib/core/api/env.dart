@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../config/product_config.dart';
+import '../config/uat_api_config.dart';
+import '../config/uat_network_guard.dart';
 import 'runtime_env.dart';
 
 class Env {
@@ -31,7 +33,8 @@ class Env {
       debugPrint('Invalid META_PIXEL_ID. Meta Pixel will stay disabled.');
       return null;
     }
-    return raw;
+    // Perfil UAT: sin analítica comercial desde un build de validación.
+    return UatApiConfig.commercialAnalyticsId(raw);
   }
 
   static String? _readEnv(String key) {
@@ -106,6 +109,13 @@ class Env {
   static String get apiBaseUrl {
     final raw = (_readEnv('API_BASE_URL') ?? '').trim();
 
+    // Perfil UAT: blindado. Se activa con FULLPOS_UAT_PROFILE=true **o** con
+    // APP_ENV=uat. No hay valor por defecto y no hay fallback remoto: si falta
+    // o no es local, falla de forma visible en vez de apuntar a producción.
+    if (UatNetworkGuard.isUat) {
+      return UatNetworkGuard.requireAllowedUrl(raw, key: 'API_BASE_URL');
+    }
+
     if (raw.isEmpty) {
       if (kIsWeb) {
         return '${Uri.base.origin}/api';
@@ -167,6 +177,13 @@ class Env {
   static String get appBaseUrl {
     final raw = (_readEnv('APP_BASE_URL') ?? '').trim();
 
+    // Perfil UAT: mismo blindaje que la API. Sin esta rama, un host local se
+    // descartaría más abajo y la app de validación caería en la URL pública de
+    // producción sin avisar.
+    if (UatNetworkGuard.isUat) {
+      return UatNetworkGuard.requireAllowedUrl(raw, key: 'APP_BASE_URL');
+    }
+
     if (raw.isEmpty) {
       if (kIsWeb) {
         return Uri.base.origin;
@@ -208,6 +225,12 @@ class Env {
   static String? get releasesApiBaseUrl {
     final raw = (_readEnv('RELEASES_API_BASE_URL') ?? '').trim();
     if (raw.isEmpty) return null;
+
+    // Perfil UAT: el actualizador no puede apuntar a infraestructura remota. Si
+    // la variable falta, no hay valor por defecto (null); si está, debe ser local.
+    if (UatNetworkGuard.isUat) {
+      return UatNetworkGuard.requireAllowedUrl(raw, key: 'RELEASES_API_BASE_URL');
+    }
 
     if (raw.startsWith('/')) {
       if (!kIsWeb) return null;
@@ -256,15 +279,21 @@ class Env {
     final source = raw.isEmpty
         ? '612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com'
         : raw;
-    return source
+    final configured = source
         .split(',')
         .map((entry) => entry.trim().toLowerCase())
         .where((entry) => entry.isNotEmpty)
         .toSet();
+    // Perfil UAT: el host comercial de descargas no es alcanzable por defecto.
+    return UatApiConfig.allowedUpdateDownloadHosts(configured);
   }
 
   static bool get releasesEnabled {
-    return releasesApiBaseUrl != null && releasesApiKey.isNotEmpty;
+    // Perfil UAT: las actualizaciones comerciales están deshabilitadas aunque
+    // haya un servidor de releases accesible desde la máquina de validación.
+    return UatApiConfig.commercialUpdatesAllowed(
+      releasesApiBaseUrl != null && releasesApiKey.isNotEmpty,
+    );
   }
 
   static int get apiTimeoutMs {

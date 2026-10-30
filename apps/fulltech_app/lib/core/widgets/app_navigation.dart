@@ -50,6 +50,10 @@ class AppNavigationSection {
 List<AppNavigationSection> buildAppNavigationSections(
   UserModel? currentUser, {
   required bool multiWarehouseEnabled,
+  // Interruptor e-CF de la EMPRESA. El llamador lo pasa ya resuelto desde la
+  // configuración del backend: mientras no esté confirmada pasa `false`, así
+  // que un fallo de red nunca deja el módulo a la vista.
+  bool ecfEnabled = false,
 }) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
@@ -213,6 +217,16 @@ List<AppNavigationSection> buildAppNavigationSections(
             appIcon: AppIcons.users,
             title: 'Usuario',
             route: Routes.users,
+          ),
+        // ÚLTIMO del menú. Solo aparece si la empresa tiene la facturación
+        // electrónica ACTIVADA y el usuario puede verla: sin eso, la opción no
+        // existe para nadie de esa empresa.
+        if (ecfEnabled && canOrAuthorize(AppPermission.viewEcfDocuments))
+          const AppNavigationItem(
+            icon: Icons.receipt_long_outlined,
+            appIcon: AppIcons.receipt,
+            title: 'Facturación electrónica',
+            route: Routes.ecf,
           ),
       ],
     ),

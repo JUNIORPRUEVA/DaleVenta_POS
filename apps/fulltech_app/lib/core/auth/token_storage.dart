@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../debug/trace_log.dart';
+import '../config/uat_network_guard.dart';
 import '../models/user_model.dart';
 
 class TokenStorageLaunchSnapshot {
@@ -20,9 +21,17 @@ class TokenStorageLaunchSnapshot {
 }
 
 class TokenStorage {
-  static const _accessTokenKey = 'accessToken';
-  static const _refreshTokenKey = 'refreshToken';
-  static const _userSnapshotKey = 'authUserSnapshot';
+  static const _accessTokenKeyBase = 'accessToken';
+  static const _refreshTokenKeyBase = 'refreshToken';
+  static const _userSnapshotKeyBase = 'authUserSnapshot';
+
+  // Aislamiento por entorno: vacío en builds comerciales (claves intactas para
+  // los clientes ya instalados) y `uat.` en validación, de modo que una app UAT
+  // nunca reutilice una sesión comercial guardada en el mismo equipo.
+  String get _ns => UatNetworkGuard.storageNamespace;
+  String get _accessTokenKey => '$_ns$_accessTokenKeyBase';
+  String get _refreshTokenKey => '$_ns$_refreshTokenKeyBase';
+  String get _userSnapshotKey => '$_ns$_userSnapshotKeyBase';
   final _secureStorage = const FlutterSecureStorage();
   String? _memoryAccessToken;
   String? _memoryRefreshToken;

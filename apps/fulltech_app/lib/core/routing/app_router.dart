@@ -18,6 +18,10 @@ import '../../features/contabilidad/cierres_diarios_screen.dart';
 import '../../features/contabilidad/depositos_bancarios_screen.dart';
 import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
+import '../../features/ecf/ui/ecf_config_page.dart';
+import '../../features/ecf/ui/ecf_dgii_habilitation_page.dart';
+import '../../features/ecf/ui/ecf_documents_page.dart';
+import '../../features/ecf/ui/ecf_platform_review_page.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
 import '../../features/reports/ui/reports_page.dart';
 import '../../features/warehouses/ui/inventory_kardex_screen.dart';
@@ -166,6 +170,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.actualizaciones,
             builder: (context, state) => const AccountUpdatesScreen(),
+          ),
+          GoRoute(
+            path: Routes.ecf,
+            builder: (context, state) => const EcfDocumentsPage(),
+          ),
+          GoRoute(
+            path: Routes.ecfConfig,
+            builder: (context, state) => const EcfConfigPage(),
+          ),
+          GoRoute(
+            path: Routes.ecfDgii,
+            builder: (context, state) => const EcfDgiiHabilitationPage(),
+          ),
+          GoRoute(
+            path: Routes.ecfPlatformReview,
+            builder: (context, state) => const EcfPlatformReviewPage(),
           ),
           GoRoute(
             path: Routes.configuracion,

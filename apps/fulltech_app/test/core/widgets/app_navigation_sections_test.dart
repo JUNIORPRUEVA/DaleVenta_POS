@@ -140,4 +140,56 @@ void main() {
       ]);
     });
   });
+
+  group('interruptor e-CF de la empresa', () {
+    test('con el módulo apagado la opción no existe en el menú', () {
+      final titles = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
+      );
+
+      expect(titles, isNot(contains('Facturación electrónica')));
+      // La entrada antigua, a mitad del menú, ya no existe.
+      expect(titles, isNot(contains('Comprobantes e-CF')));
+    });
+
+    test('con el módulo encendido la opción aparece y va AL FINAL', () {
+      final titles = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: false,
+          ecfEnabled: true,
+        ),
+      );
+
+      expect(titles, contains('Facturación electrónica'));
+      expect(titles.last, 'Facturación electrónica');
+      expect(titles, isNot(contains('Comprobantes e-CF')));
+    });
+
+    test('encender el módulo solo AÑADE la opción: nada más cambia', () {
+      final off = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
+      );
+      final on = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: false,
+          ecfEnabled: true,
+        ),
+      );
+
+      expect(on, [...off, 'Facturación electrónica']);
+    });
+
+    test('el resto del menú es idéntico con el módulo apagado', () {
+      final titles = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
+      );
+
+      // Sin e-CF, los módulos tradicionales siguen exactamente igual.
+      expect(titles, contains('Facturación'));
+      expect(titles, contains('Productos'));
+      expect(titles, contains('Usuario'));
+    });
+  });
 }

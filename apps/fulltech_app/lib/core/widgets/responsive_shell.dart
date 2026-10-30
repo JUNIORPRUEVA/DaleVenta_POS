@@ -205,9 +205,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
 
     final theme = Theme.of(context);
     final user = _user;
+    // Interruptor e-CF de la empresa, desde la configuración compartida que el
+    // shell ya observa: activar o desactivar reconstruye el menú sin reiniciar.
+    final ecfEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled ?? false;
     final sections = buildAppNavigationSections(
       user,
       multiWarehouseEnabled: _multiWarehouseEnabled,
+      ecfEnabled: ecfEnabled,
     );
     final location = safeCurrentLocation(context);
     AppNavigator.recordShellLocation(location);

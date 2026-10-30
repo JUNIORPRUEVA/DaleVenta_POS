@@ -13,6 +13,8 @@ import '../../core/app_update/app_update_controller.dart';
 import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
+import '../ecf/data/ecf_repository.dart';
+import '../ecf/ui/ecf_onboarding_section.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_feedback.dart';
@@ -494,22 +496,208 @@ class AccountCompanySettingsScreen extends ConsumerWidget {
       contentScale: previewContentScale,
       action: OutlinedButton.icon(
         onPressed: () => ref.invalidate(companySettingsProvider),
-        icon: const Icon(Icons.sync_rounded),
+        icon: const Icon(Icons.sync),
         label: const Text('Sincronizar'),
         style: _outlinedButtonStyle(),
       ),
-      child: _SectionPanel(
-        title: 'Datos de empresa',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          company.maybeWhen(
-            data: (settings) => _CompanySettingsEditor(settings: settings),
-            orElse: () => const _ParagraphBlock(
-              title: 'Configuración de empresa',
-              text:
-                  'Los datos de la empresa se sincronizan con el servidor para usarse en documentos internos y fiscales.',
-            ),
+          _SectionPanel(
+            title: 'Datos de empresa',
+            children: [
+              company.maybeWhen(
+                data: (settings) => _CompanySettingsEditor(settings: settings),
+                orElse: () => const _ParagraphBlock(
+                  title: 'Configuración de empresa',
+                  text:
+                      'Los datos de la empresa se sincronizan con el servidor para usarse en documentos internos y fiscales.',
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+          // Proceso INTERNO de habilitación. Se oculta solo si la empresa no
+          // tiene el módulo activado o el usuario no puede ver la configuración.
+          const EcfOnboardingSection(),
         ],
+      ),
+    );
+  }
+}
+
+/// Interruptor de facturación electrónica de la EMPRESA.
+///
+/// El estado que se muestra es SIEMPRE el confirmado por el backend
+/// (`companySettings.ecfEnabled`), nunca un valor optimista: si el guardado
+/// falla, el interruptor vuelve a reflejar lo que dice el servidor y se explica
+/// el error. Al guardar se invalidan la configuración de empresa y las
+/// capacidades e-CF, así que el menú se reconstruye sin reiniciar la aplicación.
+///
+/// Activar el módulo NO habilita emisión real ni credenciales: eso sigue
+/// detrás de sus propias compuertas.
+class _EcfCompanySwitchSection extends ConsumerStatefulWidget {
+  const _EcfCompanySwitchSection({this.embedded = false});
+
+  /// Cuando va EMBEBIDA no dibuja contenedor propio ni título: forma parte del
+  /// panel «Impuestos y e-CF», que es donde se activa todo lo fiscal.
+  final bool embedded;
+
+  @override
+  ConsumerState<_EcfCompanySwitchSection> createState() =>
+      _EcfCompanySwitchSectionState();
+}
+
+class _EcfCompanySwitchSectionState
+    extends ConsumerState<_EcfCompanySwitchSection> {
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _toggle(bool next) async {
+    if (!next) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('¿Desactivar la facturación electrónica?'),
+          content: const Text(
+            'Se ocultará el módulo y se bloquearán nuevas preparaciones y notas '
+            'de crédito. Los comprobantes que ya existen se conservan intactos, '
+            'igual que las ventas, la caja y el inventario.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Desactivar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(ecfRepositoryProvider).updateEnabled(enabled: next);
+      // Tras el `await` el widget puede haberse desmontado (la pantalla de
+      // empresa se reconstruye al guardar). Usar `ref` sobre un widget ya
+      // desechado lanza StateError, así que se corta aquí.
+      if (!mounted) return;
+      // Solo tras la confirmación del servidor se refresca el estado compartido:
+      // así el menú nunca muestra un cambio que el backend no aceptó.
+      ref.invalidate(companySettingsProvider);
+      ref.invalidate(ecfCapabilitiesProvider);
+      setState(() => _saving = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error =
+            'No se pudo guardar. Se mantiene el último estado confirmado por el servidor.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled =
+        ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled ?? false;
+    final canManage = hasUserPermission(
+      ref.watch(authStateProvider).user,
+      AppPermission.manageEcfConfig,
+    );
+
+    // Mismo lenguaje visual que «Impuestos y e-CF»; embebida se integra en ese
+    // panel y deja de ser un bloque independiente.
+    final embedded = widget.embedded;
+    return Material(
+      color: embedded ? Colors.transparent : theme.colorScheme.surface,
+      shape: embedded
+          ? null
+          : RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+              side: const BorderSide(color: Color(0xFFDDE7EE)),
+            ),
+      child: Padding(
+        padding: EdgeInsets.all(embedded ? 0 : 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!embedded)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Facturación electrónica (e-CF)',
+                      style: _titleStyle(15),
+                    ),
+                  ),
+                  if (_saving)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
+            if (!embedded) const SizedBox(height: 6),
+            if (canManage)
+              _CompactSwitchRow(
+                title: 'Utilizar factura electrónica',
+                subtitle:
+                    'Al activarla aparece el módulo en el menú lateral. Por sí '
+                    'sola no emite comprobantes ni contacta al proveedor.',
+                value: enabled,
+                onChanged: (next) {
+                  if (_saving) return;
+                  _toggle(next);
+                },
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Utilizar factura electrónica',
+                          style: _strongBodyStyle(),
+                        ),
+                        Text(
+                          'Solo un administrador autorizado puede cambiarlo.',
+                          style: _bodyStyle().copyWith(height: 1.18),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Switch.adaptive(value: enabled, onChanged: null),
+                ],
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: _bodyStyle().copyWith(color: theme.colorScheme.error),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _saving ? null : () => _toggle(!enabled),
+                  child: const Text('Reintentar'),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -757,16 +945,6 @@ class _SettingsDetailScaffold extends ConsumerWidget {
             compactDesktop ? 14 : 24,
           ),
           children: [
-            Row(
-              crossAxisAlignment: compact
-                  ? CrossAxisAlignment.start
-                  : CrossAxisAlignment.center,
-              children: [
-                Expanded(child: Text(subtitle, style: _bodyStyle())),
-                if (action != null) ...[const SizedBox(width: 12), action!],
-              ],
-            ),
-            SizedBox(height: previewMode ? 4 : (compactDesktop ? 10 : 16)),
             detailChild,
           ],
         ),
@@ -781,7 +959,17 @@ class _SettingsDetailScaffold extends ConsumerWidget {
         showDepartmentLabel: false,
         leading: backButton,
         trailing: const SizedBox.shrink(),
-        actions: null,
+        // La acción principal vive en el appbar, pegada al extremo derecho: la
+        // fila de subtítulo se eliminó para no gastar alto de pantalla en texto
+        // que no aporta y que obligaba a hacer scroll.
+        actions: action == null
+            ? null
+            : [
+                Padding(
+                  padding: const EdgeInsets.only(right: 14),
+                  child: action!,
+                ),
+              ],
       ),
       body: showInlineTitle
           ? SafeArea(left: false, right: false, bottom: false, child: content)
@@ -2467,7 +2655,10 @@ class _CompanySettingsEditorState
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final compactDesktop = size.width >= 900 && size.height <= 820;
+    // En escritorio, densidad compacta SIEMPRE: la pantalla debe caber sin
+    // scroll. Antes dependía de la altura de la ventana y en monitores altos
+    // los controles se inflaban.
+    final compactDesktop = size.width >= 900;
     final sectionGap = compactDesktop ? 8.0 : 12.0;
     final smallGap = compactDesktop ? 5.0 : 8.0;
     return Column(
@@ -2539,7 +2730,6 @@ class _CompanySettingsEditorState
           compact: compactDesktop,
           taxEnabled: _taxEnabled,
           pricesIncludeTax: _pricesIncludeTax,
-          ncfEnabled: _ncfEnabled,
           defaultTaxRate: widget.settings.defaultTaxRate > 0
               ? widget.settings.defaultTaxRate
               : 0.18,
@@ -2549,7 +2739,9 @@ class _CompanySettingsEditorState
           }),
           onPricesIncludeTaxChanged: (value) =>
               setState(() => _pricesIncludeTax = value),
-          onNcfEnabledChanged: (value) => setState(() => _ncfEnabled = value),
+          // La factura electrónica se activa AQUÍ, debajo de «Utilizar
+          // impuestos»: es la misma decisión fiscal, no una pantalla aparte.
+          ecfControl: const _EcfCompanySwitchSection(embedded: true),
         ),
         SizedBox(height: compactDesktop ? 6 : 10),
         _InventorySettingsPanel(
@@ -2673,29 +2865,67 @@ class _CompanySettingsEditorState
     IconData icon, {
     int maxLines = 1,
   }) {
-    final size = MediaQuery.sizeOf(context);
-    final compactDesktop = size.width >= 900 && size.height <= 820;
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      style: TextStyle(
-        fontSize: compactDesktop ? 13.5 : null,
-        height: compactDesktop ? 1.05 : null,
-      ),
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, size: compactDesktop ? 17 : 18),
-        prefixIconConstraints: BoxConstraints(
-          minWidth: compactDesktop ? 38 : 44,
-          minHeight: compactDesktop ? 38 : 44,
+    // El icono ya no se dibuja: con el rótulo encima el texto queda alineado y
+    // el campo se ve limpio. Se conserva el parámetro para no tocar las ~20
+    // llamadas existentes.
+    final compactDesktop = MediaQuery.sizeOf(context).width >= 900;
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.zero,
+      borderSide: const BorderSide(color: Color(0xFFDDE7EE)),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: compactDesktop ? 12 : 12,
+            height: 1.1,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF5B6B7C),
+          ),
         ),
-        labelText: label,
-        border: const OutlineInputBorder(),
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: compactDesktop ? 10 : 12,
-          vertical: compactDesktop ? (maxLines > 1 ? 8 : 7) : 10,
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          maxLines: maxLines,
+          // Key estable para pruebas: el rótulo ya no es descendiente del
+          // campo, así que localizarlo por texto dejó de ser fiable.
+          key: ValueKey('company_field_$label'),
+          textAlignVertical: TextAlignVertical.center,
+          style: TextStyle(
+            fontSize: compactDesktop ? 14 : null,
+            height: compactDesktop ? 1.15 : null,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: Colors.white,
+            // Esquinas RECTAS en todos los estados: el tema global define
+            // enabledBorder/focusedBorder con su propio radio y tienen
+            // prioridad sobre `border`.
+            border: border,
+            enabledBorder: border,
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 1.4,
+              ),
+            ),
+            disabledBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.zero,
+              borderSide: BorderSide(color: Color(0xFFE7EDF3)),
+            ),
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: compactDesktop ? 11 : 12,
+              vertical: compactDesktop ? (maxLines > 1 ? 10 : 8) : 10,
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -2768,21 +2998,22 @@ class _FiscalSettingsPanel extends StatelessWidget {
     this.compact = false,
     required this.taxEnabled,
     required this.pricesIncludeTax,
-    required this.ncfEnabled,
     required this.defaultTaxRate,
     required this.onTaxEnabledChanged,
     required this.onPricesIncludeTaxChanged,
-    required this.onNcfEnabledChanged,
+    this.ecfControl,
   });
 
   final bool compact;
   final bool taxEnabled;
   final bool pricesIncludeTax;
-  final bool ncfEnabled;
   final double defaultTaxRate;
   final ValueChanged<bool> onTaxEnabledChanged;
   final ValueChanged<bool> onPricesIncludeTaxChanged;
-  final ValueChanged<bool> onNcfEnabledChanged;
+
+  /// Control de facturación electrónica, que se muestra solo con impuestos
+  /// activos: sin impuestos no hay nada que facturar electrónicamente.
+  final Widget? ecfControl;
 
   @override
   Widget build(BuildContext context) {
@@ -2799,7 +3030,7 @@ class _FiscalSettingsPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Impuestos y comprobantes', style: _titleStyle(15)),
+            Text('Impuestos y e-CF', style: _titleStyle(15)),
             SizedBox(height: compact ? 3 : 6),
             _CompactSwitchRow(
               title: 'Utilizar impuestos',
@@ -2832,11 +3063,10 @@ class _FiscalSettingsPanel extends StatelessWidget {
                 onSelectionChanged: (values) =>
                     onPricesIncludeTaxChanged(values.first),
               ),
-              _CompactSwitchRow(
-                title: 'Utilizar comprobantes fiscales',
-                value: ncfEnabled,
-                onChanged: onNcfEnabledChanged,
-              ),
+              if (ecfControl != null) ...[
+                Divider(height: compact ? 10 : 16),
+                ecfControl!,
+              ],
             ],
           ],
         ),
@@ -2936,7 +3166,7 @@ class _CompanyLogoUploader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final compactDesktop = size.width >= 900 && size.height <= 820;
+    final compactDesktop = size.width >= 900;
     final displayName = companyName.trim().isEmpty
         ? 'Empresa'
         : companyName.trim();
@@ -2955,35 +3185,31 @@ class _CompanyLogoUploader extends StatelessWidget {
         builder: (context, constraints) {
           final mobile = constraints.maxWidth < 420;
           final stackActions = constraints.maxWidth < 560;
-          final image = Container(
-            width: compactDesktop ? 48 : (mobile ? 62 : 68),
-            height: compactDesktop ? 48 : (mobile ? 62 : 68),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF1FF),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFCFE0FF)),
+          final image = Tooltip(
+            message: displayName,
+            child: Container(
+              width: compactDesktop ? 48 : (mobile ? 62 : 68),
+              height: compactDesktop ? 48 : (mobile ? 62 : 68),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF1FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFCFE0FF)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: logoBytes == null
+                  ? Icon(
+                      Icons.storefront_rounded,
+                      color: AppColors.secondary,
+                      size: compactDesktop ? 24 : 30,
+                    )
+                  : Image.memory(logoBytes!, fit: BoxFit.cover),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: logoBytes == null
-                ? Icon(
-                    Icons.storefront_rounded,
-                    color: AppColors.secondary,
-                    size: compactDesktop ? 24 : 30,
-                  )
-                : Image.memory(logoBytes!, fit: BoxFit.cover),
           );
           final text = Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Logo de la empresa', style: _strongBodyStyle()),
-                SizedBox(height: compactDesktop ? 2 : 4),
-                Text(
-                  'Se mostrará en el topbar, documentos y áreas de identidad de $displayName.',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: _bodyStyle(),
-                ),
+                Text('Logo', style: _strongBodyStyle()),
               ],
             ),
           );

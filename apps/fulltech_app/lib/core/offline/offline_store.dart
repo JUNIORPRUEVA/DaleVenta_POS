@@ -4,14 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../config/uat_network_guard.dart';
 import '../debug/app_error_reporter.dart';
 import '../debug/trace_log.dart';
 import '../storage/resilient_local_database.dart';
 import 'pending_sync_action.dart';
 
 class OfflineStore {
-  OfflineStore._({String databaseFileName = 'fulltech_offline.db'})
-    : _databaseFileName = databaseFileName;
+  // El nombre por defecto depende del entorno: en UAT se usa un fichero propio
+  // (`fulltech_offline_uat.db`) para no abrir los datos comerciales del equipo.
+  OfflineStore._({String? databaseFileName})
+    : _databaseFileName =
+          databaseFileName ?? UatNetworkGuard.offlineDatabaseFileName;
 
   static final OfflineStore instance = OfflineStore._();
 
@@ -20,9 +24,15 @@ class OfflineStore {
     return OfflineStore._(databaseFileName: databaseFileName);
   }
 
-  static const String _webCachePrefix = 'ft_db_cache:';
-  static const String _webPendingKey = 'ft_db_pending_actions';
-  static const String _webOfflineSalesKey = 'ft_db_offline_sales';
+  // Claves Web con prefijo de entorno: en UAT usan `uat.` para no compartir
+  // localStorage/IndexedDB con la PWA comercial. Un build comercial conserva
+  // exactamente las claves anteriores.
+  static String get _webCachePrefix =>
+      '${UatNetworkGuard.storageNamespace}ft_db_cache:';
+  static String get _webPendingKey =>
+      '${UatNetworkGuard.storageNamespace}ft_db_pending_actions';
+  static String get _webOfflineSalesKey =>
+      '${UatNetworkGuard.storageNamespace}ft_db_offline_sales';
 
   final String _databaseFileName;
   Database? _database;

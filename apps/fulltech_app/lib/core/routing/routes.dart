@@ -92,6 +92,21 @@ class Routes {
 
   static String amonestacionById(String id) => '/amonestaciones/$id';
 
+  // Facturación electrónica (e-CF / Alanube / DGII)
+  static const ecf = '/ecf';
+  static const ecfConfig = '/ecf/config';
+
+  /// Habilitación DGII por empresa, dentro del módulo e-CF.
+  static const ecfDgii = '/ecf/dgii';
+  static String ecfDocumentDetail(String id) => '/ecf/documents/$id';
+
+  /// Cola de revisión de expedientes del equipo de Fulltech.
+  ///
+  /// La ruta existe para todos, pero los datos no: la pantalla pregunta al
+  /// backend y solo pinta expedientes de otras empresas si la sesión pertenece
+  /// al personal de plataforma.
+  static const ecfPlatformReview = '/ecf/platform/review';
+
   static String clienteDetail(String id) => '/clientes/$id';
   static String clienteEdit(String id) => '/clientes/$id/editar';
   static String serviceOrderById(String id) => '/service-orders/$id';

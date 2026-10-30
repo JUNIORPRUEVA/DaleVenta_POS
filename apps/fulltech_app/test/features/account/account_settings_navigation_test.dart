@@ -472,7 +472,7 @@ void main() {
     );
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Nombre comercial'),
+      find.byKey(const ValueKey('company_field_Nombre comercial')),
       'FULLTECH',
     );
     await tester.pump();
@@ -581,7 +581,7 @@ void main() {
     );
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Nombre comercial'),
+      find.byKey(const ValueKey('company_field_Nombre comercial')),
       'FULLTECH',
     );
     await tester.pump();

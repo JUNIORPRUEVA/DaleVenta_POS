@@ -524,4 +524,81 @@ class ApiRoutes {
       '/employee-warnings/me/$id/sign';
   static String employeeWarningsMyRefuse(String id) =>
       '/employee-warnings/me/$id/refuse';
+
+  // Facturación electrónica e-CF (Alanube / DGII). Solo lectura + rangos de
+  // numeración: no existe endpoint de emisión, por lo que el cliente nunca
+  // puede disparar un envío real al proveedor.
+  static const ecf = '/ecf';
+  static const ecfConfig = '/ecf/config';
+  static const ecfCapabilities = '/ecf/capabilities';
+  static const ecfDocuments = '/ecf/documents';
+  static const ecfDocumentsPrepare = '/ecf/documents/prepare';
+  static const ecfDocumentsPrepareCreditNote =
+      '/ecf/documents/prepare-credit-note';
+  static const ecfDocumentsPrepareConsumo = '/ecf/documents/prepare-consumo';
+  static const ecfDocumentsSummary = '/ecf/documents/summary';
+  static const ecfDocumentsEligibleOriginals = '/ecf/documents/eligible-originals';
+  static String ecfDocumentDetail(String id) => '/ecf/documents/$id';
+
+  /// Despacho SIMULADO (solo disponible en una UAT local con el transporte real
+  /// apagado). Sirve para validar la cadena completa; nunca es emisión fiscal.
+  static String ecfDocumentSimulateDispatch(String id) =>
+      '/ecf/documents/$id/simulate-dispatch';
+  static const ecfSequences = '/ecf/sequences';
+  static const ecfSequencesRenew = '/ecf/sequences/renew';
+
+  /// Proceso INTERNO de habilitación e-CF de la empresa (pasos y auditoría).
+  static const ecfOnboarding = '/ecf/onboarding';
+
+  /// Habilitación DGII POR EMPRESA (seguimiento interno + autorización oficial).
+  static const ecfDgiiHabilitation = '/ecf/dgii/habilitation';
+  static const ecfDgiiHistory = '/ecf/dgii/history';
+  static const ecfDgiiEvidence = '/ecf/dgii/evidence';
+  static const ecfDgiiAuthorization = '/ecf/dgii/authorization';
+  static const ecfDgiiAuthorizationRevoke = '/ecf/dgii/authorization/revoke';
+  static const ecfDgiiDocuments = '/ecf/dgii/documents';
+  static String ecfDgiiDocumentFile(String id) => '/ecf/dgii/documents/$id/file';
+  static String ecfDgiiRequirement(String key) => '/ecf/dgii/requirements/$key';
+  static String ecfDgiiEvidenceReview(String id) =>
+      '/ecf/dgii/evidence/$id/review';
+
+  /// Asistencia temporal que la EMPRESA concede al equipo de Fulltech.
+  ///
+  /// El `companyId` nunca viaja en la ruta ni en el cuerpo: el backend lo toma
+  /// del token. Son las únicas rutas que puede usar el cliente para autorizar,
+  /// consultar y revocar el acceso de soporte a su propio expediente.
+  static const ecfDgiiSupportGrants = '/ecf/dgii/support-grants';
+  static String ecfDgiiSupportGrantRevoke(String id) =>
+      '/ecf/dgii/support-grants/$id/revoke';
+
+  static String ecfPendingClassifications(String saleId) =>
+      '/ecf/documents/$saleId/pending-classifications';
+  static const ecfLineClassifications = '/ecf/documents/line-classifications';
+  static String ecfOnboardingStep(String stepKey) =>
+      '/ecf/onboarding/steps/$stepKey';
+
+  /// Superficie de PLATAFORMA (personal de Fulltech).
+  ///
+  /// No forma parte de la aplicación de la empresa: el backend la protege con
+  /// una lista explícita de personal y responde `403` a cualquier otro usuario.
+  static const ecfPlatformMe = '/ecf/platform/me';
+  static const ecfPlatformApplications = '/ecf/platform/dgii/applications';
+  static String ecfPlatformApplication(String companyId) =>
+      '/ecf/platform/dgii/applications/$companyId';
+  static String ecfPlatformActivation(String companyId) =>
+      '/ecf/platform/dgii/applications/$companyId/activation';
+
+  /// Alcance con el que el personal accede al expediente (lo concede la
+  /// empresa y caduca). Sirve para que el revisor no confunda asistencia
+  /// temporal con permiso permanente.
+  static String ecfPlatformAccess(String companyId) =>
+      '/ecf/platform/dgii/applications/$companyId/access';
+  static String ecfPlatformRequirements(String companyId) =>
+      '/ecf/platform/dgii/applications/$companyId/requirements';
+  static String ecfPlatformRequirement(String companyId, String key) =>
+      '/ecf/platform/dgii/applications/$companyId/requirements/$key';
+  static String ecfPlatformEvidence(String companyId, String evidenceId) =>
+      '/ecf/platform/dgii/applications/$companyId/evidence/$evidenceId';
+  static String ecfPlatformDocumentFile(String companyId, String evidenceId) =>
+      '/ecf/platform/dgii/applications/$companyId/documents/$evidenceId/file';
 }

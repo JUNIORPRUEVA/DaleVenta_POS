@@ -81,6 +81,11 @@ class CompanySettings {
   final bool measurementUnitsEnabled;
   final bool multiWarehouseEnabled;
 
+  /// Interruptor de facturación electrónica de la EMPRESA. Es la fuente que
+  /// consume la navegación: una sola verdad, servida con el resto de la
+  /// configuración, sin una petición extra para el menú.
+  final bool ecfEnabled;
+
   const CompanySettings({
     required this.companyName,
     required this.rnc,
@@ -119,6 +124,7 @@ class CompanySettings {
     this.inventoryEnabled = true,
     this.measurementUnitsEnabled = false,
     this.multiWarehouseEnabled = false,
+    this.ecfEnabled = false,
   });
 
   factory CompanySettings.empty() {
@@ -201,6 +207,7 @@ class CompanySettings {
     bool? inventoryEnabled,
     bool? measurementUnitsEnabled,
     bool? multiWarehouseEnabled,
+    bool? ecfEnabled,
     bool clearLogo = false,
   }) {
     return CompanySettings(
@@ -252,6 +259,12 @@ class CompanySettings {
           measurementUnitsEnabled ?? this.measurementUnitsEnabled,
       multiWarehouseEnabled:
           multiWarehouseEnabled ?? this.multiWarehouseEnabled,
+      // Debe propagarse SIEMPRE: `saveSettingsOrQueue` y
+      // `saveCompanyNameOrQueue` escriben el resultado de `copyWith` en la
+      // caché local. Si se perdiera aquí, guardar cualquier dato de empresa
+      // dejaría la caché con e-CF apagado y un arranque sin red ocultaría el
+      // módulo aunque la empresa lo tenga activo.
+      ecfEnabled: ecfEnabled ?? this.ecfEnabled,
     );
   }
 
@@ -293,6 +306,7 @@ class CompanySettings {
     'inventoryEnabled': inventoryEnabled,
     'measurementUnitsEnabled': measurementUnitsEnabled,
     'multiWarehouseEnabled': multiWarehouseEnabled,
+    'ecfEnabled': ecfEnabled,
   };
 
   factory CompanySettings.fromMap(Map<String, dynamic> map) {
@@ -360,6 +374,9 @@ class CompanySettings {
         map.containsKey('multiWarehouseEnabled')
             ? map['multiWarehouseEnabled']
             : map['multi_warehouse_enabled'],
+      ),
+      ecfEnabled: _bool(
+        map.containsKey('ecfEnabled') ? map['ecfEnabled'] : map['ecf_enabled'],
       ),
     );
   }

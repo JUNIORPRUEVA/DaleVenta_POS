@@ -29,6 +29,24 @@ enum AppPermission {
   refundSales,
   cancelSales,
   createFiscalInvoices,
+  viewEcfDocuments,
+  prepareEcfDocuments,
+  manageEcfConfig,
+  manageEcfSequences,
+  // Habilitación DGII. Los nombres coinciden EXACTAMENTE con las cadenas que
+  // valida `RolesGuard` en el backend, para que la bandera guardada en la base y
+  // lo que la interfaz muestra no puedan discrepar.
+  viewEcfOnboarding,
+  manageEcfOnboarding,
+  viewEcfDgiiHabilitation,
+  manageEcfDgiiRequirements,
+  registerEcfDgiiEvidence,
+  reviewEcfDgiiEvidence,
+  recordEcfDgiiOfficialVerification,
+  /// Confirmar la clasificación fiscal (bien o servicio) de una partida que no
+  /// la tiene. Mismo nombre que valida el backend: una decisión fiscal no debe
+  /// heredarse de un permiso de gestión genérico.
+  confirmEcfLineClassification,
   viewPurchases,
   createPurchases,
   editPurchases,
@@ -110,6 +128,18 @@ const Map<AppRole, Set<AppPermission>> rolePermissions = {
     AppPermission.refundSales,
     AppPermission.cancelSales,
     AppPermission.createFiscalInvoices,
+    AppPermission.viewEcfDocuments,
+    AppPermission.prepareEcfDocuments,
+    AppPermission.manageEcfConfig,
+    AppPermission.manageEcfSequences,
+    AppPermission.viewEcfOnboarding,
+    AppPermission.manageEcfOnboarding,
+    AppPermission.viewEcfDgiiHabilitation,
+    AppPermission.manageEcfDgiiRequirements,
+    AppPermission.registerEcfDgiiEvidence,
+    AppPermission.reviewEcfDgiiEvidence,
+    AppPermission.recordEcfDgiiOfficialVerification,
+    AppPermission.confirmEcfLineClassification,
     AppPermission.viewPurchases,
     AppPermission.createPurchases,
     AppPermission.editPurchases,
