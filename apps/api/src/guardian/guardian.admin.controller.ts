@@ -18,6 +18,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
+import { GuardianAutoEnrollmentService } from './guardian.auto-enrollment.service';
 import { resolveGuardianConfig } from './guardian.config';
 import { guardianSecretValue } from './guardian.secret';
 
@@ -36,6 +37,7 @@ export class GuardianAdminController {
   constructor(
     private readonly incidents: GuardianIncidentsService,
     private readonly prisma: PrismaService,
+    private readonly autoEnrollment: GuardianAutoEnrollmentService,
   ) {}
 
   private resolveCompanyId(req: Request, platformHeader?: string, requestedCompanyId?: string) {
@@ -364,6 +366,53 @@ export class GuardianAdminController {
       ip: req.ip ?? null,
     });
     return result;
+  }
+
+  /**
+   * Revelación del monitoreo para la app: qué está activo y cuántos equipos
+   * están instrumentados. Se muestra en el panel de la empresa y no depende de
+   * que la empresa esté activada (si no lo está, se informa igualmente).
+   */
+  @Get('company/status')
+  @Roles(Role.ADMIN)
+  async companyStatus(
+    @Req() req: Request,
+    @Headers('x-guardian-platform-token') platformToken?: string,
+    @Query('companyId') requestedCompanyId?: string,
+  ) {
+    const scope = this.resolveCompanyId(req, platformToken, requestedCompanyId);
+    return this.autoEnrollment.getCompanyStatus(scope.companyId);
+  }
+
+  /**
+   * Control administrativo de desactivación.
+   *
+   * Solo un ADMIN de la propia empresa puede apagarlo (el token de plataforma
+   * también puede, para soporte). Revoca credenciales y autorizaciones: el
+   * monitoreo se detiene de inmediato, no cuando caduque algo.
+   */
+  @Post('company/disable')
+  @Roles(Role.ADMIN)
+  async disableCompany(
+    @Req() req: Request,
+    @Headers('x-guardian-platform-token') platformToken?: string,
+    @Query('companyId') requestedCompanyId?: string,
+  ) {
+    const scope = this.resolveCompanyId(req, platformToken, requestedCompanyId);
+    const result = await this.autoEnrollment.disableForCompany({
+      companyId: scope.companyId,
+      actorUserId: scope.actorUserId,
+      actorRole: scope.actorRole,
+      ip: req.ip ?? null,
+    });
+    await this.audit({
+      action: 'company.guardian.disable',
+      actorUserId: scope.actorUserId,
+      actorRole: scope.actorRole,
+      companyId: scope.companyId,
+      ip: req.ip ?? null,
+    });
+    return { ...result, guardianEnabled: false };
   }
 
   private parseEnum<T extends Record<string, string>>(

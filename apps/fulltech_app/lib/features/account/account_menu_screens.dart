@@ -31,6 +31,7 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
+import '../../core/guardian/guardian_monitoring_panel.dart';
 import '../../modules/cash/cash_turn_menu_button.dart';
 import 'delete_account_dialog.dart';
 import '../settings/ui/printer_settings_page.dart';
@@ -204,6 +205,14 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                   ready: state.phase == AppUpdatePhase.readyToInstall,
                   onPressed: busy ? null : handlePendingAction,
                 ),
+              ),
+              const SizedBox(height: 14),
+              // Revelación y control del monitoreo: el cliente ve qué se envía y
+              // puede desactivarlo (revoca las credenciales de las estaciones).
+              GuardianMonitoringPanel(
+                accentColor: AppColors.secondary,
+                textStyle: _titleStyle(16),
+                captionStyle: _bodyStyle(),
               ),
             ],
           ),

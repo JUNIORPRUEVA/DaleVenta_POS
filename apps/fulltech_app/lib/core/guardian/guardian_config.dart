@@ -18,6 +18,7 @@ class GuardianConfig {
     required this.flushInterval,
     this.baseUrl = '',
     this.useMachineApi = false,
+    this.autoEnroll = false,
     this.enrollmentCode = '',
     this.enrollmentCodeFile = '',
     this.selfTest = false,
@@ -53,6 +54,16 @@ class GuardianConfig {
   /// Usa el endpoint de ingesta con credencial de instalación
   /// (`/guardian/machine/incidents`) en lugar del JWT de sesión.
   final bool useMachineApi;
+
+  /// Auto-enrolamiento con la sesión autenticada de la empresa.
+  ///
+  /// Cuando está activo, la instalación pide su autorización de enrolamiento al
+  /// servidor en lugar de esperar un código manual, y usa el transporte con
+  /// enrolamiento diferido (nunca bloquea el POS si está offline).
+  final bool autoEnroll;
+
+  /// `true` si la instalación debe usar credencial de máquina.
+  bool get usesInstallCredential => useMachineApi || autoEnroll;
 
   /// Código de enrolamiento de un solo uso (VACÍO en builds de cliente).
   ///
@@ -112,6 +123,7 @@ class GuardianConfig {
       flushInterval: Duration(seconds: _resolveFlushSeconds()),
       baseUrl: const String.fromEnvironment('GUARDIAN_BASE_URL', defaultValue: ''),
       useMachineApi: const bool.fromEnvironment('GUARDIAN_USE_MACHINE_API', defaultValue: false),
+      autoEnroll: const bool.fromEnvironment('GUARDIAN_AUTO_ENROLL', defaultValue: false),
       // El código NUNCA se compila: solo la ruta del archivo que lo contiene.
       enrollmentCodeFile:
           const String.fromEnvironment('GUARDIAN_ENROLLMENT_CODE_FILE', defaultValue: ''),
