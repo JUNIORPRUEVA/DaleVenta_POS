@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   GuardianAutoEnrollmentConfig,
   isCompanyAllowedForAutoEnrollment,
@@ -130,7 +131,19 @@ export class GuardianAutoEnrollmentService {
   /** Límite en memoria por empresa (defensa contra ráfagas, complementa la BD). */
   private readonly bursts = new Map<string, { startedAt: number; count: number }>();
 
-  constructor(private readonly prisma: GuardianAutoEnrollmentStore) {}
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Vista estrecha del cliente Prisma.
+   *
+   * El constructor recibe la **clase** `PrismaService` porque Nest resuelve la
+   * inyección con los metadatos del decorador; un tipo estructural emitiría
+   * `Object` en runtime y el arranque fallaría. Las pruebas sustituyen esta
+   * vista por un doble en memoria.
+   */
+  private get store(): GuardianAutoEnrollmentStore {
+    return this.prisma as unknown as GuardianAutoEnrollmentStore;
+  }
 
   /**
    * Emite una autorización de enrolamiento de vida corta para la empresa de la
@@ -182,7 +195,7 @@ export class GuardianAutoEnrollmentService {
       };
     }
 
-    const company = await this.prisma.company.findUnique({
+    const company = await this.store.company.findUnique({
       where: { id: companyId },
       select: {
         guardianEnabled: true,
@@ -203,12 +216,12 @@ export class GuardianAutoEnrollmentService {
       };
     }
 
-    const existingForInstall = await this.prisma.guardianMachineCredential.findFirst({
+    const existingForInstall = await this.store.guardianMachineCredential.findFirst({
       where: { companyId, installId },
       select: { id: true },
     });
     if (!existingForInstall) {
-      const active = await this.prisma.guardianMachineCredential.count({
+      const active = await this.store.guardianMachineCredential.count({
         where: {
           companyId,
           enabled: true,
@@ -225,7 +238,7 @@ export class GuardianAutoEnrollmentService {
       }
     }
 
-    const recent = await this.prisma.guardianEnrollmentCode.count({
+    const recent = await this.store.guardianEnrollmentCode.count({
       where: { companyId, createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) } },
     });
     if (recent >= config.grantsPerCompanyHour) {
@@ -247,7 +260,7 @@ export class GuardianAutoEnrollmentService {
           message: 'La empresa no tiene APPYRA Guardian activado',
         };
       }
-      await this.prisma.company.update({
+      await this.store.company.update({
         where: { id: companyId },
         data: {
           guardianEnabled: true,
@@ -267,7 +280,7 @@ export class GuardianAutoEnrollmentService {
 
     const code = generateEnrollmentCode();
     const expiresAt = new Date(now.getTime() + config.grantTtlSeconds * 1000);
-    await this.prisma.guardianEnrollmentCode.create({
+    await this.store.guardianEnrollmentCode.create({
       data: {
         companyId,
         codeHash: hashGuardianEnrollmentCode(code),
@@ -312,7 +325,7 @@ export class GuardianAutoEnrollmentService {
     const config = resolveGuardianAutoEnrollmentConfig();
     const id = String(companyId ?? '').trim();
     const company = id
-      ? await this.prisma.company.findUnique({
+      ? await this.store.company.findUnique({
           where: { id },
           select: {
             guardianEnabled: true,
@@ -325,7 +338,7 @@ export class GuardianAutoEnrollmentService {
       : null;
     let activeInstallations = 0;
     if (id) {
-      activeInstallations = await this.prisma.guardianMachineCredential.count({
+      activeInstallations = await this.store.guardianMachineCredential.count({
         where: {
           companyId: id,
           enabled: true,
@@ -359,15 +372,15 @@ export class GuardianAutoEnrollmentService {
   }): Promise<{ credentialsRevoked: number; grantsRevoked: number }> {
     const companyId = String(params.companyId ?? '').trim();
     const now = new Date();
-    await this.prisma.company.update({
+    await this.store.company.update({
       where: { id: companyId },
       data: { guardianEnabled: false },
     });
-    const credentials = await this.prisma.guardianMachineCredential.updateMany({
+    const credentials = await this.store.guardianMachineCredential.updateMany({
       where: { companyId, revokedAt: null },
       data: { enabled: false, revokedAt: now },
     });
-    const grants = await this.prisma.guardianEnrollmentCode.updateMany({
+    const grants = await this.store.guardianEnrollmentCode.updateMany({
       where: { companyId, revokedAt: null, expiresAt: { gt: now } },
       data: { revokedAt: now },
     });
@@ -384,7 +397,16 @@ export class GuardianAutoEnrollmentService {
     return { credentialsRevoked: credentials.count, grantsRevoked: grants.count };
   }
 
-  /** Límite de ráfaga en memoria: ventana de un minuto, por empresa. */
+  /**
+   * Límite de ráfaga en memoria: ventana de un minuto, por empresa.
+   *
+   * Evidencia de UAT (2026-10-30): el umbral anterior (`ceil(porHora/4)` = 3)
+   * bloqueaba el alta real de una empresa con varios equipos: cuatro estaciones
+   * enrolándose en el mismo minuto devolvían `ENROLLMENT_RATE_LIMITED`. El freno
+   * real es el límite horario en base de datos; este control existe para cortar
+   * un bucle anómalo, no para racionar el alta normal, así que el mínimo es 10
+   * autorizaciones por minuto y empresa.
+   */
   private isBurstLimited(
     config: GuardianAutoEnrollmentConfig,
     companyId: string,
@@ -393,7 +415,7 @@ export class GuardianAutoEnrollmentService {
     const key = companyId;
     const ts = now.getTime();
     const entry = this.bursts.get(key);
-    const maxPerMinute = Math.max(1, Math.ceil(config.grantsPerCompanyHour / 4));
+    const maxPerMinute = Math.max(10, Math.ceil(config.grantsPerCompanyHour / 2));
     if (!entry || ts - entry.startedAt >= 60_000) {
       this.bursts.set(key, { startedAt: ts, count: 1 });
       if (this.bursts.size > 5_000) {
@@ -416,7 +438,7 @@ export class GuardianAutoEnrollmentService {
     ip: string | null;
   }): Promise<void> {
     try {
-      await this.prisma.guardianAccessLog.create({
+      await this.store.guardianAccessLog.create({
         data: {
           actorUserId: params.actorUserId,
           actorRole: params.actorRole,

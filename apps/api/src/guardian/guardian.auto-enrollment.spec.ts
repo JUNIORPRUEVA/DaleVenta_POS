@@ -214,7 +214,7 @@ describe('concesion de auto-enrolamiento', () => {
   it('rechaza todo si el interruptor esta apagado', async () => {
     setEnv({ GUARDIAN_AUTO_ENROLL_ENABLED: 'false', GUARDIAN_AUTO_ENROLL_COMPANIES: '*' });
     const { store } = createFakeStore({ companies: { [COMPANY_A]: { ...ACTIVE_COMPANY } } });
-    const service = new GuardianAutoEnrollmentService(store);
+    const service = new GuardianAutoEnrollmentService(store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -229,7 +229,7 @@ describe('concesion de auto-enrolamiento', () => {
   it('no auto-enrola empresas fuera de la lista autorizada', async () => {
     setEnv({ GUARDIAN_AUTO_ENROLL_ENABLED: 'true', GUARDIAN_AUTO_ENROLL_COMPANIES: COMPANY_B });
     const { store } = createFakeStore({ companies: { [COMPANY_A]: { ...ACTIVE_COMPANY } } });
-    const service = new GuardianAutoEnrollmentService(store);
+    const service = new GuardianAutoEnrollmentService(store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -244,7 +244,7 @@ describe('concesion de auto-enrolamiento', () => {
   it('emite un codigo de un solo uso y activa la empresa autorizada', async () => {
     setEnv({ GUARDIAN_AUTO_ENROLL_ENABLED: 'true', GUARDIAN_AUTO_ENROLL_COMPANIES: COMPANY_A });
     const fake = createFakeStore({ companies: { [COMPANY_A]: { ...ACTIVE_COMPANY } } });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -280,7 +280,7 @@ describe('concesion de auto-enrolamiento', () => {
       GUARDIAN_AUTO_ENROLL_ACTIVATE: 'false',
     });
     const fake = createFakeStore({ companies: { [COMPANY_A]: { ...ACTIVE_COMPANY } } });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -302,7 +302,7 @@ describe('concesion de auto-enrolamiento', () => {
     const fake = createFakeStore({
       companies: { [COMPANY_A]: { ...ACTIVE_COMPANY, guardianEnabled: false } },
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -325,7 +325,7 @@ describe('concesion de auto-enrolamiento', () => {
         },
       },
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -352,7 +352,7 @@ describe('concesion de auto-enrolamiento', () => {
       companies: { [COMPANY_A]: { ...ACTIVE_COMPANY, guardianEnabled: true } },
       credentials,
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const third = await service.requestGrant({
       companyId: COMPANY_A,
@@ -371,6 +371,60 @@ describe('concesion de auto-enrolamiento', () => {
     expect(rotate.ok).toBe(true);
   });
 
+  it('permite el alta real de varios equipos de la misma empresa en el mismo minuto', async () => {
+    // Defecto observado en UAT (2026-10-30): con el umbral anterior (3/min) una
+    // empresa con cuatro estaciones recibia ENROLLMENT_RATE_LIMITED al enrolarse.
+    setEnv({
+      GUARDIAN_AUTO_ENROLL_ENABLED: 'true',
+      GUARDIAN_AUTO_ENROLL_COMPANIES: COMPANY_A,
+      GUARDIAN_MAX_INSTALLATIONS_PER_COMPANY: '10',
+    });
+    const fake = createFakeStore({
+      companies: { [COMPANY_A]: { ...ACTIVE_COMPANY, guardianEnabled: true } },
+    });
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
+
+    const outcomes = [];
+    for (let n = 1; n <= 6; n += 1) {
+      outcomes.push(
+        await service.requestGrant({
+          companyId: COMPANY_A,
+          actorUserId: 'user-1',
+          actorRole: 'ADMIN',
+          installId: `install-dev-${n}`,
+        }),
+      );
+    }
+
+    expect(outcomes.every((outcome) => outcome.ok)).toBe(true);
+    expect(fake.codes).toHaveLength(6);
+  });
+
+  it('corta una rafaga anomala por encima de 10 autorizaciones por minuto', async () => {
+    setEnv({
+      GUARDIAN_AUTO_ENROLL_ENABLED: 'true',
+      GUARDIAN_AUTO_ENROLL_COMPANIES: COMPANY_A,
+      GUARDIAN_AUTO_ENROLL_GRANTS_PER_HOUR: '12',
+    });
+    const fake = createFakeStore({
+      companies: { [COMPANY_A]: { ...ACTIVE_COMPANY, guardianEnabled: true } },
+    });
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
+
+    let limited = false;
+    for (let n = 1; n <= 14 && !limited; n += 1) {
+      const outcome = await service.requestGrant({
+        companyId: COMPANY_A,
+        actorUserId: 'user-1',
+        actorRole: 'ADMIN',
+        installId: `install-flood-${n}`,
+      });
+      if (!outcome.ok && outcome.code === 'ENROLLMENT_RATE_LIMITED') limited = true;
+    }
+
+    expect(limited).toBe(true);
+  });
+
   it('limita las autorizaciones por empresa y hora', async () => {
     setEnv({
       GUARDIAN_AUTO_ENROLL_ENABLED: 'true',
@@ -385,7 +439,7 @@ describe('concesion de auto-enrolamiento', () => {
         { id: 'k2', companyId: COMPANY_A, createdAt: new Date(now - 120_000), revokedAt: null, expiresAt: new Date(now), codeHash: 'b'.repeat(64), maxUses: 1 },
       ],
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -405,7 +459,7 @@ describe('concesion de auto-enrolamiento', () => {
         [COMPANY_B]: { ...ACTIVE_COMPANY, guardianEnabled: true },
       },
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const a = await service.requestGrant({
       companyId: COMPANY_A,
@@ -431,7 +485,7 @@ describe('concesion de auto-enrolamiento', () => {
     const fake = createFakeStore({
       companies: { [COMPANY_A]: { ...ACTIVE_COMPANY, guardianEnabled: true } },
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -451,7 +505,7 @@ describe('concesion de auto-enrolamiento', () => {
   it('un installId mal formado se rechaza antes de tocar la base', async () => {
     setEnv({ GUARDIAN_AUTO_ENROLL_ENABLED: 'true', GUARDIAN_AUTO_ENROLL_COMPANIES: COMPANY_A });
     const fake = createFakeStore({ companies: { [COMPANY_A]: { ...ACTIVE_COMPANY } } });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const outcome = await service.requestGrant({
       companyId: COMPANY_A,
@@ -482,7 +536,7 @@ describe('desactivacion administrativa', () => {
         { id: 'k1', companyId: COMPANY_A, createdAt: new Date(now), revokedAt: null, expiresAt: new Date(now + 300_000), codeHash: 'c'.repeat(64), maxUses: 1 },
       ],
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     const result = await service.disableForCompany({
       companyId: COMPANY_A,
@@ -507,7 +561,7 @@ describe('desactivacion administrativa', () => {
     const fake = createFakeStore({
       companies: { [COMPANY_A]: { ...ACTIVE_COMPANY, guardianEnabled: true } },
     });
-    const service = new GuardianAutoEnrollmentService(fake.store);
+    const service = new GuardianAutoEnrollmentService(fake.store as any);
 
     await service.disableForCompany({ companyId: COMPANY_A, actorUserId: 'admin-1', actorRole: 'ADMIN' });
     const outcome = await service.requestGrant({
