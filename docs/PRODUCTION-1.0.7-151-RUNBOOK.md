@@ -97,6 +97,27 @@ servidor, Docker materializa la imagen de una sola plataforma y su ID pasa a ser
 
 ## 2. Prueba ejecutada contra copia restaurada de PostgreSQL
 
+### Aplicadas en producción (2026-10-30 12:53 UTC, autorización del propietario)
+
+`prisma migrate deploy` con la imagen 151 (`--network container:<backend>`) →
+`All migrations have been successfully applied`, exit 0. Verificación inmediata:
+
+| Comprobación | Resultado |
+| --- | --- |
+| `_prisma_migrations` | **183** aplicadas · 0 fallidas · última `20261029210000_reconciliation_single_active_obligation` |
+| Tablas V2 | **2** · **8 índices** (incl. único parcial `…active_operation_key`) |
+| Filas en tablas V2 | 0 (ninguna escritura de datos) |
+| Tablas en `public` | **139** = 137 + 2 |
+| `Sale` / `SaleItem` / `Product` | 11.828 / 17.884 / 526 (idénticos) |
+| `inventory_movements` / `cash_sessions` / `cashbox_daily` | 8.541 / 280 / 180 (caja crece por operación real) |
+| `auth_sessions` | 21.066 (logins reales) |
+| Guardian | 12 tablas · 6 incidentes · 4 diagnósticos · 2 alertas · 7 credenciales · 1 opt-in (idénticos) |
+| Servicios | backend ver. 52392490 y worker ver. 52392475 **sin cambios ni reinicios** · `/health` 200 · `/sales/open-tickets` y `/products` 401 · latido Guardian 12:54:02 |
+
+Respaldo previo usado: `fullpos_prod_20261030T120434Z.dump` (`77e7deb8…0f2d9e5`).
+Rollback: no se revierte la base (tablas nuevas inertes para el backend actual).
+
+
 Respaldo verificado: `fullpos_prod_20261030_030249.dump` · 6.776.529 B ·
 SHA256 `9f544e54ff58b92cd5c6a3a31618aed11f71da6f0da0c928e9f55eedca76b8a2`.
 
