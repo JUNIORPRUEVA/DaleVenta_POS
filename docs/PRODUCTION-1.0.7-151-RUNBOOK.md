@@ -169,14 +169,34 @@ antiguos siguen operando sin cambios; las funciones V2 solo las usa un cliente 1
 ## 4. Orden exacto de operaciones (cada una requiere autorización)
 
 ```text
-[1] Respaldo fresco de PostgreSQL  ->  AUTORIZAR RESPALDO
-[2] Transferir imagen + verificar digest  ->  AUTORIZAR TRANSFERENCIA
-[3] prisma migrate deploy (2 migraciones) ->  AUTORIZAR MIGRACIÓN
-[4] Verificación posterior (SQL + rutas)  ->  incluida en [3]
-[5] docker service update --image (backend y worker) -> AUTORIZAR DESPLIEGUE
-[6] Comprobaciones 148 + piloto           ->  AUTORIZAR PILOTO
-[7] Publicación del instalador            ->  AUTORIZAR PUBLICACIÓN
+[1] Respaldo fresco de PostgreSQL  ->  AUTORIZAR RESPALDO          ✅ hecho (12:04 UTC)
+[2] Transferir imagen + verificar digest  ->  AUTORIZAR TRANSFERENCIA  ✅ hecho (12:32 UTC)
+[3] prisma migrate deploy (2 migraciones) ->  AUTORIZAR MIGRACIÓN   ✅ hecho (12:53 UTC)
+[4] Verificación posterior (SQL + rutas)  ->  incluida en [3]       ✅ hecho
+[5] docker service update --image  -> AUTORIZAR DESPLIEGUE          ⏳ backend hecho (12:56 UTC) · worker PENDIENTE
+[6] Comprobaciones 148 + piloto           ->  AUTORIZAR PILOTO      ⏳ pendiente
+[7] Publicación del instalador            ->  AUTORIZAR PUBLICACIÓN ⏳ pendiente
 ```
+
+### Backend desplegado (2026-10-30 12:56 UTC)
+
+Solo `daleventapos_backend`, con `docker service update --image daleventapos-prod-api:1.0.7-151-2fd7be4d --no-resolve-image --update-order start-first --update-parallelism 1` → `Service converged`.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Servicio | `daleventapos-prod-api:1.0.7-151-2fd7be4d` · ver. **52392516** · `UpdateStatus=completed` · 1/1 |
+| Tareas | nueva `Running`; anterior `autoenroll-5d8a5f98` en `Shutdown` |
+| **Huella del entorno** (`Env` ordenado, sha256) | `d890d44e989e1b369e0da2da6b478d5523a11595a122c3495a2024d4888fd481` — **idéntica antes y después** |
+| Variables clave | `RUN_MIGRATIONS=false` · `RUN_SEED=false` · `MIGRATION_STRICT=true` · `NODE_ENV=production` · `GUARDIAN_ENABLED=true` · `GUARDIAN_ALERTS_ENABLED=true` · `GUARDIAN_DIAGNOSIS_ENABLED=false` |
+| Secretos | los 5 intactos (`guardian_wa_app_secret`, `guardian_wa_verify_token`, `guardian_wa_token`, `guardian_platform_token`, `guardian_ai_key`) |
+| Migraciones al arrancar | **0** menciones de migración en el log (respeta `RUN_MIGRATIONS=false`) |
+| Guardian en el binario | huella `14e8b89c83245a8edafb2b5fddeb4b35`, **idéntica** al backend anterior |
+| Rutas | `/health` 200 (interno y público) · `/sales/open-tickets` 401 · `/sales/reconciliation-obligations` 401 · `/sales/attempts/x/reconciliation` 401 · `/products` 401 · `/auth/me` 401 · `/guardian/admin/company/status` 401 · `/api/app-updates/check` **200** · `/license` **200** (tráfico real de clientes 148) |
+| Datos | 183 migraciones · 2 tablas V2 (0 filas) · Sale 11.828 · SaleItem 17.884 · Product 526 · inventory 8.541 · cash 280/180 · Guardian: 12 tablas / 6 incidentes / 4 diagnósticos / 2 alertas / 1 opt-in · latido 13:09:43 |
+| Aviso preexistente (ajeno al despliegue) | `WARN [UsageTelemetryService] Telemetry delivery failed … fetch failed`, ya presente a las **12:46:33** en la tarea anterior |
+| Rollback preparado | snapshot `/root/rollback-backend-20261030T125552Z.json` (20 KB); `docker service rollback daleventapos_backend` restaura `easypanel/daleventapos/backend:autoenroll-5d8a5f98` |
+
+**Pendiente:** `daleventapos_guardian_worker` sigue con `autoenroll-5d8a5f98` (ver. 52392475, sin tocar). Su código Guardian es idéntico al ya desplegado, así que su comportamiento no cambia; su actualización requiere autorización aparte.
 
 ### [1] Respaldo fresco (obligatorio: los datos cambiaron desde el 03:02)
 
