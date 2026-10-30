@@ -123,6 +123,10 @@ Source: "{#VcRedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#WebView2RedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 #endif
 
+; IMPORTANTE: este bloque SOLO aplica a la instalacion estable. Las variantes
+; UAT tienen identidad propia y no deben borrar jamas los accesos directos de la
+; instalacion real del cliente (aqui `{commonprograms}` es de todos los usuarios).
+#ifndef MyAppUat
 #ifndef MyAppUatMayoreo
 [InstallDelete]
 ; El nombre visible cambio de "DaleVentas POS" a "FullPOS": al actualizar una
@@ -130,6 +134,7 @@ Source: "{#WebView2RedistPath}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 ; huerfanas duplicadas en el Menu Inicio ni en el escritorio.
 Type: filesandordirs; Name: "{commonprograms}\DaleVentas POS"
 Type: files; Name: "{commondesktop}\DaleVentas POS.lnk"
+#endif
 #endif
 
 [Icons]

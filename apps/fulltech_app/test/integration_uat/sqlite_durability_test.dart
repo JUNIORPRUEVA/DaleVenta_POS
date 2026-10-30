@@ -8,6 +8,7 @@ import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_declaration.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/core/storage/local_database_path.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -57,6 +58,7 @@ void main() {
 
   const probeFile = 'durability_probe.db';
   const rehearsalFile = 'durability_rehearsal.db';
+  const futureFile = 'durability_future.db';
 
   late Dio dio;
   late String token;
@@ -142,11 +144,17 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
       );
       final counts = <String, int>{};
+      final columns = <String, List<String>>{};
       for (final row in tables) {
         final table = row['name']!.toString();
         if (table.startsWith('sqlite_')) continue;
         final result = await db.rawQuery('SELECT COUNT(*) AS c FROM "$table"');
         counts[table] = (result.first['c'] as num).toInt();
+        final info = await db.rawQuery('PRAGMA table_info("$table")');
+        columns[table] = info
+            .map((column) => column['name'].toString())
+            .toList(growable: false)
+          ..sort();
       }
       return {
         'integrity': integrity.isEmpty
@@ -156,6 +164,7 @@ void main() {
         'tables': counts.length,
         'rows': counts.values.fold<int>(0, (a, b) => a + b),
         'counts': counts,
+        'columns': columns,
       };
     } finally {
       await db.close();
@@ -266,7 +275,7 @@ void main() {
   tearDownAll(() async {
     // Limpieza estricta: la raíz es aislada, así que solo se borran los
     // artefactos de esta prueba.
-    for (final file in [probeFile, rehearsalFile]) {
+    for (final file in [probeFile, rehearsalFile, futureFile]) {
       for (final suffix in const ['', '-wal', '-shm']) {
         final target = File(p.join(databasesDir.path, '$file$suffix'));
         if (target.existsSync()) target.deleteSync();
@@ -411,6 +420,79 @@ void main() {
   );
 
   test(
+    'una base de una versión POSTERIOR se rechaza sin degradarla',
+    () async {
+      if (legacyDb.isEmpty) return;
+
+      final futurePath = await resolveLocalDatabasePath(futureFile);
+      Directory(p.dirname(futurePath)).createSync(recursive: true);
+      File(legacyDb).copySync(futurePath);
+      final wal = File('$legacyDb-wal');
+      if (wal.existsSync()) wal.copySync('$futurePath-wal');
+
+      // Se simula una base escrita por una versión futura del cliente.
+      final writer = await databaseFactory.openDatabase(futurePath);
+      try {
+        await writer.execute('PRAGMA user_version = 99');
+      } finally {
+        await writer.close();
+      }
+
+      final digest = sha256.convert(File(futurePath).readAsBytesSync());
+      final size = File(futurePath).lengthSync();
+
+      final store = OfflineStore.forTesting(futureFile);
+      Object? failure;
+      try {
+        await store.listPendingActions(limit: 1);
+      } catch (error) {
+        failure = error;
+      } finally {
+        await store.closeForTesting();
+      }
+
+      expect(
+        failure,
+        isNotNull,
+        reason: 'abrir una base más nueva debe fallar, no degradarla',
+      );
+      expect(
+        File(futurePath).lengthSync(),
+        size,
+        reason: 'el archivo no puede cambiar de tamano',
+      );
+      expect(
+        sha256.convert(File(futurePath).readAsBytesSync()).toString(),
+        digest.toString(),
+        reason: 'el archivo no puede modificarse al rechazar la apertura',
+      );
+
+      // Y sigue siendo una base de la versión futura: no se degradó ni se
+      // vació para "arreglarla".
+      final reader = await databaseFactory.openDatabase(futurePath);
+      try {
+        final version = await reader.rawQuery('PRAGMA user_version');
+        expect(
+          (version.first.values.first as num?)?.toInt(),
+          99,
+          reason: 'no se puede rebajar user_version al rechazar la apertura',
+        );
+        final tables = await reader.rawQuery(
+          "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table'",
+        );
+        expect(
+          (tables.first['c'] as num).toInt(),
+          greaterThanOrEqualTo(8),
+          reason: 'la base debe conservar sus tablas',
+        );
+      } finally {
+        await reader.close();
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
+
+  test(
     'migración sobre una COPIA verificada (WAL incluido)',
     () async {
       if (legacyDb.isEmpty) {
@@ -461,6 +543,30 @@ void main() {
         greaterThanOrEqualTo((beforeInspect['rows'] as int?) ?? 0),
         reason: 'la migración no puede perder registros',
       );
+
+      // Reversión segura: si el esquema queda idéntico (tablas y columnas), la
+      // versión 148 puede volver a abrir esta misma base sin degradarla.
+      expect(
+        after['columns'],
+        beforeInspect['columns'],
+        reason: 'el esquema debe quedar idéntico para permitir la reversión',
+      );
+      expect(
+        after['user_version'],
+        beforeInspect['user_version'],
+        reason: 'no se puede cambiar la versión del archivo sin migración real',
+      );
+
+      // Ventas, turnos, inventario y operaciones pendientes: mismas filas.
+      final beforeCounts = (beforeInspect['counts'] as Map).cast<String, int>();
+      final afterCounts = (after['counts'] as Map).cast<String, int>();
+      for (final entry in beforeCounts.entries) {
+        expect(
+          afterCounts[entry.key],
+          entry.value,
+          reason: 'la tabla ${entry.key} no puede perder filas',
+        );
+      }
       // ignore: avoid_print
       print(
         'REHEARSAL ${{

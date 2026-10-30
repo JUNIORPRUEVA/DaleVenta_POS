@@ -117,18 +117,24 @@ El backend **debe ir primero**: un cliente nuevo contra un backend viejo recibe
 404 al declarar y la declaración queda en la cola como `failed` (visible, no se
 pierde), pero no se concilia hasta actualizar el servidor.
 
-### Instalador candidato (identidad separada de la 148)
+### Instalador candidato final (identidad de producción)
 
-- Nombre probado: `FullPOS-UAT-Setup-1.0.7-rc.1-150000.exe`.
-- `AppId {{4C1F9E6A-2D74-4E33-9B57-7A0E5F1C8D21}}` y carpeta
-  `DaleVentas POS UAT`, **distintos** de la instalación estable
-  (`{{0ED49D5E-…}}` / `DaleVentas POS`): instalarlo no puede sobrescribir la 148.
-- Versión `1.0.7-rc.1` (build 150000): no reutiliza 148 ni reserva 149.
-- **Bloqueo:** el binario queda **NotSigned** (no hay certificado de firma de
-  código en el equipo). No se usó ningún certificado falso. La publicación debe
-esperar a un certificado real, porque SmartScreen bloqueará la instalación masiva.
-- Instalar/desinstalar para probar el rollback requiere **elevación (UAC)**, que
-  no se puede automatizar desde aquí: pendiente de una sesión manual.
+- Versión definitiva: **`1.0.7+150`** (ver §7.1). Artefacto:
+  `installer/output/FullPOS-Setup-1.0.7-150.exe` — 40.304.215 B ·
+  SHA256 `3530BBDB61415254D70522EC8285A2F540B701E73436B2B581BE63CA818592DF`.
+- Identidad estable de siempre: AppId `{{0ED49D5E-6E78-4F11-8E78-6D37FDE2078A}}`
+  y carpeta `DaleVentas POS` (actualiza la instalación del cliente, no crea una
+  segunda). **No ejecutar este artefacto en el equipo de desarrollo**: existe
+  una instalación real en `C:\Program Files\DaleVentas POS`.
+- Variantes de ensayo (identidad separada, nunca publicables):
+  AppId `{{4C1F9E6A-2D74-4E33-9B57-7A0E5F1C8D21}}`, carpeta
+  `DaleVentas POS UAT`, salida `FullPOS-UAT-Setup-<ver>-<build>.exe`.
+- **Bloqueo de firma:** todos los artefactos quedan **NotSigned** (no hay
+  certificado de firma de código en el equipo). No se usó ningún certificado
+  falso. Ver §7.4 para las advertencias esperables de SmartScreen.
+- Instalar/desinstalar la variante de ensayo **sí** se pudo ejecutar en modo
+  administrador (§7.3); lo que queda pendiente es solo la firma y la ejecución
+  del candidato de producción, que es una decisión del propietario.
 
 ---
 
@@ -207,13 +213,94 @@ archivo si su `companyId` no coincide; rechaza filas sin importe válido.
 
 ---
 
-## 8. Lo que falta para publicar
+## 8. Estado del cierre técnico (2026-10-29)
 
-- [ ] UAT con datos sintéticos de todos los escenarios del informe.
-- [ ] Instalador candidato construido con `scripts/release/build_windows_release.ps1`.
-- [ ] Prueba de actualización 148 → candidato en un equipo real, verificando que
-      los datos se conservan.
-- [ ] Autorización explícita para: migración en producción, despliegue del
-      backend, publicación del instalador.
-- [ ] Importación histórica: solo si el negocio aporta los importes con
-      evidencia (caso Siarah incluido).
+### 8.1 Versión definitiva
+
+| Candidato | Valor | Motivo |
+| --- | --- | --- |
+| Versión / build | **`1.0.7+150`** | No reutiliza 148 (publicada) y **no ocupa 149**, que queda libre para la línea de Windows que ya lo tuviera reservado. |
+| Instalador | `FullPOS-Setup-1.0.7-150.exe` | Identidad estable (AppId `0ED49D5E…`, carpeta `DaleVentas POS`). |
+| Canal | `stable` **sin tocar** | No se ejecutó ninguna publicación: el canal sigue sirviendo solo `1.0.6-148`. |
+
+`apps/fulltech_app/pubspec.yaml` queda en `1.0.7+150` para que el corte de
+release sea reproducible (el script lee la versión del pubspec).
+
+### 8.2 Integración sobre la línea con Guardian AI
+
+- Rama aislada: **`agent/integrate-recovery-v2-guardian`**, creada desde
+  `agent/guardian-phase12` (`de724dca`), merge de `agent/recovery-engine-v2`
+  → commit `5fe89192`.
+- Solo 4 archivos se solapaban; 2 conflictos reales, resueltos a mano:
+  - `apps/api/prisma/schema.prisma`: se conservan los modelos de Guardian
+    (Fase 1–13) y se añaden las dos tablas de conciliación.
+  - `windows_product_paths.dart`: conviven `FULLPOS_UAT_PROFILE` (falla cerrada
+    con `StateError`) y `DALEVENTAS_POS_UAT_ISOLATION` (devuelve `null`).
+    Ninguna resuelve la raíz real sin `DALEVENTAS_POS_ROOT`.
+- Regresiones en esa rama: `prisma validate` OK · `api:build` OK ·
+  **1125 tests API PASS** (111 suites, 0 fail) · `flutter analyze` sin issues ·
+  **1517 tests Flutter PASS** (9 skip, 0 fail).
+- **Alcance:** la integración es una *preparación*. El release financiero debe
+  cortarse desde la línea de recuperación; las funcionalidades de Guardian no
+  forman parte de este release aunque compartan rama de integración.
+
+### 8.3 Ciclo completo del instalador (modo administrador, real)
+
+Ejecutado sobre la variante UAT aislada, con el instalador compilado con
+privilegios de administrador (`PrivilegesRequired=admin`):
+
+| Paso | Resultado |
+| --- | --- |
+| Instalación | `exit 0`, **modo administrativo** (`User privileges: Administrative`), destino `C:\Program Files\DaleVentas POS UAT`, 82 archivos |
+| Reinstalación misma versión | `exit 0`, añade al log de desinstalación existente (`Will append to existing uninstall log`) |
+| Actualización `1.0.7-rc.2-150002` → `1.0.7-rc.3-150003` | `exit 0`, `Installation process succeeded` |
+| Datos tras reinstalar y actualizar | `databases/prueba_ventas.db`, `config/empresa.json`, `updates/pendiente.txt` intactos con su contenido |
+| Desinstalación | `exit 0`; se eliminan `app/`, `updater/` y los accesos directos; **se conservan** `databases/ config/ logs/ media_cache/ updates/` **y sus archivos** |
+| Instalación estable `C:\Program Files\DaleVentas POS` | 147 archivos: **0 añadidos, 0 eliminados, 0 modificados** antes y después de todo el ciclo |
+| Accesos directos de la estable | Ninguno borrado (el bloque `[InstallDelete]` que los eliminaba ahora está excluido en las variantes UAT; verificado en el binario compilado: la cadena `DaleVentas POS.lnk` ya no existe) |
+
+Hallazgo corregido en este cierre: el bloque `[InstallDelete]` (que borra los
+accesos directos antiguos de "DaleVentas POS") solo estaba excluido para
+`MyAppUatMayoreo`. Una instalación UAT con privilegios de administrador habría
+borrado los accesos directos **de todos los usuarios** de la instalación real.
+Ahora está excluido también para `MyAppUat`.
+
+Nota menor: tras desinstalar queda la carpeta vacía `C:\Program Files\DaleVentas POS UAT`
+(sin contenido) porque el proceso no elevado no puede eliminar el directorio;
+se borra con una sesión elevada.
+
+### 8.4 Estado de firma digital
+
+- Todos los artefactos (`FullPOS-Setup-1.0.7-150.exe`,
+  `FullPOS-UAT-Setup-1.0.7-rc.2-150002.exe`, `-rc.3-150003.exe`) están
+  **NotSigned**: no hay certificado Authenticode en el equipo y no se fabricó
+  ninguno.
+- Consecuencias esperables al distribuir sin firmar:
+  1. **SmartScreen**: "Windows protegió su PC · Aplicación desconocida" →
+     *Más información* → *Ejecutar de todas formas*. Con pocas instalaciones,
+     el aviso se repite en cada equipo y en cada versión.
+  2. **Aviso de editor desconocido** en el diálogo de UAC.
+  3. Algunos antivirus/EDR pueden poner el `.exe` en cuarentena los primeros días.
+  4. El actualizador integrado descarga y ejecuta el instalador: si el equipo
+     bloquea ejecutables no firmados, la actualización automática falla.
+- Mitigación mientras no haya certificado: publicar el SHA256 junto al enlace y
+  distribuir por el canal de descarga autenticado (no por enlaces públicos
+  anónimos). Con certificado (EV o standard + reputación) desaparecen 1–3.
+
+### 8.5 Acciones que requieren autorización del propietario
+
+Ninguna de estas se ejecutó:
+
+1. **Integrar** `agent/recovery-engine-v2` (o la rama de integración verificada)
+   en la rama de producción y hacer el merge/push correspondiente.
+2. **Migrar PostgreSQL en producción**: `npx prisma migrate deploy` con el
+   respaldo verificado del §3.
+3. **Desplegar el backend** con la imagen que incluye este código (backend-first).
+4. **Publicar** `FullPOS-Setup-1.0.7-150.exe` en el canal `stable` y actualizar
+   el registro de release (`scripts/release/prepare_windows_release.ps1`).
+5. **Ejecutar el instalador de producción** en un equipo piloto (requiere UAC en
+   ese equipo y el aviso al cliente).
+6. **Importación histórica de declaraciones** (incluido el caso Siarah): solo
+   con importes aportados con evidencia.
+7. **Borrar** `C:\Program Files\DaleVentas POS UAT` (carpeta vacía) en una sesión
+   elevada.

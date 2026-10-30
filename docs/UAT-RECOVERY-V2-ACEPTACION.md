@@ -173,9 +173,32 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | INST-02 | Ciclo **instalar → abrir/cerrar → reinstalar → desinstalar** (variante per-usuario con la misma carga, para no requerir UAC) | install exit 0 (83 archivos) · abre y cierra · 0 conexiones remotas · reinstala con `db`/`-wal`/`-shm` intactos · desinstala y **conserva** `databases/logs/config/media_cache/updates` |
 | INST-03 | Identidad del candidato real | `ProductName=FullPOS UAT`, `FileVersion=1.0.7.1500`, AppId `4C1F9E6A…` ≠ estable `0ED49D5E…` |
 | DURA-01 | Cierre forzado con declaración pendiente | copia de `.db`+`-wal` **con la conexión abierta** (`SNAPSHOT files=2 bytes=185408 skipped=[-shm]`: el `-shm` está mapeado por el proceso vivo y SQLite lo reconstruye del WAL) → una conexión nueva lee `sales.declaration` y `sales.attempt` → al reconectar se envía **una sola obligación de 50,00** |
-| MIG-01 | Migración sobre la **COPIA** de la base real de 148 (84,8 MB) | `user_version 5→5`, 8 tablas, `integrity ok`, **481 filas antes y después**; el original conserva `SHA256` y `mtime` idénticos (nunca se abrió) |
+| MIG-01 | Migración sobre la **COPIA** de la base real de 148 (84,8 MB) | `user_version 5→5`, 8 tablas, `integrity ok`, **481 filas antes y después**, **columnas idénticas** (la 148 puede reabrir la base) y conteo por tabla sin cambios; el original conserva `SHA256` y `mtime` idénticos (nunca se abrió) |
+| UPD-01 | Base escrita por una versión POSTERIOR (`user_version=99`) | la apertura falla; el archivo queda **byte a byte idéntico** (mismo `SHA256` y tamaño) y `user_version` sigue en 99: no se degrada ni se vacía |
+| INST-04 | Ciclo real en **modo administrador** (instalar → reinstalar → actualizar → desinstalar) | los 4 pasos `exit 0`; datos de `databases/config/updates` intactos tras reinstalar y actualizar; al desinstalar se conservan las carpetas de datos **y sus archivos**; la instalación estable (147 archivos) queda con 0 altas, 0 bajas y 0 cambios |
+| SEC-01 | El instalador UAT no puede tocar la estable | AppId, carpeta, ejecutable y accesos directos propios; el bloque `[InstallDelete]` que borraba los accesos de `DaleVentas POS` ya no se compila en las variantes UAT (verificado en el binario) |
+| INT-01 | Integración sobre la línea con Guardian AI | rama `agent/integrate-recovery-v2-guardian` desde `agent/guardian-phase12`: 2 conflictos resueltos (schema Prisma y rutas de almacenamiento), `api:build` OK, **1125 tests API** y **1517 tests Flutter** PASS, `analyze` sin issues |
+| SIG-01 | Estado de firma de los artefactos | `FullPOS-Setup-1.0.7-150.exe`, `…UAT…rc.2-150002.exe` y `…rc.3-150003.exe`: **NotSigned** (sin certificado; no se fabrificó ninguno) |
 | PGBK-01 | Respaldo + **restauración probada** | dump 637.105 B, 127 bloques `TABLE DATA`, restore en base aparte exit 0, conteos idénticos (95/24/19/55) |
 | STABLE-01 | Canal estable intacto | sigue ofreciendo **solo** `releases/windows/stable/1.0.6-148/…` |
+
+### Nota de reproducibilidad de la suite
+
+`flutter test` usa un directorio compartido (`.dart_tool/sqflite_common_ffi/databases`).
+Si se dejan bases de ejecuciones anteriores, `offline_store_large_migration_test`
+y los tests de `sale_attempt_*` pueden fallar en falso (se observaron hasta 28
+fallos espurios; con el directorio limpio son 0). Antes de una corrida de
+aceptación:
+
+```powershell
+cd apps\fulltech_app
+Remove-Item '.dart_tool\sqflite_common_ffi\databases\*' -Recurse -Force -ErrorAction SilentlyContinue
+flutter test
+```
+
+Además, `test/modules/cash/turn_current_no_session_test.dart` puede fallar de
+forma intermitente por un bloqueo de SQLite de 10 s bajo carga
+(`Warning database has been locked for 0:00:10`); pasa siempre en aislamiento.
 
 ### NO EJECUTADO (declarado, no se presenta como PASS)
 
@@ -188,7 +211,8 @@ ejecutarse. El guardián 1.2 impide que se repita.
 | UAT-NE-05 | HTTP 500 real del servidor | no se inyectó fallo en el proceso; se probó red caída y puerto muerto |
 | UAT-NE-06 | Regresión funcional de NCF/clientes sobre la copia migrada | la migración se ensayó sobre copia real (MIG-01) pero **no** se levantó la app contra esa copia para revisar NCF/clientes |
 | UAT-NE-07 | Importación del caso Siarah | el importador está en dry-run por defecto y exige importe con evidencia + autorización; no se ejecutó sobre datos reales |
-| UAT-NE-08 | Instalador `.exe` (Inno Setup) firmado | se entregó la carpeta `Release` empaquetada, no un instalador |
+| UAT-NE-08 | Instalador `.exe` (Inno Setup) **firmado** | no hay certificado Authenticode en el equipo; los artefactos son `NotSigned` y las advertencias de SmartScreen están documentadas en `RECOVERY-ENGINE-V2-ROLLOUT.md` §8.4 |
+| UAT-NE-09 | Actualización `148 → 1.0.7+150` en un equipo piloto real | exige ejecutar el instalador de producción sobre la instalación de un cliente: requiere autorización del propietario (§8.5) |
 
 ---
 
