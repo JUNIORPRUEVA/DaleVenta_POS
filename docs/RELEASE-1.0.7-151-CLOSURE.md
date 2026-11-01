@@ -127,3 +127,76 @@ Archivar oculta la oferta y conserva fila, fichero y trazabilidad. No se borra n
    `backup-wal-20261101T155700Z\*.db` sobre `C:\Program Files\DaleVentas POS\databases`.
 4. El backend no requiere cambios: 151 es compatible con 148/149 y la base ya tiene las
    2 tablas V2 (inertes para el cliente antiguo).
+
+---
+
+## 3bis. Mecanismo oficial de publicación (el que ya se usó para 148/149/150)
+
+El repositorio ya trae el circuito completo; **no hace falta SQL manual**:
+
+| Script | Qué hace |
+| --- | --- |
+| `scripts/release/prepare_windows_release.ps1` | Comprueba firma (permite *unsigned* con `-AllowUnsignedProduction`), sube el `.exe` al almacenamiento (`AwsCli` → `aws s3 cp` a R2, o `Local`), y **crea la release** con `POST /api/app-updates/releases` en estado borrador/publicado |
+| `scripts/release/publish_windows_release.ps1 -ReleaseId <id>` | **Descarga el artefacto desde la URL pública, verifica tamaño y SHA256**, y luego `POST /api/app-updates/releases/:id/publish`, comprobando `check` para la versión nueva y la anterior |
+
+Rutas de la API disponibles: `POST /api/app-updates/releases`, `GET /releases`, `GET /releases/:id`,
+`PATCH /releases/:id`, `POST /releases/:id/publish`, `POST /releases/:id/revoke`.
+
+### Comandos exactos para 151
+
+```powershell
+# 1) (una vez por sesión) credenciales — NO pegarlas en el chat
+#    Ver §3ter para saber dónde se configuran.
+
+# 2) subir + crear la release (reutiliza el instalador ya compilado)
+Set-Location 'C:\src\fullpos-guardian-151'   # worktree con version 1.0.7+151
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\prepare_windows_release.ps1 `
+  -SkipBuild -AllowUnsignedProduction
+
+# 3) verificar la descarga y publicar (esto es lo que hace visible la 151)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\publish_windows_release.ps1 `
+  -ReleaseId <id-devuelto-por-el-paso-2>
+```
+
+`publish_windows_release.ps1` se niega a publicar si el tamaño o el SHA256 descargados
+no coinciden: eso cubre la comprobación de integridad del artefacto alojado.
+
+### Fallback manual (si se prefiere SQL), con el esquema real verificado
+
+```sql
+INSERT INTO app_releases
+  (id, platform, channel, version, build_number, status, mandatory, file_name, file_size,
+   sha256, download_url, release_notes, published_at, commit_sha, signed, created_at, updated_at, storage_key)
+VALUES
+  (gen_random_uuid(), 'WINDOWS', 'STABLE', '1.0.7', 151, 'PUBLISHED', false,
+   'FullPOS-Setup-1.0.7-151.exe', 40314531,
+   '06F9C31B3AA47D522F8FBA22A3E9CE4D254250E347C36CFE9D6BDC00F9435F60',
+   'https://612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com/daleventa-media/releases/windows/stable/1.0.7-151/FullPOS-Setup-1.0.7-151.exe',
+   '["Recuperacion automatica de cobros con declaracion y conciliacion.","Centro de recuperacion y panel de conciliacion en Caja.","Guardian AI con control y desactivacion desde Ajustes.","Se conservan datos locales y trabajo offline."]'::jsonb,
+   now(), '6241aa44', false, now(), now(),
+   'releases/windows/stable/1.0.7-151/FullPOS-Setup-1.0.7-151.exe');
+```
+
+Criterio de "más reciente" verificado en código: `app-updates.service.ts` ordena por
+`buildNumber: "desc"` → con la 151 PUBLISHED, la oferta pasa a 151 automáticamente.
+El registro 150 **no se toca**.
+
+## 3ter. Dónde se configuran las credenciales (no se copian aquí)
+
+En esta máquina **no hay**: `aws` CLI, `~/.aws/credentials`, ni variables
+`FULLPOS_RELEASE_*`. Hay que configurarlas una vez, en el entorno del usuario
+(`setx` o *Propiedades del sistema → Variables de entorno*) o en la sesión de PowerShell:
+
+| Variable | Para qué |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (o `~/.aws/credentials`) | autenticación del `aws s3 cp` contra R2 |
+| `AWS_CLI` | ruta/alias del binario `aws` (por defecto `aws`) — **hay que instalarlo** |
+| `FULLPOS_RELEASE_STORAGE_MODE=AwsCli` | modo de subida a R2 |
+| `FULLPOS_RELEASE_S3_BUCKET_URI` | bucket + prefijo del almacenamiento de releases |
+| `FULLPOS_RELEASE_S3_ENDPOINT_URL` | endpoint de R2 |
+| `FULLPOS_RELEASE_PUBLIC_BASE_URL` | base pública con la que se compone `download_url` |
+| `FULLPOS_RELEASE_API_BASE_URL` | `https://daleventapos-backend.gcdndd.easypanel.host` |
+| `FULLPOS_RELEASE_API_TOKEN` | token de administrador para crear/publicar la release |
+| `FULLPOS_ALLOW_UNSIGNED_PRODUCTION_RELEASE=1` | aceptar el instalador sin firmar (excepción ya usada en 149/150) |
+
+Ningún valor debe pegarse en el chat ni en el repositorio.
