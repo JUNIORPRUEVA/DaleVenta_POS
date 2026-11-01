@@ -200,3 +200,72 @@ En esta máquina **no hay**: `aws` CLI, `~/.aws/credentials`, ni variables
 | `FULLPOS_ALLOW_UNSIGNED_PRODUCTION_RELEASE=1` | aceptar el instalador sin firmar (excepción ya usada en 149/150) |
 
 Ningún valor debe pegarse en el chat ni en el repositorio.
+
+---
+
+## 5. EasyPanel: de dónde saldría un futuro Deploy (verificado, sin ejecutar)
+
+EasyPanel guarda el código del backend en `/etc/easypanel/projects/daleventapos/backend/code`
+(snapshot sin `.git`, sincronizado el **2026-10-28**). Contenido comprobado:
+
+| Comprobación en ese snapshot | Resultado |
+| --- | --- |
+| `apps/fulltech_app/pubspec.yaml` | `version: 1.0.6+147` |
+| Motor de recuperación V2 (`sale-reconciliation-obligation*`) | **NO EXISTE** |
+| `guardian.auto-enrollment.*` | **NO EXISTE** |
+| Fecha del árbol | 2026-10-28 18:17 UTC |
+
+**Conclusión (riesgo real):** pulsar **Deploy** en la app `daleventapos/backend` reconstruiría
+un backend **anterior a 151** y reemplazaría la imagen `daleventapos-prod-api:1.0.7-151-2fd7be4d`,
+eliminando los endpoints de recuperación V2 y el auto-enrolamiento de Guardian (las 2 tablas
+V2 seguirían en la base, pero sin código que las use). La PWA corre sobre su propio servicio
+(`offline-144`) y no se ve afectada por ese botón.
+
+**Reglas mientras no se actualice la fuente de EasyPanel:**
+
+1. **No usar Deploy** para `daleventapos/backend`. El camino válido es
+   `docker service update --image … --no-resolve-image` (el que se usó para el 151).
+2. Antes de cualquier Deploy futuro: refrescar el código de la app con
+   `production-main` @ `1925e17b` (o posterior) desde la pestaña *Source* de EasyPanel, y
+   verificar en el snapshot que existan `sale-reconciliation-obligation.service.ts` y
+   `guardian.auto-enrollment.service.ts`.
+3. Tras un Deploy legítimo, la imagen tendrá otro ID (se reconstruye); el
+   `sha256:14af9bd0…`/`sha256:1d2d6ea1…` deja de aplicar y hay que repetir el smoke test.
+
+## 6. AWS CLI preparado (para los scripts oficiales)
+
+| Elemento | Valor |
+| --- | --- |
+| CLI instalado | `C:\src\awsenv` (venv con AWS CLI **1.46.2** sobre CPython 3.12) |
+| Wrapper para el script | **`C:\src\awsenv\aws.cmd`** → `python -m awscli %*` |
+| Uso | `$env:AWS_CLI = 'C:\src\awsenv\aws.cmd'` (o `-AwsCli`) |
+
+No se instaló nada global ni se requirió administrador.
+
+### Credenciales que debes configurar (nombres y permisos; valores fuera del repo y del chat)
+
+| Variable | Valor / permiso |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` | Access Key ID del **API Token de Cloudflare R2** |
+| `AWS_SECRET_ACCESS_KEY` | Secret Access Key del mismo token |
+| Permiso mínimo del token R2 | **Object Read & Write** sobre el bucket `daleventa-media` (basta `s3:PutObject`; `s3:GetObject`/ListBucket opcionales para verificar) |
+| `FULLPOS_RELEASE_STORAGE_MODE` | `AwsCli` |
+| `FULLPOS_RELEASE_S3_BUCKET_URI` | `s3://daleventa-media` |
+| `FULLPOS_RELEASE_S3_ENDPOINT_URL` | `https://612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com` |
+| `FULLPOS_RELEASE_PUBLIC_BASE_URL` | `https://612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com/daleventa-media` |
+| `FULLPOS_RELEASE_API_BASE_URL` | `https://daleventapos-backend.gcdndd.easypanel.host` |
+| `FULLPOS_RELEASE_API_TOKEN` | JWT de un usuario **ADMIN** (se obtiene con `POST /auth/login`); es un secreto |
+| `FULLPOS_ALLOW_UNSIGNED_PRODUCTION_RELEASE` | `1` (excepción ya usada en 149 y 150) |
+| `AWS_CLI` | `C:\src\awsenv\aws.cmd` |
+
+Dónde: variables de entorno **de la sesión de PowerShell** o del usuario de Windows. Nunca en
+el repositorio ni en un `.env` versionado.
+
+### Estados de la release (verificado en código)
+
+- `POST /api/app-updates/releases` guarda **sin `status`** → aplica el default **`DRAFT`**:
+  el cliente **no la ve**.
+- `POST /api/app-updates/releases/:id/publish` es el único paso que la hace visible, y
+  rechaza publicar una release ya publicada o revocada.
+- Por tanto, `prepare_windows_release.ps1` **deja la 151 preparada y no visible**; la
+  visibilidad la da `publish_windows_release.ps1` con tu autorización.
