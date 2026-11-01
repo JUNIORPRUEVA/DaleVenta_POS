@@ -18,6 +18,20 @@ const bool kUatBuild = bool.fromEnvironment(
   defaultValue: false,
 );
 
+/// Perfil UAT de aceptación (`--dart-define=FULLPOS_UAT_PROFILE=true`).
+///
+/// Es el mismo interruptor que obliga a usar una raíz de datos aislada
+/// (`WindowsProductPaths`). Una build de aceptación con este perfil **también**
+/// debe separar credenciales, base y caché de la instalación real del equipo:
+/// el almacén seguro de Windows (`flutter_secure_storage.dat`) y
+/// `shared_preferences.json` viven en la carpeta de soporte de la aplicación,
+/// que es la MISMA para la app real y para la build de ensayo (mismo ejecutable).
+/// Sin esto, la pantalla de login de una build UAT mostraba el usuario real.
+const bool kUatProfile = bool.fromEnvironment(
+  'FULLPOS_UAT_PROFILE',
+  defaultValue: false,
+);
+
 /// Etiqueta visible (permite distinguir varios entornos UAT: QA, cliente, etc.).
 const String kUatLabelDefine = String.fromEnvironment(
   'FULLPOS_UAT_LABEL',
@@ -40,7 +54,7 @@ class UatIdentity {
   static const String _uatStorageKeyPrefix = 'uat.';
 
   /// `true` en un build UAT.
-  static bool get isUat => kUatBuild;
+  static bool get isUat => kUatBuild || kUatProfile;
 
   /// Etiqueta corta y visible del entorno.
   static String get label {

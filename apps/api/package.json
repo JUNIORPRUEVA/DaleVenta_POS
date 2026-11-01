@@ -23,6 +23,8 @@
     "audit:tenant-ownership": "ts-node --transpile-only -P tsconfig.scripts.json scripts/audit-tenant-ownership.ts",
     "audit:tenant-ownership:apply": "ts-node --transpile-only -P tsconfig.scripts.json scripts/audit-tenant-ownership.ts --apply",
     "backfill:tenant-ownership": "ts-node --transpile-only -P tsconfig.scripts.json scripts/backfill-tenant-ownership.ts",
+    "reconciliation:import": "ts-node --transpile-only -P tsconfig.scripts.json scripts/import-sale-declarations.ts",
+    "reconciliation:import:apply": "ts-node --transpile-only -P tsconfig.scripts.json scripts/import-sale-declarations.ts --apply",
     "audit:unsafe-tenant-queries": "ts-node --transpile-only -P tsconfig.scripts.json scripts/audit-unsafe-tenant-queries.ts",
     "audit:unsafe-tenant-queries:warn": "ts-node --transpile-only -P tsconfig.scripts.json scripts/audit-unsafe-tenant-queries.ts --warn-only",
     "prisma": "prisma",

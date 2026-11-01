@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_routes.dart';
 import '../auth/auth_repository.dart';
+import '../debug/trace_log.dart';
 import 'pending_sync_action.dart';
 import 'sale_attempt_audit.dart';
+import 'sale_attempt_declaration_providers.dart';
 import 'sale_attempt_reconciliation.dart';
 import 'sync_queue_service.dart';
 
@@ -126,5 +129,36 @@ final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
           clientRequestId: clientRequestId,
           limit: limit,
         ),
+    declareMoneyReceived:
+        ({
+          required action,
+          required totalDeclared,
+          actorUserId,
+          actorRole,
+          note,
+        }) async {
+          // La declaración va PRIMERO a la cola local con su propia clave de
+          // idempotencia; el servidor solo recibirá una OBLIGACIÓN de
+          // conciliación (nunca una venta ni un movimiento de caja).
+          try {
+            final declaration = await ref
+                .read(saleAttemptDeclarationOutboxProvider)
+                .declare(
+                  action: action,
+                  totalDeclared: totalDeclared,
+                  actorUserId: actorUserId,
+                  actorRole: actorRole,
+                  note: note,
+                );
+            return declaration != null;
+          } catch (error, stack) {
+            TraceLog.log(
+              'reconcile',
+              'declaracion.encolado.fallido id=${action.id}: $error',
+            );
+            debugPrint('[reconcile] declaración no encolada: $error\n$stack');
+            return false;
+          }
+        },
   );
 });

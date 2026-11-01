@@ -18,21 +18,20 @@ import {
 } from './ai/guardian-ai.provider';
 import { sanitizeUntrustedText, sanitizeUntrustedValue } from './ai/guardian.ai.sanitizer';
 import { GuardianToolsService } from './guardian.tools.service';
-import { resolveGuardianAiRuntime } from './ai/guardian.ai.runtime';
 import {
   GUARDIAN_COMPANY_DISABLED,
   isGuardianEnabledForCompany,
 } from './guardian.company.policy';
 
 const MAX_BACKOFF_MS = 30 * 60_000;
-const BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEFER_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Aplazamiento de un incidente con fallo irreversible: fuera de la cola. */
-const TERMINAL_DEFER_MS = BUDGET_WINDOW_MS;
+const TERMINAL_DEFER_MS = DEFER_WINDOW_MS;
 /**
- * Clave del advisory lock que serializa la reserva de presupuesto global.
+ * Clave del advisory lock que serializa la creación de la fila RUNNING.
  * Número fijo y propio de Guardian: no colisiona con otras áreas del sistema.
  */
-const GUARDIAN_GLOBAL_BUDGET_LOCK = 727_272_001;
+const GUARDIAN_DIAGNOSIS_LOCK = 727_272_001;
 
 @Injectable()
 export class GuardianDiagnosisService {
@@ -126,89 +125,16 @@ export class GuardianDiagnosisService {
       return { ok: true, skipped: GUARDIAN_COMPANY_DISABLED };
     }
 
-    // Presupuesto por empresa: evita que un bucle de errores de un solo cliente
-    // consuma el saldo de IA de toda la plataforma.
-    if (await this.isCompanyBudgetExhausted(incident.companyId, config.aiTokensPerCompanyDay)) {
-      await this.prisma.$transaction([
-        this.prisma.guardianIncident.update({
-          where: { id: incidentId },
-          data: {
-            processingState: GuardianProcessingState.SKIPPED,
-            nextDiagnosisAt: new Date(Date.now() + BUDGET_WINDOW_MS),
-          },
-        }),
-        this.prisma.guardianDiagnosis.create({
-          data: {
-            incidentId,
-            status: GuardianDiagnosisStatus.DONE,
-            verdict: GuardianDiagnosisVerdict.INSUFFICIENT,
-            confidence: new Prisma.Decimal('0.00'),
-            summary: 'El presupuesto diario de IA de la empresa está agotado; no se emitió diagnóstico.',
-            explanation:
-              'Guardian no llamó al proveedor de IA para no exceder el presupuesto configurado. ' +
-              'El incidente queda registrado y la alerta administrativa ya fue planificada.',
-            nextSteps: [
-              'Revisar el presupuesto de IA de la empresa',
-              'Reprocesar el incidente cuando se restablezca el presupuesto',
-            ],
-            evidenceRefs: [] as unknown as Prisma.InputJsonValue,
-            toolCalls: [] as unknown as Prisma.InputJsonValue,
-            model: 'budget-guard',
-          },
-        }),
-      ]);
-      this.logger.warn(`Diagnóstico omitido por presupuesto incident=${incidentId}`);
-      return { ok: true as const, skipped: 'AI_BUDGET_EXCEEDED' as const };
-    }
-
-    // Fase 7 — reserva atómica de presupuesto GLOBAL + creación de la fila
-    // RUNNING dentro de la misma transacción con advisory lock: dos workers
-    // concurrentes no pueden sobrepasar el tope, porque la fila RUNNING cuenta
-    // como reserva mientras la llamada está en vuelo.
-    const slot = await this.claimGlobalBudgetSlot({
+    // Sin cuotas de tokens (decisión de producto 2026-10-30): el coste se
+    // controla con el saldo real del proveedor (`GuardianAiBalanceMonitor`),
+    // la concurrencia máxima del adaptador, los reintentos acotados y la
+    // deduplicación de incidentes/alertas. No se bloquea una llamada por
+    // presupuesto diario o mensual.
+    const slot = await this.claimDiagnosisSlot({
       incidentId,
       attempts: incident.diagnosisAttempts,
       model: this.provider.name,
-      dailyLimit: config.aiTokensGlobalDay,
-      monthlyLimit: config.aiTokensGlobalMonth,
     });
-    if (!slot.ok) {
-      await this.prisma.$transaction([
-        this.prisma.guardianIncident.update({
-          where: { id: incidentId },
-          data: {
-            processingState: GuardianProcessingState.SKIPPED,
-            nextDiagnosisAt: new Date(Date.now() + BUDGET_WINDOW_MS),
-          },
-        }),
-        this.prisma.guardianDiagnosis.create({
-          data: {
-            incidentId,
-            status: GuardianDiagnosisStatus.DONE,
-            verdict: GuardianDiagnosisVerdict.INSUFFICIENT,
-            confidence: new Prisma.Decimal('0.00'),
-            summary:
-              'El presupuesto global de IA de la plataforma está agotado; no se emitió diagnóstico.',
-            explanation:
-              'Guardian no llamó al proveedor de IA para no exceder el presupuesto global configurado. ' +
-              'El incidente queda registrado y puede reprocesarse cuando el presupuesto se restablezca.',
-            nextSteps: [
-              'Revisar el consumo global de IA de la plataforma',
-              'Reprocesar el incidente cuando se restablezca el presupuesto',
-            ],
-            evidenceRefs: [] as unknown as Prisma.InputJsonValue,
-            toolCalls: [
-              { tool: 'ai_budget', status: 'skipped', detail: slot.detail },
-            ] as unknown as Prisma.InputJsonValue,
-            model: 'global-budget-guard',
-          },
-        }),
-      ]);
-      this.logger.warn(
-        `Diagnóstico omitido por presupuesto GLOBAL incident=${incidentId} ${slot.detail}`,
-      );
-      return { ok: true as const, skipped: 'AI_GLOBAL_BUDGET_EXCEEDED' as const };
-    }
 
     const diagnosis = { id: slot.diagnosisId };
 
@@ -357,69 +283,35 @@ export class GuardianDiagnosisService {
   }
 
   /**
-   * Reserva atómica del presupuesto GLOBAL de IA y creación de la fila RUNNING.
+   * Crea la fila `RUNNING` del diagnóstico de forma atómica.
    *
-   * Por qué así:
-   * - `pg_advisory_xact_lock` serializa el cálculo entre workers (el lock se
+   * Sin cuotas de tokens, pero **conservando las salvaguardas**:
+   * - `pg_advisory_xact_lock` serializa la creación entre workers (el lock se
    *   libera al cerrar la transacción).
-   * - La fila `RUNNING` se crea **dentro** de la misma transacción, así que
-   *   cuenta como reserva de `max_tokens` mientras la llamada está en vuelo.
-   *   Dos workers concurrentes no pueden pasar ambos si el tope está al límite.
-   * - `0` significa «sin límite» (misma semántica que el presupuesto por
-   *   empresa) para no romper entornos que no configuran la variable.
-   * - Si se agota, no se llama al proveedor: cero coste.
+   * - La fila `RUNNING` marca el incidente como «en vuelo», así que dos workers
+   *   no pueden diagnosticar el mismo incidente a la vez.
+   * - La concurrencia máxima real la impone el adaptador de IA
+   *   (`GUARDIAN_AI_MAX_CONCURRENCY`), que sigue activo.
    */
-  private async claimGlobalBudgetSlot(params: {
+  private async claimDiagnosisSlot(params: {
     incidentId: string;
     attempts: number;
     model: string;
-    dailyLimit: number;
-    monthlyLimit: number;
-  }): Promise<{ ok: true; diagnosisId: string } | { ok: false; detail: string }> {
-    const reserve = Math.max(1, resolveGuardianAiRuntime().maxTokens);
-
+  }): Promise<{ diagnosisId: string }> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${GUARDIAN_GLOBAL_BUDGET_LOCK})`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${GUARDIAN_DIAGNOSIS_LOCK})`;
 
-      const now = new Date();
-      const dayStart = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-      );
-      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-
-      const usage = async (since: Date) => {
-        const [used, running] = await Promise.all([
-          tx.guardianDiagnosis.aggregate({
-            _sum: { tokensUsed: true },
-            where: { createdAt: { gte: since } },
-          }),
-          tx.guardianDiagnosis.count({
-            where: { status: GuardianDiagnosisStatus.RUNNING, createdAt: { gte: since } },
-          }),
-        ]);
-        return {
-          consumed: Number(used._sum.tokensUsed ?? 0),
-          reserved: running * reserve,
-        };
-      };
-
-      if (params.dailyLimit > 0) {
-        const day = await usage(dayStart);
-        if (day.consumed + day.reserved + reserve > params.dailyLimit) {
-          return {
-            ok: false as const,
-            detail: `dia consumido=${day.consumed} reservado=${day.reserved} tope=${params.dailyLimit}`,
-          };
-        }
-      }
-      if (params.monthlyLimit > 0) {
-        const month = await usage(monthStart);
-        if (month.consumed + month.reserved + reserve > params.monthlyLimit) {
-          return {
-            ok: false as const,
-            detail: `mes consumido=${month.consumed} reservado=${month.reserved} tope=${params.monthlyLimit}`,
-          };
-        }
+      const running = await tx.guardianDiagnosis.count({
+        where: { incidentId: params.incidentId, status: GuardianDiagnosisStatus.RUNNING },
+      });
+      if (running > 0) {
+        // Deduplicación: el mismo incidente no se diagnostica dos veces.
+        const existing = await tx.guardianDiagnosis.findFirst({
+          where: { incidentId: params.incidentId, status: GuardianDiagnosisStatus.RUNNING },
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing) return { diagnosisId: existing.id };
       }
 
       const created = await tx.guardianDiagnosis.create({
@@ -430,29 +322,8 @@ export class GuardianDiagnosisService {
           model: params.model,
         },
       });
-      return { ok: true as const, diagnosisId: created.id };
+      return { diagnosisId: created.id };
     });
-  }
-
-  /**
-   * Presupuesto diario de tokens por empresa.
-   *
-   * Se calcula con la suma real de `tokens_used` de los diagnósticos de la
-   * empresa (vía la relación con el incidente), no con contadores en memoria:
-   * sobrevive reinicios y es correcto con varios workers.
-   */
-  private async isCompanyBudgetExhausted(companyId: string, dailyLimit: number): Promise<boolean> {
-    if (!Number.isFinite(dailyLimit) || dailyLimit <= 0) return false;
-    const since = new Date(Date.now() - BUDGET_WINDOW_MS);
-    const aggregate = await this.prisma.guardianDiagnosis.aggregate({
-      _sum: { tokensUsed: true },
-      where: {
-        createdAt: { gte: since },
-        incident: { companyId },
-      },
-    });
-    const used = Number(aggregate._sum.tokensUsed ?? 0);
-    return used >= dailyLimit;
   }
 
   private async buildRequest(

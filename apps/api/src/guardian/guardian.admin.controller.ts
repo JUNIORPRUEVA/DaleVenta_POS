@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -18,6 +19,8 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardianIncidentsService } from './guardian.incidents.service';
+import { GuardianAiBalanceMonitor } from './guardian.ai.balance.monitor';
+import { GuardianAutoEnrollmentService } from './guardian.auto-enrollment.service';
 import { resolveGuardianConfig } from './guardian.config';
 import { guardianSecretValue } from './guardian.secret';
 
@@ -36,6 +39,8 @@ export class GuardianAdminController {
   constructor(
     private readonly incidents: GuardianIncidentsService,
     private readonly prisma: PrismaService,
+    private readonly autoEnrollment: GuardianAutoEnrollmentService,
+    private readonly balanceMonitor: GuardianAiBalanceMonitor,
   ) {}
 
   private resolveCompanyId(req: Request, platformHeader?: string, requestedCompanyId?: string) {
@@ -361,6 +366,85 @@ export class GuardianAdminController {
       actorRole: scope.actorRole,
       companyId: scope.companyId,
       incidentId: id,
+      ip: req.ip ?? null,
+    });
+    return result;
+  }
+
+  /**
+   * Revelación del monitoreo para la app: qué está activo y cuántos equipos
+   * están instrumentados. Se muestra en el panel de la empresa y no depende de
+   * que la empresa esté activada (si no lo está, se informa igualmente).
+   */
+  @Get('company/status')
+  @Roles(Role.ADMIN)
+  async companyStatus(
+    @Req() req: Request,
+    @Headers('x-guardian-platform-token') platformToken?: string,
+    @Query('companyId') requestedCompanyId?: string,
+  ) {
+    const scope = this.resolveCompanyId(req, platformToken, requestedCompanyId);
+    return this.autoEnrollment.getCompanyStatus(scope.companyId);
+  }
+
+  /**
+   * Control administrativo de desactivación.
+   *
+   * Solo un ADMIN de la propia empresa puede apagarlo (el token de plataforma
+   * también puede, para soporte). Revoca credenciales y autorizaciones: el
+   * monitoreo se detiene de inmediato, no cuando caduque algo.
+   */
+  @Post('company/disable')
+  @Roles(Role.ADMIN)
+  async disableCompany(
+    @Req() req: Request,
+    @Headers('x-guardian-platform-token') platformToken?: string,
+    @Query('companyId') requestedCompanyId?: string,
+  ) {
+    const scope = this.resolveCompanyId(req, platformToken, requestedCompanyId);
+    const result = await this.autoEnrollment.disableForCompany({
+      companyId: scope.companyId,
+      actorUserId: scope.actorUserId,
+      actorRole: scope.actorRole,
+      ip: req.ip ?? null,
+    });
+    await this.audit({
+      action: 'company.guardian.disable',
+      actorUserId: scope.actorUserId,
+      actorRole: scope.actorRole,
+      companyId: scope.companyId,
+      ip: req.ip ?? null,
+    });
+    return { ...result, guardianEnabled: false };
+  }
+
+  /**
+   * Saldo real del proveedor de IA, tal como lo devuelve su API oficial.
+   *
+   * Solo lectura: consultar el saldo no consume tokens ni genera coste. Nunca
+   * se devuelven cifras estimadas: si el proveedor no responde, el estado es
+   * `UNAVAILABLE` y los importes quedan en `null`.
+   */
+  @Get('ai/balance')
+  @Roles(Role.ADMIN)
+  async aiBalance() {
+    const { snapshot } = await this.balanceMonitor.check({ notify: false });
+    return snapshot;
+  }
+
+  /** Comprueba el saldo y envía el aviso administrativo si corresponde. */
+  @Post('ai/balance/check')
+  @Roles(Role.ADMIN)
+  @HttpCode(200)
+  async aiBalanceCheck(@Req() req: Request) {
+    const result = await this.balanceMonitor.check();
+    await this.audit({
+      action: 'ai.balance.check',
+      actorUserId: (req.user as GuardianRequestUser | undefined)?.id ?? null,
+      actorRole: (req.user as GuardianRequestUser | undefined)?.role
+        ? String((req.user as GuardianRequestUser).role)
+        : null,
+      companyId: String((req.user as GuardianRequestUser | undefined)?.companyId ?? ''),
       ip: req.ip ?? null,
     });
     return result;

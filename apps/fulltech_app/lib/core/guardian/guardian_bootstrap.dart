@@ -7,6 +7,8 @@ import '../auth/token_storage.dart';
 import '../debug/app_error_reporter.dart';
 import '../usage/client_telemetry_headers.dart';
 import 'guardian_agent_log.dart';
+import 'guardian_auto_enrollment_code_source.dart';
+import 'guardian_auto_transport.dart';
 import 'guardian_client.dart';
 import 'guardian_config.dart';
 import 'guardian_dio_transport.dart';
@@ -163,19 +165,57 @@ class GuardianBootstrap {
       tokenProvider: () => TokenStorage().getAccessToken(),
     );
 
-    if (!config.useMachineApi || baseUrl.isEmpty || installId.isEmpty) {
+    if (!config.usesInstallCredential || baseUrl.isEmpty || installId.isEmpty) {
       return sessionTransport;
     }
 
     try {
       final credentialStore = GuardianInstallCredentialStore();
       final codeSource = GuardianEnrollmentCodeSource(filePath: config.enrollmentCodeFile);
+      final autoSource = config.autoEnroll
+          ? GuardianAutoEnrollmentCodeSource(
+              baseUrl: baseUrl,
+              tokenProvider: () => TokenStorage().getAccessToken(),
+              installId: installId,
+              platform: platform,
+              appVersion: appVersion,
+            )
+          : null;
       final enrollment = GuardianEnrollmentService(
         baseUrl: baseUrl,
         store: credentialStore,
-        codeProvider: codeSource.read,
+        // Código manual (piloto/UAT) si existe; si no, autorización automática
+        // obtenida con la sesión autenticada de la empresa.
+        codeProvider: () async {
+          final manual = await codeSource.read();
+          if (manual != null && manual.trim().isNotEmpty) return manual;
+          return autoSource?.read();
+        },
         onCodeConsumed: codeSource.consume,
       );
+
+      if (config.autoEnroll) {
+        // Enrolamiento diferido: el arranque nunca espera a la red ni a un
+        // código, y el POS sigue funcionando aunque esté offline.
+        unawaited(GuardianAgentLog.info(
+          'auto-enrolamiento configurado (empresa de la sesion, installId=$installId)',
+        ));
+        return AutoEnrollingGuardianTransport(
+          enrollment: enrollment,
+          credentialStore: credentialStore,
+          sessionTransport: sessionTransport,
+          installId: installId,
+          platform: platform,
+          appVersion: appVersion,
+          machineTransportFactory: (credential) => MachineGuardianTransport(
+            baseUrl: baseUrl,
+            path: GuardianConfig.machineEndpointPath,
+            credential: credential,
+            onCredentialRejected: credentialStore.clear,
+          ),
+        );
+      }
+
       final credential = await enrollment.ensureCredential(
         installId: installId,
         platform: platform,
