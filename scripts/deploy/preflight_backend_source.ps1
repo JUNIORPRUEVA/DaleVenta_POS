@@ -15,7 +15,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$SourcePath,
   [string]$ExpectedVersion = '1.0.7+151',
-  [string]$ExpectedCommit = '3842b84e5864ae578a0c09fccfe44c43b087284b',
+  [string]$ExpectedCommit = '',
   [string]$ExpectedBranch = 'production-main',
   [int]$ExpectedMigrations = 43
 )
@@ -101,7 +101,9 @@ if (Test-Path -LiteralPath $gitDir) {
   $commit = (Get-Content -LiteralPath $commitFile -TotalCount 1).Trim()
   $branch = $ExpectedBranch
 }
-Check (($branch -eq $ExpectedBranch) -or ($commit -eq $ExpectedCommit)) "Rama $ExpectedBranch (o commit aprobado)" "Rama '$branch' distinta de $ExpectedBranch y commit no aprobado"
+$approvedCommit = if ($ExpectedCommit) { $ExpectedCommit } else { (& git -C $root rev-parse origin/production-main 2>$null).Trim() }
+Check ($commit -eq $approvedCommit) "Commit aprobado $approvedCommit" "Commit '$commit' distinto del aprobado '$approvedCommit'"
+Check (($branch -eq $ExpectedBranch) -or ($commit -eq $approvedCommit)) "Rama $ExpectedBranch (o commit aprobado)" "Rama '$branch' distinta de $ExpectedBranch y commit no aprobado"
 
 # 7) El motor V2 debe existir de verdad (descarta snapshots antiguos tipo 147)
 $v2Service = Join-Path $root 'apps\api\src\sales\sale-reconciliation-obligation.service.ts'
@@ -126,3 +128,5 @@ if ($failures.Count -eq 0) {
 }
 Write-Host 'READY FOR MANUAL DEPLOY: NO'
 exit 1
+
+
