@@ -101,8 +101,13 @@ if (Test-Path -LiteralPath $gitDir) {
   $commit = (Get-Content -LiteralPath $commitFile -TotalCount 1).Trim()
   $branch = $ExpectedBranch
 }
-$approvedCommit = if ($ExpectedCommit) { $ExpectedCommit } else { (& git -C $root rev-parse origin/production-main 2>$null).Trim() }
-Check ($commit -eq $approvedCommit) "Commit aprobado $approvedCommit" "Commit '$commit' distinto del aprobado '$approvedCommit'"
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+if ($ExpectedCommit) { $approvedCommit = $ExpectedCommit }
+elseif (Test-Path -LiteralPath $gitDir) { $approvedCommit = (& git -C $root rev-parse origin/production-main 2>$null).Trim() }
+else { $approvedCommit = $null }
+$ErrorActionPreference = $prevEap
+Check ([bool]$approvedCommit -and ($commit -eq $approvedCommit)) "Commit aprobado $approvedCommit" "Indica -ExpectedCommit o usa un arbol con .git: commit '$commit' no verificable"
 Check (($branch -eq $ExpectedBranch) -or ($commit -eq $approvedCommit)) "Rama $ExpectedBranch (o commit aprobado)" "Rama '$branch' distinta de $ExpectedBranch y commit no aprobado"
 
 # 7) El motor V2 debe existir de verdad (descarta snapshots antiguos tipo 147)
