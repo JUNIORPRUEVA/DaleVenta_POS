@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import {
   DosaWebhookService,
+  PENDING_CLASSIFICATION_EVENT_TYPE,
   type DosaCompanyResolver,
   type DosaSessionHintRecorder,
   type DosaWebhookStore,
@@ -129,6 +130,113 @@ describe("webhook DOSA con firma HMAC", () => {
     expect(calls.some((c) => /INSERT INTO/i.test(c.sql))).toBe(true);
     // La empresa la decide el servidor por RNC, no el cuerpo.
     expect(calls[0].values).toContain(COMPANY_A);
+  });
+
+  // -------------------------------------------------------------------------
+  // Clasificación del evento: no se inventa el tipo
+  // -------------------------------------------------------------------------
+
+  it("persiste el evento como PENDIENTE DE CLASIFICACIÓN, no como si el proveedor lo hubiera tipado", async () => {
+    const { service, calls } = build({ insert: [{ id: "evt-c1" }] });
+    const body = rawBody();
+
+    await service.handle(
+      request({ "x-dosa-signature": signatureHeader(body) }, body),
+    );
+
+    const insert = calls.find((c) => /INSERT INTO/i.test(c.sql));
+    expect(insert).toBeDefined();
+    // El valor de `event_type` viaja como parámetro: se comprueba el parámetro.
+    expect(insert?.values).toContain(PENDING_CLASSIFICATION_EVENT_TYPE);
+    expect(PENDING_CLASSIFICATION_EVENT_TYPE).not.toBe("empresa.conectada");
+
+    // Y el resumen guardado tampoco afirma un tipo observado.
+    const summary = insert?.values.find(
+      (value) => typeof value === "string" && value.includes("\"classified\""),
+    ) as string | undefined;
+    expect(summary).toBeDefined();
+    const parsedSummary = JSON.parse(summary as string) as {
+      event: string;
+      classified: boolean;
+    };
+    expect(parsedSummary.event).toBe(PENDING_CLASSIFICATION_EVENT_TYPE);
+    expect(parsedSummary.classified).toBe(false);
+  });
+
+  it("un evento sin tipo confirmado NO activa nada: no se promueve la credencial", async () => {
+    const promotions: unknown[] = [];
+    const store = {
+      async $queryRaw<T>(query: TemplateStringsArray, ...values: unknown[]) {
+        const sql = query.join("?");
+        void values;
+        if (/INSERT INTO/i.test(sql)) return [{ id: "evt-c2" }] as T;
+        return [] as unknown as T;
+      },
+    } as DosaWebhookStore;
+
+    const credentials = {
+      async ingestFromProvider() {
+        return { ok: true as const };
+      },
+      async promote(input: unknown) {
+        promotions.push(input);
+        return { ok: true as const, status: "ACTIVE" };
+      },
+    };
+
+    const service = new DosaWebhookService(
+      store,
+      resolverOf({ "13199988001": { companyId: COMPANY_A, ecfEnabled: true } }),
+      config,
+      credentials as never,
+      undefined,
+    );
+
+    const body = rawBody();
+    const outcome = await service.handle(
+      request({ "x-dosa-signature": signatureHeader(body) }, body),
+    );
+
+    expect(outcome).toMatchObject({ accepted: true, status: 200 });
+    // Recibir credenciales no es activarlas: el webhook no promueve nunca.
+    expect(promotions).toHaveLength(0);
+  });
+
+  it("un fallo al guardar las credenciales NO se responde como 200", async () => {
+    const store = {
+      async $queryRaw<T>(query: TemplateStringsArray) {
+        const sql = query.join("?");
+        if (/INSERT INTO/i.test(sql)) return [{ id: "evt-c3" }] as T;
+        return [] as unknown as T;
+      },
+    } as DosaWebhookStore;
+
+    const credentials = {
+      async ingestFromProvider() {
+        return { ok: false as const, blockedReason: "VAULT_UNAVAILABLE" };
+      },
+    };
+
+    const service = new DosaWebhookService(
+      store,
+      resolverOf({ "13199988001": { companyId: COMPANY_A, ecfEnabled: true } }),
+      config,
+      credentials as never,
+      undefined,
+    );
+
+    const body = rawBody({
+      credenciales: { api_key_test: "CLAVE-SINTETICA-DE-PRUEBA" },
+    });
+    const outcome = await service.handle(
+      request({ "x-dosa-signature": signatureHeader(body) }, body),
+    );
+
+    expect(outcome).toMatchObject({
+      accepted: false,
+      status: 500,
+      code: "ECF_DOSA_WEBHOOK_CREDENTIALS_FAILED",
+    });
   });
 
   it("sin firma válida NO se ejecuta ninguna consulta", async () => {
@@ -273,7 +381,9 @@ describe("webhook DOSA con firma HMAC", () => {
     expect(hints[0]).toEqual({
       companyId: COMPANY_A,
       rnc: "13199988001",
-      eventType: "empresa.conectada",
+      // El proveedor no envía un campo de tipo de evento: se marca como
+      // pendiente de clasificación, no como `empresa.conectada`.
+      eventType: PENDING_CLASSIFICATION_EVENT_TYPE,
     });
     // Empresa → RNC → postulación, todo desde el servidor.
     expect(bound).toHaveLength(1);

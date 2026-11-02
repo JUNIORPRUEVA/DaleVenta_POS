@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   parseDosaWebhookPayload,
   redactDosaWebhookEvent,
+  type DosaWebhookPayload,
 } from "./dosa-webhook.dto";
 import {
   readDosaSignatureConfig,
@@ -193,8 +194,12 @@ export class DosaWebhookService {
     const rawHash = createHash("sha256")
       .update(input.rawBody)
       .digest("hex");
+    // El tipo de evento sale de lo que el proveedor envía, no de una constante
+    // nuestra: ver `classifyDosaEventType`.
+    const classification = classifyDosaEventType(payload);
     const summary = JSON.stringify({
-      event: "empresa.conectada",
+      event: classification.eventType,
+      classified: classification.classified,
       ...redactDosaWebhookEvent(payload),
     });
 
@@ -205,7 +210,7 @@ export class DosaWebhookService {
          "signature_status","processing_state","received_at")
       VALUES
         (gen_random_uuid(), ${company.companyId}::uuid, ${dedupeKey},
-         ${"empresa.conectada"}, ${payload.postulacionId},
+         ${classification.eventType}, ${payload.postulacionId},
          ${payload.estadoCertificacion}, ${rawHash}, ${summary}::jsonb,
          ${signature.strategy}, ${PENDING_STATE}, NOW())
       ON CONFLICT ("company_id","dedupe_key") DO NOTHING
@@ -219,6 +224,7 @@ export class DosaWebhookService {
         dedupeKey,
         payload,
         secretos: parsed.value.secretos,
+        eventType: classification.eventType,
         resumed: false,
       });
     }
@@ -243,6 +249,7 @@ export class DosaWebhookService {
         dedupeKey,
         payload,
         secretos: parsed.value.secretos,
+        eventType: classification.eventType,
         resumed: true,
       });
     }
@@ -273,6 +280,8 @@ export class DosaWebhookService {
     dedupeKey: string;
     payload: { rnc: string; ambiente: string; postulacionId: string };
     secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string };
+    /** Tipo de evento que se persistió: clasificado o pendiente de clasificación. */
+    eventType: string;
     resumed: boolean;
   }): Promise<DosaWebhookOutcome> {
     const hasCredentials =
@@ -333,7 +342,7 @@ export class DosaWebhookService {
         await this.sessionHints.recordEventHint({
           companyId: input.companyId,
           rnc: input.payload.rnc,
-          eventType: "empresa.conectada",
+          eventType: input.eventType,
         });
       } catch {
         // Intencionadamente no se propaga: ver el comentario anterior.
@@ -373,6 +382,48 @@ export class DosaWebhookService {
 /** Estados de procesamiento persistidos del evento. */
 export const PENDING_STATE = "PENDING_CREDENTIALS";
 export const COMPLETE_STATE = "COMPLETE";
+
+/**
+ * Etiqueta con la que se persiste un evento cuyo **tipo** no está confirmado.
+ *
+ * No es un código inventado de DOSA: es una marca nuestra que dice, sin
+ * ambigüedad, «este evento está autenticado y persistido, pero su tipo todavía
+ * no se puede afirmar». Ocupa `event_type`, que es `varchar(64)`.
+ */
+export const PENDING_CLASSIFICATION_EVENT_TYPE = "PENDING_CLASSIFICATION";
+
+export type DosaEventClassification = {
+  /** Valor que se guarda en `event_type`. */
+  eventType: string;
+  /** `true` solo si el proveedor envió un tipo de evento documentado. */
+  classified: boolean;
+};
+
+/**
+ * Tipo de evento según lo que el proveedor **realmente** envía.
+ *
+ * La muestra oficial de DOSA (`03_WEBHOOK_EJEMPLO_SANITIZADO.json`) tiene estos
+ * campos: `postulacion_id`, `rnc`, `razon_social`, `correo`, `ambiente`,
+ * `estado_certificacion`, `credenciales`, `credenciales_pendientes` y
+ * `disponibles_desde`. **No hay ningún campo de tipo de evento.**
+ *
+ * Por eso aquí no se adivina: se marca como pendiente de clasificación. Etiquetar
+ * un evento como `empresa.conectada` sin que el proveedor lo diga sería
+ * justamente inventar el dato, y ese valor se estaba guardando como si fuera
+ * observado. El día que DOSA documente un campo de tipo, este es el único punto
+ * que hay que cambiar.
+ *
+ * Importante: esta etiqueta **no autoriza nada**. Ni la recepción de credenciales
+ * ni la activación dependen de ella; la autoridad de activación mira la
+ * evidencia persistida (postulación, estado de certificación, habilitación DGII
+ * y autorización administrativa).
+ */
+export function classifyDosaEventType(
+  payload: DosaWebhookPayload,
+): DosaEventClassification {
+  void payload;
+  return { eventType: PENDING_CLASSIFICATION_EVENT_TYPE, classified: false };
+}
 
 /**
  * Clave de idempotencia SIN identificador de evento.
