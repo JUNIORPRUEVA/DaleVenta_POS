@@ -1,49 +1,85 @@
 import 'package:flutter/foundation.dart';
 
-/// Por qué el asistente oficial de DOSA no puede montarse todavía.
+/// Motivo por el que el asistente oficial no puede montarse.
 ///
-/// Es un motivo CONCRETO: la pantalla lo muestra tal cual al administrador en
-/// lugar de un "no disponible" genérico, para que se sepa qué falta.
+/// Solo motivos contrastados con `dosa-cert.js`. Se eliminó el bloqueo por
+/// `pk_test_` porque el script no distingue `pk_test_`/`pk_live_`: solo documenta
+/// `publishable-key="pk_..."`.
 enum DosaAssistantBlockReason {
   /// La bandera está apagada. Es el estado por defecto.
   disabled,
 
-  /// Falta la URL del script `dosa-cert.js`.
-  missingScriptUrl,
+  /// La URL del script no es la oficial de DOSA.
+  scriptUrlNotOfficial,
 
-  /// Falta la clave publicable del componente.
-  missingPublishableKey,
+  /// No hay ni `session-url` ni `publishable-key`: no hay nada que montar.
+  missingSessionSource,
 
-  /// La clave disponible es `pk_live_` (producción). No se usa hasta tener una
-  /// configuración de PRUEBA autorizada.
-  productionKeyNotAllowed,
-
-  /// DOSA no ha documentado los atributos de `<dosa-cert-wizard>`.
-  componentAttributesUndocumented,
-
-  /// La plataforma no puede contener el componente con lo que hay instalado.
-  platformUnsupported,
+  /// `session-url` no apunta a un origen permitido o no es https.
+  sessionUrlNotAllowed,
 }
 
 /// Configuración del asistente DOSA.
 ///
-/// Reglas de esta clase:
+/// Fuente de verdad: el propio script oficial
+/// `https://dosasystem.com/static/embed/dosa-cert.js`, que declara
 ///
-/// 1. Todo entra por `--dart-define`. **Nada** se escribe en el código: ni la
-///    clave publicable ni la URL del script.
-/// 2. `canMount` es `false` mientras exista cualquier motivo de bloqueo. Hoy
-///    siempre lo es, porque la clave recibida es `pk_live_` y porque faltan los
-///    atributos documentados del componente.
-/// 3. `componentAttributes` está **vacío** a propósito: inventar nombres de
-///    atributos haría que el componente oficial fallara en silencio.
+/// ```js
+/// static get observedAttributes() {
+///   return ['session-url', 'publishable-key', 'base-url', 'theme', 'height'];
+/// }
+/// ```
+///
+/// y los eventos `cert:ready`, `cert:step`, `cert:postulacion`, `cert:attention`,
+/// `cert:complete`, `cert:error`, `cert:resize`, `cert:asistida_pago`,
+/// `cert:asistida_pagada` y `cert:blocked`.
+///
+/// Dos aclaraciones que el script deja explícitas:
+///
+/// * La forma recomendada es `session-url`: un enlace de sesión que crea **el
+///   backend del partner** con `POST /api/certificacion/sesiones` y su *secret
+///   key*. El secreto es de servidor y nunca pasa por el cliente.
+/// * La `publishable-key` es pública por diseño (viaja en una URL). No se exige
+///   ningún prefijo de entorno porque el script no documenta esa distinción.
 @immutable
 class DosaAssistantConfig {
   const DosaAssistantConfig({
     required this.enabled,
-    required this.scriptUrl,
-    required this.publishableKey,
-    this.documentedAttributes = const <String, String>{},
+    this.scriptUrl = officialScriptUrl,
+    this.sessionUrl,
+    this.publishableKey,
+    this.baseUrl,
+    this.theme = 'light',
+    this.height = 720,
   });
+
+  /// Origen oficial del script. Único admitido.
+  static const String officialOrigin = 'https://dosasystem.com';
+  static const String officialScriptUrl =
+      'https://dosasystem.com/static/embed/dosa-cert.js';
+
+  /// Atributos que el componente observa. No se envía ninguno fuera de la lista.
+  static const Set<String> allowedAttributes = {
+    'session-url',
+    'publishable-key',
+    'base-url',
+    'theme',
+    'height',
+  };
+
+  /// Eventos que el componente emite. Cualquier otro se descarta.
+  static const Set<String> allowedEvents = {
+    'cert:ready',
+    'cert:step',
+    'cert:postulacion',
+    'cert:attention',
+    'cert:complete',
+    'cert:error',
+    'cert:resize',
+    'cert:asistida_pago',
+    'cert:asistida_pagada',
+    'cert:blocked',
+  };
 
   /// Lee la configuración del build. Sin `--dart-define`, todo queda apagado.
   factory DosaAssistantConfig.fromEnvironment() => const DosaAssistantConfig(
@@ -51,80 +87,112 @@ class DosaAssistantConfig {
       'DOSA_ASSISTANT_ENABLED',
       defaultValue: false,
     ),
-    scriptUrl: String.fromEnvironment('DOSA_ASSISTANT_SCRIPT_URL'),
+    scriptUrl: String.fromEnvironment(
+      'DOSA_ASSISTANT_SCRIPT_URL',
+      defaultValue: officialScriptUrl,
+    ),
+    sessionUrl: String.fromEnvironment('DOSA_ASSISTANT_SESSION_URL'),
     publishableKey: String.fromEnvironment(
       'DOSA_ASSISTANT_PUBLISHABLE_KEY',
     ),
+    baseUrl: String.fromEnvironment('DOSA_ASSISTANT_BASE_URL'),
   );
 
   final bool enabled;
   final String scriptUrl;
-  final String publishableKey;
 
-  /// Atributos documentados por el proveedor. **Nadie los pasa hoy**: existen
-  /// como parámetro para poder probar el camino de montaje sin inventar
-  /// atributos en el código de producción.
-  final Map<String, String> documentedAttributes;
+  /// Enlace de sesión creado por NUESTRO backend. Forma recomendada.
+  final String? sessionUrl;
 
-  /// La clave entregada empieza por `pk_live_`, es decir, es de producción.
-  bool get hasProductionKey => publishableKey.trim().startsWith('pk_live_');
+  /// Clave publicable (flujo anterior, sigue funcionando). Pública, no secreta.
+  final String? publishableKey;
 
-  /// Atributos del componente oficial `<dosa-cert-wizard>`.
-  ///
-  /// **Vacío por decisión.** DOSA entregó el script y el nombre del componente,
-  /// pero no documentó sus atributos. Se deja el punto único donde añadirlos:
-  /// cuando el proveedor los documente, se completan en `documentedAttributes`
-  /// y nada más cambia.
-  Map<String, String> get componentAttributes => documentedAttributes;
+  /// Base para el flujo anterior (`base-url`).
+  final String? baseUrl;
+
+  final String theme;
+  final double height;
+
+  bool get hasSessionUrl => (sessionUrl ?? '').trim().isNotEmpty;
+  bool get hasPublishableKey => (publishableKey ?? '').trim().isNotEmpty;
+
+  /// El script debe servirse desde el origen oficial y por https.
+  bool get isScriptUrlOfficial => _isOfficialHttpsUrl(scriptUrl);
+
+  /// La sesión debe ser https y del origen oficial.
+  bool get isSessionUrlAllowed {
+    if (!hasSessionUrl) return true;
+    return _isOfficialHttpsUrl(sessionUrl!);
+  }
+
+  /// Atributos a aplicar al elemento: solo los que el script observa y solo si
+  /// tienen valor. `session-url` manda sobre el flujo antiguo, igual que en el
+  /// componente oficial.
+  Map<String, String> get componentAttributes {
+    final attributes = <String, String>{};
+    void put(String key, String? value) {
+      final trimmed = (value ?? '').trim();
+      if (trimmed.isEmpty) return;
+      if (!allowedAttributes.contains(key)) return;
+      attributes[key] = trimmed;
+    }
+
+    if (hasSessionUrl) {
+      put('session-url', sessionUrl);
+    } else {
+      put('publishable-key', publishableKey);
+      put('base-url', baseUrl);
+    }
+    put('theme', theme);
+    put('height', height.round().toString());
+    return attributes;
+  }
 
   /// Motivos por los que el asistente no puede montarse. Lista vacía = se puede.
   List<DosaAssistantBlockReason> get blockers {
     final reasons = <DosaAssistantBlockReason>[];
     if (!enabled) reasons.add(DosaAssistantBlockReason.disabled);
-    if (scriptUrl.trim().isEmpty) {
-      reasons.add(DosaAssistantBlockReason.missingScriptUrl);
+    if (!isScriptUrlOfficial) {
+      reasons.add(DosaAssistantBlockReason.scriptUrlNotOfficial);
     }
-    if (publishableKey.trim().isEmpty) {
-      reasons.add(DosaAssistantBlockReason.missingPublishableKey);
-    } else if (hasProductionKey) {
-      reasons.add(DosaAssistantBlockReason.productionKeyNotAllowed);
+    if (!hasSessionUrl && !hasPublishableKey) {
+      reasons.add(DosaAssistantBlockReason.missingSessionSource);
     }
-    if (componentAttributes.isEmpty) {
-      reasons.add(DosaAssistantBlockReason.componentAttributesUndocumented);
+    if (hasSessionUrl && !isSessionUrlAllowed) {
+      reasons.add(DosaAssistantBlockReason.sessionUrlNotAllowed);
     }
     return reasons;
   }
 
-  /// `true` solo si no hay ningún bloqueo. Hoy siempre es `false`.
+  /// `true` solo si no hay ningún bloqueo.
   bool get canMount => blockers.isEmpty;
 
-  /// Etiqueta segura de la clave: SOLO el prefijo. El valor nunca se muestra.
+  /// Etiqueta segura de la clave: solo el prefijo. El valor nunca se muestra.
   String get maskedKey {
-    final value = publishableKey.trim();
+    final value = (publishableKey ?? '').trim();
     if (value.isEmpty) return 'sin clave';
-    if (value.startsWith('pk_live_')) return 'pk_live_…';
-    if (value.startsWith('pk_test_')) return 'pk_test_…';
-    return 'clave configurada';
+    return value.length <= 6 ? 'pk_…' : '${value.substring(0, 6)}…';
   }
 
-  /// Texto de una frase para el administrador. Sin códigos técnicos ni valores.
+  /// Texto de una frase para el administrador. Sin valores sensibles.
   String get blockedMessage {
     final reasons = blockers;
     if (reasons.isEmpty) return 'El asistente está listo para montarse.';
-    if (reasons.contains(DosaAssistantBlockReason.productionKeyNotAllowed)) {
-      return 'La única clave disponible es de producción ($maskedKey). '
-          'El asistente no se carga hasta disponer de una configuración de '
-          'prueba autorizada.';
-    }
     if (reasons.contains(DosaAssistantBlockReason.disabled)) {
       return 'El asistente de certificación automática está desactivado.';
     }
-    if (reasons.contains(DosaAssistantBlockReason.missingScriptUrl)) {
-      return 'Falta la URL del script del asistente en la configuración.';
+    if (reasons.contains(DosaAssistantBlockReason.scriptUrlNotOfficial)) {
+      return 'El script del asistente no se sirve desde el origen oficial.';
     }
-    if (reasons.contains(DosaAssistantBlockReason.missingPublishableKey)) {
-      return 'Falta la clave publicable del componente.';
+    if (reasons.contains(DosaAssistantBlockReason.sessionUrlNotAllowed)) {
+      return 'El enlace de sesión no apunta a un origen permitido.';
     }
-    return 'Falta el contrato de atributos del componente.';
+    return 'Falta el enlace de sesión que emite el servidor.';
+  }
+
+  static bool _isOfficialHttpsUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null || uri.scheme != 'https') return false;
+    return 'https://${uri.host}' == officialOrigin;
   }
 }

@@ -14,6 +14,13 @@ enum DosaAssistantPhase {
   /// Postulación en curso; el proceso se puede reanudar.
   running,
 
+  /// El contribuyente tiene que hacer algo (`cert:attention`). Sigue en curso.
+  attention,
+
+  /// El navegador no permitió enmarcar el asistente (`cert:blocked`): el dominio
+  /// de esta instalación no está registrado en el integrador.
+  originBlocked,
+
   /// El proveedor reportó finalización. **No** implica autorización fiscal.
   completed,
 
@@ -87,12 +94,17 @@ class DosaAssistantSession {
 
   /// Reanudar solo tiene sentido si había un proceso en marcha o falló.
   bool get isResumable =>
-      phase == DosaAssistantPhase.running || phase == DosaAssistantPhase.failed;
+      phase == DosaAssistantPhase.running ||
+      phase == DosaAssistantPhase.attention ||
+      phase == DosaAssistantPhase.failed;
 
   /// Un evento del proveedor puede dejar el proceso en `completed`, pero eso
-  /// **no** autoriza emisión: eso sigue siendo un acto humano con comprobaciones
-  /// fiscales del backend.
+  /// **no** autoriza emisión ni acredita aprobación de la DGII. Ambas cosas
+  /// dependen de un acto humano y de las compuertas fiscales del backend.
   bool get impliesFiscalAuthorization => false;
+
+  /// `cert:complete` significa «el asistente terminó», no «la DGII aprobó».
+  bool get isDgiiApproval => false;
 
   DosaAssistantSession copyWith({
     DosaAssistantPhase? phase,
@@ -140,6 +152,7 @@ DosaStartDecision canStartPostulation({
     (session) =>
         session.binding.dedupeKey == binding.dedupeKey &&
         (session.phase == DosaAssistantPhase.running ||
+            session.phase == DosaAssistantPhase.attention ||
             session.phase == DosaAssistantPhase.completed),
   );
   if (same.isNotEmpty) {

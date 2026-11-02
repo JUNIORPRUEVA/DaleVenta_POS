@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../ui/flow/ecf_flow_kit.dart';
 import 'dosa_assistant_config.dart';
+import 'dosa_assistant_events.dart';
 import 'dosa_assistant_session.dart';
+import 'dosa_wizard_view.dart';
 
 /// Constructor del contenedor real del componente oficial.
 ///
@@ -32,16 +34,24 @@ class DosaAssistantPanel extends StatelessWidget {
     required this.session,
     this.mountBuilder,
     this.onResume,
+    this.onWizardEvent,
+    this.onOpenExternally,
   });
 
   final DosaAssistantConfig config;
   final DosaAssistantSession session;
 
-  /// Solo se usa cuando `config.canMount` y el contrato están completos.
+  /// Solo para pruebas: sustituye el contenedor real.
   final DosaAssistantMountBuilder? mountBuilder;
 
   /// Reanudar: NO crea una postulación nueva, continúa la existente.
   final VoidCallback? onResume;
+
+  /// Evento del componente oficial. Solo sirve para refrescar desde el backend.
+  final ValueChanged<DosaAssistantEvent>? onWizardEvent;
+
+  /// Abrir el asistente en el navegador (Windows, Android, iOS).
+  final VoidCallback? onOpenExternally;
 
   @override
   Widget build(BuildContext context) {
@@ -85,32 +95,36 @@ class DosaAssistantPanel extends StatelessWidget {
         );
       case DosaAssistantPhase.idle:
       case DosaAssistantPhase.running:
-        final mount = mountBuilder;
-        if (mount == null) {
-          // Contrato completo pero sin contenedor de plataforma: se dice, no se
-          // simula un asistente que no existe.
-          return const EcfInlineNote(
-            text:
-                'Falta el contenedor de plataforma para mostrar el componente '
-                'oficial en este dispositivo.',
-            tone: EcfTone.pending,
-            icon: Icons.devices_other_outlined,
-          );
-        }
+        return _content(context);
+      case DosaAssistantPhase.attention:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(height: 360, child: mount(context, config)),
-            if (onResume != null) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: onResume,
-                  child: const Text('Reanudar proceso'),
-                ),
-              ),
-            ],
+            EcfInlineNote(
+              text:
+                  session.message ??
+                  'El contribuyente tiene que completar una acción para '
+                      'continuar el proceso.',
+              tone: EcfTone.warning,
+              icon: Icons.pan_tool_alt_outlined,
+            ),
+            const SizedBox(height: 8),
+            _content(context),
+          ],
+        );
+      case DosaAssistantPhase.originBlocked:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const EcfInlineNote(
+              text:
+                  'El navegador no permitió mostrar el asistente dentro de '
+                  'esta página. Se puede continuar en una pestaña nueva.',
+              tone: EcfTone.warning,
+              icon: Icons.open_in_new_rounded,
+            ),
+            const SizedBox(height: 8),
+            _content(context),
           ],
         );
       case DosaAssistantPhase.completed:
@@ -199,6 +213,66 @@ class DosaAssistantPanel extends StatelessWidget {
     );
   }
 
+  /// Contenedor del componente (o su ausencia) según la plataforma.
+  ///
+  /// Precedencia: si el llamador inyecta un contenedor (pruebas), ese manda.
+  /// Si no, en Web/PWA se monta el componente oficial. En Windows, Android e iOS
+  /// no hay contenedor: se ofrece abrir el asistente en el navegador.
+  Widget _content(BuildContext context) {
+    final custom = mountBuilder;
+    final Widget? mounted;
+    if (custom != null) {
+      mounted = custom(context, config);
+    } else if (dosaWizardSupported) {
+      mounted = buildDosaWizardView(
+        config: config,
+        height: config.height,
+        onEvent: (event) => onWizardEvent?.call(event),
+      );
+    } else {
+      mounted = null;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (mounted != null) mounted,
+        if (mounted == null) ...[
+          const EcfInlineNote(
+            text:
+                'El asistente se abre en el navegador. Al terminar, vuelve a '
+                'esta pantalla y el progreso se recupera del servidor.',
+            tone: EcfTone.pending,
+            icon: Icons.open_in_new_rounded,
+          ),
+          if (onOpenExternally != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: onOpenExternally,
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: const Text('Abrir asistente'),
+              ),
+            ),
+          ],
+        ],
+        if (onResume != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onResume,
+              child: const Text('Reanudar proceso'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        _boundIdentity(context),
+      ],
+    );
+  }
+
   static String _phaseLabel(DosaAssistantPhase phase) {
     switch (phase) {
       case DosaAssistantPhase.blocked:
@@ -207,6 +281,10 @@ class DosaAssistantPanel extends StatelessWidget {
         return 'Listo para iniciar';
       case DosaAssistantPhase.running:
         return 'En curso';
+      case DosaAssistantPhase.attention:
+        return 'Requiere tu atención';
+      case DosaAssistantPhase.originBlocked:
+        return 'Abrir en otra pestaña';
       case DosaAssistantPhase.completed:
         return 'Finalizado por el proveedor';
       case DosaAssistantPhase.failed:
@@ -218,11 +296,14 @@ class DosaAssistantPanel extends StatelessWidget {
     switch (phase) {
       case DosaAssistantPhase.blocked:
       case DosaAssistantPhase.failed:
+      case DosaAssistantPhase.originBlocked:
         return EcfTone.warning;
       case DosaAssistantPhase.idle:
         return EcfTone.pending;
       case DosaAssistantPhase.running:
         return EcfTone.current;
+      case DosaAssistantPhase.attention:
+        return EcfTone.pending;
       case DosaAssistantPhase.completed:
         return EcfTone.done;
     }
@@ -236,6 +317,10 @@ class DosaAssistantPanel extends StatelessWidget {
         return Icons.play_circle_outline;
       case DosaAssistantPhase.running:
         return Icons.sync_rounded;
+      case DosaAssistantPhase.attention:
+        return Icons.pan_tool_alt_outlined;
+      case DosaAssistantPhase.originBlocked:
+        return Icons.open_in_new_rounded;
       case DosaAssistantPhase.completed:
         return Icons.check_circle_outline;
       case DosaAssistantPhase.failed:

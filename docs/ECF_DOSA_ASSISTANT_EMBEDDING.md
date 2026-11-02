@@ -1,11 +1,47 @@
 # Asistente DOSA — cómo embeberlo en cada plataforma
 
-Estado: **adaptador listo y apagado**. Con la bandera por defecto (`false`) no se
-pinta nada y la pantalla actual no cambia.
+Estado: **adaptador implementado y apagado por bandera**. Con
+`DOSA_ASSISTANT_ENABLED=false` (valor por defecto) la pantalla actual no cambia.
 
-DOSA entregó `dosa-cert.js` y el componente `<dosa-cert-wizard>`. De ese
-componente **no** están documentados sus atributos, así que el adaptador deja el
-mapa vacío y el montaje bloqueado (ver `DosaAssistantBlockReason`).
+---
+
+## 0. Corrección de la Fase 3 (evidencia verificada)
+
+En la Fase 3 se concluyó que «DOSA no documentó los atributos» y que había que
+exigir una clave `pk_test_`. **Las dos conclusiones eran incorrectas.**
+
+Evidencia: el script oficial
+`https://dosasystem.com/static/embed/dosa-cert.js` (7.330 bytes, descargado y
+leído) declara en su propio código:
+
+```js
+static get observedAttributes() {
+  return ['session-url', 'publishable-key', 'base-url', 'theme', 'height'];
+}
+
+const ALLOWED_EVENTS = new Set([
+  'cert:ready', 'cert:step', 'cert:postulacion', 'cert:attention',
+  'cert:complete', 'cert:error', 'cert:resize', 'cert:asistida_pago',
+  'cert:asistida_pagada',
+]);
+```
+
+Correcciones aplicadas:
+
+| Antes (Fase 3) | Ahora |
+| --- | --- |
+| `componentAttributes` vacío | Los 5 atributos que el componente observa |
+| Eventos: no modelados | Los 10 de `ALLOWED_EVENTS` + `cert:blocked` (emitido por el propio componente) |
+| Bloqueo por `pk_test_` | **Eliminado**: el script solo documenta `publishable-key="pk_..."`, sin prefijos de entorno |
+| Montaje imposible | Montaje real en Web/PWA y apertura externa en nativo |
+
+Sobre las claves, el script es explícito:
+
+* `publishable-key` es **pública** por diseño: viaja en la URL
+  (`.../embed/certificacion/wizard?pk=...`).
+* La **secret key** es del servidor: se usa para crear el enlace de sesión con
+  `POST /api/certificacion/sesiones`. Nunca entra en el cliente.
+* La forma recomendada es `session-url` (enlace de sesión), no la clave.
 
 ---
 
@@ -128,11 +164,36 @@ datos del flujo antes de publicar.
 
 ## 8. Lo que falta para activarlo
 
-| # | Requisito | De quién |
-| --- | --- | --- |
-| 1 | Nombres y tipos de los atributos de `<dosa-cert-wizard>` | DOSA |
-| 2 | Clave **de PRUEBA** (`pk_test_`), no la `pk_live_` | DOSA |
-| 3 | URL oficial del script y autorización de nuestro origen | DOSA |
-| 4 | Eventos que emite el componente y su contrato | DOSA |
-| 5 | Contrato de vinculación RNC ↔ empresa (evitar duplicados) | DOSA |
-| 6 | Autorización para añadir `webview_flutter` / `webview_windows` | Decisión interna |
+| # | Requisito | De quién | Estado |
+| --- | --- | --- | --- |
+| 1 | Atributos del componente | — | **RESUELTO** (los declara el script) |
+| 2 | Clave publicable | — | **RECIBIDA** (es pública; no requiere prefijo de entorno) |
+| 3 | Enlace de sesión emitido por el servidor | Contrato de `POST /api/certificacion/sesiones` | **PENDIENTE** |
+| 4 | Registrar el dominio en «Dominios permitidos para iframe» | Configuración de DOSA | **PENDIENTE** |
+| 5 | Contrato de eventos (payload) | DOSA | Documentado en el script a nivel de nombres; el detalle de `payload` se lee de forma defensiva |
+| 6 | WebView nativo | Decisión interna | **NO necesario** en esta fase: se usa navegador externo |
+
+## 9. Cómo queda el montaje
+
+### Web/PWA
+
+`dosa_wizard_view_web.dart` (importado de forma condicional) registra una vista de
+plataforma, inyecta el script **una sola vez** desde el origen oficial, crea
+`<dosa-cert-wizard>`, aplica solo los 5 atributos observados y reenvía los
+eventos de la lista blanca.
+
+### Windows, Android e iOS
+
+`dosa_wizard_view_stub.dart` no monta nada. El panel ofrece
+«Abrir asistente», que llama a `openDosaAssistantExternally`: valida que la URL
+sea `https` y del origen oficial **antes** de abrir el navegador del sistema. Al
+volver, el progreso se recupera del backend.
+
+### Eventos: lo que pueden y no pueden hacer
+
+`mayMutateFiscalState()` devuelve `false` para **todos** los eventos. En el
+backend, `recordEventHint()` solo escribe `last_event_type` y `last_event_at`
+(un `UPDATE` que ni siquiera menciona `status`). `provider_confirmed_at` solo lo
+escribe `applyProviderConfirmation()`, pensado para el backend tras reconciliar.
+
+`cert:complete` significa «el asistente terminó», **nunca** «la DGII aprobó».

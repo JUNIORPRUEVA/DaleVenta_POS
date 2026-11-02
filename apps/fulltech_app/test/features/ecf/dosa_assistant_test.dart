@@ -1,4 +1,6 @@
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_config.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_events.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_launcher.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_panel.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_session.dart';
 import 'package:flutter/material.dart';
@@ -6,15 +8,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 DosaAssistantConfig _config({
   bool enabled = true,
-  String scriptUrl = 'https://asistente.example/dosa-cert.js',
-  String publishableKey = 'pk_test_valor-de-prueba',
-  Map<String, String> documentedAttributes = const <String, String>{},
+  String scriptUrl = DosaAssistantConfig.officialScriptUrl,
+  String? sessionUrl,
+  String? publishableKey = 'pk_publica_de_prueba',
+  String? baseUrl,
 }) => DosaAssistantConfig(
   enabled: enabled,
   scriptUrl: scriptUrl,
+  sessionUrl: sessionUrl,
   publishableKey: publishableKey,
-  documentedAttributes: documentedAttributes,
+  baseUrl: baseUrl,
 );
+
+const String _sessionUrl =
+    'https://dosasystem.com/embed/certificacion/s/cs_demo_prueba';
 
 DosaAssistantBinding _binding({
   String companyId = 'company-a',
@@ -29,59 +36,94 @@ DosaAssistantBinding _binding({
 void main() {
   group('configuración del asistente', () {
     test('sin configuración de build queda apagado y bloqueado', () {
-      const config = DosaAssistantConfig(
-        enabled: false,
-        scriptUrl: '',
-        publishableKey: '',
-      );
+      const config = DosaAssistantConfig(enabled: false);
 
       expect(config.canMount, isFalse);
       expect(config.blockers, contains(DosaAssistantBlockReason.disabled));
       expect(
         config.blockers,
-        contains(DosaAssistantBlockReason.missingScriptUrl),
-      );
-      expect(
-        config.blockers,
-        contains(DosaAssistantBlockReason.missingPublishableKey),
+        contains(DosaAssistantBlockReason.missingSessionSource),
       );
     });
 
-    test('una clave pk_live_ NUNCA permite montar el asistente', () {
-      final config = _config(
-        publishableKey: 'pk_live_abc123secreto',
-        documentedAttributes: const {'attribute': 'value'},
-      );
-
-      expect(config.hasProductionKey, isTrue);
-      expect(config.canMount, isFalse);
-      expect(
-        config.blockers,
-        contains(DosaAssistantBlockReason.productionKeyNotAllowed),
-      );
-      // El mensaje para el usuario no filtra el valor de la clave.
-      expect(config.blockedMessage, isNot(contains('abc123secreto')));
-      expect(config.maskedKey, 'pk_live_…');
+    test('los atributos son los que declara observedAttributes del script', () {
+      // Evidencia: dosa-cert.js ->
+      // return ['session-url','publishable-key','base-url','theme','height'];
+      expect(DosaAssistantConfig.allowedAttributes, {
+        'session-url',
+        'publishable-key',
+        'base-url',
+        'theme',
+        'height',
+      });
     });
 
-    test('no se inventan atributos del componente oficial', () {
-      // Nadie pasa atributos hoy: el mapa queda vacío y eso bloquea el montaje.
-      expect(_config().componentAttributes, isEmpty);
+    test('un enlace de sesión produce session-url y no el flujo antiguo', () {
+      final config = _config(sessionUrl: _sessionUrl, publishableKey: 'pk_x');
+      final attributes = config.componentAttributes;
+
+      expect(config.canMount, isTrue);
+      expect(attributes['session-url'], _sessionUrl);
+      // El componente prefiere session-url: no se envían los atributos antiguos.
+      expect(attributes.containsKey('publishable-key'), isFalse);
+      expect(attributes['theme'], 'light');
+      expect(attributes['height'], '720');
+      // No se añade ningún atributo fuera de la lista observada.
       expect(
-        _config().blockers,
-        contains(DosaAssistantBlockReason.componentAttributesUndocumented),
+        attributes.keys.every(DosaAssistantConfig.allowedAttributes.contains),
+        isTrue,
       );
-      expect(_config().canMount, isFalse);
     });
 
-    test('solo con clave de prueba y atributos documentados se puede montar', () {
-      final config = _config(
-        documentedAttributes: const {'company': 'demo'},
-      );
+    test('una clave pk_live_ NO se bloquea: el script no distingue entornos', () {
+      // Corrección: en Fase 3 se exigía pk_test_ sin evidencia. El script solo
+      // documenta publishable-key="pk_...".
+      final config = _config(publishableKey: 'pk_live_abc123secreto');
 
       expect(config.canMount, isTrue);
       expect(config.blockers, isEmpty);
-      expect(config.maskedKey, 'pk_test_…');
+      // Aun así el valor nunca se pinta entero.
+      expect(config.maskedKey, isNot(contains('abc123secreto')));
+    });
+
+    test('un script fuera del origen oficial bloquea el montaje', () {
+      final config = _config(scriptUrl: 'https://atacante.example/dosa-cert.js');
+
+      expect(config.canMount, isFalse);
+      expect(
+        config.blockers,
+        contains(DosaAssistantBlockReason.scriptUrlNotOfficial),
+      );
+    });
+
+    test('un session-url de otro origen o sin https se rechaza', () {
+      final otroOrigen = _config(
+        sessionUrl: 'https://otro.example/embed/certificacion/s/cs_x',
+        publishableKey: null,
+      );
+      final sinHttps = _config(
+        sessionUrl: 'http://dosasystem.com/embed/certificacion/s/cs_x',
+        publishableKey: null,
+      );
+
+      expect(
+        otroOrigen.blockers,
+        contains(DosaAssistantBlockReason.sessionUrlNotAllowed),
+      );
+      expect(
+        sinHttps.blockers,
+        contains(DosaAssistantBlockReason.sessionUrlNotAllowed),
+      );
+    });
+
+    test('sin sesión ni clave no hay nada que montar', () {
+      final config = _config(publishableKey: null);
+
+      expect(config.canMount, isFalse);
+      expect(
+        config.blockers,
+        contains(DosaAssistantBlockReason.missingSessionSource),
+      );
     });
   });
 
@@ -182,7 +224,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: DosaAssistantPanel(
-              config: _config(publishableKey: 'pk_live_noautorizada'),
+              config: _config(publishableKey: null),
               session: DosaAssistantSession(
                 binding: _binding(),
                 phase: DosaAssistantPhase.idle,
@@ -197,8 +239,7 @@ void main() {
       // Muestra con qué identidad fiscal está vinculado.
       expect(find.textContaining('1-33-02023-2'), findsOneWidget);
       expect(find.textContaining('sin iniciar'), findsOneWidget);
-      // Y no filtra la clave.
-      expect(find.textContaining('noautorizada'), findsNothing);
+      expect(find.textContaining('pk_'), findsNothing);
     });
 
     testWidgets('no monta el componente cuando el contrato está bloqueado', (
@@ -209,7 +250,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: DosaAssistantPanel(
-              config: _config(),
+              config: _config(publishableKey: null),
               session: DosaAssistantSession(
                 binding: _binding(),
                 phase: DosaAssistantPhase.running,
@@ -230,9 +271,7 @@ void main() {
     testWidgets('monta el contenedor solo con el contrato completo', (
       tester,
     ) async {
-      final config = _config(
-        documentedAttributes: const {'company': 'demo'},
-      );
+      final config = _config(sessionUrl: _sessionUrl);
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -260,9 +299,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: DosaAssistantPanel(
-              config: _config(
-                documentedAttributes: const {'company': 'demo'},
-              ),
+              config: _config(sessionUrl: _sessionUrl),
               session: DosaAssistantSession(
                 binding: _binding(externalId: 'POST-1'),
                 phase: DosaAssistantPhase.completed,
@@ -283,9 +320,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: DosaAssistantPanel(
-              config: _config(
-                documentedAttributes: const {'company': 'demo'},
-              ),
+              config: _config(sessionUrl: _sessionUrl),
               session: DosaAssistantSession(
                 binding: _binding(),
                 phase: DosaAssistantPhase.failed,
@@ -301,6 +336,129 @@ void main() {
       expect(find.textContaining('PROVIDER_TIMEOUT'), findsOneWidget);
       await tester.tap(find.text('Reanudar proceso'));
       expect(resumed, 1);
+    });
+  });
+
+  group('eventos del componente oficial', () {
+    test('la lista blanca es la que declara ALLOWED_EVENTS del script', () {
+      expect(DosaAssistantConfig.allowedEvents, {
+        'cert:ready',
+        'cert:step',
+        'cert:postulacion',
+        'cert:attention',
+        'cert:complete',
+        'cert:error',
+        'cert:resize',
+        'cert:asistida_pago',
+        'cert:asistida_pagada',
+        'cert:blocked',
+      });
+    });
+
+    test('un evento desconocido se descarta en vez de adivinarse', () {
+      expect(parseDosaAssistantEvent(type: 'cert:hackeado'), isNull);
+      expect(parseDosaAssistantEvent(type: 'message'), isNull);
+    });
+
+    test('parsea etapa y estado que envía el componente', () {
+      final event = parseDosaAssistantEvent(
+        type: 'cert:step',
+        payload: const {'etapa': 'POSTULACION', 'estado': 'EN_CURSO'},
+      );
+
+      expect(event, isNotNull);
+      expect(event!.stage, 'POSTULACION');
+      expect(event.status, 'EN_CURSO');
+      expect(event.phase, DosaAssistantPhase.running);
+    });
+
+    test('cert:complete NO es aprobación de la DGII', () {
+      final event = parseDosaAssistantEvent(
+        type: 'cert:complete',
+        payload: const {'id': 'p-1'},
+      );
+
+      expect(event!.phase, DosaAssistantPhase.completed);
+      expect(event.providerId, 'p-1');
+      expect(event.isTrusted, isFalse);
+      expect(mayMutateFiscalState(event), isFalse);
+
+      final session = DosaAssistantSession(
+        binding: _binding(),
+        phase: event.phase!,
+      );
+      expect(session.isDgiiApproval, isFalse);
+      expect(session.impliesFiscalAuthorization, isFalse);
+    });
+
+    test('NINGÚN evento permite mutar estado fiscal', () {
+      for (final type in DosaAssistantConfig.allowedEvents) {
+        final event = parseDosaAssistantEvent(
+          type: type,
+          payload: const {'id': 'x'},
+        );
+        expect(event, isNotNull, reason: type);
+        expect(mayMutateFiscalState(event!), isFalse, reason: type);
+      }
+    });
+
+    test('cert:resize no pide refresco del backend', () {
+      final event = parseDosaAssistantEvent(type: 'cert:resize');
+      expect(event!.impliesRefresh, isFalse);
+    });
+
+    test('cert:blocked reporta el origen que el navegador bloqueó', () {
+      final event = parseDosaAssistantEvent(
+        type: 'cert:blocked',
+        payload: const {'origin': 'https://fullposcloud.fulltechrd.com'},
+      );
+
+      expect(event!.phase, DosaAssistantPhase.originBlocked);
+      expect(event.blockedOrigin, 'https://fullposcloud.fulltechrd.com');
+    });
+  });
+
+  group('apertura en navegador externo (Windows / Android / iOS)', () {
+    test('rechaza una URL de otro origen sin siquiera abrirla', () async {
+      var opened = false;
+      final result = await openDosaAssistantExternally(
+        sessionUrl: 'https://otro.example/embed/certificacion/s/cs_x',
+        opener: (_) async {
+          opened = true;
+          return true;
+        },
+      );
+
+      expect(result, isFalse);
+      expect(opened, isFalse);
+    });
+
+    test('rechaza http aunque sea el origen oficial', () async {
+      var opened = false;
+      final result = await openDosaAssistantExternally(
+        sessionUrl: 'http://dosasystem.com/embed/certificacion/s/cs_x',
+        opener: (_) async {
+          opened = true;
+          return true;
+        },
+      );
+
+      expect(result, isFalse);
+      expect(opened, isFalse);
+    });
+
+    test('abre el enlace de sesión oficial', () async {
+      Uri? seen;
+      final result = await openDosaAssistantExternally(
+        sessionUrl: _sessionUrl,
+        opener: (uri) async {
+          seen = uri;
+          return true;
+        },
+      );
+
+      expect(result, isTrue);
+      expect(seen.toString(), _sessionUrl);
     });
   });
 }

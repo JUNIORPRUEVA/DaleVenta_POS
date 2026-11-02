@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/company/company_settings_repository.dart';
+import '../data/ecf_repository.dart';
 import 'dosa_assistant_config.dart';
+import 'dosa_assistant_events.dart';
+import 'dosa_assistant_launcher.dart';
 import 'dosa_assistant_panel.dart';
 import 'dosa_assistant_session.dart';
 
@@ -20,6 +23,7 @@ class DosaAssistantSection extends ConsumerWidget {
     this.postulationExternalId,
     this.phase,
     this.onResume,
+    this.onRefresh,
     this.config,
   });
 
@@ -30,6 +34,9 @@ class DosaAssistantSection extends ConsumerWidget {
   final DosaAssistantPhase? phase;
 
   final VoidCallback? onResume;
+
+  /// Recarga la pantalla que contiene la sección tras un evento del componente.
+  final VoidCallback? onRefresh;
 
   /// Solo para pruebas; en la app se lee del build.
   final DosaAssistantConfig? config;
@@ -56,7 +63,23 @@ class DosaAssistantSection extends ConsumerWidget {
         phase: phase ?? _defaultPhase(postulationExternalId),
       ),
       onResume: onResume,
+      // Un evento del navegador NO escribe nada: solo pide recargar del backend.
+      onWizardEvent: _onWizardEvent(ref),
+      onOpenExternally: resolved.hasSessionUrl
+          ? () => openDosaAssistantExternally(sessionUrl: resolved.sessionUrl!)
+          : null,
     );
+  }
+
+  ValueChanged<DosaAssistantEvent> _onWizardEvent(WidgetRef ref) {
+    return (event) {
+      // Doble cinturón: aunque el evento llegue con forma válida, aquí no se
+      // crea ninguna postulación ni se marca aceptación fiscal.
+      if (mayMutateFiscalState(event)) return;
+      if (!event.impliesRefresh) return;
+      ref.invalidate(ecfOnboardingProvider);
+      onRefresh?.call();
+    };
   }
 
   /// Sin señal del proveedor no se inventa un estado: como mucho "en curso".
