@@ -42,6 +42,7 @@ import {
   ECF_FISCAL_PROVIDER_REGISTRY,
   createEcfFiscalProviderRegistryFromConfig,
 } from "./provider/ecf-provider.registry";
+import { DosaWebhookReceiverService } from "./provider/dosa-webhook-receiver.service";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
@@ -93,6 +94,10 @@ import { EcfService } from "./ecf.service";
       inject: [ConfigService],
       useFactory: createEcfFiscalProviderRegistryFromConfig,
     },
+    // Recepcion de eventos DOSA. NO hay controlador HTTP: el servicio rechaza
+    // siempre mientras el contrato de firma no este resuelto por el proveedor,
+    // y un evento nunca autoriza emision por si solo.
+    DosaWebhookReceiverService,
     EcfAlanubeCertificationClient,
     {
       // El orquestador lee solo el `alanubeCompanyId` por empresa.

@@ -116,14 +116,48 @@ resolver antes de implementar:
 
 ## 5. Verificación antes de cualquier fase con red
 
+> **Importante:** los comandos `npm` del monorepo **fallan desde la unidad
+> `V:`** porque es una unidad `subst` y npm resuelve la ruta real, con lo que
+> pierde los workspaces (`No workspaces found`). Hay que ejecutarlos desde la
+> ruta real del worktree.
+
 ```powershell
+cd C:\Users\pc\DEV\PROYECTOS\PRODUCTOS\FULLPOS-ECF-ALANUBE
+
 # 1. Ningun fichero con secretos entra en Git
 git status --short          # no debe listar .env.*.local ni .secrets/
 
 # 2. La emision sigue apagada para todos los proveedores
-npx jest src/ecf/provider   # availability => emissionAllowed: false
+npx jest --config apps/api/jest.config.cjs src/ecf/provider   # o: cd apps/api; npx jest src/ecf/provider
 
 # 3. El backend compila y las pruebas pasan
-npm run api:build
+npm --workspace apps/api run build
 npm --workspace apps/api test
+
+# 4. El lockfile es reproducible (no debe podar nada)
+npm ci --dry-run
 ```
+
+## 6. Checklist de entrega de materiales
+
+Cada fila se completa cuando el material esté **colocado y verificado** en el
+entorno local. La columna «Verificación» es la prueba que se ejecutará, no una
+promesa.
+
+| # | Material | Lo entrega | Dónde se coloca | Verificación | Estado |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Script del asistente embebible | DOSA (entregado) | Servido por el backend o URL en `DOSA_ASSISTANT_SCRIPT_URL` | La URL responde 200 con `text/javascript` y sin credenciales | Pendiente de colocar |
+| 2 | Clave publicable del componente | DOSA (entregado) | Config pública servida por el backend al abrir el asistente | El frontend la recibe en tiempo de ejecución, nunca en el código | Pendiente de colocar |
+| 3 | Ejemplo del evento «certificación finalizada» | DOSA (entregado) | `apps/api/src/ecf/provider/` como fixture sintético | Se usa en pruebas; **no** se acepta como evento real | Pendiente de colocar |
+| 4 | Secreto del webhook | DOSA (entregado) | `apps/api/.secrets/dosa-webhook.secret` + `DOSA_WEBHOOK_SECRET_REF` | `git status` no lo lista; el valor no aparece en logs | Pendiente de colocar |
+| 5 | API Key de TEST (empresa de pruebas, **no** FULLTECH SRL) | DOSA (entregado) | `apps/api/.env.dosa.test.local` + `DOSA_API_KEY_SECRET_REF` | Se resuelve por referencia; nunca se imprime | Pendiente de colocar |
+| 6 | RNC de prueba | DOSA (entregado) | `DOSA_TEST_RNC` en el mismo `.env` local | Distinto del RNC real de FULLTECH SRL | Pendiente de colocar |
+| 7 | Rangos e-NCF de prueba y vencimiento | DOSA (entregado) | `DOSA_TEST_ENCF_FROM` / `_TO` / `_EXPIRES_ON` | Fechas visibles y alerta antes del vencimiento | Pendiente de colocar |
+| 8 | Documentación de emisión y consultas | DOSA (entregado, público) | `docs/` | Sin credenciales dentro | Recibida (pública) |
+| 9 | Fórmula exacta de `X-Dosa-Signature` | **DOSA — pendiente** | `dosa-webhook.verification.ts` | Ver §4 de `ECF_DOSA_WEBHOOK_CONTRACT.md` | **Bloqueado** |
+| 10 | Contrato de vinculación Partner (RNC ↔ empresa) | **DOSA — pendiente** | Diseño en `dosa-company-linking.policy.ts` | Resolución sin empresa por defecto | **Bloqueado** |
+| 11 | Catálogo de estados del asistente y correspondencia DGII `0/1/2/3/4` | **DOSA — pendiente** | Mapeo explícito, sin deducir | Tabla firmada por el proveedor | **Bloqueado** |
+| 12 | Confirmación de URL de webhook aceptada por DOSA | Nosotros | `https://fullposcloud.fulltechrd.com/api/webhook/dosa` | El proveedor debe aceptar el prefijo `/api` | Pendiente de confirmar |
+
+Regla de cierre: mientras las filas 9–11 estén bloqueadas, **no se activa** ni el
+asistente ni el webhook, aunque los materiales 1–7 estén colocados.
