@@ -237,7 +237,13 @@ model EcfDosaWebhookEvent {
   signatureStatus     String   @map("signature_status") @db.VarChar(48)
   /// `PENDING_CREDENTIALS` mientras falte guardar las credenciales del evento;
   /// `COMPLETE` solo cuando ya estan cifradas. Un evento a medias es reanudable.
-  processingState     String   @default("COMPLETE") @map("processing_state") @db.VarChar(32)
+  ///
+  /// El valor por defecto es `PENDING_CREDENTIALS` a proposito: una fila insertada
+  /// sin declarar el estado NO ha demostrado que guardo sus credenciales, y darla
+  /// por completa la excluiria de la reanudacion. Hay que coincidir con la
+  /// migracion `20261103200000_ecf_dosa_webhook_processing_state`, que deja ese
+  /// default tras rellenar las filas antiguas con `COMPLETE`.
+  processingState     String   @default("PENDING_CREDENTIALS") @map("processing_state") @db.VarChar(32)
   credentialsStoredAt DateTime? @map("credentials_stored_at")
   receivedAt          DateTime @default(now()) @map("received_at")
 
@@ -245,6 +251,9 @@ model EcfDosaWebhookEvent {
 
   @@unique([companyId, dedupeKey])
   @@index([companyId, receivedAt])
+  /// La migracion `20261103200000_ecf_dosa_webhook_processing_state` crea este
+  /// indice; declararlo evita que `migrate dev` lo elimine como si sobrara.
+  @@index([processingState])
   @@map("ecf_dosa_webhook_events")
 }
 
