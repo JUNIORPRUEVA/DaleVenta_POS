@@ -74,7 +74,8 @@ export const DOSA_ERROR_CODES: Readonly<Record<string, string>> = {
  */
 export const DOSA_CONTRACT_GAPS = [
   "Formato exacto de fecha (la documentación muestra dd-MM-yyyy; falta confirmación).",
-  "Qué valor de indicadorFacturacion corresponde a cada categoría de impuesto.",
+  "Cuándo usar 3 (Mixta) y 4 (Servicio profesional) en indicadorFacturacion: el modelo común solo distingue bien de servicio.",
+  "Catálogo de códigos de unidadMedida: se exige informada, pero sus valores válidos no están documentados.",
   "Si `paginacion` es obligatoria o solo para comprobantes con muchas líneas.",
   "Valores válidos de codigoModificacion por tipo de nota de crédito.",
   "Significado operativo de codigo 0 frente a codigo 2 (tabla vs ejemplo).",

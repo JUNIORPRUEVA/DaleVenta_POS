@@ -72,6 +72,7 @@ const E31_BODY: DosaEcfRequestBody = {
       indicadorFacturacion: 1,
       nombreItem: "Servicio",
       indicadorBienoServicio: 2,
+      unidadMedida: "43",
       cantidadItem: "1",
       precioUnitarioItem: "100000.00",
       montoItem: "100000.00",

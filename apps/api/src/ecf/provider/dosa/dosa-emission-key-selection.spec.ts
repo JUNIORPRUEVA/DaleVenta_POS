@@ -33,7 +33,7 @@ const RNC = "133306001";
 const BODY: DosaEcfRequestBody = {
   encabezado: {
     version: "1.0",
-    idDoc: { tipoeCF: "31", eNCF: "E31000000113500", fechaEmision: "03-11-2026" },
+    idDoc: { tipoeCF: "31", eNCF: "E310000001135", fechaEmision: "03-11-2026" },
     emisor: { RNCEmisor: RNC, RazonSocialEmisor: "EMPRESA" },
     totales: {
       MontoGravadoTotal: "100.00",
@@ -44,7 +44,18 @@ const BODY: DosaEcfRequestBody = {
       MontoTotal: "118.00",
     },
   },
-  detallesItems: [],
+  detallesItems: [
+    {
+      numeroLinea: 1,
+      indicadorFacturacion: 1,
+      nombreItem: "Articulo de prueba",
+      indicadorBienoServicio: 2,
+      unidadMedida: "43",
+      cantidadItem: "1",
+      precioUnitarioItem: "100.00",
+      montoItem: "100.00",
+    },
+  ],
 };
 
 class MemoryStore implements DosaCredentialStore {

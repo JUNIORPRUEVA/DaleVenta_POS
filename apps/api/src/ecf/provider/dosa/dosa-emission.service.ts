@@ -3,6 +3,7 @@ import {
   assessDosaEmissionGate,
   type DosaEmissionGateDecision,
 } from "./dosa-emission.gate";
+import { assessDosaDocumentBarrier } from "./dosa-emission.barrier";
 import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
 import {
@@ -38,7 +39,10 @@ export const ECF_DOSA_EMISSION_TRANSPORT = Symbol("ECF_DOSA_EMISSION_TRANSPORT")
 
 export type DosaEmitBlocked = {
   ok: false;
-  code: "ECF_DOSA_GATE_BLOCKED" | "ECF_DOSA_CREDENTIALS_UNAVAILABLE";
+  code:
+    | "ECF_DOSA_GATE_BLOCKED"
+    | "ECF_DOSA_CREDENTIALS_UNAVAILABLE"
+    | "ECF_DOSA_DOCUMENT_BLOCKED";
   blockingReasons: readonly string[];
 };
 
@@ -56,11 +60,16 @@ export type DosaEmitResult = DosaEmitBlocked | DosaEmitDone;
  *
  * Orden obligatorio, sin atajos:
  *
- * 1. Leer la configuración fiscal **del servidor** (nunca del cliente).
- * 2. Evaluar `assessDosaEmissionGate` con la evidencia disponible.
- * 3. Si no está autorizado: **no se toca la red ni la bóveda**.
- * 4. Si está autorizado: abrir la credencial cifrada de ESA empresa y ESE RNC.
- * 5. Enviar con el cliente, que a su vez garantiza idempotencia por clave.
+ * 1. **Validar el documento** con `assessDosaDocumentBarrier`. Va primero y no
+ *    depende de ninguna bandera: aunque alguien active `DOSA_EMISSION_ENABLED`
+ *    por error, un cuerpo inválido (borrador sin extraer, `unidadMedida`
+ *    ausente, `eNCF` incoherente, emisor de otra empresa, totales que no
+ *    cuadran) no llega ni a la bóveda ni a la red.
+ * 2. Leer la configuración fiscal **del servidor** (nunca del cliente).
+ * 3. Evaluar `assessDosaEmissionGate` con la evidencia disponible.
+ * 4. Si no está autorizado: **no se toca la red ni la bóveda**.
+ * 5. Si está autorizado: abrir la credencial cifrada de ESA empresa y ESE RNC.
+ * 6. Enviar con el cliente, que a su vez garantiza idempotencia por clave.
  *
  * Esta clase no crea documentos, no consume secuencias y no cambia estados: eso
  * lo hace el orquestador de emisión, que es quien tiene la transacción.
@@ -138,6 +147,21 @@ export class DosaEmissionService {
     /** Clave de idempotencia: la tentativa ya reclamada por el orquestador. */
     idempotencyKey?: string;
   }): Promise<DosaEmitResult> {
+    // La barrera del documento va ANTES de la compuerta de configuración y no
+    // depende de ninguna bandera: extraer el JSON de un borrador no convierte
+    // el borrador en un comprobante transmisible.
+    const barrier = assessDosaDocumentBarrier(input.body, {
+      documentType: input.documentType,
+      companyRnc: input.rnc,
+    });
+    if (!barrier.allowed) {
+      return {
+        ok: false,
+        code: "ECF_DOSA_DOCUMENT_BLOCKED",
+        blockingReasons: barrier.blockingReasons,
+      };
+    }
+
     const decision = await this.assess(input);
     if (!decision.allowed) {
       return {
