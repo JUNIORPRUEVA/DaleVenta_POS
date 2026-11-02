@@ -79,17 +79,39 @@ describe("EcfFiscalProvider port — adaptador Alanube", () => {
 });
 
 describe("EcfFiscalProvider port — adaptador DOSA", () => {
-  it("existe solo como estructura y no puede emitir", () => {
+  it("declara lo que realmente cubre y sigue sin poder emitir por defecto", () => {
     const provider = new DosaFiscalProvider();
     expect(provider.id).toBe("DOSA");
+    // Sigue apagado: mapear no es emitir.
     expect(provider.capabilities.realEmissionEnabled).toBe(false);
-    expect(provider.capabilities.supportedDocumentTypes).toEqual([]);
-    expect(provider.capabilities.webhookSupported).toBe(false);
+    // Lo que el mapeador cubre de verdad.
+    expect(provider.capabilities.supportedDocumentTypes).toEqual([
+      "E31",
+      "E32",
+      "E34",
+    ]);
+    expect(provider.capabilities.webhookSupported).toBe(true);
+    // No hay endpoint de consulta de estado documentado: no se inventa.
+    expect(provider.capabilities.querySupported).toBe(false);
   });
 
-  it("falla cerrado: nunca devuelve payload", () => {
+  it("mapea un E31 al contrato documentado, sin marcar el payload como emitible", () => {
     const result = new DosaFiscalProvider().mapDocument(validE31WithItbis, metadata);
-    expect(result).toEqual({ ok: false, blockedReason: "ECF_PROVIDER_NOT_IMPLEMENTED" });
+    expect(result.ok).toBe(true);
+    expect(result).toHaveProperty("payload");
+    if (result.ok) {
+      const payload = result.payload as {
+        encabezado: { idDoc: { tipoeCF: string }; totales: Record<string, string> };
+      };
+      expect(payload.encabezado.idDoc.tipoeCF).toBe("31");
+      expect(payload.encabezado.totales.MontoTotal).toMatch(/^\d+\.\d{2}$/);
+    }
+  });
+
+  it("sigue fallando cerrado con un tipo que el contrato no cubre", () => {
+    const e33 = { ...validE31WithItbis, type: "E33" as never };
+    const result = new DosaFiscalProvider().mapDocument(e33, metadata);
+    expect(result.ok).toBe(false);
     expect(result).not.toHaveProperty("payload");
   });
 });

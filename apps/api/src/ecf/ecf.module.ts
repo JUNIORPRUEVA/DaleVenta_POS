@@ -54,6 +54,25 @@ import {
   DosaWebhookService,
 } from "./provider/dosa/dosa-webhook.service";
 import { PrismaDosaCompanyResolver } from "./provider/dosa/dosa-company-resolver.service";
+import {
+  DosaCredentialService,
+  ECF_DOSA_CREDENTIAL_STORE,
+  PrismaDosaCredentialStore,
+  type DosaCredentialStore,
+} from "./provider/dosa/dosa-credential.service";
+import { DosaCredentialVault } from "./provider/dosa/dosa-credential-vault.service";
+import { PrismaDosaCompanyFiscalConfigReader } from "./provider/dosa/dosa-company-fiscal-config";
+import {
+  DosaEmissionService,
+  ECF_DOSA_EMISSION_TRANSPORT,
+  ECF_DOSA_FISCAL_CONFIG,
+  type DosaCompanyFiscalConfigReader,
+} from "./provider/dosa/dosa-emission.service";
+import {
+  createFetchDosaTransport,
+  readDosaEmissionConfig,
+  type DosaHttpTransport,
+} from "./provider/dosa/dosa-emission.client";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
@@ -130,6 +149,64 @@ import { EcfService } from "./ecf.service";
       useFactory: (resolver: PrismaDosaCompanyResolver) => resolver,
     },
     DosaWebhookService,
+    // Credenciales fiscales DOSA: cifradas (AES-256-GCM), aisladas por
+    // empresa/RNC/entorno. Sin clave maestra la boveda falla cerrado y no se
+    // guarda nada; nunca hay texto claro ni valor por defecto.
+    {
+      provide: ECF_DOSA_CREDENTIAL_STORE,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaDosaCredentialStore(prisma),
+    },
+    {
+      provide: DosaCredentialVault,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new DosaCredentialVault(config.get<string>("DOSA_CREDENTIALS_MASTER_KEY")),
+    },
+    {
+      provide: DosaCredentialService,
+      inject: [ECF_DOSA_CREDENTIAL_STORE, DosaCredentialVault],
+      useFactory: (store: DosaCredentialStore, vault: DosaCredentialVault) =>
+        new DosaCredentialService(store, vault),
+    },
+    {
+      // El webhook recibe la boveda por token: la escritura de credenciales es
+      // opcional para el receptor, que sigue funcionando sin ella.
+      provide: DosaWebhookService.CREDENTIALS,
+      inject: [DosaCredentialService],
+      useFactory: (credentials: DosaCredentialService) => credentials,
+    },
+    // Emision DOSA detras de compuertas. Sin `DOSA_EMISSION_ENABLED=true` el
+    // cliente no hace ni una peticion.
+    {
+      provide: ECF_DOSA_FISCAL_CONFIG,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        new PrismaDosaCompanyFiscalConfigReader(prisma),
+    },
+    {
+      provide: ECF_DOSA_EMISSION_TRANSPORT,
+      useFactory: () => createFetchDosaTransport(),
+    },
+    {
+      provide: DosaEmissionService,
+      inject: [
+        ECF_DOSA_FISCAL_CONFIG,
+        DosaCredentialService,
+        ECF_DOSA_EMISSION_TRANSPORT,
+      ],
+      useFactory: (
+        fiscalConfig: DosaCompanyFiscalConfigReader,
+        credentials: DosaCredentialService,
+        transport: DosaHttpTransport,
+      ) =>
+        new DosaEmissionService({
+          fiscalConfig,
+          credentials,
+          config: readDosaEmissionConfig(process.env),
+          transport,
+        }),
+    },
     EcfAlanubeCertificationClient,
     {
       // El orquestador lee solo el `alanubeCompanyId` por empresa.

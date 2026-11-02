@@ -1,36 +1,55 @@
-import type { EcfFiscalProviderCapabilities, EcfFiscalProviderPort, EcfProviderMappingResult } from "./ecf-fiscal-provider.port";
-import { ECF_PROVIDER_BLOCKED } from "./ecf-fiscal-provider.port";
+import { mapEcfToDosaDraft } from "./dosa/dosa-ecf.mapper";
+import type {
+  EcfFiscalProviderCapabilities,
+  EcfFiscalProviderPort,
+  EcfProviderMappingResult,
+} from "./ecf-fiscal-provider.port";
 
 /**
- * Adaptador DOSA — **solo estructura, sin implementación**.
+ * Adaptador DOSA.
  *
- * Existe para fijar el destino de la arquitectura y para que el registro pueda
- * informar de su estado real. Deliberadamente:
+ * Qué hace de verdad, y qué no:
  *
- * - NO conoce el contrato JSON de `EnviarFactura` (`encabezado`,
- *   `detallesItems`, `Subtotales`, …) porque todavía no está implementado.
- * - NO hace ninguna llamada de red, ni tiene API Key, ni URL, ni credenciales.
- * - `mapDocument` falla cerrado: nunca devuelve un payload.
- *
- * Implementarlo requiere los materiales del proveedor y una fase autorizada
- * aparte (ver `docs/ECF_DOSA_INTEGRATION_READINESS.md`).
+ * * **`mapDocument` está implementado** contra el contrato documentado por el
+ *   proveedor (`encabezado` + `detallesItems` + `informacionReferencia`). El
+ *   mapeador devuelve ademas un borrador marcado `DRAFT_NOT_TRANSMITTABLE`: el
+ *   mapeo existe; la transmision la decide la compuerta de emision.
+ * * **`supportedDocumentTypes` refleja lo que el mapeador cubre**: E31, E32 y
+ *   E34. E33/E41 no se declaran porque no estan implementados.
+ * * **`webhookSupported` es `true`**: hay endpoint y verificacion de firma
+ *   (bloqueada por defecto hasta que el proveedor documente el algoritmo).
+ * * **`querySupported` es `false`**: la documentacion oficial del proveedor
+ *   **no expone un endpoint de consulta de estado**. Solo documenta
+ *   `EnviarFactura` y `NotaDesdeFactura`. Declarar soporte de consulta seria
+ *   inventar una API.
+ * * **`realEmissionEnabled` es `false` por defecto.** Solo se enciende si el
+ *   llamador lo pide explicitamente, y aun asi la decision real la toma
+ *   `assessDosaEmissionGate` en cada emision.
  */
 export class DosaFiscalProvider implements EcfFiscalProviderPort {
   readonly id = "DOSA" as const;
-  readonly capabilities: EcfFiscalProviderCapabilities = {
-    providerId: "DOSA",
-    label: "DOSA e-CF",
-    // DOSA firma y transmite en su nube; aún no hay integración conectada.
-    transmission: "PROVIDER_CLOUD",
-    certification: "EMBEDDED_ASSISTANT",
-    // Sin contrato implementado no se declara ningún tipo como soportado.
-    supportedDocumentTypes: [],
-    querySupported: false,
-    webhookSupported: false,
-    realEmissionEnabled: false,
-  };
+  readonly capabilities: EcfFiscalProviderCapabilities;
 
-  mapDocument(): EcfProviderMappingResult {
-    return { ok: false, blockedReason: ECF_PROVIDER_BLOCKED.notImplemented };
+  constructor(options: { realEmissionEnabled?: boolean } = {}) {
+    this.capabilities = {
+      providerId: "DOSA",
+      label: "DOSA e-CF",
+      // DOSA firma y transmite en su nube.
+      transmission: "PROVIDER_CLOUD",
+      certification: "EMBEDDED_ASSISTANT",
+      supportedDocumentTypes: ["E31", "E32", "E34"],
+      querySupported: false,
+      webhookSupported: true,
+      realEmissionEnabled: options.realEmissionEnabled === true,
+    };
+  }
+
+  mapDocument(
+    ...args: Parameters<EcfFiscalProviderPort["mapDocument"]>
+  ): EcfProviderMappingResult {
+    const [document, metadata] = args;
+    const mapped = mapEcfToDosaDraft(document, metadata);
+    if (!mapped.ok) return { ok: false, blockedReason: mapped.blockedReason };
+    return { ok: true, payload: mapped.draft.body };
   }
 }
