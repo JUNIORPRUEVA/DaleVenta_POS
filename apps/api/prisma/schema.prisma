@@ -18,6 +18,9 @@ enum Role {
 
 enum EcfProvider {
   ALANUBE
+  /// Anadido por migracion aditiva. ALANUBE sigue siendo el valor por defecto
+  /// de la columna: ninguna empresa existente cambia de proveedor.
+  DOSA
 
   @@map("ecf_provider")
 }
