@@ -83,8 +83,6 @@ uat("e-CF plataforma — E2E HTTP + PostgreSQL desechable", () => {
 
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

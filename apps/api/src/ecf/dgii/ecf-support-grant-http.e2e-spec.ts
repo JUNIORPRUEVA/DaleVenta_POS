@@ -70,8 +70,6 @@ uat("asistencia autorizada — matriz de seguridad", () => {
 
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

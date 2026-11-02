@@ -75,8 +75,6 @@ uat("asistencia autorizada — aislamiento y auditoría", () => {
 
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

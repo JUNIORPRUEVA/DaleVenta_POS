@@ -77,8 +77,6 @@ uat("propiedad del estado del expediente DGII", () => {
 
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

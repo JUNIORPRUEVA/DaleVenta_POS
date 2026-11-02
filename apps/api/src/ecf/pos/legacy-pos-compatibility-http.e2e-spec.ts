@@ -86,8 +86,6 @@ uat("POS tradicional — compatibilidad con e-CF (HTTP + PostgreSQL)", () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || "legacy-pos-e2e-secret";
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

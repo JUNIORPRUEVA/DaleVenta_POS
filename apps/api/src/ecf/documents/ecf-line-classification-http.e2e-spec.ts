@@ -76,8 +76,6 @@ uat("F1 clasificación fiscal — HTTP + PostgreSQL", () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || "ecf-f1-http-e2e-secret";
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

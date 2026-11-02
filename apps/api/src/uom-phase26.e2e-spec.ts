@@ -162,8 +162,6 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || "phase26-uat-secret";
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

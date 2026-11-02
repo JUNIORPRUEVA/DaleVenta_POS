@@ -90,8 +90,6 @@ uat("motor de activación e-CF — E2E HTTP + PostgreSQL desechable", () => {
 
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

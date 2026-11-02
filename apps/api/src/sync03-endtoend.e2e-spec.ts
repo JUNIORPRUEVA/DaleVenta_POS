@@ -139,8 +139,6 @@ describe("SYNC-03 end-to-end offline recovery + multi-tenant (isolated UAT DB)",
     process.env.JWT_SECRET = process.env.JWT_SECRET || "sync03-uat-secret";
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

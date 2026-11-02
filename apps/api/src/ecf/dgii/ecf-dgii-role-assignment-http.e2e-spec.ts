@@ -76,8 +76,6 @@ uat("etapa V — asignación de roles (ROLE_ASSIGNMENT)", () => {
 
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",

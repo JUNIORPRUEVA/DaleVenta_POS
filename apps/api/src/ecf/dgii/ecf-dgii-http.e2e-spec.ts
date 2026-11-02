@@ -84,8 +84,6 @@ uat("e-CF habilitación DGII — E2E HTTP + PostgreSQL desechable", () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || "ecf-dgii-http-e2e-secret";
     const prismaCli = resolve(
       process.cwd(),
-      "..",
-      "..",
       "node_modules",
       "prisma",
       "build",
