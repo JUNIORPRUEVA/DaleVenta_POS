@@ -13,7 +13,7 @@ import { createHash } from "crypto";
  * Cambiar el texto exige cambiar la versión: el snapshot guarda la versión
  * aceptada, así que un consentimiento antiguo nunca se confunde con uno nuevo.
  */
-export const ECF_DGII_CONSENT_VERSION = "2026-10-19.v1";
+export const ECF_DGII_CONSENT_VERSION = "2026-10-31.v2";
 
 /**
  * Finalidad declarada del tratamiento documental.
@@ -22,11 +22,9 @@ export const ECF_DGII_CONSENT_VERSION = "2026-10-19.v1";
  * DGII: habilita el uso interno del expediente para gestionar la postulación.
  */
 export const ECF_DGII_CONSENT_PURPOSE =
-  "Autorizo el uso de los datos de mi empresa y de su representante legal, y " +
-  "de la documentación aportada, exclusivamente para gestionar la postulación " +
-  "a la facturación electrónica. Entiendo que esta aceptación no me representa " +
-  "ante la DGII ni sustituye ningún poder legal, y que no se almacenan " +
-  "contraseñas de certificados digitales.";
+  "Autorizo expresamente a FullPOS Cloud y a su personal debidamente autorizado a utilizar, revisar y procesar los datos de mi empresa, los datos de su representante legal y la documentación que suministre, exclusivamente con la finalidad de preparar, organizar y gestionar internamente el expediente relacionado con la postulación a facturación electrónica. Declaro que la información y los documentos aportados son veraces, actualizados y proporcionados bajo mi responsabilidad, y que cuento con facultades suficientes para entregarlos o autorizar su tratamiento. Comprendo que este consentimiento no constituye representación legal ante la Dirección General de Impuestos Internos (DGII), ni sustituye poderes, autorizaciones formales, firmas o trámites oficiales que correspondan al contribuyente o a su representante autorizado.\n\n" +
+  "Entiendo que la revisión interna realizada por FullPOS Cloud tiene fines de validación, organización y soporte operativo, y no equivale a una aprobación oficial, certificación, autorización para emitir comprobantes fiscales electrónicos ni confirmación de habilitación por parte de la DGII o proveedores externos. Reconozco que los resultados de cualquier trámite oficial dependen de la autoridad competente y de la información presentada. FullPOS Cloud no garantiza la aprobación de solicitudes ni los plazos de respuesta de terceros, y las incidencias derivadas de información incorrecta, incompleta o no autorizada suministrada por el usuario serán evaluadas conforme a las condiciones contractuales y a la legislación aplicable. Los datos serán tratados para las finalidades autorizadas y bajo controles de seguridad y confidencialidad.\n\n" +
+  "Esta aceptación autoriza únicamente la revisión interna del expediente. No constituye presentación oficial ante la DGII ni habilitación para emitir comprobantes electrónicos.";
 
 /** Campos mínimos del borrador: empresa y representante legal. */
 export const ECF_DGII_DRAFT_REQUIRED_FIELDS = [
@@ -80,14 +78,20 @@ export function missingDraftFields(payload: unknown): EcfDgiiDraftField[] {
     typeof value === "string" && value.trim().length > 0;
 
   const missing: EcfDgiiDraftField[] = [];
-  if (!present(company.rnc)) missing.push("company.rnc");
+  const digits = (value: unknown): string =>
+    typeof value === "string" ? value.replace(/\D/g, "") : "";
+  const taxIdLength = digits(company.rnc).length;
+  const representativeIdLength = digits(representative.identification).length;
+  const email = typeof representative.email === "string" ? representative.email.trim() : "";
+
+  if (taxIdLength !== 9 && taxIdLength !== 11) missing.push("company.rnc");
   if (!present(company.legalName)) missing.push("company.legalName");
   if (!present(company.address)) missing.push("company.address");
   if (!present(representative.fullName)) missing.push("representative.fullName");
-  if (!present(representative.identification)) {
+  if (representativeIdLength !== 9 && representativeIdLength !== 11) {
     missing.push("representative.identification");
   }
-  if (!present(representative.email)) missing.push("representative.email");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) missing.push("representative.email");
   return missing;
 }
 

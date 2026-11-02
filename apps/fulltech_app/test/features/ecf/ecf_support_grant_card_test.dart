@@ -71,10 +71,11 @@ Map<String, dynamic> _grant({
     'scopes': scopes,
     'reason': null,
     'createdAt': now.subtract(const Duration(days: 1)).toIso8601String(),
-    'expiresAt': (active
-            ? now.add(const Duration(days: 6))
-            : now.subtract(const Duration(days: 1)))
-        .toIso8601String(),
+    'expiresAt':
+        (active
+                ? now.add(const Duration(days: 6))
+                : now.subtract(const Duration(days: 1)))
+            .toIso8601String(),
     'revokedAt': revoked ? now.toIso8601String() : null,
     'active': active,
     'revoked': revoked,
@@ -120,65 +121,67 @@ void main() {
     expect(adapter.calls, <String>['GET /ecf/dgii/support-grants']);
   });
 
-  testWidgets('con concesión activa: muestra alcance, caducidad y permite revocar', (
-    tester,
-  ) async {
-    final adapter = _CannedAdapter({
-      '/ecf/dgii/support-grants': _grants([
-        _grant(
-          id: 'grant-1',
-          scopes: const ['VIEW_DOSSIER', 'REVIEW_EVIDENCE'],
-          active: true,
-        ),
-      ]),
-    });
+  testWidgets(
+    'con concesión activa: muestra alcance, caducidad y permite revocar',
+    (tester) async {
+      final adapter = _CannedAdapter({
+        '/ecf/dgii/support-grants': _grants([
+          _grant(
+            id: 'grant-1',
+            scopes: const ['VIEW_DOSSIER', 'REVIEW_EVIDENCE'],
+            active: true,
+          ),
+        ]),
+      });
 
-    await tester.pumpWidget(_harness(_dio(adapter)));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_harness(_dio(adapter)));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('Asistencia activa hasta'),
-      findsOneWidget,
-    );
-    // Los alcances se traducen a lenguaje de negocio, no a claves técnicas.
-    expect(find.textContaining('Ver el expediente'), findsOneWidget);
-    expect(find.textContaining('Revisar evidencias'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, 'Revocar ahora'), findsOneWidget);
-    // No se ofrece conceder una segunda: el backend la rechazaría.
-    expect(
-      find.widgetWithText(FilledButton, 'Conceder asistencia'),
-      findsNothing,
-    );
-  });
+      expect(find.textContaining('Asistencia activa hasta'), findsOneWidget);
+      // Los alcances se traducen a lenguaje de negocio, no a claves técnicas.
+      expect(find.textContaining('Ver el expediente'), findsOneWidget);
+      expect(find.textContaining('Revisar evidencias'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Revocar ahora'),
+        findsOneWidget,
+      );
+      // No se ofrece conceder una segunda: el backend la rechazaría.
+      expect(
+        find.widgetWithText(FilledButton, 'Conceder asistencia'),
+        findsNothing,
+      );
+    },
+  );
 
-  testWidgets('las concesiones cerradas aparecen en el historial como revocadas', (
-    tester,
-  ) async {
-    final adapter = _CannedAdapter({
-      '/ecf/dgii/support-grants': _grants([
-        _grant(
-          id: 'grant-old',
-          scopes: const ['VIEW_DOSSIER'],
-          active: false,
-          revoked: true,
-        ),
-      ]),
-    });
+  testWidgets(
+    'las concesiones cerradas aparecen en el historial como revocadas',
+    (tester) async {
+      final adapter = _CannedAdapter({
+        '/ecf/dgii/support-grants': _grants([
+          _grant(
+            id: 'grant-old',
+            scopes: const ['VIEW_DOSSIER'],
+            active: false,
+            revoked: true,
+          ),
+        ]),
+      });
 
-    await tester.pumpWidget(_harness(_dio(adapter)));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_harness(_dio(adapter)));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Ver historial'), findsOneWidget);
-    await tester.tap(find.text('Ver historial'));
-    await tester.pumpAndSettle();
+      expect(find.text('Ver historial'), findsOneWidget);
+      await tester.tap(find.text('Ver historial'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('Revocada'), findsOneWidget);
-    // Una concesión cerrada no habilita nada: sigue sin haber acceso activo.
-    expect(
-      find.textContaining('No hay ninguna asistencia activa'),
-      findsOneWidget,
-    );
-  });
+      expect(find.textContaining('Revocada'), findsOneWidget);
+      // Una concesión cerrada no habilita nada: sigue sin haber acceso activo.
+      expect(
+        find.textContaining('No hay ninguna asistencia activa'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('sin permiso de gestión no ofrece conceder ni revocar', (
     tester,
@@ -220,7 +223,9 @@ void main() {
     });
   }
 
-  testWidgets('a 320 px: estado activo + historial no desborda', (tester) async {
+  testWidgets('a 320 px: estado activo + historial no desborda', (
+    tester,
+  ) async {
     useNarrowScreen(tester, const Size(320, 568));
 
     final adapter = _CannedAdapter({
@@ -243,7 +248,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // El caso más poblado: botón de revocar + botón de historial a la vez.
-    expect(find.widgetWithText(OutlinedButton, 'Revocar ahora'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Revocar ahora'),
+      findsOneWidget,
+    );
     expect(find.text('Ver historial'), findsOneWidget);
     expect(tester.takeException(), isNull);
 

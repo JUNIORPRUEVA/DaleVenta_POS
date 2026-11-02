@@ -121,7 +121,9 @@ void main() {
       expect(find.text('Ejecutar despacho simulado'), findsNothing);
     });
 
-    testWidgets('no existe si la empresa tiene e-CF desactivado', (tester) async {
+    testWidgets('no existe si la empresa tiene e-CF desactivado', (
+      tester,
+    ) async {
       await _pump(tester, ecfEnabled: false);
       expect(find.text(_notice), findsNothing);
     });
@@ -131,7 +133,9 @@ void main() {
       expect(find.text(_notice), findsNothing);
     });
 
-    testWidgets('no existe si el comprobante no es despachable', (tester) async {
+    testWidgets('no existe si el comprobante no es despachable', (
+      tester,
+    ) async {
       await _pump(tester, status: 'HUMAN_REVIEW_REQUIRED');
       expect(find.text(_notice), findsNothing);
     });
@@ -151,48 +155,52 @@ void main() {
       expect(find.text('Ejecutar despacho simulado'), findsOneWidget);
     });
 
-    testWidgets('ejecuta, muestra el resultado y no declara aceptación oficial', (
-      tester,
-    ) async {
-      final repository = await _pump(tester);
+    testWidgets(
+      'ejecuta, muestra el resultado y no declara aceptación oficial',
+      (tester) async {
+        final repository = await _pump(tester);
 
-      await tester.tap(find.text('Ejecutar despacho simulado'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 80));
+        await tester.tap(find.text('Ejecutar despacho simulado'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 80));
 
-      expect(repository.scenarios, ['doc-1:PROVIDER_ACCEPTED']);
-      expect(find.text('Resultado de la simulación'), findsOneWidget);
-      expect(find.text('Resultado observado: ACCEPTED'), findsOneWidget);
-      expect(find.text('Aceptación fiscal oficial: no'), findsOneWidget);
-      // El aviso obligatorio sigue presente tras ejecutar.
-      expect(find.text(_notice), findsOneWidget);
-    });
+        expect(repository.scenarios, ['doc-1:PROVIDER_ACCEPTED']);
+        expect(find.text('Resultado de la simulación'), findsOneWidget);
+        expect(find.text('Resultado observado: ACCEPTED'), findsOneWidget);
+        expect(find.text('Aceptación fiscal oficial: no'), findsOneWidget);
+        // El aviso obligatorio sigue presente tras ejecutar.
+        expect(find.text(_notice), findsOneWidget);
+      },
+    );
 
-    testWidgets('una segunda pulsación mientras trabaja no dispara otra llamada', (
-      tester,
-    ) async {
-      final repository = await _pump(tester);
-      repository.gate = Completer<void>();
+    testWidgets(
+      'una segunda pulsación mientras trabaja no dispara otra llamada',
+      (tester) async {
+        final repository = await _pump(tester);
+        repository.gate = Completer<void>();
 
-      await tester.tap(find.text('Ejecutar despacho simulado'));
-      await tester.pump();
-      expect(find.text('Ejecutando…'), findsOneWidget);
+        await tester.tap(find.text('Ejecutar despacho simulado'));
+        await tester.pump();
+        expect(find.text('Ejecutando…'), findsOneWidget);
 
-      // El botón está deshabilitado: el segundo toque no debe llegar a nada.
-      await tester.tap(find.text('Ejecutando…'), warnIfMissed: false);
-      await tester.pump();
+        // El botón está deshabilitado: el segundo toque no debe llegar a nada.
+        await tester.tap(find.text('Ejecutando…'), warnIfMissed: false);
+        await tester.pump();
 
-      repository.gate!.complete();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 80));
+        repository.gate!.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 80));
 
-      expect(repository.scenarios, hasLength(1));
-    });
+        expect(repository.scenarios, hasLength(1));
+      },
+    );
 
     testWidgets('un bloqueo del backend muestra el motivo', (tester) async {
       final repository = await _pump(tester);
       repository.failure = DioException(
-        requestOptions: RequestOptions(path: '/ecf/documents/doc-1/simulate-dispatch'),
+        requestOptions: RequestOptions(
+          path: '/ecf/documents/doc-1/simulate-dispatch',
+        ),
         response: Response<dynamic>(
           statusCode: 409,
           data: {'message': 'ECF_SIMULATED_DISPATCH_REFUSED_REAL_TRANSPORT'},

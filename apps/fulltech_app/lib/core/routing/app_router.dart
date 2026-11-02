@@ -19,6 +19,7 @@ import '../../features/contabilidad/depositos_bancarios_screen.dart';
 import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
 import '../../features/ecf/ui/ecf_config_page.dart';
+import '../../features/ecf/ui/ecf_certification_recovery_page.dart';
 import '../../features/ecf/ui/ecf_dgii_habilitation_page.dart';
 import '../../features/ecf/ui/ecf_documents_page.dart';
 import '../../features/ecf/ui/ecf_platform_review_page.dart';
@@ -173,15 +174,27 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.ecf,
+            builder: (context, state) => const EcfDgiiHabilitationPage(),
+          ),
+          GoRoute(
+            path: Routes.ecfDocuments,
             builder: (context, state) => const EcfDocumentsPage(),
+          ),
+          GoRoute(
+            path: Routes.ecfFiscalData,
+            redirect: (context, state) => Routes.ecf,
           ),
           GoRoute(
             path: Routes.ecfConfig,
             builder: (context, state) => const EcfConfigPage(),
           ),
           GoRoute(
+            path: Routes.ecfCertificationRecovery,
+            builder: (context, state) => const EcfCertificationRecoveryPage(),
+          ),
+          GoRoute(
             path: Routes.ecfDgii,
-            builder: (context, state) => const EcfDgiiHabilitationPage(),
+            redirect: (context, state) => Routes.ecf,
           ),
           GoRoute(
             path: Routes.ecfPlatformReview,

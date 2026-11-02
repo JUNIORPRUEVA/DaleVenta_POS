@@ -12,6 +12,7 @@
  */
 
 import { ECF_DGII_REQUIREMENT_CATALOG } from "./ecf-dgii-habilitation.policy";
+import { DGII_MANUAL_ONLY_STEP_KEYS } from "./dgii-external-dependencies.policy";
 
 /** Clase de ejecución de un paso. Decide QUIÉN lo puede completar. */
 export const ECF_ACTIVATION_CLASS = {
@@ -55,23 +56,80 @@ export const ECF_ACTIVATION_CLASS_BY_KEY: Readonly<
   REQUIREMENTS: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   DIGITAL_CERTIFICATE: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   ALANUBE_REGISTRATION: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
-  DGII_POSTULATION: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
+  // DGII_POSTULATION, SERVICE_URLS y ENCF_REQUEST exigían una PRESENTACIÓN en el
+  // Portal de la DGII que ningún proveedor documenta públicamente. Mientras no
+  // exista una integración autorizada, el dueño es el cliente: dejados en
+  // PROVIDER_WAIT, una respuesta OK del transporte (aunque fuese simulada)
+  // marcaba el paso como completado y la pantalla decía «presentado» sin que
+  // nadie hubiera presentado nada. El trabajo del proveedor (firma del XML y URLs
+  // de la empresa) ocurre en ALANUBE_REGISTRATION y XML_SIGNATURE.
+  DGII_POSTULATION: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   XML_SIGNATURE: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
   SET_TESTS: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
   SIMULATIONS: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
   PRINTED_REPRESENTATION: ECF_ACTIVATION_CLASS.AUTOMATIC_LOCAL,
-  SERVICE_URLS: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
+  SERVICE_URLS: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   SWORN_DECLARATION: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   FINAL_AUTHORIZATION: ECF_ACTIVATION_CLASS.AUTHORITY_WAIT,
-  ENCF_REQUEST: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
+  ENCF_REQUEST: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   // Etapa V: la resuelve el cliente en la Oficina Virtual. El motor no puede
   // delegar roles por él ni darla por buena sin evidencia oficial.
   ROLE_ASSIGNMENT: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
   PRODUCTION_ENABLEMENT: ECF_ACTIVATION_CLASS.AUTHORITY_WAIT,
 };
 
+/**
+ * Pasos cuyo cierre exige una CONFIRMACIÓN externa verificable.
+ *
+ * Ninguno puede quedar completado porque el transporte responda «ok». Es la
+ * separación explícita entre «el proveedor respondió», «hay evidencia» y «la
+ * autoridad lo confirmó»: solo la evidencia revisada o el registro oficial
+ * pueden cerrarlos, nunca una respuesta técnica.
+ */
+export const ECF_STEPS_REQUIRING_OFFICIAL_CONFIRMATION: ReadonlySet<string> =
+  new Set([
+    "DGII_POSTULATION",
+    "SERVICE_URLS",
+    "SWORN_DECLARATION",
+    "ENCF_REQUEST",
+    "FINAL_AUTHORIZATION",
+    "PRODUCTION_ENABLEMENT",
+  ]);
+
+/**
+ * Estado persistible de un paso, con la protección de cierre externo aplicada.
+ *
+ * Es la única función que debe usar el motor: `stepStatusFromTransport` queda
+ * como traducción base y esta añade la garantía de que un «ok» del transporte no
+ * completa un paso que exige confirmación oficial.
+ */
+export function resolveStepStatus(input: {
+  key: string;
+  className: EcfActivationClass;
+  transportOk: boolean;
+  simulated: boolean;
+}): EcfActivationStatus {
+  const base = stepStatusFromTransport(input);
+  if (
+    base === ECF_ACTIVATION_STATUS.COMPLETED &&
+    ECF_STEPS_REQUIRING_OFFICIAL_CONFIRMATION.has(input.key)
+  ) {
+    return input.className === ECF_ACTIVATION_CLASS.CLIENT_ACTION
+      ? ECF_ACTIVATION_STATUS.AWAITING_CLIENT
+      : ECF_ACTIVATION_STATUS.AWAITING_AUTHORITY;
+  }
+  return base;
+}
+
 /** Clase de un paso; si el catálogo crece sin clasificar, falla cerrado. */
 export function activationClassOf(key: string): EcfActivationClass {
+  // Garantía de las dependencias externas: una operación administrativa sin API
+  // autorizada confirmada (postulación, presentación del XML, carga del PDF,
+  // registro de URL y declaración jurada) se trata SIEMPRE como acción del
+  // cliente, aunque el catálogo la clasifique de otra forma.
+  if (DGII_MANUAL_ONLY_STEP_KEYS.has(key)) {
+    return ECF_ACTIVATION_CLASS.CLIENT_ACTION;
+  }
   return ECF_ACTIVATION_CLASS_BY_KEY[key] ?? ECF_ACTIVATION_CLASS.CLIENT_ACTION;
 }
 

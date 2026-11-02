@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -15,6 +16,10 @@ import {
 } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
 import { PrismaService } from "../../prisma/prisma.service";
+import {
+  EcfCertificationOrchestratorService,
+  isOrchestratedStep,
+} from "./ecf-certification-orchestrator.service";
 import { ECF_DGII_REQUIREMENT_CATALOG } from "./ecf-dgii-habilitation.policy";
 import {
   ECF_ACTIVATION_CLASS,
@@ -26,6 +31,7 @@ import {
   initialStepStatus,
   nextExecutableStep,
   resolveCatalogEntry,
+  resolveStepStatus,
   stepStatusFromTransport,
   type ActivationStepInput,
 } from "./ecf-dgii-activation.policy";
@@ -66,7 +72,26 @@ export class EcfDgiiActivationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @Optional()
+    private readonly orchestrator?: EcfCertificationOrchestratorService,
   ) {}
+
+  /**
+   * ¿Se delegan los pasos del proveedor al orquestador de certificación?
+   *
+   * Por defecto NO: sin el interruptor explícito, el motor mantiene su
+   * simulación local y el orquestador ni se toca. Con el interruptor activo, los
+   * pasos pasan por el cliente Alanube (transporte simulado) y por la reserva de
+   * intentos, que es lo que impide el doble envío.
+   */
+  private usesCertificationOrchestrator(): boolean {
+    if (!this.orchestrator) return false;
+    return (
+      (this.config.get<string>("ECF_CERTIFICATION_ORCHESTRATOR") ?? "disabled")
+        .trim()
+        .toLowerCase() === "enabled"
+    );
+  }
 
   /** Estado del motor: etapas, clase de cada una y qué falta. */
   async getActivation(user: TenantUser) {
@@ -247,8 +272,11 @@ export class EcfDgiiActivationService {
         continue;
       }
 
-      const outcome = await this.executeStep(next.key, next.className);
-      const target = stepStatusFromTransport({
+      const outcome = await this.executeStep(companyId, next.key, next.className, actorUserId);
+      // `resolveStepStatus` añade la protección de cierre: un «ok» del transporte
+      // no completa un paso que exige confirmación oficial.
+      const target = resolveStepStatus({
+        key: next.key,
         className: next.className,
         transportOk: outcome.ok,
         simulated: outcome.simulated,
@@ -306,8 +334,10 @@ export class EcfDgiiActivationService {
    * exista contrato: `assertTransportAvailable` lo bloquea antes de llegar aquí.
    */
   private async executeStep(
+    companyId: string,
     key: string,
     className: string,
+    actorUserId: string,
   ): Promise<{
     ok: boolean;
     simulated: boolean;
@@ -322,6 +352,16 @@ export class EcfDgiiActivationService {
         simulated: false,
         summary: `LOCAL:${key}`,
       };
+    }
+
+    // Delegación al orquestador de certificación (opt-in). Solo cubre pasos que
+    // el proveedor documenta; el resto sigue por el camino simulado local.
+    if (this.usesCertificationOrchestrator() && isOrchestratedStep(key)) {
+      return this.orchestrator!.runProviderStep({
+        companyId,
+        stepKey: key,
+        actorUserId,
+      });
     }
 
     const scenario = (

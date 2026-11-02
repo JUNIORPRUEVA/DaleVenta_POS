@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/routing/routes.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import 'ecf_credit_note_action.dart';
 
-/// Configuración e-CF de la empresa.
+/// Estado técnico del módulo e-CF.
 ///
-/// e-CF está APAGADO por defecto: habilitarlo solo enciende el interruptor de la
-/// empresa y nunca emite ni contacta al proveedor.
+/// Es una pantalla de DIAGNÓSTICO, no un paso de configuración: qué tipos de
+/// comprobante admite la empresa, qué rangos tiene registrados y qué facturas
+/// puede acreditar. Para una empresa que todavía está en habilitación todo esto
+/// está vacío, así que las secciones sin contenido no se pintan.
+///
+/// No incluye acceso a la habilitación DGII: esa acción vive en la barra del
+/// módulo y repetirla aquí solo añadía un paso intermedio.
 class EcfConfigPage extends ConsumerWidget {
   const EcfConfigPage({super.key});
 
@@ -20,259 +23,320 @@ class EcfConfigPage extends ConsumerWidget {
     final sequences = ref.watch(ecfSequencesProvider);
     final originals = ref.watch(ecfEligibleOriginalsProvider);
 
+    // Las secciones sin datos se omiten: una lista de «no hay nada» es ruido.
+    final sequenceItems = sequences.valueOrNull ?? const <EcfSequenceInfo>[];
+    final originalItems =
+        originals.valueOrNull ?? const <EcfEligibleOriginal>[];
+    final caps = capabilities.valueOrNull;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Configuración e-CF'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go(Routes.ecf),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          capabilities.when(
-            data: (data) => _EnabledCard(capabilities: data),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Text(
-              'No se pudo cargar la configuración e-CF.',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ),
-          const SizedBox(height: 16),
-          capabilities.when(
-            data: (data) => _DocumentTypesCard(capabilities: data),
-            loading: () => const SizedBox.shrink(),
-            error: (error, _) => const SizedBox.shrink(),
-          ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Habilitación DGII',
-            subtitle:
-                'Seguimiento del proceso de incorporación de la empresa. Nadie '
-                'dentro de FullPOS puede declarar la aprobación oficial: eso '
-                'depende de la DGII.',
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.tonalIcon(
-                onPressed: () => context.go(Routes.ecfDgii),
-                icon: const Icon(Icons.verified_outlined, size: 18),
-                label: const Text('Abrir habilitación DGII'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Rangos de numeración',
-            subtitle:
-                'Un número consumido nunca se reutiliza, ni siquiera si el '
-                'comprobante se anula o falla la emisión.',
-            child: sequences.when(
-              data: (items) => items.isEmpty
-                  ? const Text('Sin rangos registrados para esta empresa.')
-                  : Column(
+      // Sin barra propia: el shell ya muestra el título y el botón de volver.
+      backgroundColor: Colors.transparent,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(ecfCapabilitiesProvider);
+          ref.invalidate(ecfSequencesProvider);
+          ref.invalidate(ecfEligibleOriginalsProvider);
+          await ref.read(ecfCapabilitiesProvider.future);
+        },
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 940),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              children: [
+                _Panel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Estado del módulo',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 2),
+                      const _Muted(
+                        'Información técnica de la facturación electrónica de '
+                        'esta empresa. La activación se hace en Menú → Empresa.',
+                      ),
+                      const SizedBox(height: 12),
+                      capabilities.when(
+                        data: (data) => _CapabilitiesLine(capabilities: data),
+                        loading: () => const _Muted('Cargando…'),
+                        error: (error, _) => const _Muted(
+                          'No se pudo consultar el estado del módulo.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (caps != null) ...[
+                  const SizedBox(height: 10),
+                  _Panel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final sequence in items)
-                          _SequenceTile(sequence: sequence),
+                        const _SectionTitle('Tipos de comprobante'),
+                        const SizedBox(height: 2),
+                        const _Muted(
+                          'E32 usa un cupo de un solo uso; E31 y E34 consumen '
+                          'el rango de numeración de la empresa.',
+                        ),
+                        const SizedBox(height: 8),
+                        for (final type in caps.documentTypes)
+                          _DocumentTypeRow(type: type),
                       ],
                     ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => const Text('No se pudieron cargar los rangos.'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Facturas originales para nota de crédito (E34)',
-            subtitle:
-                'Solo aparecen facturas fiscalmente aceptadas con saldo '
-                'disponible. El saldo lo calcula la política fiscal del backend.',
-            child: originals.when(
-              data: (items) => items.isEmpty
-                  ? const Text('No hay facturas elegibles en este momento.')
-                  : Column(
+                  ),
+                ],
+                if (sequenceItems.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _Panel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final original in items)
-                          _OriginalTile(original: original),
+                        const _SectionTitle('Rangos de numeración'),
+                        const SizedBox(height: 2),
+                        const _Muted(
+                          'Un número consumido no se reutiliza, ni siquiera si '
+                          'el comprobante se anula o falla la emisión.',
+                        ),
+                        const SizedBox(height: 8),
+                        for (final sequence in sequenceItems)
+                          _SequenceRow(sequence: sequence),
                       ],
                     ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) =>
-                  const Text('No se pudieron cargar las facturas elegibles.'),
+                  ),
+                ],
+                if (originalItems.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _Panel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionTitle(
+                          'Facturas originales para nota de crédito (E34)',
+                        ),
+                        const SizedBox(height: 2),
+                        const _Muted(
+                          'Solo aparecen facturas fiscalmente aceptadas con '
+                          'saldo disponible.',
+                        ),
+                        const SizedBox(height: 8),
+                        for (final original in originalItems)
+                          _OriginalRow(original: original),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EnabledCard extends ConsumerStatefulWidget {
-  const _EnabledCard({required this.capabilities});
-
-  final EcfCapabilities capabilities;
-
-  @override
-  ConsumerState<_EnabledCard> createState() => _EnabledCardState();
-}
-
-class _EnabledCardState extends ConsumerState<_EnabledCard> {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final capabilities = widget.capabilities;
-    // Solo lectura a propósito: el interruptor vive en Menú → Empresa, junto a
-    // impuestos y comprobantes fiscales. Tenerlo también aquí era una segunda
-    // fuente de verdad para el mismo dato.
-    return Card(
-      child: ListTile(
-        leading: Icon(
-          capabilities.enabled
-              ? Icons.toggle_on_outlined
-              : Icons.toggle_off_outlined,
-        ),
-        title: Text(
-          capabilities.enabled
-              ? 'Facturación electrónica habilitada'
-              : 'Facturación electrónica deshabilitada',
-        ),
-        subtitle: Text(
-          'Ambiente ${capabilities.environment} · '
-          'certificación ${capabilities.certificationStatus}'
-          '${capabilities.productionEnabled ? ' · producción activa' : ''}\n'
-          'Para activarla o desactivarla, ve a Menú → Empresa.',
-          style: theme.textTheme.bodySmall,
         ),
       ),
     );
   }
 }
 
-class _DocumentTypesCard extends StatelessWidget {
-  const _DocumentTypesCard({required this.capabilities});
+class _CapabilitiesLine extends StatelessWidget {
+  const _CapabilitiesLine({required this.capabilities});
 
   final EcfCapabilities capabilities;
 
   @override
   Widget build(BuildContext context) {
-    return _SectionCard(
-      title: 'Tipos de comprobante',
-      subtitle:
-          'E32 usa un cupo de un solo uso; E31 y E34 consumen el rango de la '
-          'empresa.',
-      child: Column(
-        children: [
-          for (final type in capabilities.documentTypes)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Chip(label: Text(type.documentType)),
-              title: Text('Contrato: ${type.contractStatus}'),
-              subtitle: Text(
-                [
-                  type.allowedForCompany ? 'habilitado' : 'no habilitado',
-                  type.allocatable ? 'rango propio' : 'cupo único',
-                  type.contractAllowsEmission
-                      ? 'contrato apto'
-                      : 'contrato incompleto',
-                ].join(' · '),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SequenceTile extends StatelessWidget {
-  const _SequenceTile({required this.sequence});
-
-  final EcfSequenceInfo sequence;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: sequence.active
-            ? scheme.primary.withValues(alpha: 0.15)
-            : scheme.surfaceContainerHighest,
-        child: Text(sequence.documentType),
-      ),
-      title: Text(
-        '${sequence.startNumber} – ${sequence.endNumber}'
-            '${sequence.active ? '' : ' (inactivo)'}',
-      ),
-      subtitle: Text(
-        'Consumidos ${sequence.consumed} · disponibles ${sequence.remaining}',
-      ),
-    );
-  }
-}
-
-class _OriginalTile extends StatelessWidget {
-  const _OriginalTile({required this.original});
-
-  final EcfEligibleOriginal original;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final enabled = capabilities.enabled;
+    final color = enabled ? const Color(0xFF15803D) : const Color(0xFFB45309);
+    final text =
+        '${enabled ? 'Activa' : 'Inactiva'} · ambiente '
+        '${capabilities.environment} · certificación '
+        '${capabilities.certificationStatus}'
+        '${capabilities.productionEnabled ? ' · producción activa' : ''}';
+    return Row(
       children: [
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.receipt_long_outlined),
-          title: Text('${original.documentType} · ${original.encf ?? original.id}'),
-          subtitle: Text('Saldo disponible ${original.availableAmount}'),
+        Icon(
+          enabled ? Icons.check_circle_outline : Icons.info_outline,
+          size: 15,
+          color: color,
         ),
-        EcfCreditNoteAction(
-          originalId: original.id,
-          originalLabel: '${original.documentType} · ${original.encf ?? original.id}',
-          availableAmount: original.availableAmount,
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.child,
-    this.subtitle,
-  });
+/// Un tipo de comprobante explicado en lenguaje del negocio, sin enums crudos
+/// del proveedor.
+class _DocumentTypeRow extends StatelessWidget {
+  const _DocumentTypeRow({required this.type});
 
-  final String title;
-  final String? subtitle;
+  final EcfDocumentTypeCapability type;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[
+      type.allowedForCompany ? 'habilitado' : 'no habilitado',
+      type.allocatable ? 'consume rango propio' : 'cupo de un solo uso',
+    ];
+    if (!type.contractAllowsEmission) {
+      parts.add('contrato del proveedor incompleto');
+    }
+    final blocked = !type.allowedForCompany || !type.contractAllowsEmission;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 46,
+            child: Text(
+              type.documentType,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              parts.join(' · '),
+              style: TextStyle(
+                fontSize: 12,
+                color: blocked
+                    ? const Color(0xFFB45309)
+                    : const Color(0xFF475569),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SequenceRow extends StatelessWidget {
+  const _SequenceRow({required this.sequence});
+
+  final EcfSequenceInfo sequence;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 46,
+            child: Text(
+              sequence.documentType,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${sequence.startNumber} – ${sequence.endNumber}'
+              ' · consumidos ${sequence.consumed}'
+              ' · disponibles ${sequence.remaining}'
+              '${sequence.active ? '' : ' · inactivo'}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OriginalRow extends StatelessWidget {
+  const _OriginalRow({required this.original});
+
+  final EcfEligibleOriginal original;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = '${original.documentType} · ${original.encf ?? original.id}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '$label · saldo disponible ${original.availableAmount}',
+          style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+        ),
+        const SizedBox(height: 6),
+        EcfCreditNoteAction(
+          originalId: original.id,
+          originalLabel: label,
+          availableAmount: original.availableAmount,
+        ),
+        const SizedBox(height: 6),
+      ],
+    );
+  }
+}
+
+class _Panel extends StatelessWidget {
+  const _Panel({required this.child});
+
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: theme.textTheme.titleMedium),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
+      child: child,
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF1F2A37),
+      ),
+    );
+  }
+}
+
+class _Muted extends StatelessWidget {
+  const _Muted(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
     );
   }
 }

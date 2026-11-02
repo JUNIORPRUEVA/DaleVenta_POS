@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "../prisma/prisma.service";
 import { AlanubeSafeHttpClient } from "./alanube/alanube-safe-http.client";
 import {
   ALANUBE_HTTP_TRANSPORT,
@@ -26,6 +27,13 @@ import { EcfSupportGrantGuard } from "./dgii/ecf-support-grant.guard";
 import { EcfDgiiDocumentStorage } from "./dgii/ecf-dgii-document.storage";
 import { EcfDgiiDocumentsService } from "./dgii/ecf-dgii-documents.service";
 import { EcfDgiiHabilitationService } from "./dgii/ecf-dgii-habilitation.service";
+import { EcfCertificateService } from "./dgii/certificate/ecf-certificate.service";
+import { EcfCanonicalIdentityService } from "./dgii/certificate/ecf-canonical-identity.service";
+import { EcfAlanubeCertificationClient } from "./alanube/certification/ecf-alanube-certification.client";
+import { EcfCertificationAttemptsService } from "./dgii/certification/ecf-certification-attempts.service";
+import { EcfCertificationRecoveryService } from "./dgii/certification/ecf-certification-recovery.service";
+import { EcfPreparationMetadataService } from "./dgii/ecf-preparation-metadata.service";
+import { EcfCertificationOrchestratorService } from "./dgii/ecf-certification-orchestrator.service";
 import { EcfPlatformController } from "./platform/ecf-platform.controller";
 import { PlatformStaffGuard } from "./platform/platform-staff.guard";
 import { EcfObservabilityService } from "./ecf-observability.service";
@@ -42,6 +50,8 @@ import { EcfService } from "./ecf.service";
     EcfDgiiApplicationService,
     EcfDgiiActivationService,
     EcfSupportGrantService,
+    EcfCertificateService,
+    EcfCanonicalIdentityService,
     EcfSupportGrantGuard,
     EcfDgiiDocumentStorage,
     EcfDgiiDocumentsService,
@@ -71,6 +81,29 @@ import { EcfService } from "./ecf.service";
     { provide: EcfEvidenceAuthenticityVerifier, useClass: EcfBlockedAuthenticityVerifier },
     EcfProviderAuditService,
     EcfObservabilityService,
+    EcfAlanubeCertificationClient,
+    {
+      // El orquestador lee solo el `alanubeCompanyId` por empresa.
+      provide: "ECF_ORCHESTRATOR_PRISMA",
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => prisma,
+    },
+    {
+      provide: EcfCertificationAttemptsService,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        // El cliente Prisma real cumple la forma que el servicio necesita; el
+        // tipo estrecho existe para poder probar la política con un doble.
+        new EcfCertificationAttemptsService(prisma as never),
+    },
+    EcfCertificationOrchestratorService,
+    EcfPreparationMetadataService,
+    {
+      provide: EcfCertificationRecoveryService,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        new EcfCertificationRecoveryService(prisma as never),
+    },
   ],
 })
 export class EcfModule {}

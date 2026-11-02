@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/routing/routes.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import '../ecf_status_presentation.dart';
@@ -123,106 +121,110 @@ class _EcfDocumentsPageState extends ConsumerState<EcfDocumentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final capabilities = ref.watch(ecfCapabilitiesProvider);
     final counters = ref.watch(ecfCountersProvider);
     final documents = ref.watch(ecfDocumentsProvider(_filter));
+    final firstPage = documents.valueOrNull;
+    final hasDocuments = firstPage != null && firstPage.total > 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Facturación electrónica'),
-        actions: [
-          IconButton(
-            tooltip: 'Habilitación DGII',
-            onPressed: () => context.go(Routes.ecfDgii),
-            icon: const Icon(Icons.verified_outlined),
-          ),
-          IconButton(
-            tooltip: 'Configuración e-CF',
-            onPressed: () => context.go(Routes.ecfConfig),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
+      // Sin appBar propio: la barra del shell ya muestra título, atrás y las
+      // acciones de esta pantalla. Una segunda barra duplicaba la información.
+      backgroundColor: Colors.transparent,
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            capabilities.when(
-              data: (data) => _CapabilitiesBanner(capabilities: data),
-              loading: () => const _LoadingCard(),
-              error: (error, _) => _ErrorCard(
-                message: 'No se pudo consultar la configuración e-CF.',
-                onRetry: () => ref.invalidate(ecfCapabilitiesProvider),
-              ),
-            ),
-            const SizedBox(height: 12),
-            counters.when(
-              data: (data) => _CountersRow(
-                counters: data,
-                selected: _filter.group,
-                onSelected: _applyGroup,
-              ),
-              loading: () => const SizedBox.shrink(),
-              error: (error, _) => const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 12),
-            _SearchField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              onCleared: () {
-                _searchController.clear();
-                _onSearchChanged('');
-              },
-            ),
-            const SizedBox(height: 8),
-            _TypeFilter(
-              value: _filter.documentType,
-              onChanged: _applyDocumentType,
-            ),
-            const SizedBox(height: 12),
-            documents.when(
-              data: (page) {
-                final items = <EcfDocumentSummary>[...page.items, ..._extra];
-                return _DocumentList(
-                  items: items,
-                  total: page.total,
-                  hasMore: page.total > items.length,
-                  loadingMore: _loadingMore,
-                  moreError: _moreError,
-                  onLoadMore: () => _loadMore(items.length),
-                  filtered: _filter != EcfDocumentFilter.all,
-                  onClearFilters: () {
-                    _searchController.clear();
-                    _debounce?.cancel();
-                    setState(() {
-                      _resetPagination();
-                      _filter = EcfDocumentFilter.all;
-                    });
+        // Mismo criterio que la pantalla de Empresa: contenido centrado, ancho
+        // legible y sobre un panel blanco con borde.
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1220),
+            // Sin margen exterior ni panel con borde: el appbar ya delimita la
+            // zona y añadir otro borde creaba un marco dentro de otro marco.
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              children: [
+                capabilities.when(
+                  data: (data) => _CapabilitiesBanner(capabilities: data),
+                  loading: () => const _LoadingCard(),
+                  error: (error, _) => _ErrorCard(
+                    message: 'No se pudo consultar la configuración e-CF.',
+                    onRetry: () => ref.invalidate(ecfCapabilitiesProvider),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Buscador, contadores y filtros solo tienen sentido cuando
+                // existen comprobantes. En la puesta en marcha estorban: no hay
+                // nada que buscar ni que contar.
+                if (hasDocuments) ...[
+                  counters.when(
+                    data: (data) => data.total == 0
+                        ? const SizedBox.shrink()
+                        : _CountersRow(
+                            counters: data,
+                            selected: _filter.group,
+                            onSelected: _applyGroup,
+                          ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (error, _) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    // Un buscador de 400 px basta: a ancho completo parece un campo de
+                    // formulario y compite visualmente con los filtros.
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    child: _SearchField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      onCleared: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _TypeFilter(
+                    value: _filter.documentType,
+                    onChanged: _applyDocumentType,
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                documents.when(
+                  data: (page) {
+                    final items = <EcfDocumentSummary>[
+                      ...page.items,
+                      ..._extra,
+                    ];
+                    return _DocumentList(
+                      items: items,
+                      total: page.total,
+                      hasMore: page.total > items.length,
+                      loadingMore: _loadingMore,
+                      moreError: _moreError,
+                      onLoadMore: () => _loadMore(items.length),
+                      filtered: _filter != EcfDocumentFilter.all,
+                      onClearFilters: () {
+                        _searchController.clear();
+                        _debounce?.cancel();
+                        setState(() {
+                          _resetPagination();
+                          _filter = EcfDocumentFilter.all;
+                        });
+                      },
+                    );
                   },
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => _ErrorCard(
-                message: 'No se pudieron cargar los comprobantes.',
-                onRetry: () => ref.invalidate(ecfDocumentsProvider(_filter)),
-              ),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (error, _) => _ErrorCard(
+                    message: 'No se pudieron cargar los comprobantes.',
+                    onRetry: () =>
+                        ref.invalidate(ecfDocumentsProvider(_filter)),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-            Text(
-              'Los resultados del proveedor no equivalen a la aceptación de la '
-              'DGII. Un comprobante observado o con resultado desconocido queda '
-              'marcado para revisión humana y nunca se marca como aceptado '
-              'automáticamente.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -239,57 +241,60 @@ class _CapabilitiesBanner extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final enabled = capabilities.enabled;
+    // Neutro y discreto: antes usaba un color de superficie que se leía como
+    // una franja morada que competía con el contenido.
     final background = enabled
-        ? scheme.surfaceContainerHighest
+        ? const Color(0xFFF4F7F9)
         : scheme.errorContainer;
-    final foreground = enabled ? scheme.onSurface : scheme.onErrorContainer;
+    final foreground = enabled
+        ? const Color(0xFF64748B)
+        : scheme.onErrorContainer;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      // Una sola línea: estado + ambiente + advertencia. Antes ocupaba tres
+      // párrafos apilados y una franja entera de la pantalla.
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 enabled ? Icons.verified_outlined : Icons.toggle_off_outlined,
+                size: 13,
                 color: foreground,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  enabled
-                      ? 'e-CF habilitado para esta empresa'
-                      : 'e-CF deshabilitado',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: foreground,
-                    fontWeight: FontWeight.w600,
-                  ),
+              const SizedBox(width: 5),
+              Text(
+                enabled
+                    ? 'e-CF habilitado · ${capabilities.environment} · '
+                          '${capabilities.certificationStatus}'
+                    : 'e-CF deshabilitado',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: foreground,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            enabled
-                ? 'Ambiente ${capabilities.environment} · certificación '
-                      '${capabilities.certificationStatus}'
-                : 'La facturación electrónica está apagada por defecto. '
-                      'Habilítala en Configuración cuando la empresa esté lista.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: foreground),
-          ),
-          const SizedBox(height: 4),
           Text(
             capabilities.emissionPathAvailable
                 ? 'Emisión disponible desde la aplicación.'
                 : 'La emisión no se realiza desde la aplicación: es un paso '
                       'operativo controlado.',
-            style: theme.textTheme.bodySmall?.copyWith(color: foreground),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: foreground,
+              fontSize: 10,
+            ),
           ),
         ],
       ),
@@ -319,23 +324,71 @@ class _CountersRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 6,
+      runSpacing: 6,
       children: [
         FilterChip(
-          label: Text('Todos (${counters.total})'),
+          label: Text(_labeled('Todos', counters.total)),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           selected: selected == null,
+          // Texto claro sobre el azul: antes el texto quedaba oscuro encima del
+          // relleno azul y no se leía.
+          selectedColor: const Color(0xFF1957E6),
+          checkmarkColor: Colors.white,
+          side: BorderSide(
+            color: selected == null
+                ? const Color(0xFFDDE7EE)
+                : const Color(0xFF1957E6),
+          ),
+          labelStyle: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: selected == null ? const Color(0xFF334155) : Colors.white,
+          ),
           onSelected: (_) => onSelected(null),
         ),
         for (final group in _groups)
-          FilterChip(
-            avatar: Icon(group.icon, size: 18, color: group.color(scheme)),
-            label: Text('${group.label} (${counters.count(group)})'),
-            selected: selected == group,
-            onSelected: (value) => onSelected(value ? group : null),
-          ),
+          if (counters.count(group) > 0)
+            Builder(
+              builder: (context) {
+                final isSelected = selected == group;
+                return FilterChip(
+                  avatar: Icon(
+                    group.icon,
+                    size: 15,
+                    color: isSelected ? Colors.white : group.color(scheme),
+                  ),
+                  label: Text(_labeled(group.label, counters.count(group))),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  selected: isSelected,
+                  selectedColor: const Color(0xFF1957E6),
+                  checkmarkColor: Colors.white,
+                  side: BorderSide(
+                    color: isSelected
+                        ? const Color(0xFF1957E6)
+                        : const Color(0xFFDDE7EE),
+                  ),
+                  labelStyle: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : const Color(0xFF334155),
+                  ),
+                  onSelected: (value) => onSelected(value ? group : null),
+                );
+              },
+            ),
       ],
     );
+  }
+
+  /// El contador solo se muestra cuando aporta: un "(0)" en cada filtro es
+  /// ruido que ensucia la barra sin informar de nada. Los grupos sin
+  /// comprobantes se ocultan por el mismo motivo, y además evitaban distinguir
+  /// el nombre del filtro del estado real de un comprobante.
+  static String _labeled(String label, int count) {
+    return count > 0 ? '$label ($count)' : label;
   }
 }
 
@@ -348,24 +401,62 @@ class _TypeFilter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 8,
+      spacing: 6,
       children: [
         ChoiceChip(
           label: const Text('Todos los tipos'),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           selected: value == null,
+          // Mismo criterio que los filtros de estado: relleno azul con texto
+          // claro para que el seleccionado se lea.
+          selectedColor: const Color(0xFF1957E6),
+          checkmarkColor: Colors.white,
+          side: BorderSide(
+            color: value == null
+                ? const Color(0xFFDDE7EE)
+                : const Color(0xFF1957E6),
+          ),
+          labelStyle: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: value == null ? const Color(0xFF334155) : Colors.white,
+          ),
           onSelected: (_) => onChanged(null),
         ),
         for (final type in const ['E31', 'E32', 'E34'])
-          ChoiceChip(
-            label: Text(type),
-            selected: value == type,
-            onSelected: (selected) => onChanged(selected ? type : null),
+          Builder(
+            builder: (context) {
+              final isSelected = value == type;
+              return ChoiceChip(
+                label: Text(type),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                selected: isSelected,
+                selectedColor: const Color(0xFF1957E6),
+                checkmarkColor: Colors.white,
+                side: BorderSide(
+                  color: isSelected
+                      ? const Color(0xFF1957E6)
+                      : const Color(0xFFDDE7EE),
+                ),
+                labelStyle: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : const Color(0xFF334155),
+                ),
+                onSelected: (selected) => onChanged(selected ? type : null),
+              );
+            },
           ),
       ],
     );
   }
 }
 
+/// Guía de PUESTA EN MARCHA, que sustituye a la bandeja mientras la empresa
+/// todavía no puede facturar.
+///
 class _DocumentList extends StatelessWidget {
   const _DocumentList({
     required this.items,
@@ -392,15 +483,15 @@ class _DocumentList extends StatelessWidget {
     final theme = Theme.of(context);
     if (items.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
+        padding: const EdgeInsets.symmetric(vertical: 24),
         child: Column(
           children: [
             Icon(
               filtered ? Icons.filter_alt_off_outlined : Icons.inbox_outlined,
-              size: 40,
+              size: 32,
               color: theme.colorScheme.outline,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               filtered
                   ? 'Ningún comprobante coincide con los filtros aplicados.'
@@ -689,14 +780,14 @@ class _ErrorCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            message,
-            style: TextStyle(color: scheme.onErrorContainer),
-          ),
+          Text(message, style: TextStyle(color: scheme.onErrorContainer)),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton(onPressed: onRetry, child: const Text('Reintentar')),
+            child: TextButton(
+              onPressed: onRetry,
+              child: const Text('Reintentar'),
+            ),
           ),
         ],
       ),
@@ -924,9 +1015,7 @@ class _DetailRow extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            child: Text(value, style: theme.textTheme.bodyMedium),
-          ),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );

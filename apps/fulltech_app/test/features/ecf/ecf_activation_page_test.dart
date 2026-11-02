@@ -31,13 +31,21 @@ class _CannedAdapter implements HttpClientAdapter {
     calls.add('${options.method} ${options.path}');
     final body = responses[options.path];
     if (body == null) {
-      return ResponseBody.fromString('{}', 404, headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType],
-      });
+      return ResponseBody.fromString(
+        '{}',
+        404,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
     }
-    return ResponseBody.fromString(jsonEncode(body), 200, headers: {
-      Headers.contentTypeHeader: [Headers.jsonContentType],
-    });
+    return ResponseBody.fromString(
+      jsonEncode(body),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
   }
 
   @override
@@ -126,7 +134,7 @@ Dio _dio(_CannedAdapter adapter) => Dio()..httpClientAdapter = adapter;
 
 FilledButton _buttonOf(WidgetTester tester) {
   return tester.widget<FilledButton>(
-    find.widgetWithText(FilledButton, 'Activar facturación electrónica'),
+    find.widgetWithText(FilledButton, 'Ejecutar comprobaciones disponibles'),
   );
 }
 
@@ -160,34 +168,32 @@ void main() {
     },
   );
 
-  testWidgets(
-    'con un paso ejecutable: activa de verdad y refresca el avance',
-    (tester) async {
-      final adapter = _CannedAdapter({
-        '/ecf/dgii/activation': _view(
-          stage: 'RUNNING',
-          providerExecutable: true,
-        ),
-        '/ecf/dgii/activation/start': _view(
-          stage: 'BLOCKED_ON_PROVIDER',
-          providerExecutable: true,
-        ),
-      });
+  testWidgets('con un paso ejecutable: activa de verdad y refresca el avance', (
+    tester,
+  ) async {
+    final adapter = _CannedAdapter({
+      '/ecf/dgii/activation': _view(stage: 'RUNNING', providerExecutable: true),
+      '/ecf/dgii/activation/start': _view(
+        stage: 'BLOCKED_ON_PROVIDER',
+        providerExecutable: true,
+      ),
+    });
 
-      await tester.pumpWidget(_harness(_dio(adapter)));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(_harness(_dio(adapter)));
+    await tester.pumpAndSettle();
 
-      expect(find.text('En proceso'), findsOneWidget);
-      expect(_buttonOf(tester).onPressed, isNotNull);
+    expect(find.text('En proceso'), findsOneWidget);
+    expect(_buttonOf(tester).onPressed, isNotNull);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Activar facturación electrónica'));
-      await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Ejecutar comprobaciones disponibles'),
+    );
+    await tester.pumpAndSettle();
 
-      expect(adapter.calls, <String>[
-        'GET /ecf/dgii/activation',
-        'POST /ecf/dgii/activation/start',
-      ]);
-      expect(find.text('En manos del proveedor'), findsOneWidget);
-    },
-  );
+    expect(adapter.calls, <String>[
+      'GET /ecf/dgii/activation',
+      'POST /ecf/dgii/activation/start',
+    ]);
+    expect(find.text('En manos del proveedor'), findsOneWidget);
+  });
 }

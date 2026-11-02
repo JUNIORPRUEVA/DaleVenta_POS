@@ -107,6 +107,7 @@ void main() {
         'Pagos',
         'Nómina',
         'Usuario',
+        'Facturación electrónica',
       ]);
     });
 
@@ -137,17 +138,18 @@ void main() {
         'Pagos',
         'Nómina',
         'Usuario',
+        'Facturación electrónica',
       ]);
     });
   });
 
   group('interruptor e-CF de la empresa', () {
-    test('con el módulo apagado la opción no existe en el menú', () {
+    test('con el módulo apagado se puede iniciar la habilitación', () {
       final titles = _titles(
         buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
       );
 
-      expect(titles, isNot(contains('Facturación electrónica')));
+      expect(titles, contains('Facturación electrónica'));
       // La entrada antigua, a mitad del menú, ya no existe.
       expect(titles, isNot(contains('Comprobantes e-CF')));
     });
@@ -166,7 +168,7 @@ void main() {
       expect(titles, isNot(contains('Comprobantes e-CF')));
     });
 
-    test('encender el módulo solo AÑADE la opción: nada más cambia', () {
+    test('encender el módulo no duplica la entrada del proceso', () {
       final off = _titles(
         buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
       );
@@ -178,7 +180,7 @@ void main() {
         ),
       );
 
-      expect(on, [...off, 'Facturación electrónica']);
+      expect(on, off);
     });
 
     test('el resto del menú es idéntico con el módulo apagado', () {

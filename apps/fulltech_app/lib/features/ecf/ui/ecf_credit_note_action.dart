@@ -102,7 +102,11 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _row(dialogContext, 'Original', widget.originalLabel),
-                  _row(dialogContext, 'Saldo disponible', widget.availableAmount),
+                  _row(
+                    dialogContext,
+                    'Saldo disponible',
+                    widget.availableAmount,
+                  ),
                   const SizedBox(height: 10),
                   SegmentedButton<String>(
                     segments: const [
@@ -188,9 +192,8 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
                       DropdownMenuItem(value: 0, child: Text('0')),
                       DropdownMenuItem(value: 1, child: Text('1')),
                     ],
-                    onChanged: (value) => setDialogState(
-                      () => _creditNoteIndicator = value ?? 0,
-                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => _creditNoteIndicator = value ?? 0),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -246,7 +249,9 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
   Future<void> _prepare() async {
     setState(() => _running = true);
     try {
-      final outcome = await ref.read(ecfRepositoryProvider).prepareCreditNote(
+      final outcome = await ref
+          .read(ecfRepositoryProvider)
+          .prepareCreditNote(
             originalDocumentId: widget.originalId,
             // Identidad de ESTA operación: permite varias notas parciales sobre
             // el mismo original y hace idempotente un reintento.
@@ -265,9 +270,7 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(
-            outcome.ok ? 'Nota preparada' : 'No se pudo preparar',
-          ),
+          title: Text(outcome.ok ? 'Nota preparada' : 'No se pudo preparar'),
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,

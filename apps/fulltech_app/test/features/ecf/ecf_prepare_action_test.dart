@@ -45,7 +45,9 @@ void main() {
       for (final type in const ['E31', 'E32', 'E34'])
         {
           'documentType': type,
-          'contractStatus': type == 'E32' ? 'PARTIAL_OFFICIAL' : 'CONFIRMED_OFFICIAL',
+          'contractStatus': type == 'E32'
+              ? 'PARTIAL_OFFICIAL'
+              : 'CONFIRMED_OFFICIAL',
           // E32 nunca se asigna desde el rango de la empresa.
           'contractAllowsEmission': type != 'E32',
           'allowedForCompany': allowed.contains(type),
@@ -114,8 +116,8 @@ void main() {
     );
   }
 
-  FilledButton prepareButton(WidgetTester tester) =>
-      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Preparar'));
+  FilledButton prepareButton(WidgetTester tester) => tester
+      .widget<FilledButton>(find.widgetWithText(FilledButton, 'Preparar'));
 
   Future<void> openDialog(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1100, 2000);
@@ -142,8 +144,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   }
 
-  testWidgets('offers both types and will not prepare until one is chosen',
-      (tester) async {
+  testWidgets('offers both types and will not prepare until one is chosen', (
+    tester,
+  ) async {
     await openDialog(tester);
 
     expect(find.text('E31 · Crédito fiscal'), findsOneWidget);
@@ -160,18 +163,16 @@ void main() {
     expect(posts, isEmpty);
   });
 
-  testWidgets('preparing E32 goes through its own consumo flow',
-      (tester) async {
+  testWidgets('preparing E32 goes through its own consumo flow', (
+    tester,
+  ) async {
     await openDialog(tester);
 
     await tester.tap(find.text('E32 · Consumo'));
     await tester.pumpAndSettle();
     // E32 es consumo final: no se pide receptor.
     expect(find.text('Cliente'), findsNothing);
-    expect(
-      find.textContaining('SIN numeración'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('SIN numeración'), findsOneWidget);
 
     await pickPaymentType(tester);
     await tester.tap(find.text('Preparar'));
@@ -187,8 +188,9 @@ void main() {
     await pumpRequest(tester);
   });
 
-  testWidgets('preparing E31 keeps using the credit-fiscal flow',
-      (tester) async {
+  testWidgets('preparing E31 keeps using the credit-fiscal flow', (
+    tester,
+  ) async {
     await openDialog(tester);
 
     await tester.tap(find.text('E31 · Crédito fiscal'));
@@ -208,8 +210,9 @@ void main() {
     await pumpRequest(tester);
   });
 
-  testWidgets('with only one type enabled there is nothing to choose',
-      (tester) async {
+  testWidgets('with only one type enabled there is nothing to choose', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1100, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -231,8 +234,9 @@ void main() {
     await pumpRequest(tester);
   });
 
-  testWidgets('a company with e-CF off sees no e-CF action at all',
-      (tester) async {
+  testWidgets('a company with e-CF off sees no e-CF action at all', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1100, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -242,8 +246,9 @@ void main() {
     expect(find.text('Preparar e-CF'), findsNothing);
   });
 
-  testWidgets('a company with no allowed types sees no e-CF action either',
-      (tester) async {
+  testWidgets('a company with no allowed types sees no e-CF action either', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1100, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);

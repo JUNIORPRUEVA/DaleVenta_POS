@@ -107,8 +107,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows each document real status instead of one generic badge',
-      (tester) async {
+  testWidgets('shows each document real status instead of one generic badge', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(
@@ -116,8 +117,16 @@ void main() {
           (_) => {
             'total': 3,
             'items': [
-              document(id: 'a', status: 'LOCAL_VALIDATED', encf: 'E310000000001'),
-              document(id: 'b', status: 'SEND_IN_PROGRESS', encf: 'E310000000002'),
+              document(
+                id: 'a',
+                status: 'LOCAL_VALIDATED',
+                encf: 'E310000000001',
+              ),
+              document(
+                id: 'b',
+                status: 'SEND_IN_PROGRESS',
+                encf: 'E310000000002',
+              ),
               document(id: 'c', status: 'DGII_ACCEPTED', encf: 'E310000000003'),
             ],
           },
@@ -130,8 +139,9 @@ void main() {
     expect(find.text('Aceptado DGII'), findsOneWidget);
   });
 
-  testWidgets('a provider acceptance is never shown as a DGII acceptance',
-      (tester) async {
+  testWidgets('a provider acceptance is never shown as a DGII acceptance', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(
@@ -154,8 +164,9 @@ void main() {
     expect(find.text('Aceptado DGII'), findsNothing);
   });
 
-  testWidgets('shows amount, frozen receiver and the original reference',
-      (tester) async {
+  testWidgets('shows amount, frozen receiver and the original reference', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(
@@ -188,8 +199,9 @@ void main() {
     expect(find.textContaining('sobre E310000000001'), findsOneWidget);
   });
 
-  testWidgets('shows the safe error message of a document under review',
-      (tester) async {
+  testWidgets('shows the safe error message of a document under review', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(
@@ -216,20 +228,48 @@ void main() {
     );
   });
 
-  testWidgets('an empty tray says so instead of inventing rows', (tester) async {
+  testWidgets('an empty tray says so instead of inventing rows', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(tray((_) => {'total': 0, 'items': <Object>[]})),
     );
 
-    expect(find.text('Todavía no hay comprobantes electrónicos.'), findsOneWidget);
+    // La bandeja es secundaria: el proceso de habilitación vive en /ecf.
+    expect(find.text('Puesta en marcha'), findsNothing);
+    expect(
+      find.text('Todavía no hay comprobantes electrónicos.'),
+      findsOneWidget,
+    );
+    expect(find.text('Aceptado DGII'), findsNothing);
+    expect(
+      find.text('Ningún comprobante coincide con los filtros aplicados.'),
+      findsNothing,
+    );
   });
 
-  testWidgets('a filter with no matches offers to clear the filters',
-      (tester) async {
+  testWidgets('a filter with no matches offers to clear the filters', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
-      harness(tray((_) => {'total': 0, 'items': <Object>[]})),
+      harness(
+        tray(
+          (query) => query['documentType'] == null
+              ? {
+                  'total': 1,
+                  'items': [
+                    document(
+                      id: 'a',
+                      status: 'LOCAL_VALIDATED',
+                      encf: 'E310000000001',
+                    ),
+                  ],
+                }
+              : {'total': 0, 'items': <Object>[]},
+        ),
+      ),
     );
 
     await tester.tap(find.text('E34'));
@@ -242,8 +282,9 @@ void main() {
     expect(find.text('Quitar filtros'), findsOneWidget);
   });
 
-  testWidgets('a failure to load the tray shows a retry, not an empty tray',
-      (tester) async {
+  testWidgets('a failure to load the tray shows a retry, not an empty tray', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness((options) async {
@@ -259,17 +300,35 @@ void main() {
       }),
     );
 
-    expect(find.text('No se pudieron cargar los comprobantes.'), findsOneWidget);
+    expect(
+      find.text('No se pudieron cargar los comprobantes.'),
+      findsOneWidget,
+    );
     expect(find.text('Reintentar'), findsOneWidget);
-    expect(find.text('Todavía no hay comprobantes electrónicos.'), findsNothing);
+    expect(
+      find.text('Todavía no hay comprobantes electrónicos.'),
+      findsNothing,
+    );
   });
 
-  testWidgets('filtering by document type asks the backend for that type',
-      (tester) async {
+  testWidgets('filtering by document type asks the backend for that type', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(
-        tray((_) => {'total': 0, 'items': <Object>[]}),
+        tray(
+          (_) => {
+            'total': 1,
+            'items': [
+              document(
+                id: 'a',
+                status: 'LOCAL_VALIDATED',
+                encf: 'E310000000001',
+              ),
+            ],
+          },
+        ),
       ),
     );
 
@@ -280,11 +339,25 @@ void main() {
     expect(listQueries.last.containsKey('group'), isFalse);
   });
 
-  testWidgets('the search is applied after the debounce, not on every key',
-      (tester) async {
+  testWidgets('the search is applied after the debounce, not on every key', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
-      harness(tray((_) => {'total': 0, 'items': <Object>[]})),
+      harness(
+        tray(
+          (_) => {
+            'total': 1,
+            'items': [
+              document(
+                id: 'a',
+                status: 'LOCAL_VALIDATED',
+                encf: 'E310000000001',
+              ),
+            ],
+          },
+        ),
+      ),
     );
     final before = listQueries.length;
 
@@ -302,8 +375,9 @@ void main() {
     expect(listQueries.last['search'], 'E310000000007');
   });
 
-  testWidgets('loads more rows on demand and stops at the server total',
-      (tester) async {
+  testWidgets('loads more rows on demand and stops at the server total', (
+    tester,
+  ) async {
     await pumpTray(
       tester,
       harness(
@@ -338,18 +412,20 @@ void main() {
     expect(find.textContaining('Cargar más'), findsNothing);
   });
 
-  testWidgets('the environment banner states that emission is not a UI action',
-      (tester) async {
-    await pumpTray(
-      tester,
-      harness(tray((_) => {'total': 0, 'items': <Object>[]})),
-    );
+  testWidgets(
+    'the environment banner states that emission is not a UI action',
+    (tester) async {
+      await pumpTray(
+        tester,
+        harness(tray((_) => {'total': 0, 'items': <Object>[]})),
+      );
 
-    expect(
-      find.textContaining('La emisión no se realiza desde la aplicación'),
-      findsOneWidget,
-    );
-  });
+      expect(
+        find.textContaining('La emisión no se realiza desde la aplicación'),
+        findsOneWidget,
+      );
+    },
+  );
 
   group('formatters', () {
     test('an amount without currency is shown without inventing one', () {
@@ -427,10 +503,7 @@ void main() {
         formatEcfDateTime(DateTime(2026, 10, 15, 14, 30)),
         '15/10/2026 14:30',
       );
-      expect(
-        formatEcfDateTime(DateTime(2026, 1, 5, 9, 7)),
-        '05/01/2026 09:07',
-      );
+      expect(formatEcfDateTime(DateTime(2026, 1, 5, 9, 7)), '05/01/2026 09:07');
     });
   });
 

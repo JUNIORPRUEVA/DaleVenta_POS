@@ -167,9 +167,7 @@ void main() {
             if (error != null) throw error;
             return state;
           }),
-          authStateProvider.overrideWith(
-            (ref) => _FixedAuth(ref, currentUser),
-          ),
+          authStateProvider.overrideWith((ref) => _FixedAuth(ref, currentUser)),
         ],
         child: const MaterialApp(
           home: EcfLineClassificationDialog(saleId: 'sale-1'),
@@ -291,10 +289,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('ya salió del equipo'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('ya salió del equipo'), findsOneWidget);
       // El backend dijo que no se puede: no se ofrece el botón.
       expect(find.text('Clasificar Servicio suelto'), findsNothing);
     });

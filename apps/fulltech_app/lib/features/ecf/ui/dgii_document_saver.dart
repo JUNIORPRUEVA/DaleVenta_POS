@@ -6,8 +6,5 @@ import 'dart:typed_data';
 /// compilación Web: `dart:io` no existe en navegador.
 abstract class DgiiDocumentSaver {
   /// Guarda [bytes] y devuelve una descripción legible para el usuario.
-  Future<String> save({
-    required String fileName,
-    required Uint8List bytes,
-  });
+  Future<String> save({required String fileName, required Uint8List bytes});
 }

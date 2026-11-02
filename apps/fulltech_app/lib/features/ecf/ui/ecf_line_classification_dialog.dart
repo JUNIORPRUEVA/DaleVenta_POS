@@ -109,9 +109,7 @@ class _EcfLineClassificationDialogState
       user,
       AppPermission.confirmEcfLineClassification,
     );
-    final pending = ref.watch(
-      ecfPendingClassificationsProvider(widget.saleId),
-    );
+    final pending = ref.watch(ecfPendingClassificationsProvider(widget.saleId));
 
     return AlertDialog(
       title: const Text('Clasificación fiscal de las partidas'),
@@ -207,9 +205,7 @@ class _Body extends StatelessWidget {
                 Expanded(
                   child: Text(
                     error!,
-                    style: TextStyle(
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
+                    style: TextStyle(color: theme.colorScheme.onErrorContainer),
                   ),
                 ),
               ],
@@ -288,9 +284,7 @@ class _LineTile extends StatelessWidget {
           Icon(
             pending ? Icons.error_outline : Icons.check_circle_outline,
             size: 18,
-            color: pending
-                ? theme.colorScheme.error
-                : const Color(0xFF1B7F3B),
+            color: pending ? theme.colorScheme.error : const Color(0xFF1B7F3B),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -392,17 +386,14 @@ class _ClassificationDecisionDialogState
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _classification,
-                  decoration: const InputDecoration(
-                    labelText: 'Clasificación',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Clasificación'),
                   items: const [
                     DropdownMenuItem(value: 'PRODUCT', child: Text('Bien')),
                     DropdownMenuItem(value: 'SERVICE', child: Text('Servicio')),
                   ],
                   validator: (value) =>
                       value == null ? 'Elige BIEN o SERVICIO' : null,
-                  onChanged: (value) =>
-                      setState(() => _classification = value),
+                  onChanged: (value) => setState(() => _classification = value),
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -411,7 +402,8 @@ class _ClassificationDecisionDialogState
                   maxLength: 300,
                   decoration: const InputDecoration(
                     labelText: 'Motivo',
-                    hintText: 'Por qué se clasifica así (queda en la auditoría)',
+                    hintText:
+                        'Por qué se clasifica así (queda en la auditoría)',
                   ),
                   validator: (value) {
                     final raw = value?.trim() ?? '';

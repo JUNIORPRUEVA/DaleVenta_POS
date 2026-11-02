@@ -71,15 +71,18 @@ void main() {
     expect(presentation.isFiscallyAccepted, isFalse);
   });
 
-  test('a status this version does not know is shown literally, never guessed', () {
-    final presentation = presentEcfStatus('SOMETHING_NEW');
-    expect(presentation.recognized, isFalse);
-    expect(presentation.label, 'SOMETHING_NEW');
-    expect(presentation.fiscal, EcfFiscalOutcome.none);
-    expect(presentation.operative, EcfOperativePhase.humanReview);
-    expect(presentation.isFiscallyAccepted, isFalse);
-    expect(presentation.description.toLowerCase(), contains('no reconocido'));
-  });
+  test(
+    'a status this version does not know is shown literally, never guessed',
+    () {
+      final presentation = presentEcfStatus('SOMETHING_NEW');
+      expect(presentation.recognized, isFalse);
+      expect(presentation.label, 'SOMETHING_NEW');
+      expect(presentation.fiscal, EcfFiscalOutcome.none);
+      expect(presentation.operative, EcfOperativePhase.humanReview);
+      expect(presentation.isFiscallyAccepted, isFalse);
+      expect(presentation.description.toLowerCase(), contains('no reconocido'));
+    },
+  );
 
   test('an empty status does not become a fake label', () {
     final presentation = presentEcfStatus('');
@@ -131,10 +134,7 @@ void main() {
   });
 
   test('the fiscal rejection is reported as rejected, not as pending', () {
-    expect(
-      presentEcfStatus('DGII_REJECTED').fiscal,
-      EcfFiscalOutcome.rejected,
-    );
+    expect(presentEcfStatus('DGII_REJECTED').fiscal, EcfFiscalOutcome.rejected);
     expect(
       presentEcfStatus('PROVIDER_REJECTED').fiscal,
       EcfFiscalOutcome.rejected,

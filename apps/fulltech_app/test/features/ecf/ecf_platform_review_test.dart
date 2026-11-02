@@ -63,7 +63,10 @@ const _applicationJson = {
   'hasOfficialAuthorization': false,
 };
 
-Widget _harness({required bool isStaff, List<Map<String, dynamic>> items = const []}) {
+Widget _harness({
+  required bool isStaff,
+  List<Map<String, dynamic>> items = const [],
+}) {
   return ProviderScope(
     key: UniqueKey(),
     overrides: [
@@ -85,15 +88,16 @@ Widget _harness({required bool isStaff, List<Map<String, dynamic>> items = const
 
 void main() {
   group('cliente de plataforma', () {
-    test('una respuesta afirmativa del backend confirma la pertenencia', () async {
-      final repo = _repositoryWith(
-        (options) async {
+    test(
+      'una respuesta afirmativa del backend confirma la pertenencia',
+      () async {
+        final repo = _repositoryWith((options) async {
           expect(options.path, '/ecf/platform/me');
           return _json({'isPlatformStaff': true});
-        },
-      );
-      expect(await repo.isPlatformStaff(), isTrue);
-    });
+        });
+        expect(await repo.isPlatformStaff(), isTrue);
+      },
+    );
 
     test('un 403 significa "no es personal", no un error', () async {
       final repo = _repositoryWith(
@@ -103,13 +107,16 @@ void main() {
     });
 
     test('un 500 no se disfraza de "sin acceso"', () async {
-      final repo = _repositoryWith((_) async => _json({'message': 'boom'}, 500));
+      final repo = _repositoryWith(
+        (_) async => _json({'message': 'boom'}, 500),
+      );
       await expectLater(repo.isPlatformStaff(), throwsA(isA<DioException>()));
     });
 
-    test('la bandeja envía el filtro de estado y usa el total del servidor', () async {
-      final repo = _repositoryWith(
-        (options) async {
+    test(
+      'la bandeja envía el filtro de estado y usa el total del servidor',
+      () async {
+        final repo = _repositoryWith((options) async {
           expect(options.path, '/ecf/platform/dgii/applications');
           expect(options.queryParameters['state'], 'APPLICATION_PENDING');
           expect(options.queryParameters['take'], 50);
@@ -119,49 +126,53 @@ void main() {
             'skip': 0,
             'items': [_applicationJson],
           });
-        },
-      );
-      final page = await repo.listApplications(state: 'APPLICATION_PENDING');
-      expect(page.total, 1);
-      expect(page.items.single.companyName, 'Ferretería Central');
-      expect(page.items.single.hasOfficialAuthorization, isFalse);
-    });
+        });
+        final page = await repo.listApplications(state: 'APPLICATION_PENDING');
+        expect(page.total, 1);
+        expect(page.items.single.companyName, 'Ferretería Central');
+        expect(page.items.single.hasOfficialAuthorization, isFalse);
+      },
+    );
 
     test('sin filtro no se envía el parámetro state', () async {
-      final repo = _repositoryWith(
-        (options) async {
-          expect(options.queryParameters.containsKey('state'), isFalse);
-          return _json({'total': 0, 'items': <Object>[]});
-        },
-      );
+      final repo = _repositoryWith((options) async {
+        expect(options.queryParameters.containsKey('state'), isFalse);
+        return _json({'total': 0, 'items': <Object>[]});
+      });
       final page = await repo.listApplications();
       expect(page.items, isEmpty);
     });
 
-    test('la decisión hace PATCH y no incluye un campo de aprobación', () async {
-      late RequestOptions captured;
-      final repo = _repositoryWith(
-        (options) async {
+    test(
+      'la decisión hace PATCH y no incluye un campo de aprobación',
+      () async {
+        late RequestOptions captured;
+        final repo = _repositoryWith((options) async {
           captured = options;
           return _json({'state': 'REQUIRES_CORRECTION'});
-        },
-      );
-      await repo.decide(
-        companyId: 'c-1',
-        state: 'REQUIRES_CORRECTION',
-        observations: 'Falta el certificado',
-      );
-      expect(captured.method, 'PATCH');
-      expect(captured.path, '/ecf/platform/dgii/applications/c-1');
-      final body = captured.data as Map<String, dynamic>;
-      expect(body['state'], 'REQUIRES_CORRECTION');
-      expect(body['observations'], 'Falta el certificado');
-      expect(body.keys.any((key) => key.toLowerCase().contains('approv')), isFalse);
-    });
+        });
+        await repo.decide(
+          companyId: 'c-1',
+          state: 'REQUIRES_CORRECTION',
+          observations: 'Falta el certificado',
+        );
+        expect(captured.method, 'PATCH');
+        expect(captured.path, '/ecf/platform/dgii/applications/c-1');
+        final body = captured.data as Map<String, dynamic>;
+        expect(body['state'], 'REQUIRES_CORRECTION');
+        expect(body['observations'], 'Falta el certificado');
+        expect(
+          body.keys.any((key) => key.toLowerCase().contains('approv')),
+          isFalse,
+        );
+      },
+    );
   });
 
   group('pantalla de revisión', () {
-    testWidgets('sin pertenencia no se muestra ningún expediente', (tester) async {
+    testWidgets('sin pertenencia no se muestra ningún expediente', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _harness(isStaff: false, items: const [_applicationJson]),
       );
@@ -171,7 +182,9 @@ void main() {
       expect(find.text('Ferretería Central'), findsNothing);
     });
 
-    testWidgets('con pertenencia se listan los expedientes pendientes', (tester) async {
+    testWidgets('con pertenencia se listan los expedientes pendientes', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _harness(isStaff: true, items: const [_applicationJson]),
       );

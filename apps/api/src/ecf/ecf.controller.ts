@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -18,7 +19,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { Request, Response } from "express";
 import { Permissions } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
-import type { TenantUser } from "../auth/tenant-context";
+import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import {
   RecordEcfDgiiAuthorizationDto,
   RegisterEcfDgiiEvidenceDto,
@@ -28,6 +29,8 @@ import {
   UploadEcfDgiiDocumentDto,
 } from "./dto/ecf-dgii.dto";
 import { UpdateEcfConfigDto, UpdateEcfOnboardingStepDto } from "./dto/ecf.dto";
+import { ValidateEcfCertificateDto } from "./dto/ecf-certificate.dto";
+import { ResolveEcfAttemptDto } from "./dto/ecf-certification.dto";
 import {
   SaveEcfDgiiDraftDto,
   SubmitEcfDgiiApplicationDto,
@@ -38,6 +41,15 @@ import { EcfDgiiActivationService } from "./dgii/ecf-dgii-activation.service";
 import { EcfSupportGrantService } from "./dgii/ecf-support-grant.service";
 import { EcfDgiiDocumentsService } from "./dgii/ecf-dgii-documents.service";
 import { EcfDgiiHabilitationService } from "./dgii/ecf-dgii-habilitation.service";
+import { EcfCertificateService } from "./dgii/certificate/ecf-certificate.service";
+import { EcfCanonicalIdentityService } from "./dgii/certificate/ecf-canonical-identity.service";
+import {
+  ECF_POSTULATION_XML_ERRORS,
+  ECF_POSTULATION_XML_MESSAGES,
+  inspectPostulationXml,
+} from "./dgii/certification/ecf-postulation-xml.policy";
+import { EcfCertificationRecoveryService } from "./dgii/certification/ecf-certification-recovery.service";
+import { EcfPreparationMetadataService } from "./dgii/ecf-preparation-metadata.service";
 import { EcfService } from "./ecf.service";
 
 /** Forma mínima del archivo que entrega `FileInterceptor`. */
@@ -59,6 +71,10 @@ export class EcfController {
     private readonly application: EcfDgiiApplicationService,
     private readonly activation: EcfDgiiActivationService,
     private readonly supportGrants: EcfSupportGrantService,
+    private readonly certificate: EcfCertificateService,
+    private readonly canonicalIdentity: EcfCanonicalIdentityService,
+    private readonly recovery: EcfCertificationRecoveryService,
+    private readonly preparation: EcfPreparationMetadataService,
   ) {}
 
   /**
@@ -296,6 +312,149 @@ export class EcfController {
   }
 
   // ---------------------------------------------------------------------------
+  // Certificado digital
+  //
+  // Validación CRIPTOGRÁFICA local del PFX/P12: formato, contraseña, clave
+  // privada, correspondencia con el certificado y vigencia. El archivo se procesa
+  // en memoria y NO se guarda; la contraseña nunca se registra.
+  //
+  // No afirma que la DGII haya aceptado el certificado, no lo envía a Alanube y
+  // no sustituye ningún trámite oficial.
+  // ---------------------------------------------------------------------------
+
+  @Post("dgii/certificate/validate")
+  @Permissions("manageEcfOnboarding", "manageEcfDgiiRequirements")
+  @UseInterceptors(FileInterceptor("file"))
+  async validateCertificate(
+    @Req() req: Request,
+    @Body() dto: ValidateEcfCertificateDto,
+    @UploadedFile() file: UploadedDocument | undefined,
+  ) {
+    // La empresa sale del token; esta ruta no acepta `companyId`.
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
+    if (!file) throw new BadRequestException("ECF_CERTIFICATE_FILE_REQUIRED");
+    // La identidad esperada la pone el BACKEND desde el expediente fiscal.
+    // Si la enviara el cliente, la comprobación no valdría nada.
+    const identity = await this.canonicalIdentity.resolve(companyId);
+    return this.certificate.validate({
+      fileName: file.originalname,
+      buffer: file.buffer,
+      size: file.size,
+      password: dto.password,
+      expectedTaxId: identity.taxId,
+      expectedRepresentativeId: identity.representativeId,
+      identitySource: identity.source,
+    });
+  }
+
+  /**
+   * Incorporación del XML de postulación.
+   *
+   * Valida estructura y seguridad (sin DTD, sin entidades, UTF-8, raíz de la
+   * etapa correcta) y lo guarda como evidencia de la empresa con el mismo
+   * almacenamiento privado que el resto de documentos. No es una aprobación de
+   * la DGII: deja el documento RECIBIDO y VALIDADO.
+   */
+  @Post("dgii/postulation-xml")
+  @Permissions("manageEcfOnboarding", "registerEcfDgiiEvidence")
+  @UseInterceptors(FileInterceptor("file"))
+  async uploadPostulationXml(
+    @Req() req: Request,
+    @UploadedFile() file: UploadedDocument | undefined,
+  ) {
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
+    if (!file) {
+      throw new BadRequestException(ECF_POSTULATION_XML_ERRORS.REQUIRED);
+    }
+    const identity = await this.canonicalIdentity.resolve(companyId);
+    const inspection = inspectPostulationXml({
+      bytes: file.buffer,
+      sizeBytes: file.size,
+      fileName: file.originalname,
+      expectedTaxId: identity.taxId,
+    });
+    if (!inspection.ok) {
+      throw new BadRequestException({
+        code: inspection.code,
+        message: ECF_POSTULATION_XML_MESSAGES[inspection.code],
+      });
+    }
+    const stored = await this.dgiiDocs.upload(user, {
+      kind: "POSTULATION_XML",
+      fileName: file.originalname,
+      declaredMime: file.mimetype,
+      buffer: file.buffer,
+      size: file.size,
+    });
+    return {
+      ...stored,
+      state: "VALIDATED",
+      rootElement: inspection.inspection.rootElement,
+      notes: inspection.notes,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Metadatos de preparación (vídeo y modo de prueba)
+  //
+  // Solo datos no sensibles: la URL del tutorial y si el escenario simulado está
+  // disponible para ESTA empresa. Nada de credenciales ni configuración interna
+  // del proveedor.
+  // ---------------------------------------------------------------------------
+
+  @Get("dgii/preparation")
+  @Permissions("viewEcfDgiiHabilitation", "viewEcfOnboarding")
+  getPreparationMetadata(@Req() req: Request) {
+    const user = req.user as TenantUser;
+    return this.preparation.get(requireTenant(user));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Intentos de certificación bloqueados
+  //
+  // Un timeout no se reintenta: se reconcilia. Esta vista muestra solo metadatos
+  // (empresa, operación, fecha, intento y motivo), nunca certificados, contraseñas
+  // ni documentos. La decisión queda auditada con su autor.
+  // ---------------------------------------------------------------------------
+
+  @Get("dgii/certification/attempts")
+  @Permissions("manageEcfDgiiRequirements", "manageEcfOnboarding")
+  listBlockedCertificationAttempts(@Req() req: Request) {    const user = req.user as TenantUser;
+    return this.recovery.listBlocked(requireTenant(user));
+  }
+
+  @Post("dgii/certification/attempts/:id/resolve")
+  @Permissions("manageEcfDgiiRequirements", "manageEcfOnboarding")
+  async resolveCertificationAttempt(
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body() dto: ResolveEcfAttemptDto,
+  ) {
+    const user = req.user as TenantUser;
+    const result = await this.recovery.resolve({
+      companyId: requireTenant(user),
+      attemptId: id,
+      actorUserId: user.id,
+      decision: dto.decision,
+      evidenceRef: dto.evidenceRef ?? null,
+      externalId: dto.externalId ?? null,
+      note: dto.note ?? null,
+    });
+    // Un rechazo del backend NUNCA se devuelve como éxito: el cliente tiene que
+    // poder distinguir «registrado» de «no se registró».
+    if (!result.ok) {
+      const body = { code: result.code, message: result.detail };
+      if (result.code === "ECF_ATTEMPT_NOT_FOUND") {
+        throw new NotFoundException(body);
+      }
+      throw new BadRequestException(body);
+    }
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
   // Documentos del expediente
   //
   // La carga valida el tipo REAL por contenido (no por extensión), calcula el
@@ -306,8 +465,7 @@ export class EcfController {
 
   @Post("dgii/documents")
   @Permissions("manageEcfOnboarding", "registerEcfDgiiEvidence")
-  @UseInterceptors(FileInterceptor("file"))
-  uploadDgiiDocument(
+  @UseInterceptors(FileInterceptor("file"))  uploadDgiiDocument(
     @Req() req: Request,
     @Body() dto: UploadEcfDgiiDocumentDto,
     @UploadedFile() file: UploadedDocument | undefined,

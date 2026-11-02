@@ -46,6 +46,7 @@ class DesktopShellActionItem {
     required this.onPressed,
     this.selectedIcon,
     this.selected = false,
+    this.label,
   });
 
   final IconData icon;
@@ -53,13 +54,18 @@ class DesktopShellActionItem {
   final String tooltip;
   final VoidCallback onPressed;
   final bool selected;
+
+  /// Si existe, la acción se dibuja como botón con texto en lugar de un icono
+  /// suelto: se entiende sin necesidad de pasar el ratón por encima.
+  final String? label;
 }
 
 class DesktopShellRouteActions {
-  const DesktopShellRouteActions({required this.route, required this.actions});
+  const DesktopShellRouteActions({required this.route, required this.actions, this.onBack});
 
   final String route;
   final List<DesktopShellActionItem> actions;
+  final VoidCallback? onBack;
 }
 
 final desktopShellRouteActionsProvider =
@@ -223,6 +229,35 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final shellActions = routeActions?.route == location
         ? routeActions!.actions
         : const <DesktopShellActionItem>[];
+    // Una sola acción en la bandeja: la habilitación es el destino útil del
+    // módulo. «Configuración e-CF» solo era un paso intermedio hacia este mismo
+    // lugar y, para una empresa en habilitación, mostraba secciones vacías.
+    final isEcfHome = location == Routes.ecf;
+    // Destino del botón «volver» de la barra. Los niveles del módulo e-CF
+    // vuelven a la puesta en marcha; antes se enviaba a Configuración, que en
+    // escritorio redirige a otra pantalla y el usuario aterrizaba fuera del
+    // módulo.
+    final VoidCallback? shellBack = routeActions?.route == location &&
+            routeActions?.onBack != null
+        ? routeActions!.onBack
+        : location == Routes.ecf
+        ? () => context.go(Routes.configuracion)
+        : location == Routes.ecfDocuments ||
+              location == Routes.ecfFiscalData ||
+              location == Routes.ecfConfig ||
+              location == Routes.ecfDgii
+        ? () => context.go(Routes.ecf)
+        : null;
+    final ecfActions = isEcfHome
+        ? <DesktopShellActionItem>[
+            DesktopShellActionItem(
+              icon: Icons.receipt_long_outlined,
+              tooltip: 'Comprobantes electrónicos',
+              label: 'Comprobantes',
+              onPressed: () => context.go(Routes.ecfDocuments),
+            ),
+          ]
+        : const <DesktopShellActionItem>[];
     final customFooter = _footerContent;
     final footerBuilder = customFooter?.route == location
         ? customFooter!.builder
@@ -243,14 +278,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 children: [
                   if (showShellAppBar)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      // Barra pegada a los bordes: el margen de 16/12 la
+                      // convertía en una tarjeta flotante que robaba alto útil.
+                      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
                       child: DesktopShellAppBar(
                         collapsed: true,
                         title: title,
                         currentUser: user,
                         onToggleSidebar: () =>
                             _shellScaffoldKey.currentState?.openDrawer(),
-                        extraActions: shellActions,
+                        onBack: shellBack,
+                        extraActions: [...shellActions, ...ecfActions],
                       ),
                     ),
                   Expanded(
@@ -355,12 +393,19 @@ class DesktopShellAppBar extends ConsumerWidget {
     required this.currentUser,
     required this.onToggleSidebar,
     this.extraActions = const <DesktopShellActionItem>[],
+    this.onBack,
   });
 
   final bool collapsed;
   final String title;
   final UserModel? currentUser;
   final VoidCallback onToggleSidebar;
+
+  /// Cuando no es nulo, el botón de la izquierda vuelve atrás en lugar de
+  /// abrir el menú. Se usa en pantallas que son un nivel DENTRO de un módulo,
+  /// donde "atrás" es la acción esperada y el menú sigue disponible abajo.
+  final VoidCallback? onBack;
+
   final List<DesktopShellActionItem> extraActions;
 
   @override
@@ -388,7 +433,14 @@ class DesktopShellAppBar extends ConsumerWidget {
 
           return Row(
             children: [
-              _DesktopTopbarMenuButton(onPressed: onToggleSidebar),
+              if (onBack != null)
+                IconButton(
+                  tooltip: 'Volver',
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back),
+                )
+              else
+                _DesktopTopbarMenuButton(onPressed: onToggleSidebar),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -553,43 +605,46 @@ class _DesktopShellActionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final action in actions)
-            Tooltip(
-              message: action.tooltip,
-              child: InkWell(
-                onTap: action.onPressed,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  decoration: BoxDecoration(
-                    color: action.selected
-                        ? Colors.white.withValues(alpha: 0.20)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    action.selected
-                        ? action.selectedIcon ?? action.icon
-                        : action.icon,
-                    size: 19,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
+    // La barra es BLANCA: antes las acciones se pintaban en blanco sobre un
+    // fondo blanco translúcido y quedaban invisibles. Ahora usan el color de
+    // acento y, si tienen etiqueta, se dibujan como botón con texto.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          _buildAction(context, actions[i]),
         ],
+      ],
+    );
+  }
+
+  Widget _buildAction(BuildContext context, DesktopShellActionItem action) {
+    const accent = Color(0xFF1957E6);
+    final label = action.label;
+    if (label == null) {
+      return IconButton(
+        tooltip: action.tooltip,
+        onPressed: action.onPressed,
+        icon: Icon(
+          action.selected ? action.selectedIcon ?? action.icon : action.icon,
+          size: 20,
+          color: accent,
+        ),
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: action.onPressed,
+      icon: Icon(action.icon, size: 18, color: accent),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: accent,
+        side: const BorderSide(color: Color(0xFFCFE0FF)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        minimumSize: const Size(0, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
   }

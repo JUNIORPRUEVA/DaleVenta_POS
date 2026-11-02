@@ -17,6 +17,7 @@ class EcfApplicationDraft {
   const EcfApplicationDraft({
     required this.state,
     required this.draft,
+    this.suggested = const <String, dynamic>{},
     required this.missingFields,
     required this.draftUpdatedAt,
     required this.draftRevision,
@@ -28,6 +29,7 @@ class EcfApplicationDraft {
 
   final String state;
   final Map<String, dynamic>? draft;
+  final Map<String, dynamic> suggested;
   final List<String> missingFields;
   final DateTime? draftUpdatedAt;
 
@@ -59,6 +61,9 @@ class EcfApplicationDraft {
     return EcfApplicationDraft(
       state: json['state'] is String ? json['state'] as String : 'NOT_STARTED',
       draft: rawDraft is Map ? rawDraft.cast<String, dynamic>() : null,
+      suggested: json['suggested'] is Map
+          ? (json['suggested'] as Map).cast<String, dynamic>()
+          : const <String, dynamic>{},
       missingFields: rawMissing is List
           ? rawMissing.whereType<String>().toList(growable: false)
           : const <String>[],

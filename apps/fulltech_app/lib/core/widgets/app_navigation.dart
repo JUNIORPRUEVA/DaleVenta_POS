@@ -50,9 +50,9 @@ class AppNavigationSection {
 List<AppNavigationSection> buildAppNavigationSections(
   UserModel? currentUser, {
   required bool multiWarehouseEnabled,
-  // Interruptor e-CF de la EMPRESA. El llamador lo pasa ya resuelto desde la
-  // configuración del backend: mientras no esté confirmada pasa `false`, así
-  // que un fallo de red nunca deja el módulo a la vista.
+  // Interruptor e-CF de la empresa. Se mantiene en la firma para los
+  // llamadores existentes; el asistente de habilitación debe poder abrirse
+  // antes de que la emisión esté activada.
   bool ecfEnabled = false,
 }) {
   bool canOrAuthorize(AppPermission _) {
@@ -218,10 +218,9 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Usuario',
             route: Routes.users,
           ),
-        // ÚLTIMO del menú. Solo aparece si la empresa tiene la facturación
-        // electrónica ACTIVADA y el usuario puede verla: sin eso, la opción no
-        // existe para nadie de esa empresa.
-        if (ecfEnabled && canOrAuthorize(AppPermission.viewEcfDocuments))
+        // La habilitación debe estar disponible antes de encender e-CF. El
+        // interruptor de emisión conserva su valor OFF por defecto.
+        if (canOrAuthorize(AppPermission.viewEcfDocuments))
           const AppNavigationItem(
             icon: Icons.receipt_long_outlined,
             appIcon: AppIcons.receipt,
@@ -279,6 +278,12 @@ String resolveNavigationTitle(
 ) {
   final path = Uri.tryParse(location)?.path ?? location;
   if (path == Routes.poncheHistorial) return 'Historial de ponches';
+  // Nivel dentro del módulo e-CF: el título del módulo no explica qué se está
+  // editando, y el botón de volver regresa a la puesta en marcha.
+  if (path == Routes.ecfFiscalData) return 'Datos fiscales';
+  if (path == Routes.ecfDocuments) return 'Comprobantes electrónicos';
+  if (path == Routes.ecfConfig) return 'Estado del módulo e-CF';
+  if (path == Routes.ecfDgii) return 'Habilitación DGII';
 
   for (final section in sections) {
     for (final item in section.items) {

@@ -36,6 +36,7 @@ class EcfPrepareAction extends ConsumerStatefulWidget {
 class _EcfPrepareActionState extends ConsumerState<EcfPrepareAction> {
   bool _running = false;
   int? _paymentType;
+
   /// Tipo documental elegido EXPLÍCITAMENTE por el usuario. Es `null` mientras
   /// no elija: la aplicación nunca deduce E31/E32 por su cuenta.
   String? _documentType;
@@ -176,9 +177,8 @@ class _EcfPrepareActionState extends ConsumerState<EcfPrepareAction> {
                     DropdownMenuItem(value: 5, child: Text('Código 5')),
                     DropdownMenuItem(value: 6, child: Text('Código 6')),
                   ],
-                  onChanged: (value) => setDialogState(
-                    () => _incomeType = value ?? _incomeType,
-                  ),
+                  onChanged: (value) =>
+                      setDialogState(() => _incomeType = value ?? _incomeType),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -341,9 +341,7 @@ class _Row extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            child: Text(value, style: theme.textTheme.bodyMedium),
-          ),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );

@@ -87,7 +87,10 @@ void main() {
         'productionEmissionImplemented': false,
       },
       'blockers': [
-        {'code': 'ECF_DGII_REQUIREMENTS_PENDING', 'message': 'Faltan requisitos'},
+        {
+          'code': 'ECF_DGII_REQUIREMENTS_PENDING',
+          'message': 'Faltan requisitos',
+        },
       ],
       'officialAuthorizationBlockers': [
         {'code': 'ECF_DGII_STATE_NOT_APPROVED', 'message': 'No aprobado'},
@@ -200,22 +203,25 @@ void main() {
     expect(evidence.isOfficialDocument, isTrue);
   });
 
-  test('registrar autorización exige fuente, evidencia e identificador', () async {
-    final repository = repositoryWith({'ok': true});
-    await repository.recordDgiiAuthorization(
-      source: 'DGII_OFFICIAL_RECORD',
-      evidenceId: 'e1',
-      externalId: 'DGII-2026-1',
-    );
+  test(
+    'registrar autorización exige fuente, evidencia e identificador',
+    () async {
+      final repository = repositoryWith({'ok': true});
+      await repository.recordDgiiAuthorization(
+        source: 'DGII_OFFICIAL_RECORD',
+        evidenceId: 'e1',
+        externalId: 'DGII-2026-1',
+      );
 
-    expect(captured?.method, 'POST');
-    expect(captured?.path, '/ecf/dgii/authorization');
-    expect(captured?.data, {
-      'source': 'DGII_OFFICIAL_RECORD',
-      'evidenceId': 'e1',
-      'externalId': 'DGII-2026-1',
-    });
-  });
+      expect(captured?.method, 'POST');
+      expect(captured?.path, '/ecf/dgii/authorization');
+      expect(captured?.data, {
+        'source': 'DGII_OFFICIAL_RECORD',
+        'evidenceId': 'e1',
+        'externalId': 'DGII-2026-1',
+      });
+    },
+  );
 
   test('revocar autorización usa la ruta dedicada', () async {
     final repository = repositoryWith({'ok': true});
@@ -225,16 +231,21 @@ void main() {
     expect(captured?.path, '/ecf/dgii/authorization/revoke');
   });
 
-  test('historial y evidencias leen sus rutas y toleran listas vacías', () async {
-    final repository = repositoryWith(<Object>[]);
-    expect(await repository.dgiiHistory(), isEmpty);
-    expect(captured?.path, '/ecf/dgii/history');
-    expect(await repository.dgiiEvidence(), isEmpty);
-    expect(captured?.path, '/ecf/dgii/evidence');
-  });
+  test(
+    'historial y evidencias leen sus rutas y toleran listas vacías',
+    () async {
+      final repository = repositoryWith(<Object>[]);
+      expect(await repository.dgiiHistory(), isEmpty);
+      expect(captured?.path, '/ecf/dgii/history');
+      expect(await repository.dgiiEvidence(), isEmpty);
+      expect(captured?.path, '/ecf/dgii/evidence');
+    },
+  );
 
   test('un error HTTP del backend se propaga como excepción', () async {
-    final repository = repositoryWith({'message': 'No autorizado'}, status: 403);
+    final repository = repositoryWith({
+      'message': 'No autorizado',
+    }, status: 403);
     await expectLater(
       repository.dgiiHabilitation(),
       throwsA(isA<DioException>()),
@@ -289,50 +300,52 @@ void main() {
     });
   });
 
-  test('el seguimiento de un requisito usa su ruta y omite lo no informado',
-      () async {
-    final repository = repositoryWith({
-      'companyId': 'company-a',
-      'state': 'NOT_STARTED',
-      'progress': {
-        'requirements': [
-          {
-            'key': 'SET_TESTS',
-            'label': 'Pruebas del SET',
-            'mandatory': true,
-            'automatable': false,
-            'status': 'PENDING',
-            'resolved': false,
-            'tracking': {
-              'status': 'IN_PROGRESS',
-              'note': 'Faltan pruebas',
-              'dueDate': '2026-11-30',
+  test(
+    'el seguimiento de un requisito usa su ruta y omite lo no informado',
+    () async {
+      final repository = repositoryWith({
+        'companyId': 'company-a',
+        'state': 'NOT_STARTED',
+        'progress': {
+          'requirements': [
+            {
+              'key': 'SET_TESTS',
+              'label': 'Pruebas del SET',
+              'mandatory': true,
+              'automatable': false,
+              'status': 'PENDING',
+              'resolved': false,
+              'tracking': {
+                'status': 'IN_PROGRESS',
+                'note': 'Faltan pruebas',
+                'dueDate': '2026-11-30',
+              },
             },
-          },
-        ],
-      },
-    });
+          ],
+        },
+      });
 
-    final view = await repository.updateDgiiRequirement(
-      key: 'SET_TESTS',
-      status: 'IN_PROGRESS',
-      note: 'Faltan pruebas',
-      dueDate: '2026-11-30',
-    );
+      final view = await repository.updateDgiiRequirement(
+        key: 'SET_TESTS',
+        status: 'IN_PROGRESS',
+        note: 'Faltan pruebas',
+        dueDate: '2026-11-30',
+      );
 
-    expect(captured?.method, 'PATCH');
-    expect(captured?.path, '/ecf/dgii/requirements/SET_TESTS');
-    expect(captured?.data, {
-      'status': 'IN_PROGRESS',
-      'note': 'Faltan pruebas',
-      'dueDate': '2026-11-30',
-    });
+      expect(captured?.method, 'PATCH');
+      expect(captured?.path, '/ecf/dgii/requirements/SET_TESTS');
+      expect(captured?.data, {
+        'status': 'IN_PROGRESS',
+        'note': 'Faltan pruebas',
+        'dueDate': '2026-11-30',
+      });
 
-    final tracking = view.progress.requirements.single.tracking;
-    expect(tracking?.status, 'IN_PROGRESS');
-    expect(tracking?.dueDate, '2026-11-30');
-    expect(tracking?.note, 'Faltan pruebas');
-  });
+      final tracking = view.progress.requirements.single.tracking;
+      expect(tracking?.status, 'IN_PROGRESS');
+      expect(tracking?.dueDate, '2026-11-30');
+      expect(tracking?.note, 'Faltan pruebas');
+    },
+  );
 
   test('el seguimiento no altera el progreso real del requisito', () async {
     final repository = repositoryWith({

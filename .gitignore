@@ -20,6 +20,9 @@ apps/fulltech_app/.env
 
 # local/generated artifacts
 artifacts/
+# Evidencias y XML subidos en runtime por el modulo e-CF (datos de tenants).
+# Nunca son codigo fuente: no se versionan.
+apps/api/storage/
 fulltech-pwa/
 apps/fulltech_app/release_artifacts/
 apps/fulltech_app/emulator-*.png

@@ -558,6 +558,28 @@ class ApiRoutes {
   static const ecfDgiiAuthorizationRevoke = '/ecf/dgii/authorization/revoke';
   static const ecfDgiiDocuments = '/ecf/dgii/documents';
   static String ecfDgiiDocumentFile(String id) => '/ecf/dgii/documents/$id/file';
+
+  /// Validación criptográfica LOCAL del certificado PFX/P12 de la empresa.
+  /// No envía el certificado al proveedor ni registra aceptación de la DGII.
+  static const ecfDgiiCertificateValidate = '/ecf/dgii/certificate/validate';
+
+  /// Metadatos no sensibles: URL del tutorial y disponibilidad del modo de prueba.
+  static const ecfDgiiPreparation = '/ecf/dgii/preparation';
+
+  /// XML de postulación (validación estructural + almacenamiento seguro).
+  static const ecfDgiiPostulationXml = '/ecf/dgii/postulation-xml';
+
+  /// Intentos de certificación bloqueados y su reconciliación.
+  static const ecfDgiiCertificationAttempts =
+      '/ecf/dgii/certification/attempts';
+  static String ecfDgiiCertificationAttemptResolve(String id) =>
+      '/ecf/dgii/certification/attempts/$id/resolve';
+
+  /// Arranque y consulta del motor de activación (ya existentes en el API).
+  static const ecfDgiiActivation = '/ecf/dgii/activation';
+  static const ecfDgiiActivationStart = '/ecf/dgii/activation/start';
+  static String ecfDgiiActivationStepRetry(String key) =>
+      '/ecf/dgii/activation/steps/$key/retry';
   static String ecfDgiiRequirement(String key) => '/ecf/dgii/requirements/$key';
   static String ecfDgiiEvidenceReview(String id) =>
       '/ecf/dgii/evidence/$id/review';

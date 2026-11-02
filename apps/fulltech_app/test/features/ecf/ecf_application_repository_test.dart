@@ -69,6 +69,13 @@ void main() {
         return _json({
           'state': 'NOT_STARTED',
           'draft': _completePayload,
+          'suggested': {
+            'company': {
+              'rnc': '131000001',
+              'legalName': 'Empresa Sintética SRL',
+            },
+            'representative': {'fullName': 'Ana Pérez'},
+          },
           'draftUpdatedAt': '2026-10-19T10:00:00.000Z',
           'missingFields': <String>[],
           'currentSnapshotVersion': 0,
@@ -84,6 +91,10 @@ void main() {
       expect(draft.draftUpdatedAt, isNotNull);
       expect(draft.read('company.rnc'), '131000001');
       expect(draft.read('representative.email'), 'ana@example.test');
+      expect(
+        (draft.suggested['company'] as Map)['legalName'],
+        'Empresa Sintética SRL',
+      );
       // La versión y el texto vienen del servidor, no del código cliente.
       expect(draft.requiredConsentVersion, '2026-10-19.v1');
       expect(draft.consentPurpose, isNotEmpty);
@@ -179,43 +190,49 @@ void main() {
       expect(result.version, 3);
     });
 
-    test('el rechazo por consentimiento llega como error, no como éxito', () async {
-      final repo = _repositoryWith(
-        (_) async => _json({
-          'message': 'ECF_DGII_CONSENT_REQUIRED',
-          'statusCode': 400,
-        }, 400),
-      );
-      await expectLater(
-        repo.submit(consentVersion: '', payload: _completePayload),
-        throwsA(
-          isA<DioException>().having(
-            (error) => error.response?.statusCode,
-            'status',
-            400,
+    test(
+      'el rechazo por consentimiento llega como error, no como éxito',
+      () async {
+        final repo = _repositoryWith(
+          (_) async => _json({
+            'message': 'ECF_DGII_CONSENT_REQUIRED',
+            'statusCode': 400,
+          }, 400),
+        );
+        await expectLater(
+          repo.submit(consentVersion: '', payload: _completePayload),
+          throwsA(
+            isA<DioException>().having(
+              (error) => error.response?.statusCode,
+              'status',
+              400,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
-    test('una transición no permitida no se confunde con un envío correcto', () async {
-      final repo = _repositoryWith(
-        (_) async => _json({
-          'message': 'ECF_DGII_TRANSITION_NOT_ALLOWED',
-          'statusCode': 409,
-        }, 409),
-      );
-      await expectLater(
-        repo.submit(consentVersion: 'v', payload: _completePayload),
-        throwsA(
-          isA<DioException>().having(
-            (error) => error.response?.statusCode,
-            'status',
-            409,
+    test(
+      'una transición no permitida no se confunde con un envío correcto',
+      () async {
+        final repo = _repositoryWith(
+          (_) async => _json({
+            'message': 'ECF_DGII_TRANSITION_NOT_ALLOWED',
+            'statusCode': 409,
+          }, 409),
+        );
+        await expectLater(
+          repo.submit(consentVersion: 'v', payload: _completePayload),
+          throwsA(
+            isA<DioException>().having(
+              (error) => error.response?.statusCode,
+              'status',
+              409,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   group('versiones enviadas', () {

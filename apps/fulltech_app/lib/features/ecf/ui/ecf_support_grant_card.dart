@@ -53,11 +53,13 @@ class _EcfSupportGrantCardState extends ConsumerState<EcfSupportGrantCard> {
     );
     if (request == null) return;
     await _run(
-      () => ref.read(ecfRepositoryProvider).createSupportGrant(
-        scopes: request.scopes,
-        days: request.days,
-        reason: request.reason,
-      ),
+      () => ref
+          .read(ecfRepositoryProvider)
+          .createSupportGrant(
+            scopes: request.scopes,
+            days: request.days,
+            reason: request.reason,
+          ),
     );
   }
 
@@ -159,7 +161,9 @@ class _EcfSupportGrantCardState extends ConsumerState<EcfSupportGrantCard> {
               error: (_, __) => Row(
                 children: [
                   const Expanded(
-                    child: Text('No se pudo consultar el estado de la asistencia.'),
+                    child: Text(
+                      'No se pudo consultar el estado de la asistencia.',
+                    ),
                   ),
                   TextButton(
                     onPressed: _refresh,
@@ -171,10 +175,7 @@ class _EcfSupportGrantCardState extends ConsumerState<EcfSupportGrantCard> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(
-                _error!,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
+              Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ],
           ],
         ),
@@ -231,8 +232,7 @@ class _EcfSupportGrantCardState extends ConsumerState<EcfSupportGrantCard> {
               ),
             if (closed.isNotEmpty)
               TextButton(
-                onPressed: () =>
-                    setState(() => _showHistory = !_showHistory),
+                onPressed: () => setState(() => _showHistory = !_showHistory),
                 child: Text(
                   _showHistory ? 'Ocultar historial' : 'Ver historial',
                 ),
@@ -347,11 +347,7 @@ class _ActiveGrant extends StatelessWidget {
 }
 
 class _GrantRequest {
-  const _GrantRequest({
-    required this.scopes,
-    required this.days,
-    this.reason,
-  });
+  const _GrantRequest({required this.scopes, required this.days, this.reason});
 
   final List<String> scopes;
   final int days;

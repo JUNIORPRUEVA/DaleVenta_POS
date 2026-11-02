@@ -216,7 +216,8 @@ class _StepRow extends StatelessWidget {
                   '${step.label} · ${step.status}',
                   style: theme.textTheme.bodyMedium,
                 ),
-                if (step.blockedReason != null && step.blockedReason!.isNotEmpty)
+                if (step.blockedReason != null &&
+                    step.blockedReason!.isNotEmpty)
                   Text(
                     'Bloqueado: ${step.blockedReason}',
                     style: theme.textTheme.bodySmall?.copyWith(

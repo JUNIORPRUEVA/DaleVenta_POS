@@ -32,8 +32,7 @@ const Map<String, String> _requirementLabels = <String, String>{
   'NOT_APPLICABLE': 'No aplica',
 };
 
-String _requirementLabel(String status) =>
-    _requirementLabels[status] ?? status;
+String _requirementLabel(String status) => _requirementLabels[status] ?? status;
 
 /// Etapas del motor de activación en lenguaje del producto.
 const Map<String, String> _activationStageLabels = <String, String>{
@@ -71,16 +70,15 @@ const List<String> _filterStates = <String>[
 String _readError(Object error) {
   final text = error.toString();
   const known = <String, String>{
-    'PLATFORM_STAFF_REQUIRED':
-        'Tu usuario no pertenece al equipo de Fulltech.',
+    'PLATFORM_STAFF_REQUIRED': 'Tu usuario no pertenece al equipo de Fulltech.',
     'ECF_DGII_CORRECTION_REASON_REQUIRED':
         'Escribe el motivo: una corrección o un rechazo sin motivo no es '
-            'auditable.',
+        'auditable.',
     'ECF_DGII_TRANSITION_NOT_ALLOWED':
         'Ese cambio de estado no está permitido desde el estado actual.',
     'ECF_DGII_APPROVAL_REQUIRES_OFFICIAL_RECORD':
         'La aprobación exige un registro oficial de la DGII con evidencia, '
-            'fecha e identificador externo. No se declara desde aquí.',
+        'fecha e identificador externo. No se declara desde aquí.',
     'ECF_DGII_EVIDENCE_REJECTION_REASON_REQUIRED':
         'Un rechazo de evidencia exige motivo.',
     'ECF_DGII_EVIDENCE_REVIEW_DECISION_REQUIRED':
@@ -91,7 +89,8 @@ String _readError(Object error) {
         'Esta plataforma no permite guardar el documento.',
     'ECF_DGII_DOCUMENT_EMPTY': 'El documento llegó vacío.',
     'ECF_DGII_DOCUMENT_NOT_FOUND': 'El documento ya no existe.',
-    'ECF_DGII_APPLICATION_NOT_FOUND': 'No existe un expediente para esa empresa.',
+    'ECF_DGII_APPLICATION_NOT_FOUND':
+        'No existe un expediente para esa empresa.',
     'ECF_DGII_STATE_UNKNOWN': 'Estado desconocido.',
   };
   for (final entry in known.entries) {
@@ -520,10 +519,7 @@ class _EcfPlatformApplicationDetailPageState
     try {
       final bytes = await ref
           .read(ecfPlatformRepositoryProvider)
-          .downloadDocument(
-            companyId: widget.companyId,
-            evidenceId: item.id,
-          );
+          .downloadDocument(companyId: widget.companyId, evidenceId: item.id);
       final path = await PlatformDgiiDocumentSaver().save(
         fileName: item.fileName ?? '${item.kind}.bin',
         bytes: bytes,
@@ -581,10 +577,8 @@ class _EcfPlatformApplicationDetailPageState
         padding: EdgeInsets.symmetric(vertical: 8),
         child: LinearProgressIndicator(),
       ),
-      error: (error, _) => Text(
-        _readError(error),
-        style: theme.textTheme.bodySmall,
-      ),
+      error: (error, _) =>
+          Text(_readError(error), style: theme.textTheme.bodySmall),
       data: (items) {
         if (items.isEmpty) {
           return Text(
@@ -635,10 +629,8 @@ class _EcfPlatformApplicationDetailPageState
         padding: EdgeInsets.symmetric(vertical: 8),
         child: LinearProgressIndicator(),
       ),
-      error: (error, _) => Text(
-        _readError(error),
-        style: theme.textTheme.bodySmall,
-      ),
+      error: (error, _) =>
+          Text(_readError(error), style: theme.textTheme.bodySmall),
       data: (data) {
         if (data.steps.isEmpty) {
           return Text(
@@ -711,10 +703,8 @@ class _EcfPlatformApplicationDetailPageState
         padding: EdgeInsets.symmetric(vertical: 6),
         child: LinearProgressIndicator(minHeight: 3),
       ),
-      error: (error, _) => Text(
-        _readError(error),
-        style: theme.textTheme.bodySmall,
-      ),
+      error: (error, _) =>
+          Text(_readError(error), style: theme.textTheme.bodySmall),
       data: (data) {
         if (!data.hasGrant) {
           return Container(
@@ -954,7 +944,11 @@ class _MessageCard extends StatelessWidget {
           children: [
             Icon(icon, size: 40, color: theme.colorScheme.outline),
             const SizedBox(height: 12),
-            Text(title, style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(
+              title,
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 6),
             Text(
               message,

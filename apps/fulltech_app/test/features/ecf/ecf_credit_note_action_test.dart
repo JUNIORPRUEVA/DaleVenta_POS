@@ -55,8 +55,8 @@ void main() {
     ),
   );
 
-  FilledButton confirmButton(WidgetTester tester) =>
-      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Preparar nota'));
+  FilledButton confirmButton(WidgetTester tester) => tester
+      .widget<FilledButton>(find.widgetWithText(FilledButton, 'Preparar nota'));
 
   Future<void> open(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1000, 1600);
@@ -78,8 +78,9 @@ void main() {
   const uuidV4 =
       r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
 
-  testWidgets('shows the original and its available balance before acting',
-      (tester) async {
+  testWidgets('shows the original and its available balance before acting', (
+    tester,
+  ) async {
     await open(tester);
 
     expect(find.text('Nota de crédito (E34)'), findsOneWidget);
@@ -100,8 +101,9 @@ void main() {
     expect(confirmButton(tester).onPressed, isNotNull);
   });
 
-  testWidgets('a TOTAL credit note copies the original and sends a fresh id',
-      (tester) async {
+  testWidgets('a TOTAL credit note copies the original and sends a fresh id', (
+    tester,
+  ) async {
     await open(tester);
 
     await tester.enterText(find.byType(TextField).last, 'Anulación total');
@@ -127,8 +129,9 @@ void main() {
     await settleRequest(tester);
   });
 
-  testWidgets('a PARTIAL credit note sends only the lines the user typed',
-      (tester) async {
+  testWidgets('a PARTIAL credit note sends only the lines the user typed', (
+    tester,
+  ) async {
     await open(tester);
 
     await tester.tap(find.text('Parcial'));
@@ -153,8 +156,9 @@ void main() {
     await settleRequest(tester);
   });
 
-  testWidgets('an unreadable line blocks a PARTIAL credit note',
-      (tester) async {
+  testWidgets('an unreadable line blocks a PARTIAL credit note', (
+    tester,
+  ) async {
     await open(tester);
 
     await tester.tap(find.text('Parcial'));
@@ -168,14 +172,16 @@ void main() {
     expect(paths, isEmpty);
   });
 
-  testWidgets('a rejected credit note surfaces the safe message, not a crash',
-      (tester) async {
+  testWidgets('a rejected credit note surfaces the safe message, not a crash', (
+    tester,
+  ) async {
     final dio = Dio()
       ..httpClientAdapter = _FakeAdapter(
         (_) async => _json({
           'ok': false,
           'code': 'E34_INSUFFICIENT_FISCAL_BALANCE',
-          'safeMessage': 'La cantidad supera el saldo acreditable del original.',
+          'safeMessage':
+              'La cantidad supera el saldo acreditable del original.',
         }),
       );
 

@@ -56,7 +56,8 @@ export class EcfDgiiApplicationService {
   /** Borrador persistente + lo que falta para poder enviar. */
   async getDraft(user: TenantUser) {
     const companyId = requireTenant(user);
-    const record = await this.prisma.ecfDgiiHabilitation.findUnique({
+    const [record, company, config] = await Promise.all([
+      this.prisma.ecfDgiiHabilitation.findUnique({
       where: { companyId },
       select: {
         draftPayload: true,
@@ -68,12 +69,37 @@ export class EcfDgiiApplicationService {
         consentAcceptedAt: true,
         state: true,
       },
-    });
+      }),
+      this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      }),
+      this.prisma.appConfig.findFirst({
+        where: { companyId },
+        select: {
+          rnc: true,
+          address: true,
+          legalRepresentativeName: true,
+          legalRepresentativeCedula: true,
+        },
+      }),
+    ]);
     const draft = record?.draftPayload ?? null;
     return {
       companyId,
       state: record?.state ?? "NOT_STARTED",
       draft,
+      suggested: {
+        company: {
+          rnc: config?.rnc?.trim() ?? "",
+          legalName: company?.name?.trim() ?? "",
+          address: config?.address?.trim() ?? "",
+        },
+        representative: {
+          fullName: config?.legalRepresentativeName?.trim() ?? "",
+          identification: config?.legalRepresentativeCedula?.trim() ?? "",
+        },
+      },
       draftUpdatedAt: record?.draftUpdatedAt ?? null,
       draftUpdatedByUserId: record?.draftUpdatedByUserId ?? null,
       draftRevision: record?.draftRevision ?? 0,
@@ -95,6 +121,11 @@ export class EcfDgiiApplicationService {
 
     await this.assertCompanyExists(companyId);
     const record = await this.ensureRecord(companyId, user.id);
+    if (
+      !["NOT_STARTED", "PREPARING_REQUIREMENTS", "REQUIRES_CORRECTION", "REJECTED"].includes(record.state)
+    ) {
+      throw new ConflictException("ECF_DGII_TRANSITION_NOT_ALLOWED");
+    }
 
     // A partir de la primera edición, la revisión es obligatoria: es el único
     // dato que distingue «estoy editando lo vigente» de «llego tarde».
@@ -107,7 +138,11 @@ export class EcfDgiiApplicationService {
     return this.prisma.$transaction(async (tx) => {
       // Compare-and-set atómico: solo una petición puede pasar de N a N+1.
       const updated = await tx.ecfDgiiHabilitation.updateMany({
-        where: { companyId, draftRevision: expected },
+        where: {
+          companyId,
+          draftRevision: expected,
+          state: { in: ["NOT_STARTED", "PREPARING_REQUIREMENTS", "REQUIRES_CORRECTION", "REJECTED"] },
+        },
         data: {
           draftPayload: dto.payload as Prisma.InputJsonValue,
           draftUpdatedAt: savedAt,

@@ -223,7 +223,9 @@ class _EcfSimulatedDispatchActionState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.play_arrow_rounded, size: 18),
-            label: Text(_running ? 'Ejecutando…' : 'Ejecutar despacho simulado'),
+            label: Text(
+              _running ? 'Ejecutando…' : 'Ejecutar despacho simulado',
+            ),
           ),
           if (_blockedReason != null) ...[
             const SizedBox(height: 10),
@@ -278,18 +280,12 @@ class _OutcomePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Resultado de la simulación',
-            style: theme.textTheme.titleSmall,
-          ),
+          Text('Resultado de la simulación', style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           for (final (label, value) in rows)
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                '$label: $value',
-                style: theme.textTheme.bodySmall,
-              ),
+              child: Text('$label: $value', style: theme.textTheme.bodySmall),
             ),
           const SizedBox(height: 6),
           Text(

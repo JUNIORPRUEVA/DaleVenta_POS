@@ -9,6 +9,7 @@ import {
   catalogWithClass,
   initialStepStatus,
   nextExecutableStep,
+  resolveStepStatus,
   stageOf,
   stepStatusFromTransport,
   type ActivationStepInput,
@@ -39,7 +40,7 @@ describe("motor de activación e-CF — clasificación", () => {
     }
   });
 
-  it("reparte 2 automáticos, 4 del cliente, 7 del proveedor y 2 de la autoridad", () => {
+  it("reparte 2 automáticos, 7 del cliente, 4 del proveedor y 2 de la autoridad", () => {
     const counts = catalogWithClass().reduce<Record<string, number>>(
       (acc, item) => {
         acc[item.className] = (acc[item.className] ?? 0) + 1;
@@ -48,10 +49,11 @@ describe("motor de activación e-CF — clasificación", () => {
       {},
     );
     expect(counts[ECF_ACTIVATION_CLASS.AUTOMATIC_LOCAL]).toBe(2);
-    // 4 desde que existe ROLE_ASSIGNMENT (etapa V): la asignación de roles la
-    // resuelve el cliente en su Oficina Virtual, nunca el motor.
-    expect(counts[ECF_ACTIVATION_CLASS.CLIENT_ACTION]).toBe(4);
-    expect(counts[ECF_ACTIVATION_CLASS.PROVIDER_WAIT]).toBe(7);
+    // 7 desde que DGII_POSTULATION, SERVICE_URLS y ENCF_REQUEST exigen una
+    // presentación en el Portal que ningún proveedor documenta: el dueño es el
+    // cliente, no el motor.
+    expect(counts[ECF_ACTIVATION_CLASS.CLIENT_ACTION]).toBe(7);
+    expect(counts[ECF_ACTIVATION_CLASS.PROVIDER_WAIT]).toBe(4);
     expect(counts[ECF_ACTIVATION_CLASS.AUTHORITY_WAIT]).toBe(2);
   });
 
@@ -140,6 +142,85 @@ describe("motor de activación e-CF — resultados del transporte", () => {
         simulated: true,
       }),
     ).toBe(ECF_ACTIVATION_STATUS.AWAITING_CLIENT);
+  });
+});
+
+describe("motor de activación e-CF — una respuesta OK no es una aprobación", () => {
+  const OFFICIAL_STEPS = [
+    "DGII_POSTULATION",
+    "SERVICE_URLS",
+    "SWORN_DECLARATION",
+    "ENCF_REQUEST",
+    "FINAL_AUTHORIZATION",
+    "PRODUCTION_ENABLEMENT",
+  ];
+
+  it("ningún paso con confirmación oficial se completa con un OK del transporte", () => {
+    for (const key of OFFICIAL_STEPS) {
+      for (const className of [
+        ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
+        ECF_ACTIVATION_CLASS.CLIENT_ACTION,
+        ECF_ACTIVATION_CLASS.AUTHORITY_WAIT,
+      ]) {
+        for (const simulated of [true, false]) {
+          const status = resolveStepStatus({
+            key,
+            className,
+            transportOk: true,
+            simulated,
+          });
+          expect(status).not.toBe(ECF_ACTIVATION_STATUS.COMPLETED);
+        }
+      }
+    }
+  });
+
+  it("los pasos de presentación DGII quedan esperando al cliente", () => {
+    for (const key of ["DGII_POSTULATION", "SERVICE_URLS", "ENCF_REQUEST"]) {
+      expect(
+        resolveStepStatus({
+          key,
+          className: ECF_ACTIVATION_CLASS.CLIENT_ACTION,
+          transportOk: true,
+          simulated: true,
+        }),
+      ).toBe(ECF_ACTIVATION_STATUS.AWAITING_CLIENT);
+    }
+  });
+
+  it("la autorización final espera a la autoridad incluso si el transporte dice OK", () => {
+    expect(
+      resolveStepStatus({
+        key: "FINAL_AUTHORIZATION",
+        className: ECF_ACTIVATION_CLASS.AUTHORITY_WAIT,
+        transportOk: true,
+        simulated: false,
+      }),
+    ).toBe(ECF_ACTIVATION_STATUS.AWAITING_AUTHORITY);
+  });
+
+  it("los pasos puramente técnicos del proveedor sí se completan con un OK", () => {
+    for (const key of ["ALANUBE_REGISTRATION", "XML_SIGNATURE", "SET_TESTS"]) {
+      expect(
+        resolveStepStatus({
+          key,
+          className: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
+          transportOk: true,
+          simulated: true,
+        }),
+      ).toBe(ECF_ACTIVATION_STATUS.COMPLETED);
+    }
+  });
+
+  it("un fallo del transporte sigue siendo FAILED y no se disfraza", () => {
+    expect(
+      resolveStepStatus({
+        key: "SET_TESTS",
+        className: ECF_ACTIVATION_CLASS.PROVIDER_WAIT,
+        transportOk: false,
+        simulated: true,
+      }),
+    ).toBe(ECF_ACTIVATION_STATUS.FAILED);
   });
 });
 

@@ -26,7 +26,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Prueba FUNCIONAL de la cadena:
 ///
 ///   Configuración de empresa → Activar e-CF → Guardar →
-///   Aparece en el Drawer → Abrir el módulo → Desactivar → Desaparece.
+///   El asistente permanece en el Drawer; el interruptor controla la emisión.
 ///
 /// Monta la pantalla REAL (`AccountCompanySettingsScreen`), el Drawer REAL
 /// (`AppDrawer`, el mismo que sirve `buildAdaptiveDrawer`), el
@@ -466,7 +466,7 @@ void main() {
   });
 
   group('prueba funcional — pantalla real + Drawer real', () {
-    testWidgets('1 — empresa desactivada: opción oculta en el Drawer', (
+    testWidgets('1 — empresa desactivada: asistente visible en el Drawer', (
       tester,
     ) async {
       final harness = await _pumpSettings(
@@ -478,7 +478,7 @@ void main() {
       expect(find.byType(AppDrawer), findsOneWidget);
       await _scrollDrawerToBottom(tester);
 
-      expect(_drawerText(_ecfDrawerLabel), findsNothing);
+      expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
       expect(harness.httpCalls, isEmpty);
     });
 
@@ -535,7 +535,7 @@ void main() {
     });
 
     testWidgets(
-      '6/7/8 — desactivar: confirmación, PATCH y el Drawer oculta la opción',
+      '6/7/8 — desactivar: confirmación, PATCH y el asistente sigue visible',
       (tester) async {
         final harness = await _pumpSettings(
           tester,
@@ -555,7 +555,7 @@ void main() {
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
         expect(harness.httpCalls, isEmpty);
       },
     );
@@ -588,10 +588,10 @@ void main() {
         expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
         expect(find.text(_ecfErrorText), findsOneWidget);
 
-        // Ni el interruptor ni el menú muestran una activación que no ocurrió.
+        // El interruptor sigue apagado aunque el asistente sea accesible.
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
         expect(harness.httpCalls, isEmpty);
       },
     );
@@ -651,7 +651,7 @@ void main() {
         expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
 
         await _scrollDrawerToBottom(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
         expect(harness.backend.enabledByCompany['company-a'], isTrue);
         expect(harness.httpCalls, isEmpty);
       },
