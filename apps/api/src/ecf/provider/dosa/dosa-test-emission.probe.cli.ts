@@ -10,6 +10,7 @@ import {
 } from "./dosa-test-emission.probe";
 import { createFetchDosaTransport } from "./dosa-emission.client";
 import { assessDosaDocumentBarrier } from "./dosa-emission.barrier";
+import { DOSA_UNIDAD_MEDIDA_CODES } from "./dosa-ecf.mapper";
 
 /**
  * CLI del probador E31 de TEST.
@@ -69,11 +70,10 @@ export function buildCoherentE31(input: {
   taxRate: number;
   issueDate: string;
   /**
-   * Código de unidad de medida. DOSA la exige, y su catálogo no está
-   * documentado en los materiales disponibles: **no se pone un valor por
-   * defecto**, se recibe del operador en cada ejecución.
+   * Código **entero** de unidad de medida del catálogo de DOSA (1..20).
+   * `unidadMedida` es Integer en el contrato del proveedor, no una cadena.
    */
-  unitOfMeasure: string;
+  unitOfMeasure: number;
 }): DosaEcfRequestBody {
   const priceCents = Math.round(Number.parseFloat(input.unitPrice) * 100);
   const amountCents = Math.round(priceCents * input.quantity);
@@ -130,22 +130,33 @@ export function buildCoherentE31(input: {
 }
 
 /**
- * Unidad de medida del comprobante de prueba.
+ * Unidad de medida del comprobante de prueba, como código entero del catálogo
+ * oficial de DOSA (`Catálogo de Unidades de Medida`, 1..20).
  *
- * Se exige explícitamente (`--unidad` o `DOSA_TEST_UNIT_OF_MEASURE`) porque
- * DOSA la considera obligatoria y su catálogo de códigos no está documentado en
- * los materiales que tenemos. Poner un valor por defecto sería inventar un
- * código fiscal; si falta, la prueba no se ejecuta.
+ * Se exige explícitamente (`--unidad` o `DOSA_TEST_UNIT_OF_MEASURE`) porque el
+ * código identifica una unidad fiscal concreta: poner un valor por defecto sería
+ * declarar una unidad que el operador no eligió.
  */
-function unitOfMeasure(): string {
-  const value = (arg("unidad") ?? process.env.DOSA_TEST_UNIT_OF_MEASURE ?? "").trim();
-  if (value.length === 0) {
+function unitOfMeasure(): number {
+  const raw = (arg("unidad") ?? process.env.DOSA_TEST_UNIT_OF_MEASURE ?? "").trim();
+  if (raw.length === 0) {
     fail(
       "DOSA_PROBE_UNIT_OF_MEASURE_REQUIRED",
-      "usa --unidad=<codigo> (o DOSA_TEST_UNIT_OF_MEASURE); DOSA exige unidadMedida",
+      "usa --unidad=<1..20> (o DOSA_TEST_UNIT_OF_MEASURE); DOSA exige unidadMedida",
     );
   }
-  return value;
+  const code = Number.parseInt(raw, 10);
+  if (
+    !Number.isInteger(code) ||
+    String(code) !== raw ||
+    !DOSA_UNIDAD_MEDIDA_CODES.includes(code)
+  ) {
+    fail(
+      "DOSA_PROBE_UNIT_OF_MEASURE_INVALID",
+      `unidadMedida debe ser un código entero del catálogo de DOSA (1..20); recibido: ${raw}`,
+    );
+  }
+  return code;
 }
 
 async function main(): Promise<void> {

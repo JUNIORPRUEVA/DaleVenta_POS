@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { DosaEcfRequestBody } from "./dosa-ecf.contract";
 import { DOSA_ECF_EMISSION_PATH } from "./dosa-ecf.contract";
+import { DOSA_UNIDAD_MEDIDA_CODES } from "./dosa-ecf.mapper";
 import {
   classifyDosaResponse,
   type DosaResponseClassification,
@@ -44,6 +45,7 @@ export const DOSA_PROBE_BLOCKED = {
   totalsIncoherent: "DOSA_PROBE_TOTALS_INCOHERENT",
   notAuthorized: "DOSA_PROBE_EXTERNAL_POST_NOT_AUTHORIZED",
   unsupportedType: "DOSA_PROBE_DOCUMENT_TYPE_UNSUPPORTED",
+  unitOfMeasureInvalid: "DOSA_PROBE_UNIT_OF_MEASURE_INVALID",
 } as const;
 
 /** Host oficial y único admitido para la emisión. */
@@ -124,6 +126,17 @@ export function assessProbeReadiness(input: {
   }
   if (!totalsAreCoherent(body)) {
     blockedReasons.push(DOSA_PROBE_BLOCKED.totalsIncoherent);
+  }
+  // `unidadMedida` es un código entero del catálogo de DOSA. Se comprueba aquí
+  // también, no solo en la CLI, para que ninguna invocación programática envíe
+  // un comprobante sin unidad o con un código fuera de catálogo.
+  const itemUnitInvalid = (body.detallesItems ?? []).some(
+    (item) =>
+      typeof item.unidadMedida !== "number" ||
+      !DOSA_UNIDAD_MEDIDA_CODES.includes(item.unidadMedida),
+  );
+  if (itemUnitInvalid) {
+    blockedReasons.push(DOSA_PROBE_BLOCKED.unitOfMeasureInvalid);
   }
 
   return { allowed: blockedReasons.length === 0, blockedReasons };

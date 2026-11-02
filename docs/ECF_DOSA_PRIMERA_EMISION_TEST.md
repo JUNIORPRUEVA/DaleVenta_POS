@@ -34,9 +34,22 @@ Un único comprobante por ejecución, con una sola tentativa por documento
 5. Rango de secuencia **autorizado por DOSA** en
    `DOSA_TEST_SEQUENCE_PREFIX` / `_FROM` / `_TO`. No se inventa un rango ni se
    reutiliza uno productivo.
-6. **Código de unidad de medida** (`--unidad` o `DOSA_TEST_UNIT_OF_MEASURE`).
-   DOSA la exige y su catálogo no está documentado en los materiales que
-   tenemos: **no hay valor por defecto**, lo aporta el operador.
+6. **Código de unidad de medida** (`--unidad` o `DOSA_TEST_UNIT_OF_MEASURE`), entero
+del catálogo publicado por DOSA (1..20). El código identifica una unidad fiscal
+concreta: **no hay valor por defecto**, lo aporta el operador.
+
+   | Código | Unidad | Código | Unidad |
+   | --- | --- | --- | --- |
+   | 1 | Unidad | 11 | Yarda |
+   | 2 | Caja | 12 | Litro |
+   | 3 | Kilogramo | 13 | Mililitro |
+   | 4 | Gramo | 14 | Galón |
+   | 5 | Libra | 15 | Docena |
+   | 6 | Onza | 16 | Paquete |
+   | 7 | Metro | 17 | Servicio |
+   | 8 | Centímetro | 18 | Hora |
+   | 9 | Pulgada | 19 | Día |
+   | 10 | Pie | 20 | Mes |
 7. Almacén de evidencia escribible (`DOSA_PROBE_EVIDENCE_FILE`, por defecto
    `.dosa-probe/evidence.jsonl`).
 
@@ -50,7 +63,7 @@ Desde `apps/api`, con `dist` construido:
 
 ```
 node dist/ecf/provider/dosa/dosa-test-emission.probe.cli.js \
-  --encf=E31000113500 --unidad=<CODIGO> --dry-run
+  --encf=E31000113500 --unidad=<1..20> --dry-run
 ```
 
 Qué comprueba, en este orden:
@@ -79,7 +92,7 @@ Solo con la autorización del punto 2.1 y tras un dry-run en verde:
 
 ```
 node dist/ecf/provider/dosa/dosa-test-emission.probe.cli.js \
-  --encf=<ENCF_AUTORIZADO> --unidad=<CODIGO> --token=<TOKEN_DE_AUTORIZACION>
+  --encf=<ENCF_AUTORIZADO> --unidad=<1..20> --token=<TOKEN_DE_AUTORIZACION>
 ```
 
 El `token` lo calcula `probeAuthorizationToken(encf)`; existe para que un envío

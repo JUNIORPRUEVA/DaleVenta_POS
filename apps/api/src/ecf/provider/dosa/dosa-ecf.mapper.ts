@@ -30,6 +30,8 @@ export const DOSA_MAPPER_BLOCKED = {
   referenceRequired: "DOSA_REFERENCE_REQUIRED",
   unsupportedFields: "DOSA_UNSUPPORTED_FIELDS",
   unitOfMeasureRequired: "DOSA_UNIT_OF_MEASURE_REQUIRED",
+  unitOfMeasureUnmapped: "DOSA_UNIT_OF_MEASURE_UNMAPPED",
+  modificationCodeRequired: "DOSA_MODIFICATION_CODE_REQUIRED",
 } as const;
 
 /**
@@ -61,22 +63,67 @@ function indicadorBienoServicio(line: EcfLine): 1 | 2 {
 }
 
 /**
- * Unidad de medida: DOSA la exige en cada ítem.
+ * Traducción de la unidad de medida de FullPOS al **código entero** del catalogo
+ * oficial de DOSA.
  *
- * El catálogo de códigos válidos del proveedor no está documentado en los
- * materiales que tenemos, así que **no se traduce ni se inventa**: se exige que
- * venga informada y se envía tal cual. Si falta, el documento se rechaza.
+ * HECHO verificado en el README público del proveedor (`Catálogo de Unidades de
+ * Medida`, 20 códigos): `unidadMedida` es un **Integer**, no una cadena, y sus
+ * valores son 1 Unidad, 2 Caja, 3 Kilogramo, 4 Gramo, 5 Libra, 6 Onza, 7 Metro,
+ * 8 Centímetro, 9 Pulgada, 10 Pie, 11 Yarda, 12 Litro, 13 Mililitro, 14 Galón,
+ * 15 Docena, 16 Paquete, 17 Servicio, 18 Hora, 19 Día, 20 Mes.
+ *
+ * Solo se traducen los códigos de unidad que FullPOS **tiene de verdad**
+ * (`unit_of_measures` globales del seed). No se inventan equivalencias para
+ * códigos que FullPOS no ofrece hoy (2 Caja, 8 Centímetro, 15 Docena, 16
+ * Paquete, 17 Servicio, 18 Hora, 19 Día, 20 Mes): si una empresa crea una unidad
+ * propia con un código desconocido, el documento se **rechaza** con un motivo
+ * claro en lugar de enviar un número adivinado.
  */
-function unidadMedida(line: EcfLine): string | null {
-  const raw = (line.unitOfMeasure ?? "").trim();
-  if (raw.length === 0) return null;
-  if (raw.length > 32) return null;
-  return raw;
+export const DOSA_UNIDAD_MEDIDA_BY_FULLPOS_CODE: Readonly<Record<string, number>> = {
+  UNIT: 1, // Unidad
+  YARD: 11, // Yarda
+  METER: 7, // Metro
+  FOOT: 10, // Pie
+  INCH: 9, // Pulgada
+  POUND: 5, // Libra
+  KILOGRAM: 3, // Kilogramo
+  GRAM: 4, // Gramo
+  OUNCE: 6, // Onza
+  LITER: 12, // Litro
+  MILLILITER: 13, // Mililitro
+  GALLON: 14, // Galón
+};
+
+/** Códigos válidos según el catalogo publicado por DOSA. */
+export const DOSA_UNIDAD_MEDIDA_CODES: readonly number[] = Array.from(
+  { length: 20 },
+  (_value, index) => index + 1,
+);
+
+/**
+ * Unidad de medida: DOSA la exige y la quiere como **código numérico**.
+ *
+ * Devuelve `null` si falta, y un motivo distinto si viene un código de FullPOS
+ * que no está en la tabla verificada. Nunca se envía un valor por defecto.
+ */
+function unidadMedida(line: EcfLine): { code: number } | { blockedReason: string } {
+  const raw = (line.unitOfMeasure ?? "").trim().toUpperCase();
+  if (raw.length === 0) {
+    return {
+      blockedReason: `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:${line.lineNumber}`,
+    };
+  }
+  const code = DOSA_UNIDAD_MEDIDA_BY_FULLPOS_CODE[raw];
+  if (code === undefined) {
+    return {
+      blockedReason: `${DOSA_MAPPER_BLOCKED.unitOfMeasureUnmapped}:${line.lineNumber}:${raw}`,
+    };
+  }
+  return { code };
 }
 
 const UNVERIFIED_IN_DRAFT: readonly string[] = [
   "Formato de fecha (se emite dd-MM-yyyy según la documentación pública).",
-  "Catálogo de códigos de unidadMedida: se exige informada, pero no se traduce porque no está documentado.",
   "MontoGravadoI1 como suma de líneas al 18 %.",
   "ITBIS1 como tasa (18) en lugar de monto.",
   "paginacion omitida por no conocerse si es obligatoria.",
@@ -110,6 +157,19 @@ export function mapEcfToDosaDraft(
   ) {
     return { ok: false, blockedReason: DOSA_MAPPER_BLOCKED.referenceRequired };
   }
+  // El catalogo de `codigoModificacion` no esta publicado: el documento solo
+  // dice «Codigo del tipo de modificacion» y sus ejemplos muestran el valor 1.
+  // Antes se enviaba `?? 1` cuando el llamador no lo aportaba, es decir, se
+  // declaraba un tipo de modificacion que nadie habia elegido. Ahora se exige.
+  if (
+    document.type === "E34" &&
+    metadata.modificationCode === undefined
+  ) {
+    return {
+      ok: false,
+      blockedReason: DOSA_MAPPER_BLOCKED.modificationCodeRequired,
+    };
+  }
   if (document.unsupportedFields && Object.keys(document.unsupportedFields).length > 0) {
     return { ok: false, blockedReason: DOSA_MAPPER_BLOCKED.unsupportedFields };
   }
@@ -117,20 +177,18 @@ export function mapEcfToDosaDraft(
   const items: DosaEcfItem[] = [];
   for (const line of document.lines) {
     const unidad = unidadMedida(line);
-    if (unidad === null) {
-      // Dato fiscal obligatorio ausente: se rechaza antes de construir el
-      // borrador. Mandarlo sin unidad produciría un comprobante inválido.
-      return {
-        ok: false,
-        blockedReason: `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:${line.lineNumber}`,
-      };
+    if ("blockedReason" in unidad) {
+      // Dato fiscal obligatorio ausente o no traducible: se rechaza antes de
+      // construir el borrador. Mandarlo sin unidad, o con un código inventado,
+      // produciría un comprobante inválido.
+      return { ok: false, blockedReason: unidad.blockedReason };
     }
     items.push({
       numeroLinea: line.lineNumber,
       indicadorFacturacion: indicadorFacturacion(line),
       nombreItem: line.name,
       indicadorBienoServicio: indicadorBienoServicio(line),
-      unidadMedida: unidad,
+      unidadMedida: unidad.code,
       cantidadItem: quantityString(line.quantity),
       precioUnitarioItem: moneyString(line.unitPrice),
       montoItem: moneyString(lineAmount(line)),
@@ -182,7 +240,7 @@ export function mapEcfToDosaDraft(
         ? {
             informacionReferencia: {
               NCFModificado: document.reference.originalENcf,
-              codigoModificacion: String(metadata.modificationCode ?? 1),
+              codigoModificacion: String(metadata.modificationCode),
               ...(document.reference.modificationReason
                 ? { RazonModificacion: document.reference.modificationReason }
                 : {}),

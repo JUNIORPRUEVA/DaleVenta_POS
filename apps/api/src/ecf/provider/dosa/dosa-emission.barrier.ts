@@ -29,6 +29,7 @@
  */
 
 import type { EcfDocumentType } from "../../fiscal-core/ecf-fiscal-document";
+import { DOSA_UNIDAD_MEDIDA_CODES } from "./dosa-ecf.mapper";
 
 /** Códigos estables de bloqueo de la barrera. */
 export const DOSA_BARRIER_BLOCKED = {
@@ -243,11 +244,16 @@ export function assessDosaDocumentBarrier(
       block(`${DOSA_BARRIER_BLOCKED.itemInvalid}:${label}:INDICADOR_BIENO_SERVICIO`);
     }
 
-    // Sin unidad de medida el documento no es transmisible para DOSA. Es el
-    // dato que el mapeador exige; la barrera lo vuelve a comprobar aquí porque
+    // Sin unidad de medida el documento no es transmisible para DOSA, y el
+    // valor debe ser un código del catálogo publicado (Integer 1..20). Es el
+    // dato que el mapeador traduce; la barrera lo vuelve a comprobar aquí porque
     // un cuerpo puede llegar construido a mano.
-    const unidad = nonEmpty(raw["unidadMedida"]);
-    if (unidad === null || unidad.length > 32) {
+    const unidad = raw["unidadMedida"];
+    if (
+      typeof unidad !== "number" ||
+      !Number.isInteger(unidad) ||
+      !DOSA_UNIDAD_MEDIDA_CODES.includes(unidad)
+    ) {
       block(`${DOSA_BARRIER_BLOCKED.itemUnitMissing}:${label}`);
     }
 

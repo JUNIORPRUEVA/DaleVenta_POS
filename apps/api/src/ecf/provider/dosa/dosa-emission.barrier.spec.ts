@@ -75,7 +75,11 @@ describe("barrera DOSA — cuerpos válidos del mapeador", () => {
         .allowed,
     ).toBe(true);
 
-    const e34 = bodyOf(validE34Partial, { ...metadata, encf: "E340000000001" });
+    const e34 = bodyOf(validE34Partial, {
+      ...metadata,
+      encf: "E340000000001",
+      modificationCode: 1,
+    });
     expect(
       assessDosaDocumentBarrier(e34, { documentType: "E34", companyRnc: SENDER_RNC })
         .allowed,
@@ -145,13 +149,20 @@ describe("barrera DOSA — datos fiscales obligatorios", () => {
     );
   });
 
-  it("rechaza una unidad de medida en blanco", () => {
-    const body = clone(bodyOf(validE31WithItbis));
-    body.detallesItems[0].unidadMedida = "   ";
+  it("rechaza una unidad de medida fuera del catálogo de DOSA", () => {
+    const fueraDeCatalogo = clone(bodyOf(validE31WithItbis));
+    fueraDeCatalogo.detallesItems[0].unidadMedida = 21;
 
     expect(
-      assessDosaDocumentBarrier(body, ctx).blockingReasons,
+      assessDosaDocumentBarrier(fueraDeCatalogo, ctx).blockingReasons,
     ).toContain(`${DOSA_BARRIER_BLOCKED.itemUnitMissing}:#1`);
+
+    const comoTexto = clone(bodyOf(validE31WithItbis));
+    // El contrato pide Integer: una cadena no es un código válido.
+    comoTexto.detallesItems[0].unidadMedida = "1" as unknown as number;
+    expect(assessDosaDocumentBarrier(comoTexto, ctx).blockingReasons).toContain(
+      `${DOSA_BARRIER_BLOCKED.itemUnitMissing}:#1`,
+    );
   });
 
   it("rechaza indicadores fuera de catálogo", () => {
@@ -278,7 +289,13 @@ describe("barrera DOSA — totales", () => {
 
 describe("barrera DOSA — referencia del comprobante original", () => {
   it("rechaza un E34 sin referencia", () => {
-    const body = clone(bodyOf(validE34Partial, { ...metadata, encf: "E340000000001" }));
+    const body = clone(
+      bodyOf(validE34Partial, {
+        ...metadata,
+        encf: "E340000000001",
+        modificationCode: 1,
+      }),
+    );
     delete (body as Partial<DosaEcfRequestBody>).informacionReferencia;
 
     expect(

@@ -53,14 +53,15 @@ function e31(overrides: Partial<DosaEcfRequestBody["encabezado"]> = {}): DosaEcf
     detallesItems: [
       {
         numeroLinea: 1,
-        indicadorFacuracionPlaceholder: undefined,
         indicadorFacturacion: 1,
         nombreItem: "PRUEBA",
         indicadorBienoServicio: 2,
+        // Código 1 = Unidad del catálogo publicado por DOSA.
+        unidadMedida: 1,
         cantidadItem: "1",
         precioUnitarioItem: "100.00",
         montoItem: "100.00",
-      } as never,
+      },
     ],
   };
 }
@@ -171,6 +172,25 @@ describe("assessProbeReadiness", () => {
     expect(readiness.blockedReasons).toContain(
       DOSA_PROBE_BLOCKED.totalsIncoherent,
     );
+  });
+
+  it("rechaza un código de unidad de medida fuera del catálogo de DOSA", () => {
+    const fueraDeCatalogo = e31();
+    fueraDeCatalogo.detallesItems[0].unidadMedida = 21;
+    expect(
+      assessProbeReadiness({
+        config: baseConfig(),
+        body: fueraDeCatalogo,
+        encf: ENCF,
+      }).blockedReasons,
+    ).toContain(DOSA_PROBE_BLOCKED.unitOfMeasureInvalid);
+
+    const comoTexto = e31();
+    comoTexto.detallesItems[0].unidadMedida = "1" as unknown as number;
+    expect(
+      assessProbeReadiness({ config: baseConfig(), body: comoTexto, encf: ENCF })
+        .blockedReasons,
+    ).toContain(DOSA_PROBE_BLOCKED.unitOfMeasureInvalid);
   });
 
   it("rechaza sin clave o sin RNC de prueba", () => {

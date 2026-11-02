@@ -1,9 +1,69 @@
 # DOSA — contrato de emisión verificado contra la documentación oficial
 
 Fuente: `https://github.com/alapaix13/DosaInvoicecloud-Documentation`
-(`README.md`, 75 031 bytes, clonado en local el 2026-11-03). Todo lo de abajo es
-**HECHO** leído del documento; lo que no está en el documento se marca como
-**NO DOCUMENTADO**.
+(`README.md`, 71 668 bytes descargados de `raw.githubusercontent.com` el
+2026-11-02). Todo lo de abajo es **HECHO** leído del documento; lo que no está en
+el documento se marca como **NO DOCUMENTADO**.
+
+## 0. Campos de línea (`detallesItems.items`) — verificados
+
+| Campo | Tipo según el documento | Valores |
+| --- | --- | --- |
+| `numeroLinea` | Integer, requerido | secuencial |
+| `indicadorFacturacion` | Integer, requerido | **1** por producto · **2** por servicio · **3** mixta · **4** servicio profesional |
+| `nombreItem` | String, requerido | descripción |
+| `indicadorBienoServicio` | Integer, requerido | **1 Servicio** · **2 Bien** (al revés que el código de la DGII) |
+| `cantidadItem` | Decimal, requerido | cantidad |
+| `unidadMedida` | **Integer**, requerido | **código del catálogo 1..20** (ver tabla) |
+| `precioUnitarioItem` | Decimal, requerido | precio unitario |
+| `montoItem` | Decimal, requerido | cantidad × precio |
+
+### Catálogo de Unidades de Medida (publicado por el proveedor)
+
+| Código | Unidad | Código FullPOS que lo produce |
+| --- | --- | --- |
+| 1 | Unidad | `UNIT` |
+| 2 | Caja | — (FullPOS no tiene) |
+| 3 | Kilogramo | `KILOGRAM` |
+| 4 | Gramo | `GRAM` |
+| 5 | Libra | `POUND` |
+| 6 | Onza | `OUNCE` |
+| 7 | Metro | `METER` |
+| 8 | Centímetro | — (FullPOS no tiene) |
+| 9 | Pulgada | `INCH` |
+| 10 | Pie | `FOOT` |
+| 11 | Yarda | `YARD` |
+| 12 | Litro | `LITER` |
+| 13 | Mililitro | `MILLILITER` |
+| 14 | Galón | `GALLON` |
+| 15 | Docena | — (FullPOS no tiene) |
+| 16 | Paquete | — (FullPOS no tiene) |
+| 17 | Servicio | — (FullPOS no tiene) |
+| 18 | Hora | — (FullPOS no tiene) |
+| 19 | Día | — (FullPOS no tiene) |
+| 20 | Mes | — (FullPOS no tiene) |
+
+Implementado en `DOSA_UNIDAD_MEDIDA_BY_FULLPOS_CODE`
+(`apps/api/src/ecf/provider/dosa/dosa-ecf.mapper.ts`). Un código de unidad que no
+esté en la tabla **bloquea el documento** con
+`DOSA_UNIT_OF_MEASURE_UNMAPPED:<línea>:<código>`: no se adivina la equivalencia ni
+se envía un valor por defecto. Los códigos 2, 8 y 15–20 existen en DOSA pero hoy
+FullPOS no puede producirlos porque no tiene esas unidades en
+`unit_of_measures`.
+
+### `codigoModificacion` (notas de crédito) — catálogo NO DOCUMENTADO
+
+El documento pide `Referencia.CodigoModificacion` («Código del tipo de
+modificación») y sus ejemplos usan `1` con `RazonModificacion: "Corrección de
+factura"`, pero **no publica la tabla de valores**. Por eso el mapeador **exige**
+que el llamador aporte el código (`DOSA_MODIFICATION_CODE_REQUIRED`): antes se
+enviaba `1` por defecto, que declaraba un tipo de modificación que nadie había
+elegido.
+
+Otro conflicto del mismo documento: los ejemplos de `NotaDesdeFactura` usan
+claves PascalCase (`Encabezado`, `DetallesItems.Items`, `Referencia`) mientras el
+ejemplo de `EnviarFactura` usa camelCase. FullPOS emite camelCase, que es la
+forma del ejemplo del endpoint de envío. Queda como brecha declarada.
 
 ## 1. Endpoint y autenticación
 

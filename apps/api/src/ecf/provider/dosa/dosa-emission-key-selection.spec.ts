@@ -50,7 +50,7 @@ const BODY: DosaEcfRequestBody = {
       indicadorFacturacion: 1,
       nombreItem: "Articulo de prueba",
       indicadorBienoServicio: 2,
-      unidadMedida: "43",
+      unidadMedida: 1,
       cantidadItem: "1",
       precioUnitarioItem: "100.00",
       montoItem: "100.00",

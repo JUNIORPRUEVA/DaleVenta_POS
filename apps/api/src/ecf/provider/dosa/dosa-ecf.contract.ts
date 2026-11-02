@@ -75,7 +75,8 @@ export const DOSA_ERROR_CODES: Readonly<Record<string, string>> = {
 export const DOSA_CONTRACT_GAPS = [
   "Formato exacto de fecha (la documentación muestra dd-MM-yyyy; falta confirmación).",
   "Cuándo usar 3 (Mixta) y 4 (Servicio profesional) en indicadorFacturacion: el modelo común solo distingue bien de servicio.",
-  "Catálogo de códigos de unidadMedida: se exige informada, pero sus valores válidos no están documentados.",
+  "Valores del catálogo de codigoModificacion: el documento dice «Código del tipo de modificación» pero no publica la tabla; los ejemplos solo muestran 1.",
+  "Forma del request para E34: los ejemplos de NotaDesdeFactura usan claves PascalCase (Encabezado, DetallesItems.Items, Referencia) y el ejemplo de EnviarFactura camelCase.",
   "Si `paginacion` es obligatoria o solo para comprobantes con muchas líneas.",
   "Valores válidos de codigoModificacion por tipo de nota de crédito.",
   "Significado operativo de codigo 0 frente a codigo 2 (tabla vs ejemplo).",
@@ -124,8 +125,11 @@ export type DosaEcfItem = {
   nombreItem: string;
   /** Naturaleza según DOSA: 1 = Servicio, 2 = Bien (al revés que la DGII). */
   indicadorBienoServicio: 1 | 2;
-  /** Obligatoria para DOSA. Sin ella el documento no es transmisible. */
-  unidadMedida: string;
+  /**
+   * Código **entero** del catálogo de unidades de medida de DOSA
+   * (1..20). Verificado en el README público del proveedor; no es una cadena.
+   */
+  unidadMedida: number;
   cantidadItem: string;
   precioUnitarioItem: string;
   montoItem: string;

@@ -36,7 +36,7 @@ function withLine(overrides: Partial<EcfLine>): EcfFiscalDocument {
     discountAmount: "0.00",
     taxCategory: "ITBIS_18",
     taxRate: "0.18",
-    unitOfMeasure: "43",
+    unitOfMeasure: "UNIT",
   };
   return { ...validE31WithItbis, lines: [{ ...base, ...overrides }] };
 }
@@ -101,6 +101,7 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     const result = mapEcfToDosaDraft(validE34Partial, {
       ...metadata,
       encf: "E340000000001",
+      modificationCode: 2,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -108,10 +109,23 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(result.draft.body.encabezado.idDoc.tipoeCF).toBe("34");
     expect(result.draft.body.informacionReferencia).toMatchObject({
       NCFModificado: "E310000000001",
-      codigoModificacion: "1",
+      // Se envia el codigo que eligio el llamador, no un valor por defecto.
+      codigoModificacion: "2",
       RazonModificacion: "Devolucion parcial de prueba",
       FechaNCFModificado: "13-10-2026",
     });
+  });
+
+  it("rechaza un E34 sin código de modificación en lugar de suponer el 1", () => {
+    const result = mapEcfToDosaDraft(validE34Partial, {
+      ...metadata,
+      encf: "E340000000001",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockedReason).toBe(
+      DOSA_MAPPER_BLOCKED.modificationCodeRequired,
+    );
   });
 
   it("el importe de la línea es cantidad x precio menos descuento", () => {
@@ -180,14 +194,28 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     );
   });
 
-  it("transmite la unidad de medida tal como la informa el ítem", () => {
+  it("traduce la unidad de FullPOS al código entero del catálogo de DOSA", () => {
+    const unit = mapEcfToDosaDraft(withLine({ unitOfMeasure: " unit " }), metadata);
+    const yarda = mapEcfToDosaDraft(withLine({ unitOfMeasure: "YARD" }), metadata);
+    const libra = mapEcfToDosaDraft(withLine({ unitOfMeasure: "pound" }), metadata);
+
+    // Catálogo oficial: 1 Unidad · 5 Libra · 11 Yarda.
+    expect(unit.ok && unit.draft.body.detallesItems[0].unidadMedida).toBe(1);
+    expect(yarda.ok && yarda.draft.body.detallesItems[0].unidadMedida).toBe(11);
+    expect(libra.ok && libra.draft.body.detallesItems[0].unidadMedida).toBe(5);
+  });
+
+  it("rechaza un código de unidad que no está en la tabla verificada", () => {
     const result = mapEcfToDosaDraft(
-      withLine({ unitOfMeasure: " UND " }),
+      withLine({ lineNumber: 3, unitOfMeasure: "CAJA_PROPIA" }),
       metadata,
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.draft.body.detallesItems[0].unidadMedida).toBe("UND");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // No se adivina una equivalencia: se bloquea con el código concreto.
+    expect(result.blockedReason).toBe(
+      `${DOSA_MAPPER_BLOCKED.unitOfMeasureUnmapped}:3:CAJA_PROPIA`,
+    );
   });
 
   it("marca el borrador como no verificado en los puntos dudosos", () => {
@@ -198,8 +226,10 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(result.draft.unverified.length).toBeGreaterThan(0);
     const joined = result.draft.unverified.join(" ");
     expect(joined).toMatch(/fecha/i);
-    expect(joined).toMatch(/unidadMedida/i);
     expect(joined).toMatch(/paginacion/i);
+    // La unidad de medida ya está traducida contra el catálogo publicado: no
+    // debe seguir apareciendo como dato sin verificar.
+    expect(joined).not.toMatch(/Catálogo de códigos de unidadMedida/i);
   });
 });
 
