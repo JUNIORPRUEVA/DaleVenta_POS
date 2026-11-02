@@ -44,6 +44,8 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
   let appUrl: string;
   let adminUrl: string;
   const evidence: Record<string, unknown> = {};
+  /** Turno abierto por token de empresa: el contrato de venta lo exige. */
+  const sessionByToken = new Map<string, string>();
 
   async function assertTestDatabase() {
     const [db, user, addr, port] = await Promise.all([
@@ -129,9 +131,39 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     return request(app.getHttpServer())
       .post("/sales")
       .set("Authorization", `Bearer ${token}`)
-      .send(body)
+      .send({
+        // Contrato vigente: la venta declara el turno de caja abierto.
+        // El arnés lo abría pero no lo enviaba, así que el backend lo rechazaba
+        // con LEGACY_MISSING_SESSION antes de llegar a la validación que cada
+        // caso quiere demostrar.
+        originCashSessionId: sessionByToken.get(token),
+        ...body,
+      })
       .expect(expectedStatus)
       .then((res) => res.body);
+  }
+
+  /**
+   * Vender más de lo que hay en el almacén es un **conflicto de estado**, no una
+   * petición mal formada: el backend responde 409 `INSUFFICIENT_WAREHOUSE_STOCK`
+   * desde antes de esta fase y el cliente Flutter ya lo trata así
+   * (`sync_queue_service.dart`, `stock_adjustment_feedback.dart`). Se fija el
+   * código, no solo el status, para que no se degrade a un 400 genérico.
+   */
+  async function expectInsufficientStock(
+    token: string,
+    body: Record<string, unknown>,
+  ) {
+    await assertTestDatabase();
+    const res = await request(app.getHttpServer())
+      .post("/sales")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ originCashSessionId: sessionByToken.get(token), ...body })
+      .expect(409);
+    expect(res.body.code ?? res.body.errorCode).toBe(
+      "INSUFFICIENT_WAREHOUSE_STOCK",
+    );
+    return res.body;
   }
 
   beforeAll(async () => {
@@ -224,9 +256,12 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
       .then((res) => res.body);
     expect(settingsB.measurementUnitsEnabled).toBe(true);
 
-    await openCashSession(companyA.companyId, companyA.userId);
-    await openCashSession(companyB.companyId, companyB.userId);
-
+    await openCashSession(companyA.companyId, companyA.userId).then((session) =>
+      sessionByToken.set(companyA.token, session.id),
+    );
+    await openCashSession(companyB.companyId, companyB.userId).then((session) =>
+      sessionByToken.set(companyB.token, session.id),
+    );
     const legacyProduct = await createProduct(companyA.token, {
       nombre: "Audifonos UAT",
       codigo: `AUD-${Date.now()}`,
@@ -352,24 +387,18 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
       costo: 100,
       unitOfMeasureId: yard.id,
     });
-    await createSale(
-      companyB.token,
-      {
-        paymentMethod: "cash",
-        paymentCashAmount: 1100.2,
-        items: [{ productId: boundary.id, qty: 5.501, priceSoldUnit: 200 }],
-      },
-      400,
-    );
-    await createSale(
-      companyB.token,
-      {
-        paymentMethod: "cash",
-        paymentCashAmount: 1200,
-        items: [{ productId: boundary.id, qty: 6, priceSoldUnit: 200 }],
-      },
-      400,
-    );
+    // Exceder el stock disponible: conflicto de estado (409), no petición
+    // inválida. Se conserva el límite exacto (5.5) como vendible.
+    await expectInsufficientStock(companyB.token, {
+      paymentMethod: "cash",
+      paymentCashAmount: 1100.2,
+      items: [{ productId: boundary.id, qty: 5.501, priceSoldUnit: 200 }],
+    });
+    await expectInsufficientStock(companyB.token, {
+      paymentMethod: "cash",
+      paymentCashAmount: 1200,
+      items: [{ productId: boundary.id, qty: 6, priceSoldUnit: 200 }],
+    });
     await createSale(companyB.token, {
       paymentMethod: "cash",
       paymentCashAmount: 1100,
@@ -460,6 +489,11 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
       .post(`/sales/${telaSale.id}/return`)
       .set("Authorization", `Bearer ${companyB.token}`)
       .send({
+        // Contrato completo de devolución: turno del comprobante original,
+        // turno de la operación y momento en que ocurrió.
+        originalSaleCashSessionId: sessionByToken.get(companyB.token),
+        operationCashSessionId: sessionByToken.get(companyB.token),
+        operationOccurredAt: new Date().toISOString(),
         reason: "Phase 2.6 partial UAT",
         items: [{ saleItemId: telaSale.items[0].id, qty: 1.25 }],
       })
@@ -472,7 +506,12 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     await request(app.getHttpServer())
       .post(`/sales/${telaSale.id}/return`)
       .set("Authorization", `Bearer ${companyB.token}`)
-      .send({ items: [{ saleItemId: telaSale.items[0].id, qty: 4.251 }] })
+      .send({
+        originalSaleCashSessionId: sessionByToken.get(companyB.token),
+        operationCashSessionId: sessionByToken.get(companyB.token),
+        operationOccurredAt: new Date().toISOString(),
+        items: [{ saleItemId: telaSale.items[0].id, qty: 4.251 }],
+      })
       .expect(400);
 
     const cancelSale = await createSale(companyB.token, {
@@ -491,9 +530,17 @@ describe("PHASE 2.6 UoM manual UAT on isolated test database", () => {
     const carneAfterDelete = await prisma.product.findUniqueOrThrow({
       where: { id: carne.id },
     });
-    expectDecimal(carneAfterDelete.stock, carneDb.stock.toString());
+    // Contrato vigente: eliminar una FACTURA es una cancelación segura, así que
+    // repone el inventario (y marca `inventoryRestoredAt`). Antes el arnés
+    // esperaba que NO lo repusiera; el backend cambió a la cancelación segura y
+    // esta prueba es la que fija el comportamiento real.
+    expectDecimal(carneAfterDelete.stock, carneDb.stock.plus(2.375).toString());
+    const cancelledSale = await prisma.sale.findUniqueOrThrow({
+      where: { id: cancelSale.id },
+    });
+    expect(cancelledSale.inventoryRestoredAt).not.toBeNull();
     evidence.deleteSemantics =
-      "DELETE /sales marks sale deleted and does not restore inventory; POST /sales/:id/return is the inventory-restoring workflow.";
+      "DELETE /sales cancels an invoice with safe inventory restoration (inventoryRestoredAt set); POST /sales/:id/return remains the partial-return workflow.";
 
     const quotation = await request(app.getHttpServer())
       .post("/cotizaciones")

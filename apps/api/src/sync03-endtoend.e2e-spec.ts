@@ -330,7 +330,8 @@ describe("SYNC-03 end-to-end offline recovery + multi-tenant (isolated UAT DB)",
   it("replays queued sale exactly once (single stock decrement) under response loss", async () => {
     await assertTestDatabase();
     const companyA = await registerCompany("sale-idem");
-    await prisma.cashSession.create({
+    // Contrato vigente: la venta debe declarar el turno de caja abierto.
+    const sessionA = await prisma.cashSession.create({
       data: {
         companyId: companyA.companyId,
         openedByUserId: companyA.userId,
@@ -352,6 +353,7 @@ describe("SYNC-03 end-to-end offline recovery + multi-tenant (isolated UAT DB)",
       clientRequestId: `sync03-sale-response-lost-${Date.now()}`,
       paymentMethod: "cash",
       paymentCashAmount: 200,
+      originCashSessionId: sessionA.id,
       items: [
         {
           productId: product.id,

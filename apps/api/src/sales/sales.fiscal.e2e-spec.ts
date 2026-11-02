@@ -296,7 +296,9 @@ describe("Fiscal authenticated HTTP E2E", () => {
 
   it("keeps quote snapshots through B01 conversion and prevents duplicate NCF", async () => {
     const adminA = await registerCompany("quote-a");
-    await openCashSession(adminA.companyId, adminA.userId);
+    // Contrato vigente: toda venta debe declarar el turno de caja abierto
+    // (`originCashSessionId`). El arnés lo abría pero no lo enviaba.
+    const sessionA = (await openCashSession(adminA.companyId, adminA.userId)).id;
 
     const tax = await request(app.getHttpServer())
       .post("/taxes")
@@ -389,6 +391,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
         fiscalVoucherType: "B01",
         customerId: client.body.id,
         expectedTotalSold: 1180,
+        originCashSessionId: sessionA,
         items: [
           {
             productName: "Stale",
@@ -434,8 +437,8 @@ describe("Fiscal authenticated HTTP E2E", () => {
   it("blocks cross-tenant product/client/sale access and isolates reports", async () => {
     const adminA = await registerCompany("tenant-a");
     const adminB = await registerCompany("tenant-b");
-    await openCashSession(adminA.companyId, adminA.userId);
-    await openCashSession(adminB.companyId, adminB.userId);
+    const sessionA = (await openCashSession(adminA.companyId, adminA.userId)).id;
+    const sessionB = (await openCashSession(adminB.companyId, adminB.userId)).id;
 
     const productB = await request(app.getHttpServer())
       .post("/products")
@@ -468,6 +471,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .set("Authorization", `Bearer ${adminA.token}`)
       .send({
         clientRequestId: "sale-a-10000",
+        originCashSessionId: sessionA,
         items: [
           {
             productName: "A",
@@ -483,6 +487,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .set("Authorization", `Bearer ${adminB.token}`)
       .send({
         clientRequestId: "sale-b-20000",
+        originCashSessionId: sessionB,
         items: [
           {
             productName: "B",
@@ -497,7 +502,14 @@ describe("Fiscal authenticated HTTP E2E", () => {
     await request(app.getHttpServer())
       .post(`/sales/${saleA.body.id}/return`)
       .set("Authorization", `Bearer ${adminB.token}`)
-      .send({})
+      .send({
+        // Contrato completo de devolución: sin los tres campos la petición se
+        // rechaza por contrato antes de comprobar la empresa, y la prueba
+        // dejaría de demostrar aislamiento entre empresas.
+        originalSaleCashSessionId: sessionB,
+        operationCashSessionId: sessionB,
+        operationOccurredAt: new Date().toISOString(),
+      })
       .expect(404);
 
     const reportA = await request(app.getHttpServer())
@@ -516,7 +528,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
 
   it("keeps sale, payment fields, stock and price snapshot idempotent after response loss retry", async () => {
     const adminA = await registerCompany("offline-idempotency");
-    await openCashSession(adminA.companyId, adminA.userId);
+    const sessionA = (await openCashSession(adminA.companyId, adminA.userId)).id;
 
     const product = await request(app.getHttpServer())
       .post("/products")
@@ -534,6 +546,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
       clientRequestId: "offline-sale-response-lost-1",
       paymentMethod: "cash",
       paymentCashAmount: 200,
+      originCashSessionId: sessionA,
       items: [
         {
           productId: product.body.id,
@@ -595,7 +608,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
 
   it("validates B01 failure without fiscal customer, B02, refunds and over-refund", async () => {
     const adminA = await registerCompany("refund-a");
-    await openCashSession(adminA.companyId, adminA.userId);
+    const sessionA = (await openCashSession(adminA.companyId, adminA.userId)).id;
     const tax = await request(app.getHttpServer())
       .post("/taxes")
       .set("Authorization", `Bearer ${adminA.token}`)
@@ -638,6 +651,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .set("Authorization", `Bearer ${adminA.token}`)
       .send({
         fiscalVoucherType: "B01",
+        originCashSessionId: sessionA,
         items: [
           {
             productName: "Fiscal",
@@ -658,6 +672,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .set("Authorization", `Bearer ${adminA.token}`)
       .send({
         fiscalVoucherType: "B02",
+        originCashSessionId: sessionA,
         items: [
           {
             productName: "Final",
@@ -674,6 +689,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
       .post("/sales")
       .set("Authorization", `Bearer ${adminA.token}`)
       .send({
+        originCashSessionId: sessionA,
         items: [
           {
             productName: "Refundable",
@@ -688,14 +704,24 @@ describe("Fiscal authenticated HTTP E2E", () => {
     const refund = await request(app.getHttpServer())
       .post(`/sales/${sale.body.id}/return`)
       .set("Authorization", `Bearer ${adminA.token}`)
-      .send({ items: [{ saleItemId: firstItem.id, qty: 1 }] })
+      .send({
+        originalSaleCashSessionId: sessionA,
+        operationCashSessionId: sessionA,
+        operationOccurredAt: new Date().toISOString(),
+        items: [{ saleItemId: firstItem.id, qty: 1 }],
+      })
       .expect(201);
     expect(Number(refund.body.totalSold)).toBeCloseTo(-1180, 2);
 
     await request(app.getHttpServer())
       .post(`/sales/${sale.body.id}/return`)
       .set("Authorization", `Bearer ${adminA.token}`)
-      .send({ items: [{ saleItemId: firstItem.id, qty: 2 }] })
+      .send({
+        originalSaleCashSessionId: sessionA,
+        operationCashSessionId: sessionA,
+        operationOccurredAt: new Date().toISOString(),
+        items: [{ saleItemId: firstItem.id, qty: 2 }],
+      })
       .expect(400);
   }, 60000);
 });
