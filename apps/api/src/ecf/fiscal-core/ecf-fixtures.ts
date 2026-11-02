@@ -21,6 +21,8 @@ function line(overrides: Partial<EcfLine> = {}): EcfLine {
     discountAmount: "0.00",
     taxCategory: "ITBIS_18",
     taxRate: "0.18",
+    // Dato sintético de pruebas: DOSA exige unidadMedida en cada ítem.
+    unitOfMeasure: "43",
     ...overrides,
   };
 }

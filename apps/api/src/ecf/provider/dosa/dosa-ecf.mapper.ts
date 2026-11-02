@@ -10,7 +10,6 @@ import type {
   EcfDocumentType,
   EcfFiscalDocument,
   EcfLine,
-  EcfTaxCategory,
 } from "../../fiscal-core/ecf-fiscal-document";
 import {
   DOSA_CONTRACT_GAPS,
@@ -30,27 +29,54 @@ export const DOSA_MAPPER_BLOCKED = {
   unsupportedCurrency: "DOSA_CURRENCY_UNSUPPORTED",
   referenceRequired: "DOSA_REFERENCE_REQUIRED",
   unsupportedFields: "DOSA_UNSUPPORTED_FIELDS",
+  unitOfMeasureRequired: "DOSA_UNIT_OF_MEASURE_REQUIRED",
 } as const;
 
 /**
- * Indicador de facturación por categoría de impuesto.
+ * `indicadorFacturacion` de DOSA — **naturaleza del ítem**, no impuesto.
  *
- * Sigue la codificación estándar de la DGII para e-CF (0 no facturable, 1 ITBIS
- * 18 %, 2 ITBIS 16 %, 3 ITBIS 0 %, 4 exento). **Pendiente de confirmar con
- * DOSA**: está en `DOSA_CONTRACT_GAPS`, y por eso el borrador lo declara como no
- * verificado en lugar de darlo por bueno.
+ * 1 = Producto · 2 = Servicio · 3 = Mixta · 4 = Servicio profesional.
+ *
+ * Antes este campo se rellenaba con la codificación de impuesto de la DGII
+ * (1 = ITBIS 18 %, 2 = ITBIS 16 %, 3 = ITBIS 0 %, 4 = exento). Son dos
+ * catálogos distintos y el resultado habría sido un JSON con la naturaleza
+ * equivocada en cada línea.
+ *
+ * 3 y 4 no son alcanzables desde el modelo actual: `EcfGoodServiceIndicator`
+ * solo distingue `GOOD` y `SERVICE`, no «mixta» ni «servicio profesional». No se
+ * deduce uno del otro: no hay dato que lo sustente.
  */
-const INDICADOR_FACTURACION: Record<EcfTaxCategory, number> = {
-  ITBIS_18: 1,
-  ITBIS_16: 2,
-  ITBIS_0: 3,
-  EXEMPT: 4,
-  NON_BILLABLE: 0,
-};
+function indicadorFacturacion(line: EcfLine): 1 | 2 {
+  return line.goodServiceIndicator === "GOOD" ? 1 : 2;
+}
+
+/**
+ * `indicadorBienoServicio` de DOSA: 1 = Servicio, 2 = Bien.
+ *
+ * Está **al revés** que el código de la DGII, donde 1 es bien y 2 es servicio.
+ * El mapeador anterior tenía la inversión: emitía 1 para un bien.
+ */
+function indicadorBienoServicio(line: EcfLine): 1 | 2 {
+  return line.goodServiceIndicator === "GOOD" ? 2 : 1;
+}
+
+/**
+ * Unidad de medida: DOSA la exige en cada ítem.
+ *
+ * El catálogo de códigos válidos del proveedor no está documentado en los
+ * materiales que tenemos, así que **no se traduce ni se inventa**: se exige que
+ * venga informada y se envía tal cual. Si falta, el documento se rechaza.
+ */
+function unidadMedida(line: EcfLine): string | null {
+  const raw = (line.unitOfMeasure ?? "").trim();
+  if (raw.length === 0) return null;
+  if (raw.length > 32) return null;
+  return raw;
+}
 
 const UNVERIFIED_IN_DRAFT: readonly string[] = [
   "Formato de fecha (se emite dd-MM-yyyy según la documentación pública).",
-  "indicadorFacturacion por categoría de impuesto.",
+  "Catálogo de códigos de unidadMedida: se exige informada, pero no se traduce porque no está documentado.",
   "MontoGravadoI1 como suma de líneas al 18 %.",
   "ITBIS1 como tasa (18) en lugar de monto.",
   "paginacion omitida por no conocerse si es obligatoria.",
@@ -88,15 +114,28 @@ export function mapEcfToDosaDraft(
     return { ok: false, blockedReason: DOSA_MAPPER_BLOCKED.unsupportedFields };
   }
 
-  const items: DosaEcfItem[] = document.lines.map((line) => ({
-    numeroLinea: line.lineNumber,
-    indicadorFacturacion: INDICADOR_FACTURACION[line.taxCategory],
-    nombreItem: line.name,
-    indicadorBienoServicio: line.goodServiceIndicator === "GOOD" ? 1 : 2,
-    cantidadItem: quantityString(line.quantity),
-    precioUnitarioItem: moneyString(line.unitPrice),
-    montoItem: moneyString(lineAmount(line)),
-  }));
+  const items: DosaEcfItem[] = [];
+  for (const line of document.lines) {
+    const unidad = unidadMedida(line);
+    if (unidad === null) {
+      // Dato fiscal obligatorio ausente: se rechaza antes de construir el
+      // borrador. Mandarlo sin unidad produciría un comprobante inválido.
+      return {
+        ok: false,
+        blockedReason: `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:${line.lineNumber}`,
+      };
+    }
+    items.push({
+      numeroLinea: line.lineNumber,
+      indicadorFacturacion: indicadorFacturacion(line),
+      nombreItem: line.name,
+      indicadorBienoServicio: indicadorBienoServicio(line),
+      unidadMedida: unidad,
+      cantidadItem: quantityString(line.quantity),
+      precioUnitarioItem: moneyString(line.unitPrice),
+      montoItem: moneyString(lineAmount(line)),
+    });
+  }
 
   const draft: DosaEmissionDraft = {
     status: "DRAFT_NOT_TRANSMITTABLE",

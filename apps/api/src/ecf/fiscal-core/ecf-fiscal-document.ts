@@ -33,6 +33,14 @@ export type EcfLine = {
   taxCategory: EcfTaxCategory;
   taxRate: EcfDecimalInput;
   expectedItemAmount?: EcfDecimalInput;
+  /**
+   * Código de unidad de medida del proveedor, tal cual (p. ej. `43`).
+   *
+   * Opcional en el modelo común porque no todos los proveedores lo exigen.
+   * DOSA **sí** lo considera obligatorio, así que su mapeador rechaza el
+   * documento cuando falta: no se inventa una unidad por defecto.
+   */
+  unitOfMeasure?: string;
   unsupportedFields?: Record<string, unknown>;
 };
 

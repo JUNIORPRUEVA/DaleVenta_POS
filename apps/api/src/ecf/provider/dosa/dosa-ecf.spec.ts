@@ -36,6 +36,7 @@ function withLine(overrides: Partial<EcfLine>): EcfFiscalDocument {
     discountAmount: "0.00",
     taxCategory: "ITBIS_18",
     taxRate: "0.18",
+    unitOfMeasure: "43",
   };
   return { ...validE31WithItbis, lines: [{ ...base, ...overrides }] };
 }
@@ -127,22 +128,66 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(item.montoItem).toBe("90.00");
   });
 
-  it("traduce la categoría de impuesto al indicador de facturación", () => {
-    const itbis18 = mapEcfToDosaDraft(withLine({}), metadata);
-    const exento = mapEcfToDosaDraft(
+  it("usa la naturaleza del ítem para indicadorFacturacion y no la categoría de impuesto", () => {
+    const productoGravado = mapEcfToDosaDraft(withLine({}), metadata);
+    const productoServicioExento = mapEcfToDosaDraft(
       withLine({ taxCategory: "EXEMPT", taxRate: "0" }),
       metadata,
     );
-    expect(itbis18.ok && itbis18.draft.body.detallesItems[0].indicadorFacturacion).toBe(1);
-    expect(exento.ok && exento.draft.body.detallesItems[0].indicadorFacturacion).toBe(4);
+    const servicioGravado = mapEcfToDosaDraft(
+      withLine({ goodServiceIndicator: "SERVICE" }),
+      metadata,
+    );
+
+    // 1 = Producto, 2 = Servicio. La categoría de impuesto NO cambia la naturaleza.
+    expect(productoGravado.ok && productoGravado.draft.body.detallesItems[0].indicadorFacturacion).toBe(1);
+    expect(productoServicioExento.ok && productoServicioExento.draft.body.detallesItems[0].indicadorFacturacion).toBe(1);
+    expect(servicioGravado.ok && servicioGravado.draft.body.detallesItems[0].indicadorFacturacion).toBe(2);
   });
 
-  it("distingue bien de servicio", () => {
+  it("distingue bien de servicio con los códigos de DOSA (1 = servicio, 2 = bien)", () => {
+    const bien = mapEcfToDosaDraft(withLine({}), metadata);
     const servicio = mapEcfToDosaDraft(
       withLine({ goodServiceIndicator: "SERVICE" }),
       metadata,
     );
-    expect(servicio.ok && servicio.draft.body.detallesItems[0].indicadorBienoServicio).toBe(2);
+
+    expect(bien.ok && bien.draft.body.detallesItems[0].indicadorBienoServicio).toBe(2);
+    expect(servicio.ok && servicio.draft.body.detallesItems[0].indicadorBienoServicio).toBe(1);
+  });
+
+  it("rechaza el documento cuando falta la unidad de medida", () => {
+    const result = mapEcfToDosaDraft(
+      withLine({ unitOfMeasure: undefined }),
+      metadata,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockedReason).toBe(
+      `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:1`,
+    );
+  });
+
+  it("rechaza la línea sin unidad aunque el resto del documento sea válido", () => {
+    const result = mapEcfToDosaDraft(
+      withLine({ lineNumber: 7, unitOfMeasure: "   " }),
+      metadata,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockedReason).toBe(
+      `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:7`,
+    );
+  });
+
+  it("transmite la unidad de medida tal como la informa el ítem", () => {
+    const result = mapEcfToDosaDraft(
+      withLine({ unitOfMeasure: " UND " }),
+      metadata,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.body.detallesItems[0].unidadMedida).toBe("UND");
   });
 
   it("marca el borrador como no verificado en los puntos dudosos", () => {
@@ -153,7 +198,7 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(result.draft.unverified.length).toBeGreaterThan(0);
     const joined = result.draft.unverified.join(" ");
     expect(joined).toMatch(/fecha/i);
-    expect(joined).toMatch(/indicadorFacturacion/i);
+    expect(joined).toMatch(/unidadMedida/i);
     expect(joined).toMatch(/paginacion/i);
   });
 });

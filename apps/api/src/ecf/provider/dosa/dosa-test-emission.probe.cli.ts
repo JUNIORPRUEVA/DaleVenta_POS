@@ -67,6 +67,12 @@ export function buildCoherentE31(input: {
   quantity: number;
   taxRate: number;
   issueDate: string;
+  /**
+   * Código de unidad de medida. DOSA la exige, y su catálogo no está
+   * documentado en los materiales disponibles: **no se pone un valor por
+   * defecto**, se recibe del operador en cada ejecución.
+   */
+  unitOfMeasure: string;
 }): DosaEcfRequestBody {
   const priceCents = Math.round(Number.parseFloat(input.unitPrice) * 100);
   const amountCents = Math.round(priceCents * input.quantity);
@@ -108,15 +114,37 @@ export function buildCoherentE31(input: {
     detallesItems: [
       {
         numeroLinea: 1,
+        // 1 = Producto (naturaleza del ítem, no el indicador de impuesto).
         indicadorFacturacion: 1,
         nombreItem: "PRUEBA DE EMISION TEST",
+        // 2 = Bien en DOSA (al revés que el código de la DGII).
         indicadorBienoServicio: 2,
+        unidadMedida: input.unitOfMeasure,
         cantidadItem: String(input.quantity),
         precioUnitarioItem: money(priceCents),
         montoItem: money(amountCents),
       },
     ],
   };
+}
+
+/**
+ * Unidad de medida del comprobante de prueba.
+ *
+ * Se exige explícitamente (`--unidad` o `DOSA_TEST_UNIT_OF_MEASURE`) porque
+ * DOSA la considera obligatoria y su catálogo de códigos no está documentado en
+ * los materiales que tenemos. Poner un valor por defecto sería inventar un
+ * código fiscal; si falta, la prueba no se ejecuta.
+ */
+function unitOfMeasure(): string {
+  const value = (arg("unidad") ?? process.env.DOSA_TEST_UNIT_OF_MEASURE ?? "").trim();
+  if (value.length === 0) {
+    fail(
+      "DOSA_PROBE_UNIT_OF_MEASURE_REQUIRED",
+      "usa --unidad=<codigo> (o DOSA_TEST_UNIT_OF_MEASURE); DOSA exige unidadMedida",
+    );
+  }
+  return value;
 }
 
 async function main(): Promise<void> {
@@ -158,6 +186,7 @@ async function main(): Promise<void> {
     taxRate: Number.parseInt(process.env.DOSA_TEST_TAX_RATE ?? "18", 10),
     issueDate:
       (process.env.DOSA_TEST_ISSUE_DATE ?? "").trim() || ddMmYyyy(new Date()),
+    unitOfMeasure: unitOfMeasure(),
   });
 
   const probe = new DosaE31TestProbe({

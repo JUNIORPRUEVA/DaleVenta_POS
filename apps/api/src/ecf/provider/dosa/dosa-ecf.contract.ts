@@ -112,9 +112,19 @@ export type DosaEcfTotales = {
 
 export type DosaEcfItem = {
   numeroLinea: number;
-  indicadorFacturacion: number;
+  /**
+   * Naturaleza del ítem según DOSA: 1 = Producto, 2 = Servicio,
+   * 3 = Mixta, 4 = Servicio profesional.
+   *
+   * **No** es el indicador de impuesto de la DGII. Son dos cosas distintas y
+   * confundirlas fue un defecto real del mapeador.
+   */
+  indicadorFacturacion: 1 | 2 | 3 | 4;
   nombreItem: string;
+  /** Naturaleza según DOSA: 1 = Servicio, 2 = Bien (al revés que la DGII). */
   indicadorBienoServicio: 1 | 2;
+  /** Obligatoria para DOSA. Sin ella el documento no es transmisible. */
+  unidadMedida: string;
   cantidadItem: string;
   precioUnitarioItem: string;
   montoItem: string;
