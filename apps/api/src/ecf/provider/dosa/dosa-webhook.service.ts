@@ -9,6 +9,8 @@ import {
   verifyDosaSignature,
   type DosaSignatureConfig,
 } from "./dosa-webhook-signature.policy";
+import type { DosaCredentialService } from "./dosa-credential.service";
+import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
 
 /** Cliente mínimo (SQL parametrizado). Se puede sustituir por un doble. */
 export interface DosaWebhookStore {
@@ -73,7 +75,13 @@ export class DosaWebhookService {
     @Optional()
     @Inject(ECF_DOSA_SIGNATURE_CONFIG)
     private readonly injectedSignature?: DosaSignatureConfig,
+    @Optional()
+    @Inject(DosaWebhookService.CREDENTIALS)
+    private readonly credentials?: DosaCredentialService,
   ) {}
+
+  /** Token para inyectar la boveda de credenciales sin acoplar el modulo. */
+  static readonly CREDENTIALS = Symbol("ECF_DOSA_CREDENTIALS");
 
   /** Configuracion efectiva: la inyectada o, si no, la del entorno. */
   private get signature(): DosaSignatureConfig {
@@ -178,6 +186,11 @@ export class DosaWebhookService {
       };
     }
 
+    // Las credenciales del evento se guardan CIFRADAS y en estado
+    // PENDING_CONFIRMATION. Que lleguen no las activa: activarlas exige
+    // confirmacion del proveedor, aprobacion DGII y autorizacion administrativa.
+    await this.sealProviderCredentials(company.companyId, payload, parsed.value.secretos);
+
     return {
       accepted: true,
       status: 200,
@@ -185,6 +198,38 @@ export class DosaWebhookService {
       eventId: rows[0].id,
       code: "ECF_DOSA_WEBHOOK_RECORDED",
     };
+  }
+
+  /**
+   * Persiste las credenciales cifradas. Nunca lanza hacia fuera: un fallo de la
+   * boveda (por ejemplo, clave maestra ausente) no debe tumbar la recepcion del
+   * evento, pero tampoco se registra el valor en ningun sitio.
+   */
+  private async sealProviderCredentials(
+    companyId: string,
+    payload: { rnc: string; ambiente: string },
+    secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string },
+  ): Promise<void> {
+    if (!this.credentials) return;
+    const hasAny =
+      (secretos.apiKeyProduccion ?? "").trim().length > 0 ||
+      (secretos.apiKeyTest ?? "").trim().length > 0 ||
+      (secretos.apiSecret ?? "").trim().length > 0;
+    if (!hasAny) return;
+
+    try {
+      await this.credentials.ingestFromProvider({
+        companyId,
+        rnc: payload.rnc,
+        environment: environmentOf(payload.ambiente),
+        bundle: secretos,
+        // La firma ya se verifico arriba: sin eso el pipeline no llega aqui.
+        signatureAuthenticated: true,
+      });
+    } catch {
+      // Silencio deliberado: el evento queda registrado sin credenciales y la
+      // reconciliacion es un acto humano. Nunca se escribe el valor en un log.
+    }
   }
 }
 
@@ -205,4 +250,17 @@ export function dedupeKeyOf(payload: {
       `${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}`,
     )
     .digest("hex");
+}
+
+/**
+ * Entorno fiscal a partir del campo `ambiente` del proveedor.
+ *
+ * El proveedor usa `Produccion` / `Test`. Cualquier otro valor se trata como
+ * `test`: es el lado seguro, porque una credencial de produccion mal etiquetada
+ * nunca debe terminar marcada como productiva.
+ */
+export function environmentOf(ambiente: string): DosaCredentialEnvironment {
+  return /produccion|production/i.test(ambiente ?? "")
+    ? "production"
+    : "test";
 }

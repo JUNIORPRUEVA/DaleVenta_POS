@@ -241,6 +241,36 @@ model EcfDosaWebhookEvent {
   @@map("ecf_dosa_webhook_events")
 }
 
+/// Credenciales fiscales de DOSA, CIFRADAS (AES-256-GCM) y aisladas por
+/// empresa, RNC y entorno. La tabla no guarda ningun valor en claro: el
+/// criptograma solo se descifra en el contexto company_id + rnc + environment,
+/// que ademas viaja como AAD. Un evento del proveedor deja la fila en
+/// PENDING_CONFIRMATION; llegar a ACTIVE exige confirmacion del proveedor,
+/// aprobacion DGII y autorizacion administrativa.
+model EcfDosaCompanyCredential {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  rnc          String   @db.VarChar(32)
+  environment  String   @db.VarChar(16)
+  status       String   @db.VarChar(32)
+  source       String   @db.VarChar(16)
+  keyVersion   Int      @map("key_version")
+  ciphertext   String   @db.Text
+  iv           String   @db.VarChar(64)
+  authTag      String   @map("auth_tag") @db.VarChar(64)
+  fingerprint  String   @db.VarChar(64)
+  /// Presencia de cada credencial. Nunca los valores.
+  present      Json
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, rnc, environment])
+  @@index([companyId, status])
+  @@map("ecf_dosa_company_credentials")
+}
+
 /// Estado del proceso de habilitación DGII de una empresa. Es un estado de
 /// SEGUIMIENTO interno: no es, por sí mismo, una resolución oficial de la DGII.
 enum EcfDgiiHabilitationState {
@@ -1112,6 +1142,7 @@ model Company {
   ecfDgiiHabilitation              EcfDgiiHabilitation?
   ecfDosaCertificationSessions     EcfDosaCertificationSession[]
   ecfDosaWebhookEvents             EcfDosaWebhookEvent[]
+  ecfDosaCompanyCredentials        EcfDosaCompanyCredential[]
   ecfCertificationAttempts         EcfCertificationAttempt[]
   ecfEvidences                     EcfEvidence[]
   ecfAuditLogs                     EcfAuditLog[]
