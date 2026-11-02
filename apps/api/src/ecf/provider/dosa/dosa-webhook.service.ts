@@ -96,10 +96,12 @@ export class DosaWebhookService {
     rawBody: Buffer | undefined;
     body: unknown;
   }): Promise<DosaWebhookOutcome> {
-    // 1. Firma
+    // 1. Firma — se verifica sobre los BYTES ORIGINALES, nunca sobre el JSON
+    //    re-serializado: `HMAC-SHA256(secret, t + "." + rawBody)`.
     const signature = verifyDosaSignature({
       headers: input.headers,
       config: this.signature,
+      rawBody: input.rawBody,
     });
     if (!signature.ok) {
       return {
@@ -111,6 +113,8 @@ export class DosaWebhookService {
     }
 
     if (!input.rawBody) {
+      // Cinturón para la estrategia de laboratorio, que no consume el cuerpo
+      // para verificar pero sí lo necesita para la huella y la deduplicación.
       return {
         accepted: false,
         status: 400,

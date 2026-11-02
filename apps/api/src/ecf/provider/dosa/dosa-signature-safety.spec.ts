@@ -76,9 +76,13 @@ describe("isLocalLabEnvironment", () => {
 
 describe("readDosaSignatureConfig — degradación por entorno", () => {
   it("por defecto (sin variable) queda BLOCKED", () => {
+    // Los parámetros de tiempo se rellenan siempre con su valor seguro por
+    // defecto, aunque la estrategia esté bloqueada.
     expect(readDosaSignatureConfig({})).toEqual({
       strategy: "BLOCKED",
       secret: null,
+      timestampUnit: "seconds",
+      toleranceSeconds: 300,
     });
   });
 

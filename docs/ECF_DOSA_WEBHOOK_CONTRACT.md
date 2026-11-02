@@ -1,7 +1,15 @@
 # Webhook DOSA — contrato, topología y estado del bloqueo
 
-Estado: **BLOQUEADO POR CONTRATO**. No existe ruta HTTP, no se autentica ningún
-evento y ningún evento puede activar emisión.
+Estado (2026-11-02): **FIRMA CONFIRMADA E IMPLEMENTADA**. El proveedor confirmó
+`X-Dosa-Signature: t=<hora>,v1=<firma>` con
+`firma = HMAC-SHA256(webhookSecret, t + "." + rawRequestBody)`. La ruta
+`POST /webhook/dosa` existe detrás de bandera y ningún evento puede activar
+emisión.
+
+Sigue **SIN CONFIRMAR** (no se inventa): la unidad de `t` (segundos o
+milisegundos), la codificación del digest (hex o base64) y el nombre del campo
+que identifica el tipo de evento. Ver `DOSA_WEBHOOK_PENDING_QUESTIONS` en
+`apps/api/src/ecf/provider/dosa/dosa-webhook-signature.policy.ts`.
 
 ---
 
