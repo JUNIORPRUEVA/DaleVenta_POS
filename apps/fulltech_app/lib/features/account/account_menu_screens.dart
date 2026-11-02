@@ -682,6 +682,31 @@ class _EcfCompanySwitchSectionState
                   Switch.adaptive(value: enabled, onChanged: null),
                 ],
               ),
+            // Camino administrativo EXPLÍCITO para iniciar la habilitación sin
+            // encender el módulo. Así el administrador puede trabajar en el
+            // expediente mientras el resto de la empresa sigue con su POS
+            // tradicional y sin ninguna pantalla de e-CF en el menú.
+            //
+            // Preparar la habilitación NO autoriza emisión real: eso depende de
+            // la DGII y de las compuertas fiscales del backend.
+            if (canManage && !enabled) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : () => context.go(Routes.ecf),
+                  icon: const Icon(Icons.assignment_outlined, size: 18),
+                  label: const Text('Preparar habilitación e-CF'),
+                  style: _outlinedButtonStyle(),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Abre el expediente de habilitación y no activa el módulo. No '
+                'emite comprobantes ni contacta con ningún proveedor fiscal.',
+                style: _bodyStyle().copyWith(height: 1.18),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(

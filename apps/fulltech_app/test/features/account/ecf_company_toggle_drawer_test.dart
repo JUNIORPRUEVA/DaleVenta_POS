@@ -43,6 +43,7 @@ const _ecfDrawerLabel = 'Facturación electrónica';
 // dentro del bloque fiscal, que se llama «Impuestos y e-CF». La aserción sigue
 // verificando que esa sección está en pantalla, solo que con su nombre actual.
 const _ecfSectionTitle = 'Impuestos y e-CF';
+const _ecfPrepareLabel = 'Preparar habilitación e-CF';
 const _ecfErrorText =
     'No se pudo guardar. Se mantiene el último estado confirmado por el servidor.';
 
@@ -466,7 +467,7 @@ void main() {
   });
 
   group('prueba funcional — pantalla real + Drawer real', () {
-    testWidgets('1 — empresa desactivada: asistente visible en el Drawer', (
+    testWidgets('1 — empresa desactivada: el módulo NO aparece en el Drawer', (
       tester,
     ) async {
       final harness = await _pumpSettings(
@@ -478,7 +479,9 @@ void main() {
       expect(find.byType(AppDrawer), findsOneWidget);
       await _scrollDrawerToBottom(tester);
 
-      expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+      // Un cliente que no ha solicitado e-CF conserva su POS tradicional: la
+      // entrada del módulo no existe para nadie de esa empresa.
+      expect(_drawerText(_ecfDrawerLabel), findsNothing);
       expect(harness.httpCalls, isEmpty);
     });
 
@@ -494,6 +497,12 @@ void main() {
         // El interruptor se monta en la pantalla real y arranca apagado.
         expect(find.text(_ecfSectionTitle), findsOneWidget);
         expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
+
+        // Antes de activarlo la empresa no tiene el módulo en el menú.
+        await _openDrawer(tester);
+        await _scrollDrawerToBottom(tester);
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        await _closeDrawer(tester);
 
         await _turnEcfOn(tester);
 
@@ -535,7 +544,7 @@ void main() {
     });
 
     testWidgets(
-      '6/7/8 — desactivar: confirmación, PATCH y el asistente sigue visible',
+      '6/7/8 — desactivar: confirmación, PATCH y el módulo desaparece',
       (tester) async {
         final harness = await _pumpSettings(
           tester,
@@ -555,7 +564,9 @@ void main() {
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+        // Al desactivar, el módulo desaparece del menú: la empresa vuelve a su
+        // POS tradicional sin reiniciar.
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
         expect(harness.httpCalls, isEmpty);
       },
     );
@@ -588,10 +599,10 @@ void main() {
         expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
         expect(find.text(_ecfErrorText), findsOneWidget);
 
-        // El interruptor sigue apagado aunque el asistente sea accesible.
+        // El interruptor sigue apagado y, por tanto, el módulo sigue oculto.
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
         expect(harness.httpCalls, isEmpty);
       },
     );
@@ -619,6 +630,8 @@ void main() {
         find.text('Solo un administrador autorizado puede cambiarlo.'),
         findsOneWidget,
       );
+      // Tampoco existe el camino administrativo para iniciar la habilitación.
+      expect(find.text(_ecfPrepareLabel), findsNothing);
 
       await tester.ensureVisible(_ecfSwitch());
       await tester.pumpAndSettle();
@@ -628,6 +641,38 @@ void main() {
       expect(harness.backend.patchCalls, isEmpty);
       expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
     });
+
+    testWidgets(
+      '10b — el administrador inicia la habilitación sin encender el módulo',
+      (tester) async {
+        final harness = await _pumpSettings(
+          tester,
+          backend: _backendWith(companyA: false),
+        );
+
+        // El módulo está apagado y el Drawer no lo muestra...
+        await _openDrawer(tester);
+        await _scrollDrawerToBottom(tester);
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        await _closeDrawer(tester);
+
+        // ...pero el administrador sí tiene un camino explícito desde la
+        // configuración de la empresa, sin exponer el menú al resto.
+        final prepare = find.text(_ecfPrepareLabel);
+        expect(prepare, findsOneWidget);
+        await tester.ensureVisible(prepare);
+        await tester.pumpAndSettle();
+        await tester.tap(prepare);
+        await tester.pumpAndSettle();
+
+        // Abre el expediente y NO activa nada: sin PATCH, sin red y con el
+        // interruptor todavía apagado.
+        expect(find.text(_markerModule), findsOneWidget);
+        expect(harness.backend.patchCalls, isEmpty);
+        expect(harness.backend.enabledByCompany['company-a'], isFalse);
+        expect(harness.httpCalls, isEmpty);
+      },
+    );
 
     testWidgets(
       '11 — al cambiar de empresa NO se reutiliza la bandera anterior',
@@ -651,7 +696,8 @@ void main() {
         expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
 
         await _scrollDrawerToBottom(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+        // La empresa nueva no tiene e-CF: el módulo no se hereda de la anterior.
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
         expect(harness.backend.enabledByCompany['company-a'], isTrue);
         expect(harness.httpCalls, isEmpty);
       },

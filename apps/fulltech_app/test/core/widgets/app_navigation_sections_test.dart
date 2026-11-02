@@ -107,7 +107,6 @@ void main() {
         'Pagos',
         'Nómina',
         'Usuario',
-        'Facturación electrónica',
       ]);
     });
 
@@ -138,23 +137,22 @@ void main() {
         'Pagos',
         'Nómina',
         'Usuario',
-        'Facturación electrónica',
       ]);
     });
   });
 
-  group('interruptor e-CF de la empresa', () {
-    test('con el módulo apagado se puede iniciar la habilitación', () {
+  group('visibilidad e-CF por empresa (opt-in obligatorio)', () {
+    test('empresa sin e-CF: el módulo NO aparece en el menú', () {
       final titles = _titles(
         buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
       );
 
-      expect(titles, contains('Facturación electrónica'));
-      // La entrada antigua, a mitad del menú, ya no existe.
+      expect(titles, isNot(contains('Facturación electrónica')));
+      // La entrada antigua, a mitad del menú, tampoco existe.
       expect(titles, isNot(contains('Comprobantes e-CF')));
     });
 
-    test('con el módulo encendido la opción aparece y va AL FINAL', () {
+    test('empresa con e-CF activada: aparece una sola vez y AL FINAL', () {
       final titles = _titles(
         buildAppNavigationSections(
           _user(),
@@ -163,12 +161,14 @@ void main() {
         ),
       );
 
-      expect(titles, contains('Facturación electrónica'));
+      expect(
+        titles.where((title) => title == 'Facturación electrónica').length,
+        1,
+      );
       expect(titles.last, 'Facturación electrónica');
-      expect(titles, isNot(contains('Comprobantes e-CF')));
     });
 
-    test('encender el módulo no duplica la entrada del proceso', () {
+    test('activar e-CF añade exactamente una entrada y no altera el resto', () {
       final off = _titles(
         buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
       );
@@ -180,18 +180,31 @@ void main() {
         ),
       );
 
-      expect(on, off);
+      expect(on.length, off.length + 1);
+      expect(on.take(off.length).toList(), off);
     });
 
-    test('el resto del menú es idéntico con el módulo apagado', () {
-      final titles = _titles(
+    test('los módulos tradicionales son idénticos con e-CF apagada', () {
+      final off = _titles(
         buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
       );
 
-      // Sin e-CF, los módulos tradicionales siguen exactamente igual.
-      expect(titles, contains('Facturación'));
-      expect(titles, contains('Productos'));
-      expect(titles, contains('Usuario'));
+      for (final traditional in [
+        'Clientes',
+        'Facturación',
+        'Lista de ventas',
+        'Créditos',
+        'Productos',
+        'Compras',
+        'Reportes',
+        'Factura fiscal',
+        'Depósitos',
+        'Pagos',
+        'Nómina',
+        'Usuario',
+      ]) {
+        expect(off, contains(traditional), reason: traditional);
+      }
     });
   });
 }

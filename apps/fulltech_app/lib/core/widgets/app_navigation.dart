@@ -50,9 +50,9 @@ class AppNavigationSection {
 List<AppNavigationSection> buildAppNavigationSections(
   UserModel? currentUser, {
   required bool multiWarehouseEnabled,
-  // Interruptor e-CF de la empresa. Se mantiene en la firma para los
-  // llamadores existentes; el asistente de habilitación debe poder abrirse
-  // antes de que la emisión esté activada.
+  // Interruptor e-CF de la EMPRESA. Es la única compuerta de visibilidad del
+  // módulo: apagado significa que la empresa no ha solicitado facturación
+  // electrónica y el menú queda exactamente como un POS tradicional.
   bool ecfEnabled = false,
 }) {
   bool canOrAuthorize(AppPermission _) {
@@ -218,9 +218,16 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Usuario',
             route: Routes.users,
           ),
-        // La habilitación debe estar disponible antes de encender e-CF. El
-        // interruptor de emisión conserva su valor OFF por defecto.
-        if (canOrAuthorize(AppPermission.viewEcfDocuments))
+        // La facturación electrónica es OPCIONAL por empresa: la entrada del
+        // menú solo existe cuando la empresa la ha activado explícitamente en
+        // Configuración → Empresa → Impuestos y e-CF. Un cliente que no la ha
+        // solicitado conserva su POS tradicional y no ve nada de e-CF.
+        //
+        // Mientras la configuración de empresa no esté confirmada el valor es
+        // `false`, así que un fallo de red nunca deja el módulo a la vista.
+        // Activar el módulo NO autoriza emisión real: eso sigue detrás de las
+        // compuertas fiscales del backend.
+        if (ecfEnabled && canOrAuthorize(AppPermission.viewEcfDocuments))
           const AppNavigationItem(
             icon: Icons.receipt_long_outlined,
             appIcon: AppIcons.receipt,
