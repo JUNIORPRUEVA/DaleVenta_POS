@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, ServiceUnavailableException } from "@nestjs/common";
+import { ConflictException, ServiceUnavailableException } from "@nestjs/common";
 import {
   DosaCertificationIntentController,
   type RegisterDosaIntentDto,
@@ -84,13 +84,30 @@ class FakeIntents {
   }
 
   async preview() {
-    return { ok: true as const, rnc: RNC };
+    switch (this.behaviour) {
+      case "no-rnc":
+        return { ok: false as const, reason: "COMPANY_RNC_NOT_VERIFIED" as const };
+      case "mismatch":
+        return {
+          ok: false as const,
+          reason: "RNC_DOES_NOT_MATCH_COMPANY_IDENTITY" as const,
+        };
+      case "ambiguous":
+        return { ok: false as const, reason: "AMBIGUOUS_RNC" as const };
+      default:
+        return { ok: true as const, rnc: RNC };
+    }
   }
 }
 
-function fiscalConfig(enabled: boolean, provider = "DOSA"): DosaCompanyFiscalConfigReader {
+function fiscalConfig(
+  enabled: boolean | null,
+  provider = "DOSA",
+): DosaCompanyFiscalConfigReader {
   return {
     async read() {
+      // `null` = la empresa todavía no tiene fila en `ecf_company_configurations`.
+      if (enabled === null) return null;
       return { ecfEnabled: enabled, provider };
     },
   };
@@ -128,7 +145,7 @@ function credentials(): DosaCredentialService {
 
 function build(options: {
   behaviour?: ConstructorParameters<typeof FakeIntents>[0];
-  ecfEnabled?: boolean;
+  ecfEnabled?: boolean | null;
 } = {}) {
   const intents = new FakeIntents(options.behaviour ?? "created");
   const { prisma, rows } = auditLog();
@@ -136,7 +153,7 @@ function build(options: {
     prisma,
     intents as unknown as DosaCertificationIntentService,
     credentials(),
-    fiscalConfig(options.ecfEnabled ?? true),
+    fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled),
   );
   return { controller, intents, rows };
 }
@@ -165,13 +182,35 @@ describe("POST /ecf/dosa/certification-intent", () => {
     expect(Object.keys(dto)).toEqual([]);
   });
 
-  it("exige que la empresa haya activado la preparación de e-CF", async () => {
+  it("prepara la habilitación aunque la emisión esté DESACTIVADA", async () => {
+    // Preparar no es activar: el módulo de emisión apagado no puede impedir
+    // que un administrador autorizado inicie su habilitación.
     const { controller, intents } = build({ ecfEnabled: false });
 
-    await expect(
-      controller.register(req(), {} as RegisterDosaIntentDto),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(intents.registerCalls).toHaveLength(0);
+    const response = await controller.register(
+      req(),
+      {} as RegisterDosaIntentDto,
+    );
+
+    expect(response.ok).toBe(true);
+    expect(response.ecfEnabled).toBe(false);
+    expect(response.fiscalAuthorizationGranted).toBe(false);
+    expect(intents.registerCalls).toHaveLength(1);
+  });
+
+  it("prepara aunque la empresa no tenga todavía configuración fiscal", async () => {
+    const { controller, intents } = build({ ecfEnabled: null });
+
+    const response = await controller.register(
+      req(),
+      {} as RegisterDosaIntentDto,
+    );
+
+    expect(response.ok).toBe(true);
+    expect(response.ecfEnabled).toBe(false);
+    // El proveedor del intento es DOSA sin afirmar nada de la configuración.
+    expect(response.provider).toBe("DOSA");
+    expect(intents.registerCalls).toHaveLength(1);
   });
 
   it("rechaza un RNC sin verificar en el expediente", async () => {
@@ -286,10 +325,19 @@ describe("GET /ecf/dosa/certification-intent", () => {
     expect(serialized).not.toMatch(/[A-Za-z0-9+/_-]{40,}/);
   });
 
-  it("con e-CF desactivado explica el bloqueo", async () => {
+  it("con emisión desactivada la preparación sigue disponible", async () => {
     const { controller } = build({ ecfEnabled: false });
     const state = await controller.state(req());
+    // El estado del módulo se informa, pero no bloquea la preparación.
+    expect(state.ecfEnabled).toBe(false);
+    expect(state.canRegister).toBe(true);
+    expect(state.blockingReasons).toEqual([]);
+  });
+
+  it("solo bloquea por identidad fiscal, no por el interruptor de emisión", async () => {
+    const { controller } = build({ ecfEnabled: false, behaviour: "no-rnc" });
+    const state = await controller.state(req());
     expect(state.canRegister).toBe(false);
-    expect(state.blockingReasons).toContain("ECF_DOSA_INTENT_ECF_NOT_ENABLED");
+    expect(state.blockingReasons).toEqual(["COMPANY_RNC_NOT_VERIFIED"]);
   });
 });

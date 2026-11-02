@@ -21,12 +21,13 @@ import type { Request } from "express";
  * Preasociación por HTTP contra PostgreSQL REAL.
  *
  * Recorre el controlador completo (auditoría incluida) sobre datos reales:
- * `app_config` para la identidad fiscal, `ecf_company_configurations` para el
- * opt-in y `ecf_dosa_certification_sessions` para el intento.
+ * `app_config` para la identidad fiscal y `ecf_dosa_certification_sessions` para
+ * el intento. `ecf_company_configurations` solo se **lee** para informar del
+ * estado de emisión: no es una compuerta de preparación.
  *
  * Demuestra lo que un doble no puede: que **antes** de abrir el asistente existe
- * una fila real que vincula la empresa con su RNC, y que la preparación no toca
- * la configuración de facturación de nadie.
+ * una fila real que vincula la empresa con su RNC, que la preparación funciona
+ * con la emisión desactivada —o sin configuración fiscal— y que no activa nada.
  */
 const real = process.env.ECF_POSTGRES_UAT === "true" ? describe : describe.skip;
 
@@ -233,7 +234,19 @@ real("Preasociación empresa-RNC — PostgreSQL real", () => {
   });
 
   it("la preparación NO activa nada: la configuración fiscal queda igual", async () => {
-    await controller.register(req(COMPANY_A), {});
+    // Se parte del caso realista: empresa preparando con el módulo de emisión
+    // APAGADO. Antes esto bloqueaba; ahora debe preparar y no tocar nada.
+    await prisma.$executeRaw`
+      UPDATE "ecf_company_configurations"
+         SET "enabled" = false, "production_enabled" = false,
+             "certification_status" = 'NOT_STARTED', "environment" = 'SANDBOX'
+       WHERE "company_id" = ${COMPANY_A}::uuid
+    `;
+
+    const response = await controller.register(req(COMPANY_A), {});
+    expect(response.ok).toBe(true);
+    expect(response.ecfEnabled).toBe(false);
+    expect(response.fiscalAuthorizationGranted).toBe(false);
 
     const rows = await prisma.$queryRaw<
       Array<{ enabled: boolean; production_enabled: boolean; certification_status: string; environment: string }>
@@ -243,8 +256,9 @@ real("Preasociación empresa-RNC — PostgreSQL real", () => {
         FROM "ecf_company_configurations"
        WHERE "company_id" = ${COMPANY_A}::uuid
     `;
+    // Nada cambió: preparar no es activar.
     expect(rows[0]).toEqual({
-      enabled: true,
+      enabled: false,
       production_enabled: false,
       certification_status: "NOT_STARTED",
       environment: "SANDBOX",
@@ -255,21 +269,39 @@ real("Preasociación empresa-RNC — PostgreSQL real", () => {
        WHERE "company_id" = ${COMPANY_A}::uuid
     `;
     expect(credentials[0].n).toBe(0);
+    // La sesión de preparación SÍ existe: el estado distinto quedó registrado.
+    expect(await sessionRows(COMPANY_A)).toHaveLength(1);
   });
 
-  it("con e-CF desactivado no se registra y se informa el motivo", async () => {
+  it("prepara una empresa que aún no tiene configuración fiscal, sin crearla", async () => {
     await prisma.$executeRaw`
-      UPDATE "ecf_company_configurations" SET "enabled" = false
-       WHERE "company_id" = ${COMPANY_A}::uuid
+      DELETE FROM "ecf_company_configurations" WHERE "company_id" = ${COMPANY_OTHER}::uuid
     `;
+    try {
+      const response = await controller.register(req(COMPANY_OTHER), {});
+      expect(response.ok).toBe(true);
+      // El proveedor del intento es DOSA; no se afirma nada de la configuración.
+      expect(response.provider).toBe("DOSA");
+      expect(response.ecfEnabled).toBe(false);
 
-    await expect(controller.register(req(COMPANY_A), {})).rejects.toMatchObject({
-      response: { message: "ECF_DOSA_INTENT_ECF_NOT_ENABLED" },
-    });
-    expect(await sessionRows(COMPANY_A)).toHaveLength(0);
+      const configs = await prisma.$queryRaw<Array<{ n: number }>>`
+        SELECT count(*)::int AS "n" FROM "ecf_company_configurations"
+         WHERE "company_id" = ${COMPANY_OTHER}::uuid
+      `;
+      // No se creó una configuración fiscal "por la cara".
+      expect(configs[0].n).toBe(0);
+      expect(await sessionRows(COMPANY_OTHER)).toHaveLength(1);
 
-    const state = await controller.state(req(COMPANY_A));
-    expect(state.canRegister).toBe(false);
-    expect(state.blockingReasons).toContain("ECF_DOSA_INTENT_ECF_NOT_ENABLED");
+      const state = await controller.state(req(COMPANY_OTHER));
+      expect(state.canRegister).toBe(true);
+      expect(state.blockingReasons).toEqual([]);
+      expect(state.ecfEnabled).toBe(false);
+    } finally {
+      await prisma.$executeRaw`
+        INSERT INTO "ecf_company_configurations" ("id","company_id","enabled","provider")
+        VALUES (gen_random_uuid(), ${COMPANY_OTHER}::uuid, true, 'DOSA')
+        ON CONFLICT ("company_id") DO UPDATE SET "enabled" = true
+      `;
+    }
   });
 });

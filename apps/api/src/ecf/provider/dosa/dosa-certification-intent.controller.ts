@@ -2,7 +2,6 @@ import {
   Body,
   ConflictException,
   Controller,
-  ForbiddenException,
   Get,
   HttpCode,
   Inject,
@@ -106,6 +105,19 @@ const REJECTION_HTTP: Record<DosaIntentRejection, "CONFLICT" | "UNAVAILABLE"> = 
  * * La respuesta no contiene claves fiscales ni secretos.
  * * Es idempotente: repetir devuelve la misma sesión con `created: false`; dos
  *   envíos simultáneos no crean dos intentos.
+ *
+ * Preparación y activación son estados **distintos** y no se confunden:
+ *
+ * * *Preparación* = esta fila de sesión, creada por la acción voluntaria de un
+ *   administrador con `manageEcfOnboarding` sobre su propia empresa.
+ * * *Activación* = `ecf_company_configurations.enabled` (módulo visible) y
+ *   `production_enabled` (emisión real), que este controlador **nunca** toca.
+ *
+ * Por eso el opt-in de e-CF **no** se exige aquí: exigirlo obligaría a activar
+ * el módulo antes de poder prepararlo, que es justo el orden inverso. La
+ * autorización administrativa (autenticación + permiso + empresa del token) es
+ * el opt-in de la preparación; la activación sigue teniendo sus propias
+ * compuertas fiscales, intactas.
  */
 @Controller("ecf/dosa")
 @UseGuards(AuthGuard("jwt"), RolesGuard)
@@ -139,11 +151,10 @@ export class DosaCertificationIntentController {
     }
     this.inFlight.add(companyId);
     try {
+      // Informativo: el estado del módulo de emisión NO condiciona la
+      // preparación. Puede no existir configuración todavía (`null`) y el
+      // administrador sigue teniendo derecho a preparar su habilitación.
       const fiscal = await this.fiscalConfig.read(companyId);
-      if (fiscal === null || !fiscal.ecfEnabled) {
-        // El administrador todavía no pidió preparar e-CF.
-        throw new ForbiddenException("ECF_DOSA_INTENT_ECF_NOT_ENABLED");
-      }
 
       const result = await this.intents.register({
         companyId,
@@ -158,11 +169,16 @@ export class DosaCertificationIntentController {
         throw new ConflictException(result.reason);
       }
 
+      // Sin configuración fiscal todavía, el proveedor del intento es DOSA por
+      // definición de este recurso; no se afirma nada sobre la configuración
+      // de la empresa, que sigue sin crearse ni modificarse.
+      const provider = fiscal?.provider ?? "DOSA";
+
       await this.audit(user, companyId, result.sessionId, {
         rnc: result.rnc,
         attemptNo: result.attemptNo,
         created: result.created,
-        provider: fiscal.provider,
+        provider,
       });
 
       return {
@@ -173,8 +189,8 @@ export class DosaCertificationIntentController {
         attemptNo: result.attemptNo,
         created: result.created,
         status: result.created ? "NOT_STARTED" : "EXISTING",
-        provider: fiscal.provider,
-        ecfEnabled: fiscal.ecfEnabled,
+        provider,
+        ecfEnabled: fiscal?.ecfEnabled === true,
         fiscalAuthorizationGranted: false,
       };
     } finally {
@@ -199,12 +215,11 @@ export class DosaCertificationIntentController {
         })
       : null;
 
+    // `ecfEnabled` es solo informativo: describe el módulo de emisión, no la
+    // preparación. `canRegister` depende únicamente de que exista identidad
+    // fiscal verificable y no ambigua.
     const ecfEnabled = fiscal?.ecfEnabled === true;
-    const blockingReasons = preview.ok
-      ? ecfEnabled
-        ? []
-        : ["ECF_DOSA_INTENT_ECF_NOT_ENABLED"]
-      : [preview.reason];
+    const blockingReasons = preview.ok ? [] : [preview.reason];
 
     return {
       ok: true,
@@ -212,8 +227,8 @@ export class DosaCertificationIntentController {
       canonicalRnc: described.canonicalRnc,
       canonicalSource: described.canonicalSource,
       ecfEnabled,
-      provider: fiscal?.provider ?? "UNKNOWN",
-      canRegister: preview.ok && ecfEnabled,
+      provider: fiscal?.provider ?? "DOSA",
+      canRegister: preview.ok,
       blockingReasons,
       session: described.session,
       credentials: credential
