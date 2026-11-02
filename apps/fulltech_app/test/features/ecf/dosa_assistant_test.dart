@@ -416,6 +416,44 @@ void main() {
       expect(event!.phase, DosaAssistantPhase.originBlocked);
       expect(event.blockedOrigin, 'https://fullposcloud.fulltechrd.com');
     });
+
+    test('los cuatro eventos obligatorios tienen fase propia y no autorizan nada', () {
+      final expected = <String, DosaAssistantPhase>{
+        'cert:ready': DosaAssistantPhase.running,
+        'cert:step': DosaAssistantPhase.running,
+        'cert:blocked': DosaAssistantPhase.originBlocked,
+        'cert:error': DosaAssistantPhase.failed,
+      };
+
+      for (final entry in expected.entries) {
+        final event = parseDosaAssistantEvent(
+          type: entry.key,
+          payload: const {'id': 'p-1'},
+        );
+        expect(event, isNotNull, reason: entry.key);
+        expect(event!.phase, entry.value, reason: entry.key);
+        // Ninguno de los cuatro puede presentarse como aprobación fiscal.
+        expect(event.isTrusted, isFalse, reason: entry.key);
+        expect(mayMutateFiscalState(event), isFalse, reason: entry.key);
+        final session = DosaAssistantSession(
+          binding: _binding(),
+          phase: event.phase!,
+        );
+        expect(session.isDgiiApproval, isFalse, reason: entry.key);
+        expect(session.impliesFiscalAuthorization, isFalse, reason: entry.key);
+      }
+    });
+
+    test('un cert:error pide recargar el estado en vez de reintentar en el cliente', () {
+      final event = parseDosaAssistantEvent(
+        type: 'cert:error',
+        payload: const {'message': 'No se pudo contactar con la DGII'},
+      );
+
+      expect(event!.impliesRefresh, isTrue);
+      expect(event.message, 'No se pudo contactar con la DGII');
+      expect(event.phase, DosaAssistantPhase.failed);
+    });
   });
 
   group('apertura en navegador externo (Windows / Android / iOS)', () {
