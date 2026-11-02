@@ -14,6 +14,10 @@ apps/api/.env.alanube.uat.local
 apps/api/.env.alanube.sandbox.local
 apps/api/.env.*.uat.local
 apps/api/.env.*.sandbox.local
+# Cubre cualquier entorno local futuro (p. ej. .env.dosa.test.local) sin tener
+# que anadir una linea por proveedor. No afecta a los .env.*.example, que si se
+# versionan.
+apps/api/.env.*.local
 apps/api/.secrets/
 apps/fulltech_app/.env
 .env.uat.local

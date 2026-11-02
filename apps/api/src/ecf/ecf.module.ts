@@ -38,6 +38,10 @@ import { EcfPlatformController } from "./platform/ecf-platform.controller";
 import { PlatformStaffGuard } from "./platform/platform-staff.guard";
 import { EcfObservabilityService } from "./ecf-observability.service";
 import { EcfProviderAuditService } from "./ecf-provider-audit.service";
+import {
+  ECF_FISCAL_PROVIDER_REGISTRY,
+  createEcfFiscalProviderRegistryFromConfig,
+} from "./provider/ecf-provider.registry";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
@@ -81,6 +85,14 @@ import { EcfService } from "./ecf.service";
     { provide: EcfEvidenceAuthenticityVerifier, useClass: EcfBlockedAuthenticityVerifier },
     EcfProviderAuditService,
     EcfObservabilityService,
+    // Registro de proveedores fiscales (puerto EcfFiscalProvider). Es solo
+    // lectura: describe qué adaptador existe y si puede emitir. Por defecto
+    // todos quedan apagados, así que no habilita ninguna emisión real.
+    {
+      provide: ECF_FISCAL_PROVIDER_REGISTRY,
+      inject: [ConfigService],
+      useFactory: createEcfFiscalProviderRegistryFromConfig,
+    },
     EcfAlanubeCertificationClient,
     {
       // El orquestador lee solo el `alanubeCompanyId` por empresa.
