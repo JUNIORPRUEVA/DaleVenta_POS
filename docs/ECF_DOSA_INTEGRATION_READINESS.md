@@ -15,6 +15,11 @@ Leyenda: **IMPLEMENTADO** (código escrito) · **PROBADO** (con prueba que lo
 ejercita) · **PENDIENTE** (falta un dato o contrato) · **BLOQUEADO** (no puede
 activarse con seguridad todavía).
 
+> Nota sobre el alcance de las pruebas: **PROBADO LOCALMENTE** significa que el
+> código se ejerce contra PostgreSQL real y HTTP real, pero con eventos
+> generados por nosotros. **PROBADO CONTRA DOSA** todavía no existe en ningún
+> componente: no se ha recibido ni procesado una firma legítima del proveedor.
+
 | Componente | Estado | Evidencia / límite |
 | --- | --- | --- |
 | Preparación de e-CF sin `enabled` | IMPLEMENTADO + PROBADO | `POST /ecf/dosa/certification-intent`; probado con emisión apagada y sin configuración fiscal |
@@ -22,6 +27,8 @@ activarse con seguridad todavía).
 | Registro solo por acción voluntaria | IMPLEMENTADO + PROBADO | Abrir el expediente no escribe; hay prueba que cuenta las escrituras |
 | Firma `X-Dosa-Signature` | IMPLEMENTADO + PROBADO | HMAC-SHA256 sobre bytes originales, anti-replay, parseo estricto, tiempo constante |
 | Webhook `POST /webhook/dosa` | IMPLEMENTADO + PROBADO (local) | **Sin validar contra un evento auténtico de DOSA** |
+| Correlación `postulacion_id` → intento | IMPLEMENTADO + PROBADO | Empresa → RNC → intento activo → postulación, en una sola sentencia con guardas |
+| Suites e-CF con PostgreSQL | PROBADO LOCALMENTE | 115 suites / 1400 pruebas contra un destino desechable dedicado |
 | Cliente de consultas `X-Dosa-Secret-Key` | IMPLEMENTADO + PROBADO | Apagado por defecto; sin endpoints de consulta confirmados |
 | Separación TEST / producción | IMPLEMENTADO + PROBADO | Clave por empresa + RNC + entorno; sin fallback entre entornos |
 | Emisión real | **BLOQUEADO** | Requiere certificación DGII + credenciales productivas + autorización expresa |
