@@ -26,13 +26,18 @@ activarse con seguridad todavía).
 | Endpoint de intención con JWT real | PROBADO | E2E HTTP real con `POST /auth/register-business` + `POST /auth/login` (8 casos) |
 | Registro solo por acción voluntaria | IMPLEMENTADO + PROBADO | Abrir el expediente no escribe; hay prueba que cuenta las escrituras |
 | Firma `X-Dosa-Signature` | IMPLEMENTADO + PROBADO | HMAC-SHA256 sobre bytes originales, anti-replay, parseo estricto, tiempo constante |
-| Webhook `POST /webhook/dosa` | IMPLEMENTADO + PROBADO (local) | **Sin validar contra un evento auténtico de DOSA** |
+| Webhook `POST /webhook/dosa` | IMPLEMENTADO + PROBADO (local) | **Sin validar contra un evento auténtico de DOSA**. El tipo de evento se persiste como `PENDING_CLASSIFICATION`: el payload del proveedor no trae campo de tipo y no se inventa |
 | Correlación `postulacion_id` → intento | IMPLEMENTADO + PROBADO | Empresa → RNC → intento activo → postulación; **exclusividad concurrente** probada contra PostgreSQL real (bloqueo de asesoría en transacción) |
-| Suites e-CF con PostgreSQL | PROBADO LOCALMENTE | 115 suites / 1400 pruebas contra un destino desechable dedicado |
+| Mapeo fiscal DOSA (`indicadorFacturacion`, `indicadorBienoServicio`, `unidadMedida`) | IMPLEMENTADO + PROBADO | Naturaleza del ítem (1 producto / 2 servicio) separada del impuesto; `unidadMedida` obligatoria y el documento se rechaza con `DOSA_UNIT_OF_MEASURE_REQUIRED:<línea>` si falta |
+| Barrera del punto de envío | IMPLEMENTADO + PROBADO | `assessDosaDocumentBarrier` valida el cuerpo **antes** de la compuerta de configuración: extraer el JSON de un borrador no lo hace transmisible |
+| Autoridad de activación encadenada | IMPLEMENTADO + PROBADO | Intento de `attempt_no` más alto → `postulacion_id` → evidencia de esa postulación → DGII → **última** decisión administrativa; probado contra PostgreSQL real |
+| Suites e-CF con PostgreSQL | PROBADO LOCALMENTE | 117 suites / 1459 pruebas contra el destino desechable dedicado (postulaciones 1–4 incluidas) |
 | Cliente de consultas `X-Dosa-Secret-Key` | IMPLEMENTADO + PROBADO | Apagado por defecto; sin endpoints de consulta confirmados |
 | Separación TEST / producción | IMPLEMENTADO + PROBADO | Clave por empresa + RNC + entorno; sin fallback entre entornos |
 | Emisión real | **BLOQUEADO** | Requiere certificación DGII + credenciales productivas + autorización expresa |
+| Primera emisión TEST | **PREPARADO, SIN EJECUTAR** | `docs/ECF_DOSA_PRIMERA_EMISION_TEST.md`; exige autorización expresa, secuencia TEST y código de unidad aportado por el operador |
 | Sesión oficial del asistente | **PENDIENTE** | Falta contrato de creación de sesiones y autorización de dominio |
+
 
 Lo que **no** puede afirmarse todavía: que nuestra verificación HMAC sea
 compatible con la implementación real del proveedor. Las pruebas validan la
