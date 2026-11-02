@@ -297,6 +297,91 @@ describe("readDosaSignatureConfig", () => {
   });
 });
 
+describe("codificación del secreto (pendiente de confirmar por DOSA)", () => {
+  // Secreto con forma real: 64 caracteres hexadecimales. Admite dos lecturas
+  // incompatibles: texto literal (64 bytes) o 32 bytes decodificados.
+  const HEX_SECRET = "a".repeat(64);
+
+  function signedWithSecret(body: Buffer, key: Buffer | string, t = String(NOW_SECONDS)) {
+    const digest = createHmac("sha256", key)
+      .update(`${t}.`, "utf8")
+      .update(body)
+      .digest("hex");
+    return `t=${t},v1=${digest}`;
+  }
+
+  it("por defecto interpreta el secreto como texto literal (utf8)", () => {
+    const result = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: signedWithSecret(RAW, HEX_SECRET) },
+      config: { strategy: "HMAC_SHA256_TIMESTAMPED", secret: HEX_SECRET },
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("con `hex` usa los 32 bytes decodificados y no los 64 caracteres", () => {
+    const key = Buffer.from(HEX_SECRET, "hex");
+    expect(key.length).toBe(32);
+
+    const withHexKey = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: signedWithSecret(RAW, key) },
+      config: {
+        strategy: "HMAC_SHA256_TIMESTAMPED",
+        secret: HEX_SECRET,
+        secretEncoding: "hex",
+      },
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+    expect(withHexKey.ok).toBe(true);
+
+    // La firma hecha con el texto literal NO vale en modo hex: las dos lecturas
+    // son distintas de verdad, no un detalle cosmético.
+    const withLiteralKey = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: signedWithSecret(RAW, HEX_SECRET) },
+      config: {
+        strategy: "HMAC_SHA256_TIMESTAMPED",
+        secret: HEX_SECRET,
+        secretEncoding: "hex",
+      },
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+    expect((withLiteralKey as { reason: string }).reason).toBe("SIGNATURE_MISMATCH");
+  });
+
+  it("si se pide `hex` y el secreto no es hex, no se reinterpreta en silencio", () => {
+    const result = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: signedWithSecret(RAW, "no-es-hex") },
+      config: {
+        strategy: "HMAC_SHA256_TIMESTAMPED",
+        secret: "no-es-hex",
+        secretEncoding: "hex",
+      },
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+    expect((result as { reason: string }).reason).toBe("CONFIG_INVALID");
+  });
+
+  it("la codificación se lee de entorno y por defecto es utf8", () => {
+    expect(
+      readDosaSignatureConfig({
+        DOSA_WEBHOOK_SIGNATURE_STRATEGY: "HMAC_SHA256_TIMESTAMPED",
+        DOSA_WEBHOOK_SECRET: HEX_SECRET,
+      }).secretEncoding,
+    ).toBe("utf8");
+    expect(
+      readDosaSignatureConfig({
+        DOSA_WEBHOOK_SIGNATURE_STRATEGY: "HMAC_SHA256_TIMESTAMPED",
+        DOSA_WEBHOOK_SECRET: HEX_SECRET,
+        DOSA_WEBHOOK_SECRET_ENCODING: "HEX",
+      }).secretEncoding,
+    ).toBe("hex");
+  });
+});
+
 describe("dudas externas documentadas", () => {
   it("la unidad del timestamp y la codificación del digest siguen declaradas como pendientes", () => {
     expect(DOSA_WEBHOOK_PENDING_QUESTIONS.length).toBeGreaterThanOrEqual(2);

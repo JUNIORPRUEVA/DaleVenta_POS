@@ -57,6 +57,23 @@ export type DosaSignatureResult =
 /** Unidad del campo `t`. No confirmada por el proveedor. */
 export type DosaTimestampUnit = "seconds" | "milliseconds";
 
+/**
+ * Cómo se interpreta el secreto del webhook. **No confirmado.**
+ *
+ * El secreto entregado tiene 64 caracteres hexadecimales. Eso admite dos
+ * lecturas incompatibles entre sí:
+ *
+ * * `utf8` — los 64 caracteres son el secreto tal cual (64 bytes) y se usan
+ *   literalmente como clave HMAC. Es el valor por defecto porque es la lectura
+ *   que no transforma nada.
+ * * `hex` — los 64 caracteres codifican 32 bytes binarios que son la clave.
+ *
+ * Elegir mal hace que TODA firma del proveedor se rechace. El fallo es seguro
+ * (cerrado), pero silencioso en cuanto a la causa: por eso queda configurable y
+ * declarado como pendiente en `DOSA_WEBHOOK_PENDING_QUESTIONS`.
+ */
+export type DosaSecretEncoding = "utf8" | "hex";
+
 export type DosaSignatureConfig = {
   strategy: DosaSignatureStrategyId;
   /** Secreto del webhook. Nunca se registra ni se devuelve. */
@@ -69,6 +86,8 @@ export type DosaSignatureConfig = {
   timestampUnit?: DosaTimestampUnit;
   /** Ventana anti-replay, en segundos. Por defecto 300. */
   toleranceSeconds?: number;
+  /** Cómo se interpretan los caracteres del secreto. Por defecto `utf8`. */
+  secretEncoding?: DosaSecretEncoding;
   /** Motivo por el que la estrategia pedida no se aplicó, si aplica. */
   downgradedFrom?: DosaSignatureStrategyId;
   downgradeReason?: "NOT_A_LOCAL_LAB_ENVIRONMENT";
@@ -85,6 +104,7 @@ export const DOSA_WEBHOOK_PENDING_QUESTIONS = [
   "¿El digest de `v1` va en hex o en base64? (se aceptan ambos)",
   "¿`t` es realmente epoch Unix, o el timestamp de su reloj interno?",
   "¿Hay rotación de secreto? Si la hay, ¿se envían varios `v1` en la cabecera?",
+  "¿El secreto de 64 caracteres hex es TEXTO LITERAL o 32 bytes decodificados de hex? (se configura con DOSA_WEBHOOK_SECRET_ENCODING; por defecto utf8)",
 ] as const;
 
 export const DOSA_SIGNATURE_HEADER = "x-dosa-signature";
@@ -104,6 +124,7 @@ export const DOSA_LAB_APP_ENVS: readonly string[] = [
 export type DosaSafetyEnv = {
   DOSA_WEBHOOK_SIGNATURE_STRATEGY?: string;
   DOSA_WEBHOOK_SECRET?: string;
+  DOSA_WEBHOOK_SECRET_ENCODING?: string;
   DOSA_WEBHOOK_TIMESTAMP_UNIT?: string;
   DOSA_WEBHOOK_TOLERANCE_SECONDS?: string;
   NODE_ENV?: string;
@@ -179,11 +200,13 @@ export function readDosaSignatureConfig(env: DosaSafetyEnv): DosaSignatureConfig
   const secretValue = secret.length > 0 ? secret : null;
   const timestampUnit = parseTimestampUnit(env.DOSA_WEBHOOK_TIMESTAMP_UNIT);
   const toleranceSeconds = parseTolerance(env.DOSA_WEBHOOK_TOLERANCE_SECONDS);
+  const secretEncoding = parseSecretEncoding(env.DOSA_WEBHOOK_SECRET_ENCODING);
 
   if (raw === "HMAC_SHA256_TIMESTAMPED") {
     return {
       strategy: "HMAC_SHA256_TIMESTAMPED",
       secret: secretValue,
+      secretEncoding,
       timestampUnit,
       toleranceSeconds,
     };
@@ -193,6 +216,7 @@ export function readDosaSignatureConfig(env: DosaSafetyEnv): DosaSignatureConfig
     return {
       strategy: "BLOCKED",
       secret: secretValue,
+      secretEncoding,
       timestampUnit,
       toleranceSeconds,
     };
@@ -202,6 +226,7 @@ export function readDosaSignatureConfig(env: DosaSafetyEnv): DosaSignatureConfig
     return {
       strategy: "BLOCKED",
       secret: secretValue,
+      secretEncoding,
       timestampUnit,
       toleranceSeconds,
       downgradedFrom: "UNVERIFIED_PLAINTEXT_SECRET",
@@ -212,9 +237,36 @@ export function readDosaSignatureConfig(env: DosaSafetyEnv): DosaSignatureConfig
   return {
     strategy: "UNVERIFIED_PLAINTEXT_SECRET",
     secret: secretValue,
+    secretEncoding,
     timestampUnit,
     toleranceSeconds,
   };
+}
+
+/**
+ * Lectura de la codificación del secreto.
+ *
+ * Solo `hex` es una lectura distinta; cualquier otro valor (incluido vacío) cae
+ * a `utf8`, que es la interpretación que no transforma nada.
+ */
+function parseSecretEncoding(value: string | undefined): DosaSecretEncoding {
+  return (value ?? "").trim().toLowerCase() === "hex" ? "hex" : "utf8";
+}
+
+/**
+ * Convierte el secreto configurado en la clave HMAC.
+ *
+ * `utf8` = los caracteres tal cual. `hex` = decodificar los caracteres a bytes.
+ * Si se pide `hex` y el valor no es hex válido se devuelve `null` en vez de caer
+ * a `utf8` en silencio: reinterpretar el secreto cambiaría el resultado de la
+ * verificación sin que nadie se entere.
+ */
+function secretKey(secret: string, encoding: DosaSecretEncoding): Buffer | null {
+  if (encoding === "hex") {
+    if (!/^[0-9A-Fa-f]+$/.test(secret) || secret.length % 2 !== 0) return null;
+    return Buffer.from(secret, "hex");
+  }
+  return Buffer.from(secret, "utf8");
 }
 
 function parseTimestampUnit(value: string | undefined): DosaTimestampUnit {
@@ -279,6 +331,7 @@ export function verifyDosaSignature(input: {
   return verifyHmacTimestamped({
     header: provided,
     secret: config.secret,
+    secretEncoding: config.secretEncoding ?? "utf8",
     rawBody: input.rawBody,
     timestampUnit: config.timestampUnit ?? "seconds",
     toleranceSeconds: config.toleranceSeconds ?? DOSA_DEFAULT_TOLERANCE_SECONDS,
@@ -296,6 +349,7 @@ export function verifyDosaSignature(input: {
 function verifyHmacTimestamped(input: {
   header: string;
   secret: string;
+  secretEncoding: DosaSecretEncoding;
   rawBody: Buffer | undefined;
   timestampUnit: DosaTimestampUnit;
   toleranceSeconds: number;
@@ -318,8 +372,14 @@ function verifyHmacTimestamped(input: {
 
   const { timestampRaw, signature } = parsed;
 
+  const key = secretKey(input.secret, input.secretEncoding);
+  if (key === null) {
+    // Un secreto que dice ser hex y no lo es: no se reinterpreta en silencio.
+    return fail("CONFIG_INVALID");
+  }
+
   // Digest del mensaje firmado: `t` TAL CUAL llegó, un punto, y el cuerpo.
-  const expected = createHmac("sha256", input.secret)
+  const expected = createHmac("sha256", key)
     .update(`${timestampRaw}.`, "utf8")
     .update(input.rawBody)
     .digest();

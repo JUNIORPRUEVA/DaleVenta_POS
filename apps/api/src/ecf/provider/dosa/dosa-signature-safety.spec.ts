@@ -81,6 +81,7 @@ describe("readDosaSignatureConfig — degradación por entorno", () => {
     expect(readDosaSignatureConfig({})).toEqual({
       strategy: "BLOCKED",
       secret: null,
+      secretEncoding: "utf8",
       timestampUnit: "seconds",
       toleranceSeconds: 300,
     });
