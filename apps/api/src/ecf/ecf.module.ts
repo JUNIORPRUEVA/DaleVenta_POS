@@ -69,6 +69,12 @@ import {
 } from "./provider/dosa/dosa-activation-authority.service";
 import { DosaActivationService } from "./provider/dosa/dosa-activation.service";
 import {
+  DosaCertificationIntentService,
+  ECF_DOSA_RNC_OWNERS,
+  PrismaDosaRncOwnersReader,
+  type DosaRncOwnersReader,
+} from "./provider/dosa/dosa-certification-intent.service";
+import {
   DosaEmissionService,
   ECF_DOSA_EMISSION_TRANSPORT,
   ECF_DOSA_FISCAL_CONFIG,
@@ -203,6 +209,22 @@ import { EcfService } from "./ecf.service";
         authority: DosaAuthorizationReader,
         credentials: DosaCredentialService,
       ) => new DosaActivationService(authority, credentials),
+    },
+    // Intencion de certificacion: asocia la empresa con su RNC verificado ANTES
+    // de abrir el asistente. Reutiliza la tabla de sesiones existente.
+    {
+      provide: ECF_DOSA_RNC_OWNERS,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaDosaRncOwnersReader(prisma),
+    },
+    {
+      provide: DosaCertificationIntentService,
+      inject: [EcfCanonicalIdentityService, EcfDosaSessionService, ECF_DOSA_RNC_OWNERS],
+      useFactory: (
+        identity: EcfCanonicalIdentityService,
+        sessions: EcfDosaSessionService,
+        rncOwners: DosaRncOwnersReader,
+      ) => new DosaCertificationIntentService(identity, sessions, rncOwners),
     },
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,
