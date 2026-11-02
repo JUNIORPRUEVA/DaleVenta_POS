@@ -40,6 +40,24 @@ export const ECF_DOSA_COMPANY_RESOLVER = Symbol("ECF_DOSA_COMPANY_RESOLVER");
 /** Permite inyectar la configuracion de firma en pruebas. */
 export const ECF_DOSA_SIGNATURE_CONFIG = Symbol("ECF_DOSA_SIGNATURE_CONFIG");
 
+/**
+ * Pista de evento sobre la sesión de certificación.
+ *
+ * Es un contrato MÍNIMO a propósito: lo único que el webhook puede pedirle a la
+ * sesión es dejar constancia de que llegó un evento. No expone `status`, ni
+ * confirmación, ni autorización, así que un evento autenticado no puede cambiar
+ * el estado de certificación por esta vía.
+ */
+export interface DosaSessionHintRecorder {
+  recordEventHint(input: {
+    companyId: string;
+    rnc: string;
+    eventType: string;
+  }): Promise<{ updated: boolean }>;
+}
+
+export const ECF_DOSA_SESSION_HINTS = Symbol("ECF_DOSA_SESSION_HINTS");
+
 export type DosaWebhookOutcome =
   | { accepted: false; status: number; code: string; reason: string }
   | {
@@ -78,6 +96,9 @@ export class DosaWebhookService {
     @Optional()
     @Inject(DosaWebhookService.CREDENTIALS)
     private readonly credentials?: DosaCredentialService,
+    @Optional()
+    @Inject(ECF_DOSA_SESSION_HINTS)
+    private readonly sessionHints?: DosaSessionHintRecorder,
   ) {}
 
   /** Token para inyectar la boveda de credenciales sin acoplar el modulo. */
@@ -286,6 +307,28 @@ export class DosaWebhookService {
        WHERE "id" = ${input.eventId}::uuid
          AND "company_id" = ${input.companyId}::uuid
     `;
+
+    // Pista de correlación con la postulación EN CURSO de esa empresa y ese RNC.
+    //
+    // Es best-effort y deliberadamente débil: `recordEventHint` solo escribe
+    // `last_event_type` / `last_event_at`. No toca `status`, ni
+    // `provider_confirmed_at`, ni autoriza nada. Si la empresa no tiene un
+    // intento activo, no se crea ninguna fila.
+    //
+    // Un fallo aquí NO invalida el evento ya persistido: el hecho fiscal queda
+    // registrado y la pista es un extra. Se ignora para no convertir un
+    // problema cosmético en un reintento del proveedor.
+    if (this.sessionHints) {
+      try {
+        await this.sessionHints.recordEventHint({
+          companyId: input.companyId,
+          rnc: input.payload.rnc,
+          eventType: "empresa.conectada",
+        });
+      } catch {
+        // Intencionadamente no se propaga: ver el comentario anterior.
+      }
+    }
 
     return {
       accepted: true,

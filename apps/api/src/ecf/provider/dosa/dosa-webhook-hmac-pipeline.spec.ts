@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import {
   DosaWebhookService,
   type DosaCompanyResolver,
+  type DosaSessionHintRecorder,
   type DosaWebhookStore,
 } from "./dosa-webhook.service";
 import type { DosaSignatureConfig } from "./dosa-webhook-signature.policy";
@@ -94,6 +95,7 @@ function build(options: {
   select?: Array<{ id: string; processing_state: string | null }>;
   companies?: Record<string, { companyId: string; ecfEnabled: boolean }>;
   signature?: DosaSignatureConfig;
+  hints?: DosaSessionHintRecorder;
 }) {
   const { store, calls } = fakeStore(options);
   const service = new DosaWebhookService(
@@ -104,6 +106,8 @@ function build(options: {
       },
     ),
     options.signature ?? config,
+    undefined,
+    options.hints,
   );
   return { service, calls };
 }
@@ -236,5 +240,68 @@ describe("webhook DOSA con firma HMAC", () => {
 
     expect(outcome).toMatchObject({ accepted: false, status: 409 });
     expect(calls).toHaveLength(0);
+  });
+
+  it("un evento autenticado deja la pista de correlación en su empresa y RNC", async () => {
+    const hints: Array<{ companyId: string; rnc: string; eventType: string }> = [];
+    const { service } = build({
+      insert: [{ id: "evt-5" }],
+      hints: {
+        async recordEventHint(input) {
+          hints.push(input);
+          return { updated: true };
+        },
+      },
+    });
+    const body = rawBody();
+
+    const outcome = await service.handle(
+      request({ "x-dosa-signature": signatureHeader(body) }, body),
+    );
+
+    expect(outcome.accepted).toBe(true);
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toEqual({
+      companyId: COMPANY_A,
+      rnc: "13199988001",
+      eventType: "empresa.conectada",
+    });
+  });
+
+  it("la pista NO se registra si la firma no es válida", async () => {
+    const hints: unknown[] = [];
+    const { service } = build({
+      insert: [{ id: "evt-6" }],
+      hints: {
+        async recordEventHint(input) {
+          hints.push(input);
+          return { updated: true };
+        },
+      },
+    });
+    const body = rawBody();
+
+    await service.handle(request({}, body));
+
+    expect(hints).toHaveLength(0);
+  });
+
+  it("si la pista falla, el evento ya persistido sigue siendo un éxito", async () => {
+    const { service } = build({
+      insert: [{ id: "evt-7" }],
+      hints: {
+        async recordEventHint() {
+          throw new Error("sesion no disponible");
+        },
+      },
+    });
+    const body = rawBody();
+
+    const outcome = await service.handle(
+      request({ "x-dosa-signature": signatureHeader(body) }, body),
+    );
+
+    // El hecho fiscal quedó registrado; la pista es un extra.
+    expect(outcome.accepted).toBe(true);
   });
 });

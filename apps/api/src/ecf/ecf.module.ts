@@ -50,6 +50,7 @@ import {
 import { DosaWebhookController } from "./provider/dosa/dosa-webhook.controller";
 import {
   ECF_DOSA_COMPANY_RESOLVER,
+  ECF_DOSA_SESSION_HINTS,
   ECF_DOSA_WEBHOOK_STORE,
   DosaWebhookService,
 } from "./provider/dosa/dosa-webhook.service";
@@ -188,6 +189,14 @@ import { EcfService } from "./ecf.service";
       provide: DosaWebhookService.CREDENTIALS,
       inject: [DosaCredentialService],
       useFactory: (credentials: DosaCredentialService) => credentials,
+    },
+    {
+      // Pista de correlación del evento con la postulación EN CURSO.
+      // Se expone por token con un contrato mínimo (`recordEventHint`), para que
+      // el webhook no pueda tocar `status` ni ninguna autorización.
+      provide: ECF_DOSA_SESSION_HINTS,
+      inject: [EcfDosaSessionService],
+      useFactory: (sessions: EcfDosaSessionService) => sessions,
     },
     // Emision DOSA detras de compuertas. Sin `DOSA_EMISSION_ENABLED=true` el
     // cliente no hace ni una peticion.
