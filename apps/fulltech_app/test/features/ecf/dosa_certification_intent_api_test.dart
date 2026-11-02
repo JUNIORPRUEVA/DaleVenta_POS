@@ -88,22 +88,35 @@ void main() {
     test('propaga los motivos de bloqueo', () {
       final state = DosaIntentState.fromJson(const {
         'canRegister': false,
-        'blockingReasons': ['ECF_DOSA_INTENT_ECF_NOT_ENABLED'],
+        'blockingReasons': ['COMPANY_RNC_NOT_VERIFIED'],
       });
       expect(state.canRegister, isFalse);
-      expect(state.blockingReasons, contains('ECF_DOSA_INTENT_ECF_NOT_ENABLED'));
+      expect(state.blockingReasons, contains('COMPANY_RNC_NOT_VERIFIED'));
+    });
+
+    test('emisión apagada NO impide preparar', () {
+      // Preparar y activar son estados distintos: el interruptor de emisión se
+      // informa, pero no condiciona la preparación.
+      final state = DosaIntentState.fromJson(const {
+        'ecfEnabled': false,
+        'canRegister': true,
+        'blockingReasons': [],
+      });
+      expect(state.ecfEnabled, isFalse);
+      expect(state.canRegister, isTrue);
+      expect(state.blockingReasons, isEmpty);
     });
   });
 
   group('DosaIntentException', () {
     test('traduce cada código a un mensaje para el administrador', () {
       const codes = {
-        'ECF_DOSA_INTENT_ECF_NOT_ENABLED': 'activado',
         'COMPANY_RNC_NOT_VERIFIED': 'RNC verificado',
         'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY': 'no coincide',
         'AMBIGUOUS_RNC': 'comparte este RNC',
         'ECF_DOSA_INTENT_IN_PROGRESS': 'en curso',
         'SESSION_CLAIM_FAILED': 'No se pudo registrar',
+        'ECF_DOSA_INTENT_UNAUTHENTICATED': 'Vuelve a iniciar sesión',
       };
       codes.forEach((code, fragment) {
         expect(

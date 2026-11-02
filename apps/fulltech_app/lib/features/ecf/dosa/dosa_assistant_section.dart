@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../data/ecf_repository.dart';
@@ -18,7 +19,12 @@ import 'dosa_certification_intent_api.dart';
 ///
 /// Con la bandera apagada devuelve `SizedBox.shrink()`: la pantalla actual no
 /// cambia en absoluto para las empresas que no usan e-CF.
-class DosaAssistantSection extends ConsumerWidget {
+///
+/// **Abrir el expediente no registra nada.** Al montarse solo se consulta el
+/// estado (lectura). La intención se registra únicamente cuando un administrador
+/// autorizado pulsa «Preparar certificación con DOSA»; hasta entonces el panel
+/// del asistente no se monta.
+class DosaAssistantSection extends ConsumerStatefulWidget {
   const DosaAssistantSection({
     super.key,
     this.postulationExternalId,
@@ -43,85 +49,169 @@ class DosaAssistantSection extends ConsumerWidget {
   final DosaAssistantConfig? config;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final resolved = config ?? DosaAssistantConfig.fromEnvironment();
+  ConsumerState<DosaAssistantSection> createState() =>
+      _DosaAssistantSectionState();
+}
+
+class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
+  /// Solo pasa a `true` por acción explícita del administrador.
+  bool _requested = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = widget.config ?? DosaAssistantConfig.fromEnvironment();
     if (!resolved.enabled) return const SizedBox.shrink();
 
-    final companyId =
-        ref.watch(authStateProvider).user?.companyId?.trim() ?? '';
+    final user = ref.watch(authStateProvider).user;
+    final companyId = user?.companyId?.trim() ?? '';
     final taxId = ref.watch(companySettingsProvider).valueOrNull?.rnc.trim() ?? '';
+    // Preparar exige el permiso administrativo, igual que en el backend.
+    final canManage = hasUserPermission(
+      user,
+      AppPermission.manageEcfOnboarding,
+    );
 
     final binding = DosaAssistantBinding(
       companyId: companyId,
       taxId: taxId,
-      postulationExternalId: postulationExternalId,
+      postulationExternalId: widget.postulationExternalId,
     );
 
-    // El asistente NO se monta hasta que el backend confirma la intención. Esta
-    // es la unica forma de que la empresa quede asociada a su RNC verificado
-    // antes de que DOSA emita ningun evento.
-    final intent = ref.watch(dosaIntentRegistrationProvider(taxId));
-
-    return intent.when(
+    // Lectura del estado interno. Consultar no crea ni activa nada.
+    return ref.watch(dosaIntentStateProvider).when(
       loading: () => const _DosaIntentGate(
         icon: Icons.hourglass_top,
-        message: 'Registrando la preparacion de facturacion electronica...',
+        message: 'Consultando la preparación de facturación electrónica...',
       ),
       error: (error, _) => _DosaIntentGate(
-        icon: Icons.block,
-        message: error is DosaIntentException
-            ? error.message
-            : 'No se pudo registrar la intencion de certificacion.',
-        // Solo se muestra como detalle un codigo propio del dominio: los
-        // errores de transporte no aportan nada al administrador.
-        detail: error is DosaIntentException &&
-                (error.code.startsWith('ECF_') ||
-                    error.code == 'AMBIGUOUS_RNC' ||
-                    error.code == 'COMPANY_RNC_NOT_VERIFIED' ||
-                    error.code == 'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY' ||
-                    error.code == 'SESSION_CLAIM_FAILED')
-            ? error.code
-            : null,
-        onRetry: () => ref.invalidate(dosaIntentRegistrationProvider(taxId)),
+        icon: Icons.cloud_off,
+        message: 'No se pudo consultar el estado de la preparación.',
+        onRetry: () => ref.invalidate(dosaIntentStateProvider),
       ),
-      data: (registered) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _DosaIntentBanner(
-            attemptNo: registered.attemptNo,
-            created: registered.created,
-            provider: registered.provider,
-            onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
-          ),
-          DosaAssistantPanel(
-            config: resolved,
-            session: DosaAssistantSession(
-              binding: binding,
-              phase: phase ?? _defaultPhase(postulationExternalId),
-            ),
-            onResume: onResume,
-            // Un evento del navegador NO escribe nada: solo pide recargar.
-            onWizardEvent: _onWizardEvent(ref),
-            onOpenExternally: resolved.hasSessionUrl
-                ? () => openDosaAssistantExternally(
-                    sessionUrl: resolved.sessionUrl!,
-                  )
-                : null,
-          ),
-        ],
-      ),
+      data: (value) {
+        // Ya hay una intención registrada: se abre el asistente existente.
+        if (value.sessionId != null) {
+          return _panel(
+            resolved,
+            binding,
+            provider: value.provider,
+            attemptNo: value.sessionAttemptNo ?? 0,
+            created: false,
+          );
+        }
+
+        // El backend explica qué falta (identidad fiscal), no el interruptor
+        // de emisión: preparar no depende de tener e-CF ya activado.
+        if (!value.canRegister) {
+          final reason = value.blockingReasons.isEmpty
+              ? null
+              : value.blockingReasons.first;
+          return _DosaIntentGate(
+            icon: Icons.block,
+            message: reason == null
+                ? 'La preparación no puede iniciarse todavía.'
+                : dosaIntentReasonMessage(reason),
+            detail: reason,
+          );
+        }
+
+        if (!canManage) {
+          return const _DosaIntentGate(
+            icon: Icons.lock_outline,
+            message:
+                'Solo un administrador autorizado puede preparar la '
+                'certificación con DOSA.',
+          );
+        }
+
+        if (!_requested) {
+          return _DosaPrepareCard(
+            onPrepare: () => setState(() => _requested = true),
+          );
+        }
+
+        // Acción voluntaria confirmada: ahora sí se registra la intención.
+        return ref
+            .watch(dosaIntentRegistrationProvider(taxId))
+            .when(
+              loading: () => const _DosaIntentGate(
+                icon: Icons.hourglass_top,
+                message:
+                    'Registrando la preparación de facturación electrónica...',
+              ),
+              error: (error, _) => _DosaIntentGate(
+                icon: Icons.block,
+                message: error is DosaIntentException
+                    ? error.message
+                    : 'No se pudo registrar la intención de certificación.',
+                // Solo se muestra como detalle un código propio del dominio:
+                // los errores de transporte no aportan nada al administrador.
+                detail: error is DosaIntentException &&
+                        (error.code.startsWith('ECF_') ||
+                            error.code == 'AMBIGUOUS_RNC' ||
+                            error.code == 'COMPANY_RNC_NOT_VERIFIED' ||
+                            error.code ==
+                                'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY' ||
+                            error.code == 'SESSION_CLAIM_FAILED')
+                    ? error.code
+                    : null,
+                onRetry: () =>
+                    ref.invalidate(dosaIntentRegistrationProvider(taxId)),
+              ),
+              data: (registered) => _panel(
+                resolved,
+                binding,
+                provider: registered.provider,
+                attemptNo: registered.attemptNo,
+                created: registered.created,
+              ),
+            );
+      },
     );
   }
 
-  ValueChanged<DosaAssistantEvent> _onWizardEvent(WidgetRef ref) {
-    return (event) {
-      // Doble cinturón: aunque el evento llegue con forma válida, aquí no se
-      // crea ninguna postulación ni se marca aceptación fiscal.
-      if (mayMutateFiscalState(event)) return;
-      if (!event.impliesRefresh) return;
-      ref.invalidate(ecfOnboardingProvider);
-      onRefresh?.call();
-    };
+  Widget _panel(
+    DosaAssistantConfig resolved,
+    DosaAssistantBinding binding, {
+    required String provider,
+    required int attemptNo,
+    required bool created,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _DosaIntentBanner(
+          attemptNo: attemptNo,
+          created: created,
+          provider: provider,
+          onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
+        ),
+        DosaAssistantPanel(
+          config: resolved,
+          session: DosaAssistantSession(
+            binding: binding,
+            phase:
+                widget.phase ?? _defaultPhase(widget.postulationExternalId),
+          ),
+          onResume: widget.onResume,
+          // Un evento del navegador NO escribe nada: solo pide recargar.
+          onWizardEvent: _onWizardEvent,
+          onOpenExternally: resolved.hasSessionUrl
+              ? () =>
+                    openDosaAssistantExternally(sessionUrl: resolved.sessionUrl!)
+              : null,
+        ),
+      ],
+    );
+  }
+
+  void _onWizardEvent(DosaAssistantEvent event) {
+    // Doble cinturón: aunque el evento llegue con forma válida, aquí no se
+    // crea ninguna postulación ni se marca aceptación fiscal.
+    if (mayMutateFiscalState(event)) return;
+    if (!event.impliesRefresh) return;
+    ref.invalidate(ecfOnboardingProvider);
+    widget.onRefresh?.call();
   }
 
   /// Sin señal del proveedor no se inventa un estado: como mucho "en curso".
@@ -129,6 +219,58 @@ class DosaAssistantSection extends ConsumerWidget {
       externalId == null || externalId.trim().isEmpty
       ? DosaAssistantPhase.idle
       : DosaAssistantPhase.running;
+}
+
+/// Paso previo explícito: explica qué va a pasar y espera la confirmación del
+/// administrador. Es la única puerta que registra la intención.
+class _DosaPrepareCard extends StatelessWidget {
+  const _DosaPrepareCard({required this.onPrepare});
+
+  final VoidCallback onPrepare;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.verified_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Certificación con DOSA',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Vincula esta empresa con su RNC verificado para abrir el '
+              'asistente del proveedor. No activa la facturación electrónica, '
+              'no emite comprobantes y no envía nada a la DGII.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: onPrepare,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Preparar certificación con DOSA'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Estado previo al asistente: mientras la intención no esté registrada, DOSA

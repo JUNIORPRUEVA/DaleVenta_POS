@@ -99,6 +99,31 @@ class DosaIntentState {
   }
 }
 
+/// Texto para el administrador a partir del código del backend.
+///
+/// Fuente única: lo usan tanto la excepción como el aviso del expediente, así
+/// que un mismo motivo nunca se explica de dos formas distintas.
+String dosaIntentReasonMessage(String code) {
+  switch (code) {
+    case 'COMPANY_RNC_NOT_VERIFIED':
+      return 'La empresa no tiene un RNC verificado en su expediente fiscal.';
+    case 'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY':
+      return 'El RNC de la empresa no coincide con el del expediente fiscal.';
+    case 'AMBIGUOUS_RNC':
+      return 'Otra empresa comparte este RNC. La asociación automática está bloqueada.';
+    case 'ECF_DOSA_INTENT_IN_PROGRESS':
+      return 'Ya hay una preparación en curso para esta empresa.';
+    case 'SESSION_CLAIM_FAILED':
+      return 'No se pudo registrar la intención. Inténtalo de nuevo en unos segundos.';
+    case 'ECF_DOSA_INTENT_UNAUTHENTICATED':
+      return 'La sesión no es válida. Vuelve a iniciar sesión.';
+    default:
+      // Sin interpolación: un código interno no es un mensaje de usuario.
+      // El código sigue disponible en `DosaIntentException.code` para soporte.
+      return 'No se pudo registrar la intención de certificación. Inténtalo de nuevo.';
+  }
+}
+
 /// Error con el código del backend, para poder mostrar el motivo exacto sin
 /// inventarlo en el cliente.
 class DosaIntentException implements Exception {
@@ -106,28 +131,7 @@ class DosaIntentException implements Exception {
   final String code;
 
   /// Texto para el administrador. Sin datos sensibles.
-  String get message {
-    switch (code) {
-      case 'ECF_DOSA_INTENT_ECF_NOT_ENABLED':
-        return 'La empresa todavía no ha activado la preparación de facturación electrónica.';
-      case 'COMPANY_RNC_NOT_VERIFIED':
-        return 'La empresa no tiene un RNC verificado en su expediente fiscal.';
-      case 'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY':
-        return 'El RNC de la empresa no coincide con el del expediente fiscal.';
-      case 'AMBIGUOUS_RNC':
-        return 'Otra empresa comparte este RNC. La asociación automática está bloqueada.';
-      case 'ECF_DOSA_INTENT_IN_PROGRESS':
-        return 'Ya hay una preparación en curso para esta empresa.';
-      case 'SESSION_CLAIM_FAILED':
-        return 'No se pudo registrar la intención. Inténtalo de nuevo en unos segundos.';
-      case 'ECF_DOSA_INTENT_UNAUTHENTICATED':
-        return 'La sesión no es válida. Vuelve a iniciar sesión.';
-      default:
-        // Sin interpolación: un código interno no es un mensaje de usuario.
-        // El código sigue disponible en `code` para diagnóstico y soporte.
-        return 'No se pudo registrar la intención de certificación. Inténtalo de nuevo.';
-    }
-  }
+  String get message => dosaIntentReasonMessage(code);
 
   @override
   String toString() => 'DosaIntentException($code)';
@@ -192,7 +196,10 @@ final dosaIntentStateProvider = FutureProvider.autoDispose<DosaIntentState>((
   return ref.watch(dosaCertificationIntentApiProvider).state();
 });
 
-/// Registro de la intención, ejecutado al montar la sección del asistente.
+/// Registro de la intención. **No se ejecuta al abrir el expediente**: la
+/// sección del asistente solo lo observa cuando el administrador pulsa
+/// «Preparar certificación con DOSA». Abrir una pantalla informativa nunca
+/// escribe nada en el backend.
 ///
 /// Es `autoDispose` y está indexado por el RNC que ya tenemos de la
 /// configuración: si la empresa cambia, se registra la nueva. Repetir el registro
