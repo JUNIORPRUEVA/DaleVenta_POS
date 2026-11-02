@@ -9,6 +9,7 @@ import {
   type DosaProbeEvidence,
 } from "./dosa-test-emission.probe";
 import { createFetchDosaTransport } from "./dosa-emission.client";
+import { assessDosaDocumentBarrier } from "./dosa-emission.barrier";
 
 /**
  * CLI del probador E31 de TEST.
@@ -200,6 +201,17 @@ async function main(): Promise<void> {
       });
     },
   });
+
+  // El cuerpo que se va a enviar se valida con LA MISMA barrera del punto de
+  // envío, también en dry-run: así el operador ve el veredicto real antes de
+  // pedir autorización, y no descubre el problema con la secuencia ya consumida.
+  const barrier = assessDosaDocumentBarrier(body, {
+    documentType: "E31",
+    companyRnc: config.testRnc,
+  });
+  if (!barrier.allowed) {
+    fail("DOSA_PROBE_DOCUMENT_BLOCKED", barrier.blockingReasons.join(" "));
+  }
 
   if (dryRun) {
     // Sin autorización, el probador NO envía: solo valida y deja evidencia.
