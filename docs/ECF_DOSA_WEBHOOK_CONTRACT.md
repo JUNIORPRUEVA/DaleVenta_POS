@@ -1,33 +1,37 @@
 # Webhook DOSA — contrato, topología y estado del bloqueo
 
-Estado (2026-11-02): **FIRMA CONFIRMADA E IMPLEMENTADA**. El proveedor confirmó
+Estado (2026-11-02, revalidado el mismo día con sondas `GET`): **FIRMA
+CONFIRMADA E IMPLEMENTADA**. El proveedor confirmó
 `X-Dosa-Signature: t=<hora>,v1=<firma>` con
 `firma = HMAC-SHA256(webhookSecret, t + "." + rawRequestBody)`. La ruta
 `POST /webhook/dosa` existe detrás de bandera y ningún evento puede activar
 emisión.
 
 Sigue **SIN CONFIRMAR** (no se inventa): la unidad de `t` (segundos o
-milisegundos), la codificación del digest (hex o base64) y el nombre del campo
+milisegundos), la codificación del digest (hex o base64), la codificación del
+secreto (texto literal UTF-8 o hexadecimal decodificado) y el nombre del campo
 que identifica el tipo de evento. Ver `DOSA_WEBHOOK_PENDING_QUESTIONS` en
 `apps/api/src/ecf/provider/dosa/dosa-webhook-signature.policy.ts`.
 
+> **No se declara compatibilidad real con DOSA hasta recibir y verificar una
+> firma auténtica del proveedor.** Todo lo verificado aquí es local (cuerpos
+> sintéticos y firmas generadas por nosotros).
+
 ---
 
-## 1. Topología verificada del dominio (1 de noviembre de 2026)
+## 1. Topología verificada del dominio (sondas del 2 de noviembre de 2026)
 
 `fullposcloud.fulltechrd.com` resuelve a **31.97.99.70** (mismo servidor que el
 API). Lo sirve el contenedor nginx del PWA, **no** el backend NestJS.
 
-Sondas ejecutadas (solo `GET`, sin credenciales, sin enviar datos):
+Sondas ejecutadas (solo `GET`, sin credenciales, sin enviar datos, sin modificar
+nginx):
 
 | Ruta | Código | Content-Type | Qué es |
 | --- | --- | --- | --- |
-| `/` | 200 | `text/html` | PWA (nginx) |
-| `/webhook/dosa` | **200** | **`text/html`** | **Fallback SPA del PWA** |
-| `/health` | 200 | `text/html` | Fallback SPA del PWA |
-| `/api/health` | **200** | **`application/json`** | **API NestJS** |
-| `/api/webhook/dosa` | 404 | `application/json` | API NestJS (ruta inexistente aún) |
-| `/api/ecf` | 404 | `application/json` | API NestJS |
+| `/api/health` | 200 | `application/json` | API NestJS |
+| `/api/webhook/dosa` | **404** | **`application/json`** | **API NestJS**: la ruta existe, pero `GET` no es su método |
+| `/webhook/dosa` | **200** | **`text/html`** | **Fallback SPA del PWA** (nginx) |
 
 Conclusiones:
 
@@ -39,13 +43,25 @@ Conclusiones:
    prefijo global, así que nginx **elimina** `/api` antes de reenviar (prueba:
    `GET /api/health` responde `{"status":"ok"}` del `HealthController`, cuya ruta
    real es `/health`).
-3. **URL correcta para el webhook:**
+3. `/api/webhook/dosa` responde JSON (no HTML) incluso con un método que no
+   corresponde: la petición la atiende NestJS, no nginx. Ese es el discriminante
+   que se puede comprobar sin escribir nada.
+4. **URL correcta para el webhook:**
    `https://fullposcloud.fulltechrd.com/api/webhook/dosa`
    → llega al API como `POST /webhook/dosa`.
 
 > Pendiente de confirmar con quien administra el proxy: si el bloque `/api` de
-> nginx tiene límite de tamaño de cuerpo o algún filtro que afecte al `POST`.
-> El código de esta fase no depende de ello.
+> nginx tiene límite de tamaño de cuerpo o algún filtro que afecte al `POST`, y si
+> el `verify` de `express.json` recibe los bytes tal cual. No se modifica nginx
+> sin autorización explícita.
+
+### Qué queda para declarar la ruta operativa
+
+- [x] La URL con `/api` alcanza NestJS (comprobado por `Content-Type`).
+- [x] La firma se verifica sobre el cuerpo crudo (pruebas locales, 15 casos).
+- [ ] Un `POST` real de DOSA con **su** firma. Hasta entonces no se puede
+      afirmar que la unidad de `t`, la codificación del digest y la del secreto
+      sean las correctas.
 
 ---
 
@@ -54,20 +70,26 @@ Conclusiones:
 Estado real de `apps/api/src/main.ts`:
 
 - `NestFactory.create(AppModule, { bodyParser: false })`.
-- `app.use(express.json({ limit: bodySizeLimit }))` — **sin** opción `verify`.
-- **Consecuencia: hoy no se conserva el cuerpo crudo.** No es posible verificar
-  ninguna firma sobre los bytes exactos recibidos.
+- `app.use(express.json({ limit: bodySizeLimit, verify }))` — **la captura del
+  cuerpo crudo YA está aplicada**, con `verify` limitado por ruta a los prefijos
+  `/webhook/` y `/api/webhook/`; fuera de ellos no se toca nada.
+- **Consecuencia: el webhook sí conserva los bytes exactos** en `req.rawBody`, que
+  es lo que consume `verifyDosaSignature`.
 
-Diseño previsto (no aplicado todavía, porque no hay contrato que verificar):
+Código real (resumen de `apps/api/src/main.ts`):
 
 ```ts
-// main.ts — captura del cuerpo crudo SOLO para la ruta del webhook
+// Cuerpo CRUDO solo para el webhook de DOSA: la firma se calcula sobre los
+// bytes EXACTOS recibidos, sin normalizar.
+const rawBodyPathPrefixes = ["/webhook/", "/api/webhook/"];
+
 app.use(
   express.json({
     limit: bodySizeLimit,
-    verify: (req, _res, buf) => {
-      if (req.url?.startsWith("/webhook/")) {
-        (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
+      const url = req.originalUrl ?? req.url ?? "";
+      if (rawBodyPathPrefixes.some((prefix) => url.startsWith(prefix))) {
+        req.rawBody = Buffer.from(buf);
       }
     },
   }),
