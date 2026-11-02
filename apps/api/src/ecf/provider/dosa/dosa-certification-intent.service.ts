@@ -114,6 +114,90 @@ export class DosaCertificationIntentService {
     /** RNC que el navegador cree conocer. Solo se usa para comparar. */
     rncFromClient?: string | null;
   }): Promise<DosaIntentResult> {
+    const target = await this.resolveTarget(input);
+    if (!target.ok) return target;
+
+    const claim = await this.sessions.claim({
+      companyId: input.companyId,
+      rnc: target.rnc,
+      createdByUserId: input.userId ?? null,
+    });
+    if (!claim.ok) {
+      return {
+        ok: false,
+        reason: "SESSION_CLAIM_FAILED",
+        detail: (claim as { reason?: string }).reason,
+      };
+    }
+
+    return {
+      ok: true,
+      companyId: input.companyId,
+      rnc: target.rnc,
+      sessionId: claim.id,
+      attemptNo: claim.attemptNo,
+      created: claim.created,
+      fiscalAuthorizationGranted: false,
+    };
+  }
+
+  /**
+   * Comprueba si la intención podría registrarse, **sin crear nada**.
+   * Sirve para el endpoint de estado y para explicar al administrador qué falta.
+   */
+  async preview(input: {
+    companyId: string;
+    rncFromClient?: string | null;
+  }): Promise<
+    | { ok: true; rnc: string }
+    | { ok: false; reason: DosaIntentRejection; detail?: string }
+  > {
+    return this.resolveTarget(input);
+  }
+
+  /** Estado interno de la preparación. Nunca devuelve secretos. */
+  async describe(input: { companyId: string }): Promise<{
+    canonicalRnc: string | null;
+    canonicalSource: string | null;
+    session: {
+      id: string;
+      status: string;
+      attemptNo: number;
+      sessionUrl: string | null;
+    } | null;
+  }> {
+    const canonical = await this.identity.resolve(input.companyId);
+    const rnc = normalizeRnc(canonical.taxId ?? "");
+    if (rnc.length === 0) {
+      return { canonicalRnc: null, canonicalSource: canonical.source ?? null, session: null };
+    }
+    const active = await this.sessions.findActiveFor(input.companyId, rnc);
+    return {
+      canonicalRnc: rnc,
+      canonicalSource: canonical.source ?? null,
+      session:
+        active && active.ok
+          ? {
+              id: active.id,
+              status: active.status,
+              attemptNo: active.attemptNo,
+              sessionUrl: active.sessionUrl,
+            }
+          : null,
+    };
+  }
+
+  /**
+   * Comprobaciones comunes a `register` y `preview`. El RNC siempre sale del
+   * servidor; el del navegador solo se compara.
+   */
+  private async resolveTarget(input: {
+    companyId: string;
+    rncFromClient?: string | null;
+  }): Promise<
+    | { ok: true; rnc: string }
+    | { ok: false; reason: DosaIntentRejection; detail?: string }
+  > {
     const canonical = await this.identity.resolve(input.companyId);
     const serverRnc = normalizeRnc(canonical.taxId ?? "");
     if (serverRnc.length === 0) {
@@ -135,27 +219,6 @@ export class DosaCertificationIntentService {
       return { ok: false, reason: "AMBIGUOUS_RNC", detail: `${others}` };
     }
 
-    const claim = await this.sessions.claim({
-      companyId: input.companyId,
-      rnc: serverRnc,
-      createdByUserId: input.userId ?? null,
-    });
-    if (!claim.ok) {
-      return {
-        ok: false,
-        reason: "SESSION_CLAIM_FAILED",
-        detail: (claim as { reason?: string }).reason,
-      };
-    }
-
-    return {
-      ok: true,
-      companyId: input.companyId,
-      rnc: serverRnc,
-      sessionId: claim.id,
-      attemptNo: claim.attemptNo,
-      created: claim.created,
-      fiscalAuthorizationGranted: false,
-    };
+    return { ok: true, rnc: serverRnc };
   }
 }

@@ -74,6 +74,7 @@ import {
   PrismaDosaRncOwnersReader,
   type DosaRncOwnersReader,
 } from "./provider/dosa/dosa-certification-intent.service";
+import { DosaCertificationIntentController } from "./provider/dosa/dosa-certification-intent.controller";
 import {
   DosaEmissionService,
   ECF_DOSA_EMISSION_TRANSPORT,
@@ -90,7 +91,7 @@ import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
 
 @Module({
-  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController],
+  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController],
   providers: [
     EcfService,
     EcfDgiiHabilitationService,

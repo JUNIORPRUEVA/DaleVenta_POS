@@ -129,6 +129,20 @@ export class EcfDosaSessionService {
     throw lastError;
   }
 
+  /**
+   * Lectura del intento EN CURSO para diagnóstico (endpoint de estado).
+   * No crea nada y no cambia nada: si no hay intento, devuelve `null`.
+   */
+  async findActiveFor(
+    companyId: string,
+    rnc: string,
+  ): Promise<DosaSessionClaim | null> {
+    const company = `${companyId ?? ""}`.trim();
+    const normalized = normalizeRnc(rnc);
+    if (!company || !normalized) return null;
+    return this.findActive(company, normalized);
+  }
+
   /** Sesión EN CURSO de la empresa+RNC, si ya existe. */
   private async findActive(
     companyId: string,
