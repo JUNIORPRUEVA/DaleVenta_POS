@@ -14,10 +14,15 @@ import {
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { assertSafeUatEnvironment, buildSafeUatBanner } from './common/uat-safety';
+import { assertDosaSignatureLabSafety } from './ecf/provider/dosa/dosa-webhook-signature.policy';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
 
 async function bootstrap() {
   assertSafeUatEnvironment();
+  // Barrera DOSA: la estrategia de firma no verificada solo puede existir en un
+  // laboratorio local. Si la configuracion la pide en cualquier otro entorno, la
+  // aplicacion NO arranca (fallar ruidosamente, no arrancar fingiendo autenticar).
+  assertDosaSignatureLabSafety();
   if ((process.env.APP_ENV ?? '').trim().toLowerCase() === 'uat') {
     // eslint-disable-next-line no-console
     console.log(buildSafeUatBanner());
@@ -32,6 +37,10 @@ async function bootstrap() {
     },
   );
   app.set('trust proxy', 1);
+
+  // Apagado ordenado: Nest ejecuta `onModuleDestroy`/`beforeApplicationShutdown`
+  // y Prisma cierra su pool. Sin esto el proceso muere con conexiones abiertas.
+  app.enableShutdownHooks();
 
   // Basic request logging (method/url/status/duration).
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -144,6 +153,37 @@ async function bootstrap() {
   // eslint-disable-next-line no-console
   const displayHost = host.includes(':') ? `[${host}]` : host;
   console.log(`API listening on http://${displayHost}:${port}`);
+
+  // Cierre explicito y acotado. Si el apagado ordenado no termina a tiempo, se
+  // sale igualmente para no dejar el proceso colgado. No se registra nada
+  // sensible: solo el evento y el codigo de salida.
+  let closing = false;
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (closing) return;
+    closing = true;
+    // eslint-disable-next-line no-console
+    console.log(`API shutdown requested (${signal})`);
+    const forceExit = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.error('API shutdown timed out; forcing exit');
+      process.exit(1);
+    }, 15_000);
+    forceExit.unref();
+    void app
+      .close()
+      .then(() => {
+        clearTimeout(forceExit);
+        // eslint-disable-next-line no-console
+        console.log('API shutdown complete');
+        process.exit(0);
+      })
+      .catch(() => {
+        clearTimeout(forceExit);
+        process.exit(1);
+      });
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 bootstrap();
