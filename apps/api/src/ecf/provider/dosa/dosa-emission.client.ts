@@ -52,6 +52,8 @@ export type DosaEmissionConfig = {
   apiKey: string;
   apiKeyIsProduction: boolean;
   productionEnabled: boolean;
+  /** RNC de prueba exigido por la politica de identidad en TEST. */
+  testRnc: string;
   timeoutMs: number;
   breakerThreshold: number;
   breakerCooldownMs: number;
@@ -77,6 +79,7 @@ export function readDosaEmissionConfig(env: {
   DOSA_PRODUCTION_API_KEY?: string;
   DOSA_PRODUCTION_EMISSION_ENABLED?: string;
   DOSA_EMISSION_TIMEOUT_MS?: string;
+  DOSA_TEST_RNC?: string;
 }): DosaEmissionConfig {
   const environment: DosaEmissionEnvironment =
     (env.DOSA_EMISSION_ENVIRONMENT ?? "").trim().toUpperCase() === "PRODUCTION"
@@ -97,6 +100,7 @@ export function readDosaEmissionConfig(env: {
     apiKeyIsProduction: environment === "PRODUCTION" && prodKey.length > 0,
     productionEnabled:
       (env.DOSA_PRODUCTION_EMISSION_ENABLED ?? "").trim().toLowerCase() === "true",
+    testRnc: (env.DOSA_TEST_RNC ?? "").trim(),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 15_000,
     breakerThreshold: 3,
     breakerCooldownMs: 60_000,
@@ -124,12 +128,22 @@ export type DosaSendResult =
       /** `true` cuando el comprobante pudo haberse recibido y NO se debe reintentar a ciegas. */
       unconfirmed: boolean;
       status: number | null;
-      retryPermitted: false;
+      /**
+       * Solo `true` cuando el propio proveedor afirma que la DGII no recibio
+       * nada (`estado: "Error de envio"`). En cualquier otro fallo el reintento
+       * con el mismo eNCF podria duplicar el comprobante.
+       */
+      retryPermitted: boolean;
+      classification: DosaResponseClassification | null;
+      /** Cuerpo crudo para la evidencia. `null` si no hubo respuesta legible. */
+      raw: unknown | null;
     }
   | {
       ok: true;
       status: number;
       classification: DosaResponseClassification;
+      /** Cuerpo crudo tal como lo devolvio el proveedor. */
+      raw: unknown;
       redactedHeaders: Record<string, string>;
     };
 
@@ -214,14 +228,21 @@ export class DosaEmissionClient {
       });
 
       if (response.status >= 500) {
-        // 5xx: el proveedor pudo haberlo recibido. No se reintenta solo.
+        // 5xx: el proveedor pudo haberlo recibido. La unica excepcion
+        // documentada es 502 con `estado: "Error de envio"`, donde el propio
+        // proveedor afirma que la DGII no recibio el eCF y autoriza reenviar
+        // con el MISMO eNCF.
         this.recordFailure();
+        const classification = safeClassify(response.body);
+        const notReceived = classification?.outcome === "NOT_RECEIVED";
         return {
           ok: false,
           transportFailure: "HTTP",
-          unconfirmed: true,
+          unconfirmed: !notReceived,
           status: response.status,
-          retryPermitted: false,
+          retryPermitted: notReceived,
+          classification,
+          raw: classification === null ? null : safeParse(response.body),
         };
       }
 
@@ -236,6 +257,8 @@ export class DosaEmissionClient {
           unconfirmed: true,
           status: response.status,
           retryPermitted: false,
+          classification: null,
+          raw: null,
         };
       }
 
@@ -249,6 +272,7 @@ export class DosaEmissionClient {
         ok: true,
         status: response.status,
         classification,
+        raw: parsed,
         redactedHeaders: redactDosaHeaders(headers),
       };
     } catch {
@@ -260,6 +284,8 @@ export class DosaEmissionClient {
         unconfirmed: true,
         status: null,
         retryPermitted: false,
+        classification: null,
+        raw: null,
       };
     } finally {
       clearTimeout(timer);
@@ -288,4 +314,21 @@ export function createFetchDosaTransport(): DosaHttpTransport {
       return { status: response.status, body: await response.text() };
     },
   };
+}
+
+/** Clasifica un cuerpo sin lanzar: un cuerpo ilegible no es una clasificación. */
+function safeClassify(body: string): DosaResponseClassification | null {
+  const parsed = safeParse(body);
+  return parsed === null ? null : classifyDosaResponse(parsed);
+}
+
+/** Parsea sin lanzar. `null` si el cuerpo no es JSON. */
+function safeParse(body: string): unknown | null {
+  const text = (body ?? "").trim();
+  if (text.length === 0) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }

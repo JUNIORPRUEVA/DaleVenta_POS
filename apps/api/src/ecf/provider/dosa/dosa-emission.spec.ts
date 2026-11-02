@@ -115,24 +115,62 @@ describe("classifyDosaResponse", () => {
     expect(result.codigoType).toBe("absent");
   });
 
-  it("captura los datos de QR cuando vienen", () => {
+  it("construye los datos de QR desde los campos reales de la respuesta", () => {
     const result = classifyDosaResponse({
-      data: {
-        codigo: 1,
-        qrUrl: "https://dgii.gov.do/qr?encf=E310000000001",
-      },
+      codigo: "1",
+      encf: "E310000000001",
+      rnc: "101742186",
+      url: "https://ecf.dgii.gov.do/testecf/consulta?encf=E310000000001",
+      codigoSeguridad: "EAkbyR",
+      fechaFirma: "15-11-2025 14:46:41",
     });
     expect(result.qr).toEqual({
-      field: "qrUrl",
-      value: "https://dgii.gov.do/qr?encf=E310000000001",
+      consultaUrl: "https://ecf.dgii.gov.do/testecf/consulta?encf=E310000000001",
+      codigoSeguridad: "EAkbyR",
+      fechaFirma: "15-11-2025 14:46:41",
+      encf: "E310000000001",
+      rnc: "101742186",
+      complete: true,
     });
   });
 
-  it("captura QR anidado en objeto", () => {
+  it("el QR queda incompleto si falta el codigo de seguridad", () => {
     const result = classifyDosaResponse({
-      data: { codigo: 1, codigoQr: { url: "https://x.test/qr" } },
+      codigo: "1",
+      encf: "E310000000001",
+      rnc: "101742186",
+      url: "https://ecf.dgii.gov.do/testecf/consulta",
     });
-    expect(result.qr?.value).toBe("https://x.test/qr");
+    expect(result.qr?.complete).toBe(false);
+  });
+
+  it("propaga secuenciaUtilizada, que es lo que dice si se consumio la secuencia", () => {
+    expect(
+      classifyDosaResponse({ codigo: "1", secuenciaUtilizada: true })
+        .secuenciaUtilizada,
+    ).toBe(true);
+    expect(
+      classifyDosaResponse({ codigo: "2", secuenciaUtilizada: false })
+        .secuenciaUtilizada,
+    ).toBe(false);
+    expect(classifyDosaResponse({ codigo: "1" }).secuenciaUtilizada).toBeNull();
+  });
+
+  it("502 con 'Error de envío' significa que la DGII no recibio nada", () => {
+    const result = classifyDosaResponse({
+      estado: "Error de envío",
+      mensaje: "No se pudo conectar con la DGII",
+    });
+    expect(result.outcome).toBe("NOT_RECEIVED");
+    expect(result.safeToRetrySameEncf).toBe(true);
+    expect(result.impliesFiscalAuthorization).toBe(false);
+  });
+
+  it("solo NOT_RECEIVED autoriza reintentar con el mismo eNCF", () => {
+    expect(classifyDosaResponse({ codigo: "1" }).safeToRetrySameEncf).toBe(false);
+    expect(classifyDosaResponse({ codigo: "2" }).safeToRetrySameEncf).toBe(false);
+    expect(classifyDosaResponse({ codigo: "3" }).safeToRetrySameEncf).toBe(false);
+    expect(classifyDosaResponse({ codigo: "0" }).safeToRetrySameEncf).toBe(false);
   });
 
   it("recoge los mensajes del proveedor", () => {
@@ -178,6 +216,7 @@ function config(overrides: Partial<DosaEmissionConfig> = {}): DosaEmissionConfig
     apiKey: "TEST-KEY-SECRETA",
     apiKeyIsProduction: false,
     productionEnabled: false,
+    testRnc: "133306001",
     timeoutMs: 50,
     breakerThreshold: 3,
     breakerCooldownMs: 60_000,
@@ -362,6 +401,29 @@ describe("DosaEmissionClient — transporte", () => {
     const result = await client.sendEcf({ body: BODY, idempotencyKey: "k1" });
 
     expect(result).toMatchObject({ ok: false, unconfirmed: true });
+  });
+
+  it("502 con 'Error de envío' permite reintentar con el mismo eNCF", async () => {
+    const transport = new FakeTransport(() => ({
+      status: 502,
+      body: JSON.stringify({ estado: "Error de envío", mensaje: "sin conexion DGII" }),
+    }));
+    const client = new DosaEmissionClient(transport, config());
+
+    const result = await client.sendEcf({ body: BODY, idempotencyKey: "k1" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      transportFailure: "HTTP",
+      status: 502,
+      unconfirmed: false,
+      retryPermitted: true,
+    });
+    // Y como no se marco como enviado, la clave sigue disponible.
+    const retry = await client.sendEcf({ body: BODY, idempotencyKey: "k1" });
+    expect(retry).not.toMatchObject({
+      blockedReason: "DOSA_IDEMPOTENCY_KEY_ALREADY_SENT",
+    });
   });
 
   it("la misma clave no se envía dos veces", async () => {

@@ -1,22 +1,39 @@
 /**
  * Clasificación de la respuesta de emisión de DOSA.
  *
- * Reglas que este módulo respeta y que no son negociables:
+ * Basado en la documentación oficial del proveedor
+ * (`alapaix13/DosaInvoicecloud-Documentation`, README §"Respuesta del Sistema"
+ * y §"Códigos de Respuesta del Sistema"). La respuesta real es **plana**, no
+ * envuelta en `data`:
  *
- * 1. **No inventa estados.** El único mapeo que se aplica es el de la tabla
- *    pública del proveedor (`1` Aceptado, `2` Rechazado, `3` En proceso,
- *    `4` Aceptado condicional). El `0` está en conflicto documentado
- *    (`DOSA_STATUS_TABLE_CONFLICT`) y por eso queda **sin resolver**: no se
- *    interpreta como aceptado ni como rechazado.
- * 2. **`codigo` se trata como valor observado**, no como un tipo cerrado: se
- *    conserva tal cual llegó, incluido su tipo primitivo. Un `"1"` (texto) y un
- *    `1` (número) se registran distintos en lugar de coercionarse en silencio.
- * 3. **Un resultado aceptado no autoriza nada.** La aceptación del proveedor no
- *    es aprobación de la DGII y no habilita emisión: `impliesFiscalAuthorization`
- *    y `isDgiiApproval` son siempre `false`.
- * 4. Los tres estados de la DGII (Aceptado / Aceptado condicional / Rechazado)
- *    se reconocen también en texto; si el texto y el código se contradicen, el
- *    resultado es `UNRESOLVED` y se reporta el conflicto.
+ * ```json
+ * { "trackId": "...", "codigo": "4", "estado": "Aceptado Condicional",
+ *   "rnc": "101742186", "encf": "E320000000004",
+ *   "url": "https://ecf.dgii.gov.do/testecf/consulta...",
+ *   "codigoSeguridad": "EAkbyR", "fechaFirma": "15-11-2025 14:46:41",
+ *   "secuenciaUtilizada": true, "fechaRecepcion": "...",
+ *   "mensajes": [{ "valor": "...", "codigo": 1934 }] }
+ * ```
+ *
+ * Reglas que este módulo respeta:
+ *
+ * 1. **No inventa estados.** Se aplica la tabla pública de códigos DGII
+ *    (`1` Aceptado, `2` Rechazado, `3` En proceso, `4` Aceptado condicional).
+ * 2. **`codigo 0` NO se resuelve.** La tabla del proveedor dice «No encontrado»
+ *    pero su propio ejemplo de manejo de respuestas trata `0` como «Rechazado».
+ *    Dos fuentes del mismo proveedor se contradicen; interpretarlo cambiaría el
+ *    estado fiscal de un comprobante, así que queda `UNRESOLVED` y se reporta.
+ * 3. **`codigo` se trata como valor observado**: la documentación lo muestra
+ *    como cadena (`"4"`) aunque el tipo declarado sea numérico, así que se
+ *    conserva tal cual llegó, con su tipo primitivo.
+ * 4. **`estado: "Error de envío"` (HTTP 502) significa que la DGII no recibió
+ *    nada** y el propio proveedor indica que se puede reintentar con el MISMO
+ *    eNCF. Es el único caso donde el reintento es seguro y se marca como tal.
+ * 5. **`secuenciaUtilizada` se propaga.** Es lo que permite decidir si la
+ *    secuencia se consumió, sin deducirlo del código de estado.
+ * 6. **Nunca se declara aprobación.** `impliesFiscalAuthorization` y
+ *    `isDgiiApproval` son siempre `false`: la respuesta del proveedor es
+ *    evidencia, no autorización.
  */
 
 export type DosaDgiiOutcome =
@@ -24,7 +41,20 @@ export type DosaDgiiOutcome =
   | "CONDITIONALLY_ACCEPTED"
   | "REJECTED"
   | "IN_PROCESS"
-  | "UNRESOLVED";
+  | "UNRESOLVED"
+  /** HTTP 502 + `estado: "Error de envío"`: la DGII no recibió el eCF. */
+  | "NOT_RECEIVED";
+
+export type DosaQrData = {
+  /** URL de consulta pública del comprobante. */
+  consultaUrl: string | null;
+  codigoSeguridad: string | null;
+  fechaFirma: string | null;
+  encf: string | null;
+  rnc: string | null;
+  /** `true` solo si están presentes todos los componentes del QR de la DGII. */
+  complete: boolean;
+};
 
 export type DosaResponseClassification = {
   outcome: DosaDgiiOutcome;
@@ -35,10 +65,13 @@ export type DosaResponseClassification = {
   /** Motivo legible cuando el resultado no se puede determinar. */
   unresolvedReason: string | null;
   mensajes: string[];
-  /** Datos de QR tal como llegaron (campo + valor). Puede venir ausente. */
-  qr: { field: string; value: string } | null;
+  qr: DosaQrData | null;
   eNCF: string | null;
   trackId: string | null;
+  /** La DGII consumió la secuencia. `null` si el proveedor no lo informó. */
+  secuenciaUtilizada: boolean | null;
+  /** `true` solo si el proveedor afirma que la DGII no recibió el eCF. */
+  safeToRetrySameEncf: boolean;
   /** Nunca `true`: una respuesta del proveedor no es aprobación DGII. */
   impliesFiscalAuthorization: false;
   isDgiiApproval: false;
@@ -51,7 +84,7 @@ const TABLE_OUTCOME: Record<string, DosaDgiiOutcome> = {
   "4": "CONDITIONALLY_ACCEPTED",
 };
 
-/** El conflicto documentado: la tabla dice una cosa y el ejemplo otra. */
+/** El conflicto: la tabla dice «No encontrado», el ejemplo dice «Rechazado». */
 const CONFLICT_CODE = "0";
 
 const TEXT_OUTCOME: ReadonlyArray<[RegExp, DosaDgiiOutcome]> = [
@@ -61,50 +94,51 @@ const TEXT_OUTCOME: ReadonlyArray<[RegExp, DosaDgiiOutcome]> = [
   [/en\s+proceso/i, "IN_PROCESS"],
 ];
 
-/** Claves donde el proveedor podría devolver el QR; se buscan por nombre. */
-const QR_KEY = /qr/i;
+/** El proveedor usa este texto para decir que la DGII no recibió el eCF. */
+const NOT_RECEIVED_TEXT = /error\s+de\s+env[ií]o/i;
 
 export function classifyDosaResponse(input: unknown): DosaResponseClassification {
   const envelope = asRecord(input);
+  // La forma documentada es plana; se acepta `data` por tolerancia a cambios.
   const data = asRecord(envelope?.data) ?? envelope;
-  const rawCode = data?.codigo;
 
+  const rawCode = data?.codigo;
   const codigoType: "number" | "string" | "absent" =
     typeof rawCode === "number"
       ? "number"
       : typeof rawCode === "string"
         ? "string"
         : "absent";
-
   const codigo =
     typeof rawCode === "number" || typeof rawCode === "string" ? rawCode : null;
-
   const codeKey = codigo === null ? null : String(codigo).trim();
+
   const mensajes = collectMessages(data);
+  const estadoText = firstString(data, ["estado"]);
+
+  const notReceived = estadoText !== null && NOT_RECEIVED_TEXT.test(estadoText);
 
   const fromCode =
     codeKey !== null && codeKey !== CONFLICT_CODE
       ? (TABLE_OUTCOME[codeKey] ?? null)
       : null;
 
-  const textValues = collectStrings(data).filter(
-    (value) =>
-      /aceptado|rechazado|en\s+proceso/i.test(value) && value.length <= 200,
-  );
-  const fromText =
-    textValues
-      .map((value) => TEXT_OUTCOME.find(([pattern]) => pattern.test(value))?.[1])
-      .find((outcome) => outcome !== undefined) ?? null;
+  const fromText = estadoText
+    ? (TEXT_OUTCOME.find(([pattern]) => pattern.test(estadoText))?.[1] ?? null)
+    : null;
 
   let outcome: DosaDgiiOutcome;
   let unresolvedReason: string | null = null;
 
-  if (codeKey === CONFLICT_CODE) {
+  if (notReceived) {
+    outcome = "NOT_RECEIVED";
+  } else if (codeKey === CONFLICT_CODE) {
     outcome = "UNRESOLVED";
-    unresolvedReason = "DOSA_STATUS_TABLE_CONFLICT: codigo 0 ambiguo";
+    unresolvedReason =
+      "DOSA_STATUS_TABLE_CONFLICT: la tabla dice 'No encontrado' y el ejemplo del proveedor trata 0 como rechazo";
   } else if (fromCode && fromText && fromCode !== fromText) {
     outcome = "UNRESOLVED";
-    unresolvedReason = `DOSA_STATUS_TEXT_CODE_CONFLICT: codigo=${codeKey} texto=${fromText}`;
+    unresolvedReason = `DOSA_STATUS_TEXT_CODE_CONFLICT: codigo=${codeKey} estado=${estadoText}`;
   } else if (fromCode) {
     outcome = fromCode;
   } else if (fromText) {
@@ -118,15 +152,21 @@ export function classifyDosaResponse(input: unknown): DosaResponseClassification
     unresolvedReason = `DOSA_STATUS_CODE_UNKNOWN: ${codeKey}`;
   }
 
+  const encf = firstString(data, ["encf", "eNCF", "e_ncf", "ncf"]);
+  const rnc = firstString(data, ["rnc", "RNC"]);
+  const secuencia = data?.secuenciaUtilizada;
+
   return {
     outcome,
     codigo,
     codigoType,
     unresolvedReason,
     mensajes,
-    qr: findQr(data),
-    eNCF: firstString(data, ["encf", "eNCF", "e_ncf", "ncf"]),
+    qr: buildQr(data, { encf, rnc }),
+    eNCF: encf,
     trackId: firstString(data, ["trackId", "track_id", "trackid"]),
+    secuenciaUtilizada: typeof secuencia === "boolean" ? secuencia : null,
+    safeToRetrySameEncf: outcome === "NOT_RECEIVED",
     impliesFiscalAuthorization: false,
     isDgiiApproval: false,
   };
@@ -141,38 +181,35 @@ export function isDosaOutcomeFinal(outcome: DosaDgiiOutcome): boolean {
   );
 }
 
-function findQr(
+/**
+ * QR de la DGII. La respuesta no trae un campo `qr`: trae sus componentes
+ * (`url`, `codigoSeguridad`, `fechaFirma`, `encf`, `rnc`). Se construye desde
+ * ahí y se conserva el descubrimiento por nombre para no perder el dato si el
+ * proveedor añade un campo explícito.
+ */
+function buildQr(
   data: Record<string, unknown> | null,
-): { field: string; value: string } | null {
+  ids: { encf: string | null; rnc: string | null },
+): DosaQrData | null {
   if (!data) return null;
-  for (const [key, value] of Object.entries(data)) {
-    if (!QR_KEY.test(key)) continue;
-    const collected = pickQrValue(value);
-    if (collected) return { field: key, value: collected };
-  }
-  return null;
+
+  const consultaUrl = firstString(data, ["url", "urlConsulta", "consultaUrl"]);
+  const codigoSeguridad = firstString(data, ["codigoSeguridad"]);
+  const fechaFirma = firstString(data, ["fechaFirma"]);
+
+  if (!consultaUrl && !codigoSeguridad && !fechaFirma) return null;
+
+  return {
+    consultaUrl,
+    codigoSeguridad,
+    fechaFirma,
+    encf: ids.encf,
+    rnc: ids.rnc,
+    complete: Boolean(consultaUrl && codigoSeguridad && ids.encf && ids.rnc),
+  };
 }
 
-/** El QR puede venir como cadena, como objeto con `url`, o como lista. */
-function pickQrValue(value: unknown): string | null {
-  if (typeof value === "string") return value.trim() || null;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = pickQrValue(item);
-      if (found) return found;
-    }
-    return null;
-  }
-  const record = asRecord(value);
-  if (!record) return null;
-  for (const [key, inner] of Object.entries(record)) {
-    if (!/url|link|contenido|value|valor|qr/i.test(key)) continue;
-    const found = pickQrValue(inner);
-    if (found) return found;
-  }
-  return null;
-}
-
+/** `mensajes` es un array de `{ valor, codigo }` según la documentación. */
 function collectMessages(data: Record<string, unknown> | null): string[] {
   if (!data) return [];
   const raw = data.mensajes ?? data.mensaje ?? data.message ?? data.messages;
@@ -185,23 +222,14 @@ function collectMessages(data: Record<string, unknown> | null): string[] {
       continue;
     }
     const record = asRecord(entry);
+    if (!record) continue;
     const text =
-      record && typeof record.valor === "string"
+      typeof record.valor === "string"
         ? record.valor
-        : record && typeof record.mensaje === "string"
+        : typeof record.mensaje === "string"
           ? record.mensaje
           : null;
     if (text?.trim()) result.push(text.trim());
-  }
-  return result;
-}
-
-function collectStrings(data: Record<string, unknown> | null): string[] {
-  if (!data) return [];
-  const result: string[] = [];
-  for (const [key, value] of Object.entries(data)) {
-    if (/mensaje|message|error/i.test(key)) continue;
-    if (typeof value === "string") result.push(value);
   }
   return result;
 }
