@@ -92,7 +92,12 @@ export class DosaEmissionService {
     documentType: EcfDocumentType;
     senderTaxId: string | null;
     sequenceAvailable: boolean;
-  }): Promise<DosaEmissionGateDecision & { credentialStatus: string | null }> {
+  }): Promise<
+    DosaEmissionGateDecision & {
+      credentialStatus: string | null;
+      credentialFingerprint: string | null;
+    }
+  > {
     const fiscal = await this.deps.fiscalConfig.read(input.companyId);
     const environment: DosaCredentialEnvironment =
       this.deps.config.environment === "PRODUCTION" ? "production" : "test";
@@ -116,7 +121,11 @@ export class DosaEmissionService {
       documentType: input.documentType,
     });
 
-    return { ...decision, credentialStatus: credential?.status ?? null };
+    return {
+      ...decision,
+      credentialStatus: credential?.status ?? null,
+      credentialFingerprint: credential?.fingerprint ?? null,
+    };
   }
 
   async emit(input: {
@@ -158,33 +167,66 @@ export class DosaEmissionService {
       };
     }
 
+    // La credencial de ESTE entorno, y solo esa. Nunca se sustituye la clave de
+    // TEST por la de produccion ni al reves: un fallback silencioso enviaria un
+    // comprobante de pruebas firmado con credenciales productivas (o al
+    // contrario), que es exactamente lo que no puede ocurrir.
     const apiKey =
       environment === "production"
-        ? (bundle.apiKeyProduccion ?? "")
-        : (bundle.apiKeyTest ?? bundle.apiKeyProduccion ?? "");
-    if (apiKey.trim().length === 0) {
+        ? (bundle.apiKeyProduccion ?? "").trim()
+        : (bundle.apiKeyTest ?? "").trim();
+
+    if (apiKey.length === 0) {
       return {
         ok: false,
         code: "ECF_DOSA_CREDENTIALS_UNAVAILABLE",
-        blockingReasons: ["ECF_DOSA_CREDENTIALS_MISSING_FOR_ENVIRONMENT"],
+        blockingReasons: [
+          `ECF_DOSA_CREDENTIALS_MISSING_FOR_ENVIRONMENT:${environment.toUpperCase()}`,
+        ],
       };
     }
 
-    const client = this.clientFor(input.companyId, environment, apiKey);
+    const client = this.clientFor(
+      input.companyId,
+      input.rnc,
+      environment,
+      decision.credentialFingerprint,
+      apiKey,
+    );
 
     const idempotencyKey = input.idempotencyKey ?? randomUUID();
     const result = await client.sendEcf({ body: input.body, idempotencyKey });
     return { ok: true, result, idempotencyKey };
   }
 
+  /**
+   * Cliente por empresa + RNC + entorno + **huella de la credencial**.
+   *
+   * Incluir la huella es lo que hace que rotar o revocar una clave invalide el
+   * cliente anterior: el siguiente envio pide un cliente distinto y el viejo se
+   * descarta. Si la clave solo cambiara de valor con la misma clave de cache,
+   * se seguiria enviando con la credencial vieja.
+   */
   private clientFor(
     companyId: string,
+    rnc: string,
     environment: DosaCredentialEnvironment,
+    credentialFingerprint: string | null,
     apiKey: string,
   ): DosaEmissionClient {
-    const key = `${companyId}|${environment}`;
+    const scope = `${companyId}|${normalizeRnc(rnc)}|${environment}`;
+    const key = `${scope}|${credentialFingerprint ?? "no-fingerprint"}`;
     const existing = this.clients.get(key);
     if (existing) return existing;
+
+    // Invalidacion explicita: cualquier cliente de la misma empresa/RNC/entorno
+    // con otra version de credencial deja de utilizarse.
+    for (const stale of [...this.clients.keys()]) {
+      if (stale.startsWith(`${scope}|`) && stale !== key) {
+        this.clients.delete(stale);
+      }
+    }
+
     const created = new DosaEmissionClient(this.deps.transport, {
       ...this.deps.config,
       apiKey,
@@ -193,6 +235,10 @@ export class DosaEmissionService {
     this.clients.set(key, created);
     return created;
   }
+}
+
+function normalizeRnc(value: string): string {
+  return `${value ?? ""}`.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
 }
 
 function normalizeProvider(value: string | undefined): string {
