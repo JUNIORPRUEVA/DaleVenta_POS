@@ -27,7 +27,7 @@ activarse con seguridad todavía).
 | Registro solo por acción voluntaria | IMPLEMENTADO + PROBADO | Abrir el expediente no escribe; hay prueba que cuenta las escrituras |
 | Firma `X-Dosa-Signature` | IMPLEMENTADO + PROBADO | HMAC-SHA256 sobre bytes originales, anti-replay, parseo estricto, tiempo constante |
 | Webhook `POST /webhook/dosa` | IMPLEMENTADO + PROBADO (local) | **Sin validar contra un evento auténtico de DOSA** |
-| Correlación `postulacion_id` → intento | IMPLEMENTADO + PROBADO | Empresa → RNC → intento activo → postulación, en una sola sentencia con guardas |
+| Correlación `postulacion_id` → intento | IMPLEMENTADO + PROBADO | Empresa → RNC → intento activo → postulación; **exclusividad concurrente** probada contra PostgreSQL real (bloqueo de asesoría en transacción) |
 | Suites e-CF con PostgreSQL | PROBADO LOCALMENTE | 115 suites / 1400 pruebas contra un destino desechable dedicado |
 | Cliente de consultas `X-Dosa-Secret-Key` | IMPLEMENTADO + PROBADO | Apagado por defecto; sin endpoints de consulta confirmados |
 | Separación TEST / producción | IMPLEMENTADO + PROBADO | Clave por empresa + RNC + entorno; sin fallback entre entornos |
@@ -129,7 +129,11 @@ Sigue sin confirmar, y por eso no se implementa a ciegas:
 1. **Unidad del timestamp** `t`: segundos o milisegundos epoch. Se configura con
    `DOSA_WEBHOOK_TIMESTAMP_UNIT`; el valor por defecto (`seconds`) es una
    suposición cuyo peor efecto es rechazar eventos, nunca aceptar uno falso.
-2. **Codificación del digest**: hex o base64. Se aceptan ambas.
+2. **Codificación del secreto del webhook**: los 64 caracteres hexadecimales son
+   la clave literal (64 bytes) o codifican 32 bytes. Se configura con
+   `DOSA_WEBHOOK_SECRET_ENCODING` (`utf8` por defecto, o `hex`). Elegir mal hace
+   que toda firma legítima se rechace.
+3. **Codificación del digest**: hex o base64. Se aceptan ambas.
 3. **Campo que identifica el tipo de evento**: hoy solo se procesa la forma
    confirmada de `empresa.conectada`; otra forma se rechaza con 400.
 4. **Endpoints de consulta** para `X-Dosa-Secret-Key`.
