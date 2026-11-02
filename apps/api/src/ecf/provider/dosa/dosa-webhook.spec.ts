@@ -51,7 +51,25 @@ type StoredRow = {
   dedupeKey: string;
   summary: string;
   signatureStatus: string;
+  id?: string;
+  state?: string;
 };
+
+/** Bóveda de prueba: acepta y confirma que se llamó. */
+function fakeCredentials() {
+  const calls: Array<{ companyId: string; rnc: string }> = [];
+  return {
+    calls,
+    async ingestFromProvider(input: { companyId: string; rnc: string }) {
+      calls.push({ companyId: input.companyId, rnc: input.rnc });
+      return {
+        ok: true as const,
+        status: "PENDING_CONFIRMATION" as const,
+        fingerprint: "f".repeat(64),
+      };
+    },
+  };
+}
 
 /** Doble del almacén: implementa el `ON CONFLICT DO NOTHING` en memoria. */
 class FakeStore implements DosaWebhookStore {
@@ -65,15 +83,36 @@ class FakeStore implements DosaWebhookStore {
     const sql = query.join("?");
     this.queries.push(sql);
 
-    const [companyId, dedupeKey, , , , , summary, signatureStatus] =
+    // El pipeline recuperable usa tres formas de SQL; el doble las distingue
+    // para no confundir un UPDATE con un INSERT.
+    if (sql.includes('"processing_state" =')) {
+      const eventId = String(values[1]);
+      const row = this.rows.find((item) => item.id === eventId);
+      if (row) row.state = String(values[0]);
+      return [] as unknown as T;
+    }
+
+    if (!sql.includes("INSERT INTO")) {
+      const companyId = String(values[0]);
+      const dedupeKey = String(values[1]);
+      const row = this.rows.find(
+        (item) => item.companyId === companyId && item.dedupeKey === dedupeKey,
+      );
+      return (row
+        ? [{ id: row.id, processing_state: row.state }]
+        : []) as unknown as T;
+    }
+
+    const [companyId, dedupeKey, , , , , summary, signatureStatus, state] =
       values as string[];
     const exists = this.rows.some(
       (row) => row.companyId === companyId && row.dedupeKey === dedupeKey,
     );
     if (exists) return [] as unknown as T;
 
-    this.rows.push({ companyId, dedupeKey, summary, signatureStatus });
-    return [{ id: `evt-${this.rows.length}` }] as unknown as T;
+    const id = `evt-${this.rows.length + 1}`;
+    this.rows.push({ id, companyId, dedupeKey, summary, signatureStatus, state });
+    return [{ id }] as unknown as T;
   }
 }
 
@@ -102,12 +141,14 @@ function build(options: {
       [RNC_KNOWN]: { companyId: "company-a", ecfEnabled: true },
     },
   );
+  const credentials = fakeCredentials();
   const service = new DosaWebhookService(
     store,
     resolver,
     options.signature ?? ENABLED_SIGNATURE,
+    credentials as unknown as never,
   );
-  return { store, resolver, service };
+  return { store, resolver, service, credentials };
 }
 
 function request(
@@ -415,10 +456,12 @@ describe("DosaWebhookService — secretos y ausencia de autoridad fiscal", () =>
     );
 
     expect(outcome).toMatchObject({ accepted: true, duplicate: false });
-    // El único SQL emitido es el INSERT del evento.
-    expect(store.queries).toHaveLength(1);
-    const sql = store.queries[0].toUpperCase();
-    expect(sql).not.toContain("UPDATE");
+    // El pipeline emite exactamente dos sentencias: el INSERT del evento y el
+    // UPDATE que lo marca completo. Ninguna toca tablas fiscales.
+    expect(store.queries).toHaveLength(2);
+    expect(store.queries[0]).toContain("INSERT INTO");
+    expect(store.queries[1]).toContain("processing_state");
+    const sql = store.queries.join(" ").toUpperCase();
     expect(sql).not.toContain("ECF_DOSA_CERTIFICATION_SESSIONS");
     expect(sql).not.toContain("ECF_COMPANY_CONFIGURATIONS");
   });

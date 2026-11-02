@@ -235,6 +235,10 @@ model EcfDosaWebhookEvent {
   payloadSummary      Json     @map("payload_summary")
   /// Estrategia que autenticó el evento. `BLOCKED` nunca llega aquí.
   signatureStatus     String   @map("signature_status") @db.VarChar(48)
+  /// `PENDING_CREDENTIALS` mientras falte guardar las credenciales del evento;
+  /// `COMPLETE` solo cuando ya estan cifradas. Un evento a medias es reanudable.
+  processingState     String   @default("COMPLETE") @map("processing_state") @db.VarChar(32)
+  credentialsStoredAt DateTime? @map("credentials_stored_at")
   receivedAt          DateTime @default(now()) @map("received_at")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

@@ -166,72 +166,138 @@ export class DosaWebhookService {
       INSERT INTO "ecf_dosa_webhook_events"
         ("id","company_id","dedupe_key","event_type","postulacion_id",
          "estado_certificacion","raw_body_sha256","payload_summary",
-         "signature_status","received_at")
+         "signature_status","processing_state","received_at")
       VALUES
         (gen_random_uuid(), ${company.companyId}::uuid, ${dedupeKey},
          ${"empresa.conectada"}, ${payload.postulacionId},
          ${payload.estadoCertificacion}, ${rawHash}, ${summary}::jsonb,
-         ${signature.strategy}, NOW())
+         ${signature.strategy}, ${PENDING_STATE}, NOW())
       ON CONFLICT ("company_id","dedupe_key") DO NOTHING
       RETURNING "id"
     `;
 
-    if (rows.length === 0) {
-      return {
-        accepted: true,
-        status: 200,
-        duplicate: true,
-        eventId: null,
-        code: "ECF_DOSA_WEBHOOK_DUPLICATE",
-      };
+    if (rows.length > 0) {
+      return this.completeEvent({
+        eventId: rows[0].id,
+        companyId: company.companyId,
+        dedupeKey,
+        payload,
+        secretos: parsed.value.secretos,
+        resumed: false,
+      });
     }
+
+    // Ya existia. Si quedo a medias (el proceso anterior murio entre la
+    // insercion y el guardado de credenciales), se REANUDA en vez de darlo por
+    // duplicado: de lo contrario el evento quedaria incompleto para siempre.
+    const existing = await this.store.$queryRaw<
+      Array<{ id: string; processing_state: string | null }>
+    >`
+      SELECT "id", "processing_state"
+        FROM "ecf_dosa_webhook_events"
+       WHERE "company_id" = ${company.companyId}::uuid
+         AND "dedupe_key" = ${dedupeKey}
+       LIMIT 1
+    `;
+
+    if (existing.length > 0 && existing[0].processing_state === PENDING_STATE) {
+      return this.completeEvent({
+        eventId: existing[0].id,
+        companyId: company.companyId,
+        dedupeKey,
+        payload,
+        secretos: parsed.value.secretos,
+        resumed: true,
+      });
+    }
+
+    return {
+      accepted: true,
+      status: 200,
+      duplicate: true,
+      eventId: null,
+      code: "ECF_DOSA_WEBHOOK_DUPLICATE",
+    };
+  }
 
     // Las credenciales del evento se guardan CIFRADAS y en estado
     // PENDING_CONFIRMATION. Que lleguen no las activa: activarlas exige
     // confirmacion del proveedor, aprobacion DGII y autorizacion administrativa.
-    await this.sealProviderCredentials(company.companyId, payload, parsed.value.secretos);
+  /**
+   * Cierra el evento: guarda las credenciales cifradas y solo entonces lo marca
+   * como completo.
+   *
+   * Si el guardado falla, el evento queda en `PENDING_CREDENTIALS` y se responde
+   * 5xx para que el proveedor reintente; el reenvio lo reanuda. Nunca se responde
+   * 2xx con el trabajo obligatorio sin hacer, y nunca se silencia el error.
+   */
+  private async completeEvent(input: {
+    eventId: string;
+    companyId: string;
+    dedupeKey: string;
+    payload: { rnc: string; ambiente: string };
+    secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string };
+    resumed: boolean;
+  }): Promise<DosaWebhookOutcome> {
+    const hasCredentials =
+      (input.secretos.apiKeyProduccion ?? "").trim().length > 0 ||
+      (input.secretos.apiKeyTest ?? "").trim().length > 0 ||
+      (input.secretos.apiSecret ?? "").trim().length > 0;
+
+    if (hasCredentials) {
+      if (!this.credentials) {
+        // Sin boveda no se puede cumplir la obligacion: se falla, no se finge.
+        return {
+          accepted: false,
+          status: 500,
+          code: "ECF_DOSA_WEBHOOK_CREDENTIALS_UNAVAILABLE",
+          reason: "CREDENTIAL_SERVICE_NOT_CONFIGURED",
+        };
+      }
+
+      const stored = await this.credentials.ingestFromProvider({
+        companyId: input.companyId,
+        rnc: input.payload.rnc,
+        environment: environmentOf(input.payload.ambiente),
+        bundle: input.secretos,
+        // La firma ya se verifico antes de llegar aqui.
+        signatureAuthenticated: true,
+      });
+
+      if (!stored.ok) {
+        // Error real, no silenciado. El evento sigue en PENDING_CREDENTIALS.
+        return {
+          accepted: false,
+          status: 500,
+          code: "ECF_DOSA_WEBHOOK_CREDENTIALS_FAILED",
+          reason: stored.blockedReason,
+        };
+      }
+    }
+
+    await this.store.$queryRaw`
+      UPDATE "ecf_dosa_webhook_events"
+         SET "processing_state" = ${COMPLETE_STATE},
+             "credentials_stored_at" = NOW()
+       WHERE "id" = ${input.eventId}::uuid
+         AND "company_id" = ${input.companyId}::uuid
+    `;
 
     return {
       accepted: true,
       status: 200,
       duplicate: false,
-      eventId: rows[0].id,
-      code: "ECF_DOSA_WEBHOOK_RECORDED",
+      eventId: input.eventId,
+      code: input.resumed
+        ? "ECF_DOSA_WEBHOOK_RESUMED"
+        : "ECF_DOSA_WEBHOOK_RECORDED",
     };
   }
-
-  /**
-   * Persiste las credenciales cifradas. Nunca lanza hacia fuera: un fallo de la
-   * boveda (por ejemplo, clave maestra ausente) no debe tumbar la recepcion del
-   * evento, pero tampoco se registra el valor en ningun sitio.
-   */
-  private async sealProviderCredentials(
-    companyId: string,
-    payload: { rnc: string; ambiente: string },
-    secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string },
-  ): Promise<void> {
-    if (!this.credentials) return;
-    const hasAny =
-      (secretos.apiKeyProduccion ?? "").trim().length > 0 ||
-      (secretos.apiKeyTest ?? "").trim().length > 0 ||
-      (secretos.apiSecret ?? "").trim().length > 0;
-    if (!hasAny) return;
-
-    try {
-      await this.credentials.ingestFromProvider({
-        companyId,
-        rnc: payload.rnc,
-        environment: environmentOf(payload.ambiente),
-        bundle: secretos,
-        // La firma ya se verifico arriba: sin eso el pipeline no llega aqui.
-        signatureAuthenticated: true,
-      });
-    } catch {
-      // Silencio deliberado: el evento queda registrado sin credenciales y la
-      // reconciliacion es un acto humano. Nunca se escribe el valor en un log.
-    }
-  }
 }
+
+/** Estados de procesamiento persistidos del evento. */
+export const PENDING_STATE = "PENDING_CREDENTIALS";
+export const COMPLETE_STATE = "COMPLETE";
 
 /**
  * Clave de idempotencia SIN identificador de evento.

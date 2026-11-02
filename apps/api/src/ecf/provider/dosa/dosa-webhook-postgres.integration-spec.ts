@@ -1,7 +1,13 @@
 import { PrismaClient } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { DosaWebhookService } from "./dosa-webhook.service";
 import { PrismaDosaCompanyResolver } from "./dosa-company-resolver.service";
+import {
+  DosaCredentialService,
+  PrismaDosaCredentialStore,
+} from "./dosa-credential.service";
+import { DosaCredentialVault } from "./dosa-credential-vault.service";
 
 /**
  * Pruebas REALES del webhook DOSA contra PostgreSQL.
@@ -65,6 +71,12 @@ real("DosaWebhook — PostgreSQL real", () => {
       prisma,
       new PrismaDosaCompanyResolver(prisma as unknown as PrismaService),
       SIGNATURE,
+      // La boveda va con clave maestra real: las pruebas de este archivo enviian
+      // credenciales, y sin boveda el pipeline debe fallar cerrado.
+      new DosaCredentialService(
+        new PrismaDosaCredentialStore(prisma),
+        new DosaCredentialVault(randomBytes(32).toString("base64")),
+      ),
     );
 
     for (const [id, slug] of [
