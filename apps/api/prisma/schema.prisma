@@ -211,6 +211,36 @@ model EcfDosaCertificationSession {
   @@map("ecf_dosa_certification_sessions")
 }
 
+/// Evento recibido del webhook de DOSA (`empresa.conectada`).
+///
+/// Es **evidencia candidata**, no autorización fiscal. Guarda el payload
+/// REDACTADO: las credenciales que trae el evento (`api_key_produccion`,
+/// `api_key_test`, `api_secret`) NUNCA se persisten aquí; solo su presencia.
+///
+/// La idempotencia la impone la base: `@@unique([companyId, dedupeKey])`. La
+/// muestra del proveedor no trae `event_id`, así que la clave se deriva de la
+/// identidad de negocio (postulación + estado + disponibilidad), que sí es
+/// estable entre reintentos.
+model EcfDosaWebhookEvent {
+  id                  String   @id @default(uuid()) @db.Uuid
+  companyId           String   @map("company_id") @db.Uuid
+  dedupeKey           String   @map("dedupe_key") @db.VarChar(128)
+  eventType           String   @map("event_type") @db.VarChar(64)
+  postulacionId       String?  @map("postulacion_id") @db.VarChar(128)
+  estadoCertificacion String?  @map("estado_certificacion") @db.VarChar(64)
+  rawBodySha256       String   @map("raw_body_sha256") @db.VarChar(64)
+  payloadSummary      Json     @map("payload_summary")
+  /// Estrategia que autenticó el evento. `BLOCKED` nunca llega aquí.
+  signatureStatus     String   @map("signature_status") @db.VarChar(48)
+  receivedAt          DateTime @default(now()) @map("received_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, dedupeKey])
+  @@index([companyId, receivedAt])
+  @@map("ecf_dosa_webhook_events")
+}
+
 /// Estado del proceso de habilitación DGII de una empresa. Es un estado de
 /// SEGUIMIENTO interno: no es, por sí mismo, una resolución oficial de la DGII.
 enum EcfDgiiHabilitationState {
@@ -1081,6 +1111,7 @@ model Company {
   ecfOnboardingSteps               EcfOnboardingStep[]
   ecfDgiiHabilitation              EcfDgiiHabilitation?
   ecfDosaCertificationSessions     EcfDosaCertificationSession[]
+  ecfDosaWebhookEvents             EcfDosaWebhookEvent[]
   ecfCertificationAttempts         EcfCertificationAttempt[]
   ecfEvidences                     EcfEvidence[]
   ecfAuditLogs                     EcfAuditLog[]

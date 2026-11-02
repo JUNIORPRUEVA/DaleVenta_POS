@@ -72,7 +72,25 @@ async function bootstrap() {
   // eslint-disable-next-line no-console
   console.log('[http] compression enabled (gzip/deflate/br, threshold=1024)');
 
-  app.use(express.json({ limit: bodySizeLimit }));
+  // Cuerpo CRUDO solo para el webhook de DOSA: la firma se calcula sobre los
+  // bytes EXACTOS recibidos, sin normalizar. Es un `verify` por ruta, así que
+  // el resto de la API sigue parseando exactamente igual que antes.
+  const rawBodyPathPrefixes = ["/webhook/", "/api/webhook/"];
+  app.use(
+    express.json({
+      limit: bodySizeLimit,
+      verify: (
+        req: Request & { rawBody?: Buffer },
+        _res: Response,
+        buf: Buffer,
+      ) => {
+        const url = req.originalUrl ?? req.url ?? '';
+        if (rawBodyPathPrefixes.some((prefix) => url.startsWith(prefix))) {
+          req.rawBody = Buffer.from(buf);
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: bodySizeLimit }));
   // eslint-disable-next-line no-console
   console.log(`[http] request body limit: ${bodySizeLimit}`);

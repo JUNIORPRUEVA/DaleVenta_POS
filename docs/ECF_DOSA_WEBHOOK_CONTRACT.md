@@ -92,30 +92,43 @@ Motivos del diseño:
 
 ## 4. Qué está implementado y qué no
 
-Implementado (aislado, sin superficie HTTP):
+El paquete de traspaso del proveedor llegó el 2 de noviembre de 2026 (muestra
+real del evento, secreto de 64 hex, API Key de TEST). Con esa evidencia se
+sustituyó el bloqueo total por un endpoint **real, apagado por bandera y que
+falla cerrado**.
+
+Implementado:
 
 | Archivo | Qué hace |
 | --- | --- |
-| `provider/dosa-webhook.contract.ts` | Estado del contrato y lectura **estructural** del sobre. No autentica. |
-| `provider/dosa-webhook.verification.ts` | Verificación de `X-Dosa-Signature` que **falla siempre cerrado**. Sin algoritmo, sin criptografía. |
-| `provider/dosa-webhook-receiver.service.ts` | Receptor que **nunca acepta** (503 + `ECF_DOSA_WEBHOOK_BLOCKED`). No persiste, no escribe, no llama a nadie. |
-| `provider/dosa-company-linking.policy.ts` | Resolución empresa ↔ RNC con rechazo de RNC desconocido, ambiguo o identidad no coincidente. |
-| `provider/dosa-webhook.spec.ts` | 19 pruebas de seguridad del bloqueo y del aislamiento multiempresa. |
+| `provider/dosa/dosa-webhook.dto.ts` | Validador estricto del payload real (`postulacion_id`, `rnc`, `razon_social`, `correo`, `ambiente`, `estado_certificacion`, `credenciales`, `credenciales_pendientes`, `disponibles_desde`). Devuelve los secretos por separado y una versión **redactada** para persistir. |
+| `provider/dosa/dosa-webhook-signature.policy.ts` | Estrategia intercambiable. Por defecto `BLOCKED`; `UNVERIFIED_PLAINTEXT_SECRET` existe solo para pruebas sintéticas y está marcada como no verificada. Comparación con `timingSafeEqual`. |
+| `provider/dosa/dosa-webhook.service.ts` | Pipeline firma → `rawBody` → esquema → RNC → opt-in e-CF → `INSERT … ON CONFLICT DO NOTHING`. **Nunca** activa emisión ni cambia el estado de la sesión. |
+| `provider/dosa/dosa-company-resolver.service.ts` | Correlación `RNC → companyId` desde `ecf_dosa_certification_sessions` + `ecf_company_configurations`. Cero o más de una fila ⇒ no resuelve. |
+| `provider/dosa/dosa-webhook.controller.ts` | `POST /webhook/dosa`. `DOSA_WEBHOOK_ENABLED` debe valer `true`. Todas las respuestas son JSON con código explícito; **nunca** 200 HTML. |
+| `prisma/migrations/20261102180000_ecf_dosa_webhook_events` | Tabla `ecf_dosa_webhook_events` con índice único `(company_id, dedupe_key)`. |
+| `provider/dosa/dosa-webhook.spec.ts` | 29 pruebas de falsificación, replay, duplicado, esquema, secretos cruzados, falta de firma, doble entrega y empresa sin e-CF. |
+| `provider/dosa/dosa-webhook-postgres.integration-spec.ts` | 8 pruebas contra PostgreSQL real (doble entrega ⇒ una sola fila; credenciales ausentes de la fila; sesión intacta). |
 
-**No implementado a propósito:**
+**Sigue sin implementarse a propósito:**
 
-- Ninguna ruta HTTP (`@Post("webhook/dosa")`). Añadirla sin firma verificable
-  sería abrir un endpoint público que responde a cualquiera.
-- Ninguna tabla ni migración. La deduplicación se diseñó (`eventDedupeKey`) pero
-  no se persiste: sin contrato no se sabe qué campos son estables.
-- Ninguna llamada a DOSA.
+- Verificación criptográfica real de la firma. `DOSA_WEBHOOK_SIGNATURE_STRATEGY`
+  queda en `BLOCKED` hasta que el proveedor documente el algoritmo.
+- Persistencia de las credenciales que llegan en el evento. Se validan, se
+  redactan y se descartan; escribirlas en el gestor de secretos es un acto
+  humano posterior.
+- Cualquier llamada saliente a DOSA.
 
 Garantías que ya se prueban automáticamente:
 
-- Cualquier valor de `X-Dosa-Signature` produce rechazo.
-- Una petición con cuerpo válido y firma plausible sigue rechazándose (503).
-- La respuesta no contiene el valor de la firma ni el cuerpo.
-- Un evento nunca activa emisión: el receptor no escribe estado.
+- Sin cabecera de firma, con estrategia `BLOCKED` o con firma falsificada ⇒ 503
+  y cero filas escritas.
+- Payload fuera de esquema ⇒ 400. RNC desconocido ⇒ 404. Empresa sin e-CF ⇒ 409.
+- La segunda entrega del mismo evento devuelve `duplicate: true` y no reprocesa.
+- El valor de `api_key_produccion`, `api_key_test`, `api_secret` y del secreto
+  del webhook no aparece ni en la fila persistida ni en la respuesta.
+- Un evento con `estado_certificacion=finalizado` y firma válida **no** emite el
+  SQL que tocaría la sesión ni la configuración de la empresa.
 
 ---
 
@@ -141,16 +154,21 @@ Garantías que ya se prueban automáticamente:
 
 ---
 
-## 6. Siguiente cambio, cuando DOSA responda
+## 6. Cómo se enciende (y qué falta para hacerlo)
 
-1. Guardar la fórmula de firma en `dosa-webhook.verification.ts` y cambiar
-   `DOSA_WEBHOOK_CONTRACT_STATUS` a `READY`.
-2. Añadir el `verify` de `rawBody` en `main.ts` (sección 2).
-3. Crear la tabla de eventos con índice único `(companyId, eventId)` y la
-   migración aditiva.
-4. Registrar `POST /webhook/dosa` con: límite de tamaño, verificación de firma,
-   deduplicación, y respuesta 2xx **solo después** de persistir.
-5. El evento entra como **evidencia**, nunca como autorización de emisión. La
+La ruta existe pero está apagada. Para activarla en TEST:
+
+1. `DOSA_WEBHOOK_ENABLED=true` en el entorno del API (variable, no commit).
+2. `DOSA_WEBHOOK_SECRET` con el secreto entregado, por referencia.
+3. `DOSA_WEBHOOK_SIGNATURE_STRATEGY` **sigue en `BLOCKED`** hasta que el
+   proveedor documente el algoritmo. Sin ese documento, encender la bandera deja
+   el endpoint en 503 para todo evento real: es el comportamiento correcto.
+4. La URL a registrar en DOSA es
+   `https://fullposcloud.fulltechrd.com/api/webhook/dosa` (el proxy elimina
+   `/api`). La URL sugerida por el proveedor, `/webhook/dosa`, hoy devuelve la
+   SPA y **no** debe usarse tal cual. No se toca nginx de producción para esto.
+5. Tras el primer evento real: comprobar la fila en `ecf_dosa_webhook_events`,
+   que `payload_summary` solo contenga `[REDACTED]`, y que
+   `ecf_dosa_certification_sessions` siga en su estado anterior.
+6. El evento entra como **evidencia**, nunca como autorización de emisión. La
    activación sigue siendo un acto humano con comprobaciones fiscales.
-6. Ejecutar las pruebas de seguridad con eventos firmados reales de TEST y con
-   firma manipulada, repetida y obsoleta.

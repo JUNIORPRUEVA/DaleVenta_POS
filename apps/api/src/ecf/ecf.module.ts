@@ -47,12 +47,19 @@ import {
   ECF_DOSA_SESSION_STORE,
   EcfDosaSessionService,
 } from "./provider/dosa/ecf-dosa-session.service";
+import { DosaWebhookController } from "./provider/dosa/dosa-webhook.controller";
+import {
+  ECF_DOSA_COMPANY_RESOLVER,
+  ECF_DOSA_WEBHOOK_STORE,
+  DosaWebhookService,
+} from "./provider/dosa/dosa-webhook.service";
+import { PrismaDosaCompanyResolver } from "./provider/dosa/dosa-company-resolver.service";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
 
 @Module({
-  controllers: [EcfController, EcfDocumentsController, EcfPlatformController],
+  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController],
   providers: [
     EcfService,
     EcfDgiiHabilitationService,
@@ -110,6 +117,19 @@ import { EcfService } from "./ecf.service";
       useFactory: (prisma: PrismaService) => prisma,
     },
     EcfDosaSessionService,
+    // Webhook DOSA: ruta detras de bandera, fail-closed y sin autoridad fiscal.
+    {
+      provide: ECF_DOSA_WEBHOOK_STORE,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => prisma,
+    },
+    PrismaDosaCompanyResolver,
+    {
+      provide: ECF_DOSA_COMPANY_RESOLVER,
+      inject: [PrismaDosaCompanyResolver],
+      useFactory: (resolver: PrismaDosaCompanyResolver) => resolver,
+    },
+    DosaWebhookService,
     EcfAlanubeCertificationClient,
     {
       // El orquestador lee solo el `alanubeCompanyId` por empresa.
