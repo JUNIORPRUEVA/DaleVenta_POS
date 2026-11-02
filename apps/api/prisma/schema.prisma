@@ -151,47 +151,63 @@ enum EcfAuditAction {
 ///
 /// Es un estado de SEGUIMIENTO: `COMPLETED` significa que el asistente terminó,
 /// NO que la DGII haya aprobado la certificación.
+///
+/// `NOT_STARTED`, `RUNNING` y `ATTENTION` son estados EN CURSO. Los demás son
+/// TERMINALES: liberan la clave activa para permitir un intento nuevo sin
+/// perder el historial.
 enum EcfDosaSessionStatus {
   NOT_STARTED
   RUNNING
   ATTENTION
   COMPLETED
   FAILED
+  CANCELLED
+  EXPIRED
 }
 
 /// Sesión de certificación automática del asistente DOSA.
 ///
-/// Una fila por EMPRESA y RNC. La unicidad la impone la base de datos
-/// (`@@unique([companyId, rnc])`), no una clave generada en el cliente: así el
-/// control de duplicados es transaccional y sobrevive a dos pestañas, dos
-/// dispositivos o un reintento del navegador.
+/// Modelo de INTENTOS: cada postulación es una fila, así que el historial se
+/// conserva. Una empresa puede repetir la postulación tras un intento fallido,
+/// cancelado o vencido: el intento anterior queda como registro y se crea uno
+/// nuevo con `attemptNo + 1`.
+///
+/// Lo que la base de datos impone (no la aplicación):
+/// * `@@unique([companyId, rnc, attemptNo])`: no existen dos intentos con el
+///   mismo número para la misma identidad fiscal.
+/// * `activeKey` único: como mucho UN intento EN CURSO por empresa y RNC. Vale
+///   `"<companyId>:<rnc>"` mientras la sesión está activa y pasa a `NULL` al
+///   terminar. PostgreSQL permite muchos `NULL` en un índice único, así que el
+///   historial crece sin bloquear el siguiente intento.
 ///
 /// `rnc` es el RNC propio de la empresa (identidad fiscal del cliente), no el
 /// del partner. `sessionUrl` es una capacidad emitida por el proveedor: se
 /// guarda para poder reanudar, no se registra en logs y solo se devuelve a
 /// usuarios autorizados de ESA empresa.
-///
-/// `providerConfirmedAt` solo lo escribe el backend tras reconciliar con el
-/// proveedor. Los eventos del navegador actualizan `lastEventType`/`lastEventAt`
-/// como PISTA, nunca como confirmación fiscal.
 model EcfDosaCertificationSession {
   id                    String               @id @default(uuid()) @db.Uuid
   companyId             String               @map("company_id") @db.Uuid
   rnc                   String               @db.VarChar(32)
+  /// Número de intento, empezando en 1. Es lo que preserva el historial.
+  attemptNo             Int                  @default(1) @map("attempt_no")
+  /// `"<companyId>:<rnc>"` mientras el intento está en curso; `NULL` al cerrar.
+  activeKey             String?              @unique @map("active_key") @db.VarChar(96)
   sessionUrl            String?              @map("session_url") @db.Text
   providerPostulationId String?              @map("provider_postulation_id") @db.VarChar(128)
   status                EcfDosaSessionStatus @default(NOT_STARTED)
   lastEventType         String?              @map("last_event_type") @db.VarChar(64)
   lastEventAt           DateTime?            @map("last_event_at")
   providerConfirmedAt   DateTime?            @map("provider_confirmed_at")
+  closedAt              DateTime?            @map("closed_at")
   createdByUserId       String?              @map("created_by_user_id") @db.Uuid
   createdAt             DateTime             @default(now()) @map("created_at")
   updatedAt             DateTime             @updatedAt @map("updated_at")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, rnc])
-  @@index([companyId, status])
+  @@unique([companyId, rnc, attemptNo])
+  @@index([companyId, rnc, status])
+  @@index([companyId, rnc, createdAt])
   @@map("ecf_dosa_certification_sessions")
 }
 
