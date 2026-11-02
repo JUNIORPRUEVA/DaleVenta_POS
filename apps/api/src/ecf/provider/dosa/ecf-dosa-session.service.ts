@@ -249,6 +249,53 @@ export class EcfDosaSessionService {
     `;
     return { updated: rows.length === 1 };
   }
+
+  /**
+   * Vincula el `postulacion_id` que reporta el PROVEEDOR con el intento activo.
+   *
+   * Todo va en una sola sentencia para que no exista una ventana entre
+   * comprobación y escritura. Condiciones, todas en la misma cláusula `WHERE`:
+   *
+   * 1. Solo el intento ACTIVO (`active_key`) de esa empresa y ese RNC.
+   * 2. Solo si aún no tiene identificador, o si es el MISMO. Un identificador
+   *    distinto no sobrescribe: el primero confirmado por el proveedor manda, de
+   *    modo que un evento fuera de orden no reescribe el vínculo.
+   * 3. **Nunca** si otra empresa ya tiene ese `postulacion_id`: el mismo
+   *    identificador no puede pertenecer a dos tenants.
+   *
+   * Si no hay intento activo no se crea nada. El evento queda registrado y la
+   * vinculación queda pendiente de reconciliación, que es preferible a inventar
+   * una sesión o a asociarla «a la primera que aparezca».
+   */
+  async bindProviderPostulation(input: {
+    companyId: string;
+    rnc: string;
+    providerPostulationId: string;
+  }): Promise<{ bound: boolean }> {
+    const companyId = (input.companyId ?? "").trim();
+    const rnc = normalizeRnc(input.rnc);
+    const postulationId = (input.providerPostulationId ?? "").trim();
+    if (!companyId || !rnc || !postulationId) return { bound: false };
+
+    const id = postulationId.slice(0, 128);
+    const rows = await this.store.$queryRaw<{ id: string }[]>`
+      UPDATE "ecf_dosa_certification_sessions"
+         SET "provider_postulation_id" = ${id},
+             "provider_confirmed_at" = NOW(),
+             "updated_at" = NOW()
+       WHERE "company_id" = ${companyId}::uuid
+         AND "rnc" = ${rnc}
+         AND "active_key" = ${`${companyId}:${rnc}`}
+         AND ("provider_postulation_id" IS NULL OR "provider_postulation_id" = ${id})
+         AND NOT EXISTS (
+           SELECT 1 FROM "ecf_dosa_certification_sessions" otro
+            WHERE otro."provider_postulation_id" = ${id}
+              AND otro."company_id" <> ${companyId}::uuid
+         )
+      RETURNING "id"
+    `;
+    return { bound: rows.length === 1 };
+  }
 }
 
 /** Traduce la fila del RETURNING al contrato público del servicio. */

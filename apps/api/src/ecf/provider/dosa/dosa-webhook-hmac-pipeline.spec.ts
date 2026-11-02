@@ -242,14 +242,23 @@ describe("webhook DOSA con firma HMAC", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("un evento autenticado deja la pista de correlación en su empresa y RNC", async () => {
+  it("un evento autenticado deja la pista y vincula el postulacion_id", async () => {
     const hints: Array<{ companyId: string; rnc: string; eventType: string }> = [];
+    const bound: Array<{
+      companyId: string;
+      rnc: string;
+      providerPostulationId: string;
+    }> = [];
     const { service } = build({
       insert: [{ id: "evt-5" }],
       hints: {
         async recordEventHint(input) {
           hints.push(input);
           return { updated: true };
+        },
+        async bindProviderPostulation(input) {
+          bound.push(input);
+          return { bound: true };
         },
       },
     });
@@ -266,16 +275,28 @@ describe("webhook DOSA con firma HMAC", () => {
       rnc: "13199988001",
       eventType: "empresa.conectada",
     });
+    // Empresa → RNC → postulación, todo desde el servidor.
+    expect(bound).toHaveLength(1);
+    expect(bound[0]).toEqual({
+      companyId: COMPANY_A,
+      rnc: "13199988001",
+      providerPostulationId: "post-1",
+    });
   });
 
-  it("la pista NO se registra si la firma no es válida", async () => {
+  it("sin firma válida no se registra pista NI se vincula la postulación", async () => {
     const hints: unknown[] = [];
+    const bound: unknown[] = [];
     const { service } = build({
       insert: [{ id: "evt-6" }],
       hints: {
         async recordEventHint(input) {
           hints.push(input);
           return { updated: true };
+        },
+        async bindProviderPostulation(input) {
+          bound.push(input);
+          return { bound: true };
         },
       },
     });
@@ -284,14 +305,19 @@ describe("webhook DOSA con firma HMAC", () => {
     await service.handle(request({}, body));
 
     expect(hints).toHaveLength(0);
+    expect(bound).toHaveLength(0);
   });
 
-  it("si la pista falla, el evento ya persistido sigue siendo un éxito", async () => {
+  it("si la sesión no puede vincular, el evento sigue siendo un éxito", async () => {
     const { service } = build({
       insert: [{ id: "evt-7" }],
       hints: {
         async recordEventHint() {
           throw new Error("sesion no disponible");
+        },
+        async bindProviderPostulation() {
+          // Sin intento activo: no se vincula, pero no es un fallo del evento.
+          return { bound: false };
         },
       },
     });
@@ -302,6 +328,27 @@ describe("webhook DOSA con firma HMAC", () => {
     );
 
     // El hecho fiscal quedó registrado; la pista es un extra.
+    expect(outcome.accepted).toBe(true);
+  });
+
+  it("si el vínculo revienta, el evento tampoco se pierde", async () => {
+    const { service } = build({
+      insert: [{ id: "evt-8" }],
+      hints: {
+        async recordEventHint() {
+          return { updated: true };
+        },
+        async bindProviderPostulation() {
+          throw new Error("caida de la base");
+        },
+      },
+    });
+    const body = rawBody();
+
+    const outcome = await service.handle(
+      request({ "x-dosa-signature": signatureHeader(body) }, body),
+    );
+
     expect(outcome.accepted).toBe(true);
   });
 });

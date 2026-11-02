@@ -41,12 +41,18 @@ export const ECF_DOSA_COMPANY_RESOLVER = Symbol("ECF_DOSA_COMPANY_RESOLVER");
 export const ECF_DOSA_SIGNATURE_CONFIG = Symbol("ECF_DOSA_SIGNATURE_CONFIG");
 
 /**
- * Pista de evento sobre la sesión de certificación.
+ * Contrato MÍNIMO de la sesión de certificación para el webhook.
  *
- * Es un contrato MÍNIMO a propósito: lo único que el webhook puede pedirle a la
- * sesión es dejar constancia de que llegó un evento. No expone `status`, ni
- * confirmación, ni autorización, así que un evento autenticado no puede cambiar
- * el estado de certificación por esta vía.
+ * Solo dos operaciones, y ninguna puede cambiar `status` ni autorizar nada:
+ *
+ * * `recordEventHint` — deja constancia de que llegó un evento.
+ * * `bindProviderPostulation` — asocia el `postulacion_id` del proveedor al
+ *   intento ACTIVO. La propia consulta impide que un identificador se vincule a
+ *   otra empresa, que se sobrescriba uno ya confirmado y que se invente una
+ *   sesión inexistente.
+ *
+ * Es la única puerta por la que un evento autenticado puede tocar identificadores
+ * del proveedor. El navegador nunca los envía.
  */
 export interface DosaSessionHintRecorder {
   recordEventHint(input: {
@@ -54,6 +60,11 @@ export interface DosaSessionHintRecorder {
     rnc: string;
     eventType: string;
   }): Promise<{ updated: boolean }>;
+  bindProviderPostulation(input: {
+    companyId: string;
+    rnc: string;
+    providerPostulationId: string;
+  }): Promise<{ bound: boolean }>;
 }
 
 export const ECF_DOSA_SESSION_HINTS = Symbol("ECF_DOSA_SESSION_HINTS");
@@ -260,7 +271,7 @@ export class DosaWebhookService {
     eventId: string;
     companyId: string;
     dedupeKey: string;
-    payload: { rnc: string; ambiente: string };
+    payload: { rnc: string; ambiente: string; postulacionId: string };
     secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string };
     resumed: boolean;
   }): Promise<DosaWebhookOutcome> {
@@ -311,9 +322,8 @@ export class DosaWebhookService {
     // Pista de correlación con la postulación EN CURSO de esa empresa y ese RNC.
     //
     // Es best-effort y deliberadamente débil: `recordEventHint` solo escribe
-    // `last_event_type` / `last_event_at`. No toca `status`, ni
-    // `provider_confirmed_at`, ni autoriza nada. Si la empresa no tiene un
-    // intento activo, no se crea ninguna fila.
+    // `last_event_type` / `last_event_at`. No toca `status`, ni autoriza nada.
+    // Si la empresa no tiene un intento activo, no se crea ninguna fila.
     //
     // Un fallo aquí NO invalida el evento ya persistido: el hecho fiscal queda
     // registrado y la pista es un extra. Se ignora para no convertir un
@@ -327,6 +337,24 @@ export class DosaWebhookService {
         });
       } catch {
         // Intencionadamente no se propaga: ver el comentario anterior.
+      }
+
+      // Vínculo REAL con la postulación: Empresa → RNC → intento activo →
+      // `postulacion_id`. Lo garantiza una sola sentencia SQL que exige intento
+      // activo, no sobrescribe un identificador ya confirmado y no acepta un
+      // identificador que ya pertenezca a otra empresa.
+      //
+      // Si devuelve `false` no se fuerza nada: el evento ya está persistido con
+      // su `postulacion_id`, así que la reconciliación es posible después. Este
+      // servicio NO crea sesiones ni elige una «a la primera que aparezca».
+      try {
+        await this.sessionHints.bindProviderPostulation({
+          companyId: input.companyId,
+          rnc: input.payload.rnc,
+          providerPostulationId: input.payload.postulacionId,
+        });
+      } catch {
+        // Igual que la pista: el hecho fiscal ya quedó registrado.
       }
     }
 
