@@ -147,6 +147,54 @@ enum EcfAuditAction {
   @@map("ecf_audit_action")
 }
 
+/// Estado de la sesión de certificación automática del asistente DOSA.
+///
+/// Es un estado de SEGUIMIENTO: `COMPLETED` significa que el asistente terminó,
+/// NO que la DGII haya aprobado la certificación.
+enum EcfDosaSessionStatus {
+  NOT_STARTED
+  RUNNING
+  ATTENTION
+  COMPLETED
+  FAILED
+}
+
+/// Sesión de certificación automática del asistente DOSA.
+///
+/// Una fila por EMPRESA y RNC. La unicidad la impone la base de datos
+/// (`@@unique([companyId, rnc])`), no una clave generada en el cliente: así el
+/// control de duplicados es transaccional y sobrevive a dos pestañas, dos
+/// dispositivos o un reintento del navegador.
+///
+/// `rnc` es el RNC propio de la empresa (identidad fiscal del cliente), no el
+/// del partner. `sessionUrl` es una capacidad emitida por el proveedor: se
+/// guarda para poder reanudar, no se registra en logs y solo se devuelve a
+/// usuarios autorizados de ESA empresa.
+///
+/// `providerConfirmedAt` solo lo escribe el backend tras reconciliar con el
+/// proveedor. Los eventos del navegador actualizan `lastEventType`/`lastEventAt`
+/// como PISTA, nunca como confirmación fiscal.
+model EcfDosaCertificationSession {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @map("company_id") @db.Uuid
+  rnc                   String               @db.VarChar(32)
+  sessionUrl            String?              @map("session_url") @db.Text
+  providerPostulationId String?              @map("provider_postulation_id") @db.VarChar(128)
+  status                EcfDosaSessionStatus @default(NOT_STARTED)
+  lastEventType         String?              @map("last_event_type") @db.VarChar(64)
+  lastEventAt           DateTime?            @map("last_event_at")
+  providerConfirmedAt   DateTime?            @map("provider_confirmed_at")
+  createdByUserId       String?              @map("created_by_user_id") @db.Uuid
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, rnc])
+  @@index([companyId, status])
+  @@map("ecf_dosa_certification_sessions")
+}
+
 /// Estado del proceso de habilitación DGII de una empresa. Es un estado de
 /// SEGUIMIENTO interno: no es, por sí mismo, una resolución oficial de la DGII.
 enum EcfDgiiHabilitationState {
@@ -1016,6 +1064,7 @@ model Company {
   ecfConfiguration                 EcfCompanyConfiguration?
   ecfOnboardingSteps               EcfOnboardingStep[]
   ecfDgiiHabilitation              EcfDgiiHabilitation?
+  ecfDosaCertificationSessions     EcfDosaCertificationSession[]
   ecfCertificationAttempts         EcfCertificationAttempt[]
   ecfEvidences                     EcfEvidence[]
   ecfAuditLogs                     EcfAuditLog[]

@@ -43,6 +43,10 @@ import {
   createEcfFiscalProviderRegistryFromConfig,
 } from "./provider/ecf-provider.registry";
 import { DosaWebhookReceiverService } from "./provider/dosa-webhook-receiver.service";
+import {
+  ECF_DOSA_SESSION_STORE,
+  EcfDosaSessionService,
+} from "./provider/dosa/ecf-dosa-session.service";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
@@ -98,6 +102,14 @@ import { EcfService } from "./ecf.service";
     // siempre mientras el contrato de firma no este resuelto por el proveedor,
     // y un evento nunca autoriza emision por si solo.
     DosaWebhookReceiverService,
+    // Sesion de certificacion DOSA: control de duplicados TRANSACCIONAL por
+    // indice unico (company_id, rnc). No pide sesiones al proveedor.
+    {
+      provide: ECF_DOSA_SESSION_STORE,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => prisma,
+    },
+    EcfDosaSessionService,
     EcfAlanubeCertificationClient,
     {
       // El orquestador lee solo el `alanubeCompanyId` por empresa.
