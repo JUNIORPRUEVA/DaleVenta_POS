@@ -1,11 +1,35 @@
-# Integración DOSA — materiales y configuración del entorno
+# Integración DOSA — materiales, estado real y configuración del entorno
 
-Estado: **Fase 1 completada**. No hay ninguna conexión con DOSA, ninguna llamada de
-red y ninguna emisión fiscal real. Este documento fija **dónde** debe vivir cada
-material cuando se autoricen las fases siguientes.
+Estado (2026-11-02): **CONTRATOS PRINCIPALES CONFIRMADOS E IMPLEMENTADOS;
+ACTIVACIÓN PÚBLICA BLOQUEADA**. Sigue sin haber ninguna llamada real a DOSA,
+ninguna postulación DGII y ninguna emisión fiscal.
 
 Regla que no se negocia: **cero valores en el repositorio**. Ni en código, ni en
 `docs`, ni en Flutter, ni en logs, ni en informes, ni en mensajes de error.
+
+---
+
+## 0. Estado por componente
+
+Leyenda: **IMPLEMENTADO** (código escrito) · **PROBADO** (con prueba que lo
+ejercita) · **PENDIENTE** (falta un dato o contrato) · **BLOQUEADO** (no puede
+activarse con seguridad todavía).
+
+| Componente | Estado | Evidencia / límite |
+| --- | --- | --- |
+| Preparación de e-CF sin `enabled` | IMPLEMENTADO + PROBADO | `POST /ecf/dosa/certification-intent`; probado con emisión apagada y sin configuración fiscal |
+| Endpoint de intención con JWT real | PROBADO | E2E HTTP real con `POST /auth/register-business` + `POST /auth/login` (8 casos) |
+| Registro solo por acción voluntaria | IMPLEMENTADO + PROBADO | Abrir el expediente no escribe; hay prueba que cuenta las escrituras |
+| Firma `X-Dosa-Signature` | IMPLEMENTADO + PROBADO | HMAC-SHA256 sobre bytes originales, anti-replay, parseo estricto, tiempo constante |
+| Webhook `POST /webhook/dosa` | IMPLEMENTADO + PROBADO (local) | **Sin validar contra un evento auténtico de DOSA** |
+| Cliente de consultas `X-Dosa-Secret-Key` | IMPLEMENTADO + PROBADO | Apagado por defecto; sin endpoints de consulta confirmados |
+| Separación TEST / producción | IMPLEMENTADO + PROBADO | Clave por empresa + RNC + entorno; sin fallback entre entornos |
+| Emisión real | **BLOQUEADO** | Requiere certificación DGII + credenciales productivas + autorización expresa |
+| Sesión oficial del asistente | **PENDIENTE** | Falta contrato de creación de sesiones y autorización de dominio |
+
+Lo que **no** puede afirmarse todavía: que nuestra verificación HMAC sea
+compatible con la implementación real del proveedor. Las pruebas validan la
+fórmula documentada, no su comportamiento. Solo un evento auténtico lo confirma.
 
 ---
 
@@ -85,19 +109,30 @@ Reglas:
 
 ## 4. Pendiente de DOSA (contratos, no credenciales)
 
-Falta confirmación por escrito de:
+Confirmado el 2026-11-02 (ya no está pendiente):
 
-1. **Firma del webhook**: cabecera exacta, algoritmo, inclusión de marca de
-   tiempo, ventana anti-replay y formato del cuerpo firmado (bytes exactos).
-2. **Vinculación Partner**: cómo se asocia el RNC del cliente a *nuestra*
-   empresa y cómo se evita una postulación duplicada.
-3. **Asistente**: origen permitido (dominios), eventos que emite y estado de
-   progreso recuperable.
-4. **Catálogo de estados** del asistente y de la emisión, y su correspondencia
+1. ~~Firma del webhook~~ → `X-Dosa-Signature: t=<hora>,v1=<firma>` con
+   `HMAC-SHA256(secreto, t + "." + cuerpo HTTP original)`.
+2. ~~Vinculación Partner~~ → automática para empresas que usan el asistente
+   desde nuestro dominio autorizado; DOSA identifica por RNC y **no** debemos
+   enviar identificadores Partner inventados.
+
+Sigue sin confirmar, y por eso no se implementa a ciegas:
+
+1. **Unidad del timestamp** `t`: segundos o milisegundos epoch. Se configura con
+   `DOSA_WEBHOOK_TIMESTAMP_UNIT`; el valor por defecto (`seconds`) es una
+   suposición cuyo peor efecto es rechazar eventos, nunca aceptar uno falso.
+2. **Codificación del digest**: hex o base64. Se aceptan ambas.
+3. **Campo que identifica el tipo de evento**: hoy solo se procesa la forma
+   confirmada de `empresa.conectada`; otra forma se rechaza con 400.
+4. **Endpoints de consulta** para `X-Dosa-Secret-Key`.
+5. **Rotación de secreto**: si existe, ¿se envían varios `v1`? Hoy un `v1`
+   duplicado se rechaza por ambiguo.
+6. **Catálogo de estados** del asistente y de la emisión, y su correspondencia
    con los códigos DGII `0/1/2/3/4`.
-5. **Idempotencia**: si el mismo e-NCF reenviado devuelve el mismo `trackId`
+7. **Idempotencia**: si el mismo e-NCF reenviado devuelve el mismo `trackId`
    o un error de secuencia duplicada.
-6. **Vigencia de los rangos e-NCF** de pruebas: fecha exacta y qué ocurre al
+8. **Vigencia de los rangos e-NCF** de pruebas: fecha exacta y qué ocurre al
    agotarse.
 
 Inconsistencias ya detectadas en la documentación pública que DOSA debe
@@ -154,8 +189,8 @@ promesa.
 | 6 | RNC de prueba | DOSA (entregado) | `DOSA_TEST_RNC` en el mismo `.env` local | Distinto del RNC real de FULLTECH SRL | Pendiente de colocar |
 | 7 | Rangos e-NCF de prueba y vencimiento | DOSA (entregado) | `DOSA_TEST_ENCF_FROM` / `_TO` / `_EXPIRES_ON` | Fechas visibles y alerta antes del vencimiento | Pendiente de colocar |
 | 8 | Documentación de emisión y consultas | DOSA (entregado, público) | `docs/` | Sin credenciales dentro | Recibida (pública) |
-| 9 | Fórmula exacta de `X-Dosa-Signature` | **DOSA — pendiente** | `dosa-webhook.verification.ts` | Ver §4 de `ECF_DOSA_WEBHOOK_CONTRACT.md` | **Bloqueado** |
-| 10 | Contrato de vinculación Partner (RNC ↔ empresa) | **DOSA — pendiente** | Diseño en `dosa-company-linking.policy.ts` | Resolución sin empresa por defecto | **Bloqueado** |
+| 9 | Fórmula exacta de `X-Dosa-Signature` | **CONFIRMADO (2026-11-02)** | Implementado en `dosa-webhook-signature.policy.ts` | Ver §4 y `ECF_DOSA_WEBHOOK_CONTRACT.md` | Implementado y probado en local; **falta validar con un evento auténtico** |
+| 10 | Contrato de vinculación Partner (RNC ↔ empresa) | **CONFIRMADO (2026-11-02)** | Implementado en `dosa-company-resolver.service.ts` + `dosa-certification-intent.service.ts` | Vinculación automática desde nuestro dominio; identificación por RNC | Implementado; sin identificadores Partner inventados |
 | 11 | Catálogo de estados del asistente y correspondencia DGII `0/1/2/3/4` | **DOSA — pendiente** | Mapeo explícito, sin deducir | Tabla firmada por el proveedor | **Bloqueado** |
 | 12 | Confirmación de URL de webhook aceptada por DOSA | Nosotros | `https://fullposcloud.fulltechrd.com/api/webhook/dosa` | El proveedor debe aceptar el prefijo `/api` | Pendiente de confirmar |
 
