@@ -531,6 +531,9 @@ class ApiRoutes {
   static const ecf = '/ecf';
   static const ecfConfig = '/ecf/config';
   static const ecfCapabilities = '/ecf/capabilities';
+  /// Preasociación empresa↔RNC antes de abrir el asistente DOSA. Registrar la
+  /// intención no activa facturación electrónica ni inicia ninguna postulación.
+  static const ecfDosaCertificationIntent = '/ecf/dosa/certification-intent';
   static const ecfDocuments = '/ecf/documents';
   static const ecfDocumentsPrepare = '/ecf/documents/prepare';
   static const ecfDocumentsPrepareCreditNote =

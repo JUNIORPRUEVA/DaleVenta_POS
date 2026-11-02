@@ -9,6 +9,7 @@ import 'dosa_assistant_events.dart';
 import 'dosa_assistant_launcher.dart';
 import 'dosa_assistant_panel.dart';
 import 'dosa_assistant_session.dart';
+import 'dosa_certification_intent_api.dart';
 
 /// Inserta el panel del asistente DOSA dentro del expediente existente.
 ///
@@ -56,18 +57,59 @@ class DosaAssistantSection extends ConsumerWidget {
       postulationExternalId: postulationExternalId,
     );
 
-    return DosaAssistantPanel(
-      config: resolved,
-      session: DosaAssistantSession(
-        binding: binding,
-        phase: phase ?? _defaultPhase(postulationExternalId),
+    // El asistente NO se monta hasta que el backend confirma la intención. Esta
+    // es la unica forma de que la empresa quede asociada a su RNC verificado
+    // antes de que DOSA emita ningun evento.
+    final intent = ref.watch(dosaIntentRegistrationProvider(taxId));
+
+    return intent.when(
+      loading: () => const _DosaIntentGate(
+        icon: Icons.hourglass_top,
+        message: 'Registrando la preparacion de facturacion electronica...',
       ),
-      onResume: onResume,
-      // Un evento del navegador NO escribe nada: solo pide recargar del backend.
-      onWizardEvent: _onWizardEvent(ref),
-      onOpenExternally: resolved.hasSessionUrl
-          ? () => openDosaAssistantExternally(sessionUrl: resolved.sessionUrl!)
-          : null,
+      error: (error, _) => _DosaIntentGate(
+        icon: Icons.block,
+        message: error is DosaIntentException
+            ? error.message
+            : 'No se pudo registrar la intencion de certificacion.',
+        // Solo se muestra como detalle un codigo propio del dominio: los
+        // errores de transporte no aportan nada al administrador.
+        detail: error is DosaIntentException &&
+                (error.code.startsWith('ECF_') ||
+                    error.code == 'AMBIGUOUS_RNC' ||
+                    error.code == 'COMPANY_RNC_NOT_VERIFIED' ||
+                    error.code == 'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY' ||
+                    error.code == 'SESSION_CLAIM_FAILED')
+            ? error.code
+            : null,
+        onRetry: () => ref.invalidate(dosaIntentRegistrationProvider(taxId)),
+      ),
+      data: (registered) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _DosaIntentBanner(
+            attemptNo: registered.attemptNo,
+            created: registered.created,
+            provider: registered.provider,
+            onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
+          ),
+          DosaAssistantPanel(
+            config: resolved,
+            session: DosaAssistantSession(
+              binding: binding,
+              phase: phase ?? _defaultPhase(postulationExternalId),
+            ),
+            onResume: onResume,
+            // Un evento del navegador NO escribe nada: solo pide recargar.
+            onWizardEvent: _onWizardEvent(ref),
+            onOpenExternally: resolved.hasSessionUrl
+                ? () => openDosaAssistantExternally(
+                    sessionUrl: resolved.sessionUrl!,
+                  )
+                : null,
+          ),
+        ],
+      ),
     );
   }
 
@@ -87,4 +129,124 @@ class DosaAssistantSection extends ConsumerWidget {
       externalId == null || externalId.trim().isEmpty
       ? DosaAssistantPhase.idle
       : DosaAssistantPhase.running;
+}
+
+/// Estado previo al asistente: mientras la intención no esté registrada, DOSA
+/// no se monta. Si falla, se explica el motivo y no se abre nada.
+class _DosaIntentGate extends StatelessWidget {
+  const _DosaIntentGate({
+    required this.icon,
+    required this.message,
+    this.detail,
+    this.onRetry,
+  });
+
+  final IconData icon;
+  final String message;
+  final String? detail;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: theme.colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(message, style: theme.textTheme.bodyMedium),
+                  if (detail != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      detail!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                child: const Text('Reintentar'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Barra informativa con el estado interno de la preparación.
+///
+/// Solo muestra identificadores y estados: ni claves, ni credenciales, ni nada
+/// que el administrador no deba ver.
+class _DosaIntentBanner extends ConsumerWidget {
+  const _DosaIntentBanner({
+    required this.attemptNo,
+    required this.created,
+    required this.provider,
+    required this.onRefreshState,
+  });
+
+  final int attemptNo;
+  final bool created;
+  final String provider;
+  final VoidCallback onRefreshState;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final state = ref.watch(dosaIntentStateProvider);
+
+    final parts = <String>[
+      'Intento $attemptNo',
+      created ? 'registrado ahora' : 'ya estaba registrado',
+      'proveedor $provider',
+    ];
+
+    state.whenData((value) {
+      if (value.sessionStatus != null) {
+        parts.add('sesion ${value.sessionStatus}');
+      }
+      if (value.credentialStatus != null) {
+        parts.add('credencial ${value.credentialStatus}');
+      }
+    });
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.link, size: 16, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              parts.join(' \u00b7 '),
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          TextButton(
+            onPressed: onRefreshState,
+            child: const Text('Actualizar estado'),
+          ),
+        ],
+      ),
+    );
+  }
 }
