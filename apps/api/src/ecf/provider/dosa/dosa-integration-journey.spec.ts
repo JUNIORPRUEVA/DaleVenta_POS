@@ -220,14 +220,23 @@ async function preparedJourney(respond: (attempt: number) => DosaHttpResponse) {
 function fullEvidence(overrides: Partial<DosaActivationEvidence> = {}): DosaActivationEvidence {
   return {
     identityLinked: true,
+    postulationBound: true,
     providerConfirmed: true,
     dgiiApproved: true,
     administrativeAuthorized: true,
     details: {
+      attemptNo: 1,
+      attemptStartedAt: "2026-11-02T12:00:00.000Z",
+      postulacionId: "post-journey",
       linkedSessions: 1,
       authenticatedProviderEvents: 1,
+      providerEventsForOtherPostulations: 0,
       dgiiState: "APPROVED",
       dgiiSource: "DGII_OFFICIAL_RECORD",
+      dgiiAuthorizedAt: "2026-11-02T12:05:00.000Z",
+      lastDecision: "RECORDED",
+      lastDecisionAt: "2026-11-02T12:06:00.000Z",
+      lastRecordedAt: "2026-11-02T12:06:00.000Z",
       authorizationsRecorded: 1,
       authorizationsRevoked: 0,
     },

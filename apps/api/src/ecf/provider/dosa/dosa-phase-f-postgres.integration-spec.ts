@@ -5,7 +5,10 @@ import {
   PrismaDosaCredentialStore,
 } from "./dosa-credential.service";
 import { DosaCredentialVault } from "./dosa-credential-vault.service";
-import { PrismaDosaAuthorizationReader } from "./dosa-activation-authority.service";
+import {
+  PrismaDosaAuthorizationReader,
+  activationBlockers,
+} from "./dosa-activation-authority.service";
 import { DosaActivationService } from "./dosa-activation.service";
 
 /**
@@ -26,6 +29,8 @@ const COMPANY = "ffffffff-0000-4000-8000-00000000000f";
 const COMPANY_OTHER = "f0f0f0f0-0000-4000-8000-0000000000f0";
 const RNC = "133306001";
 const ACTOR = "a0a0a0a0-0000-4000-8000-0000000000a0";
+/** `postulacion_id` del intento vigente en estas pruebas. */
+const POSTULACION = "post-fasef";
 
 real("Fase F — DOSA en PostgreSQL real", () => {
   let prisma: PrismaClient;
@@ -141,46 +146,61 @@ real("Fase F — DOSA en PostgreSQL real", () => {
   });
 
   describe("autoridad de activación (evidencia persistida)", () => {
-    async function seedSession() {
+    async function seedSession(postulacionId: string | null = POSTULACION) {
       await prisma.$executeRaw`
         INSERT INTO "ecf_dosa_certification_sessions"
-          ("id","company_id","rnc","attempt_no","active_key","status","created_at","updated_at")
+          ("id","company_id","rnc","attempt_no","active_key","provider_postulation_id","status","created_at","updated_at")
         VALUES (gen_random_uuid(), ${COMPANY}::uuid, ${RNC}, 1,
-                ${`${COMPANY}:${RNC}`}, 'RUNNING', NOW(), NOW())
+                ${`${COMPANY}:${RNC}`}, ${postulacionId}, 'RUNNING', NOW(), NOW())
       `;
     }
 
-    async function seedAuthenticatedEvent() {
+    async function seedAuthenticatedEvent(
+      postulacionId: string | null = POSTULACION,
+      estado: string = "finalizado",
+    ) {
       await prisma.$executeRaw`
         INSERT INTO "ecf_dosa_webhook_events"
           ("id","company_id","dedupe_key","event_type","postulacion_id",
            "estado_certificacion","raw_body_sha256","payload_summary",
-           "signature_status")
-        VALUES (gen_random_uuid(), ${COMPANY}::uuid, 'k-fasef', 'empresa.conectada',
-                'post-fasef', 'finalizado', repeat('a', 64), '{}'::jsonb,
-                'UNVERIFIED_PLAINTEXT_SECRET')
+           "signature_status","processing_state","credentials_stored_at")
+        VALUES (gen_random_uuid(), ${COMPANY}::uuid, ${`k-fasef-${postulacionId}-${estado}`}, 'empresa.conectada',
+                ${postulacionId}, ${estado}, repeat('a', 64), '{}'::jsonb,
+                'UNVERIFIED_PLAINTEXT_SECRET', 'COMPLETE', NOW())
       `;
     }
 
     async function seedDgii(
       state: string,
       source: string,
+      authorizedAtSql = "NOW()",
     ) {
       await prisma.$executeRawUnsafe(
         `INSERT INTO "ecf_dgii_habilitations"
-           ("id","company_id","state","authorization_source","created_at","updated_at")
+           ("id","company_id","state","authorization_source","authorized_at","created_at","updated_at")
          VALUES (gen_random_uuid(), $1::uuid, $2::text::ecf_dgii_habilitation_state,
-                 $3::text::ecf_dgii_verification_source, NOW(), NOW())`,
+                 $3::text::ecf_dgii_verification_source, ${authorizedAtSql}, NOW(), NOW())`,
         COMPANY,
         state,
         source,
       );
     }
 
-    async function seedAudit(action: string, withActor = true) {
+    /**
+     * Inserta una decisión administrativa con una fecha explícita.
+     *
+     * La fecha es obligatoria en estas pruebas: la autoridad mira la **última**
+     * decisión, y dos inserciones en el mismo milisegundo dejarían el orden
+     * indefinido.
+     */
+    async function seedAudit(
+      action: string,
+      withActor = true,
+      atSql = "NOW()",
+    ) {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "ecf_audit_logs" ("id","company_id","actor_user_id","action")
-         VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::text::ecf_audit_action)`,
+        `INSERT INTO "ecf_audit_logs" ("id","company_id","actor_user_id","action","created_at")
+         VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::text::ecf_audit_action, ${atSql})`,
         COMPANY,
         withActor ? ACTOR : null,
         action,
@@ -219,12 +239,14 @@ real("Fase F — DOSA en PostgreSQL real", () => {
     });
 
     it("una autorización revocada invalida las anteriores", async () => {
-      await seedAudit("DGII_AUTHORIZATION_RECORDED");
-      await seedAudit("DGII_AUTHORIZATION_REVOKED");
+      await seedSession();
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() - INTERVAL '2 minutes'");
+      await seedAudit("DGII_AUTHORIZATION_REVOKED", true, "NOW() - INTERVAL '1 minute'");
       const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
         companyId: COMPANY,
         rnc: RNC,
       });
+      expect(evidence.details.lastDecision).toBe("REVOKED");
       expect(evidence.administrativeAuthorized).toBe(false);
     });
 
@@ -312,15 +334,196 @@ real("Fase F — DOSA en PostgreSQL real", () => {
       await prisma.$executeRaw`
         INSERT INTO "ecf_dosa_webhook_events"
           ("id","company_id","dedupe_key","event_type","estado_certificacion",
-           "raw_body_sha256","payload_summary","signature_status")
+           "raw_body_sha256","payload_summary","signature_status","processing_state")
         VALUES (gen_random_uuid(), ${COMPANY}::uuid, 'k-blocked', 'empresa.conectada',
-                'finalizado', repeat('b', 64), '{}'::jsonb, 'BLOCKED')
+                'finalizado', repeat('b', 64), '{}'::jsonb, 'BLOCKED', 'COMPLETE')
       `;
       const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
         companyId: COMPANY,
         rnc: RNC,
       });
       expect(evidence.providerConfirmed).toBe(false);
+    });
+
+    // -----------------------------------------------------------------------
+    // Cadena empresa → RNC → intento → postulación → evidencia
+    // -----------------------------------------------------------------------
+
+    it("un evento de OTRA postulación no confirma al proveedor", async () => {
+      await seedSession(POSTULACION);
+      await seedAuthenticatedEvent("post-otra-postulacion");
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.providerConfirmed).toBe(false);
+      expect(evidence.details.authenticatedProviderEvents).toBe(0);
+      expect(evidence.details.providerEventsForOtherPostulations).toBe(1);
+    });
+
+    it("un evento sin postulacion_id no confirma a nadie", async () => {
+      await seedSession(POSTULACION);
+      await seedAuthenticatedEvent(null);
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.providerConfirmed).toBe(false);
+    });
+
+    it("un intento sin postulación asignada bloquea con su propio código", async () => {
+      await seedSession(null);
+      await seedAuthenticatedEvent();
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.identityLinked).toBe(true);
+      expect(evidence.postulationBound).toBe(false);
+      expect(evidence.providerConfirmed).toBe(false);
+      expect(activationBlockers(evidence)).toContain(
+        "ECF_DOSA_ACTIVATION_POSTULATION_NOT_BOUND",
+      );
+    });
+
+    it("solo cuenta el intento vigente: el más alto manda, no el confirmado antes", async () => {
+      // Intento 1: confirmado por el proveedor.
+      await seedSession(POSTULACION);
+      await seedAuthenticatedEvent(POSTULACION);
+
+      // Intento 2 (nuevo) sobre la misma empresa y RNC, todavía sin evidencia.
+      await prisma.$executeRaw`
+        INSERT INTO "ecf_dosa_certification_sessions"
+          ("id","company_id","rnc","attempt_no","active_key","provider_postulation_id",
+           "status","created_at","updated_at")
+        VALUES (gen_random_uuid(), ${COMPANY}::uuid, ${RNC}, 2,
+                ${`${COMPANY}:${RNC}:2`}, 'post-nueva', 'RUNNING', NOW() + INTERVAL '1 minute', NOW())
+      `;
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.details.attemptNo).toBe(2);
+      expect(evidence.details.postulacionId).toBe("post-nueva");
+      expect(evidence.providerConfirmed).toBe(false);
+      expect(activationBlockers(evidence)).toContain(
+        "ECF_DOSA_ACTIVATION_PROVIDER_NOT_CONFIRMED",
+      );
+    });
+
+    it("un evento de otra empresa no cuenta aunque comparta el postulacion_id", async () => {
+      await seedSession(POSTULACION);
+      await prisma.$executeRaw`
+        INSERT INTO "ecf_dosa_webhook_events"
+          ("id","company_id","dedupe_key","event_type","postulacion_id",
+           "estado_certificacion","raw_body_sha256","payload_summary","signature_status",
+           "processing_state","credentials_stored_at")
+        VALUES (gen_random_uuid(), ${COMPANY_OTHER}::uuid, 'k-otra-empresa', 'empresa.conectada',
+                ${POSTULACION}, 'finalizado', repeat('c', 64), '{}'::jsonb,
+                'UNVERIFIED_PLAINTEXT_SECRET', 'COMPLETE', NOW())
+      `;
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.providerConfirmed).toBe(false);
+    });
+
+    // -----------------------------------------------------------------------
+    // Última decisión administrativa
+    // -----------------------------------------------------------------------
+
+    it("la última decisión prevalece aunque haya más registros que revocaciones", async () => {
+      await seedSession(POSTULACION);
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() - INTERVAL '5 minutes'");
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() - INTERVAL '4 minutes'");
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() - INTERVAL '3 minutes'");
+      await seedAudit("DGII_AUTHORIZATION_REVOKED", true, "NOW() - INTERVAL '1 minute'");
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      // Con comparación de cantidades (3 > 1) esto habría autorizado.
+      expect(evidence.details.authorizationsRecorded).toBe(3);
+      expect(evidence.details.authorizationsRevoked).toBe(1);
+      expect(evidence.details.lastDecision).toBe("REVOKED");
+      expect(evidence.administrativeAuthorized).toBe(false);
+      expect(activationBlockers(evidence)).toContain(
+        "ECF_DOSA_ACTIVATION_ADMIN_DECISION_REVOKED",
+      );
+    });
+
+    it("una revocación antigua seguida de un registro nuevo sí autoriza", async () => {
+      await seedSession(POSTULACION);
+      // Todas posteriores al inicio del intento: la última manda.
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() + INTERVAL '1 minute'");
+      await seedAudit("DGII_AUTHORIZATION_REVOKED", true, "NOW() + INTERVAL '2 minutes'");
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() + INTERVAL '3 minutes'");
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.details.authorizationsRecorded).toBe(2);
+      expect(evidence.details.authorizationsRevoked).toBe(1);
+      expect(evidence.details.lastDecision).toBe("RECORDED");
+      expect(evidence.administrativeAuthorized).toBe(true);
+    });
+
+    it("una decisión administrativa anterior al intento vigente no sirve", async () => {
+      // La decisión se tomó antes de que existiera este intento.
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() - INTERVAL '30 minutes'");
+      await seedSession(POSTULACION);
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.administrativeAuthorized).toBe(false);
+      expect(activationBlockers(evidence)).toContain(
+        "ECF_DOSA_ACTIVATION_ADMIN_AUTHORIZATION_STALE",
+      );
+    });
+
+    it("una aprobación DGII anterior al intento vigente no sirve", async () => {
+      await seedDgii("APPROVED", "DGII_OFFICIAL_RECORD", "NOW() - INTERVAL '30 minutes'");
+      await seedSession(POSTULACION);
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence.details.dgiiState).toBe("APPROVED");
+      expect(evidence.dgiiApproved).toBe(false);
+      expect(activationBlockers(evidence)).toContain(
+        "ECF_DOSA_ACTIVATION_DGII_APPROVAL_STALE",
+      );
+    });
+
+    it("sin ninguno de los dos bloqueos se activa con la cadena completa", async () => {
+      await seedSession(POSTULACION);
+      await seedAuthenticatedEvent(POSTULACION);
+      await seedDgii("APPROVED", "DGII_OFFICIAL_RECORD", "NOW() + INTERVAL '1 minute'");
+      await seedAudit("DGII_AUTHORIZATION_RECORDED", true, "NOW() + INTERVAL '2 minutes'");
+
+      const evidence = await new PrismaDosaAuthorizationReader(prisma).read({
+        companyId: COMPANY,
+        rnc: RNC,
+      });
+      expect(evidence).toMatchObject({
+        identityLinked: true,
+        postulationBound: true,
+        providerConfirmed: true,
+        dgiiApproved: true,
+        administrativeAuthorized: true,
+      });
+      expect(activationBlockers(evidence)).toEqual([]);
     });
   });
 });

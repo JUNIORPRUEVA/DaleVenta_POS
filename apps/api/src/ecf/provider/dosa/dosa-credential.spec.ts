@@ -271,14 +271,23 @@ describe("DosaCredentialService", () => {
     };
     const evidence = (overrides: Partial<DosaActivationEvidence>) => ({
       identityLinked: true,
+      postulationBound: true,
       providerConfirmed: true,
       dgiiApproved: true,
       administrativeAuthorized: true,
       details: {
+        attemptNo: 1,
+        attemptStartedAt: "2026-11-02T12:00:00.000Z",
+        postulacionId: "post-cred",
         linkedSessions: 1,
         authenticatedProviderEvents: 1,
+        providerEventsForOtherPostulations: 0,
         dgiiState: "APPROVED",
         dgiiSource: "DGII_OFFICIAL_RECORD",
+        dgiiAuthorizedAt: "2026-11-02T12:04:00.000Z",
+        lastDecision: "RECORDED" as const,
+        lastDecisionAt: "2026-11-02T12:05:00.000Z",
+        lastRecordedAt: "2026-11-02T12:05:00.000Z",
         authorizationsRecorded: 1,
         authorizationsRevoked: 0,
       },
