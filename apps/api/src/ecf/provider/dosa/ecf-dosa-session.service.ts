@@ -28,6 +28,14 @@ export interface DosaSessionStore {
     query: TemplateStringsArray,
     ...values: unknown[]
   ): Promise<T>;
+  /**
+   * Opcional: solo la implementación real (Prisma) la tiene.
+   *
+   * Es necesaria para la vinculación por `postulacion_id`, porque la
+   * exclusividad concurrente NO se puede garantizar con una sola sentencia: el
+   * bloqueo y la comprobación tienen que ir en la misma transacción.
+   */
+  $transaction?<T>(fn: (tx: DosaSessionStore) => Promise<T>): Promise<T>;
 }
 
 export const ECF_DOSA_SESSION_STORE = Symbol("ECF_DOSA_SESSION_STORE");
@@ -253,19 +261,44 @@ export class EcfDosaSessionService {
   /**
    * Vincula el `postulacion_id` que reporta el PROVEEDOR con el intento activo.
    *
-   * Todo va en una sola sentencia para que no exista una ventana entre
-   * comprobación y escritura. Condiciones, todas en la misma cláusula `WHERE`:
+   * **Por qué no basta un `NOT EXISTS`**
    *
-   * 1. Solo el intento ACTIVO (`active_key`) de esa empresa y ese RNC.
-   * 2. Solo si aún no tiene identificador, o si es el MISMO. Un identificador
-   *    distinto no sobrescribe: el primero confirmado por el proveedor manda, de
-   *    modo que un evento fuera de orden no reescribe el vínculo.
-   * 3. **Nunca** si otra empresa ya tiene ese `postulacion_id`: el mismo
-   *    identificador no puede pertenecer a dos tenants.
+   * Una sola sentencia con `NOT EXISTS` NO garantiza exclusividad concurrente:
+   * bajo `READ COMMITTED` la foto se toma al empezar la sentencia, así que dos
+   * transacciones simultáneas pueden comprobar «no existe» antes de que la otra
+   * confirme su escritura, y ambas escribir. Las filas son distintas (dos
+   * sesiones de dos empresas), así que tampoco hay conflicto de escritura que
+   * PostgreSQL resuelva solo: es *write skew* clásico.
    *
-   * Si no hay intento activo no se crea nada. El evento queda registrado y la
-   * vinculación queda pendiente de reconciliación, que es preferible a inventar
-   * una sesión o a asociarla «a la primera que aparezca».
+   * **Estrategia**
+   *
+   * 1. Se abre una transacción y se toma un bloqueo de asesoría exclusivo sobre
+   *    el `postulacion_id`. Dos vinculaciones del MISMO identificador se
+   *    serializan; las de identificadores distintos no se estorban.
+   * 2. Ya con el bloqueo, la comprobación se ejecuta en una sentencia NUEVA, con
+   *    foto nueva, así que ve lo que la otra transacción confirmó.
+   * 3. El bloqueo es `xact`: se libera solo al cerrar la transacción, incluso si
+   *    hay error. No queda nada tomado si el proceso muere.
+   *
+   * **Por qué no un UNIQUE**
+   *
+   * El alcance de unicidad de `postulacion_id` no está documentado por el
+   * proveedor. Para una misma empresa podría ser legítimo reutilizar el mismo
+   * identificador en un reintento o en la recuperación de un intento anterior.
+   * Imponer un UNIQUE global sin ese dato sería inventar una regla de negocio;
+   * aquí se serializa y se decide con la regla conservadora (un identificador,
+   * una empresa), dejando la restricción declarativa para cuando el proveedor
+   * confirme el alcance.
+   *
+   * Condiciones, todas dentro de la misma sentencia:
+   *
+   * * Solo el intento ACTIVO (`active_key`) de esa empresa y ese RNC.
+   * * Solo si aún no tiene identificador, o si es el MISMO: un evento fuera de
+   *   orden no reescribe el vínculo ni alterna entre identificadores.
+   * * Nunca si otra empresa ya lo tiene.
+   *
+   * Si no hay intento activo no se crea nada: el evento queda registrado con su
+   * `postulacion_id` y la vinculación queda pendiente de reconciliación.
    */
   async bindProviderPostulation(input: {
     companyId: string;
@@ -278,19 +311,47 @@ export class EcfDosaSessionService {
     if (!companyId || !rnc || !postulationId) return { bound: false };
 
     const id = postulationId.slice(0, 128);
-    const rows = await this.store.$queryRaw<{ id: string }[]>`
+    const runTransaction = this.store.$transaction?.bind(this.store);
+
+    if (typeof runTransaction === "function") {
+      return runTransaction(async (tx: DosaSessionStore) => {
+        // Serializa por identificador, con espacio de nombres propio. El
+        // envoltorio devuelve un entero porque `pg_advisory_xact_lock` devuelve
+        // `void` y el driver no sabe deserializarlo.
+        await tx.$queryRaw`
+          SELECT 1 AS "ok"
+            FROM (SELECT pg_advisory_xact_lock(
+                    hashtext('fullpos:dosa:postulacion'),
+                    hashtext(${id})
+                  )) AS "bloqueo"
+        `;
+        return this.bindWithin(tx, { companyId, rnc, id });
+      });
+    }
+
+    // Sin transacción (dobles de prueba) se mantiene la comprobación, pero NO se
+    // puede afirmar exclusividad concurrente. La implementación real siempre la
+    // tiene, así que este camino no se usa en producción.
+    return this.bindWithin(this.store, { companyId, rnc, id });
+  }
+
+  private async bindWithin(
+    store: DosaSessionStore,
+    input: { companyId: string; rnc: string; id: string },
+  ): Promise<{ bound: boolean }> {
+    const rows = await store.$queryRaw<{ id: string }[]>`
       UPDATE "ecf_dosa_certification_sessions"
-         SET "provider_postulation_id" = ${id},
+         SET "provider_postulation_id" = ${input.id},
              "provider_confirmed_at" = NOW(),
              "updated_at" = NOW()
-       WHERE "company_id" = ${companyId}::uuid
-         AND "rnc" = ${rnc}
-         AND "active_key" = ${`${companyId}:${rnc}`}
-         AND ("provider_postulation_id" IS NULL OR "provider_postulation_id" = ${id})
+       WHERE "company_id" = ${input.companyId}::uuid
+         AND "rnc" = ${input.rnc}
+         AND "active_key" = ${`${input.companyId}:${input.rnc}`}
+         AND ("provider_postulation_id" IS NULL OR "provider_postulation_id" = ${input.id})
          AND NOT EXISTS (
            SELECT 1 FROM "ecf_dosa_certification_sessions" otro
-            WHERE otro."provider_postulation_id" = ${id}
-              AND otro."company_id" <> ${companyId}::uuid
+            WHERE otro."provider_postulation_id" = ${input.id}
+              AND otro."company_id" <> ${input.companyId}::uuid
          )
       RETURNING "id"
     `;
