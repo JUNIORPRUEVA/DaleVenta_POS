@@ -9,6 +9,10 @@ import {
   type DosaCredentialStatus,
   type SealedDosaCredential,
 } from "./dosa-credential-vault.service";
+import {
+  activationBlockers,
+  type DosaActivationEvidence,
+} from "./dosa-activation-authority.service";
 
 /**
  * Persistencia de credenciales fiscales cifradas, **aislada por empresa/RNC y
@@ -272,17 +276,21 @@ export class DosaCredentialService {
   }
 
   /**
-   * Cambia el estado. `ACTIVE` exige las tres evidencias a la vez; `CONFIRMED`
-   * exige al menos la del proveedor. Nunca se llega a `ACTIVE` por un evento.
+   * Cambia el estado. La evidencia se recibe **ya leída de la base** por
+   * `DosaAuthorizationReader`: esta capa no acepta «autorízame» como argumento.
+   *
+   * * `REVOKED` no exige evidencia (revocar siempre es posible).
+   * * `CONFIRMED` exige confirmación del proveedor.
+   * * `ACTIVE` exige las cuatro piezas: vínculo RNC↔empresa, confirmación del
+   *   proveedor, aprobación DGII por registro oficial y autorización
+   *   administrativa con actor real.
    */
   async promote(input: {
     companyId: string;
     rnc: string;
     environment: DosaCredentialEnvironment;
     to: "CONFIRMED" | "ACTIVE" | "REVOKED";
-    providerConfirmed: boolean;
-    dgiiApproved: boolean;
-    administrativeAuthorization: boolean;
+    evidence: DosaActivationEvidence;
   }): Promise<{ ok: true; status: DosaCredentialStatus } | { ok: false; blockedReason: string }> {
     if (input.to === "REVOKED") {
       const changed = await this.store.setStatus({ ...input, status: "REVOKED" });
@@ -291,7 +299,10 @@ export class DosaCredentialService {
         : { ok: false, blockedReason: "ECF_DOSA_CREDENTIALS_NOT_FOUND" };
     }
     if (input.to === "CONFIRMED") {
-      if (!input.providerConfirmed) {
+      if (!input.evidence.identityLinked) {
+        return { ok: false, blockedReason: "ECF_DOSA_ACTIVATION_RNC_NOT_LINKED" };
+      }
+      if (!input.evidence.providerConfirmed) {
         return { ok: false, blockedReason: "ECF_DOSA_CREDENTIALS_PROVIDER_NOT_CONFIRMED" };
       }
       const changed = await this.store.setStatus({ ...input, status: "CONFIRMED" });
@@ -299,13 +310,12 @@ export class DosaCredentialService {
         ? { ok: true, status: "CONFIRMED" }
         : { ok: false, blockedReason: "ECF_DOSA_CREDENTIALS_NOT_FOUND" };
     }
-    // ACTIVE: las tres condiciones, sin excepción.
-    const missing: string[] = [];
-    if (!input.providerConfirmed) missing.push("PROVIDER_NOT_CONFIRMED");
-    if (!input.dgiiApproved) missing.push("DGII_NOT_APPROVED");
-    if (!input.administrativeAuthorization) missing.push("ADMINISTRATIVE_AUTHORIZATION_MISSING");
-    if (missing.length > 0) {
-      return { ok: false, blockedReason: `ECF_DOSA_CREDENTIALS_NOT_ACTIVATABLE:${missing.join(",")}` };
+    const blockers = activationBlockers(input.evidence);
+    if (blockers.length > 0) {
+      return {
+        ok: false,
+        blockedReason: `ECF_DOSA_CREDENTIALS_NOT_ACTIVATABLE:${blockers.join(",")}`,
+      };
     }
     const changed = await this.store.setStatus({ ...input, status: "ACTIVE" });
     return changed

@@ -21,6 +21,7 @@ import {
   type DosaSendResult,
 } from "./dosa-emission.client";
 import { assessDosaEmissionGate } from "./dosa-emission.gate";
+import type { DosaActivationEvidence } from "./dosa-activation-authority.service";
 import { DosaWebhookService, type DosaCompanyResolver } from "./dosa-webhook.service";
 import type { DosaSignatureConfig } from "./dosa-webhook-signature.policy";
 import type { DosaEcfRequestBody } from "./dosa-ecf.contract";
@@ -214,17 +215,34 @@ async function preparedJourney(respond: (attempt: number) => DosaHttpResponse) {
   return journey;
 }
 
+/** Evidencia persistida completa, tal como la leería la autoridad real. */
+function fullEvidence(overrides: Partial<DosaActivationEvidence> = {}): DosaActivationEvidence {
+  return {
+    identityLinked: true,
+    providerConfirmed: true,
+    dgiiApproved: true,
+    administrativeAuthorized: true,
+    details: {
+      linkedSessions: 1,
+      authenticatedProviderEvents: 1,
+      dgiiState: "APPROVED",
+      dgiiSource: "DGII_OFFICIAL_RECORD",
+      authorizationsRecorded: 1,
+      authorizationsRevoked: 0,
+    },
+    ...overrides,
+  };
+}
+
 async function activatedJourney(respond: (attempt: number) => DosaHttpResponse) {
   const journey = await preparedJourney(respond);
-  // 2. Activación: proveedor + DGII + autorización administrativa.
+  // 2. Activación: la evidencia se lee de la base, no la aporta el llamador.
   await journey.credentials.promote({
     companyId: COMPANY_ECF,
     rnc: RNC_TEST,
     environment: "test",
     to: "ACTIVE",
-    providerConfirmed: true,
-    dgiiApproved: true,
-    administrativeAuthorization: true,
+    evidence: fullEvidence(),
   });
   return journey;
 }
@@ -337,9 +355,7 @@ describe("Recorrido DOSA — bloqueo previo a la autorización fiscal", () => {
       rnc: RNC_TEST,
       environment: "test",
       to: "CONFIRMED",
-      providerConfirmed: true,
-      dgiiApproved: false,
-      administrativeAuthorization: false,
+      evidence: fullEvidence({ dgiiApproved: false, administrativeAuthorized: false }),
     });
 
     const result = await journey.emission.emit({

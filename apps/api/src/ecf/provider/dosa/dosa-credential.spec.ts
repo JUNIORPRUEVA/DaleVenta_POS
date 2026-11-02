@@ -10,6 +10,7 @@ import {
   type DosaCredentialStore,
   type StoredDosaCredential,
 } from "./dosa-credential.service";
+import type { DosaActivationEvidence } from "./dosa-activation-authority.service";
 import type { DosaCredentialEnvironment, DosaCredentialStatus } from "./dosa-credential-vault.service";
 
 /**
@@ -252,7 +253,7 @@ describe("DosaCredentialService", () => {
     expect(serialized).not.toContain("PROD-KEY-SECRETA");
   });
 
-  it("ACTIVE exige proveedor + DGII + autorización administrativa", async () => {
+  it("ACTIVE exige evidencia persistida completa, no booleanos", async () => {
     const { service } = build();
     await service.ingestFromProvider({
       companyId: COMPANY_A,
@@ -268,40 +269,42 @@ describe("DosaCredentialService", () => {
       environment: "test" as const,
       to: "ACTIVE" as const,
     };
-
-    expect(
-      await service.promote({
-        ...base,
-        providerConfirmed: true,
-        dgiiApproved: true,
-        administrativeAuthorization: false,
-      }),
-    ).toMatchObject({ ok: false });
-
-    expect(
-      await service.promote({
-        ...base,
-        providerConfirmed: true,
-        dgiiApproved: false,
-        administrativeAuthorization: true,
-      }),
-    ).toMatchObject({ ok: false });
-
-    expect(
-      await service.promote({
-        ...base,
-        providerConfirmed: false,
-        dgiiApproved: true,
-        administrativeAuthorization: true,
-      }),
-    ).toMatchObject({ ok: false });
-
-    const ok = await service.promote({
-      ...base,
+    const evidence = (overrides: Partial<DosaActivationEvidence>) => ({
+      identityLinked: true,
       providerConfirmed: true,
       dgiiApproved: true,
-      administrativeAuthorization: true,
+      administrativeAuthorized: true,
+      details: {
+        linkedSessions: 1,
+        authenticatedProviderEvents: 1,
+        dgiiState: "APPROVED",
+        dgiiSource: "DGII_OFFICIAL_RECORD",
+        authorizationsRecorded: 1,
+        authorizationsRevoked: 0,
+      },
+      ...overrides,
     });
+
+    expect(
+      await service.promote({ ...base, evidence: evidence({ identityLinked: false }) }),
+    ).toMatchObject({ ok: false });
+
+    expect(
+      await service.promote({ ...base, evidence: evidence({ providerConfirmed: false }) }),
+    ).toMatchObject({ ok: false });
+
+    expect(
+      await service.promote({ ...base, evidence: evidence({ dgiiApproved: false }) }),
+    ).toMatchObject({ ok: false });
+
+    expect(
+      await service.promote({
+        ...base,
+        evidence: evidence({ administrativeAuthorized: false }),
+      }),
+    ).toMatchObject({ ok: false });
+
+    const ok = await service.promote({ ...base, evidence: evidence({}) });
     expect(ok).toEqual({ ok: true, status: "ACTIVE" });
   });
 

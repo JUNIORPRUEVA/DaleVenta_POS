@@ -63,6 +63,12 @@ import {
 import { DosaCredentialVault } from "./provider/dosa/dosa-credential-vault.service";
 import { PrismaDosaCompanyFiscalConfigReader } from "./provider/dosa/dosa-company-fiscal-config";
 import {
+  ECF_DOSA_AUTHORIZATION,
+  PrismaDosaAuthorizationReader,
+  type DosaAuthorizationReader,
+} from "./provider/dosa/dosa-activation-authority.service";
+import { DosaActivationService } from "./provider/dosa/dosa-activation.service";
+import {
   DosaEmissionService,
   ECF_DOSA_EMISSION_TRANSPORT,
   ECF_DOSA_FISCAL_CONFIG,
@@ -183,6 +189,20 @@ import { EcfService } from "./ecf.service";
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) =>
         new PrismaDosaCompanyFiscalConfigReader(prisma),
+    },
+    // Autoridad de activacion: lee la evidencia de la BASE, no de un booleano.
+    {
+      provide: ECF_DOSA_AUTHORIZATION,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new PrismaDosaAuthorizationReader(prisma),
+    },
+    {
+      provide: DosaActivationService,
+      inject: [ECF_DOSA_AUTHORIZATION, DosaCredentialService],
+      useFactory: (
+        authority: DosaAuthorizationReader,
+        credentials: DosaCredentialService,
+      ) => new DosaActivationService(authority, credentials),
     },
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,

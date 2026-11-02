@@ -173,7 +173,7 @@ real("Credenciales DOSA — PostgreSQL real", () => {
     ).rejects.toThrow();
   });
 
-  it("el estado avanza solo con las tres evidencias", async () => {
+  it("el estado avanza solo con la evidencia persistida completa", async () => {
     await service.ingestFromProvider({
       companyId: COMPANY_A,
       rnc: RNC_A,
@@ -187,9 +187,20 @@ real("Credenciales DOSA — PostgreSQL real", () => {
       rnc: RNC_A,
       environment: "test",
       to: "ACTIVE",
-      providerConfirmed: true,
-      dgiiApproved: false,
-      administrativeAuthorization: true,
+      evidence: {
+        identityLinked: true,
+        providerConfirmed: true,
+        dgiiApproved: false,
+        administrativeAuthorized: true,
+        details: {
+          linkedSessions: 1,
+          authenticatedProviderEvents: 1,
+          dgiiState: "IN_CERTIFICATION",
+          dgiiSource: "MANUAL_OPERATOR_DECLARATION",
+          authorizationsRecorded: 1,
+          authorizationsRevoked: 0,
+        },
+      },
     });
     expect(blocked.ok).toBe(false);
 
@@ -198,9 +209,20 @@ real("Credenciales DOSA — PostgreSQL real", () => {
       rnc: RNC_A,
       environment: "test",
       to: "ACTIVE",
-      providerConfirmed: true,
-      dgiiApproved: true,
-      administrativeAuthorization: true,
+      evidence: {
+        identityLinked: true,
+        providerConfirmed: true,
+        dgiiApproved: true,
+        administrativeAuthorized: true,
+        details: {
+          linkedSessions: 1,
+          authenticatedProviderEvents: 1,
+          dgiiState: "APPROVED",
+          dgiiSource: "DGII_OFFICIAL_RECORD",
+          authorizationsRecorded: 1,
+          authorizationsRevoked: 0,
+        },
+      },
     });
     expect(activated).toEqual({ ok: true, status: "ACTIVE" });
 
