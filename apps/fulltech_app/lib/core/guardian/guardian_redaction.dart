@@ -25,11 +25,19 @@ String redactText(String? input, {int maxChars = 20000}) {
 }
 
 /// Hash estable (FNV-1a 64) sin dependencias externas.
+///
+/// Se calcula con `BigInt` a propósito: dart2js **no puede** representar los
+/// literales de 64 bits de FNV-1a (0xcbf29ce484222325, 0xFFFFFFFFFFFFFFFF) sobre
+/// `int`, y el build web de la aplicación fallaba al compilar. Con `BigInt` el
+/// resultado es idéntico en VM y en web, así que la huella de deduplicación no
+/// cambia entre plataformas.
 String stableHash(String input) {
-  var hash = 0xcbf29ce484222325;
+  final mask = (BigInt.one << 64) - BigInt.one;
+  final prime = BigInt.from(0x100000001b3);
+  var hash = BigInt.parse('cbf29ce484222325', radix: 16);
   for (final code in input.codeUnits) {
-    hash ^= code;
-    hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+    hash = (hash ^ BigInt.from(code)) & mask;
+    hash = (hash * prime) & mask;
   }
   return hash.toRadixString(16).padLeft(16, '0');
 }

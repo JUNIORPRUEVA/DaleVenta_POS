@@ -28,7 +28,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$template = Join-Path $repoRoot 'deploy/ecf-certificacion/index.html'
+$template = Join-Path $repoRoot 'apps/fulltech_app/web/ecf/certificacion/index.html'
 $localEnv = Join-Path $repoRoot 'apps/fulltech_app/.env.dosa.local'
 
 if (-not (Test-Path $template)) { throw "No se encontro la plantilla: $template" }

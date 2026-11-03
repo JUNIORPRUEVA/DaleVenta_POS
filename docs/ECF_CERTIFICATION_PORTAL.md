@@ -26,7 +26,7 @@ DOSA solo permite enmarcar su asistente desde
 | API | `src/ecf/portal/ecf-certification-portal.service.ts` | Tickets, sesiones y contexto |
 | API | `src/ecf/portal/ecf-certification-portal.controller.ts` | 4 endpoints |
 | BD | `ecf_certification_portal_tickets` / `_sessions` | Solo hashes SHA-256, caducidad, revocación |
-| Portal | `deploy/ecf-certificacion/index.html` | Página estática, responsive, identidad FullPOS |
+| Portal | `apps/fulltech_app/web/ecf/certificacion/index.html` | Página estática, responsive, identidad FullPOS. Viaja dentro de la imagen Web: `flutter build web` la copia a `build/web/ecf/certificacion/` y el `Dockerfile` rellena `__DOSA_PUBLISHABLE_KEY__` y `__API_BASE__` con los Build Args de EasyPanel (falla el build si falta la clave) |
 | App | `lib/features/ecf/dosa/dosa_portal_launcher.dart` | Pide el ticket y abre el portal |
 | App | `dosa_assistant_section.dart` | Botón único «Iniciar o continuar certificación» |
 | Ops | `scripts/dev/publish_ecf_portal.ps1` | Publicación con dry-run por defecto |
