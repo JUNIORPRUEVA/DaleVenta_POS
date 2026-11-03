@@ -20,6 +20,8 @@ apps/api/.env.*.sandbox.local
 apps/api/.env.*.local
 apps/api/.secrets/
 apps/fulltech_app/.env
+# Config local del asistente DOSA: la clave publicable se inyecta por entorno.
+apps/fulltech_app/.env.dosa.local
 .env.uat.local
 
 # local/generated artifacts

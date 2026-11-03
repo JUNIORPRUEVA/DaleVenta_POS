@@ -90,11 +90,14 @@ import {
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
+import { EcfCertificationPortalController } from "./portal/ecf-certification-portal.controller";
+import { EcfCertificationPortalService } from "./portal/ecf-certification-portal.service";
 
 @Module({
-  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController],
+  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, EcfCertificationPortalController],
   providers: [
     EcfService,
+    EcfCertificationPortalService,
     EcfDgiiHabilitationService,
     EcfDgiiApplicationService,
     EcfDgiiActivationService,

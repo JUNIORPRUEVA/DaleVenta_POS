@@ -103,6 +103,31 @@ void main() {
     expect(find.textContaining('Solo un administrador autorizado'), findsOneWidget);
   });
 
+  testWidgets(
+      'con intento ya registrado, el administrador ve el acceso al portal',
+      (tester) async {
+    final api = _IntentApi(hasSession: true);
+
+    await pumpSection(tester, api: api);
+
+    expect(find.text('Iniciar o continuar certificación'), findsOneWidget);
+    // Abrir el expediente sigue sin escribir nada.
+    expect(api.registerCalls, isEmpty);
+  });
+
+  testWidgets(
+      'con intento ya registrado, un usuario sin permiso NO ve el portal',
+      (tester) async {
+    // Regresión: el panel se devolvía antes de comprobar el permiso, así que
+    // un usuario sin manageEcfOnboarding veía el botón del portal.
+    final api = _IntentApi(hasSession: true);
+
+    await pumpSection(tester, api: api, role: 'MARKETING');
+
+    expect(find.text('Iniciar o continuar certificación'), findsNothing);
+    expect(api.registerCalls, isEmpty);
+  });
+
   testWidgets('un motivo del backend se explica y no abre el asistente',
       (tester) async {
     final api = _IntentApi(blockingReasons: const ['COMPANY_RNC_NOT_VERIFIED']);
@@ -139,9 +164,12 @@ UserModel _user({String role = 'ADMIN'}) {
 /// Doble del cliente HTTP: cuenta lecturas y escrituras por separado, que es
 /// justo la diferencia que estas pruebas vigilan.
 class _IntentApi implements DosaCertificationIntentApi {
-  _IntentApi({this.blockingReasons = const []});
+  _IntentApi({this.blockingReasons = const [], this.hasSession = false});
 
   final List<String> blockingReasons;
+
+  /// Simula un expediente que ya tiene intento registrado.
+  final bool hasSession;
   final List<String?> registerCalls = <String?>[];
   int stateCalls = 0;
 
@@ -155,6 +183,12 @@ class _IntentApi implements DosaCertificationIntentApi {
       'provider': 'DOSA',
       'canRegister': blockingReasons.isEmpty,
       'blockingReasons': blockingReasons,
+      if (hasSession)
+        'session': {
+          'id': 'session-1',
+          'status': 'NOT_STARTED',
+          'attemptNo': 1,
+        },
     });
   }
 

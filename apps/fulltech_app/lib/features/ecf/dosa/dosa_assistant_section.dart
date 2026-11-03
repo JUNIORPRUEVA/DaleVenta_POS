@@ -11,6 +11,7 @@ import 'dosa_assistant_launcher.dart';
 import 'dosa_assistant_panel.dart';
 import 'dosa_assistant_session.dart';
 import 'dosa_certification_intent_api.dart';
+import 'dosa_portal_launcher.dart';
 
 /// Inserta el panel del asistente DOSA dentro del expediente existente.
 ///
@@ -57,6 +58,38 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
   /// Solo pasa a `true` por acción explícita del administrador.
   bool _requested = false;
 
+  /// Evita dobles peticiones de ticket mientras se abre el portal.
+  bool _openingPortal = false;
+
+  ///
+  /// Pide un ticket de un solo uso y abre el portal alojado en el dominio
+  /// autorizado. El componente oficial NO se monta aquí: en Web el iframe
+  /// sería bloqueado por la CSP del proveedor y en movil/Windows no hay origen
+  /// autorizado. Por eso la acción siempre es "abrir el portal".
+  Future<void> _openPortal() async {
+    if (_openingPortal) return;
+    setState(() => _openingPortal = true);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final api = ref.read(dosaPortalApiProvider);
+      final ticket = await api.requestTicket();
+      final opened = await openDosaPortal(ticket.url);
+      if (!opened) {
+        messenger?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo abrir el navegador. Copia el enlace desde el portal.',
+            ),
+          ),
+        );
+      }
+    } on DosaPortalException catch (error) {
+      messenger?.showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _openingPortal = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final resolved = widget.config ?? DosaAssistantConfig.fromEnvironment();
@@ -97,6 +130,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
             provider: value.provider,
             attemptNo: value.sessionAttemptNo ?? 0,
             created: false,
+            canManage: canManage,
           );
         }
 
@@ -164,6 +198,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
                 provider: registered.provider,
                 attemptNo: registered.attemptNo,
                 created: registered.created,
+                canManage: true,
               ),
             );
       },
@@ -176,10 +211,15 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     required String provider,
     required int attemptNo,
     required bool created,
+    required bool canManage,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // La acción del portal exige el permiso administrativo: un usuario sin
+        // él puede ver el estado, pero no pedir un ticket ni abrir el portal.
+        if (canManage)
+          _DosaPortalCard(onOpen: _openPortal, busy: _openingPortal),
         _DosaIntentBanner(
           attemptNo: attemptNo,
           created: created,
@@ -322,6 +362,68 @@ class _DosaIntentGate extends StatelessWidget {
                 onPressed: onRetry,
                 child: const Text('Reintentar'),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Acción única para todos los dispositivos: abrir el portal de certificación.
+///
+/// Un solo portal en el dominio autorizado, no un asistente por plataforma. El
+/// componente oficial solo se monta allí porque es el único origen que el
+/// proveedor permite enmarcar.
+class _DosaPortalCard extends StatelessWidget {
+  const _DosaPortalCard({required this.onOpen, required this.busy});
+
+  final VoidCallback onOpen;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.open_in_new, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Continuar certificación',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Se abre el portal seguro de FullPOS con el asistente oficial de '
+              'DOSA. Puedes empezar aquí y seguir desde otro dispositivo: el '
+              'proceso pertenece a la empresa, no al equipo.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: busy ? null : onOpen,
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Iniciar o continuar certificación'),
+              ),
+            ),
           ],
         ),
       ),
