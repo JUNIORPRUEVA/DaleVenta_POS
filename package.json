@@ -33,5 +33,8 @@
     "web:dev": "npm --workspace apps/web run dev",
     "web:build": "npm --workspace apps/web run build",
     "web:preview": "npm --workspace apps/web run preview"
+  },
+  "devDependencies": {
+    "@types/node-forge": "^1.3.14"
   }
 }

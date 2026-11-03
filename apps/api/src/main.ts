@@ -16,10 +16,15 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import { describeListenFailure, shouldFallbackToIpv4 } from './common/listen-host';
 import { requestIdMiddleware } from './common/request-id/request-id.middleware';
 import { assertSafeUatEnvironment, buildSafeUatBanner } from './common/uat-safety';
+import { assertDosaSignatureLabSafety } from './ecf/provider/dosa/dosa-webhook-signature.policy';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
 
 async function bootstrap() {
   assertSafeUatEnvironment();
+  // Barrera DOSA: la estrategia de firma no verificada solo puede existir en un
+  // laboratorio local. Si la configuracion la pide en cualquier otro entorno, la
+  // aplicacion NO arranca (fallar ruidosamente, no arrancar fingiendo autenticar).
+  assertDosaSignatureLabSafety();
   if ((process.env.APP_ENV ?? '').trim().toLowerCase() === 'uat') {
     // eslint-disable-next-line no-console
     console.log(buildSafeUatBanner());
@@ -38,6 +43,10 @@ async function bootstrap() {
   // Request correlation: accepts/propagates x-request-id (or x-correlation-id)
   // and always echoes a sanitized identifier in the response headers.
   app.use(requestIdMiddleware);
+
+  // Apagado ordenado: Nest ejecuta `onModuleDestroy`/`beforeApplicationShutdown`
+  // y Prisma cierra su pool. Sin esto el proceso muere con conexiones abiertas.
+  app.enableShutdownHooks();
 
   // Basic request logging (request id/method/url/status/duration).
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -91,7 +100,25 @@ async function bootstrap() {
     },
   );
 
-  app.use(express.json({ limit: bodySizeLimit }));
+  // Cuerpo CRUDO solo para el webhook de DOSA: la firma se calcula sobre los
+  // bytes EXACTOS recibidos, sin normalizar. Es un `verify` por ruta, así que
+  // el resto de la API sigue parseando exactamente igual que antes.
+  const rawBodyPathPrefixes = ['/webhook/', '/api/webhook/'];
+  app.use(
+    express.json({
+      limit: bodySizeLimit,
+      verify: (
+        req: Request & { rawBody?: Buffer },
+        _res: Response,
+        buf: Buffer,
+      ) => {
+        const url = req.originalUrl ?? req.url ?? '';
+        if (rawBodyPathPrefixes.some((prefix) => url.startsWith(prefix))) {
+          req.rawBody = Buffer.from(buf);
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: bodySizeLimit }));
   // eslint-disable-next-line no-console
   console.log(`[http] request body limit: ${bodySizeLimit}`);
@@ -136,11 +163,13 @@ async function bootstrap() {
   // El fallback se aplica SOLO si la pila IPv6 no existe. Si el puerto está
   // ocupado (EADDRINUSE) se aborta: reintentar en IPv4 dejaba dos instancias
   // sirviendo el mismo puerto sin ningún error visible.
-  let host = '::';
+  const isolatedUat =
+    process.env.APP_ENV === 'uat' && process.env.UAT_LOCAL_ONLY === 'true';
+  let host = isolatedUat ? '127.0.0.1' : '::';
   try {
     await app.listen(port, host);
   } catch (error) {
-    if (!shouldFallbackToIpv4(error)) {
+    if (isolatedUat || !shouldFallbackToIpv4(error)) {
       // eslint-disable-next-line no-console
       console.error(describeListenFailure(port, host, error));
       throw error;
@@ -152,6 +181,37 @@ async function bootstrap() {
   // eslint-disable-next-line no-console
   const displayHost = host.includes(':') ? `[${host}]` : host;
   console.log(`API listening on http://${displayHost}:${port}`);
+
+  // Cierre explicito y acotado. Si el apagado ordenado no termina a tiempo, se
+  // sale igualmente para no dejar el proceso colgado. No se registra nada
+  // sensible: solo el evento y el codigo de salida.
+  let closing = false;
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (closing) return;
+    closing = true;
+    // eslint-disable-next-line no-console
+    console.log(`API shutdown requested (${signal})`);
+    const forceExit = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.error('API shutdown timed out; forcing exit');
+      process.exit(1);
+    }, 15_000);
+    forceExit.unref();
+    void app
+      .close()
+      .then(() => {
+        clearTimeout(forceExit);
+        // eslint-disable-next-line no-console
+        console.log('API shutdown complete');
+        process.exit(0);
+      })
+      .catch(() => {
+        clearTimeout(forceExit);
+        process.exit(1);
+      });
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 bootstrap();

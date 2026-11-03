@@ -26,6 +26,7 @@ import {
   ensureDefaultWarehouseAndTerminal,
 } from "../inventory/zero-config-inventory";
 import { DEFAULT_UNIT_OF_MEASURE_ID } from "../products/unit-of-measure.util";
+import { isEcfPortalPilotCompany } from "../ecf/portal/ecf-portal-pilot.policy";
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -151,10 +152,17 @@ export class SettingsService {
         ncfEnabled: this.boolValue(dto, "ncfEnabled") ?? undefined,
       });
     }
+    // La respuesta de la escritura también expone el interruptor: si faltara,
+    // guardar datos de empresa dejaría al cliente con un valor por defecto.
+    const ecfEnabled = await this.ecfEnabledFor(companyId);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
     const productSource =
       await this.productSourceResolver.resolveForCompany(companyId);
-    return this.toPublicSettings(config, fiscal, productSource);
+    return this.toPublicSettings(
+      { ...config, ecfEnabled },
+      fiscal,
+      productSource,
+    );
   }
 
   async updateCompanyName(user: TenantUser, dto: { companyName?: unknown }) {
@@ -197,10 +205,15 @@ export class SettingsService {
       return updated;
     });
     this.emitCompanyNameUpdated(companyId, companyName);
+    const ecfEnabled = await this.ecfEnabledFor(companyId);
     const fiscal = await this.taxes.getCompanyFiscalSettings(companyId);
     const productSource =
       await this.productSourceResolver.resolveForCompany(companyId);
-    return this.toPublicSettings(config, fiscal, productSource);
+    return this.toPublicSettings(
+      { ...config, ecfEnabled },
+      fiscal,
+      productSource,
+    );
   }
 
   private withoutCompanyName(
@@ -339,6 +352,8 @@ export class SettingsService {
         select: { id: true },
       });
     }
+    // Interruptor e-CF de la EMPRESA: una sola lectura para toda la carga útil.
+    const ecfEnabled = await this.ecfEnabledFor(companyId);
     return {
       ...config,
       companyName,
@@ -347,6 +362,11 @@ export class SettingsService {
       multiWarehouseEnabled: company?.multiWarehouseEnabled === true,
       wholesalePriceListsEnabled:
         company?.wholesalePriceListsEnabled === true,
+      ecfEnabled,
+      // Piloto de certificación: viaja en la MISMA carga útil de configuración
+      // para que el menú no tenga que pedirlo aparte (una petición por cada
+      // build del menú era tráfico gratuito y un fallo de red visible).
+      ecfPilotEligible: isEcfPortalPilotCompany(companyId),
     };
   }
 
@@ -555,6 +575,20 @@ export class SettingsService {
     };
   }
 
+  /**
+   * Interruptor e-CF de la EMPRESA: ÚNICA lectura del flag. La carga útil de
+   * configuración lo incluye siempre —GET y respuestas de escritura— para que la
+   * navegación no dependa de una petición aparte ni reciba un valor distinto
+   * según la ruta. Se lee con el ámbito de la empresa autenticada.
+   */
+  private async ecfEnabledFor(companyId: string): Promise<boolean> {
+    const config = await this.prisma.ecfCompanyConfiguration.findUnique({
+      where: { companyId },
+      select: { enabled: true },
+    });
+    return config?.enabled === true;
+  }
+
   private toPublicSettings(
     config: {
       companyName: string;
@@ -585,6 +619,7 @@ export class SettingsService {
       measurementUnitsEnabled?: boolean;
       multiWarehouseEnabled?: boolean;
       wholesalePriceListsEnabled?: boolean;
+      ecfEnabled?: boolean;
       adminAuthorizationPinHash: string | null;
     },
     fiscal: {
@@ -629,6 +664,9 @@ export class SettingsService {
       measurementUnitsEnabled: config.measurementUnitsEnabled === true,
       multiWarehouseEnabled: config.multiWarehouseEnabled === true,
       wholesalePriceListsEnabled: config.wholesalePriceListsEnabled === true,
+      // Interruptor e-CF de la EMPRESA. Debe salir en la carga útil pública:
+      // es lo que consume la navegación para mostrar u ocultar el módulo.
+      ecfEnabled: config.ecfEnabled === true,
       hasAdminAuthorizationPin: Boolean(config.adminAuthorizationPinHash),
       productsSource: productSource.source,
       productsReadOnly: productSource.readOnly,

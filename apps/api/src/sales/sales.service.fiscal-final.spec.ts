@@ -21,6 +21,7 @@ describe("SalesService fiscal closure", () => {
           direccion: string | null;
         }
       | null,
+    products: Array<Record<string, unknown>> = [],
   ) {
     const prisma = {
       cotizacion: { findFirst: jest.fn() },
@@ -36,7 +37,7 @@ describe("SalesService fiscal closure", () => {
         }),
       },
       sale: { findFirst: jest.fn() },
-      product: { findMany: jest.fn().mockResolvedValue([]) },
+      product: { findMany: jest.fn().mockResolvedValue(products) },
       client: { findFirst: jest.fn().mockResolvedValue(customer) },
       cashSession: {
         findFirst: jest
@@ -298,6 +299,10 @@ describe("SalesService fiscal closure", () => {
             profit: new Prisma.Decimal("3779.66"),
             commercialProfit: new Prisma.Decimal("3779.66"),
             netTaxProfit: new Prisma.Decimal("3779.66"),
+            // La clasificación fiscal se persiste SIEMPRE con la venta. Aquí
+            // queda sin confirmar (null) porque el producto no está disponible:
+            // jamás se adivina a partir del nombre ni de otros datos.
+            itemTypeSnapshot: null,
           }),
         ],
       }),

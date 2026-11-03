@@ -10,12 +10,25 @@ dist/
 apps/api/.env
 apps/api/.env.docker
 apps/api/.env.uat.local
+apps/api/.env.alanube.uat.local
+apps/api/.env.alanube.sandbox.local
 apps/api/.env.*.uat.local
+apps/api/.env.*.sandbox.local
+# Cubre cualquier entorno local futuro (p. ej. .env.dosa.test.local) sin tener
+# que anadir una linea por proveedor. No afecta a los .env.*.example, que si se
+# versionan.
+apps/api/.env.*.local
+apps/api/.secrets/
 apps/fulltech_app/.env
+# Config local del asistente DOSA: la clave publicable se inyecta por entorno.
+apps/fulltech_app/.env.dosa.local
 .env.uat.local
 
 # local/generated artifacts
 artifacts/
+# Evidencias y XML subidos en runtime por el modulo e-CF (datos de tenants).
+# Nunca son codigo fuente: no se versionan.
+apps/api/storage/
 fulltech-pwa/
 apps/fulltech_app/release_artifacts/
 apps/fulltech_app/emulator-*.png

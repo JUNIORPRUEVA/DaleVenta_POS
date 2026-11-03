@@ -34,6 +34,7 @@ import { ServiceOrdersModule } from './service-orders/service-orders.module';
 import { AppUpdatesModule } from './app-updates/app-updates.module';
 import { PriceListsModule } from './price-lists/price-lists.module';
 import { GuardianModule } from './guardian/guardian.module';
+import { EcfModule } from './ecf/ecf.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { GuardianModule } from './guardian/guardian.module';
     AppUpdatesModule,
     PriceListsModule,
     GuardianModule,
+    EcfModule,
   ],
 })
 export class AppModule {}
