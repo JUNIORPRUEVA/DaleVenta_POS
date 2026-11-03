@@ -2,9 +2,20 @@ import 'package:daleventa_pos/core/printing/esc_pos/fullpos_esc_pos_shift_close_
 import 'package:daleventa_pos/core/printing/esc_pos/shift_close_receipt_view_model.dart';
 import 'package:daleventa_pos/core/printing/models/company_info.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // El renderizador formatea con `DateFormat('dd/MM/yyyy h:mm a')` sin locale
+  // explícita, así que usa la locale por defecto del proceso. Esa locale la
+  // resuelve ICU y no es la misma en Windows (donde se imprime de verdad) que en
+  // un runner Linux, donde el marcador AM/PM cambia y la cadena esperada deja de
+  // coincidir. Se fija aquí para que la prueba mida el formato del producto y no
+  // el entorno del runner. No se toca el renderizador.
+  setUpAll(() {
+    Intl.defaultLocale = 'en_US';
+  });
 
   test('renders a professional close ticket with all official fields', () {
     final lines = _renderer.preview(
