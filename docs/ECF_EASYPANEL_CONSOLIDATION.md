@@ -6,6 +6,20 @@ Contexto: el backend e-CF está en producción por una imagen transferida a mano
 (`daleventapos-prod-api:1.0.7-ecf-pilot`). EasyPanel sigue apuntando a
 `production-main`, que **no** contiene e-CF.
 
+> **Actualización 2026-11-03 (integración lista, sin publicar).** La integración
+> existe ya en la rama local `integration/ecf-into-production` sobre
+> `origin/production-main` @ `144bf519`, en dos commits: `da409ea4` (merge con
+> los 20 conflictos resueltos a mano) y `27072ac8` (portal dentro de la imagen y
+> arreglo del build web). El portal ya **no** se copia a mano: vive en
+> `apps/fulltech_app/web/ecf/certificacion/index.html`, entra en la imagen Web
+> mediante `flutter build web` y el `Dockerfile` rellena
+> `__DOSA_PUBLISHABLE_KEY__` / `__API_BASE__` desde los **Build Args** de
+> EasyPanel (`DOSA_ASSISTANT_PUBLISHABLE_KEY`, `ECF_PORTAL_API_BASE`). Si la
+> clave falta, el build de la PWA falla a propósito.
+> Nada se ha publicado ni desplegado: el push a `production-main` y el botón
+> «Implementar» siguen siendo decisiones del responsable.
+
+
 ---
 
 ## 1. Qué debe pasar para que EasyPanel conserve esta versión
