@@ -93,6 +93,31 @@ class Routes {
 
   static String amonestacionById(String id) => '/amonestaciones/$id';
 
+  // Facturación electrónica (e-CF / Alanube / DGII)
+  static const ecf = '/ecf';
+  static const ecfDocuments = '/ecf/documents';
+  static const ecfConfig = '/ecf/config';
+
+  /// Datos fiscales en versión enfocada al proceso e-CF.
+  ///
+  /// Es una vista acotada dentro del módulo: la pantalla oficial de Empresa
+  /// (`configuracionEmpresa`) sigue existiendo sin cambios y sigue siendo la
+  /// fuente de verdad del formulario completo.
+  static const ecfFiscalData = '/ecf/fiscal';
+  /// Habilitación DGII por empresa, dentro del módulo e-CF.
+  static const ecfDgii = '/ecf/dgii';
+
+  /// Reconciliación administrativa de intentos de certificación bloqueados.
+  static const ecfCertificationRecovery = '/ecf/certification/recovery';
+  static String ecfDocumentDetail(String id) => '/ecf/documents/$id';
+
+  /// Cola de revisión de expedientes del equipo de Fulltech.
+  ///
+  /// La ruta existe para todos, pero los datos no: la pantalla pregunta al
+  /// backend y solo pinta expedientes de otras empresas si la sesión pertenece
+  /// al personal de plataforma.
+  static const ecfPlatformReview = '/ecf/platform/review';
+
   static String clienteDetail(String id) => '/clientes/$id';
   static String clienteEdit(String id) => '/clientes/$id/editar';
   static String serviceOrderById(String id) => '/service-orders/$id';

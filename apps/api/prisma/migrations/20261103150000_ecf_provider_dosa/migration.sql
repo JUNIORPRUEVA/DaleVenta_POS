@@ -1,0 +1,24 @@
+-- Anade DOSA al enum de proveedores fiscales.
+--
+-- Alcance deliberado: SOLO agrega el valor. No toca `ecf_company_configurations`
+-- ni ninguna otra tabla, no cambia el valor por defecto de la columna (que sigue
+-- siendo ALANUBE) y no activa facturacion electronica de ninguna empresa.
+--
+-- LIMITACION DE REVERSION (PostgreSQL, no Prisma):
+--   Un valor de enum NO se puede eliminar. No existe `ALTER TYPE ... DROP VALUE`.
+--   Por tanto el "down" de esta migracion es una NO-OP estructural y se
+--   documenta asi a proposito, en lugar de fingir una reversibilidad que la base
+--   de datos no ofrece.
+--
+--   Reversion FUNCIONAL: si ninguna empresa tiene `provider = 'DOSA'`, revertir
+--   el comportamiento es tan simple como ejecutar
+--     UPDATE ecf_company_configurations SET provider = 'ALANUBE'
+--      WHERE provider = 'DOSA';
+--   El valor del enum permanece en el tipo, sin efecto alguno.
+--
+-- Nota de transaccion: desde PostgreSQL 12 `ALTER TYPE ... ADD VALUE` puede
+-- ejecutarse dentro de una transaccion, pero el valor nuevo no puede USARSE en
+-- esa misma transaccion. Esta migracion no lo usa, y por eso es seguro crearlo
+-- aqui y usarlo en una migracion o en datos posteriores.
+
+ALTER TYPE "ecf_provider" ADD VALUE IF NOT EXISTS 'DOSA';

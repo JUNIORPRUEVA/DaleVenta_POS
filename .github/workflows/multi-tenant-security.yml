@@ -9,6 +9,26 @@ on:
 jobs:
   api-security:
     runs-on: ubuntu-latest
+    # El gate incluye pruebas que usan Prisma de verdad. Sin una base de datos,
+    # 104 suites fallaban por conexión (el job llevaba rojo desde antes de esta
+    # rama). Se levanta un PostgreSQL efímero del runner y se aplican las
+    # migraciones del repositorio: si alguna no aplica en limpio, el gate falla.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: fullpos_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d fullpos_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/fullpos_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,6 +36,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # En este monorepo el `postinstall` de @prisma/client no encuentra el
+      # esquema (vive en apps/api), así que sin este paso las pruebas reciben
+      # `Role` sin definir. `npm run build` sí lo genera, pero corre después.
+      - run: npx prisma generate
+        working-directory: apps/api
+      - run: npx prisma migrate deploy
+        working-directory: apps/api
       - run: npx prisma validate
         working-directory: apps/api
       - run: npm run audit:tenant-inventory
@@ -31,15 +58,55 @@ jobs:
 
   flutter-regression:
     runs-on: ubuntu-latest
+    # El producto formatea las horas en la zona de negocio (America/Santo_Domingo)
+    # con `toBusinessTime`, y varias pruebas construyen `DateTime` en hora local:
+    # en un runner UTC esa hora local se convierte a 4:00 AM y una aserción
+    # legitima falla. El runner se alinea con la zona del negocio; no se cambia ni
+    # se relaja ninguna prueba.
+    env:
+      TZ: America/Santo_Domingo
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
+          # Misma versión que el artefacto real (Dockerfile de la PWA y
+          # AGENTS.md). Con `channel: stable` CI corría 3.47.9 y fallaba por una
+          # aserción nueva de Flutter (ListTile dentro de DecoratedBox), algo que
+          # el producto publicado en 3.41.6 nunca ejecuta.
+          flutter-version: 3.41.6
           channel: stable
           cache: true
       - run: flutter pub get
         working-directory: apps/fulltech_app
+      # `pubspec.yaml` declara `.env` como asset y el fichero está en .gitignore,
+      # así que en un clon limpio no existe y `flutter analyze` falla con
+      # `asset_does_not_exist` (defecto preexistente). El Dockerfile de la PWA
+      # hace exactamente esto antes de compilar.
+      - run: cp .env.example .env
+        working-directory: apps/fulltech_app
       - run: flutter analyze
         working-directory: apps/fulltech_app
       - run: flutter test
+        working-directory: apps/fulltech_app
+
+  # El descargador y el instalador de actualizaciones son API Win32: fuera de
+  # Windows responden UNSUPPORTED_PLATFORM. Sus pruebas se omiten con motivo
+  # explícito en el job de Linux y se ejecutan de verdad aquí, para no perder
+  # cobertura ni convertir un fallo de plataforma en un fallo de producto.
+  windows-updater:
+    runs-on: windows-latest
+    env:
+      TZ: America/Santo_Domingo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.6
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/fulltech_app
+      - run: Copy-Item .env.example .env
+        working-directory: apps/fulltech_app
+      - run: flutter test test/core/app_update
         working-directory: apps/fulltech_app

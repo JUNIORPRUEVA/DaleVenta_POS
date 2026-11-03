@@ -10,6 +10,12 @@ WORKDIR /app
 
 ARG META_PIXEL_ID=411890861585278
 ARG MARKETING_ANALYTICS_DEBUG=false
+# Clave publica del asistente DOSA. Se inyecta desde EasyPanel (Build Args) y
+# NUNCA se versiona: el portal de certificacion la necesita para montar el
+# wizard, asi que si falta, el build falla en vez de publicar una pagina rota.
+ARG DOSA_ASSISTANT_PUBLISHABLE_KEY=""
+# Base de la API que consumira el portal (independiente de la del POS movil).
+ARG ECF_PORTAL_API_BASE="https://fullposcloud.fulltechrd.com/api"
 
 # Copy only what is needed for a Flutter Web build.
 COPY pubspec.yaml pubspec.lock ./
@@ -36,6 +42,27 @@ RUN BUILD_ID="$(date -u +%Y%m%d%H%M%S)" \
   && sed -i "s@main.dart.js@main.dart.js?v=${BUILD_ID}@g" build/web/flutter_bootstrap.js \
   && sed -i "s@href=\"main.dart.js\"@href=\"main.dart.js?v=${BUILD_ID}\"@g" build/web/index.html \
   && sed -i "s@src=\"flutter_bootstrap.js\"@src=\"flutter_bootstrap.js?v=${BUILD_ID}\"@g" build/web/index.html
+
+# Portal de certificacion e-CF: `web/ecf/certificacion/` viaja dentro del build
+# de Flutter, y aqui se rellenan sus marcadores. Fail-closed: sin clave publica
+# valida el build falla, en lugar de publicar un portal que no puede arrancar.
+RUN set -eu; \
+  key="${DOSA_ASSISTANT_PUBLISHABLE_KEY}"; \
+  api="${ECF_PORTAL_API_BASE}"; \
+  portal="build/web/ecf/certificacion/index.html"; \
+  test -f "$portal"; \
+  case "$key" in \
+    pk_live_*|pk_test_*) : ;; \
+    "") echo "ERROR: falta DOSA_ASSISTANT_PUBLISHABLE_KEY (Build Arg de EasyPanel)." >&2; exit 1 ;; \
+    *) echo "ERROR: DOSA_ASSISTANT_PUBLISHABLE_KEY no parece una clave publica (pk_...)." >&2; exit 1 ;; \
+  esac; \
+  test -n "$api"; \
+  sed -i "s|__DOSA_PUBLISHABLE_KEY__|$key|g" "$portal"; \
+  sed -i "s|__API_BASE__|$api|g" "$portal"; \
+  if grep -q '__DOSA_PUBLISHABLE_KEY__\|__API_BASE__' "$portal"; then \
+    echo "ERROR: el portal conserva marcadores sin rellenar." >&2; exit 1; \
+  fi; \
+  grep -q 'pk_live_\|pk_test_' "$portal"
 
 # Runtime files the browser never requests: debug symbols and the dart2wasm /
 # skwasm variants (this build only ships the dart2js + CanvasKit build).

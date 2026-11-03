@@ -17,7 +17,7 @@ param(
   [string]$ExpectedVersion = '1.0.7+151',
   [string]$ExpectedCommit = '',
   [string]$ExpectedBranch = 'production-main',
-  [int]$ExpectedMigrations = 43
+  [int]$ExpectedMigrations = 68
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +55,9 @@ $required = @(
   'apps\api\src\guardian\guardian.alert.channels.ts',
   'apps\api\src\guardian\guardian.config.ts',
   'apps\api\src\app-updates\app-update-releases.controller.ts',
+  'apps\api\src\ecf\portal\ecf-certification-portal.service.ts',
+  'apps\api\src\ecf\portal\ecf-certification-portal.controller.ts',
+  'apps\api\src\ecf\portal\ecf-portal-pilot.policy.ts',
   'apps\api\Dockerfile',
   'apps\api\prisma\schema.prisma'
 )
@@ -70,12 +73,12 @@ if (Test-Path -LiteralPath $salesCtl) {
   Check ($text -match 'attempts/:clientRequestId/declaration') 'Ruta de declaracion presente' "No hay ruta de declaracion en sales.controller.ts"
 }
 
-# 4) Migraciones del repositorio (el repo lleva 43 carpetas; la base tiene 183 filas aplicadas)
+# 4) Migraciones del repositorio (el repo lleva 68 carpetas; la base tiene 208 filas aplicadas)
 $migDir = Join-Path $root 'apps\api\prisma\migrations'
 if (Test-Path -LiteralPath $migDir) {
   $migCount = (Get-ChildItem -LiteralPath $migDir -Directory | Measure-Object).Count
   Check ($migCount -eq $ExpectedMigrations) "$migCount carpetas de migracion (repo)" "Se esperaban $ExpectedMigrations carpetas de migracion, hay $migCount"
-  foreach ($m in @('20261029190000_sale_reconciliation_obligations', '20261029210000_reconciliation_single_active_obligation')) {
+  foreach ($m in @('20261029190000_sale_reconciliation_obligations', '20261029210000_reconciliation_single_active_obligation', '20261103210000_ecf_certification_portal')) {
     Check (Test-Path -LiteralPath (Join-Path $migDir $m)) "Migracion $m presente" "FALTA la migracion $m"
   }
 } else {

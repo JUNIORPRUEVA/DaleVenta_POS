@@ -543,10 +543,27 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
             .valueOrNull
             ?.wholesalePriceListsEnabled ??
         false;
+    // Interruptor e-CF de la EMPRESA, leído de la MISMA configuración que el
+    // Drawer ya observa: el menú no añade ninguna petición de red. Mientras la
+    // configuración no esté confirmada vale `false`, así que un error de red
+    // nunca deja el módulo a la vista.
+    final ecfEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled ?? false;
+    // Piloto: la elegibilidad la confirma el backend y viaja en la MISMA
+    // configuración que el Drawer ya observa, así que el menú no añade ninguna
+    // petición de red. Mientras no esté confirmada vale `false`.
+    final ecfPilotEligible =
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.ecfPilotEligible ??
+        false;
     final sections = buildAppNavigationSections(
       currentUser,
       multiWarehouseEnabled: multiWarehouseEnabled,
       wholesalePriceListsEnabled: wholesalePriceListsEnabled,
+      ecfEnabled: ecfEnabled,
+      ecfPilotEligible: ecfPilotEligible,
     );
     // Estado autoritativo del turno (fuente de verdad = backend). El drawer
     // móvil observa el MISMO provider que el resto de la app: si el turno
@@ -1182,11 +1199,17 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     ]);
 
     if (itemsByRoute.isNotEmpty) {
+      // Un único módulo restante no debe quedar escondido tras «Más módulos»:
+      // el menú mostraba un título que no identifica la función (la facturación
+      // electrónica aparecía como «Más módulos»). Con un solo ítem se usa su
+      // propio nombre e icono, y el toque sigue navegando a su ruta.
+      final leftovers = itemsByRoute.values.toList();
+      final only = leftovers.length == 1 ? leftovers.first : null;
       groups.add(
         _DrawerMenuGroup(
-          title: 'Más módulos',
-          icon: Icons.apps_rounded,
-          items: itemsByRoute.values.toList(),
+          title: only?.title ?? 'Más módulos',
+          icon: only?.icon ?? Icons.apps_rounded,
+          items: leftovers,
           openOnHover: false,
         ),
       );
@@ -1262,11 +1285,14 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   ]);
 
   if (itemsByRoute.isNotEmpty) {
+    // Mismo criterio que en móvil: con un único ítem, su propio nombre.
+    final leftovers = itemsByRoute.values.toList();
+    final only = leftovers.length == 1 ? leftovers.first : null;
     groups.add(
       _DrawerMenuGroup(
-        title: 'Más módulos',
-        icon: Icons.apps_rounded,
-        items: itemsByRoute.values.toList(),
+        title: only?.title ?? 'Más módulos',
+        icon: only?.icon ?? Icons.apps_rounded,
+        items: leftovers,
       ),
     );
   }

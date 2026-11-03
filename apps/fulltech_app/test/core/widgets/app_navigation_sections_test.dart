@@ -47,6 +47,41 @@ void main() {
       expect(titles, contains('Productos'));
     });
 
+    test('sin e-CF y sin piloto, la entrada de facturación electrónica no aparece',
+        () {
+      final titles = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: true),
+      );
+
+      expect(titles, isNot(contains('Facturación electrónica')));
+    });
+
+    test('la empresa piloto ve la entrada aunque su e-CF esté desactivado', () {
+      final titles = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: true,
+          ecfEnabled: false,
+          ecfPilotEligible: true,
+        ),
+      );
+
+      // Preparar la certificación no depende de tener la emisión activada.
+      expect(titles, contains('Facturación electrónica'));
+    });
+
+    test('con e-CF activado la entrada sigue apareciendo como antes', () {
+      final titles = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: true,
+          ecfEnabled: true,
+        ),
+      );
+
+      expect(titles, contains('Facturación electrónica'));
+    });
+
     test('no duplica módulos en ninguna combinación', () {
       for (final enabled in [true, false]) {
         final titles = _titles(
@@ -138,6 +173,73 @@ void main() {
         'Nómina',
         'Usuario',
       ]);
+    });
+  });
+
+  group('visibilidad e-CF por empresa (opt-in obligatorio)', () {
+    test('empresa sin e-CF: el módulo NO aparece en el menú', () {
+      final titles = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
+      );
+
+      expect(titles, isNot(contains('Facturación electrónica')));
+      // La entrada antigua, a mitad del menú, tampoco existe.
+      expect(titles, isNot(contains('Comprobantes e-CF')));
+    });
+
+    test('empresa con e-CF activada: aparece una sola vez y AL FINAL', () {
+      final titles = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: false,
+          ecfEnabled: true,
+        ),
+      );
+
+      expect(
+        titles.where((title) => title == 'Facturación electrónica').length,
+        1,
+      );
+      expect(titles.last, 'Facturación electrónica');
+    });
+
+    test('activar e-CF añade exactamente una entrada y no altera el resto', () {
+      final off = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
+      );
+      final on = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: false,
+          ecfEnabled: true,
+        ),
+      );
+
+      expect(on.length, off.length + 1);
+      expect(on.take(off.length).toList(), off);
+    });
+
+    test('los módulos tradicionales son idénticos con e-CF apagada', () {
+      final off = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: false),
+      );
+
+      for (final traditional in [
+        'Clientes',
+        'Facturación',
+        'Lista de ventas',
+        'Créditos',
+        'Productos',
+        'Compras',
+        'Reportes',
+        'Factura fiscal',
+        'Depósitos',
+        'Pagos',
+        'Nómina',
+        'Usuario',
+      ]) {
+        expect(off, contains(traditional), reason: traditional);
+      }
     });
   });
 }

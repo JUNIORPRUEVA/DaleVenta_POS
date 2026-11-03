@@ -51,6 +51,14 @@ List<AppNavigationSection> buildAppNavigationSections(
   UserModel? currentUser, {
   required bool multiWarehouseEnabled,
   bool wholesalePriceListsEnabled = false,
+  // Interruptor e-CF de la EMPRESA. Es la única compuerta de visibilidad del
+  // módulo: apagado significa que la empresa no ha solicitado facturación
+  // electrónica y el menú queda exactamente como un POS tradicional.
+  bool ecfEnabled = false,
+  /// Piloto de certificación: el backend confirmó que ESTA empresa puede
+  /// preparar su certificación aunque la emisión siga desactivada. Ya incluye
+  /// la comprobación de permiso, así que aquí no se vuelve a evaluar.
+  bool ecfPilotEligible = false,
 }) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
@@ -224,6 +232,23 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Usuario',
             route: Routes.users,
           ),
+        // La facturación electrónica es OPCIONAL por empresa: la entrada del
+        // menú solo existe cuando la empresa la ha activado explícitamente en
+        // Configuración → Empresa → Impuestos y e-CF. Un cliente que no la ha
+        // solicitado conserva su POS tradicional y no ve nada de e-CF.
+        //
+        // Mientras la configuración de empresa no esté confirmada el valor es
+        // `false`, así que un fallo de red nunca deja el módulo a la vista.
+        // Activar el módulo NO autoriza emisión real: eso sigue detrás de las
+        // compuertas fiscales del backend.
+        if ((ecfEnabled && canOrAuthorize(AppPermission.viewEcfDocuments)) ||
+            ecfPilotEligible)
+          const AppNavigationItem(
+            icon: Icons.receipt_long_outlined,
+            appIcon: AppIcons.receipt,
+            title: 'Facturación electrónica',
+            route: Routes.ecf,
+          ),
       ],
     ),
   ];
@@ -275,6 +300,12 @@ String resolveNavigationTitle(
 ) {
   final path = Uri.tryParse(location)?.path ?? location;
   if (path == Routes.poncheHistorial) return 'Historial de ponches';
+  // Nivel dentro del módulo e-CF: el título del módulo no explica qué se está
+  // editando, y el botón de volver regresa a la puesta en marcha.
+  if (path == Routes.ecfFiscalData) return 'Datos fiscales';
+  if (path == Routes.ecfDocuments) return 'Comprobantes electrónicos';
+  if (path == Routes.ecfConfig) return 'Estado del módulo e-CF';
+  if (path == Routes.ecfDgii) return 'Habilitación DGII';
 
   for (final section in sections) {
     for (final item in section.items) {
