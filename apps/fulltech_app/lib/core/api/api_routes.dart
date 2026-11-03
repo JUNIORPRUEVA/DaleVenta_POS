@@ -537,6 +537,9 @@ class ApiRoutes {
   /// Ticket de un solo uso que abre el portal de certificación (DOSA).
   static const ecfCertificationPortalTickets =
       '/ecf/certification-portal/tickets';
+  /// Elegibilidad de SOLO LECTURA para preparar la certificación.
+  static const ecfCertificationPortalEligibility =
+      '/ecf/certification-portal/eligibility';
   static const ecfDocuments = '/ecf/documents';
   static const ecfDocumentsPrepare = '/ecf/documents/prepare';
   static const ecfDocumentsPrepareCreditNote =

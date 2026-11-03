@@ -131,6 +131,39 @@ function makeService(prisma: any, pilot: string[] = PILOT) {
   return new EcfCertificationPortalService(prisma);
 }
 
+describe("elegibilidad (solo lectura)", () => {
+  it("la empresa piloto es elegible sin activar la emision", () => {
+    const service = makeService(makePrismaFake(), ["company-a"]);
+    const result = service.eligibility("company-a");
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toBe("ELIGIBLE");
+    expect(result.portalPath).toBe("/ecf/certificacion");
+  });
+
+  it("una empresa fuera del piloto no es elegible, y el motivo lo dice", () => {
+    const service = makeService(makePrismaFake(), ["company-a"]);
+    const result = service.eligibility("company-b");
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe("PILOT_NOT_INCLUDED");
+  });
+
+  it("sin piloto configurado nadie es elegible (cerrado por defecto)", () => {
+    const service = makeService(makePrismaFake(), []);
+    expect(service.eligibility("company-a").eligible).toBe(false);
+  });
+
+  it("consultar la elegibilidad no crea tickets ni sesiones", () => {
+    const prisma = makePrismaFake();
+    const service = makeService(prisma, ["company-a"]);
+
+    service.eligibility("company-a");
+    service.eligibility("company-b");
+
+    expect(prisma.__rows.tickets).toHaveLength(0);
+    expect(prisma.__rows.sessions).toHaveLength(0);
+  });
+});
+
 describe("compuerta del piloto (por companyId)", () => {
   it("sin empresas configuradas el portal esta cerrado para todos", async () => {
     const prisma = makePrismaFake();

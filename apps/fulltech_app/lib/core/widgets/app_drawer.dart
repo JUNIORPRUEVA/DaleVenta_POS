@@ -11,6 +11,7 @@ import '../auth/admin_authorization.dart';
 import '../auth/app_permissions.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_role.dart';
+import '../../features/ecf/dosa/dosa_portal_launcher.dart';
 import '../company/company_settings_repository.dart';
 import '../models/user_model.dart';
 
@@ -543,10 +544,15 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     // nunca deja el módulo a la vista.
     final ecfEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled ?? false;
+    // Piloto: la elegibilidad la confirma el backend para ESTA empresa. Mientras
+    // carga, o si falla, vale `false` y el menú no muestra nada nuevo.
+    final ecfPilotEligible =
+        ref.watch(dosaPortalEligibilityProvider).valueOrNull ?? false;
     final sections = buildAppNavigationSections(
       currentUser,
       multiWarehouseEnabled: multiWarehouseEnabled,
       ecfEnabled: ecfEnabled,
+      ecfPilotEligible: ecfPilotEligible,
     );
     // Estado autoritativo del turno (fuente de verdad = backend). El drawer
     // móvil observa el MISMO provider que el resto de la app: si el turno

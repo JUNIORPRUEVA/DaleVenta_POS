@@ -47,6 +47,41 @@ void main() {
       expect(titles, contains('Productos'));
     });
 
+    test('sin e-CF y sin piloto, la entrada de facturación electrónica no aparece',
+        () {
+      final titles = _titles(
+        buildAppNavigationSections(_user(), multiWarehouseEnabled: true),
+      );
+
+      expect(titles, isNot(contains('Facturación electrónica')));
+    });
+
+    test('la empresa piloto ve la entrada aunque su e-CF esté desactivado', () {
+      final titles = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: true,
+          ecfEnabled: false,
+          ecfPilotEligible: true,
+        ),
+      );
+
+      // Preparar la certificación no depende de tener la emisión activada.
+      expect(titles, contains('Facturación electrónica'));
+    });
+
+    test('con e-CF activado la entrada sigue apareciendo como antes', () {
+      final titles = _titles(
+        buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: true,
+          ecfEnabled: true,
+        ),
+      );
+
+      expect(titles, contains('Facturación electrónica'));
+    });
+
     test('no duplica módulos en ninguna combinación', () {
       for (final enabled in [true, false]) {
         final titles = _titles(

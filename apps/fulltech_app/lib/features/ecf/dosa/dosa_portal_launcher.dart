@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_routes.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/auth_repository.dart';
 
 /// Portal de certificación automática (DOSA) alojado en nuestro dominio.
@@ -58,6 +59,22 @@ class DosaPortalApi {
 
   final Dio _dio;
   final String _portalBaseUrl;
+
+  /// ¿Puede esta empresa PREPARAR su certificación?
+  ///
+  /// Consulta de solo lectura que el backend responde cerrada por defecto: sin
+  /// piloto configurado, sin permiso o con cualquier error, la respuesta es
+  /// `false`. Nunca crea ticket ni sesión de DOSA.
+  Future<bool> isEligible() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        ApiRoutes.ecfCertificationPortalEligibility,
+      );
+      return (res.data ?? const <String, dynamic>{})['eligible'] == true;
+    } on DioException {
+      return false;
+    }
+  }
 
   Future<DosaPortalTicket> requestTicket() async {
     try {
@@ -117,3 +134,15 @@ Future<bool> openDosaPortal(String url) async {
 final dosaPortalApiProvider = Provider<DosaPortalApi>((ref) {
   return DosaPortalApi(ref.watch(dioProvider));
 });
+
+/// Elegibilidad del piloto para ESTA empresa, consultada al backend.
+///
+/// Se apoya en la sesión: sin usuario autenticado no se pregunta nada y la
+/// respuesta es `false`. Mientras carga, o si falla, también `false`: la
+/// entrada de e-CF nunca aparece por un error de red.
+final dosaPortalEligibilityProvider =
+    FutureProvider.autoDispose<bool>((ref) async {
+      final auth = ref.watch(authStateProvider);
+      if (!auth.isAuthenticated) return false;
+      return ref.watch(dosaPortalApiProvider).isEligible();
+    });

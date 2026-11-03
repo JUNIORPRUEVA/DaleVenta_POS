@@ -96,6 +96,22 @@ export class EcfCertificationPortalController {
     return { ok: true, context: await this.portal.readContext(token) };
   }
 
+  /**
+   * Elegibilidad para PREPARAR la certificacion, independiente de la emision.
+   *
+   * Una empresa con e-CF desactivado puede preparar su certificacion; este
+   * endpoint es de solo lectura y no emite ticket ni sesion. Sin permiso
+   * administrativo responde 403 (cerrado por defecto).
+   */
+  @Get("eligibility")
+  @UseGuards(AuthGuard("jwt"), RolesGuard)
+  @Permissions("manageEcfOnboarding")
+  eligibility(@Req() req: Request) {
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
+    return { ok: true, ...this.portal.eligibility(companyId) };
+  }
+
   @Delete("sessions")
   @HttpCode(200)
   async logout(@Headers(PORTAL_TOKEN_HEADER) token?: string) {

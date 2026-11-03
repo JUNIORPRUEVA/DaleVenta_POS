@@ -182,6 +182,54 @@ void main() {
     });
   });
 
+  group('DosaPortalApi.isEligible', () {
+    test('la empresa piloto es elegible', () async {
+      final api = _apiWith(
+        _FakeAdapter(
+          statusCode: 200,
+          body: jsonEncode({'ok': true, 'eligible': true, 'reason': 'ELIGIBLE'}),
+        ),
+      );
+
+      expect(await api.isEligible(), isTrue);
+    });
+
+    test('una empresa fuera del piloto no es elegible', () async {
+      final api = _apiWith(
+        _FakeAdapter(
+          statusCode: 200,
+          body: jsonEncode({'ok': true, 'eligible': false}),
+        ),
+      );
+
+      expect(await api.isEligible(), isFalse);
+    });
+
+    test('sin permiso (403) queda cerrado', () async {
+      final api = _apiWith(
+        _FakeAdapter(
+          statusCode: 403,
+          body: jsonEncode({'message': 'Forbidden resource'}),
+        ),
+      );
+
+      expect(await api.isEligible(), isFalse);
+    });
+
+    test('un fallo de red no abre la entrada', () async {
+      final api = _apiWith(
+        _FakeAdapter(
+          throwError: DioException(
+            requestOptions: RequestOptions(path: '/x'),
+            type: DioExceptionType.connectionError,
+          ),
+        ),
+      );
+
+      expect(await api.isEligible(), isFalse);
+    });
+  });
+
   group('openDosaPortal', () {
     test('rechaza esquemas que no son http(s)', () async {
       expect(await openDosaPortal('javascript:alert(1)'), isFalse);

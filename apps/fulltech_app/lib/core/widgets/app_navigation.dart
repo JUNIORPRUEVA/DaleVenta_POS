@@ -54,6 +54,10 @@ List<AppNavigationSection> buildAppNavigationSections(
   // módulo: apagado significa que la empresa no ha solicitado facturación
   // electrónica y el menú queda exactamente como un POS tradicional.
   bool ecfEnabled = false,
+  /// Piloto de certificación: el backend confirmó que ESTA empresa puede
+  /// preparar su certificación aunque la emisión siga desactivada. Ya incluye
+  /// la comprobación de permiso, así que aquí no se vuelve a evaluar.
+  bool ecfPilotEligible = false,
 }) {
   bool canOrAuthorize(AppPermission _) {
     if (currentUser == null) return false;
@@ -227,7 +231,8 @@ List<AppNavigationSection> buildAppNavigationSections(
         // `false`, así que un fallo de red nunca deja el módulo a la vista.
         // Activar el módulo NO autoriza emisión real: eso sigue detrás de las
         // compuertas fiscales del backend.
-        if (ecfEnabled && canOrAuthorize(AppPermission.viewEcfDocuments))
+        if ((ecfEnabled && canOrAuthorize(AppPermission.viewEcfDocuments)) ||
+            ecfPilotEligible)
           const AppNavigationItem(
             icon: Icons.receipt_long_outlined,
             appIcon: AppIcons.receipt,

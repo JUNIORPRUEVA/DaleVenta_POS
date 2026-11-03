@@ -90,6 +90,28 @@ export class EcfCertificationPortalService {
     return allowed.includes(`${companyId ?? ""}`.trim().toLowerCase());
   }
 
+  /**
+   * Elegibilidad de SOLO LECTURA: separa "preparar" de "emitir".
+   *
+   * No crea tickets, ni sesiones, ni escribe nada. Sirve para que la app decida
+   * si muestra la entrada del portal. Cerrada por defecto: si el piloto no esta
+   * configurado, `eligible` es `false` y el motivo lo explica.
+   */
+  eligibility(companyId: string): {
+    eligible: boolean;
+    companyId: string;
+    reason: "ELIGIBLE" | "PILOT_NOT_INCLUDED";
+    portalPath: string;
+  } {
+    const eligible = this.isPilotCompany(companyId);
+    return {
+      eligible,
+      companyId,
+      reason: eligible ? "ELIGIBLE" : "PILOT_NOT_INCLUDED",
+      portalPath: "/ecf/certificacion",
+    };
+  }
+
   /** Emite un ticket de un solo uso para el administrador autenticado. */
   async issueTicket(input: {
     companyId: string;

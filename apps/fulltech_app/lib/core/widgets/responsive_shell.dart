@@ -12,6 +12,7 @@ import '../auth/admin_authorization_session.dart';
 import '../app_update/app_update_mini_control.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
+import '../../features/ecf/dosa/dosa_portal_launcher.dart';
 import '../company/company_settings_model.dart';
 import '../company/company_settings_repository.dart';
 import '../design_system/icons/app_icon.dart';
@@ -215,10 +216,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // shell ya observa: activar o desactivar reconstruye el menú sin reiniciar.
     final ecfEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled ?? false;
+    // Piloto: elegibilidad confirmada por el backend (false mientras carga o si
+    // falla, así que un error de red nunca deja el módulo a la vista).
+    final ecfPilotEligible =
+        ref.watch(dosaPortalEligibilityProvider).valueOrNull ?? false;
     final sections = buildAppNavigationSections(
       user,
       multiWarehouseEnabled: _multiWarehouseEnabled,
       ecfEnabled: ecfEnabled,
+      ecfPilotEligible: ecfPilotEligible,
     );
     final location = safeCurrentLocation(context);
     AppNavigator.recordShellLocation(location);
