@@ -7,6 +7,13 @@ import 'package:daleventa_pos/core/app_update/update_downloader_io.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// El descargador es API Win32: `update_downloader_io.dart` rechaza cualquier
+// otro sistema con UNSUPPORTED_PLATFORM. La prueba necesita Windows y se omite
+// (con motivo explícito) en el resto de runners; el job `windows-updater` de CI
+// la ejecuta de verdad en windows-latest.
+final bool _notWindows = !Platform.isWindows;
+const String _windowsOnlyReason = 'Requiere Windows: descarga Win32';
+
 void main() {
   test(
     'stalled partial download fails instead of staying in progress',
@@ -61,6 +68,7 @@ void main() {
           : const <FileSystemEntity>[];
       expect(leftovers.whereType<File>().map((file) => file.path), isEmpty);
     },
+    skip: _notWindows ? _windowsOnlyReason : null,
   );
 }
 

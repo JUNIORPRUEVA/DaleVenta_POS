@@ -81,3 +81,23 @@ jobs:
         working-directory: apps/fulltech_app
       - run: flutter test
         working-directory: apps/fulltech_app
+
+  # El descargador y el instalador de actualizaciones son API Win32: fuera de
+  # Windows responden UNSUPPORTED_PLATFORM. Sus pruebas se omiten con motivo
+  # explícito en el job de Linux y se ejecutan de verdad aquí, para no perder
+  # cobertura ni convertir un fallo de plataforma en un fallo de producto.
+  windows-updater:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.6
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/fulltech_app
+      - run: Copy-Item .env.example .env
+        working-directory: apps/fulltech_app
+      - run: flutter test test/core/app_update
+        working-directory: apps/fulltech_app
