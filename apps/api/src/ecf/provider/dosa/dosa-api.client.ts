@@ -44,7 +44,7 @@ export type DosaQueryAuthConfig = {
   timeoutMs: number;
 };
 
-export type DosaQueryAuthEnv = {
+export type DosaQueryAuthEnv = NodeJS.ProcessEnv & {
   DOSA_BASE_URL?: string;
   DOSA_SECRET_KEY?: string;
   DOSA_API_QUERIES_ENABLED?: string;

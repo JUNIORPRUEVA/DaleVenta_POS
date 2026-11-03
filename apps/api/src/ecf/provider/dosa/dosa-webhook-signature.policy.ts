@@ -121,7 +121,7 @@ export const DOSA_LAB_APP_ENVS: readonly string[] = [
   "e2e",
 ];
 
-export type DosaSafetyEnv = {
+export type DosaSafetyEnv = NodeJS.ProcessEnv & {
   DOSA_WEBHOOK_SIGNATURE_STRATEGY?: string;
   DOSA_WEBHOOK_SECRET?: string;
   DOSA_WEBHOOK_SECRET_ENCODING?: string;

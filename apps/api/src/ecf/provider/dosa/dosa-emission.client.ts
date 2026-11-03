@@ -87,16 +87,18 @@ export const DOSA_EMISSION_BLOCKED = {
 } as const;
 
 /** Configuración desde entorno. Sin banderas, todo queda desactivado. */
-export function readDosaEmissionConfig(env: {
-  DOSA_EMISSION_ENABLED?: string;
-  DOSA_EMISSION_ENVIRONMENT?: string;
-  DOSA_BASE_URL?: string;
-  DOSA_TEST_API_KEY?: string;
-  DOSA_PRODUCTION_API_KEY?: string;
-  DOSA_PRODUCTION_EMISSION_ENABLED?: string;
-  DOSA_EMISSION_TIMEOUT_MS?: string;
-  DOSA_TEST_RNC?: string;
-}): DosaEmissionConfig {
+export function readDosaEmissionConfig(
+  env: NodeJS.ProcessEnv & {
+    DOSA_EMISSION_ENABLED?: string;
+    DOSA_EMISSION_ENVIRONMENT?: string;
+    DOSA_BASE_URL?: string;
+    DOSA_TEST_API_KEY?: string;
+    DOSA_PRODUCTION_API_KEY?: string;
+    DOSA_PRODUCTION_EMISSION_ENABLED?: string;
+    DOSA_EMISSION_TIMEOUT_MS?: string;
+    DOSA_TEST_RNC?: string;
+  },
+): DosaEmissionConfig {
   const environment: DosaEmissionEnvironment =
     (env.DOSA_EMISSION_ENVIRONMENT ?? "").trim().toUpperCase() === "PRODUCTION"
       ? "PRODUCTION"
