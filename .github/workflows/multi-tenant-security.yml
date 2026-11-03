@@ -58,6 +58,13 @@ jobs:
 
   flutter-regression:
     runs-on: ubuntu-latest
+    # El producto formatea las horas en la zona de negocio (America/Santo_Domingo)
+    # con `toBusinessTime`, y varias pruebas construyen `DateTime` en hora local:
+    # en un runner UTC esa hora local se convierte a 4:00 AM y una aserción
+    # legitima falla. El runner se alinea con la zona del negocio; no se cambia ni
+    # se relaja ninguna prueba.
+    env:
+      TZ: America/Santo_Domingo
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -88,6 +95,8 @@ jobs:
   # cobertura ni convertir un fallo de plataforma en un fallo de producto.
   windows-updater:
     runs-on: windows-latest
+    env:
+      TZ: America/Santo_Domingo
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
