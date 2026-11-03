@@ -51,19 +51,54 @@ se envía un valor por defecto. Los códigos 2, 8 y 15–20 existen en DOSA pero
 FullPOS no puede producirlos porque no tiene esas unidades en
 `unit_of_measures`.
 
-### `codigoModificacion` (notas de crédito) — catálogo NO DOCUMENTADO
+### `codigoModificacion` (notas de crédito)
 
-El documento pide `Referencia.CodigoModificacion` («Código del tipo de
-modificación») y sus ejemplos usan `1` con `RazonModificacion: "Corrección de
-factura"`, pero **no publica la tabla de valores**. Por eso el mapeador **exige**
-que el llamador aporte el código (`DOSA_MODIFICATION_CODE_REQUIRED`): antes se
-enviaba `1` por defecto, que declaraba un tipo de modificación que nadie había
-elegido.
+Causa de la nota de crédito, en `Referencia.CodigoModificacion`:
+
+| Código | Causa |
+| --- | --- |
+| 1 | Anulación |
+| 2 | Corrección de texto |
+| 3 | Corrección de montos |
+
+Procedencia: el documento **`NOTAS_CREDITO_DESDE_FACTURA.md` entregado por el
+propietario del producto**. El README público del proveedor **no publica la
+tabla**: solo sus ejemplos de E34 usan `1`. Por eso el valor viaja desde el
+llamador y el mapeador **nunca lo rellena por defecto**:
+
+- sin código → `DOSA_MODIFICATION_CODE_REQUIRED`;
+- código fuera de 1/2/3 (por ejemplo el `4` que admite el modelo de Alanube) →
+  `DOSA_MODIFICATION_CODE_UNSUPPORTED:<código>`.
+
+Se prefiere bloquear a declarar una causa de modificación que nadie eligió.
+
+### Endpoint: `EnviarFactura` vs `NotaDesdeFactura`
+
+El proveedor documenta dos rutas distintas, y el cliente de emisión **enruta por
+tipo de comprobante** (`emissionPathFor`):
+
+| e-CF | Endpoint |
+| --- | --- |
+| E31, E32 | `/fe/api/emision/ecf/EnviarFactura` |
+| E34 | `/fe/api/emision/ecf/NotaDesdeFactura` |
+
+Antes se enviaba todo a `EnviarFactura`: una nota de crédito habría ido al
+endpoint equivocado.
 
 Otro conflicto del mismo documento: los ejemplos de `NotaDesdeFactura` usan
 claves PascalCase (`Encabezado`, `DetallesItems.Items`, `Referencia`) mientras el
 ejemplo de `EnviarFactura` usa camelCase. FullPOS emite camelCase, que es la
 forma del ejemplo del endpoint de envío. Queda como brecha declarada.
+
+### Contenido del catálogo de unidades: lo que NO se mapea
+
+DOSA documenta 20 códigos; FullPOS solo puede producir 12. Los códigos **2
+Caja, 8 Centímetro, 15 Docena, 16 Paquete, 17 Servicio, 18 Hora, 19 Día y 20
+Mes** no tienen unidad equivalente en `unit_of_measures`, así que no se mapean:
+`17 = Servicio` es una unidad del catálogo, no una instrucción de «usa 17 para
+las líneas de servicio» (la naturaleza del ítem ya viaja en
+`indicadorBienoServicio`). Antes de mapearlos hace falta una decisión de producto
+(códigos de unidad nuevos), no un cambio silencioso del mapeador.
 
 ## 1. Endpoint y autenticación
 

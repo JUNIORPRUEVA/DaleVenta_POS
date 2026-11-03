@@ -128,6 +128,36 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     );
   });
 
+  it.each([
+    [1, "Anulación"],
+    [2, "Corrección de texto"],
+    [3, "Corrección de montos"],
+  ])("acepta el código de modificación %i (%s) y lo envía tal cual", (code) => {
+    const result = mapEcfToDosaDraft(validE34Partial, {
+      ...metadata,
+      encf: "E340000000001",
+      modificationCode: code as 1 | 2 | 3,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.body.informacionReferencia?.codigoModificacion).toBe(
+      String(code),
+    );
+  });
+
+  it("rechaza un código de modificación no documentado para DOSA (4)", () => {
+    const result = mapEcfToDosaDraft(validE34Partial, {
+      ...metadata,
+      encf: "E340000000001",
+      modificationCode: 4,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockedReason).toBe(
+      `${DOSA_MAPPER_BLOCKED.modificationCodeUnsupported}:4`,
+    );
+  });
+
   it("el importe de la línea es cantidad x precio menos descuento", () => {
     const doc = withLine({ quantity: "3", unitPrice: "33.33", discountAmount: "9.99" });
     const result = mapEcfToDosaDraft(doc, metadata);
@@ -216,6 +246,50 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(result.blockedReason).toBe(
       `${DOSA_MAPPER_BLOCKED.unitOfMeasureUnmapped}:3:CAJA_PROPIA`,
     );
+  });
+
+  // Códigos que DOSA documenta pero que FullPOS no puede producir hoy (no tiene
+  // esas unidades en `unit_of_measures`). Se fija el rechazo para que nadie
+  // añada una equivalencia especulativa más adelante.
+  it.each([
+    ["CAJA"],
+    ["CENTIMETER"],
+    ["DOCENA"],
+    ["PAQUETE"],
+    ["SERVICIO"],
+    ["HORA"],
+    ["DIA"],
+    ["MES"],
+  ])("rechaza el código %s por no tener equivalencia demostrable", (code) => {
+    const result = mapEcfToDosaDraft(withLine({ unitOfMeasure: code }), metadata);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.blockedReason).toBe(
+      `${DOSA_MAPPER_BLOCKED.unitOfMeasureUnmapped}:1:${code}`,
+    );
+  });
+
+  it("traduce todas las unidades globales que FullPOS sí tiene", () => {
+    const expected: Array<[string, number]> = [
+      ["UNIT", 1],
+      ["KILOGRAM", 3],
+      ["GRAM", 4],
+      ["POUND", 5],
+      ["OUNCE", 6],
+      ["METER", 7],
+      ["INCH", 9],
+      ["FOOT", 10],
+      ["YARD", 11],
+      ["LITER", 12],
+      ["MILLILITER", 13],
+      ["GALLON", 14],
+    ];
+    for (const [code, dosaCode] of expected) {
+      const result = mapEcfToDosaDraft(withLine({ unitOfMeasure: code }), metadata);
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.draft.body.detallesItems[0].unidadMedida).toBe(dosaCode);
+    }
   });
 
   it("marca el borrador como no verificado en los puntos dudosos", () => {

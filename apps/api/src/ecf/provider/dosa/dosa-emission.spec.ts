@@ -5,13 +5,18 @@ import {
 import {
   DOSA_EMISSION_BLOCKED,
   DosaEmissionClient,
+  emissionPathFor,
   readDosaEmissionConfig,
   redactDosaHeaders,
   type DosaEmissionConfig,
   type DosaHttpResponse,
   type DosaHttpTransport,
 } from "./dosa-emission.client";
-import type { DosaEcfRequestBody } from "./dosa-ecf.contract";
+import {
+  DOSA_ECF_CREDIT_NOTE_PATH,
+  DOSA_ECF_EMISSION_PATH,
+  type DosaEcfRequestBody,
+} from "./dosa-ecf.contract";
 
 /**
  * Pruebas del clasificador de respuestas y del cliente de emisión.
@@ -224,8 +229,7 @@ function config(overrides: Partial<DosaEmissionConfig> = {}): DosaEmissionConfig
   };
 }
 
-describe("DosaEmissionClient — puertas cerradas", () => {
-  it("sin bandera no hace ni una petición", async () => {
+describe("DosaEmissionClient — puertas cerradas", () => {  it("sin bandera no hace ni una petición", async () => {
     const transport = new FakeTransport(() => ({ status: 200, body: "{}" }));
     const client = new DosaEmissionClient(
       transport,
@@ -291,9 +295,44 @@ describe("DosaEmissionClient — puertas cerradas", () => {
   });
 });
 
-describe("DosaEmissionClient — transporte", () => {
-  it("envía la clave en X-API-KEY y clasifica la respuesta", async () => {
+describe("DosaEmissionClient — endpoint por tipo de comprobante", () => {
+  it("las facturas van a EnviarFactura y la nota de crédito a NotaDesdeFactura", () => {
+    // El proveedor documenta DOS rutas distintas. Enviar una nota de crédito a
+    // `EnviarFactura` es un error de contrato, no un detalle.
+    expect(emissionPathFor(BODY)).toBe(DOSA_ECF_EMISSION_PATH);
+
+    const e32 = { ...BODY, encabezado: { ...BODY.encabezado, idDoc: { ...BODY.encabezado.idDoc, tipoeCF: "32" as const } } };
+    expect(emissionPathFor(e32)).toBe(DOSA_ECF_EMISSION_PATH);
+
+    const e34 = {
+      ...BODY,
+      encabezado: { ...BODY.encabezado, idDoc: { ...BODY.encabezado.idDoc, tipoeCF: "34" as const } },
+    };
+    expect(emissionPathFor(e34)).toBe(DOSA_ECF_CREDIT_NOTE_PATH);
+    expect(DOSA_ECF_CREDIT_NOTE_PATH).toBe("/fe/api/emision/ecf/NotaDesdeFactura");
+  });
+
+  it("un E34 sale por la ruta de notas de crédito", async () => {
     const transport = new FakeTransport(() => ({
+      status: 200,
+      body: JSON.stringify({ codigo: "1", estado: "Aceptado" }),
+    }));
+    const client = new DosaEmissionClient(transport, config());
+    const e34 = {
+      ...BODY,
+      encabezado: { ...BODY.encabezado, idDoc: { ...BODY.encabezado.idDoc, tipoeCF: "34" as const } },
+    };
+
+    await client.sendEcf({ body: e34, idempotencyKey: "k-e34" });
+
+    expect(transport.calls[0].url).toBe(
+      `${config().baseUrl}${DOSA_ECF_CREDIT_NOTE_PATH}`,
+    );
+  });
+});
+
+describe("DosaEmissionClient — transporte", () => {
+  it("envía la clave en X-API-KEY y clasifica la respuesta", async () => {    const transport = new FakeTransport(() => ({
       status: 200,
       body: JSON.stringify({ data: { codigo: 1, encf: "E310000000001" } }),
     }));

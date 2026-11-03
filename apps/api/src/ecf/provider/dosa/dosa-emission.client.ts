@@ -1,8 +1,24 @@
 import {
   DOSA_AUTH_HEADER,
+  DOSA_ECF_CREDIT_NOTE_PATH,
   DOSA_ECF_EMISSION_PATH,
   type DosaEcfRequestBody,
 } from "./dosa-ecf.contract";
+
+/**
+ * Endpoint según el tipo de comprobante.
+ *
+ * El proveedor documenta **dos** rutas distintas: `EnviarFactura` para los
+ * comprobantes de venta (E31, E32) y `NotaDesdeFactura` para las notas de
+ * crédito (E34). Enviar una nota de crédito a `EnviarFactura` es un error de
+ * contrato, así que la ruta se deriva del `tipoeCF` del cuerpo y no de una
+ * constante fija.
+ */
+export function emissionPathFor(body: DosaEcfRequestBody): string {
+  return body.encabezado?.idDoc?.tipoeCF === "34"
+    ? DOSA_ECF_CREDIT_NOTE_PATH
+    : DOSA_ECF_EMISSION_PATH;
+}
 import {
   classifyDosaResponse,
   type DosaResponseClassification,
@@ -215,7 +231,7 @@ export class DosaEmissionClient {
       "Content-Type": "application/json",
       [DOSA_AUTH_HEADER]: this.config.apiKey,
     };
-    const url = `${this.config.baseUrl}${DOSA_ECF_EMISSION_PATH}`;
+    const url = `${this.config.baseUrl}${emissionPathFor(input.body)}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
 

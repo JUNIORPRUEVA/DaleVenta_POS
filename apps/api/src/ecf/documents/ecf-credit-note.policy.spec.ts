@@ -16,6 +16,7 @@ const gravada = (over: Partial<EcfSaleSnapshotLine> = {}): EcfSaleSnapshotLine =
   discountAmount: "0.00",
   taxCategory: "ITBIS_18",
   goodServiceIndicator: "GOOD",
+  unitOfMeasure: "UNIT",
   ...over,
 });
 
@@ -26,6 +27,7 @@ const exenta = (over: Partial<EcfSaleSnapshotLine> = {}): EcfSaleSnapshotLine =>
   discountAmount: "0.00",
   taxCategory: "EXEMPT",
   goodServiceIndicator: "GOOD",
+  unitOfMeasure: "UNIT",
   ...over,
 });
 

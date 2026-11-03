@@ -19,6 +19,8 @@ type LineSpec = {
   exemptAmount?: string;
   taxExempt?: boolean;
   itemType?: "PRODUCT" | "SERVICE" | null;
+  /** Código de unidad congelado en la partida. Por defecto `UNIT`. */
+  unitCode?: string;
 };
 
 uat("EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL", () => {
@@ -85,6 +87,7 @@ uat("EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL", () => {
     sale?: Record<string, unknown>;
   }) {
     const totals = { ...money(input.lines), ...(input.totals ?? {}) };
+    const productIds: string[] = [];
     const sale = await prisma.sale.create({
       data: {
         companyId: input.companyId,
@@ -122,6 +125,7 @@ uat("EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL", () => {
           },
         });
         productId = product.id;
+        productIds.push(product.id);
       }
       await prisma.saleItem.create({
         data: {
@@ -141,12 +145,14 @@ uat("EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL", () => {
           subtotalSold: line.taxableBase,
           subtotalCost: "1.00",
           profit: "0.00",
-          // Congelado como lo haría el flujo de ventas real.
+          // Congelado como lo haría el flujo de ventas real. La unidad también
+          // se congela: es el dato que viaja al comprobante fiscal.
           itemTypeSnapshot: line.itemType === null ? null : (line.itemType ?? "PRODUCT"),
+          ...(line.unitCode ? { unitCodeSnapshot: line.unitCode } : {}),
         },
       });
     }
-    return { sale, totals };
+    return { sale, totals, productIds };
   }
 
   const itbisLine: LineSpec = {
@@ -547,5 +553,68 @@ uat("EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL", () => {
     expect(second.value.evidence.snapshotFingerprint).toBe(
       first.value.evidence.snapshotFingerprint,
     );
+  });
+
+  it("keeps the sale's own unit when the product changes unit afterwards", async () => {
+    const { companyId, user } = await tenant();
+    const { sale, productIds } = await createSale({
+      companyId,
+      // La partida se vendió por yardas.
+      lines: [{ ...itbisLine, qty: "2.5", unitCode: "YARD" }],
+      sale: { fiscalCustomerTaxId: "130000000", fiscalCustomerName: "Cliente SA" },
+    });
+
+    // Después de la venta el producto pasa a libras: la venta NO cambia.
+    const pounds = await prisma.unitOfMeasure.upsert({
+      where: { id: "POUND" },
+      update: {},
+      create: {
+        id: "POUND",
+        code: "POUND",
+        name: "Libra",
+        symbol: "lb",
+        category: "WEIGHT",
+        allowDecimals: true,
+        precision: 3,
+      },
+    });
+    await prisma.product.update({
+      where: { id: productIds[0] },
+      data: { unitOfMeasureId: pounds.id },
+    });
+
+    const result = await adapter.build(user, { saleId: sale.id, documentType: "E31" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Unidad HISTÓRICA de la partida, no la configuración actual del producto.
+    expect(result.value.snapshot.lines[0].unitOfMeasure).toBe("YARD");
+    expect(result.value.snapshot.lines[0].quantity).toBe("2.5");
+  });
+
+  it("carries the unit of each line in a mixed sale (good + service)", async () => {
+    const { companyId, user } = await tenant();
+    const { sale } = await createSale({
+      companyId,
+      lines: [
+        { ...itbisLine, name: "Bien gravado", unitCode: "UNIT" },
+        { ...itbisLine, name: "Servicio gravado", itemType: "SERVICE", unitCode: "UNIT" },
+      ],
+      sale: { fiscalCustomerTaxId: "130000000", fiscalCustomerName: "Cliente SA" },
+    });
+
+    const result = await adapter.build(user, { saleId: sale.id, documentType: "E31" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(
+      result.value.snapshot.lines.map((line) => ({
+        unit: line.unitOfMeasure,
+        nature: line.goodServiceIndicator,
+      })),
+    ).toEqual([
+      { unit: "UNIT", nature: "GOOD" },
+      { unit: "UNIT", nature: "SERVICE" },
+    ]);
   });
 });

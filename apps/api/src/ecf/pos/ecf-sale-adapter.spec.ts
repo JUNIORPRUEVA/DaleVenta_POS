@@ -16,6 +16,7 @@ describe("mapSaleSnapshotToEcfDocument", () => {
           unitPrice: 100,
           taxCategory: "ITBIS_18",
           goodServiceIndicator: "GOOD",
+          unitOfMeasure: "UNIT",
         },
       ],
       totals: {

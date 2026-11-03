@@ -214,6 +214,9 @@ export class EcfSaleFiscalAdapter {
         discountAmount: item.lineDiscountAmount.toString(),
         taxCategory: category.value,
         goodServiceIndicator: classification.value,
+        // Unidad HISTÓRICA de la partida: la que estaba vigente al vender. Si el
+        // producto cambió de unidad después, la venta sigue declarando la suya.
+        unitOfMeasure: item.unitCodeSnapshot,
       });
     }
 

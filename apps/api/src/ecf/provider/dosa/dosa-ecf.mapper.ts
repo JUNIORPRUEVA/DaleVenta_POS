@@ -32,7 +32,27 @@ export const DOSA_MAPPER_BLOCKED = {
   unitOfMeasureRequired: "DOSA_UNIT_OF_MEASURE_REQUIRED",
   unitOfMeasureUnmapped: "DOSA_UNIT_OF_MEASURE_UNMAPPED",
   modificationCodeRequired: "DOSA_MODIFICATION_CODE_REQUIRED",
+  modificationCodeUnsupported: "DOSA_MODIFICATION_CODE_UNSUPPORTED",
 } as const;
+
+/**
+ * Causa de la nota de crédito (`Referencia.CodigoModificacion`).
+ *
+ * Valores según el documento `NOTAS_CREDITO_DESDE_FACTURA.md` entregado por el
+ * propietario del producto: 1 = anulación, 2 = corrección de texto, 3 =
+ * corrección de montos. El README público del proveedor **no** publica la tabla
+ * (solo sus ejemplos usan 1), así que estos valores no se pueden verificar aquí
+ * contra el proveedor: viajan con la nota para que la emisión no invente una
+ * causa.
+ *
+ * El 4 que admite el modelo compartido de Alanube **no** está documentado para
+ * DOSA y por eso se rechaza en lugar de enviarse a ciegas.
+ */
+export const DOSA_CODIGO_MODIFICACION: Readonly<Record<number, string>> = {
+  1: "Anulación",
+  2: "Corrección de texto",
+  3: "Corrección de montos",
+};
 
 /**
  * `indicadorFacturacion` de DOSA — **naturaleza del ítem**, no impuesto.
@@ -157,18 +177,24 @@ export function mapEcfToDosaDraft(
   ) {
     return { ok: false, blockedReason: DOSA_MAPPER_BLOCKED.referenceRequired };
   }
-  // El catalogo de `codigoModificacion` no esta publicado: el documento solo
-  // dice «Codigo del tipo de modificacion» y sus ejemplos muestran el valor 1.
-  // Antes se enviaba `?? 1` cuando el llamador no lo aportaba, es decir, se
-  // declaraba un tipo de modificacion que nadie habia elegido. Ahora se exige.
-  if (
-    document.type === "E34" &&
-    metadata.modificationCode === undefined
-  ) {
-    return {
-      ok: false,
-      blockedReason: DOSA_MAPPER_BLOCKED.modificationCodeRequired,
-    };
+  // El catalogo de `codigoModificacion` no esta publicado por el proveedor:
+  // `NOTAS_CREDITO_DESDE_FACTURA.md` documenta 1/2/3 y sus ejemplos solo
+  // muestran 1. Antes se enviaba `?? 1` cuando el llamador no lo aportaba, es
+  // decir, se declaraba una causa de modificacion que nadie habia elegido.
+  // Ahora se exige y se rechaza lo que no tenga causa documentada.
+  if (document.type === "E34") {
+    if (metadata.modificationCode === undefined) {
+      return {
+        ok: false,
+        blockedReason: DOSA_MAPPER_BLOCKED.modificationCodeRequired,
+      };
+    }
+    if (DOSA_CODIGO_MODIFICACION[metadata.modificationCode] === undefined) {
+      return {
+        ok: false,
+        blockedReason: `${DOSA_MAPPER_BLOCKED.modificationCodeUnsupported}:${metadata.modificationCode}`,
+      };
+    }
   }
   if (document.unsupportedFields && Object.keys(document.unsupportedFields).length > 0) {
     return { ok: false, blockedReason: DOSA_MAPPER_BLOCKED.unsupportedFields };
