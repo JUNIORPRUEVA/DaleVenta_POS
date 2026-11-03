@@ -16,8 +16,14 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # `prisma validate` solo resuelve `env("DATABASE_URL")` del esquema: NO
+      # abre conexión. Sin la variable el paso abortaba con P1012 y el gate
+      # entero quedaba en rojo en todos los PR (defecto preexistente). El valor
+      # es un marcador local; no hay base de datos en el runner.
       - run: npx prisma validate
         working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/fullpos_ci_validate
       - run: npm run audit:tenant-inventory
         working-directory: apps/api
       - run: npm run audit:endpoints
@@ -38,6 +44,12 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+        working-directory: apps/fulltech_app
+      # `pubspec.yaml` declara `.env` como asset y el fichero está en .gitignore,
+      # así que en un clon limpio no existe y `flutter analyze` falla con
+      # `asset_does_not_exist` (defecto preexistente). El Dockerfile de la PWA
+      # hace exactamente esto antes de compilar.
+      - run: cp .env.example .env
         working-directory: apps/fulltech_app
       - run: flutter analyze
         working-directory: apps/fulltech_app
