@@ -73,10 +73,13 @@ class _EcfDgiiHabilitationPageState
   bool _activationOpen = false;
   bool _submissionGuideOpen = false;
 
-  /// El certificado de la empresa superó la validación criptográfica en esta
-  /// sesión. Habilita el botón del modo de prueba, nada más.
-  bool _certificateValidated = false;
-
+  /// Estado real del certificado en esta sesión.
+  ///
+  /// Solo habilita el avance cuando el certificado es utilizable **y** su titular
+  /// está identificado. Se invalida en cuanto la persona cambia el archivo o la
+  /// contraseña, para que un resultado viejo no deje pasar un certificado nuevo
+  /// sin comprobar.
+  EcfCertificateGate _certificateGate = EcfCertificateGate.pending;
   /// Paso del recorrido que se está mostrando.
   ///
   /// Mientras sea `null` se deduce del expediente real, así que al volver a la
@@ -444,7 +447,7 @@ class _EcfDgiiHabilitationPageState
                                 ),
                             officialAuthorization: view.officialAuthorization,
                             fiscalReady: fiscalReady,
-                            certificateValidated: _certificateValidated,
+                            certificateValidated: _certificateReady(view),
                             testsOrLater:
                                 stage == _EcfStage.tests ||
                                 stage == _EcfStage.activation,
@@ -514,9 +517,16 @@ class _EcfDgiiHabilitationPageState
                             settings: settings,
                             fiscalReady: fiscalReady,
                             wide: wide,
+                            // El paso decide con el estado real: mientras el
+                            // certificado no sea utilizable y del titular, no
+                            // deja avanzar y explica qué falta.
+                            certificateReady: _certificateReady(view),
+                            certificateBlockedReason: _certificateBlockedReason(
+                              view,
+                            ),
                             certificate: EcfCertificateCard(
-                              onValidated: () =>
-                                  setState(() => _certificateValidated = true),
+                              onGateChanged: (gate) =>
+                                  setState(() => _certificateGate = gate),
                             ),
                             onEditFiscalData: () =>
                                 setState(() => _fiscalOpen = true),
@@ -687,11 +697,19 @@ class _EcfDgiiHabilitationPageState
     );
   }
 
-  /// El certificado cuenta como listo si se validó aquí o si el expediente ya
-  /// lo tiene registrado como resuelto (no se repite la comprobación).
+  /// El certificado cuenta como listo si se validó aquí con titular
+  /// identificado, o si el expediente ya lo tiene registrado como resuelto (no
+  /// se repite la comprobación en cada visita).
   bool _certificateReady(EcfDgiiHabilitationView view) =>
-      _certificateValidated ||
+      _certificateGate.ready ||
       _requirementResolved(view, 'DIGITAL_CERTIFICATE');
+
+  /// Qué falta exactamente para poder continuar. `null` si ya se puede.
+  String? _certificateBlockedReason(EcfDgiiHabilitationView view) {
+    if (_certificateReady(view)) return null;
+    return _certificateGate.reason ??
+        'Valida el certificado digital del representante legal para continuar.';
+  }
 
   bool _requirementResolved(EcfDgiiHabilitationView view, String key) => view
       .progress

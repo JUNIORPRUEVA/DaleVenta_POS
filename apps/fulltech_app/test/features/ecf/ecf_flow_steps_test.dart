@@ -101,6 +101,29 @@ EcfDgiiHabilitationView _habilitation({
   blockers: const [],
 );
 
+/// Progreso con el certificado digital ya registrado en el expediente.
+///
+/// Es la vía legítima para llegar al paso de preparación sin volver a validar el
+/// archivo: el expediente ya lo tiene resuelto.
+EcfDgiiProgress _certificateResolvedProgress() => const EcfDgiiProgress(
+  requirements: <EcfDgiiRequirementProgress>[
+    EcfDgiiRequirementProgress(
+      key: 'DIGITAL_CERTIFICATE',
+      label: 'Certificado digital',
+      mandatory: true,
+      automatable: true,
+      status: 'RESOLVED',
+      resolved: true,
+    ),
+  ],
+  total: 1,
+  resolvedCount: 1,
+  mandatoryTotal: 1,
+  mandatoryResolved: 1,
+  percent: 100,
+  pendingMandatory: <String>[],
+);
+
 CompanySettings _settings({bool complete = true}) =>
     CompanySettings.empty().copyWith(
       companyName: 'ECF Visual UAT Demo',
@@ -288,12 +311,37 @@ void main() {
     expect(find.text('Continuar'), findsNothing);
   });
 
-  testWidgets('preparación: resumen y acción bloqueada con su motivo', (
+  testWidgets('empresa: «Continuar» bloqueado hasta validar el certificado', (
     tester,
   ) async {
     await _pump(tester, _harness());
     await _tapText(tester, 'Comenzar');
-    await _tapText(tester, 'Continuar');
+
+    final button = find.byKey(const ValueKey('ecf_company_step_continue'));
+    expect(button, findsOneWidget);
+    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    // Se dice exactamente qué falta, sin obligar a avanzar y volver.
+    expect(
+      find.text(
+        'Valida el certificado digital del representante legal para continuar.',
+      ),
+      findsOneWidget,
+    );
+    // Los datos ya registrados siguen a la vista y no se vuelven a pedir.
+    expect(find.text('133020232'), findsOneWidget);
+    expect(find.text('ECF Visual UAT Demo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('preparación: resumen y acción bloqueada con su motivo', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _harness(
+        view: _habilitation(progress: _certificateResolvedProgress()),
+      ),
+    );
 
     expect(find.text('Antes de postular'), findsOneWidget);
     expect(find.text('Datos de la empresa'), findsWidgets);
@@ -305,16 +353,25 @@ void main() {
     );
     expect(button, findsOneWidget);
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    expect(find.text('Valida primero el certificado digital.'), findsOneWidget);
+    // Motivo real: el certificado ya está resuelto en el expediente, lo que
+    // falta es el modo de prueba.
+    expect(
+      find.text('El modo de prueba no está habilitado en este entorno.'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('preparación: el modo de prueba se declara cuando existe', (
     tester,
   ) async {
-    await _pump(tester, _harness(simulationAvailable: true));
-    await _tapText(tester, 'Comenzar');
-    await _tapText(tester, 'Continuar');
+    await _pump(
+      tester,
+      _harness(
+        simulationAvailable: true,
+        view: _habilitation(progress: _certificateResolvedProgress()),
+      ),
+    );
 
     expect(find.byKey(const ValueKey('ecf_test_mode_badge')), findsOneWidget);
     expect(find.textContaining('MODO DE PRUEBA'), findsOneWidget);
