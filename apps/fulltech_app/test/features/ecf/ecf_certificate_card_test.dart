@@ -28,10 +28,22 @@ class _FakeCertificateRepository implements EcfCertificateRepository {
   }
 }
 
-EcfCertificateReport _validReport() => EcfCertificateReport.fromJson({
-  'valid': true,
-  'code': null,
-  'message': 'El certificado es válido y está vigente.',
+EcfCertificateReport _report({
+  bool valid = true,
+  bool canProceed = true,
+  String? code,
+  String identity = 'MATCH_REPRESENTATIVE',
+  String? matchedAs = 'REPRESENTATIVE',
+  bool hasCompanyTaxId = true,
+  bool hasRepresentativeId = true,
+  List<String> missing = const <String>[],
+  String holderKind = 'PERSON',
+  String message = 'El certificado es válido y está vigente.',
+}) => EcfCertificateReport.fromJson({
+  'valid': valid,
+  'canProceed': canProceed,
+  'code': code,
+  'message': message,
   'certificate': {
     'commonName': 'MANOLO LIO',
     'organization': 'ECF VISUAL UAT DEMO',
@@ -48,16 +60,65 @@ EcfCertificateReport _validReport() => EcfCertificateReport.fromJson({
     'privateKey': 'PASS',
     'keyMatch': 'PASS',
     'validity': 'PASS',
-    'identity': 'NOT_EVALUATED',
+    'identity': valid && canProceed ? 'PASS' : 'NOT_EVALUATED',
     'trustChain': 'NOT_EVALUATED',
     'revocation': 'NOT_EVALUATED',
   },
-  'identity': 'NOT_EVALUATED',
-  'notes': ['La cadena de confianza no se ha comprobado.'],
+  'identity': identity,
+  'notes': ['Esta comprobación es local y no confirma ninguna aceptación.'],
+  'diagnostics': {
+    'identityMatchedAs': matchedAs,
+    'canonical': {
+      'hasCompanyTaxId': hasCompanyTaxId,
+      'hasRepresentativeId': hasRepresentativeId,
+    },
+    'missingCanonicalFields': missing,
+    'certificate': {
+      'hasSerialNumber': true,
+      'hasCommonNameDigits': true,
+      'hasOrganizationDigits': false,
+      'holderKind': holderKind,
+      'certificatesInContainer': 1,
+    },
+    'validity': {
+      'notBefore': '2026-01-01T00:00:00.000Z',
+      'notAfter': '2027-01-01T00:00:00.000Z',
+      'daysRemaining': 61,
+    },
+    'privateKey': {'present': true, 'matchesCertificate': true},
+  },
 });
+
+EcfCertificateReport _validReport() => _report();
+
+/// El archivo es correcto pero falta la cédula del representante: no habilita
+/// a continuar y NO se presenta como certificado ajeno.
+EcfCertificateReport _notVerifiableReport() => _report(
+  canProceed: false,
+  code: 'ECF_CERTIFICATE_IDENTITY_NOT_VERIFIABLE',
+  identity: 'NOT_VERIFIABLE',
+  matchedAs: null,
+  hasRepresentativeId: false,
+  missing: const <String>['representative.identification'],
+  message:
+      'El certificado se abrió correctamente, pero el expediente todavía no '
+      'tiene la cédula del representante legal.',
+);
+
+EcfCertificateReport _mismatchReport() => _report(
+  valid: false,
+  canProceed: false,
+  code: 'ECF_CERTIFICATE_IDENTITY_MISMATCH',
+  identity: 'MISMATCH',
+  matchedAs: null,
+  message:
+      'El certificado no corresponde a la empresa o al representante del '
+      'expediente.',
+);
 
 EcfCertificateReport _errorReport() => EcfCertificateReport.fromJson({
   'valid': false,
+  'canProceed': false,
   'code': 'ECF_CERTIFICATE_WRONG_PASSWORD',
   'message': 'La contraseña no corresponde a este certificado.',
   'certificate': null,
@@ -150,7 +211,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('no significa que la DGII haya aceptado'),
+      find.textContaining('no es una validación de la DGII'),
       findsOneWidget,
     );
   });
@@ -188,6 +249,208 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Certificado válido y vigente'), findsNothing);
+  });
+
+  testWidgets('titular no verificable: bloquea el avance y dice qué falta', (
+    tester,
+  ) async {
+    final repository = _FakeCertificateRepository(_notVerifiableReport);
+    final gates = <EcfCertificateGate>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ecfCertificateRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: _harness(
+          EcfCertificateCard(
+            pickFile: () async =>
+                (name: 'certificado.pfx', bytes: const [1, 2, 3]),
+            onGateChanged: gates.add,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Seleccionar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      'clave',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Validar certificado'));
+    await tester.pumpAndSettle();
+
+    expect(gates.last.ready, isFalse);
+    expect(gates.last.reason, contains('cédula del representante'));
+    // Mensaje propio, no «no es utilizable»: el archivo está bien.
+    expect(find.text('Falta comprobar el titular'), findsOneWidget);
+    expect(find.text('El certificado no es utilizable'), findsNothing);
+    expect(find.text('Certificado válido y vigente'), findsNothing);
+    // Diagnóstico seguro: qué dato canónico falta, sin exponer el valor.
+    expect(find.text('Por qué'), findsOneWidget);
+    expect(find.text('Cédula del representante'), findsOneWidget);
+    expect(find.text('RNC en el expediente'), findsOneWidget);
+  });
+
+  testWidgets('identidad no coincidente: diagnóstico sin datos personales', (
+    tester,
+  ) async {
+    final repository = _FakeCertificateRepository(_mismatchReport);
+    final gates = <EcfCertificateGate>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ecfCertificateRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: _harness(
+          EcfCertificateCard(
+            pickFile: () async => (name: 'ajeno.p12', bytes: const [7]),
+            onGateChanged: gates.add,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Seleccionar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      'clave',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Validar certificado'));
+    await tester.pumpAndSettle();
+
+    expect(gates.last.ready, isFalse);
+    expect(gates.last.reason, contains('no coincide'));
+    expect(find.text('El certificado no es utilizable'), findsOneWidget);
+    expect(find.text('Tipo de titular'), findsOneWidget);
+  });
+
+  testWidgets('cambiar la contraseña invalida el resultado anterior', (
+    tester,
+  ) async {
+    final repository = _FakeCertificateRepository(_validReport);
+    final gates = <EcfCertificateGate>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ecfCertificateRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: _harness(
+          EcfCertificateCard(
+            pickFile: () async =>
+                (name: 'certificado.pfx', bytes: const [1, 2, 3]),
+            onGateChanged: gates.add,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Seleccionar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      'clave-buena',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Validar certificado'));
+    await tester.pumpAndSettle();
+    expect(gates.last.ready, isTrue);
+    expect(find.text('Certificado válido y vigente'), findsOneWidget);
+
+    // Con otra contraseña, el informe anterior ya no vale.
+    await tester.enterText(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      'otra-clave',
+    );
+    await tester.pumpAndSettle();
+
+    expect(gates.last.ready, isFalse);
+    expect(gates.last.reason, isNotNull);
+    expect(find.text('Certificado válido y vigente'), findsNothing);
+  });
+
+  testWidgets('cambiar el archivo invalida el resultado anterior', (
+    tester,
+  ) async {
+    var pick = 0;
+    final repository = _FakeCertificateRepository(_validReport);
+    final gates = <EcfCertificateGate>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ecfCertificateRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: _harness(
+          EcfCertificateCard(
+            pickFile: () async {
+              pick += 1;
+              return (name: 'certificado-$pick.pfx', bytes: const [1, 2, 3]);
+            },
+            onGateChanged: gates.add,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Seleccionar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      'clave-buena',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Validar certificado'));
+    await tester.pumpAndSettle();
+    expect(gates.last.ready, isTrue);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Cambiar'));
+    await tester.pumpAndSettle();
+
+    expect(gates.last.ready, isFalse);
+    expect(find.text('Certificado válido y vigente'), findsNothing);
+    expect(find.text('certificado-2.pfx'), findsOneWidget);
+  });
+
+  testWidgets('no expone la contraseña del certificado en la interfaz', (
+    tester,
+  ) async {
+    const password = 'clave-super-secreta-987';
+    final repository = _FakeCertificateRepository(_validReport);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ecfCertificateRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: _harness(
+          EcfCertificateCard(
+            pickFile: () async =>
+                (name: 'certificado.pfx', bytes: const [1, 2, 3]),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Seleccionar'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      password,
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Validar certificado'));
+    await tester.pumpAndSettle();
+
+    // La contraseña solo vive en el controlador del campo oscurecido: ningún
+    // texto visible la repite (ni el informe, ni el diagnóstico, ni las notas).
+    final rendered = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? '')
+        .join('\n');
+    expect(rendered.contains(password), isFalse);
+    expect(repository.lastPassword, password);
   });
 
   for (final width in <double>[360, 768, 1366]) {

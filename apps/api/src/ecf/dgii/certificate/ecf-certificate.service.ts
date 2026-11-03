@@ -12,6 +12,7 @@ import {
 import {
   evaluateCertificate,
   type EcfCertificateChecks,
+  type EcfCertificateDiagnostics,
   type EcfCertificateIdentity,
 } from "./ecf-certificate.policy";
 
@@ -22,6 +23,11 @@ import {
  */
 export type EcfCertificateReport = {
   valid: boolean;
+  /**
+   * Única señal que habilita a continuar en el asistente. `valid` dice que el
+   * archivo es correcto; `canProceed` añade que el titular está identificado.
+   */
+  canProceed: boolean;
   code: EcfCertificateErrorCode | null;
   message: string;
   certificate: {
@@ -37,16 +43,23 @@ export type EcfCertificateReport = {
   } | null;
   checks: EcfCertificateChecks;
   identity: EcfCertificateIdentity;
+  /**
+   * Qué condición falló, sin datos personales: booleanos, enums y fechas.
+   * Nunca identificadores, nombres, contraseñas ni claves.
+   */
+  diagnostics: EcfCertificateDiagnostics;
   notes: string[];
 };
 
 /**
  * Validación de certificado digital para la habilitación e-CF.
  *
- * No persiste nada. No envía el certificado a ningún proveedor. No afirma que la
- * DGII lo haya aceptado: solo dice si el archivo es un PKCS#12 correcto, si la
- * contraseña lo abre, si la clave privada corresponde al certificado y si está
- * vigente.
+ * No persiste nada: el archivo vive en memoria durante la petición y su búfer se
+ * sobrescribe al terminar la inspección. No envía el certificado a ningún
+ * proveedor ni a la DGII. No afirma que la DGII lo haya aceptado: solo dice si
+ * el archivo es un PKCS#12 correcto, si la contraseña lo abre, si la clave
+ * privada corresponde al certificado, si está vigente y si el titular coincide
+ * con los datos canónicos del expediente.
  */
 @Injectable()
 export class EcfCertificateService {
@@ -60,6 +73,8 @@ export class EcfCertificateService {
     expectedRepresentativeId?: string | null;
     /** De dónde salieron los datos esperados (siempre del backend). */
     identitySource?: "APPLICATION_SNAPSHOT" | "FISCAL_CONFIG" | "NONE";
+    /** Campos canónicos ausentes; solo nombres, nunca valores. */
+    missingCanonicalFields?: readonly string[];
   }): EcfCertificateReport {
     const password = (input.password ?? "").trim();
     if (password.length === 0) {
@@ -68,7 +83,7 @@ export class EcfCertificateService {
 
     const inspection = inspectPkcs12(input.buffer, password);
     if (!inspection.ok) {
-      return this.failure(inspection.code);
+      return this.failure(inspection.code, input);
     }
 
     const policy = evaluateCertificate({
@@ -78,10 +93,12 @@ export class EcfCertificateService {
       now: input.now ?? new Date(),
       expectedTaxId: input.expectedTaxId,
       expectedRepresentativeId: input.expectedRepresentativeId,
+      missingCanonicalFields: input.missingCanonicalFields,
     });
 
     return {
       valid: policy.valid,
+      canProceed: policy.canProceed,
       code: policy.code,
       message: policy.code
         ? ECF_CERTIFICATE_MESSAGES[policy.code]
@@ -89,13 +106,22 @@ export class EcfCertificateService {
       certificate: this.summarize(inspection.inspection, policy.daysRemaining),
       checks: policy.checks,
       identity: policy.identity,
+      diagnostics: policy.diagnostics,
       notes: policy.notes,
     };
   }
 
-  private failure(code: EcfCertificateErrorCode): EcfCertificateReport {
+  private failure(
+    code: EcfCertificateErrorCode,
+    input: {
+      expectedTaxId?: string | null;
+      expectedRepresentativeId?: string | null;
+      missingCanonicalFields?: readonly string[];
+    },
+  ): EcfCertificateReport {
     return {
       valid: false,
+      canProceed: false,
       code,
       message: ECF_CERTIFICATE_MESSAGES[code],
       certificate: null,
@@ -113,6 +139,31 @@ export class EcfCertificateService {
         revocation: "NOT_EVALUATED",
       },
       identity: "NOT_EVALUATED",
+      // Sin inspección no hay datos del certificado que diagnosticar: se deja
+      // constancia solo de qué datos canónicos existían.
+      diagnostics: {
+        identityMatchedAs: null,
+        canonical: {
+          hasCompanyTaxId: Boolean((input.expectedTaxId ?? "").trim()),
+          hasRepresentativeId: Boolean(
+            (input.expectedRepresentativeId ?? "").trim(),
+          ),
+        },
+        missingCanonicalFields: [...(input.missingCanonicalFields ?? [])],
+        certificate: {
+          hasSerialNumber: false,
+          hasCommonNameDigits: false,
+          hasOrganizationDigits: false,
+          holderKind: "UNKNOWN",
+          certificatesInContainer: 0,
+        },
+        validity: {
+          notBefore: "",
+          notAfter: "",
+          daysRemaining: 0,
+        },
+        privateKey: { present: false, matchesCertificate: null },
+      },
       notes: [
         "No se pudo completar la comprobación criptográfica del archivo.",
         "Esta comprobación es local: no confirma ninguna aceptación por la DGII.",

@@ -13,16 +13,47 @@ typedef EcfPickedCertificate = ({String name, List<int> bytes});
 /// diálogo del sistema.
 typedef EcfCertificatePicker = Future<EcfPickedCertificate?> Function();
 
+/// Estado del certificado para decidir si se puede continuar.
+///
+/// `ready` es la única señal que habilita el botón «Continuar» del paso; `reason`
+/// dice exactamente qué falta cuando no lo está.
+class EcfCertificateGate {
+  const EcfCertificateGate({required this.ready, this.reason});
+
+  /// Todavía no se ha validado nada.
+  static const EcfCertificateGate pending = EcfCertificateGate(
+    ready: false,
+    reason:
+        'Valida el certificado digital del representante legal para continuar.',
+  );
+
+  final bool ready;
+  final String? reason;
+}
+
 /// Tarjeta de certificado digital del proceso de habilitación.
 ///
-/// Hace una única cosa y la declara con precisión: valida el archivo PKCS#12 de
-/// forma criptográfica y local. No envía el certificado a nadie, no lo guarda y
-/// no afirma que la DGII lo haya aceptado.
+/// Qué hace, con precisión: envía el archivo y su contraseña **por HTTPS** a
+/// FullPOS Cloud, donde se validan en memoria (formato PKCS#12, contraseña,
+/// clave privada, vigencia y titular). El backend no los guarda, no los registra
+/// y no los reenvía a la DGII ni a DOSA. La comprobación no afirma que la DGII
+/// haya aceptado el certificado.
 class EcfCertificateCard extends ConsumerStatefulWidget {
-  const EcfCertificateCard({super.key, this.onValidated, this.pickFile});
+  const EcfCertificateCard({
+    super.key,
+    this.onValidated,
+    this.onGateChanged,
+    this.pickFile,
+  });
 
-  /// Se avisa cuando el certificado supera la validación criptográfica.
+  /// Se avisa cuando el certificado queda utilizable **y** con titular
+  /// identificado, es decir, cuando ya no bloquea el avance.
   final VoidCallback? onValidated;
+
+  /// Se avisa en cada cambio de estado: validado, rechazado o invalidado
+  /// (archivo o contraseña modificados). El paso usa `reason` para explicar qué
+  /// falta sin obligar a avanzar y volver.
+  final ValueChanged<EcfCertificateGate>? onGateChanged;
 
   /// Selector de archivo. Por defecto, el diálogo del sistema.
   final EcfCertificatePicker? pickFile;
@@ -51,6 +82,30 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   bool get _canValidate =>
       !_busy && _bytes != null && _password.text.trim().isNotEmpty;
 
+  /// Estado real del certificado, sin optimismo: sin informe no hay permiso.
+  EcfCertificateGate get _gate {
+    final report = _report;
+    if (report == null) return EcfCertificateGate.pending;
+    if (report.canProceed) return const EcfCertificateGate(ready: true);
+    return EcfCertificateGate(ready: false, reason: report.blockingReason);
+  }
+
+  void _publishGate() => widget.onGateChanged?.call(_gate);
+
+  /// Cambiar el archivo o la contraseña invalida el resultado anterior: se
+  /// validó con otros datos y no debe servir para continuar.
+  void _invalidateResult() {
+    if (_report == null && _error == null) {
+      setState(() {});
+      return;
+    }
+    setState(() {
+      _report = null;
+      _error = null;
+    });
+    _publishGate();
+  }
+
   Future<void> _pick() async {
     final picker = widget.pickFile;
     final picked = picker != null
@@ -63,6 +118,7 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
       _report = null;
       _error = null;
     });
+    _publishGate();
   }
 
   Future<EcfPickedCertificate?> _pickWithSystemDialog() async {
@@ -97,11 +153,13 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
         _report = report;
         _busy = false;
       });
-      if (report.valid) {
+      _publishGate();
+      if (report.canProceed) {
         AppFeedback.showToast(
           context,
           title: 'Certificado válido',
-          body: 'El archivo y la clave privada son correctos y está vigente.',
+          body: 'El archivo y la clave privada son correctos, está vigente y el '
+              'titular coincide con el expediente.',
           kind: AppFeedbackKind.success,
           dedupeKey: 'ecf_certificate_valid',
         );
@@ -114,6 +172,7 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
         _error = error.toString().replaceFirst('Exception: ', '');
         _report = null;
       });
+      _publishGate();
     }
   }
 
@@ -155,7 +214,9 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
           controller: _password,
           obscureText: _obscure,
           enabled: !_busy,
-          onChanged: (_) => setState(() {}),
+          // Cambiar la contraseña invalida el informe anterior: se validó con
+          // otra y no debe seguir habilitando el avance.
+          onChanged: (_) => _invalidateResult(),
           decoration: InputDecoration(
             labelText: 'Contraseña del certificado',
             isDense: true,
@@ -286,13 +347,6 @@ class _ReportView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final certificate = report.certificate;
-    if (!report.valid) {
-      return _Message(
-        kind: _MessageKind.error,
-        title: 'El certificado no es utilizable',
-        body: report.message,
-      );
-    }
     final rows = <(String, String)>[
       if (certificate?.commonName != null)
         ('Titular', certificate!.commonName!),
@@ -307,6 +361,48 @@ class _ReportView extends StatelessWidget {
       if (certificate?.fingerprintShort != null)
         ('Huella', certificate!.fingerprintShort!),
     ];
+    final facts = rows.isEmpty ? null : _FactsCard(rows: rows);
+
+    if (!report.valid) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Message(
+            kind: _MessageKind.error,
+            title: 'El certificado no es utilizable',
+            body: report.message,
+          ),
+          if (facts != null) ...[const SizedBox(height: 10), facts],
+          const SizedBox(height: 10),
+          _DiagnosticsView(
+            diagnostics: report.diagnostics,
+            notes: report.notes,
+          ),
+        ],
+      );
+    }
+
+    // Archivo correcto pero titular sin identificar: no es un error del usuario
+    // ni un certificado ajeno. Se explica qué falta y no se habilita el avance.
+    if (!report.canProceed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Message(
+            kind: _MessageKind.neutral,
+            title: 'Falta comprobar el titular',
+            body: report.blockingReason ?? report.message,
+          ),
+          if (facts != null) ...[const SizedBox(height: 10), facts],
+          const SizedBox(height: 10),
+          _DiagnosticsView(
+            diagnostics: report.diagnostics,
+            notes: report.notes,
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -317,49 +413,7 @@ class _ReportView extends StatelessWidget {
               'El archivo se abrió con esa contraseña y la clave privada '
               'corresponde al certificado.',
         ),
-        if (rows.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                for (final (label, value) in rows)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 104,
-                          child: Text(
-                            label,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            value,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF1F2A37),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+        if (facts != null) ...[const SizedBox(height: 10), facts],
         const SizedBox(height: 10),
         Text(
           'Lo que todavía no se comprobó',
@@ -395,8 +449,8 @@ class _ReportView extends StatelessWidget {
           ),
         const SizedBox(height: 6),
         Text(
-          'Esta comprobación es local: no significa que la DGII haya aceptado '
-          'el certificado ni que ya puedas emitir.',
+          'Esta comprobación no es una validación de la DGII: no significa que '
+          'haya aceptado el certificado ni que ya puedas emitir.',
           style: theme.textTheme.bodySmall?.copyWith(
             fontSize: 11,
             height: 1.3,
@@ -404,6 +458,171 @@ class _ReportView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FactsCard extends StatelessWidget {
+  const _FactsCard({required this.rows});
+
+  final List<(String, String)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          for (final (label, value) in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 104,
+                    child: Text(
+                      label,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1F2A37),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Diagnóstico SEGURO del resultado.
+///
+/// Dice qué condición falló con booleanos y etiquetas: nunca el RNC, la cédula,
+/// el nombre del titular, la contraseña ni material del certificado.
+class _DiagnosticsView extends StatelessWidget {
+  const _DiagnosticsView({required this.diagnostics, required this.notes});
+
+  final EcfCertificateDiagnostics diagnostics;
+  final List<String> notes;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rows = <(String, String)>[
+      if (diagnostics.matchedAs != null)
+        (
+          'Titular reconocido',
+          diagnostics.matchedAs == 'COMPANY'
+              ? 'RNC de la empresa'
+              : 'Cédula del representante',
+        ),
+      ('RNC en el expediente', diagnostics.hasCompanyTaxId ? 'Sí' : 'No'),
+      (
+        'Cédula del representante',
+        diagnostics.hasRepresentativeId ? 'Sí' : 'No',
+      ),
+      (
+        'Tipo de titular',
+        switch (diagnostics.holderKind) {
+          'PERSON' => 'Persona física',
+          'ORGANIZATION' => 'Empresa',
+          _ => 'No determinado',
+        },
+      ),
+      if (diagnostics.daysRemaining != null)
+        ('Días de vigencia', '${diagnostics.daysRemaining}'),
+      if (diagnostics.keyMatchesCertificate != null)
+        (
+          'Clave privada',
+          diagnostics.keyMatchesCertificate!
+              ? 'Corresponde al certificado'
+              : 'No corresponde',
+        ),
+    ];
+    if (rows.isEmpty && notes.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (rows.isNotEmpty) ...[
+            Text(
+              'Por qué',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF475569),
+              ),
+            ),
+            const SizedBox(height: 2),
+            for (final (label, value) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 132,
+                      child: Text(
+                        label,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2A37),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          if (notes.isNotEmpty) ...[
+            if (rows.isNotEmpty) const SizedBox(height: 6),
+            for (final note in notes)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  note,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11.5,
+                    height: 1.35,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }

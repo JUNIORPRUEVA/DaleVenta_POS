@@ -345,6 +345,9 @@ export class EcfController {
       expectedTaxId: identity.taxId,
       expectedRepresentativeId: identity.representativeId,
       identitySource: identity.source,
+      // Solo los NOMBRES de los campos que faltan: se usan para el diagnóstico
+      // seguro que ve el administrador, nunca para completar datos.
+      missingCanonicalFields: identity.missing,
     });
   }
 

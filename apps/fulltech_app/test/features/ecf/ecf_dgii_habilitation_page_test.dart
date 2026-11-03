@@ -103,6 +103,26 @@ const _noAuthorization = EcfDgiiEmissionState(
   productionEmissionImplemented: false,
 );
 
+/// Expediente con el certificado digital ya registrado.
+EcfDgiiProgress _certificateResolvedProgress() => const EcfDgiiProgress(
+  requirements: <EcfDgiiRequirementProgress>[
+    EcfDgiiRequirementProgress(
+      key: 'DIGITAL_CERTIFICATE',
+      label: 'Certificado digital',
+      mandatory: true,
+      automatable: true,
+      status: 'RESOLVED',
+      resolved: true,
+    ),
+  ],
+  total: 1,
+  resolvedCount: 1,
+  mandatoryTotal: 1,
+  mandatoryResolved: 1,
+  percent: 100,
+  pendingMandatory: <String>[],
+);
+
 EcfDgiiHabilitationView _view({
   String companyId = 'company-a',
   String state = 'NOT_STARTED',
@@ -550,17 +570,46 @@ void main() {
     expect(find.text('Validar certificado'), findsOneWidget);
     expect(find.text('Ningún archivo seleccionado'), findsOneWidget);
 
-    // Preparación: el botón de postulación inteligente existe, pero NO ejecuta
-    // nada porque el modo de prueba no está disponible en este entorno.
-    await tester.tap(find.text('Continuar').first);
-    await tester.pumpAndSettle();
+    // Sin certificado validado no se puede avanzar, y se dice qué falta sin
+    // obligar a pasar de pantalla y volver.
+    final continueButton = find.byKey(
+      const ValueKey('ecf_company_step_continue'),
+    );
+    expect(continueButton, findsOneWidget);
+    expect(tester.widget<FilledButton>(continueButton).onPressed, isNull);
+    expect(
+      find.text(
+        'Valida el certificado digital del representante legal para continuar.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('preparación: el botón de postulación espera al modo de prueba', (
+    tester,
+  ) async {
+    // Se entra con el certificado ya registrado en el expediente (vía legítima
+    // sin volver a subir el archivo): el recorrido abre directamente la
+    // preparación.
+    await _pumpPage(
+      tester,
+      _harness(
+        user: _adminUser(),
+        view: _view(progress: _certificateResolvedProgress()),
+      ),
+      step: null,
+      technical: false,
+    );
+    expect(find.text('Antes de postular'), findsOneWidget);
+
+    // El botón de postulación inteligente existe, pero NO ejecuta nada porque
+    // el modo de prueba no está disponible en este entorno.
     final button = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
     expect(button, findsOneWidget);
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    // Sin certificado validado se explica en UNA frase qué falta.
-    expect(find.text('Valida primero el certificado digital.'), findsOneWidget);
     // Sin modo de prueba disponible no se muestra el distintivo de pruebas.
     expect(find.byKey(const ValueKey('ecf_test_mode_badge')), findsNothing);
     expect(tester.takeException(), isNull);

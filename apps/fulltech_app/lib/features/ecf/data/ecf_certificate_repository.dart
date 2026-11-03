@@ -7,9 +7,15 @@ import '../ecf_certificate_models.dart';
 
 /// Envío del certificado para su validación.
 ///
-/// El archivo y la contraseña viajan juntos en una sola petición multipart: no
-/// se guardan en el dispositivo, no se cachean y no se registran. El servidor
-/// responde con un informe y descarta el material.
+/// Tratamiento REAL de los datos, sin adornos: el archivo y la contraseña viajan
+/// juntos en una sola petición multipart **por HTTPS** hasta FullPOS Cloud. El
+/// servidor los valida en memoria y no los persiste: no se escriben en disco, no
+/// se guardan en la base de datos, no se registran en logs ni en auditoría y no
+/// se reenvían a la DGII ni a DOSA. En el dispositivo tampoco se guardan.
+///
+/// Se envía al backend a propósito: es el único sitio donde el certificado se
+/// puede comparar con la identidad canónica del expediente, que el cliente no
+/// conoce ni puede declarar.
 class EcfCertificateRepository {
   EcfCertificateRepository(this._dio);
 

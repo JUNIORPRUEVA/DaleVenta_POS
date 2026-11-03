@@ -18,6 +18,12 @@ export const ECF_CERTIFICATE_ERRORS = {
   EXPIRED: "ECF_CERTIFICATE_EXPIRED",
   NOT_YET_VALID: "ECF_CERTIFICATE_NOT_YET_VALID",
   IDENTITY_MISMATCH: "ECF_CERTIFICATE_IDENTITY_MISMATCH",
+  /**
+   * El certificado es criptograficamente correcto pero el expediente no tiene
+   * ningun identificador con el que compararlo. No es un rechazo del archivo:
+   * es «todavia no verificable» y no habilita a continuar.
+   */
+  IDENTITY_NOT_VERIFIABLE: "ECF_CERTIFICATE_IDENTITY_NOT_VERIFIABLE",
   UNSUPPORTED_ALGORITHM: "ECF_CERTIFICATE_UNSUPPORTED_KEY",
 } as const;
 
@@ -52,6 +58,9 @@ export const ECF_CERTIFICATE_MESSAGES: Readonly<
     "El certificado todavía no está vigente.",
   [ECF_CERTIFICATE_ERRORS.IDENTITY_MISMATCH]:
     "El certificado no corresponde a la empresa o al representante del expediente.",
+  [ECF_CERTIFICATE_ERRORS.IDENTITY_NOT_VERIFIABLE]:
+    "El certificado se abrió correctamente, pero el expediente todavía no tiene " +
+    "la cédula del representante legal para comprobar que es el titular.",
   [ECF_CERTIFICATE_ERRORS.UNSUPPORTED_ALGORITHM]:
     "La clave del certificado usa un algoritmo que no se puede comprobar aquí.",
 };

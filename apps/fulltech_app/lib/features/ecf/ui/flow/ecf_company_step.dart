@@ -17,6 +17,8 @@ class EcfCompanyStep extends StatelessWidget {
     required this.onEditFiscalData,
     required this.onContinue,
     required this.wide,
+    this.certificateReady = false,
+    this.certificateBlockedReason,
   });
 
   final CompanySettings? settings;
@@ -24,6 +26,13 @@ class EcfCompanyStep extends StatelessWidget {
 
   /// Bloque de certificado digital (se inyecta para poder probarlo solo).
   final Widget certificate;
+
+  /// El certificado ya es utilizable y su titular está identificado (o el
+  /// expediente ya lo tiene registrado). Es la condición que habilita avanzar.
+  final bool certificateReady;
+
+  /// Qué falta exactamente cuando el certificado bloquea el avance.
+  final String? certificateBlockedReason;
 
   final VoidCallback onEditFiscalData;
   final VoidCallback onContinue;
@@ -39,7 +48,11 @@ class EcfCompanyStep extends StatelessWidget {
     final cert = EcfSection(
       title: 'Certificado digital',
       icon: Icons.verified_user_outlined,
-      subtitle: 'Se comprueba aquí mismo y no se guarda ni se envía.',
+      // La descripción refleja el tratamiento real: el archivo y la contraseña
+      // se validan en FullPOS Cloud (cifrados en tránsito) y no se guardan.
+      subtitle:
+          'Se comprueba en FullPOS Cloud y no se guarda. No se envía a la '
+          'DGII ni a DOSA.',
       child: certificate,
     );
 
@@ -72,19 +85,25 @@ class EcfCompanyStep extends StatelessWidget {
             cert,
           ],
           const SizedBox(height: 16),
-          if (fiscalReady)
-            EcfPrimaryAction(
-              label: 'Continuar',
-              onPressed: onContinue,
-              helper:
-                  'El certificado se puede validar ahora o en el paso siguiente.',
-            )
-          else
+          if (!fiscalReady)
             EcfPrimaryAction(
               label: 'Completar datos de la empresa',
               icon: Icons.edit_outlined,
               onPressed: onEditFiscalData,
               helper: 'Sin estos datos la DGII no puede identificar al emisor.',
+              buttonKey: const ValueKey('ecf_company_step_primary'),
+            )
+          else
+            EcfPrimaryAction(
+              label: 'Continuar',
+              // Bloqueado hasta que el certificado sea utilizable y el titular
+              // esté identificado: así no hay que avanzar y volver.
+              onPressed: certificateReady ? onContinue : null,
+              helper: certificateReady
+                  ? 'Certificado comprobado. Puedes continuar.'
+                  : (certificateBlockedReason ??
+                        'Valida el certificado digital para continuar.'),
+              buttonKey: const ValueKey('ecf_company_step_continue'),
             ),
         ],
       ),
