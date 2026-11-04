@@ -145,6 +145,17 @@ dosa-session-url-cipher.spec.ts
 82 passed
 ```
 
+Sondas `GET` de solo lectura al dominio público (2026-11-04):
+
+```text
+/api/health              -> 200 application/json
+/api/webhook/dosa        -> 404 application/json  (NestJS alcanzado; GET no es su método)
+/webhook/dosa            -> 200 text/html         (PWA, no usar)
+/ecf/certificacion/      -> 200 text/html
+```
+
+No se envió ningún `POST`, firma ni credencial en estas sondas.
+
 ## 5. Certificado y proveedor efectivo
 
 La UI ahora usa `provider` del expediente, no solo el permiso del usuario:
