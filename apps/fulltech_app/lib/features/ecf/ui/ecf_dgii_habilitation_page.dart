@@ -14,6 +14,7 @@ import '../data/ecf_certification_repository.dart';
 import '../data/ecf_platform_repository.dart';
 import '../data/ecf_repository.dart';
 import '../dosa/dosa_assistant_section.dart';
+import '../dosa/dosa_certification_diagnostic_section.dart';
 import '../domain/ecf_fiscal_readiness.dart';
 import '../ecf_certificate_models.dart';
 import '../ecf_certification_models.dart';
@@ -554,18 +555,32 @@ class _EcfDgiiHabilitationPageState
                             companyReady: fiscalReady,
                             certificateReady: _certificateReady(view),
                             dosaEntry:
-                                fiscalReady &&
-                                        _certificateReady(view) &&
-                                        hasUserPermission(
-                                          user,
-                                          AppPermission.manageEcfOnboarding,
-                                        )
-                                ? DosaAssistantSection(
-                                    key: ValueKey(
-                                      'dosa-preparation-${user?.companyId}',
-                                    ),
-                                    portalOnly: true,
-                                    postulationExternalId: view.externalId,
+                                hasUserPermission(
+                                  user,
+                                  AppPermission.manageEcfOnboarding,
+                                )
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (fiscalReady &&
+                                          _certificateReady(view)) ...[
+                                        DosaAssistantSection(
+                                          key: ValueKey(
+                                            'dosa-preparation-${user?.companyId}',
+                                          ),
+                                          portalOnly: true,
+                                          postulationExternalId:
+                                              view.externalId,
+                                        ),
+                                        const SizedBox(height: 12),
+                                      ],
+                                      DosaCertificationDiagnosticSection(
+                                        key: ValueKey(
+                                          'dosa-diagnostic-${user?.companyId}',
+                                        ),
+                                      ),
+                                    ],
                                   )
                                 : null,
                             dgiiAccessReady: _requirementResolved(
