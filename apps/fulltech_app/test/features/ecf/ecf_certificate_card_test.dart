@@ -162,7 +162,7 @@ void main() {
     expect(repository.calls, 0);
   });
 
-  testWidgets('archivo + contraseña: valida y muestra datos verificables', (
+  testWidgets('éxito compacto: datos y salvedades solo en detalles', (
     tester,
   ) async {
     final repository = _FakeCertificateRepository(_validReport);
@@ -198,10 +198,29 @@ void main() {
     expect(repository.calls, 1);
     expect(repository.lastPassword, 'clave-secreta');
     expect(repository.lastFileName, 'certificado.pfx');
-    expect(find.text('Certificado válido y vigente'), findsOneWidget);
+    expect(find.text('Certificado verificado correctamente'), findsOneWidget);
+    expect(
+      find.text('Vigente hasta ${_validReport().certificate!.notAfterLabel}'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      findsNothing,
+    );
+    expect(find.text('MANOLO LIO'), findsNothing);
+    expect(find.text('40323211222'), findsNothing);
+    expect(find.text('…AA:BB:CC'), findsNothing);
+    expect(find.text('Lo que todavía no se comprobó'), findsNothing);
+    expect(find.text('Cambiar certificado'), findsOneWidget);
+    await tester.tap(find.text('Ver detalles'));
+    await tester.pumpAndSettle();
     expect(find.text('MANOLO LIO'), findsOneWidget);
     expect(find.text('40323211222'), findsOneWidget);
-    // Lo no comprobado se declara, no se omite.
+    expect(find.text('…AA:BB:CC'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('ecf_certificate_password')),
+      findsOneWidget,
+    );
     expect(find.text('Lo que todavía no se comprobó'), findsOneWidget);
     expect(find.text('Cadena de confianza del certificado'), findsOneWidget);
     // DGII CA5241 y CA5388: identidad del administrador e-CF y delegación.
@@ -214,6 +233,9 @@ void main() {
       find.textContaining('no es una validación de la DGII'),
       findsOneWidget,
     );
+    await tester.tap(find.text('Ocultar detalles'));
+    await tester.pumpAndSettle();
+    expect(find.text('40323211222'), findsNothing);
   });
 
   testWidgets('contraseña incorrecta: error claro, sin éxito falso', (
@@ -248,8 +270,40 @@ void main() {
       find.text('La contraseña no corresponde a este certificado.'),
       findsOneWidget,
     );
-    expect(find.text('Certificado válido y vigente'), findsNothing);
+    expect(find.text('Certificado verificado correctamente'), findsNothing);
   });
+
+  testWidgets(
+    'al volver muestra el resultado de la misma sesión sin repetir clave',
+    (tester) async {
+      final report = _validReport();
+      final repository = _FakeCertificateRepository(_validReport);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ecfCertificateRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: _harness(
+            EcfCertificateCard(
+              initialReport: report,
+              initialFileName: 'certificado.pfx',
+              pickFile: _noFile,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Certificado verificado correctamente'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('ecf_certificate_password')),
+        findsNothing,
+      );
+      expect(repository.calls, 0);
+      await tester.tap(find.text('Cambiar certificado'));
+      await tester.pumpAndSettle();
+      expect(find.text('Certificado verificado correctamente'), findsOneWidget);
+    },
+  );
 
   testWidgets('titular no verificable: bloquea el avance y dice qué falta', (
     tester,
@@ -286,7 +340,7 @@ void main() {
     // Mensaje propio, no «no es utilizable»: el archivo está bien.
     expect(find.text('Falta comprobar el titular'), findsOneWidget);
     expect(find.text('El certificado no es utilizable'), findsNothing);
-    expect(find.text('Certificado válido y vigente'), findsNothing);
+    expect(find.text('Certificado verificado correctamente'), findsNothing);
     // Diagnóstico seguro: qué dato canónico falta, sin exponer el valor.
     expect(find.text('Por qué'), findsOneWidget);
     expect(find.text('Cédula del representante'), findsOneWidget);
@@ -358,7 +412,9 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Validar certificado'));
     await tester.pumpAndSettle();
     expect(gates.last.ready, isTrue);
-    expect(find.text('Certificado válido y vigente'), findsOneWidget);
+    expect(find.text('Certificado verificado correctamente'), findsOneWidget);
+    await tester.tap(find.text('Ver detalles'));
+    await tester.pumpAndSettle();
 
     // Con otra contraseña, el informe anterior ya no vale.
     await tester.enterText(
@@ -369,7 +425,7 @@ void main() {
 
     expect(gates.last.ready, isFalse);
     expect(gates.last.reason, isNotNull);
-    expect(find.text('Certificado válido y vigente'), findsNothing);
+    expect(find.text('Certificado verificado correctamente'), findsNothing);
   });
 
   testWidgets('cambiar el archivo invalida el resultado anterior', (
@@ -406,11 +462,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(gates.last.ready, isTrue);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Cambiar'));
+    await tester.tap(find.text('Cambiar certificado'));
     await tester.pumpAndSettle();
 
     expect(gates.last.ready, isFalse);
-    expect(find.text('Certificado válido y vigente'), findsNothing);
+    expect(find.text('Certificado verificado correctamente'), findsNothing);
     expect(find.text('certificado-2.pfx'), findsOneWidget);
   });
 

@@ -15,6 +15,7 @@ import '../data/ecf_platform_repository.dart';
 import '../data/ecf_repository.dart';
 import '../dosa/dosa_assistant_section.dart';
 import '../domain/ecf_fiscal_readiness.dart';
+import '../ecf_certificate_models.dart';
 import '../ecf_certification_models.dart';
 import '../ecf_models.dart';
 import 'ecf_activation_page.dart';
@@ -80,6 +81,9 @@ class _EcfDgiiHabilitationPageState
   /// contraseña, para que un resultado viejo no deje pasar un certificado nuevo
   /// sin comprobar.
   EcfCertificateGate _certificateGate = EcfCertificateGate.pending;
+  EcfCertificateReport? _verifiedCertificate;
+  String? _verifiedCertificateFileName;
+
   /// Paso del recorrido que se está mostrando.
   ///
   /// Mientras sea `null` se deduce del expediente real, así que al volver a la
@@ -521,12 +525,25 @@ class _EcfDgiiHabilitationPageState
                             // certificado no sea utilizable y del titular, no
                             // deja avanzar y explica qué falta.
                             certificateReady: _certificateReady(view),
+                            certificateVerifiedHere:
+                                _verifiedCertificate != null,
                             certificateBlockedReason: _certificateBlockedReason(
                               view,
                             ),
                             certificate: EcfCertificateCard(
-                              onGateChanged: (gate) =>
-                                  setState(() => _certificateGate = gate),
+                              initialReport: _verifiedCertificate,
+                              initialFileName: _verifiedCertificateFileName,
+                              onVerified: (report, fileName) => setState(() {
+                                _verifiedCertificate = report;
+                                _verifiedCertificateFileName = fileName;
+                              }),
+                              onGateChanged: (gate) => setState(() {
+                                _certificateGate = gate;
+                                if (!gate.ready) {
+                                  _verifiedCertificate = null;
+                                  _verifiedCertificateFileName = null;
+                                }
+                              }),
                             ),
                             onEditFiscalData: () =>
                                 setState(() => _fiscalOpen = true),
