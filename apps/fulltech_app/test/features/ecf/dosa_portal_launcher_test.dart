@@ -48,7 +48,7 @@ void main() {
       );
       expect(
         url,
-        'https://fullposcloud.fulltechrd.com/ecf/certificacion?ticket=abc123',
+        'https://fullposcloud.fulltechrd.com/ecf/certificacion/?ticket=abc123',
       );
     });
 
@@ -59,7 +59,7 @@ void main() {
       );
       expect(
         url,
-        'https://fullposcloud.fulltechrd.com/ecf/certificacion?ticket=abc123',
+        'https://fullposcloud.fulltechrd.com/ecf/certificacion/?ticket=abc123',
       );
     });
 
@@ -81,7 +81,7 @@ void main() {
       final uri = Uri.parse(url);
       expect(uri.scheme, 'https');
       expect(uri.host, 'fullposcloud.fulltechrd.com');
-      expect(uri.path, '/ecf/certificacion');
+      expect(uri.path, '/ecf/certificacion/');
     });
   });
 
@@ -99,7 +99,7 @@ void main() {
       );
 
       final ticket = await api.requestTicket();
-      expect(ticket.url, contains('/ecf/certificacion?ticket=ticket-de-prueba-123'));
+      expect(ticket.url, contains('/ecf/certificacion/?ticket=ticket-de-prueba-123'));
       expect(ticket.expiresAt, isNotEmpty);
     });
 

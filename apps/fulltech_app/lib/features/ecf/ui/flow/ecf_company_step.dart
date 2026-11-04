@@ -57,7 +57,7 @@ class EcfCompanyStep extends StatelessWidget {
       subtitle: certificateVerifiedHere
           ? null
           : 'Se comprueba en FullPOS Cloud y no se guarda. No se envía a la '
-                'DGII ni a DOSA.',
+                'la DGII ni al proveedor de certificación.',
       child: certificate,
     );
 

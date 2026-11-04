@@ -234,7 +234,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Asistente de certificación DOSA'), findsOneWidget);
+      expect(find.text('Asistente de certificación'), findsOneWidget);
       expect(find.text('Bloqueado'), findsOneWidget);
       // Muestra con qué identidad fiscal está vinculado.
       expect(find.textContaining('1-33-02023-2'), findsOneWidget);

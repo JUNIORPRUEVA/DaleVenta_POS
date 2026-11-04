@@ -21,6 +21,10 @@ class EcfCertificateRepository {
 
   final Dio _dio;
 
+  Future<void> restart() async {
+    await _dio.post(ApiRoutes.ecfDgiiCertificateRestart);
+  }
+
   Future<EcfCertificateReport> validate({
     required List<int> bytes,
     required String fileName,

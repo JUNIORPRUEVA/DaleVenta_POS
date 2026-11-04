@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daleventa_pos/features/ecf/data/ecf_certificate_repository.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certificate_models.dart';
+import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_certificate_card.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_habilitacion_video_card.dart';
 
@@ -14,6 +15,9 @@ class _FakeCertificateRepository implements EcfCertificateRepository {
   String? lastPassword;
   String? lastFileName;
   int calls = 0;
+
+  @override
+  Future<void> restart() async {}
 
   @override
   Future<EcfCertificateReport> validate({
@@ -143,6 +147,58 @@ Widget _harness(Widget child) => ProviderScope(
 );
 
 void main() {
+  testWidgets('restaura la validación persistida sin pedir otro archivo', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_harness(EcfCertificateCard(
+      persistedValidation: EcfPersistedCertificateValidation(
+        ready: true,
+        notAfter: DateTime.utc(2027, 4, 16),
+      ),
+      pickFile: _noFile,
+    )));
+    expect(find.text('Certificado verificado correctamente'), findsOneWidget);
+    expect(find.text('Ningún archivo seleccionado'), findsNothing);
+    expect(find.textContaining('Vigente hasta'), findsOneWidget);
+  });
+
+  testWidgets('un certificado vencido vuelve a requerir validación', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_harness(EcfCertificateCard(
+      persistedValidation: EcfPersistedCertificateValidation(
+        ready: false,
+        notAfter: DateTime.utc(2020, 1, 1),
+        reason: 'Certificado vencido',
+      ),
+      pickFile: _noFile,
+    )));
+    expect(find.text('Certificado verificado correctamente'), findsNothing);
+    expect(find.text('Ningún archivo seleccionado'), findsOneWidget);
+  });
+
+  testWidgets('cambiar certificado requiere confirmación explícita', (
+    tester,
+  ) async {
+    var restarts = 0;
+    await tester.pumpWidget(_harness(EcfCertificateCard(
+      persistedValidation: EcfPersistedCertificateValidation(
+        ready: true,
+        notAfter: DateTime.utc(2027, 4, 16),
+      ),
+      onRestart: () async => restarts++,
+      pickFile: () async => (name: 'nuevo.p12', bytes: const [1]),
+    )));
+    await tester.tap(find.text('Cambiar certificado'));
+    await tester.pumpAndSettle();
+    expect(restarts, 0);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continuar'));
+    await tester.pumpAndSettle();
+    expect(restarts, 1);
+    expect(find.text('nuevo.p12'), findsOneWidget);
+    expect(find.text('Certificado verificado correctamente'), findsNothing);
+  });
+
   testWidgets('sin archivo ni contraseña el botón está deshabilitado', (
     tester,
   ) async {

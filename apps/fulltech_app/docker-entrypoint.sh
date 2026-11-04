@@ -257,6 +257,30 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
+  # /ecf is a Flutter route, even though the portal creates a physical /ecf directory.
+  location = /ecf {
+    add_header Cache-Control "no-cache";
+    try_files /index.html =404;
+  }
+
+  location = /ecf/ {
+    absolute_redirect off;
+    return 308 /ecf$is_args$args;
+  }
+
+  location = /ecf/certificacion {
+    absolute_redirect off;
+    return 308 /ecf/certificacion/$is_args$args;
+  }
+
+  location = /ecf/certificacion/ {
+    try_files /ecf/certificacion/index.html =404;
+  }
+
+  location ^~ /ecf/certificacion/ {
+    try_files $uri =404;
+  }
+
   location / {
     try_files $uri $uri/ /index.html;
   }

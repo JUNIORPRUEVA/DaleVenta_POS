@@ -186,7 +186,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
             icon: Icons.lock_outline,
             message:
                 'Solo un administrador autorizado puede preparar la '
-                'certificación con DOSA.',
+                'certificación de esta empresa.',
           );
         }
 
@@ -446,8 +446,8 @@ class _DosaPortalCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Se abre el portal seguro de FullPOS con el asistente oficial de '
-              'DOSA. Puedes empezar aquí y seguir desde otro dispositivo: el '
+              'Se abre el portal seguro de FullPOS Cloud con el asistente de '
+              'certificación. Puedes empezar aquí y seguir desde otro dispositivo: el '
               'proceso pertenece a la empresa, no al equipo.',
               style: theme.textTheme.bodyMedium,
             ),

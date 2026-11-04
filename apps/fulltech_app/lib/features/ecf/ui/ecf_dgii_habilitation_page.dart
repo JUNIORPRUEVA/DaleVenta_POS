@@ -11,6 +11,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/widgets/responsive_shell.dart';
 import '../data/ecf_certification_repository.dart';
+import '../data/ecf_certificate_repository.dart';
 import '../data/ecf_platform_repository.dart';
 import '../data/ecf_repository.dart';
 import '../dosa/dosa_assistant_section.dart';
@@ -75,15 +76,14 @@ class _EcfDgiiHabilitationPageState
   bool _activationOpen = false;
   bool _submissionGuideOpen = false;
 
-  /// Estado real del certificado en esta sesión.
+  /// Informe temporal para mostrar el resultado sin volver a cargar el archivo.
   ///
-  /// Solo habilita el avance cuando el certificado es utilizable **y** su titular
-  /// está identificado. Se invalida en cuanto la persona cambia el archivo o la
-  /// contraseña, para que un resultado viejo no deje pasar un certificado nuevo
-  /// sin comprobar.
+  /// El avance se decide con la respuesta persistida del backend. El informe
+  /// temporal se invalida al cambiar archivo o contraseña.
   EcfCertificateGate _certificateGate = EcfCertificateGate.pending;
   EcfCertificateReport? _verifiedCertificate;
   String? _verifiedCertificateFileName;
+  bool _certificateRestarted = false;
 
   /// Paso del recorrido que se está mostrando.
   ///
@@ -133,6 +133,26 @@ class _EcfDgiiHabilitationPageState
   @override
   void initState() {
     super.initState();
+    ref.listenManual(
+      authStateProvider.select((state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      )),
+      (previous, next) {
+        if (previous == next || !mounted) return;
+        setState(() {
+          _step = null;
+          _fiscalOpen = false;
+          _applicationOpen = false;
+          _activationOpen = false;
+          _certificateGate = EcfCertificateGate.pending;
+          _verifiedCertificate = null;
+          _verifiedCertificateFileName = null;
+          _certificateRestarted = false;
+        });
+      },
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref
@@ -153,6 +173,7 @@ class _EcfDgiiHabilitationPageState
 
   Future<void> _refresh() async {
     ref.invalidate(ecfDgiiHabilitationProvider);
+    ref.invalidate(companySettingsProvider);
     ref.invalidate(ecfDgiiHistoryProvider);
     ref.invalidate(ecfSupportGrantsProvider);
     try {
@@ -405,7 +426,8 @@ class _EcfDgiiHabilitationPageState
       AppPermission.recordEcfDgiiOfficialVerification,
     );
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
-    final settings = ref.watch(companySettingsProvider).valueOrNull;
+    final settingsState = ref.watch(companySettingsProvider);
+    final settings = settingsState.valueOrNull;
 
     return PopScope(
       canPop: !_canGoBack,
@@ -430,7 +452,11 @@ class _EcfDgiiHabilitationPageState
                 child: habilitation.when(
                   loading: () => const _LoadingBody(),
                   error: (_, __) => _ErrorBody(onRetry: _refresh),
-                  data: (view) => LayoutBuilder(
+                  data: (view) => settingsState.isLoading
+                      ? const _LoadingBody()
+                      : settingsState.hasError || settings == null
+                      ? _ErrorBody(onRetry: _refresh)
+                      : LayoutBuilder(
                     builder: (context, constraints) {
                       final fiscalReady = fiscalDataReady(settings);
                       final stage = _stageOf(
@@ -527,17 +553,33 @@ class _EcfDgiiHabilitationPageState
                             // deja avanzar y explica qué falta.
                             certificateReady: _certificateReady(view),
                             certificateVerifiedHere:
-                                _verifiedCertificate != null,
+                                _verifiedCertificate != null ||
+                                view.certificateValidation?.ready == true,
                             certificateBlockedReason: _certificateBlockedReason(
                               view,
                             ),
                             certificate: EcfCertificateCard(
+                              persistedValidation: _certificateRestarted
+                                  ? null
+                                  : view.certificateValidation,
+                              onRestart: () async {
+                                await ref
+                                    .read(ecfCertificateRepositoryProvider)
+                                    .restart();
+                                if (mounted) {
+                                  setState(() => _certificateRestarted = true);
+                                }
+                              },
                               initialReport: _verifiedCertificate,
                               initialFileName: _verifiedCertificateFileName,
-                              onVerified: (report, fileName) => setState(() {
-                                _verifiedCertificate = report;
-                                _verifiedCertificateFileName = fileName;
-                              }),
+                              onVerified: (report, fileName) {
+                                setState(() {
+                                  _verifiedCertificate = report;
+                                  _verifiedCertificateFileName = fileName;
+                                  _certificateRestarted = false;
+                                });
+                                ref.invalidate(ecfDgiiHabilitationProvider);
+                              },
                               onGateChanged: (gate) => setState(() {
                                 _certificateGate = gate;
                                 if (!gate.ready) {
@@ -744,17 +786,14 @@ class _EcfDgiiHabilitationPageState
     );
   }
 
-  /// El certificado cuenta como listo si se validó aquí con titular
-  /// identificado, o si el expediente ya lo tiene registrado como resuelto (no
-  /// se repite la comprobación en cada visita).
+  /// Solo el estado persistido y vigente que devuelve el servidor permite avanzar.
   bool _certificateReady(EcfDgiiHabilitationView view) =>
-      _certificateGate.ready ||
-      _requirementResolved(view, 'DIGITAL_CERTIFICATE');
+      !_certificateRestarted && view.certificateValidation?.ready == true;
 
   /// Qué falta exactamente para poder continuar. `null` si ya se puede.
   String? _certificateBlockedReason(EcfDgiiHabilitationView view) {
     if (_certificateReady(view)) return null;
-    return _certificateGate.reason ??
+    return view.certificateValidation?.reason ?? _certificateGate.reason ??
         'Valida el certificado digital del representante legal para continuar.';
   }
 
