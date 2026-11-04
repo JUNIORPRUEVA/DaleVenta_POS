@@ -1,6 +1,8 @@
 import {
   Body,
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Controller,
   Get,
   HttpCode,
@@ -11,12 +13,14 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { IsOptional, IsString, MaxLength } from "class-validator";
+import { IsOptional, IsString, MaxLength, MinLength, IsUUID, Equals } from "class-validator";
+import { Prisma } from "@prisma/client";
 import type { Request } from "express";
 import { Permissions } from "../../../auth/roles.decorator";
 import { RolesGuard } from "../../../auth/roles.guard";
 import { requireTenant, type TenantUser } from "../../../auth/tenant-context";
 import { PrismaService } from "../../../prisma/prisma.service";
+import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
 import {
   DosaCertificationIntentService,
   type DosaIntentRejection,
@@ -25,6 +29,7 @@ import { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
 import { ECF_DOSA_FISCAL_CONFIG } from "./dosa-emission.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
+import { effectiveIntentProvider, historicalIntentProvider, type DosaIntentAttributionAudit } from "./dosa-intent-attribution";
 
 /** Cuerpo del registro de intención. */
 export class RegisterDosaIntentDto {
@@ -37,6 +42,15 @@ export class RegisterDosaIntentDto {
   @IsString()
   @MaxLength(32)
   rnc?: string;
+}
+
+export class ReconcileDosaIntentDto {
+  @IsUUID() intentId!: string;
+  @IsUUID() sourceAuditId!: string;
+  @IsString() @MinLength(8) @MaxLength(128) externalReviewReference!: string;
+  @IsString() @MinLength(8) @MaxLength(128) ownerApprovalReference!: string;
+  @IsString() @MinLength(20) @MaxLength(500) reason!: string;
+  @Equals("RECONCILE_EXISTING_DOSA_INTENT") confirmation!: string;
 }
 
 export type DosaIntentHttpResponse = {
@@ -81,7 +95,8 @@ export type DosaIntentStateResponse = {
   fiscalAuthorizationGranted: false;
 };
 
-type IntentAuditEntry = {
+type IntentAuditEntry = DosaIntentAttributionAudit & {
+  id: string;
   action: string;
   createdAt: Date;
   metadata: unknown;
@@ -300,11 +315,13 @@ export class DosaCertificationIntentController {
         attemptNo: session.attemptNo,
         status: session.status,
         recordedProvider: recordedProvider(audits),
+        effectiveProvider: effectiveIntentProvider(audits),
         hasProviderSessionUrl: Boolean(session.sessionUrl),
         hasProviderPostulationId: Boolean(session.providerPostulationId),
         createdAt: session.createdAt,
       } : null,
       audit: audits.map((entry) => ({
+        id: entry.id,
         action: entry.action,
         createdAt: entry.createdAt,
         recordedProvider: recordedProvider([entry]),
@@ -312,15 +329,110 @@ export class DosaCertificationIntentController {
     };
   }
 
+  /** Records an owner-approved administrative decision; references must be
+   * verified independently before the switch is enabled. Never contacts DOSA. */
+  @Post("certification-intent/reconcile-provider")
+  @HttpCode(200)
+  @Permissions("manageEcfOnboarding")
+  async reconcileProvider(@Req() req: Request, @Body() body: ReconcileDosaIntentDto) {
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
+    if (user.role !== "ADMIN" && user.role !== "ADMINISTRADOR") {
+      throw new ForbiddenException("DOSA_INTENT_ADMIN_REQUIRED");
+    }
+    // Separate owner-controlled switch. No production write is possible by default.
+    if (process.env.ECF_DOSA_INTENT_RECONCILIATION_ENABLED !== "true") {
+      throw new ConflictException("DOSA_INTENT_RECONCILIATION_DISABLED");
+    }
+    if (!isEcfPortalPilotCompany(companyId)) {
+      throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
+    }
+    if (!body || body.confirmation !== "RECONCILE_EXISTING_DOSA_INTENT" ||
+      !body.externalReviewReference?.trim() ||
+      !body.ownerApprovalReference?.trim() || !body.reason?.trim()) {
+      throw new BadRequestException("DOSA_INTENT_RECONCILIATION_EVIDENCE_REQUIRED");
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const intent = await tx.ecfDosaCertificationSession.findFirst({
+        where: { id: body.intentId, companyId },
+        select: { id: true, rnc: true, attemptNo: true, status: true,
+          sessionUrl: true, providerPostulationId: true, lastEventType: true,
+          providerConfirmedAt: true, closedAt: true, createdAt: true,
+          createdByUserId: true },
+      });
+      if (!intent) throw new ConflictException("DOSA_INTENT_NOT_FOUND");
+      const latest = await tx.ecfDosaCertificationSession.findFirst({
+        where: { companyId }, orderBy: { createdAt: "desc" }, select: { id: true },
+      });
+      if (latest?.id !== intent.id || intent.attemptNo !== 1 || intent.status !== "NOT_STARTED" ||
+        intent.sessionUrl || intent.providerPostulationId || intent.lastEventType ||
+        intent.providerConfirmedAt || intent.closedAt) {
+        throw new ConflictException("DOSA_INTENT_RECONCILIATION_STATE_UNSAFE");
+      }
+      const audits = await tx.ecfAuditLog.findMany({
+        where: { companyId, targetType: "DOSA_CERTIFICATION_INTENT", targetId: intent.id },
+        select: { id: true, action: true, actorUserId: true, metadata: true, before: true, after: true },
+      });
+      const originals = audits.filter((entry) => entry.action === "ONBOARDING_STARTED");
+      const original = originals.find((entry) => entry.metadata &&
+        typeof entry.metadata === "object" && !Array.isArray(entry.metadata) &&
+        (entry.metadata as Record<string, unknown>).created === true);
+      const source = original?.metadata && typeof original.metadata === "object" &&
+        !Array.isArray(original.metadata) ? original.metadata as Record<string, unknown> : null;
+      if (originals.length === 0 || audits.length !== originals.length ||
+        originals.filter((entry) => entry.metadata && typeof entry.metadata === "object" &&
+          !Array.isArray(entry.metadata) &&
+          (entry.metadata as Record<string, unknown>).created === true).length !== 1 ||
+        original?.id !== body.sourceAuditId ||
+        historicalIntentProvider(audits) !== "ALANUBE" ||
+        source?.created !== true || source?.rnc !== intent.rnc ||
+        source?.attemptNo !== intent.attemptNo ||
+        originals.some((entry) => {
+          const meta = entry.metadata as Record<string, unknown>;
+          return meta.rnc !== intent.rnc || meta.attemptNo !== intent.attemptNo;
+        }) ||
+        !intent.createdByUserId || original.actorUserId !== intent.createdByUserId) {
+        throw new ConflictException("DOSA_INTENT_LOCAL_ORIGIN_UNVERIFIED");
+      }
+      // Other local records can reveal external activity despite null session refs.
+      const [legacyOperations, webhookEvents, portalTickets, portalSessions] = await Promise.all([
+        tx.ecfCertificationAttempt.count({ where: { companyId, provider: "ALANUBE",
+          createdAt: { gte: intent.createdAt } } }),
+        tx.ecfDosaWebhookEvent.count({ where: { companyId, receivedAt: { gte: intent.createdAt } } }),
+        tx.ecfCertificationPortalTicket.count({ where: { companyId,
+          createdAt: { gte: intent.createdAt } } }),
+        tx.ecfCertificationPortalSession.count({ where: { companyId,
+          createdAt: { gte: intent.createdAt } } }),
+      ]);
+      if (legacyOperations || webhookEvents || portalTickets || portalSessions) {
+        throw new ConflictException("DOSA_INTENT_EXTERNAL_ACTIVITY_REVIEW_REQUIRED");
+      }
+      await tx.ecfAuditLog.create({ data: {
+        companyId, actorUserId: user.id,
+        action: "INTENT_PROVIDER_RECONCILED",
+        targetType: "DOSA_CERTIFICATION_INTENT", targetId: intent.id,
+        before: { provider: "ALANUBE" }, after: { provider: "DOSA" },
+        metadata: { sourceAuditId: original.id,
+          externalReviewReference: body.externalReviewReference.trim(),
+          ownerApprovalReference: body.ownerApprovalReference.trim(),
+          reason: body.reason.trim() },
+      } });
+      return { ok: true, intentId: intent.id, attemptNo: intent.attemptNo,
+        historicalProvider: "ALANUBE", effectiveProvider: "DOSA",
+        fiscalAuthorizationGranted: false };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
   private async intentProvider(companyId: string, sessionId: string): Promise<string> {
-    return recordedProvider(await this.intentAudits(companyId, sessionId));
+    return effectiveIntentProvider(await this.intentAudits(companyId, sessionId));
   }
 
   private async intentAudits(companyId: string, sessionId: string): Promise<IntentAuditEntry[]> {
     return this.prisma.ecfAuditLog.findMany({
       where: { companyId, targetType: "DOSA_CERTIFICATION_INTENT", targetId: sessionId },
       orderBy: { createdAt: "asc" },
-      select: { action: true, createdAt: true, metadata: true },
+      select: { id: true, action: true, actorUserId: true, createdAt: true,
+        metadata: true, before: true, after: true },
     });
   }
 

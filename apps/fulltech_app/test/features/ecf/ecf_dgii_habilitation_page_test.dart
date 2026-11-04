@@ -359,7 +359,8 @@ void main() {
   ) async {
     await _pumpPage(tester, _harness(), step: 'Preparación', technical: false);
     expect(find.byType(EcfFiscalDataContent), findsNothing);
-    expect(find.text('Iniciar postulación inteligente'), findsOneWidget);
+    expect(find.text('Antes de postular'), findsOneWidget);
+    expect(find.text('Postulación inteligente'), findsNothing);
   });
 
   testWidgets('un solo dato obligatorio pendiente muestra un solo campo', (
@@ -614,13 +615,11 @@ void main() {
     );
     expect(find.text('Antes de postular'), findsOneWidget);
 
-    // El botón de postulación inteligente existe, pero NO ejecuta nada porque
-    // el modo de prueba no está disponible en este entorno.
+    // El motor legado desaparece cuando el modo de prueba no está disponible.
     final button = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
-    expect(button, findsOneWidget);
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    expect(button, findsNothing);
     // Sin modo de prueba disponible no se muestra el distintivo de pruebas.
     expect(find.byKey(const ValueKey('ecf_test_mode_badge')), findsNothing);
     expect(find.text('Estado de certificación'), findsNothing);
@@ -647,7 +646,7 @@ void main() {
     final legacy = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
-    expect(tester.widget<FilledButton>(legacy).onPressed, isNull);
+    expect(legacy, findsNothing);
     expect(tester.takeException(), isNull);
   });
 

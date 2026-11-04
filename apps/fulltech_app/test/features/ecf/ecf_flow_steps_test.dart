@@ -335,7 +335,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('preparación: resumen y acción bloqueada con su motivo', (
+  testWidgets('preparación: oculta el motor legado deshabilitado', (
     tester,
   ) async {
     await _pump(
@@ -353,14 +353,8 @@ void main() {
     final button = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
-    expect(button, findsOneWidget);
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    // Motivo real: el certificado ya está resuelto en el expediente, lo que
-    // falta es el modo de prueba.
-    expect(
-      find.text('El modo de prueba no está habilitado en este entorno.'),
-      findsOneWidget,
-    );
+    expect(button, findsNothing);
+    expect(find.text('Postulación inteligente'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
