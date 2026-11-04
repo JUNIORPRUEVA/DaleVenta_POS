@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { IsOptional, IsString, MaxLength, MinLength, IsUUID, Equals, IsIn } from "class-validator";
-import { Prisma } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import type { Request } from "express";
 import { Permissions } from "../../../auth/roles.decorator";
 import { RolesGuard } from "../../../auth/roles.guard";
@@ -261,7 +261,8 @@ export class DosaCertificationIntentController {
   @Get("certification-intent")
   @Permissions("viewEcfOnboarding")
   async state(@Req() req: Request): Promise<DosaIntentStateResponse> {
-    const companyId = requireTenant(req.user as TenantUser);
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
     const fiscal = await this.fiscalConfig.read(companyId);
     const described = await this.intents.describe({ companyId });
     const preview = await this.intents.preview({ companyId });
@@ -280,6 +281,26 @@ export class DosaCertificationIntentController {
     // fiscal verificable y no ambigua.
     const ecfEnabled = fiscal?.ecfEnabled === true;
     const blockingReasons = preview.ok ? [] : [preview.reason];
+    // La URL de sesión es una capacidad de acceso. Solo se devuelve a quien
+    // puede abrir el portal; `viewEcfOnboarding` basta para ver el estado, no
+    // para recibir la credencial.
+    const rawPermissions = user.userPermissions;
+    const permissionMap =
+      rawPermissions &&
+      typeof rawPermissions === "object" &&
+      !Array.isArray(rawPermissions)
+        ? (rawPermissions as Record<string, unknown>)
+        : {};
+    const canManageSession =
+      user.role === Role.ADMIN ||
+      user.role === "ADMINISTRADOR" ||
+      permissionMap.manageEcfOnboarding === true;
+    const session = described.session
+      ? {
+          ...described.session,
+          sessionUrl: canManageSession ? described.session.sessionUrl : null,
+        }
+      : null;
 
     return {
       ok: true,
@@ -292,7 +313,7 @@ export class DosaCertificationIntentController {
         : "DOSA",
       canRegister: preview.ok,
       blockingReasons,
-      session: described.session,
+      session,
       credentials: credential
         ? {
             environment: credential.environment,

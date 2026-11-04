@@ -39,6 +39,7 @@ class FakeIntents {
       | "mismatch"
       | "ambiguous"
       | "claim-failed" = "created",
+    private readonly sessionUrl: string | null = null,
   ) {}
 
   async register(input: {
@@ -79,7 +80,12 @@ class FakeIntents {
     return {
       canonicalRnc: RNC,
       canonicalSource: "FISCAL_CONFIG",
-      session: { id: "session-1", status: "RUNNING", attemptNo: 1, sessionUrl: null },
+      session: {
+        id: "session-1",
+        status: "RUNNING",
+        attemptNo: 1,
+        sessionUrl: this.sessionUrl,
+      },
     };
   }
 
@@ -172,8 +178,12 @@ function build(options: {
   ecfEnabled?: boolean | null;
   historicalProvider?: string;
   configuredProvider?: string;
+  sessionUrl?: string | null;
 } = {}) {
-  const intents = new FakeIntents(options.behaviour ?? "created");
+  const intents = new FakeIntents(
+    options.behaviour ?? "created",
+    options.sessionUrl ?? null,
+  );
   const { prisma, rows } = auditLog(options.historicalProvider);
   const controller = new DosaCertificationIntentController(
     prisma,
@@ -368,6 +378,30 @@ describe("GET /ecf/dosa/certification-intent", () => {
     ).toBe(true);
     const serialized = JSON.stringify(state);
     expect(serialized).not.toMatch(/[A-Za-z0-9+/_-]{40,}/);
+  });
+
+  it("solo devuelve la URL de sesión a quien puede abrir el portal", async () => {
+    const { controller } = build({
+      sessionUrl: "https://dosasystem.com/sesion/abc",
+    });
+
+    const admin = await controller.state(
+      req(user({ role: "ADMIN" })),
+    );
+    expect(admin.session?.sessionUrl).toBe(
+      "https://dosasystem.com/sesion/abc",
+    );
+
+    const viewer = await controller.state(
+      req(
+        user({
+          role: "TECNICO",
+          userPermissions: { viewEcfOnboarding: true },
+        }),
+      ),
+    );
+    expect(viewer.session?.status).toBe("RUNNING");
+    expect(viewer.session?.sessionUrl).toBeNull();
   });
 
   it("con emisión desactivada la preparación sigue disponible", async () => {

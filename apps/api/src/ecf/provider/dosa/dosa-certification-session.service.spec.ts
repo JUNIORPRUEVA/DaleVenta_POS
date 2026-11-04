@@ -1,4 +1,5 @@
 import {
+  DOSA_SESSION_DEFAULT_LEASE_MS,
   DosaCertificationSessionService,
   type DosaContactEmailReader,
   type DosaIdentityReader,
@@ -49,11 +50,18 @@ class FakeSessions implements DosaSessionCoordinator {
   readonly claimed: string[] = [];
   readonly closed: string[] = [];
   readonly uncertain: string[] = [];
+  /** Expedientes históricos reconciliados que la apertura no puede mutar. */
+  readonly reconciled = new Set<string>();
+  lastLeaseMs: number | null = null;
   /** Simula a otra petición publicando la URL mientras esperamos. */
   publishOnPoll: Row | null = null;
 
   private key(companyId: string, rnc: string) {
     return `${companyId}:${rnc}`;
+  }
+
+  async hasReconciledIntent(companyId: string, rnc: string) {
+    return this.reconciled.has(this.key(companyId, rnc));
   }
 
   async findActiveSessionFor(
@@ -114,7 +122,11 @@ class FakeSessions implements DosaSessionCoordinator {
     };
   }
 
-  async acquireRequestLease(input: { companyId: string; rnc: string }) {
+  async acquireRequestLease(input: {
+    companyId: string;
+    rnc: string;
+    leaseMs: number;
+  }) {
     const row = this.rows.get(this.key(input.companyId, input.rnc));
     if (!row) return { acquired: false, sessionUrl: null, sessionExpiresAt: null };
     if (row.leaseUntil !== null && row.leaseUntil > Date.now()) {
@@ -124,7 +136,8 @@ class FakeSessions implements DosaSessionCoordinator {
         sessionExpiresAt: row.sessionExpiresAt,
       };
     }
-    row.leaseUntil = Date.now() + 45_000;
+    this.lastLeaseMs = input.leaseMs;
+    row.leaseUntil = Date.now() + input.leaseMs;
     return {
       acquired: true,
       sessionUrl: row.sessionUrl,
@@ -454,5 +467,99 @@ describe("DosaCertificationSessionService — apertura automática", () => {
     const { service } = build({});
     const result = await service.open({ companyId: "company-a" });
     expect(result.ok).toBe(true);
+  });
+
+  it("expediente reconciliado: bloquea la apertura automática sin mutarlo", async () => {
+    const { service, sessions, client } = build({});
+    sessions.reconciled.add("company-a:101000001");
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
+    });
+    expect(sessions.claimed).toHaveLength(0);
+    expect(client.calls).toBe(0);
+  });
+
+  it("sesión histórica con URL pero sin vencimiento: no la reutiliza ni abre otra", async () => {
+    const sessions = new FakeSessions();
+    await sessions.claim({ companyId: "company-a", rnc: "101000001" });
+    const row = sessions.rows.get("company-a:101000001")!;
+    row.sessionUrl = "https://dosasystem.com/sesion/sin-fecha";
+    row.sessionExpiresAt = null;
+    const { service, client } = build({ sessions });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_EXPIRY_UNKNOWN",
+    });
+    expect(client.calls).toBe(0);
+  });
+
+  it("el lease por defecto cubre el timeout máximo del cliente", async () => {
+    const { service, sessions } = build({});
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result.ok).toBe(true);
+    expect(sessions.lastLeaseMs).toBe(DOSA_SESSION_DEFAULT_LEASE_MS);
+    expect(DOSA_SESSION_DEFAULT_LEASE_MS).toBeGreaterThan(120_000);
+  });
+
+  it("concurrencia: dos aperturas de la misma empresa producen un solo POST", async () => {
+    const { service, client } = build({});
+    const [a, b] = await Promise.all([
+      service.open({ companyId: "company-a" }),
+      service.open({ companyId: "company-a" }),
+    ]);
+
+    expect(client.calls).toBe(1);
+    expect([a.ok, b.ok].filter(Boolean).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("concurrencia multiempresa: cada empresa mantiene su propio RNC y sesión", async () => {
+    const { service, client, sessions } = build({});
+
+    const [a, b] = await Promise.all([
+      service.open({ companyId: "company-a" }),
+      service.open({ companyId: "company-b" }),
+    ]);
+
+    expect(a.ok).toBe(true);
+    expect(b.ok).toBe(true);
+    expect(client.calls).toBe(2);
+    expect(sessions.rows.has("company-a:101000001")).toBe(true);
+    expect(sessions.rows.has("company-b:202000002")).toBe(true);
+  });
+
+  it("201 malformado: marca ATTENTION y no permite un segundo POST", async () => {
+    const { service, sessions, client } = build({
+      client: new FakeClient({
+        ok: false,
+        code: "DOSA_SESSION_MALFORMED_RESPONSE",
+        reason: "respuesta inválida",
+        status: 201,
+        uncertain: true,
+      }),
+    });
+
+    const first = await service.open({ companyId: "company-a" });
+    expect(first).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_UNCERTAIN",
+      uncertain: true,
+    });
+    expect(sessions.uncertain).toContain("DOSA_SESSION_MALFORMED_RESPONSE");
+
+    const second = await service.open({ companyId: "company-a" });
+    expect(second).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_UNCERTAIN",
+    });
+    expect(client.calls).toBe(1);
   });
 });

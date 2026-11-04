@@ -138,6 +138,34 @@ export class EcfDosaSessionService {
   }
 
   /**
+   * Indica si la empresa/RNC tiene un expediente reconciliado en su historial.
+   *
+   * Es una lectura pura: no crea, no cierra y no actualiza nada. La apertura
+   * automática la usa para bloquear transiciones sobre expedientes históricos.
+   */
+  async hasReconciledIntent(
+    companyId: string,
+    rnc: string,
+  ): Promise<boolean> {
+    const company = `${companyId ?? ""}`.trim();
+    const normalized = normalizeRnc(rnc);
+    if (!company || !normalized) return false;
+    const rows = await this.store.$queryRaw<Array<{ found: number }>>`
+      SELECT 1 AS "found"
+        FROM "ecf_dosa_certification_sessions" s
+        JOIN "ecf_audit_logs" a
+          ON a."company_id" = s."company_id"
+         AND a."target_type" = 'DOSA_CERTIFICATION_INTENT'
+         AND a."target_id" = s."id"
+         AND a."action" = 'INTENT_PROVIDER_RECONCILED'
+       WHERE s."company_id" = ${company}::uuid
+         AND s."rnc" = ${normalized}
+       LIMIT 1
+    `;
+    return rows.length === 1;
+  }
+
+  /**
    * Lectura del intento EN CURSO para diagnóstico (endpoint de estado).
    * No crea nada y no cambia nada: si no hay intento, devuelve `null`.
    */

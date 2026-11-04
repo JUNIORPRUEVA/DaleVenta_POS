@@ -252,4 +252,29 @@ describe("EcfDosaSessionService — duplicados transaccionales", () => {
     expect(calls[0].sql).toContain('"provider_postulation_id"');
     expect(calls[0].values).toContain("p-1");
   });
+
+  it("detecta un expediente reconciliado sin escribir nada", async () => {
+    const { store, calls } = fakeStore([{ found: 1 }]);
+    const service = new EcfDosaSessionService(store);
+
+    const result = await service.hasReconciledIntent(
+      "company-a",
+      "101000001",
+    );
+
+    expect(result).toBe(true);
+    expect(calls[0].sql).toContain("ecf_audit_logs");
+    expect(calls[0].sql).toContain("INTENT_PROVIDER_RECONCILED");
+    expect(calls[0].sql).not.toContain("UPDATE");
+    expect(calls[0].values).toContain("101000001");
+  });
+
+  it("no considera reconciliado un expediente sin auditoría", async () => {
+    const { store } = fakeStore([]);
+    const service = new EcfDosaSessionService(store);
+
+    expect(
+      await service.hasReconciledIntent("company-a", "101000001"),
+    ).toBe(false);
+  });
 });

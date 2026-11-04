@@ -41,7 +41,9 @@ export type DosaSessionOpenFailureCode =
   | "ECF_DOSA_SESSION_IN_PROGRESS"
   | "ECF_DOSA_SESSION_UNCERTAIN"
   | "ECF_DOSA_SESSION_PROVIDER_ERROR"
-  | "ECF_DOSA_SESSION_NOT_PERSISTED";
+  | "ECF_DOSA_SESSION_NOT_PERSISTED"
+  | "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED"
+  | "ECF_DOSA_SESSION_EXPIRY_UNKNOWN";
 
 export type DosaSessionOpenResult =
   | {
@@ -73,6 +75,14 @@ export interface DosaContactEmailReader {
 
 /** Contrato estrecho de persistencia: permite probar sin base de datos. */
 export interface DosaSessionCoordinator {
+  /**
+   * Historial ya reconciliado para esta empresa/RNC. La apertura automática no
+   * puede mutar esos expedientes: requieren una operación explícita y auditada.
+   */
+  hasReconciledIntent?(
+    companyId: string,
+    rnc: string,
+  ): Promise<boolean>;
   findActiveSessionFor(
     companyId: string,
     rnc: string,
@@ -134,7 +144,12 @@ export const ECF_DOSA_SESSION_CLIENT = Symbol("ECF_DOSA_SESSION_CLIENT");
 
 /** Margen para no reutilizar una sesión que caduca en segundos. */
 const EXPIRY_SKEW_MS = 30_000;
-const DEFAULT_LEASE_MS = 45_000;
+/**
+ * Debe superar el timeout máximo del cliente (120 s) para que el lease no
+ * expire mientras la petición ganadora sigue esperando al proveedor. Si el
+ * proceso muere, la reserva se libera sola al vencer.
+ */
+export const DOSA_SESSION_DEFAULT_LEASE_MS = 180_000;
 
 @Injectable()
 export class DosaCertificationSessionService {
@@ -182,6 +197,18 @@ export class DosaCertificationSessionService {
       );
     }
 
+    // Un expediente reconciliado es histórico: la apertura automática no puede
+    // cambiar sus estados, fechas, referencias ni identificadores. La única
+    // vía es una operación explícita, autorizada y auditada.
+    if (
+      (await this.sessions.hasReconciledIntent?.(companyId, rnc)) === true
+    ) {
+      return failure(
+        "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
+        "Este expediente tiene una revisión histórica registrada. La apertura automática está bloqueada: requiere una operación explícita y auditada.",
+      );
+    }
+
     const readiness = this.client.describeReadiness();
     if (!readiness.ready) {
       // Fail-closed: sin bandera o sin clave, no se llama al proveedor. El
@@ -197,6 +224,16 @@ export class DosaCertificationSessionService {
     const existing = await this.sessions.findActiveSessionFor(companyId, rnc);
     const reusable = reusableUrl(existing);
     if (reusable) return reusable;
+
+    // Una URL histórica sin fecha de vencimiento no se puede validar. Se trata
+    // como revisión manual: ni se reutiliza ni se sobrescribe con una nueva
+    // sesión automática.
+    if (existing && existing.sessionUrl && !existing.sessionExpiresAt) {
+      return failure(
+        "ECF_DOSA_SESSION_EXPIRY_UNKNOWN",
+        "Hay una sesión anterior sin fecha de vencimiento verificable. Requiere revisión antes de abrir otra.",
+      );
+    }
 
     // 2) Una sesión incierta NO se reintenta sola.
     if (existing && existing.status === "ATTENTION") {
@@ -242,7 +279,7 @@ export class DosaCertificationSessionService {
     const lease = await this.sessions.acquireRequestLease({
       companyId,
       rnc,
-      leaseMs: this.options.leaseMs ?? DEFAULT_LEASE_MS,
+      leaseMs: this.options.leaseMs ?? DOSA_SESSION_DEFAULT_LEASE_MS,
     });
     if (!lease.acquired) {
       const winner = await this.waitForWinner(companyId, rnc);

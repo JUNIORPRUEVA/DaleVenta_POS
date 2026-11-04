@@ -224,6 +224,8 @@ describe("DosaCertificationSessionClient — contrato de sesiones", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("DOSA_SESSION_MALFORMED_RESPONSE");
+    // El 201 confirma que el proveedor pudo crear la sesión: no se reintenta.
+    expect(result.uncertain).toBe(true);
   });
 
   it("rechaza una url de otro dominio aunque sea https", async () => {
@@ -287,6 +289,7 @@ describe("DosaCertificationSessionClient — contrato de sesiones", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("DOSA_SESSION_EXPIRED");
+    expect(result.uncertain).toBe(true);
   });
 
   it("rechaza una respuesta 201 que no sea JSON", async () => {
@@ -300,6 +303,22 @@ describe("DosaCertificationSessionClient — contrato de sesiones", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe("DOSA_SESSION_MALFORMED_RESPONSE");
+    expect(result.uncertain).toBe(true);
+  });
+
+  it("rechaza una base HTTP porque la clave viajaría sin TLS", async () => {
+    const captured: Captured[] = [];
+    const client = new DosaCertificationSessionClient(
+      config({ baseUrl: "http://dosasystem.test" }),
+      transport(201, created(), captured),
+    );
+
+    const result = await client.createSession(validRequest);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("DOSA_SESSION_BASE_URL_INVALID");
+    expect(captured).toHaveLength(0);
   });
 
   it("no toca la red si la bandera está apagada", async () => {

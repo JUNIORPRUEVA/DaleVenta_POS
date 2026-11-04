@@ -202,7 +202,10 @@ export class DosaCertificationSessionClient {
     else if (!this.config.secretKey.startsWith(DOSA_SERVER_SECRET_PREFIX)) {
       problems.push("DOSA_SESSION_SECRET_MALFORMED");
     }
-    if (!/^https?:\/\//i.test(this.config.baseUrl)) {
+    // La clave de servidor viaja en esta llamada: la base debe ser HTTPS.
+    // Aceptar HTTP permitiría enviar `sk_...` en texto claro por un error de
+    // configuración del entorno.
+    if (!/^https:\/\//i.test(this.config.baseUrl)) {
       problems.push("DOSA_SESSION_BASE_URL_INVALID");
     }
     return problems;
@@ -357,6 +360,9 @@ export class DosaCertificationSessionClient {
         code: "DOSA_SESSION_MALFORMED_RESPONSE",
         reason: "La respuesta no es JSON.",
         status: 201,
+        // El proveedor respondió 201: pudo crear la sesión aunque no
+        // podamos leerla. No se puede reintentar a ciegas.
+        uncertain: true,
       };
     }
     if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
@@ -365,6 +371,7 @@ export class DosaCertificationSessionClient {
         code: "DOSA_SESSION_MALFORMED_RESPONSE",
         reason: "La respuesta no es un objeto.",
         status: 201,
+        uncertain: true,
       };
     }
     const record = payload as Record<string, unknown>;
@@ -395,6 +402,9 @@ export class DosaCertificationSessionClient {
         code: "DOSA_SESSION_EXPIRED",
         reason: "La sesión llegó ya caducada.",
         status: 201,
+        // El 201 confirma que el proveedor creó una sesión. Aunque llegue
+        // caducada, un reintento automático podría duplicar la postulación.
+        uncertain: true,
       };
     }
 
@@ -418,6 +428,8 @@ export class DosaCertificationSessionClient {
       code: "DOSA_SESSION_MALFORMED_RESPONSE",
       reason,
       status: 201,
+      // Un 201 con forma inválida no demuestra que la sesión NO se creó.
+      uncertain: true,
     };
   }
 
