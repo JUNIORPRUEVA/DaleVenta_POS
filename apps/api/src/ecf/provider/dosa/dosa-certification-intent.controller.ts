@@ -421,6 +421,15 @@ export class DosaCertificationIntentController {
           createdByUserId: true },
       });
       if (!intent) throw new ConflictException("DOSA_INTENT_NOT_FOUND");
+      // Valores OBSERVADOS en la lectura, capturados antes de cualquier
+      // comprobación: la evidencia que se firma describe lo que se leyó.
+      const observedProviderReferences = {
+        providerPostulationId: intent.providerPostulationId,
+        sessionUrl: intent.sessionUrl,
+        lastEventType: intent.lastEventType,
+        providerConfirmedAt: intent.providerConfirmedAt,
+        closedAt: intent.closedAt,
+      };
       const latest = await tx.ecfDosaCertificationSession.findFirst({
         where: { companyId }, orderBy: { createdAt: "desc" }, select: { id: true },
       });
@@ -495,11 +504,15 @@ export class DosaCertificationIntentController {
             status: intent.status,
             createdAt: intent.createdAt.toISOString(),
             createdByUserId: intent.createdByUserId,
-            providerPostulationId: null,
-            sessionUrl: null,
-            lastEventType: null,
-            providerConfirmedAt: null,
-            closedAt: null,
+            // Se copian los valores OBSERVADOS, no constantes: si alguna vez
+            // existiera un dato del proveedor, el snapshot lo reflejaría y la
+            // verificación lo rechazaría en lugar de ocultarlo.
+            providerPostulationId: observedProviderReferences.providerPostulationId,
+            sessionUrl: observedProviderReferences.sessionUrl,
+            lastEventType: observedProviderReferences.lastEventType,
+            providerConfirmedAt:
+              observedProviderReferences.providerConfirmedAt?.toISOString() ?? null,
+            closedAt: observedProviderReferences.closedAt?.toISOString() ?? null,
           },
           audit: {
             total: audits.length,
