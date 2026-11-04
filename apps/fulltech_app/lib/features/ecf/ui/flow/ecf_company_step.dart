@@ -18,6 +18,7 @@ class EcfCompanyStep extends StatelessWidget {
     required this.onContinue,
     required this.wide,
     this.certificateReady = false,
+    this.certificateVerifiedHere = false,
     this.certificateBlockedReason,
   });
 
@@ -30,6 +31,9 @@ class EcfCompanyStep extends StatelessWidget {
   /// El certificado ya es utilizable y su titular está identificado (o el
   /// expediente ya lo tiene registrado). Es la condición que habilita avanzar.
   final bool certificateReady;
+
+  /// Oculta el texto de ayuda una vez verificado en esta sesión.
+  final bool certificateVerifiedHere;
 
   /// Qué falta exactamente cuando el certificado bloquea el avance.
   final String? certificateBlockedReason;
@@ -50,9 +54,10 @@ class EcfCompanyStep extends StatelessWidget {
       icon: Icons.verified_user_outlined,
       // La descripción refleja el tratamiento real: el archivo y la contraseña
       // se validan en FullPOS Cloud (cifrados en tránsito) y no se guardan.
-      subtitle:
-          'Se comprueba en FullPOS Cloud y no se guarda. No se envía a la '
-          'DGII ni a DOSA.',
+      subtitle: certificateVerifiedHere
+          ? null
+          : 'Se comprueba en FullPOS Cloud y no se guarda. No se envía a la '
+                'DGII ni a DOSA.',
       child: certificate,
     );
 
@@ -69,15 +74,13 @@ class EcfCompanyStep extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           if (wide)
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 5, child: company),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 6, child: cert),
-                ],
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 5, child: company),
+                const SizedBox(width: 12),
+                Expanded(flex: 6, child: cert),
+              ],
             )
           else ...[
             company,

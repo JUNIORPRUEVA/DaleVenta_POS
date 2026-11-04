@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../data/ecf_certificate_repository.dart';
 import '../ecf_certificate_models.dart';
@@ -12,6 +13,9 @@ typedef EcfPickedCertificate = ({String name, List<int> bytes});
 /// Selección de archivo, inyectable para poder probar la tarjeta sin abrir el
 /// diálogo del sistema.
 typedef EcfCertificatePicker = Future<EcfPickedCertificate?> Function();
+
+typedef EcfCertificateVerified =
+    void Function(EcfCertificateReport report, String fileName);
 
 /// Estado del certificado para decidir si se puede continuar.
 ///
@@ -44,6 +48,9 @@ class EcfCertificateCard extends ConsumerStatefulWidget {
     this.onValidated,
     this.onGateChanged,
     this.pickFile,
+    this.initialReport,
+    this.initialFileName,
+    this.onVerified,
   });
 
   /// Se avisa cuando el certificado queda utilizable **y** con titular
@@ -58,6 +65,11 @@ class EcfCertificateCard extends ConsumerStatefulWidget {
   /// Selector de archivo. Por defecto, el diálogo del sistema.
   final EcfCertificatePicker? pickFile;
 
+  /// Resultado de esta misma sesión al regresar desde Preparación.
+  final EcfCertificateReport? initialReport;
+  final String? initialFileName;
+  final EcfCertificateVerified? onVerified;
+
   @override
   ConsumerState<EcfCertificateCard> createState() => _EcfCertificateCardState();
 }
@@ -68,8 +80,18 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   final TextEditingController _password = TextEditingController();
   bool _busy = false;
   bool _obscure = true;
+  bool _showDetails = false;
   EcfCertificateReport? _report;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialReport?.canProceed == true) {
+      _report = widget.initialReport;
+      _fileName = widget.initialFileName;
+    }
+  }
 
   @override
   void dispose() {
@@ -102,6 +124,7 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
     setState(() {
       _report = null;
       _error = null;
+      _showDetails = false;
     });
     _publishGate();
   }
@@ -117,6 +140,7 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
       _bytes = picked.bytes;
       _report = null;
       _error = null;
+      _showDetails = false;
     });
     _publishGate();
   }
@@ -152,9 +176,11 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
       setState(() {
         _report = report;
         _busy = false;
+        _showDetails = false;
       });
       _publishGate();
       if (report.canProceed) {
+        widget.onVerified?.call(report, fileName);
         AppFeedback.showToast(
           context,
           title: 'Certificado válido',
@@ -179,6 +205,83 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final verified = _report?.canProceed == true;
+    if (verified) {
+      final expiry = _report?.certificate?.notAfterLabel;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 20,
+                color: AppColors.success,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Certificado verificado correctamente',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (expiry != null)
+                      Text(
+                        'Vigente hasta $expiry',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: () => setState(() => _showDetails = !_showDetails),
+                child: Text(_showDetails ? 'Ocultar detalles' : 'Ver detalles'),
+              ),
+              TextButton(
+                onPressed: _pick,
+                child: const Text('Cambiar certificado'),
+              ),
+            ],
+          ),
+          if (_showDetails) ...[
+            if (_fileName != null)
+              Text(
+                _fileName!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            const SizedBox(height: 8),
+            _ReportView(report: _report!),
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('ecf_certificate_password'),
+              controller: _password,
+              obscureText: _obscure,
+              onChanged: (_) => _invalidateResult(),
+              decoration: const InputDecoration(
+                labelText: 'Contraseña del certificado',
+                isDense: true,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -265,7 +368,7 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   }
 }
 
-enum _MessageKind { success, error, neutral }
+enum _MessageKind { error, neutral }
 
 class _Message extends StatelessWidget {
   const _Message({required this.kind, required this.title, required this.body});
@@ -278,12 +381,6 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final (background, border, icon, iconColor) = switch (kind) {
-      _MessageKind.success => (
-        const Color(0xFFECFDF3),
-        const Color(0xFFB7E4C7),
-        Icons.check_circle_outline,
-        const Color(0xFF15803D),
-      ),
       _MessageKind.error => (
         const Color(0xFFFEF2F2),
         const Color(0xFFFCA5A5),
@@ -406,13 +503,6 @@ class _ReportView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Message(
-          kind: _MessageKind.success,
-          title: 'Certificado válido y vigente',
-          body:
-              'El archivo se abrió con esa contraseña y la clave privada '
-              'corresponde al certificado.',
-        ),
         if (facts != null) ...[const SizedBox(height: 10), facts],
         const SizedBox(height: 10),
         Text(
