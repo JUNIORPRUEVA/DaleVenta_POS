@@ -93,21 +93,27 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
       // correo ya guardado, y devuelve el enlace de sesión de DOSA. El cliente
       // no vuelve a escribir esos datos.
       try {
-        final session =
-            await ref.read(dosaCertificationSessionApiProvider).open();
+        final session = await ref
+            .read(dosaCertificationSessionApiProvider)
+            .open();
         if (!mounted) return;
         final currentUser = ref.read(authStateProvider).user;
         // El enlace debe pertenecer a la empresa autenticada: se comprueba el
         // `companyId` devuelto contra el del usuario actual.
         if (currentUser?.companyId?.trim() != companyId ||
             session.companyId.trim() != companyId ||
-            !hasUserPermission(currentUser, AppPermission.manageEcfOnboarding)) {
+            !hasUserPermission(
+              currentUser,
+              AppPermission.manageEcfOnboarding,
+            )) {
           return;
         }
         if (session.sessionUrl.trim().isEmpty) {
           messenger?.showSnackBar(
             const SnackBar(
-              content: Text('El servidor no devolvió un enlace de sesión válido.'),
+              content: Text(
+                'El servidor no devolvió un enlace de sesión válido.',
+              ),
             ),
           );
           return;
@@ -182,7 +188,8 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
 
     final user = ref.watch(authStateProvider).user;
     final companyId = user?.companyId?.trim() ?? '';
-    final taxId = ref.watch(companySettingsProvider).valueOrNull?.rnc.trim() ?? '';
+    final taxId =
+        ref.watch(companySettingsProvider).valueOrNull?.rnc.trim() ?? '';
     // Preparar exige el permiso administrativo, igual que en el backend.
     final canManage = hasUserPermission(
       user,
@@ -205,107 +212,118 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     );
 
     // Lectura del estado interno. Consultar no crea ni activa nada.
-    return ref.watch(dosaIntentStateProvider).when(
-      loading: () => const _DosaIntentGate(
-        icon: Icons.hourglass_top,
-        message: 'Consultando la preparación de facturación electrónica...',
-      ),
-      error: (error, _) => _DosaIntentGate(
-        icon: Icons.cloud_off,
-        message: 'No se pudo consultar el estado de la preparación.',
-        onRetry: () => ref.invalidate(dosaIntentStateProvider),
-      ),
-      data: (value) {
-        // Solo una intención atribuida a DOSA ofrece el portal sin registrar otra.
-        if (value.sessionId != null) {
-          if (value.provider != 'DOSA') {
-            return const _DosaIntentGate(
-              icon: Icons.info_outline,
-              message: 'Revisa el intento de certificación existente con un '
-                  'administrador antes de continuar.',
-            );
-          }
-          return _panel(
-            resolved,
-            binding,
-            attemptNo: value.sessionAttemptNo ?? 0,
-            created: false,
-            canManage: canManage,
-          );
-        }
-
-        // El backend explica qué falta (identidad fiscal), no el interruptor
-        // de emisión: preparar no depende de tener e-CF ya activado.
-        if (!value.canRegister) {
-          final reason = value.blockingReasons.isEmpty
-              ? null
-              : value.blockingReasons.first;
-          return _DosaIntentGate(
-            icon: Icons.block,
-            message: reason == null
-                ? 'La preparación no puede iniciarse todavía.'
-                : dosaIntentReasonMessage(reason),
-            detail: reason,
-          );
-        }
-
-        if (!canManage) {
-          return const _DosaIntentGate(
-            icon: Icons.lock_outline,
-            message:
-                'Solo un administrador autorizado puede preparar la '
-                'certificación de esta empresa.',
-          );
-        }
-
-        if (!_requested) {
-          return _DosaPrepareCard(
-            portalOnly: widget.portalOnly,
-            onPrepare: () => setState(() => _requested = true),
-          );
-        }
-
-        // Acción voluntaria confirmada: ahora sí se registra la intención.
-        return ref
-            .watch(dosaIntentRegistrationProvider(taxId))
-            .when(
-              loading: () => const _DosaIntentGate(
-                icon: Icons.hourglass_top,
-                message:
-                    'Registrando la preparación de facturación electrónica...',
-              ),
-              error: (error, _) => _DosaIntentGate(
-                icon: Icons.block,
-                message: error is DosaIntentException
-                    ? error.message
-                    : 'No se pudo registrar la intención de certificación.',
-                // Solo se muestra como detalle un código propio del dominio:
-                // los errores de transporte no aportan nada al administrador.
-                detail: error is DosaIntentException &&
-                        (error.code.startsWith('ECF_') ||
-                            error.code == 'AMBIGUOUS_RNC' ||
-                            error.code == 'COMPANY_RNC_NOT_VERIFIED' ||
-                            error.code ==
-                                'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY' ||
-                            error.code == 'SESSION_CLAIM_FAILED')
-                    ? error.code
-                    : null,
-                onRetry: () =>
-                    ref.invalidate(dosaIntentRegistrationProvider(taxId)),
-              ),
-              data: (registered) {
-                _scheduleAutoOpen();
-                return _panel(
-                  resolved,
-                  binding,
-                  attemptNo: registered.attemptNo,
-                  created: registered.created,
-                  canManage: true,
+    return ref
+        .watch(dosaIntentStateProvider)
+        .when(
+          loading: () => const _DosaIntentGate(
+            icon: Icons.hourglass_top,
+            message: 'Consultando la preparación de facturación electrónica...',
+          ),
+          error: (error, _) => _DosaIntentGate(
+            icon: Icons.cloud_off,
+            message: 'No se pudo consultar el estado de la preparación.',
+            onRetry: () => ref.invalidate(dosaIntentStateProvider),
+          ),
+          data: (value) {
+            // Solo una intención atribuida a DOSA ofrece el portal sin registrar otra.
+            if (value.sessionId != null) {
+              if (value.provider != 'DOSA') {
+                return const _DosaIntentGate(
+                  icon: Icons.info_outline,
+                  message:
+                      'Revisa el intento de certificación existente con un '
+                      'administrador antes de continuar.',
                 );
-              },
-            );
-      },
-    );
+              }
+              return _panel(
+                resolved,
+                binding,
+                attemptNo: value.sessionAttemptNo ?? 0,
+                created: false,
+                canManage: canManage,
+                intentId: value.sessionId,
+                // Una sesión ya emitida y vigente se puede reanudar: no se exige
+                // una nueva autorización solo para volver a abrirla.
+                historicalReviewRequired:
+                    value.historicalReviewRequired && !value.sessionReusable,
+              );
+            }
+
+            // El backend explica qué falta (identidad fiscal), no el interruptor
+            // de emisión: preparar no depende de tener e-CF ya activado.
+            if (!value.canRegister) {
+              final reason = value.blockingReasons.isEmpty
+                  ? null
+                  : value.blockingReasons.first;
+              return _DosaIntentGate(
+                icon: Icons.block,
+                message: reason == null
+                    ? 'La preparación no puede iniciarse todavía.'
+                    : dosaIntentReasonMessage(reason),
+                detail: reason,
+              );
+            }
+
+            if (!canManage) {
+              return const _DosaIntentGate(
+                icon: Icons.lock_outline,
+                message:
+                    'Solo un administrador autorizado puede preparar la '
+                    'certificación de esta empresa.',
+              );
+            }
+
+            if (!_requested) {
+              return _DosaPrepareCard(
+                portalOnly: widget.portalOnly,
+                onPrepare: () => setState(() => _requested = true),
+              );
+            }
+
+            // Acción voluntaria confirmada: ahora sí se registra la intención.
+            return ref
+                .watch(dosaIntentRegistrationProvider(taxId))
+                .when(
+                  loading: () => const _DosaIntentGate(
+                    icon: Icons.hourglass_top,
+                    message:
+                        'Registrando la preparación de facturación electrónica...',
+                  ),
+                  error: (error, _) => _DosaIntentGate(
+                    icon: Icons.block,
+                    message: error is DosaIntentException
+                        ? error.message
+                        : 'No se pudo registrar la intención de certificación.',
+                    // Solo se muestra como detalle un código propio del dominio:
+                    // los errores de transporte no aportan nada al administrador.
+                    detail:
+                        error is DosaIntentException &&
+                            (error.code.startsWith('ECF_') ||
+                                error.code == 'AMBIGUOUS_RNC' ||
+                                error.code == 'COMPANY_RNC_NOT_VERIFIED' ||
+                                error.code ==
+                                    'RNC_DOES_NOT_MATCH_COMPANY_IDENTITY' ||
+                                error.code == 'SESSION_CLAIM_FAILED')
+                        ? error.code
+                        : null,
+                    onRetry: () =>
+                        ref.invalidate(dosaIntentRegistrationProvider(taxId)),
+                  ),
+                  data: (registered) {
+                    _scheduleAutoOpen();
+                    return _panel(
+                      resolved,
+                      binding,
+                      attemptNo: registered.attemptNo,
+                      created: registered.created,
+                      canManage: true,
+                      intentId: registered.sessionId,
+                      historicalReviewRequired: false,
+                    );
+                  },
+                );
+          },
+        );
   }
 
   Widget _panel(
@@ -314,13 +332,32 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     required int attemptNo,
     required bool created,
     required bool canManage,
+    required String? intentId,
+    required bool historicalReviewRequired,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (historicalReviewRequired && canManage && intentId != null)
+          _DosaHistoricalReviewCard(
+            intentId: intentId,
+            onAuthorized: () {
+              ref.invalidate(dosaIntentStateProvider);
+              ref.invalidate(ecfOnboardingProvider);
+            },
+          )
+        else if (historicalReviewRequired)
+          const _DosaIntentGate(
+            icon: Icons.lock_outline,
+            message:
+                'Este expediente tiene una revisión histórica. Solo un '
+                'administrador autorizado puede aprobar la transición.',
+          ),
         // La acción del portal exige el permiso administrativo: un usuario sin
         // él puede ver el estado, pero no pedir un ticket ni abrir el portal.
-        if (canManage)
+        // Mientras la transición histórica no esté autorizada, el portal no se
+        // ofrece: abrirlo solo devolvería el mismo bloqueo del backend.
+        if (canManage && !historicalReviewRequired)
           _DosaPortalCard(
             onOpen: _openPortal,
             busy: _openingPortal,
@@ -478,11 +515,205 @@ class _DosaIntentGate extends StatelessWidget {
               ),
             ),
             if (onRetry != null)
-              TextButton(
-                onPressed: onRetry,
-                child: const Text('Reintentar'),
-              ),
+              TextButton(onPressed: onRetry, child: const Text('Reintentar')),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Autorización administrativa de una transición histórica ya reconciliada.
+///
+/// Se muestra únicamente cuando el backend indica que queda una reconciliación
+/// sin autorización vigente. No se ejecuta sola, no abre el portal y no emite:
+/// solo deja la auditoría humana que el backend exige para continuar.
+class _DosaHistoricalReviewCard extends ConsumerStatefulWidget {
+  const _DosaHistoricalReviewCard({
+    required this.intentId,
+    required this.onAuthorized,
+  });
+
+  final String intentId;
+  final VoidCallback onAuthorized;
+
+  @override
+  ConsumerState<_DosaHistoricalReviewCard> createState() =>
+      _DosaHistoricalReviewCardState();
+}
+
+class _DosaHistoricalReviewCardState
+    extends ConsumerState<_DosaHistoricalReviewCard> {
+  final _formKey = GlobalKey<FormState>();
+  final _approvalController = TextEditingController();
+  final _reasonController = TextEditingController();
+  bool _confirmed = false;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _approvalController.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy) return;
+    if (!(_formKey.currentState?.validate() ?? false) || !_confirmed) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Autorizar transición histórica'),
+        content: const Text(
+          'Esta acción deja auditoría y permite continuar la preparación del '
+          'expediente. No emite comprobantes, no activa la facturación '
+          'electrónica y no llama al proveedor.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Autorizar'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(dosaCertificationIntentApiProvider)
+          .authorizeHistoricalTransition(
+            intentId: widget.intentId,
+            ownerApprovalReference: _approvalController.text,
+            reason: _reasonController.text,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Transición histórica autorizada.')),
+      );
+      widget.onAuthorized();
+    } on DosaIntentException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'No se pudo autorizar la transición. Inténtalo de nuevo.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.admin_panel_settings_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Autorización administrativa requerida',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Este expediente conserva una intención histórica de otro '
+                'proveedor que ya fue conciliada con DOSA. Para evitar cambiar '
+                'estados, fechas o referencias sin control, la transición '
+                'requiere aprobación del propietario y queda auditada.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _approvalController,
+                maxLength: 128,
+                decoration: const InputDecoration(
+                  labelText: 'Referencia de aprobación del propietario',
+                  helperText: 'Mínimo 8 caracteres',
+                ),
+                validator: (value) => (value ?? '').trim().length < 8
+                    ? 'Indica una referencia de aprobación válida.'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _reasonController,
+                maxLength: 500,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Motivo de la autorización',
+                  helperText: 'Mínimo 20 caracteres',
+                ),
+                validator: (value) => (value ?? '').trim().length < 20
+                    ? 'Explica el motivo con al menos 20 caracteres.'
+                    : null,
+              ),
+              CheckboxListTile(
+                value: _confirmed,
+                onChanged: _busy
+                    ? null
+                    : (value) => setState(() => _confirmed = value == true),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Confirmo que revisé el expediente y autorizo esta '
+                  'transición histórica.',
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _error!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: _busy || !_confirmed ? null : _submit,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check, size: 18),
+                  label: const Text('Autorizar transición'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

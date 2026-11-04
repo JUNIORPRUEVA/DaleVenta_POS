@@ -105,6 +105,22 @@ describe("DOSA intent provider reconciliation", () => {
     expect(effectiveIntentProvider(f.audits as any)).toBe("DOSA");
     expect(f.intent.status).toBe("NOT_STARTED");
     expect(f.intent.sessionUrl).toBeNull();
+
+    // Una autorización posterior no crea un nuevo origen ni cambia el
+    // proveedor efectivo del expediente ya reconciliado.
+    f.audits.push({ id: "audit-3", companyId: COMPANY, targetId: INTENT,
+      action: "INTENT_HISTORICAL_TRANSITION_AUTHORIZED", actorUserId: "admin-3",
+      createdAt: new Date("2026-11-02T00:00:00Z"),
+      metadata: { provider: "DOSA", reason: "authorized" }, before: null, after: null });
+    expect(effectiveIntentProvider(f.audits as any)).toBe("DOSA");
+
+    // Una acción desconocida sigue invalidando la atribución: no se ignora
+    // silenciosamente un historial malformado.
+    f.audits.push({ id: "audit-4", companyId: COMPANY, targetId: INTENT,
+      action: "UNKNOWN_AUDIT_ACTION", actorUserId: "admin-3",
+      createdAt: new Date("2026-11-03T00:00:00Z"), metadata: { provider: "DOSA" },
+      before: null, after: null });
+    expect(effectiveIntentProvider(f.audits as any)).toBe("UNVERIFIED");
   });
 
   it("rejects insufficient origin or external evidence without writing", async () => {

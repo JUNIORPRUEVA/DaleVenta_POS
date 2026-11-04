@@ -14,10 +14,21 @@ function provider(value: unknown): string | null {
   return candidate === "DOSA" || candidate === "ALANUBE" ? candidate : null;
 }
 
+const NON_ORIGIN_ACTIONS = new Set([
+  "INTENT_PROVIDER_RECONCILED",
+  // Una autorización posterior no es un origen de proveedor: solo habilita la
+  // transición del expediente histórico ya reconciliado.
+  "INTENT_HISTORICAL_TRANSITION_AUTHORIZED",
+]);
+
 export function historicalIntentProvider(audits: readonly DosaIntentAttributionAudit[]): string {
   const originals = audits.filter((entry) => entry.action === "ONBOARDING_STARTED");
-  if (originals.length === 0 || originals.length !== audits.filter((entry) =>
-    entry.action !== "INTENT_PROVIDER_RECONCILED").length) return "UNVERIFIED";
+  // Cualquier acción desconocida sigue invalidando la atribución. No se
+  // convierte en origen ni se ignora: un historial malformado debe bloquear.
+  const unknown = audits.some(
+    (entry) => entry.action !== "ONBOARDING_STARTED" && !NON_ORIGIN_ACTIONS.has(entry.action),
+  );
+  if (originals.length === 0 || unknown) return "UNVERIFIED";
   const values = new Set(originals.map((entry) => provider(entry.metadata)));
   return values.size === 1 ? values.values().next().value ?? "UNVERIFIED" : "UNVERIFIED";
 }

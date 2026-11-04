@@ -540,9 +540,12 @@ class ApiRoutes {
   static const ecf = '/ecf';
   static const ecfConfig = '/ecf/config';
   static const ecfCapabilities = '/ecf/capabilities';
+
   /// Preasociación empresa↔RNC antes de abrir el asistente DOSA. Registrar la
   /// intención no activa facturación electrónica ni inicia ninguna postulación.
   static const ecfDosaCertificationIntent = '/ecf/dosa/certification-intent';
+  static const ecfDosaAuthorizeHistoricalTransition =
+      '/ecf/dosa/certification-intent/authorize-historical-transition';
   static const ecfDosaCertificationSession = '/ecf/dosa/certification-session';
   static const ecfDosaCertificationDiagnostic =
       '/ecf/dosa/certification-diagnostic';
@@ -550,6 +553,7 @@ class ApiRoutes {
   /// Ticket de un solo uso que abre el portal de certificación (DOSA).
   static const ecfCertificationPortalTickets =
       '/ecf/certification-portal/tickets';
+
   /// Elegibilidad de SOLO LECTURA para preparar la certificación.
   static const ecfCertificationPortalEligibility =
       '/ecf/certification-portal/eligibility';
@@ -559,7 +563,8 @@ class ApiRoutes {
       '/ecf/documents/prepare-credit-note';
   static const ecfDocumentsPrepareConsumo = '/ecf/documents/prepare-consumo';
   static const ecfDocumentsSummary = '/ecf/documents/summary';
-  static const ecfDocumentsEligibleOriginals = '/ecf/documents/eligible-originals';
+  static const ecfDocumentsEligibleOriginals =
+      '/ecf/documents/eligible-originals';
   static String ecfDocumentDetail(String id) => '/ecf/documents/$id';
 
   /// Despacho SIMULADO (solo disponible en una UAT local con el transporte real
@@ -579,7 +584,8 @@ class ApiRoutes {
   static const ecfDgiiAuthorization = '/ecf/dgii/authorization';
   static const ecfDgiiAuthorizationRevoke = '/ecf/dgii/authorization/revoke';
   static const ecfDgiiDocuments = '/ecf/dgii/documents';
-  static String ecfDgiiDocumentFile(String id) => '/ecf/dgii/documents/$id/file';
+  static String ecfDgiiDocumentFile(String id) =>
+      '/ecf/dgii/documents/$id/file';
 
   /// Validación criptográfica LOCAL del certificado PFX/P12 de la empresa.
   /// No envía el certificado al proveedor ni registra aceptación de la DGII.

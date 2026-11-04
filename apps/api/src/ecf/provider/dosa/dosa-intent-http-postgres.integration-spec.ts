@@ -32,8 +32,11 @@ import type { Request } from "express";
 const real = process.env.ECF_POSTGRES_UAT === "true" ? describe : describe.skip;
 
 const MASTER = randomBytes(32).toString("base64");
-const RNC_SHARED = "133306001";
-const RNC_OTHER = "130000002";
+// La base UAT puede contener una empresa sintética con el RNC de pruebas por
+// defecto. Se permite elegir un RNC libre para que la prueba no dependa de que
+// el entorno esté vacío, sin tocar datos existentes.
+const RNC_SHARED = process.env.ECF_POSTGRES_TEST_RNC?.trim() || "133306001";
+const RNC_OTHER = process.env.ECF_POSTGRES_TEST_RNC_OTHER?.trim() || "130000002";
 
 const COMPANY_A = "31313131-0000-4000-8000-000000000031";
 const COMPANY_B = "32323232-0000-4000-8000-000000000032";

@@ -339,6 +339,53 @@ describe("DosaCertificationSessionService — apertura automática", () => {
     expect(client.calls).toBe(0);
   });
 
+  it("autorización caducada pero sesión vigente: la reutiliza sin llamar al proveedor", async () => {
+    const sessions = new FakeSessions();
+    // Expediente reconciliado sin autorización vigente (24h expiradas).
+    sessions.reconciled.add("company-a:101000001");
+    await sessions.claim({ companyId: "company-a", rnc: "101000001" });
+    await sessions.recordIssuedSession({
+      companyId: "company-a",
+      rnc: "101000001",
+      sessionUrl: "https://dosasystem.com/sesion/ya-emitida",
+      sessionExpiresAt: FUTURE,
+      providerPostulationId: "post-ya-emitida",
+    });
+    const { service, client } = build({ sessions });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      reused: true,
+      sessionUrl: "https://dosasystem.com/sesion/ya-emitida",
+    });
+    expect(client.calls).toBe(0);
+  });
+
+  it("sin autorización vigente no abre ni cierra una sesión histórica", async () => {
+    const sessions = new FakeSessions();
+    sessions.reconciled.add("company-a:101000001");
+    await sessions.claim({ companyId: "company-a", rnc: "101000001" });
+    await sessions.recordIssuedSession({
+      companyId: "company-a",
+      rnc: "101000001",
+      sessionUrl: "https://dosasystem.com/sesion/historica",
+      sessionExpiresAt: PAST,
+      providerPostulationId: "post-historica",
+    });
+    const { service, client } = build({ sessions });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
+    });
+    expect(client.calls).toBe(0);
+    expect(sessions.closed).not.toContain("EXPIRED");
+  });
+
   it("sesión caducada: se cierra y se emite una nueva", async () => {
     const sessions = new FakeSessions();
     await sessions.claim({ companyId: "company-a", rnc: "101000001" });

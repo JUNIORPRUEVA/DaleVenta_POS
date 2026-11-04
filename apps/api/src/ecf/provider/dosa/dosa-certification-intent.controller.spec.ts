@@ -85,6 +85,7 @@ class FakeIntents {
         status: "RUNNING",
         attemptNo: 1,
         sessionUrl: this.sessionUrl,
+        reusable: this.sessionUrl !== null,
       },
     };
   }
@@ -156,17 +157,26 @@ function auditLog(historicalProvider?: string) {
   return { prisma, rows };
 }
 
-function credentials(): DosaCredentialService {
+function credentials(available: { test?: boolean; production?: boolean } = {
+  test: true,
+  production: true,
+}): DosaCredentialService {
   return {
-    async inspect() {
+    async inspect(input: { environment: "test" | "production" }) {
+      if (input.environment === "production" && available.production === false) return null;
+      if (input.environment === "test" && available.test === false) return null;
       return {
         companyId: COMPANY,
         rnc: RNC,
-        environment: "test" as const,
-        status: "PENDING_CONFIRMATION" as const,
-        keyVersion: 1,
+        environment: input.environment,
+        status: input.environment === "test"
+          ? "PENDING_CONFIRMATION" as const
+          : "ACTIVE" as const,
+        keyVersion: input.environment === "test" ? 1 : 2,
         fingerprint: "f".repeat(64),
-        present: { apiKeyProduccion: true, apiKeyTest: true, apiSecret: false },
+        present: input.environment === "test"
+          ? { apiKeyProduccion: true, apiKeyTest: true, apiSecret: false }
+          : { apiKeyProduccion: true, apiKeyTest: false, apiSecret: true },
         updatedAt: null,
       };
     },
@@ -179,6 +189,7 @@ function build(options: {
   historicalProvider?: string;
   configuredProvider?: string;
   sessionUrl?: string | null;
+  credentials?: { test?: boolean; production?: boolean };
 } = {}) {
   const intents = new FakeIntents(
     options.behaviour ?? "created",
@@ -188,7 +199,7 @@ function build(options: {
   const controller = new DosaCertificationIntentController(
     prisma,
     intents as unknown as DosaCertificationIntentService,
-    credentials(),
+    credentials(options.credentials),
     fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled,
       options.configuredProvider ?? "DOSA"),
   );
@@ -376,8 +387,58 @@ describe("GET /ecf/dosa/certification-intent", () => {
         (value) => typeof value === "boolean",
       ),
     ).toBe(true);
+    expect(state.credentialsByEnvironment.test?.status).toBe("PENDING_CONFIRMATION");
+    expect(state.credentialsByEnvironment.production?.status).toBe("ACTIVE");
+    expect(state.credentialsByEnvironment.production?.present).toEqual({
+      hasProductionKey: true,
+      hasTestKey: false,
+      hasSecret: true,
+    });
     const serialized = JSON.stringify(state);
     expect(serialized).not.toMatch(/[A-Za-z0-9+/_-]{40,}/);
+  });
+
+  it("informa que no hay credencial TEST sin ocultar la de producción", async () => {
+    const { controller } = build({ credentials: { test: false, production: true } });
+    const state = await controller.state(req());
+    expect(state.credentials).toBeNull();
+    expect(state.credentialsByEnvironment.test).toBeNull();
+    expect(state.credentialsByEnvironment.production?.status).toBe("ACTIVE");
+    expect(JSON.stringify(state)).not.toMatch(/[A-Za-z0-9+/_-]{40,}/);
+  });
+
+  it("informa que no hay credencial de producción sin ocultar la de TEST", async () => {
+    const { controller } = build({ credentials: { test: true, production: false } });
+    const state = await controller.state(req());
+    expect(state.credentials?.status).toBe("PENDING_CONFIRMATION");
+    expect(state.credentialsByEnvironment.test?.status).toBe("PENDING_CONFIRMATION");
+    expect(state.credentialsByEnvironment.production).toBeNull();
+  });
+
+  it("marca la revisión histórica solo mientras falta una autorización vigente", async () => {
+    const { controller, rows } = build({ historicalProvider: "ALANUBE" });
+    rows.push({
+      id: "audit-2", companyId: COMPANY, targetType: "DOSA_CERTIFICATION_INTENT",
+      targetId: "session-1", action: "INTENT_PROVIDER_RECONCILED",
+      createdAt: new Date("2026-11-01T01:00:00Z"), actorUserId: "admin-2",
+      metadata: { sourceAuditId: "audit-1", externalReviewReference: "provider-review",
+        ownerApprovalReference: "owner-approval" },
+      before: { provider: "ALANUBE" }, after: { provider: "DOSA" },
+    });
+
+    const pending = await controller.state(req());
+    expect(pending.provider).toBe("DOSA");
+    expect(pending.historicalReviewRequired).toBe(true);
+
+    rows.push({
+      id: "audit-3", companyId: COMPANY, targetType: "DOSA_CERTIFICATION_INTENT",
+      targetId: "session-1", action: "INTENT_HISTORICAL_TRANSITION_AUTHORIZED",
+      createdAt: new Date(), actorUserId: "admin-3",
+      metadata: { reason: "authorized" }, before: null, after: null,
+    });
+    const authorized = await controller.state(req());
+    expect(authorized.provider).toBe("DOSA");
+    expect(authorized.historicalReviewRequired).toBe(false);
   });
 
   it("nunca devuelve la URL de sesión desde el estado; solo su presencia", async () => {

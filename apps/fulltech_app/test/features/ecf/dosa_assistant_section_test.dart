@@ -359,6 +359,100 @@ void main() {
     },
   );
 
+  testWidgets(
+    'expediente histórico solo muestra la autorización, no el portal',
+    (tester) async {
+      final api = _IntentApi(hasSession: true, historicalReviewRequired: true);
+
+      await pumpSection(tester, api: api);
+
+      expect(
+        find.text('Autorización administrativa requerida'),
+        findsOneWidget,
+      );
+      expect(find.text('Continuar certificación'), findsNothing);
+      expect(api.authorizeCalls, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'con sesión vigente se reanuda aunque la autorización histórica haya expirado',
+    (tester) async {
+      final api = _IntentApi(
+        hasSession: true,
+        historicalReviewRequired: true,
+        sessionReusable: true,
+      );
+
+      await pumpSection(tester, api: api);
+
+      // No se pide una autorización nueva solo para volver a abrir una sesión
+      // que el backend ya consideró vigente.
+      expect(find.text('Autorización administrativa requerida'), findsNothing);
+      expect(find.text('Continuar certificación'), findsOneWidget);
+      expect(api.authorizeCalls, isEmpty);
+      expect(api.registerCalls, isEmpty);
+    },
+  );
+
+  testWidgets('un usuario sin permiso no ve la autorización histórica', (
+    tester,
+  ) async {
+    final api = _IntentApi(hasSession: true, historicalReviewRequired: true);
+
+    await pumpSection(tester, api: api, role: 'MARKETING');
+
+    expect(find.text('Autorización administrativa requerida'), findsNothing);
+    expect(find.text('Continuar certificación'), findsNothing);
+    expect(api.authorizeCalls, isEmpty);
+  });
+
+  testWidgets(
+    'el administrador autoriza con confirmación y refresca el estado',
+    (tester) async {
+      final api = _IntentApi(hasSession: true, historicalReviewRequired: true);
+
+      await pumpSection(tester, api: api);
+
+      await tester.enterText(
+        find.widgetWithText(
+          TextFormField,
+          'Referencia de aprobación del propietario',
+        ),
+        'owner-approval-123',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Motivo de la autorización'),
+        'Revisión documentada de la transición histórica.',
+      );
+      await tester.tap(
+        find.text(
+          'Confirmo que revisé el expediente y autorizo esta transición '
+          'histórica.',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Autorizar transición'));
+      await tester.pumpAndSettle();
+
+      // La confirmación es explícita: todavía no se envió nada.
+      expect(api.authorizeCalls, isEmpty);
+      await tester.tap(find.text('Autorizar'));
+      await tester.pumpAndSettle();
+
+      expect(api.authorizeCalls, hasLength(1));
+      expect(api.authorizeCalls.single.intentId, 'session-1');
+      expect(
+        api.authorizeCalls.single.ownerApprovalReference,
+        'owner-approval-123',
+      );
+      // Tras la autorización se refresca el estado y aparece el portal; nunca se
+      // abre solo ni se registra una nueva intención.
+      expect(find.text('Continuar certificación'), findsOneWidget);
+      expect(api.registerCalls, isEmpty);
+    },
+  );
+
   testWidgets('un motivo del backend se explica y no abre el asistente', (
     tester,
   ) async {
@@ -401,11 +495,25 @@ UserModel _user({String role = 'ADMIN', String companyId = 'company-a'}) {
 
 /// Doble del cliente HTTP: cuenta lecturas y escrituras por separado, que es
 /// justo la diferencia que estas pruebas vigilan.
+class _AuthorizeCall {
+  const _AuthorizeCall({
+    required this.intentId,
+    required this.ownerApprovalReference,
+    required this.reason,
+  });
+
+  final String intentId;
+  final String ownerApprovalReference;
+  final String reason;
+}
+
 class _IntentApi implements DosaCertificationIntentApi {
   _IntentApi({
     this.blockingReasons = const [],
     this.hasSession = false,
     this.provider = 'DOSA',
+    this.historicalReviewRequired = false,
+    this.sessionReusable = false,
   });
 
   final List<String> blockingReasons;
@@ -413,7 +521,10 @@ class _IntentApi implements DosaCertificationIntentApi {
   /// Simula un expediente que ya tiene intento registrado.
   final bool hasSession;
   final String provider;
+  bool historicalReviewRequired;
+  final bool sessionReusable;
   final List<String?> registerCalls = <String?>[];
+  final List<_AuthorizeCall> authorizeCalls = <_AuthorizeCall>[];
   int stateCalls = 0;
 
   @override
@@ -426,9 +537,31 @@ class _IntentApi implements DosaCertificationIntentApi {
       'provider': provider,
       'canRegister': blockingReasons.isEmpty,
       'blockingReasons': blockingReasons,
+      'historicalReviewRequired': historicalReviewRequired,
       if (hasSession)
-        'session': {'id': 'session-1', 'status': 'NOT_STARTED', 'attemptNo': 1},
+        'session': {
+          'id': 'session-1',
+          'status': 'NOT_STARTED',
+          'attemptNo': 1,
+          'reusable': sessionReusable,
+        },
     });
+  }
+
+  @override
+  Future<void> authorizeHistoricalTransition({
+    required String intentId,
+    required String ownerApprovalReference,
+    required String reason,
+  }) async {
+    authorizeCalls.add(
+      _AuthorizeCall(
+        intentId: intentId,
+        ownerApprovalReference: ownerApprovalReference,
+        reason: reason,
+      ),
+    );
+    historicalReviewRequired = false;
   }
 
   @override

@@ -210,22 +210,6 @@ export class DosaCertificationSessionService {
       );
     }
 
-    // Un expediente reconciliado es histórico: la apertura automática no puede
-    // cambiar sus estados, fechas, referencias ni identificadores sin una
-    // autorización explícita, vigente y auditada.
-    const ttl =
-      this.options.historicalAuthorizationTtlMs ??
-      DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS;
-    if (
-      (await this.sessions.requiresHistoricalReview(companyId, rnc, ttl)) ===
-      true
-    ) {
-      return failure(
-        "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
-        "Este expediente tiene una revisión histórica registrada. La apertura automática está bloqueada: requiere una autorización explícita y auditada.",
-      );
-    }
-
     const readiness = this.client.describeReadiness();
     if (!readiness.ready) {
       // Fail-closed: sin bandera o sin clave, no se llama al proveedor. El
@@ -274,12 +258,30 @@ export class DosaCertificationSessionService {
       );
     }
 
-    // 3) Sesión caducada: se cierra para liberar el hueco del intento.
+    // 3) Un expediente reconciliado es histórico: la apertura automática no
+    // puede cambiar sus estados, fechas, referencias ni identificadores sin una
+    // autorización explícita, vigente y auditada. Se comprueba después de la
+    // reutilización: una sesión ya emitida y vigente sigue siendo válida aunque
+    // la autorización de creación haya expirado.
+    const ttl =
+      this.options.historicalAuthorizationTtlMs ??
+      DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS;
+    if (
+      (await this.sessions.requiresHistoricalReview(companyId, rnc, ttl)) ===
+      true
+    ) {
+      return failure(
+        "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
+        "Este expediente tiene una revisión histórica registrada. La apertura automática está bloqueada: requiere una autorización explícita y auditada.",
+      );
+    }
+
+    // 4) Sesión caducada: se cierra para liberar el hueco del intento.
     if (existing && existing.sessionExpiresAt && isExpired(existing.sessionExpiresAt)) {
       await this.sessions.close({ companyId, rnc, status: "EXPIRED" });
     }
 
-    // 4) Claim idempotente por empresa+RNC (índice único en la base).
+    // 5) Claim idempotente por empresa+RNC (índice único en la base).
     const claim = await this.sessions.claim({
       companyId,
       rnc,
@@ -311,7 +313,7 @@ export class DosaCertificationSessionService {
       );
     }
 
-    // 5) Candado: solo una petición puede llamar al proveedor.
+    // 6) Candado: solo una petición puede llamar al proveedor.
     const lease = await this.sessions.acquireRequestLease({
       companyId,
       rnc,

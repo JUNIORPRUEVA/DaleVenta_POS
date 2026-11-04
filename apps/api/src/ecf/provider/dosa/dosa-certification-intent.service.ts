@@ -164,6 +164,8 @@ export class DosaCertificationIntentService {
       status: string;
       attemptNo: number;
       sessionUrl: string | null;
+      /** Hay una sesión emitida y vigente que se puede reanudar sin crear otra. */
+      reusable: boolean;
     } | null;
   }> {
     const canonical = await this.identity.resolve(input.companyId);
@@ -171,19 +173,22 @@ export class DosaCertificationIntentService {
     if (rnc.length === 0) {
       return { canonicalRnc: null, canonicalSource: canonical.source ?? null, session: null };
     }
-    const active = await this.sessions.findActiveFor(input.companyId, rnc);
+    const active = await this.sessions.findActiveSessionFor(input.companyId, rnc);
     return {
       canonicalRnc: rnc,
       canonicalSource: canonical.source ?? null,
-      session:
-        active && active.ok
-          ? {
-              id: active.id,
-              status: active.status,
-              attemptNo: active.attemptNo,
-              sessionUrl: active.sessionUrl,
-            }
-          : null,
+      session: active
+        ? {
+            id: active.id,
+            status: active.status,
+            attemptNo: active.attemptNo,
+            sessionUrl: active.sessionUrl,
+            reusable:
+              active.sessionUrl !== null &&
+              active.sessionExpiresAt !== null &&
+              new Date(active.sessionExpiresAt).getTime() > Date.now(),
+          }
+        : null,
     };
   }
 

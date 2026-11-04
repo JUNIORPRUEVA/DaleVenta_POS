@@ -64,6 +64,7 @@ void main() {
           'status': 'RUNNING',
           'attemptNo': 1,
           'sessionUrl': null,
+          'reusable': true,
         },
         'credentials': {
           'environment': 'test',
@@ -80,8 +81,19 @@ void main() {
       expect(state.canonicalRnc, '133306001');
       expect(state.canRegister, isTrue);
       expect(state.sessionStatus, 'RUNNING');
+      expect(state.sessionReusable, isTrue);
       expect(state.credentialStatus, 'PENDING_CONFIRMATION');
       expect(state.blockingReasons, isEmpty);
+      expect(state.historicalReviewRequired, isFalse);
+      expect(state.fiscalAuthorizationGranted, isFalse);
+    });
+
+    test('lee la marca de revisión histórica sin autorizarla', () {
+      final state = DosaIntentState.fromJson(const {
+        'session': {'id': 'session-1', 'status': 'NOT_STARTED', 'attemptNo': 1},
+        'historicalReviewRequired': true,
+      });
+      expect(state.historicalReviewRequired, isTrue);
       expect(state.fiscalAuthorizationGranted, isFalse);
     });
 
@@ -151,25 +163,29 @@ void main() {
       expect(intent.fiscalAuthorizationGranted, isFalse);
     });
 
-    test('si el backend rechaza, el provider falla y el asistente no se abre',
-        () async {
-      final api = _FailingApi('AMBIGUOUS_RNC');
-      final container = ProviderContainer(
-        overrides: [dosaCertificationIntentApiProvider.overrideWithValue(api)],
-      );
-      addTearDown(container.dispose);
+    test(
+      'si el backend rechaza, el provider falla y el asistente no se abre',
+      () async {
+        final api = _FailingApi('AMBIGUOUS_RNC');
+        final container = ProviderContainer(
+          overrides: [
+            dosaCertificationIntentApiProvider.overrideWithValue(api),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      await expectLater(
-        container.read(dosaIntentRegistrationProvider('133306001').future),
-        throwsA(
-          isA<DosaIntentException>().having(
-            (error) => error.code,
-            'code',
-            'AMBIGUOUS_RNC',
+        await expectLater(
+          container.read(dosaIntentRegistrationProvider('133306001').future),
+          throwsA(
+            isA<DosaIntentException>().having(
+              (error) => error.code,
+              'code',
+              'AMBIGUOUS_RNC',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('el estado se consulta al volver al sistema', () async {
       final api = _RecordingApi();

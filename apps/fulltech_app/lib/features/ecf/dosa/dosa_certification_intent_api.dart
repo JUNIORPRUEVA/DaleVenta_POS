@@ -59,7 +59,9 @@ class DosaIntentState {
     required this.sessionStatus,
     required this.sessionAttemptNo,
     required this.sessionId,
+    required this.sessionReusable,
     required this.credentialStatus,
+    required this.historicalReviewRequired,
   });
 
   final String? canonicalRnc;
@@ -71,7 +73,15 @@ class DosaIntentState {
   final String? sessionStatus;
   final int? sessionAttemptNo;
   final String? sessionId;
+
+  /// El backend ya confirmó que la sesión emitida sigue vigente y puede
+  /// reanudarse aunque la autorización de creación haya expirado.
+  final bool sessionReusable;
   final String? credentialStatus;
+
+  /// El backend marca esto solo cuando una reconciliación histórica sigue
+  /// necesitando la acción administrativa explícita. No autoriza nada.
+  final bool historicalReviewRequired;
 
   /// SIEMPRE `false`.
   bool get fiscalAuthorizationGranted => false;
@@ -80,7 +90,9 @@ class DosaIntentState {
     final session = json['session'];
     final sessionMap = session is Map<String, dynamic> ? session : null;
     final credentials = json['credentials'];
-    final credentialMap = credentials is Map<String, dynamic> ? credentials : null;
+    final credentialMap = credentials is Map<String, dynamic>
+        ? credentials
+        : null;
     final reasons = json['blockingReasons'];
     return DosaIntentState(
       canonicalRnc: json['canonicalRnc'] as String?,
@@ -94,7 +106,9 @@ class DosaIntentState {
       sessionStatus: sessionMap?['status'] as String?,
       sessionAttemptNo: (sessionMap?['attemptNo'] as num?)?.toInt(),
       sessionId: sessionMap?['id'] as String?,
+      sessionReusable: sessionMap?['reusable'] == true,
       credentialStatus: credentialMap?['status'] as String?,
+      historicalReviewRequired: json['historicalReviewRequired'] == true,
     );
   }
 }
@@ -117,6 +131,20 @@ String dosaIntentReasonMessage(String code) {
       return 'No se pudo registrar la intención. Inténtalo de nuevo en unos segundos.';
     case 'ECF_DOSA_INTENT_UNAUTHENTICATED':
       return 'La sesión no es válida. Vuelve a iniciar sesión.';
+    case 'DOSA_HISTORICAL_TRANSITION_ADMIN_REQUIRED':
+      return 'Solo un administrador autorizado puede aprobar esta transición.';
+    case 'DOSA_HISTORICAL_TRANSITION_DISABLED':
+      return 'La autorización de transiciones históricas no está habilitada.';
+    case 'DOSA_HISTORICAL_TRANSITION_EVIDENCE_REQUIRED':
+      return 'Faltan la referencia de aprobación o el motivo de la autorización.';
+    case 'DOSA_HISTORICAL_TRANSITION_INTENT_NOT_FOUND':
+      return 'El expediente ya no está disponible. Actualiza el estado.';
+    case 'DOSA_HISTORICAL_TRANSITION_STATE_UNSAFE':
+      return 'El expediente cambió: actualiza el estado antes de volver a intentarlo.';
+    case 'DOSA_HISTORICAL_TRANSITION_NOT_RECONCILED':
+      return 'Este expediente no requiere una autorización histórica.';
+    case 'DOSA_HISTORICAL_TRANSITION_ALREADY_AUTHORIZED':
+      return 'La transición ya tiene una autorización vigente.';
     default:
       // Sin interpolación: un código interno no es un mensaje de usuario.
       // El código sigue disponible en `DosaIntentException.code` para soporte.
@@ -170,24 +198,52 @@ class DosaCertificationIntentApi {
     }
   }
 
+  /// Autoriza la transición de un expediente histórico reconciliado.
+  ///
+  /// Solo un administrador con `manageEcfOnboarding` puede llegar aquí; el
+  /// backend vuelve a verificarlo y exige la confirmación literal. La acción
+  /// únicamente deja auditoría: no emite, no activa y no llama a DOSA.
+  Future<void> authorizeHistoricalTransition({
+    required String intentId,
+    required String ownerApprovalReference,
+    required String reason,
+  }) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        ApiRoutes.ecfDosaAuthorizeHistoricalTransition,
+        data: <String, dynamic>{
+          'intentId': intentId,
+          'ownerApprovalReference': ownerApprovalReference.trim(),
+          'reason': reason.trim(),
+          'confirmation': 'AUTHORIZE_HISTORICAL_TRANSITION',
+        },
+      );
+    } on DioException catch (error) {
+      throw _mapError(error);
+    }
+  }
+
   DosaIntentException _mapError(DioException error) {
     final status = error.response?.statusCode;
     final data = error.response?.data;
     final code = data is Map && data['message'] is String
         ? data['message'] as String
-        : data is Map && data['message'] is List && (data['message'] as List).isNotEmpty
-            ? '${(data['message'] as List).first}'
-            : status == 401
-                ? 'ECF_DOSA_INTENT_UNAUTHENTICATED'
-                : 'HTTP_$status';
+        : data is Map &&
+              data['message'] is List &&
+              (data['message'] as List).isNotEmpty
+        ? '${(data['message'] as List).first}'
+        : status == 401
+        ? 'ECF_DOSA_INTENT_UNAUTHENTICATED'
+        : 'HTTP_$status';
     return DosaIntentException(code);
   }
 }
 
-final dosaCertificationIntentApiProvider =
-    Provider<DosaCertificationIntentApi>((ref) {
-  return DosaCertificationIntentApi(ref.watch(dioProvider));
-});
+final dosaCertificationIntentApiProvider = Provider<DosaCertificationIntentApi>(
+  (ref) {
+    return DosaCertificationIntentApi(ref.watch(dioProvider));
+  },
+);
 
 /// Estado de la preparación. Se invalida para refrescar tras registrar.
 final dosaIntentStateProvider = FutureProvider.autoDispose<DosaIntentState>((
@@ -206,5 +262,5 @@ final dosaIntentStateProvider = FutureProvider.autoDispose<DosaIntentState>((
 /// es idempotente en el backend (devuelve la misma sesión con `created: false`).
 final dosaIntentRegistrationProvider = FutureProvider.autoDispose
     .family<DosaCertificationIntent, String>((ref, taxId) {
-  return ref.watch(dosaCertificationIntentApiProvider).register(rnc: taxId);
-});
+      return ref.watch(dosaCertificationIntentApiProvider).register(rnc: taxId);
+    });

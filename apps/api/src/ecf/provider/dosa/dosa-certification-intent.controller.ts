@@ -30,6 +30,7 @@ import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service"
 import { ECF_DOSA_FISCAL_CONFIG } from "./dosa-emission.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
 import { effectiveIntentProvider, historicalIntentProvider, intentReconciliationKind, type DosaIntentAttributionAudit } from "./dosa-intent-attribution";
+import { DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS } from "./dosa-certification-session.service";
 import {
   INTERNAL_EVIDENCE_SCHEMA,
   internalEvidenceDigest,
@@ -100,6 +101,17 @@ export type DosaIntentHttpResponse = {
   fiscalAuthorizationGranted: false;
 };
 
+export type DosaIntentCredentialSummary = {
+  environment: DosaCredentialEnvironment;
+  status: string;
+  /** Solo presencia: nunca el valor, ni siquiera con nombre de clave. */
+  present: {
+    hasProductionKey: boolean;
+    hasTestKey: boolean;
+    hasSecret: boolean;
+  };
+};
+
 export type DosaIntentStateResponse = {
   ok: true;
   companyId: string;
@@ -114,17 +126,18 @@ export type DosaIntentStateResponse = {
     status: string;
     attemptNo: number;
     sessionUrl: string | null;
+    /** Sesión ya emitida y vigente: se puede reanudar sin pedir una nueva. */
+    reusable: boolean;
   } | null;
-  credentials: {
-    environment: DosaCredentialEnvironment;
-    status: string;
-    /** Solo presencia: nunca el valor, ni siquiera con nombre de clave. */
-    present: {
-      hasProductionKey: boolean;
-      hasTestKey: boolean;
-      hasSecret: boolean;
-    };
-  } | null;
+  /** Compatibilidad: resumen de TEST (null si no hay credencial TEST). */
+  credentials: DosaIntentCredentialSummary | null;
+  /** Estado real por ambiente, sin revelar valores. */
+  credentialsByEnvironment: {
+    test: DosaIntentCredentialSummary | null;
+    production: DosaIntentCredentialSummary | null;
+  };
+  /** `true` solo si una reconciliación histórica sigue necesitando la acción administrativa. */
+  historicalReviewRequired: boolean;
   fiscalAuthorizationGranted: false;
 };
 
@@ -278,14 +291,32 @@ export class DosaCertificationIntentController {
     const described = await this.intents.describe({ companyId });
     const preview = await this.intents.preview({ companyId });
 
-    const environment: DosaCredentialEnvironment = "test";
-    const credential = described.canonicalRnc
-      ? await this.credentials.inspect({
-          companyId,
-          rnc: described.canonicalRnc,
-          environment,
-        })
-      : null;
+    const environments: readonly DosaCredentialEnvironment[] = ["test", "production"];
+    const inspections = described.canonicalRnc
+      ? await Promise.all(
+          environments.map((environment) =>
+            this.credentials.inspect({
+              companyId,
+              rnc: described.canonicalRnc as string,
+              environment,
+            }),
+          ),
+        )
+      : [null, null];
+    const summarize = (inspection: (typeof inspections)[number]): DosaIntentCredentialSummary | null =>
+      inspection
+        ? {
+            environment: inspection.environment,
+            status: inspection.status,
+            present: {
+              hasProductionKey: inspection.present.apiKeyProduccion,
+              hasTestKey: inspection.present.apiKeyTest,
+              hasSecret: inspection.present.apiSecret,
+            },
+          }
+        : null;
+    const testCredential = summarize(inspections[0]);
+    const productionCredential = summarize(inspections[1]);
 
     // `ecfEnabled` es solo informativo: describe el módulo de emisión, no la
     // preparación. `canRegister` depende únicamente de que exista identidad
@@ -298,6 +329,12 @@ export class DosaCertificationIntentController {
     const session = described.session
       ? { ...described.session, sessionUrl: null }
       : null;
+    const provider = described.session
+      ? await this.intentProvider(companyId, described.session.id)
+      : "DOSA";
+    const historicalReviewRequired = described.session
+      ? await this.isHistoricalReviewRequired(companyId, described.session.id, provider)
+      : false;
 
     return {
       ok: true,
@@ -305,23 +342,16 @@ export class DosaCertificationIntentController {
       canonicalRnc: described.canonicalRnc,
       canonicalSource: described.canonicalSource,
       ecfEnabled,
-      provider: described.session
-        ? await this.intentProvider(companyId, described.session.id)
-        : "DOSA",
+      provider,
       canRegister: preview.ok,
       blockingReasons,
       session,
-      credentials: credential
-        ? {
-            environment: credential.environment,
-            status: credential.status,
-            present: {
-              hasProductionKey: credential.present.apiKeyProduccion,
-              hasTestKey: credential.present.apiKeyTest,
-              hasSecret: credential.present.apiSecret,
-            },
-          }
-        : null,
+      credentials: testCredential,
+      credentialsByEnvironment: {
+        test: testCredential,
+        production: productionCredential,
+      },
+      historicalReviewRequired,
       fiscalAuthorizationGranted: false,
     };
   }
@@ -737,6 +767,34 @@ export class DosaCertificationIntentController {
 
   private async intentProvider(companyId: string, sessionId: string): Promise<string> {
     return effectiveIntentProvider(await this.intentAudits(companyId, sessionId));
+  }
+
+  /**
+   * Indicador de solo lectura para la UI: ¿queda una reconciliación histórica
+   * sin autorización vigente? No habilita nada por sí mismo; el endpoint de
+   * autorización vuelve a validar el estado dentro de una transacción.
+   */
+  private async isHistoricalReviewRequired(
+    companyId: string,
+    sessionId: string,
+    provider: string,
+  ): Promise<boolean> {
+    if (provider !== "DOSA") return false;
+    const audits = await this.intentAudits(companyId, sessionId);
+    const reconciled = audits.some((entry) => entry.action === "INTENT_PROVIDER_RECONCILED");
+    if (!reconciled || historicalIntentProvider(audits) !== "ALANUBE") return false;
+    const latestAuthorization = audits
+      .filter((entry) => entry.action === "INTENT_HISTORICAL_TRANSITION_AUTHORIZED")
+      .reduce<Date | null>(
+        (latest, entry) => (!latest || entry.createdAt > latest ? entry.createdAt : latest),
+        null,
+      );
+    return (
+      !latestAuthorization ||
+      latestAuthorization.getTime() +
+        DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS <=
+        Date.now()
+    );
   }
 
   private async intentAudits(companyId: string, sessionId: string): Promise<IntentAuditEntry[]> {
