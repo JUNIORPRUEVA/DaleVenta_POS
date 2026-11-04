@@ -79,7 +79,7 @@ export interface DosaSessionCoordinator {
    * Historial ya reconciliado para esta empresa/RNC. La apertura automática no
    * puede mutar esos expedientes: requieren una operación explícita y auditada.
    */
-  hasReconciledIntent?(
+  hasReconciledIntent(
     companyId: string,
     rnc: string,
   ): Promise<boolean>;
@@ -200,9 +200,7 @@ export class DosaCertificationSessionService {
     // Un expediente reconciliado es histórico: la apertura automática no puede
     // cambiar sus estados, fechas, referencias ni identificadores. La única
     // vía es una operación explícita, autorizada y auditada.
-    if (
-      (await this.sessions.hasReconciledIntent?.(companyId, rnc)) === true
-    ) {
+    if ((await this.sessions.hasReconciledIntent(companyId, rnc)) === true) {
       return failure(
         "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
         "Este expediente tiene una revisión histórica registrada. La apertura automática está bloqueada: requiere una operación explícita y auditada.",
