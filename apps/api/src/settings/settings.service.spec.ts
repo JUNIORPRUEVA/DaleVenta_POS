@@ -16,6 +16,7 @@ describe("SettingsService company master data protection", () => {
     return {
       companyName: "FullPOS Cloud",
       rnc: "",
+      ecfContactEmail: "",
       phone: "",
       phonePreferential: "",
       address: "",
@@ -257,6 +258,80 @@ describe("SettingsService company master data protection", () => {
 
     expect(tx.company.update).not.toHaveBeenCalled();
     expect(settings.inventoryEnabled).toBe(false);
+  });
+
+  it("rejects an invalid electronic billing email before touching prisma", async () => {
+    const prisma = { $transaction: jest.fn() };
+    const service = buildService(prisma);
+
+    await expect(
+      service.updateSettings(
+        { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+        { ecfContactEmail: "no-es-correo" },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("persists a valid electronic billing email once in app_config", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          inventoryEnabled: true,
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn(),
+      },
+      appConfig: {
+        upsert: jest
+          .fn()
+          .mockResolvedValue({ ...baseConfig(), ecfContactEmail: "factura@empresa.com" }),
+      },
+    };
+    const prisma = { $transaction: jest.fn((callback) => callback(tx)) };
+    const service = buildService(prisma);
+
+    const response = await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { ecfContactEmail: "factura@empresa.com" },
+    );
+
+    expect(tx.appConfig.upsert.mock.calls[0][0].update).toMatchObject({
+      ecfContactEmail: "factura@empresa.com",
+    });
+    expect(response.ecfContactEmail).toBe("factura@empresa.com");
+  });
+
+  it("does not erase the billing email when saving other settings", async () => {
+    const tx = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          name: "FullPOS Cloud",
+          inventoryEnabled: true,
+          measurementUnitsEnabled: false,
+          multiWarehouseEnabled: false,
+        }),
+        update: jest.fn(),
+      },
+      appConfig: {
+        upsert: jest.fn().mockResolvedValue(baseConfig()),
+      },
+    };
+    const prisma = { $transaction: jest.fn((callback) => callback(tx)) };
+    const service = buildService(prisma);
+
+    await service.updateSettings(
+      { id: "admin-a", role: Role.ADMIN, companyId: "company-a" },
+      { phone: "809-000-0000" },
+    );
+
+    // `undefined` = Prisma no toca la columna, así que el correo guardado se
+    // conserva al guardar otros campos de la empresa.
+    expect(
+      tx.appConfig.upsert.mock.calls[0][0].update.ecfContactEmail,
+    ).toBeUndefined();
   });
 
   it("rejects empty company names on the dedicated rename endpoint", async () => {

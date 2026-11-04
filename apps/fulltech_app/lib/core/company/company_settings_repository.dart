@@ -249,6 +249,7 @@ class CompanySettingsRepository {
       // solo el endpoint dedicado /settings/company-name lo actualiza.
       final payload = <String, dynamic>{
         'rnc': settings.rnc,
+        'ecfContactEmail': settings.ecfContactEmail,
         'phone': settings.phone,
         'phonePreferential': settings.phonePreferential,
         'address': settings.address,

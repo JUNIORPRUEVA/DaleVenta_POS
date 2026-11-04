@@ -357,6 +357,187 @@ export class EcfDosaSessionService {
     `;
     return { bound: rows.length === 1 };
   }
+
+  /**
+   * Lectura del intento activo con los metadatos de la sesión emitida.
+   *
+   * Se usa para REUTILIZAR una sesión vigente sin volver a llamar al proveedor
+   * y para detectar una caducada. No crea ni cambia nada.
+   */
+  async findActiveSessionFor(
+    companyId: string,
+    rnc: string,
+  ): Promise<DosaActiveSession | null> {
+    const company = `${companyId ?? ""}`.trim();
+    const normalized = normalizeRnc(rnc);
+    if (!company || !normalized) return null;
+    const rows = await this.store.$queryRaw<
+      Array<{
+        id: string;
+        status: string;
+        attempt_no: number;
+        session_url: string | null;
+        session_expires_at: Date | string | null;
+        provider_postulation_id: string | null;
+      }>
+    >`
+      SELECT "id", "status", "attempt_no", "session_url",
+             "session_expires_at", "provider_postulation_id"
+        FROM "ecf_dosa_certification_sessions"
+       WHERE "active_key" = ${`${company}:${normalized}`}
+       LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      status: row.status as DosaSessionStatus,
+      attemptNo: row.attempt_no,
+      sessionUrl: row.session_url,
+      sessionExpiresAt: toIsoOrNull(row.session_expires_at),
+      providerPostulationId: row.provider_postulation_id,
+    };
+  }
+
+  /**
+   * Reserva temporal de la petición en vuelo.
+   *
+   * Un único `UPDATE` condicional actúa como candado por empresa+RNC: solo la
+   * petición que encuentra la reserva libre (o vencida) la obtiene. Las demás
+   * no llaman al proveedor, así que un doble clic o dos instancias del backend
+   * no pueden crear dos sesiones. La reserva vence sola: si el proceso muere,
+   * la siguiente petición puede recuperarla.
+   */
+  async acquireRequestLease(input: {
+    companyId: string;
+    rnc: string;
+    leaseMs: number;
+  }): Promise<{ acquired: boolean; sessionUrl: string | null; sessionExpiresAt: string | null }> {
+    const company = `${input.companyId ?? ""}`.trim();
+    const rnc = normalizeRnc(input.rnc);
+    if (!company || !rnc) {
+      return { acquired: false, sessionUrl: null, sessionExpiresAt: null };
+    }
+    const leaseSeconds = Math.max(5, Math.ceil(input.leaseMs / 1000));
+    const rows = await this.store.$queryRaw<
+      Array<{ session_url: string | null; session_expires_at: Date | string | null }>
+    >`
+      UPDATE "ecf_dosa_certification_sessions"
+         SET "session_lease_until" = NOW() + (${`${leaseSeconds}`} || ' seconds')::interval,
+             "updated_at" = NOW()
+       WHERE "company_id" = ${company}::uuid
+         AND "rnc" = ${rnc}
+         AND "active_key" = ${`${company}:${rnc}`}
+         AND ("session_lease_until" IS NULL OR "session_lease_until" < NOW())
+      RETURNING "session_url", "session_expires_at"
+    `;
+    const row = rows[0];
+    return {
+      acquired: rows.length === 1,
+      sessionUrl: row?.session_url ?? null,
+      sessionExpiresAt: toIsoOrNull(row?.session_expires_at ?? null),
+    };
+  }
+
+  /** Libera la reserva sin cambiar el estado. La deja disponible para reintento. */
+  async releaseRequestLease(input: {
+    companyId: string;
+    rnc: string;
+  }): Promise<void> {
+    const company = `${input.companyId ?? ""}`.trim();
+    const rnc = normalizeRnc(input.rnc);
+    if (!company || !rnc) return;
+    await this.store.$queryRaw`
+      UPDATE "ecf_dosa_certification_sessions"
+         SET "session_lease_until" = NULL,
+             "updated_at" = NOW()
+       WHERE "company_id" = ${company}::uuid
+         AND "rnc" = ${rnc}
+         AND "active_key" = ${`${company}:${rnc}`}
+    `;
+  }
+
+  /**
+   * Guarda la sesión emitida por el proveedor en el intento activo.
+   *
+   * Solo escribe el intento ACTIVO de ESA empresa y ese RNC. La URL es una
+   * capacidad del proveedor: se persiste para poder reanudar y **nunca** se
+   * registra en logs.
+   */
+  async recordIssuedSession(input: {
+    companyId: string;
+    rnc: string;
+    sessionUrl: string;
+    sessionExpiresAt: string;
+    providerPostulationId: string;
+  }): Promise<{ recorded: boolean }> {
+    const company = `${input.companyId ?? ""}`.trim();
+    const rnc = normalizeRnc(input.rnc);
+    const url = `${input.sessionUrl ?? ""}`.trim();
+    const postulation = `${input.providerPostulationId ?? ""}`.trim();
+    if (!company || !rnc || !url || !postulation) return { recorded: false };
+    const rows = await this.store.$queryRaw<{ id: string }[]>`
+      UPDATE "ecf_dosa_certification_sessions"
+         SET "session_url" = ${url},
+             "session_expires_at" = ${input.sessionExpiresAt}::timestamptz,
+             "provider_postulation_id" = ${postulation.slice(0, 128)},
+             "session_issued_at" = NOW(),
+             "session_lease_until" = NULL,
+             "status" = 'RUNNING',
+             "updated_at" = NOW()
+       WHERE "company_id" = ${company}::uuid
+         AND "rnc" = ${rnc}
+         AND "active_key" = ${`${company}:${rnc}`}
+      RETURNING "id"
+    `;
+    return { recorded: rows.length === 1 };
+  }
+
+  /**
+   * Marca el intento como INCIERTO cuando el proveedor no respondió de forma
+   * concluyente (timeout o 5xx).
+   *
+   * No se reintenta automáticamente: DOSA pudo haber creado la sesión. Pasa a
+   * `ATTENTION`, conserva la clave activa y exige intervención explícita.
+   */
+  async markSessionUncertain(input: {
+    companyId: string;
+    rnc: string;
+    reasonCode: string;
+  }): Promise<{ updated: boolean }> {
+    const company = `${input.companyId ?? ""}`.trim();
+    const rnc = normalizeRnc(input.rnc);
+    const code = `${input.reasonCode ?? ""}`.trim().slice(0, 64);
+    if (!company || !rnc) return { updated: false };
+    const rows = await this.store.$queryRaw<{ id: string }[]>`
+      UPDATE "ecf_dosa_certification_sessions"
+         SET "status" = 'ATTENTION',
+             "session_lease_until" = NULL,
+             "last_event_type" = ${code || "PROVIDER_UNCERTAIN"},
+             "last_event_at" = NOW(),
+             "updated_at" = NOW()
+       WHERE "company_id" = ${company}::uuid
+         AND "rnc" = ${rnc}
+         AND "active_key" = ${`${company}:${rnc}`}
+      RETURNING "id"
+    `;
+    return { updated: rows.length === 1 };
+  }
+}
+
+export type DosaActiveSession = {
+  id: string;
+  status: DosaSessionStatus;
+  attemptNo: number;
+  sessionUrl: string | null;
+  sessionExpiresAt: string | null;
+  providerPostulationId: string | null;
+};
+
+function toIsoOrNull(value: Date | string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
 /** Traduce la fila del RETURNING al contrato público del servicio. */

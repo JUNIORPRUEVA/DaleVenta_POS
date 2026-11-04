@@ -11,6 +11,7 @@ import 'dosa_assistant_launcher.dart';
 import 'dosa_assistant_panel.dart';
 import 'dosa_assistant_session.dart';
 import 'dosa_certification_intent_api.dart';
+import 'dosa_certification_session_api.dart';
 import 'dosa_portal_launcher.dart';
 
 /// Inserta el panel del asistente DOSA dentro del expediente existente.
@@ -88,6 +89,52 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     setState(() => _openingPortal = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
+      // 1) Apertura AUTOMÁTICA: el backend toma el RNC del expediente y el
+      // correo ya guardado, y devuelve el enlace de sesión de DOSA. El cliente
+      // no vuelve a escribir esos datos.
+      try {
+        final session =
+            await ref.read(dosaCertificationSessionApiProvider).open();
+        if (!mounted) return;
+        final currentUser = ref.read(authStateProvider).user;
+        // El enlace debe pertenecer a la empresa autenticada: se comprueba el
+        // `companyId` devuelto contra el del usuario actual.
+        if (currentUser?.companyId?.trim() != companyId ||
+            session.companyId.trim() != companyId ||
+            !hasUserPermission(currentUser, AppPermission.manageEcfOnboarding)) {
+          return;
+        }
+        if (session.sessionUrl.trim().isEmpty) {
+          messenger?.showSnackBar(
+            const SnackBar(
+              content: Text('El servidor no devolvió un enlace de sesión válido.'),
+            ),
+          );
+          return;
+        }
+        final opened = await openDosaPortal(session.sessionUrl);
+        if (!opened) {
+          messenger?.showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No se pudo abrir el navegador. Copia el enlace desde el portal.',
+              ),
+            ),
+          );
+        }
+        return;
+      } on DosaCertificationSessionException catch (error) {
+        // Un error definitivo (correo, RNC, incierto) se explica y NO se
+        // reintenta. Solo si la API aún no está habilitada se usa el asistente
+        // actual como alternativa segura.
+        if (!error.canFallBackToAssistant) {
+          messenger?.showSnackBar(SnackBar(content: Text(error.message)));
+          return;
+        }
+      }
+
+      // 2) Alternativa segura: portal existente mientras la API de sesiones
+      // todavía no está habilitada.
       final api = ref.read(dosaPortalApiProvider);
       final ticket = await api.requestTicket();
       if (!mounted) return;
@@ -503,8 +550,6 @@ class _DosaPortalCard extends StatelessWidget {
                       ? 'Volver a abrir el asistente'
                       : 'Continuar certificación',
                 ),
-              ),
-            ),
           ],
         ),
       ),

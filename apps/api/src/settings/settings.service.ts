@@ -452,6 +452,27 @@ export class SettingsService {
     return typeof value === "string" ? value.trim() : undefined;
   }
 
+  /**
+   * Correo de facturación electrónica: se captura UNA vez y se reutiliza al
+   * abrir la sesión de certificación DOSA. Solo se escribe si el payload lo
+   * incluye (no se borra por guardar otros campos) y se valida antes de tocar
+   * la base. Cadena vacía = «sin configurar».
+   */
+  private ecfContactEmailValue(dto: SettingsPayload): string | undefined {
+    if (!Object.prototype.hasOwnProperty.call(dto, "ecfContactEmail")) {
+      return undefined;
+    }
+    const raw = this.stringValue(dto, "ecfContactEmail") ?? "";
+    if (raw.length === 0) return "";
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (raw.length > 254 || !emailPattern.test(raw)) {
+      throw new BadRequestException(
+        "El correo de facturación electrónica no es válido",
+      );
+    }
+    return raw;
+  }
+
   private boolValue(dto: SettingsPayload, key: string) {
     const value = dto[key];
     if (typeof value === "boolean") return value;
@@ -539,6 +560,7 @@ export class SettingsService {
     return {
       companyName: this.stringValue(dto, "companyName"),
       rnc: this.stringValue(dto, "rnc"),
+      ecfContactEmail: this.ecfContactEmailValue(dto),
       phone: this.stringValue(dto, "phone"),
       phonePreferential: this.stringValue(dto, "phonePreferential"),
       address: this.stringValue(dto, "address"),
@@ -593,6 +615,7 @@ export class SettingsService {
     config: {
       companyName: string;
       rnc: string;
+      ecfContactEmail: string;
       phone: string;
       phonePreferential: string;
       address: string;
@@ -634,6 +657,7 @@ export class SettingsService {
     return {
       companyName: config.companyName,
       rnc: config.rnc,
+      ecfContactEmail: config.ecfContactEmail,
       phone: config.phone,
       phonePreferential: config.phonePreferential,
       address: config.address,
