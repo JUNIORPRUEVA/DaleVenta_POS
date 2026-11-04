@@ -113,13 +113,33 @@ function fiscalConfig(
   };
 }
 
-function auditLog() {
+function auditLog(historicalProvider?: string) {
   const rows: Array<Record<string, unknown>> = [];
+  if (historicalProvider) rows.push({
+    companyId: COMPANY,
+    targetType: "DOSA_CERTIFICATION_INTENT",
+    targetId: "session-1",
+    action: "ONBOARDING_STARTED",
+    createdAt: new Date("2026-11-01T00:00:00Z"),
+    metadata: { provider: historicalProvider },
+  });
   const prisma = {
     ecfAuditLog: {
       async create(input: { data: Record<string, unknown> }) {
-        rows.push(input.data);
+        rows.push({ ...input.data, createdAt: new Date() });
         return input.data;
+      },
+      async findMany(input: { where: { companyId: string; targetId: string } }) {
+        return rows.filter((row) => row.companyId === input.where.companyId &&
+          row.targetId === input.where.targetId);
+      },
+    },
+    ecfDosaCertificationSession: {
+      async findFirst(input: { where: { companyId: string } }) {
+        if (input.where.companyId !== COMPANY) return null;
+        return { id: "session-1", attemptNo: 1, status: "NOT_STARTED",
+          sessionUrl: null, providerPostulationId: null,
+          createdAt: new Date("2026-11-01T00:00:00Z") };
       },
     },
   } as unknown as PrismaService;
@@ -146,14 +166,17 @@ function credentials(): DosaCredentialService {
 function build(options: {
   behaviour?: ConstructorParameters<typeof FakeIntents>[0];
   ecfEnabled?: boolean | null;
+  historicalProvider?: string;
+  configuredProvider?: string;
 } = {}) {
   const intents = new FakeIntents(options.behaviour ?? "created");
-  const { prisma, rows } = auditLog();
+  const { prisma, rows } = auditLog(options.historicalProvider);
   const controller = new DosaCertificationIntentController(
     prisma,
     intents as unknown as DosaCertificationIntentService,
     credentials(),
-    fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled),
+    fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled,
+      options.configuredProvider ?? "DOSA"),
   );
   return { controller, intents, rows };
 }
@@ -211,6 +234,24 @@ describe("POST /ecf/dosa/certification-intent", () => {
     // El proveedor del intento es DOSA sin afirmar nada de la configuración.
     expect(response.provider).toBe("DOSA");
     expect(intents.registerCalls).toHaveLength(1);
+  });
+
+  it("la intención nueva es DOSA aunque la configuración de emisión sea ALANUBE", async () => {
+    const { controller, rows } = build({ ecfEnabled: false, configuredProvider: "ALANUBE" });
+    const response = await controller.register(req(), {} as RegisterDosaIntentDto);
+    expect(response.provider).toBe("DOSA");
+    expect(rows[0].metadata).toMatchObject({
+      provider: "DOSA", configuredProvider: "ALANUBE",
+    });
+  });
+
+  it("una intención existente conserva el proveedor de su auditoría", async () => {
+    const { controller, rows } = build({
+      behaviour: "existing", historicalProvider: "ALANUBE",
+    });
+    const response = await controller.register(req(), {} as RegisterDosaIntentDto);
+    expect(response.provider).toBe("ALANUBE");
+    expect(rows).toHaveLength(1);
   });
 
   it("rechaza un RNC sin verificar en el expediente", async () => {
@@ -339,5 +380,18 @@ describe("GET /ecf/dosa/certification-intent", () => {
     const state = await controller.state(req());
     expect(state.canRegister).toBe(false);
     expect(state.blockingReasons).toEqual(["COMPANY_RNC_NOT_VERIFIED"]);
+  });
+});
+
+describe("GET /ecf/dosa/certification-diagnostic", () => {
+  it("muestra el proveedor histórico y referencias sin alterar el intento", async () => {
+    const { controller, rows } = build({ historicalProvider: "ALANUBE" });
+    const diagnostic = await controller.diagnostic(req());
+    expect(diagnostic.intention).toMatchObject({
+      attemptNo: 1, status: "NOT_STARTED", recordedProvider: "ALANUBE",
+      hasProviderSessionUrl: false, hasProviderPostulationId: false,
+    });
+    expect(diagnostic.configuredEmissionProvider).toBe("DOSA");
+    expect(rows).toHaveLength(1);
   });
 });

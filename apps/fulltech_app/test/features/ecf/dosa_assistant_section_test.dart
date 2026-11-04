@@ -84,7 +84,7 @@ void main() {
     expect(api.stateCalls, 1);
     expect(api.registerCalls, isEmpty);
     // Y se ofrece la acción explícita, no se ejecuta sola.
-    expect(find.text('Preparar certificación con DOSA'), findsOneWidget);
+    expect(find.text('Preparar certificación'), findsOneWidget);
   });
 
   testWidgets('portal en Preparación consulta elegibilidad sin escribir', (
@@ -99,8 +99,8 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 1);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Continuar con DOSA'), findsOneWidget);
-    expect(find.text('Preparar certificación con DOSA'), findsOneWidget);
+    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Preparar certificación'), findsOneWidget);
   });
 
   testWidgets('portal fuera del piloto falla cerrado', (tester) async {
@@ -113,7 +113,7 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 0);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Continuar con DOSA'), findsNothing);
+    expect(find.text('Estado de certificación'), findsNothing);
   });
 
   testWidgets('portal sin permiso no consulta ni ofrece acciones', (
@@ -134,7 +134,7 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 0);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Continuar con DOSA'), findsNothing);
+    expect(find.text('Estado de certificación'), findsNothing);
   });
 
   testWidgets('portal registra intención solo después del clic', (
@@ -144,13 +144,13 @@ void main() {
     final portal = _PortalApi();
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
-    await tester.tap(find.text('Preparar certificación con DOSA'));
+    await tester.tap(find.text('Preparar certificación'));
     await tester.pumpAndSettle();
 
     expect(api.registerCalls, hasLength(1));
     expect(portal.ticketCalls, 0);
-    expect(find.text('Continuar con DOSA'), findsOneWidget);
-    expect(find.text('Iniciar o continuar certificación'), findsOneWidget);
+    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Continuar certificación'), findsOneWidget);
   });
 
   testWidgets('intención existente ofrece portal sin pedir ticket al cargar', (
@@ -161,8 +161,23 @@ void main() {
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
 
-    expect(find.text('Continuar con DOSA'), findsOneWidget);
-    expect(find.text('Iniciar o continuar certificación'), findsOneWidget);
+    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Continuar certificación'), findsOneWidget);
+    expect(api.registerCalls, isEmpty);
+    expect(portal.ticketCalls, 0);
+  });
+
+  testWidgets('intención histórica ALANUBE no ofrece el portal DOSA', (
+    tester,
+  ) async {
+    final api = _IntentApi(hasSession: true, provider: 'ALANUBE');
+    final portal = _PortalApi();
+
+    await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
+
+    expect(find.textContaining('Revisa el intento de certificación existente'),
+        findsOneWidget);
+    expect(find.text('Continuar certificación'), findsNothing);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -179,7 +194,7 @@ void main() {
       portalApi: portal,
     );
 
-    await tester.tap(find.text('Iniciar o continuar certificación'));
+    await tester.tap(find.text('Continuar certificación'));
     await tester.pump();
     expect(portal.ticketCalls, 1);
 
@@ -200,13 +215,13 @@ void main() {
     await pumpSection(tester, api: api);
     expect(api.registerCalls, isEmpty);
 
-    await tester.tap(find.text('Preparar certificación con DOSA'));
+    await tester.tap(find.text('Preparar certificación'));
     await tester.pumpAndSettle();
 
     expect(api.registerCalls, hasLength(1));
     // El paso previo desaparece: ya hay intención registrada y se monta el
     // asistente con su barra de estado.
-    expect(find.text('Preparar certificación con DOSA'), findsNothing);
+    expect(find.text('Preparar certificación'), findsNothing);
     expect(find.textContaining('Intento 1'), findsOneWidget);
   });
 
@@ -217,7 +232,7 @@ void main() {
     await pumpSection(tester, api: api, role: 'MARKETING');
 
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Preparar certificación con DOSA'), findsNothing);
+    expect(find.text('Preparar certificación'), findsNothing);
     expect(find.textContaining('Solo un administrador autorizado'), findsOneWidget);
   });
 
@@ -228,7 +243,7 @@ void main() {
 
     await pumpSection(tester, api: api);
 
-    expect(find.text('Iniciar o continuar certificación'), findsOneWidget);
+    expect(find.text('Continuar certificación'), findsOneWidget);
     // Abrir el expediente sigue sin escribir nada.
     expect(api.registerCalls, isEmpty);
   });
@@ -242,7 +257,7 @@ void main() {
 
     await pumpSection(tester, api: api, role: 'MARKETING');
 
-    expect(find.text('Iniciar o continuar certificación'), findsNothing);
+    expect(find.text('Continuar certificación'), findsNothing);
     expect(api.registerCalls, isEmpty);
   });
 
@@ -253,7 +268,7 @@ void main() {
     await pumpSection(tester, api: api);
 
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Preparar certificación con DOSA'), findsNothing);
+    expect(find.text('Preparar certificación'), findsNothing);
     expect(
       find.textContaining('no tiene un RNC verificado'),
       findsOneWidget,
@@ -291,12 +306,14 @@ UserModel _user({String role = 'ADMIN', String companyId = 'company-a'}) {
 /// Doble del cliente HTTP: cuenta lecturas y escrituras por separado, que es
 /// justo la diferencia que estas pruebas vigilan.
 class _IntentApi implements DosaCertificationIntentApi {
-  _IntentApi({this.blockingReasons = const [], this.hasSession = false});
+  _IntentApi({this.blockingReasons = const [], this.hasSession = false,
+    this.provider = 'DOSA'});
 
   final List<String> blockingReasons;
 
   /// Simula un expediente que ya tiene intento registrado.
   final bool hasSession;
+  final String provider;
   final List<String?> registerCalls = <String?>[];
   int stateCalls = 0;
 
@@ -307,7 +324,7 @@ class _IntentApi implements DosaCertificationIntentApi {
       'companyId': 'company-a',
       'canonicalRnc': '133306001',
       'ecfEnabled': false, // emisión apagada: preparar sigue disponible
-      'provider': 'DOSA',
+      'provider': provider,
       'canRegister': blockingReasons.isEmpty,
       'blockingReasons': blockingReasons,
       if (hasSession)

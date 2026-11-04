@@ -28,6 +28,7 @@ function makePrismaFake(seed?: {
   companies?: Array<{ id: string; name: string }>;
   dosaSessions?: Array<Record<string, unknown>>;
   ecfConfigs?: Array<{ companyId: string; enabled: boolean }>;
+  intentionProvider?: string | null;
 }) {
   const tickets: Array<Record<string, any>> = [];
   const sessions: Array<Record<string, any>> = [];
@@ -35,7 +36,12 @@ function makePrismaFake(seed?: {
     { id: "company-a", name: "FULLTECH SRL" },
     { id: "company-b", name: "OTRA EMPRESA SRL" },
   ];
-  const dosaSessions = seed?.dosaSessions ?? [];
+  const dosaSessions = (seed?.dosaSessions ?? [
+    { companyId: "company-a", rnc: "000000001", attemptNo: 1,
+      status: "NOT_STARTED", providerPostulationId: null, createdAt: new Date() },
+    { companyId: "company-b", rnc: "999999999", attemptNo: 1,
+      status: "NOT_STARTED", providerPostulationId: null, createdAt: new Date() },
+  ]).map((row) => ({ id: `dosa-${row.companyId}`, ...row }));
   const ecfConfigs = seed?.ecfConfigs ?? [];
 
   let seq = 0;
@@ -114,6 +120,11 @@ function makePrismaFake(seed?: {
         return rows.length > 0 ? rows[rows.length - 1] : null;
       },
     },
+    ecfAuditLog: {
+      findMany: async () => seed?.intentionProvider === null ? [] : [
+        { metadata: { provider: seed?.intentionProvider ?? "DOSA" } },
+      ],
+    },
     ecfCompanyConfiguration: {
       findUnique: async ({ where }: any) =>
         ecfConfigs.find((c) => c.companyId === where.companyId) ?? null,
@@ -165,6 +176,21 @@ describe("elegibilidad (solo lectura)", () => {
 });
 
 describe("compuerta del piloto (por companyId)", () => {
+  it("no emite ticket para un intento histórico ALANUBE", async () => {
+    const prisma = makePrismaFake({ intentionProvider: "ALANUBE" });
+    const service = makeService(prisma, ["company-a"]);
+    await expect(service.issueTicket({ companyId: "company-a", userId: "u" }))
+      .rejects.toThrow("PORTAL_INTENTION_PROVIDER_UNVERIFIED");
+    expect(prisma.__rows.tickets).toHaveLength(0);
+  });
+
+  it("no emite ticket sin intento verificado", async () => {
+    const prisma = makePrismaFake({ dosaSessions: [] });
+    const service = makeService(prisma, ["company-a"]);
+    await expect(service.issueTicket({ companyId: "company-a", userId: "u" }))
+      .rejects.toThrow("PORTAL_INTENTION_REQUIRED");
+    expect(prisma.__rows.tickets).toHaveLength(0);
+  });
   it("sin empresas configuradas el portal esta cerrado para todos", async () => {
     const prisma = makePrismaFake();
     const service = makeService(prisma, []);

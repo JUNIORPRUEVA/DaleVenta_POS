@@ -29,9 +29,9 @@ export class PrismaDosaCompanyResolver implements DosaCompanyResolver {
     const rows = await this.prisma.$queryRaw<
       { company_id: string; enabled: boolean }[]
     >`
-      SELECT DISTINCT s."company_id" AS company_id, c."enabled" AS enabled
+      SELECT DISTINCT s."company_id" AS company_id, COALESCE(c."enabled", FALSE) AS enabled
         FROM "ecf_dosa_certification_sessions" s
-        JOIN "ecf_company_configurations" c
+        LEFT JOIN "ecf_company_configurations" c
           ON c."company_id" = s."company_id"
        WHERE s."rnc" = ${normalized}
        LIMIT 2

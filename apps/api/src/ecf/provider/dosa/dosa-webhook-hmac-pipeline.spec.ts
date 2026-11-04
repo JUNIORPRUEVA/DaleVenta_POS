@@ -350,6 +350,47 @@ describe("webhook DOSA con firma HMAC", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("el piloto procesa un evento firmado antes de activar la emisión", async () => {
+    const previous = process.env.ECF_PORTAL_PILOT_COMPANY_IDS;
+    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = COMPANY_A;
+    try {
+      const { service, calls } = build({
+        insert: [{ id: "evt-pilot" }],
+        companies: {
+          "13199988001": { companyId: COMPANY_A, ecfEnabled: false },
+        },
+      });
+      const body = rawBody();
+      const outcome = await service.handle(
+        request({ "x-dosa-signature": signatureHeader(body) }, body),
+      );
+      expect(outcome).toMatchObject({ accepted: true, status: 200 });
+      expect(calls.some((call) => /INSERT INTO/i.test(call.sql))).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.ECF_PORTAL_PILOT_COMPANY_IDS;
+      else process.env.ECF_PORTAL_PILOT_COMPANY_IDS = previous;
+    }
+  });
+
+  it("el piloto no procesa una firma inválida", async () => {
+    const previous = process.env.ECF_PORTAL_PILOT_COMPANY_IDS;
+    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = COMPANY_A;
+    try {
+      const { service, calls } = build({
+        insert: [{ id: "evt-pilot" }],
+        companies: {
+          "13199988001": { companyId: COMPANY_A, ecfEnabled: false },
+        },
+      });
+      const outcome = await service.handle(request({}, rawBody()));
+      expect(outcome).toMatchObject({ accepted: false, status: 503 });
+      expect(calls).toHaveLength(0);
+    } finally {
+      if (previous === undefined) delete process.env.ECF_PORTAL_PILOT_COMPANY_IDS;
+      else process.env.ECF_PORTAL_PILOT_COMPANY_IDS = previous;
+    }
+  });
+
   it("un evento autenticado deja la pista y vincula el postulacion_id", async () => {
     const hints: Array<{ companyId: string; rnc: string; eventType: string }> = [];
     const bound: Array<{
