@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { IsOptional, IsString, MaxLength, MinLength, IsUUID, Equals } from "class-validator";
+import { IsOptional, IsString, MaxLength, MinLength, IsUUID, Equals, IsIn } from "class-validator";
 import { Prisma } from "@prisma/client";
 import type { Request } from "express";
 import { Permissions } from "../../../auth/roles.decorator";
@@ -29,7 +29,14 @@ import { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
 import { ECF_DOSA_FISCAL_CONFIG } from "./dosa-emission.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
-import { effectiveIntentProvider, historicalIntentProvider, type DosaIntentAttributionAudit } from "./dosa-intent-attribution";
+import { effectiveIntentProvider, historicalIntentProvider, intentReconciliationKind, type DosaIntentAttributionAudit } from "./dosa-intent-attribution";
+import {
+  INTERNAL_EVIDENCE_SCHEMA,
+  internalEvidenceDigest,
+  verifyInternalEvidence,
+  type DosaInternalEvidenceSnapshot,
+  type DosaReconciliationReviewKind,
+} from "./dosa-internal-review-evidence";
 
 /** Cuerpo del registro de intención. */
 export class RegisterDosaIntentDto {
@@ -44,10 +51,25 @@ export class RegisterDosaIntentDto {
   rnc?: string;
 }
 
+/**
+ * Cuerpo de la reconciliación administrativa del proveedor.
+ *
+ * Dos clases de revisión, mutuamente excluyentes:
+ *
+ * * `EXTERNAL` (por defecto, retrocompatible): exige una referencia de un acto
+ *   del proveedor y la aprobación del propietario.
+ * * `INTERNAL`: excepción basada en evidencia interna reproducible. Exige una
+ *   referencia interna, la aprobación del propietario y una segunda bandera
+ *   (`ECF_DOSA_INTENT_RECONCILIATION_INTERNAL_ENABLED`). No admite ninguna
+ *   referencia externa: no se puede disfrazar una revisión interna de externa.
+ */
 export class ReconcileDosaIntentDto {
   @IsUUID() intentId!: string;
   @IsUUID() sourceAuditId!: string;
-  @IsString() @MinLength(8) @MaxLength(128) externalReviewReference!: string;
+  /** Ausente = `EXTERNAL`, para no romper a los llamadores existentes. */
+  @IsOptional() @IsIn(["EXTERNAL", "INTERNAL"]) reviewKind?: DosaReconciliationReviewKind;
+  @IsOptional() @IsString() @MinLength(8) @MaxLength(128) externalReviewReference?: string;
+  @IsOptional() @IsString() @MinLength(8) @MaxLength(128) internalReviewReference?: string;
   @IsString() @MinLength(8) @MaxLength(128) ownerApprovalReference!: string;
   @IsString() @MinLength(20) @MaxLength(500) reason!: string;
   @Equals("RECONCILE_EXISTING_DOSA_INTENT") confirmation!: string;
@@ -306,6 +328,7 @@ export class DosaCertificationIntentController {
       }),
     ]);
     const audits = session ? await this.intentAudits(companyId, session.id) : [];
+    const reconciliationKind = session ? intentReconciliationKind(audits) : null;
     return {
       companyId,
       configuredEmissionProvider: fiscal?.provider ?? null,
@@ -316,6 +339,18 @@ export class DosaCertificationIntentController {
         status: session.status,
         recordedProvider: recordedProvider(audits),
         effectiveProvider: effectiveIntentProvider(audits),
+        /**
+         * Clase de la revisión que sustentó la corrección de atribución.
+         * `INTERNAL` avisa de que NO hubo confirmación del proveedor.
+         */
+        reconciliationKind,
+        /**
+         * Señal para revisión humana: hay una reconciliación y, además, datos
+         * del proveedor en el intento. Ninguna coincidencia se resuelve sola.
+         */
+        attributionConflict:
+          reconciliationKind !== null &&
+          (Boolean(session.sessionUrl) || Boolean(session.providerPostulationId)),
         hasProviderSessionUrl: Boolean(session.sessionUrl),
         hasProviderPostulationId: Boolean(session.providerPostulationId),
         createdAt: session.createdAt,
@@ -344,13 +379,38 @@ export class DosaCertificationIntentController {
     if (process.env.ECF_DOSA_INTENT_RECONCILIATION_ENABLED !== "true") {
       throw new ConflictException("DOSA_INTENT_RECONCILIATION_DISABLED");
     }
+    const reviewKind: DosaReconciliationReviewKind =
+      body?.reviewKind === "INTERNAL" ? "INTERNAL" : "EXTERNAL";
+    // La excepción interna tiene su PROPIA bandera: encender la reconciliación
+    // general no la habilita.
+    if (
+      reviewKind === "INTERNAL" &&
+      process.env.ECF_DOSA_INTENT_RECONCILIATION_INTERNAL_ENABLED !== "true"
+    ) {
+      throw new ConflictException("DOSA_INTENT_RECONCILIATION_INTERNAL_DISABLED");
+    }
     if (!isEcfPortalPilotCompany(companyId)) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     if (!body || body.confirmation !== "RECONCILE_EXISTING_DOSA_INTENT" ||
-      !body.externalReviewReference?.trim() ||
       !body.ownerApprovalReference?.trim() || !body.reason?.trim()) {
       throw new BadRequestException("DOSA_INTENT_RECONCILIATION_EVIDENCE_REQUIRED");
+    }
+    // Referencias: la del tipo declarado, y NUNCA la del otro tipo.
+    const externalReference = (body.externalReviewReference ?? "").trim();
+    const internalReference = (body.internalReviewReference ?? "").trim();
+    if (externalReference.length > 0 && internalReference.length > 0) {
+      // Ni se suman ni se elige una: la decisión es de una sola clase.
+      throw new BadRequestException("DOSA_INTENT_REVIEW_REFERENCES_CONFLICT");
+    }
+    if (reviewKind === "EXTERNAL") {
+      if (externalReference.length < 8) {
+        throw new BadRequestException("DOSA_INTENT_EXTERNAL_REVIEW_REFERENCE_REQUIRED");
+      }
+    } else {
+      if (internalReference.length < 8) {
+        throw new BadRequestException("DOSA_INTENT_INTERNAL_REVIEW_REFERENCE_REQUIRED");
+      }
     }
     return this.prisma.$transaction(async (tx) => {
       const intent = await tx.ecfDosaCertificationSession.findFirst({
@@ -394,6 +454,12 @@ export class DosaCertificationIntentController {
         !intent.createdByUserId || original.actorUserId !== intent.createdByUserId) {
         throw new ConflictException("DOSA_INTENT_LOCAL_ORIGIN_UNVERIFIED");
       }
+      // La excepción interna solo vale sobre el caso exacto: una única auditoría
+      // original. El snapshot que se firma debe describir ese caso, no uno más
+      // laxo que luego la atribución rechazaría.
+      if (reviewKind === "INTERNAL" && audits.length !== 1) {
+        throw new ConflictException("DOSA_INTENT_LOCAL_ORIGIN_UNVERIFIED");
+      }
       // Other local records can reveal external activity despite null session refs.
       const [legacyOperations, webhookEvents, portalTickets, portalSessions] = await Promise.all([
         tx.ecfCertificationAttempt.count({ where: { companyId, provider: "ALANUBE",
@@ -407,19 +473,87 @@ export class DosaCertificationIntentController {
       if (legacyOperations || webhookEvents || portalTickets || portalSessions) {
         throw new ConflictException("DOSA_INTENT_EXTERNAL_ACTIVITY_REVIEW_REQUIRED");
       }
+      const ownerApprovalReference = body.ownerApprovalReference.trim();
+      const reason = body.reason.trim();
+
+      let metadata: Prisma.InputJsonObject;
+      if (reviewKind === "INTERNAL") {
+        // Evidencia reproducible: se construye y se firma AQUÍ, dentro de la
+        // transacción. El cliente no aporta ni el snapshot ni el digest.
+        const originalMeta = (original.metadata ?? {}) as Record<string, unknown>;
+        const originalProvider =
+          originalMeta.provider === "ALANUBE" || originalMeta.provider === "DOSA"
+            ? originalMeta.provider
+            : "UNVERIFIED";
+        const snapshot: DosaInternalEvidenceSnapshot = {
+          schema: INTERNAL_EVIDENCE_SCHEMA,
+          intent: {
+            id: intent.id,
+            companyId,
+            rnc: intent.rnc,
+            attemptNo: intent.attemptNo,
+            status: intent.status,
+            createdAt: intent.createdAt.toISOString(),
+            createdByUserId: intent.createdByUserId,
+            providerPostulationId: null,
+            sessionUrl: null,
+            lastEventType: null,
+            providerConfirmedAt: null,
+            closedAt: null,
+          },
+          audit: {
+            total: audits.length,
+            originalAuditId: original.id,
+            originalActorUserId: original.actorUserId ?? null,
+            originalProvider,
+            originalCreated: originalMeta.created === true,
+            originalRnc: typeof originalMeta.rnc === "string" ? originalMeta.rnc : "",
+            originalAttemptNo:
+              typeof originalMeta.attemptNo === "number" ? originalMeta.attemptNo : -1,
+          },
+          activity: {
+            legacyProviderAttempts: legacyOperations,
+            webhookEvents,
+            portalTickets,
+            portalSessions,
+          },
+        };
+        const candidate = {
+          sourceAuditId: original.id,
+          reviewKind: "INTERNAL" as const,
+          internalReviewReference: internalReference,
+          internalEvidenceDigest: internalEvidenceDigest(snapshot),
+          evidenceSnapshot: snapshot,
+          ownerApprovalReference,
+          reason,
+        };
+        // Defensa en profundidad: no se escribe una decisión que la atribución
+        // vaya a rechazar después. Falla cerrado antes de tocar la auditoría.
+        const verdict = verifyInternalEvidence(candidate);
+        if (!verdict.ok) {
+          throw new ConflictException("DOSA_INTENT_INTERNAL_EVIDENCE_INCONSISTENT");
+        }
+        metadata = candidate as unknown as Prisma.InputJsonObject;
+      } else {
+        metadata = {
+          sourceAuditId: original.id,
+          reviewKind: "EXTERNAL",
+          externalReviewReference: externalReference,
+          ownerApprovalReference,
+          reason,
+        };
+      }
+
       await tx.ecfAuditLog.create({ data: {
         companyId, actorUserId: user.id,
         action: "INTENT_PROVIDER_RECONCILED",
         targetType: "DOSA_CERTIFICATION_INTENT", targetId: intent.id,
         before: { provider: "ALANUBE" }, after: { provider: "DOSA" },
-        metadata: { sourceAuditId: original.id,
-          externalReviewReference: body.externalReviewReference.trim(),
-          ownerApprovalReference: body.ownerApprovalReference.trim(),
-          reason: body.reason.trim() },
+        metadata,
       } });
       return { ok: true, intentId: intent.id, attemptNo: intent.attemptNo,
         historicalProvider: "ALANUBE", effectiveProvider: "DOSA",
-        fiscalAuthorizationGranted: false };
+        reviewKind, fiscalAuthorizationGranted: false };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
