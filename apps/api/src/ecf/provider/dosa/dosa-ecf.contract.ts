@@ -106,30 +106,44 @@ export type DosaEcfComprador = {
 export type DosaEcfTotales = {
   MontoGravadoTotal: string;
   MontoGravadoI1: string;
+  /** Solo cuando hay líneas al 16 %. */
+  MontoGravadoI2?: string;
+  /** Solo cuando hay líneas al 0 % (no exentas). */
+  MontoGravadoI3?: string;
   MontoExento: string;
-  ITBIS1: string;
+  /** Tasas, no montos: la DGII las espera como número. */
+  ITBIS1: number;
+  ITBIS2?: number;
+  ITBIS3?: number;
   TotalITBIS: string;
+  TotalITBIS1?: string;
+  TotalITBIS2?: string;
+  TotalITBIS3?: string;
   MontoTotal: string;
 };
 
 export type DosaEcfItem = {
   numeroLinea: number;
   /**
-   * Naturaleza del ítem según DOSA: 1 = Producto, 2 = Servicio,
-   * 3 = Mixta, 4 = Servicio profesional.
+   * Indicador de facturación de la **DGII**: cómo se grava la línea.
    *
-   * **No** es el indicador de impuesto de la DGII. Son dos cosas distintas y
-   * confundirlas fue un defecto real del mapeador.
+   * 0 = no facturable · 1 = ITBIS 18 % · 2 = ITBIS 16 % · 3 = ITBIS 0 % ·
+   * 4 = exento. **No** dice si es producto o servicio: eso va en
+   * `indicadorBienoServicio`.
+   *
+   * Corrección del proveedor de noviembre 2026: las versiones anteriores del
+   * documento describían este campo como naturaleza del ítem.
    */
-  indicadorFacturacion: 1 | 2 | 3 | 4;
+  indicadorFacturacion: 0 | 1 | 2 | 3 | 4;
   nombreItem: string;
-  /** Naturaleza según DOSA: 1 = Servicio, 2 = Bien (al revés que la DGII). */
+  /** Naturaleza del ítem: 1 = bien, 2 = servicio (catálogo DGII). */
   indicadorBienoServicio: 1 | 2;
   /**
-   * Código **entero** del catálogo de unidades de medida de DOSA
-   * (1..20). Verificado en el README público del proveedor; no es una cadena.
+   * Código **entero** del catálogo de unidades de medida de la DGII
+   * (1..57). Opcional: si no se conoce la equivalencia, se omite en lugar de
+   * inventar un código.
    */
-  unidadMedida: number;
+  unidadMedida?: number;
   cantidadItem: string;
   precioUnitarioItem: string;
   montoItem: string;

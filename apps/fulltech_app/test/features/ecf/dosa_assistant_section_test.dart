@@ -100,7 +100,7 @@ void main() {
     expect(api.stateCalls, 1);
     expect(api.registerCalls, isEmpty);
     expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Preparar certificación'), findsOneWidget);
+    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
   });
 
   testWidgets('portal fuera del piloto falla cerrado', (tester) async {
@@ -137,20 +137,43 @@ void main() {
     expect(find.text('Estado de certificación'), findsNothing);
   });
 
-  testWidgets('portal registra intención solo después del clic', (
+  testWidgets('un solo clic registra la intención y abre el portal', (
     tester,
   ) async {
     final api = _IntentApi();
     final portal = _PortalApi();
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
-    await tester.tap(find.text('Preparar certificación'));
+    expect(portal.ticketCalls, 0);
+
+    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.pumpAndSettle();
+
+    // Un toque: registra la intención (una vez) y pide el ticket del portal.
+    expect(api.registerCalls, hasLength(1));
+    expect(portal.ticketCalls, 1);
+    expect(find.text('Estado de certificación'), findsOneWidget);
+    // La reapertura queda como acción secundaria, no como paso obligatorio.
+    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
+    expect(find.text('Iniciar postulación electrónica'), findsNothing);
+  });
+
+  testWidgets('doble clic no duplica la intención ni el ticket', (
+    tester,
+  ) async {
+    final api = _IntentApi();
+    final portal = _PortalApi();
+
+    await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
+    final button = find.text('Iniciar postulación electrónica');
+
+    // Dos toques dentro del mismo frame: el segundo no debe crear nada nuevo.
+    await tester.tap(button);
+    await tester.tap(button, warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(api.registerCalls, hasLength(1));
-    expect(portal.ticketCalls, 0);
-    expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Continuar certificación'), findsOneWidget);
+    expect(portal.ticketCalls, 1);
   });
 
   testWidgets('intención existente ofrece portal sin pedir ticket al cargar', (
@@ -162,7 +185,7 @@ void main() {
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
 
     expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Continuar certificación'), findsOneWidget);
+    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -177,7 +200,7 @@ void main() {
 
     expect(find.textContaining('Revisa el intento de certificación existente'),
         findsOneWidget);
-    expect(find.text('Continuar certificación'), findsNothing);
+    expect(find.text('Volver a abrir el asistente'), findsNothing);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -194,7 +217,7 @@ void main() {
       portalApi: portal,
     );
 
-    await tester.tap(find.text('Continuar certificación'));
+    await tester.tap(find.text('Volver a abrir el asistente'));
     await tester.pump();
     expect(portal.ticketCalls, 1);
 
@@ -373,7 +396,12 @@ class _PortalApi implements DosaPortalApi {
   Future<DosaPortalTicket> requestTicket() async {
     ticketCalls += 1;
     if (pendingTicket != null) return pendingTicket!.future;
-    throw StateError('No se debe pedir un ticket sin un clic explícito.');
+    // Esquema no navegable a propósito: la prueba no debe lanzar un navegador
+    // real ni tocar la red. `openDosaPortal` devuelve false y la sección avisa.
+    return const DosaPortalTicket(
+      url: 'mailto:sin-navegador@example.test',
+      expiresAt: '',
+    );
   }
 
   @override

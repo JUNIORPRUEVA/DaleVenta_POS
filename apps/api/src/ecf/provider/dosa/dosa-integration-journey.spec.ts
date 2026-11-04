@@ -61,7 +61,7 @@ const E31_BODY: DosaEcfRequestBody = {
       MontoGravadoTotal: "100000.00",
       MontoGravadoI1: "100000.00",
       MontoExento: "0.00",
-      ITBIS1: "18",
+      ITBIS1: 18,
       TotalITBIS: "18000.00",
       MontoTotal: "118000.00",
     },

@@ -31,7 +31,7 @@ describe("mapeador DOSA — serialización decimal", () => {
   it("todos los importes salen con dos decimales", () => {
     const totals = totalsOf(validE31WithItbis, metadataE31);
     for (const [key, value] of Object.entries(totals)) {
-      if (key === "ITBIS1") continue; // tasa, no importe
+      if (key === "ITBIS1" || key === "ITBIS2" || key === "ITBIS3") continue;
       expect(value).toMatch(/^-?\d+\.\d{2}$/);
     }
   });
@@ -46,6 +46,7 @@ describe("mapeador DOSA — serialización decimal", () => {
         "MontoGravadoTotal",
         "MontoTotal",
         "TotalITBIS",
+        "TotalITBIS1",
       ].sort(),
     );
     expect(totals.MontoExento).toBe("0.00");

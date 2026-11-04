@@ -26,6 +26,9 @@ extension EcfFlowStepLabels on EcfFlowStep {
 ///  * Si la empresa todavía no empezó nada, se empieza por la bienvenida.
 ///  * Si ya hay expediente, requisitos resueltos o autorización, se entra
 ///    directamente a la etapa en la que está: nunca se reinicia el recorrido.
+///  * Cuando el certificado lo gestiona el asistente oficial de DOSA
+///    (`dosaOwnsCertificate`), su validación previa en FullPOS deja de ser un
+///    requisito para avanzar: no se pide dos veces la misma cosa.
 EcfFlowStep initialEcfFlowStep({
   required String state,
   required bool hasResolvedRequirement,
@@ -33,12 +36,15 @@ EcfFlowStep initialEcfFlowStep({
   required bool fiscalReady,
   required bool certificateValidated,
   required bool testsOrLater,
+  bool dosaOwnsCertificate = false,
 }) {
   if (officialAuthorization || testsOrLater) return EcfFlowStep.tracking;
   final started =
       state != 'NOT_STARTED' || hasResolvedRequirement || certificateValidated;
   if (!started) return EcfFlowStep.welcome;
-  if (!fiscalReady || !certificateValidated) return EcfFlowStep.company;
+  if (!fiscalReady || (!certificateValidated && !dosaOwnsCertificate)) {
+    return EcfFlowStep.company;
+  }
   return EcfFlowStep.preparation;
 }
 

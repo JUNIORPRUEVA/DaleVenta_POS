@@ -24,8 +24,10 @@ import 'dosa_portal_launcher.dart';
 ///
 /// **Abrir el expediente no registra nada.** Al montarse solo se consulta el
 /// estado (lectura). La intención se registra únicamente cuando un administrador
-/// autorizado pulsa «Preparar certificación con DOSA»; hasta entonces el panel
-/// del asistente no se monta.
+/// autorizado pulsa «Iniciar postulación electrónica»; con ese mismo clic se
+/// abre el portal oficial, sin pedir un segundo toque. El clic autoriza abrir
+/// el asistente, no crear una postulación externa ni pulsar «Conectar» por el
+/// usuario.
 class DosaAssistantSection extends ConsumerStatefulWidget {
   const DosaAssistantSection({
     super.key,
@@ -66,6 +68,10 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
   /// Evita dobles peticiones de ticket mientras se abre el portal.
   bool _openingPortal = false;
 
+  /// El portal se abre una única vez por registro, nunca en bucle ni al
+  /// volver a construir la sección.
+  bool _autoOpened = false;
+
   ///
   /// Pide un ticket de un solo uso y abre el portal alojado en el dominio
   /// autorizado. El componente oficial NO se monta aquí: en Web el iframe
@@ -105,6 +111,20 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     } finally {
       if (mounted) setState(() => _openingPortal = false);
     }
+  }
+
+  /// Un solo clic: registrada la intención, se abre el portal sin pedir otro
+  /// toque. Solo en Preparación (`portalOnly`); en Seguimiento la apertura
+  /// sigue siendo manual.
+  ///
+  /// Abrir el portal NO crea ninguna postulación externa ni pulsa «Conectar»
+  /// por el usuario: solo pide un ticket de un solo uso a nuestro backend.
+  void _scheduleAutoOpen() {
+    if (!widget.portalOnly || _autoOpened) return;
+    _autoOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openPortal();
+    });
   }
 
   @override
@@ -225,13 +245,16 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
                 onRetry: () =>
                     ref.invalidate(dosaIntentRegistrationProvider(taxId)),
               ),
-              data: (registered) => _panel(
-                resolved,
-                binding,
-                attemptNo: registered.attemptNo,
-                created: registered.created,
-                canManage: true,
-              ),
+              data: (registered) {
+                _scheduleAutoOpen();
+                return _panel(
+                  resolved,
+                  binding,
+                  attemptNo: registered.attemptNo,
+                  created: registered.created,
+                  canManage: true,
+                );
+              },
             );
       },
     );
@@ -298,7 +321,8 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
 }
 
 /// Paso previo explícito: explica qué va a pasar y espera la confirmación del
-/// administrador. Es la única puerta que registra la intención.
+/// administrador. Es la única puerta que registra la intención y, en
+/// Preparación, la que abre el portal con el mismo clic.
 class _DosaPrepareCard extends StatelessWidget {
   const _DosaPrepareCard({required this.onPrepare, this.portalOnly = false});
 
@@ -329,9 +353,16 @@ class _DosaPrepareCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Vincula esta empresa con su RNC verificado para abrir el '
-              'asistente del proveedor. No activa la facturación electrónica, '
-              'no emite comprobantes y no envía nada a la DGII.',
+              portalOnly
+                  ? 'Abrimos el asistente oficial de DOSA con el RNC de tu '
+                        'empresa. El certificado y las contraseñas los pide '
+                        'DOSA dentro del asistente: no hay que subirlos aquí. '
+                        'No activa la facturación electrónica ni emite '
+                        'comprobantes.'
+                  : 'Vincula esta empresa con su RNC verificado para abrir el '
+                        'asistente del proveedor. No activa la facturación '
+                        'electrónica, no emite comprobantes y no envía nada a '
+                        'la DGII.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -340,7 +371,11 @@ class _DosaPrepareCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onPrepare,
                 icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Preparar certificación'),
+                label: Text(
+                  portalOnly
+                      ? 'Iniciar postulación electrónica'
+                      : 'Preparar certificación',
+                ),
               ),
             ),
           ],
@@ -463,7 +498,11 @@ class _DosaPortalCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Continuar certificación'),
+                label: Text(
+                  portalOnly
+                      ? 'Volver a abrir el asistente'
+                      : 'Continuar certificación',
+                ),
               ),
             ),
           ],

@@ -137,21 +137,21 @@ describe("barrera DOSA — un borrador no es transmisible", () => {
 });
 
 describe("barrera DOSA — datos fiscales obligatorios", () => {
-  it("rechaza la línea sin unidad de medida", () => {
+  it("acepta la línea sin unidad de medida: el campo es opcional", () => {
     const body = clone(bodyOf(validE31WithItbis));
     delete (body.detallesItems[0] as Partial<DosaEcfRequestBody["detallesItems"][number]>)
       .unidadMedida;
 
     const decision = assessDosaDocumentBarrier(body, ctx);
-    expect(decision.allowed).toBe(false);
-    expect(decision.blockingReasons).toContain(
+    expect(decision.blockingReasons).not.toContain(
       `${DOSA_BARRIER_BLOCKED.itemUnitMissing}:#1`,
     );
   });
 
-  it("rechaza una unidad de medida fuera del catálogo de DOSA", () => {
+  it("rechaza una unidad de medida fuera del catálogo de la DGII", () => {
     const fueraDeCatalogo = clone(bodyOf(validE31WithItbis));
-    fueraDeCatalogo.detallesItems[0].unidadMedida = 21;
+    // 999 no existe: el catálogo de la DGII va de 1 a 57.
+    fueraDeCatalogo.detallesItems[0].unidadMedida = 999;
 
     expect(
       assessDosaDocumentBarrier(fueraDeCatalogo, ctx).blockingReasons,
@@ -159,7 +159,7 @@ describe("barrera DOSA — datos fiscales obligatorios", () => {
 
     const comoTexto = clone(bodyOf(validE31WithItbis));
     // El contrato pide Integer: una cadena no es un código válido.
-    comoTexto.detallesItems[0].unidadMedida = "1" as unknown as number;
+    comoTexto.detallesItems[0].unidadMedida = "43" as unknown as number;
     expect(assessDosaDocumentBarrier(comoTexto, ctx).blockingReasons).toContain(
       `${DOSA_BARRIER_BLOCKED.itemUnitMissing}:#1`,
     );
@@ -417,13 +417,12 @@ describe("DosaEmissionService — la barrera decide aunque la configuración est
     expect(credentialCalls).toEqual([]);
   });
 
-  it("no envía un cuerpo sin unidad de medida", async () => {
+  it("no envía un cuerpo con una unidad de medida fuera del catálogo", async () => {
     const transport = new FakeTransport();
     const { service, credentialCalls } = buildService(transport);
 
     const body = clone(bodyOf(validE31WithItbis));
-    delete (body.detallesItems[0] as Partial<DosaEcfRequestBody["detallesItems"][number]>)
-      .unidadMedida;
+    body.detallesItems[0].unidadMedida = 999;
 
     const result = await service.emit({
       companyId: "11111111-1111-4111-8111-111111111111",

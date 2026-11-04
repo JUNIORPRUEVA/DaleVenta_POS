@@ -23,6 +23,7 @@ class EcfPreparationStep extends StatelessWidget {
     required this.onGoCompany,
     required this.onGoCertificate,
     this.dosaEntry,
+    this.dosaOwnsCertificate = false,
   });
 
   final bool companyReady;
@@ -44,13 +45,17 @@ class EcfPreparationStep extends StatelessWidget {
   /// Entrada al portal DOSA, independiente del motor de prueba legado.
   final Widget? dosaEntry;
 
+  /// El certificado lo gestiona el asistente oficial de DOSA. En ese caso no
+  /// se presenta como requisito previo de FullPOS ni como bloqueo.
+  final bool dosaOwnsCertificate;
+
   bool get _canRun => canManage && simulationAvailable && certificateReady;
 
   String get _blockedReason {
     if (!companyReady) {
       return 'Faltan datos de la empresa para postular.';
     }
-    if (!certificateReady) {
+    if (!certificateReady && !dosaOwnsCertificate) {
       return 'Valida primero el certificado digital.';
     }
     if (!canManage) {
@@ -74,8 +79,8 @@ class EcfPreparationStep extends StatelessWidget {
           const EcfStepTitle(
             title: 'Preparación',
             subtitle:
-                'Revisa que todo esté listo. Después, FullPOS prepara el '
-                'expediente contigo.',
+                'La postulación se realiza en el asistente oficial de DOSA. '
+                'Aquí solo reunimos lo que ya tenemos registrado.',
           ),
           const SizedBox(height: 14),
           EcfSection(
@@ -91,9 +96,19 @@ class EcfPreparationStep extends StatelessWidget {
                 ),
                 EcfSummaryRow(
                   label: 'Certificado digital',
-                  value: certificateReady ? 'Validado' : 'Sin validar',
-                  tone: certificateReady ? EcfTone.done : EcfTone.warning,
-                  onTap: certificateReady ? null : onGoCertificate,
+                  value: certificateReady
+                      ? 'Validado'
+                      : dosaOwnsCertificate
+                      ? 'Se pide en el asistente de DOSA'
+                      : 'Sin validar',
+                  tone: certificateReady
+                      ? EcfTone.done
+                      : dosaOwnsCertificate
+                      ? EcfTone.pending
+                      : EcfTone.warning,
+                  onTap: certificateReady || dosaOwnsCertificate
+                      ? null
+                      : onGoCertificate,
                 ),
                 EcfSummaryRow(
                   label: 'Acceso al portal de la DGII',
@@ -114,7 +129,9 @@ class EcfPreparationStep extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (dosaEntry != null) ...[dosaEntry!, const SizedBox(height: 12)],
-          if (simulationAvailable) EcfSection(
+          // Con el portal oficial presente no se ofrece un segundo camino de
+          // postulación: un solo proceso, un solo botón principal.
+          if (simulationAvailable && dosaEntry == null) EcfSection(
             title: 'Postulación inteligente',
             icon: Icons.auto_awesome_outlined,
             subtitle:
