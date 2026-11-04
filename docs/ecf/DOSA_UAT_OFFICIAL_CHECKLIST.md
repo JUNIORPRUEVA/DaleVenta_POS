@@ -7,6 +7,8 @@ Regla de oro: si falta una respuesta de DOSA o una evidencia, el paso queda
 **BLOQUEADO**. No se sustituye con una suposición, un valor manual ni una prueba
 contra producción.
 
+Entorno UAT local preparado: `docs/ecf/DOSA_UAT_ENVIRONMENT.md`.
+
 ## 0. Separación de responsabilidades
 
 | Bloque | Responsable | Puede ejecutarse ya |
@@ -23,38 +25,39 @@ código. No se copiaron valores de credenciales.
 
 | Elemento | RECIBIDO | CONFIGURADO | PROBADO REALMENTE | PENDIENTE |
 | --- | --- | --- | --- | --- |
-| Script oficial y `publishable-key` | Sí: script y clave `pk_` en el historial privado | No: falta `apps/fulltech_app/.env.dosa.local` | No | Crear el archivo local e inyectarla en el build |
-| Dominio `fullposcloud.fulltechrd.com` | Sí | No: falta `DOSA_SESSION_ALLOWED_RETURN_ORIGINS` | No | Configurarlo en UAT |
-| Secreto del webhook | Sí: 64 caracteres hex | No | No | Cargarlo en el gestor de secretos UAT |
+| Script oficial y `publishable-key` | Sí: script y clave `pk_` en el historial privado | Sí: archivo local `apps/fulltech_app/.env.dosa.local` | No | Inyectarla en el build web autorizado |
+| Dominio `fullposcloud.fulltechrd.com` | Sí | Sí: `DOSA_SESSION_ALLOWED_RETURN_ORIGINS` local | No | Probar el origen real |
+| Secreto del webhook | Sí: 64 caracteres hex | Sí: cargado en `.env.uat.local` local | No | Probar un evento real |
 | Firma HMAC-SHA256 `t + "." + cuerpo` | Sí: fórmula confirmada | Sí: `CONFIGURADO` en código; por defecto `BLOCKED` | Solo pruebas locales | Validar un evento real y fijar unidad/encoding |
 | URL pública del webhook | Sí, pero la sugerida apunta al PWA | Sí: ruta NestJS `/webhook/dosa`; pública correcta `/api/webhook/dosa` | No | Corregir la URL en DOSA/panel |
 | Payload `empresa.conectada` | Sí: ejemplo sanitizado | Sí: parser y persistencia redactada | Solo pruebas locales | Un evento real |
 | Correlación empresa/RNC/`postulacion_id` | Sí: confirmación verbal | Sí: resolver por sesión y binding SQL protegido | Solo pruebas locales | Un evento real y una sesión UAT |
 | Protección de credenciales del webhook | Sí: payload con claves | Sí: se cifran, se redactan y no se registran | Solo pruebas locales | Un evento real |
 | Selección de API Key por empresa/RNC/entorno | Sí: una clave por RNC | Sí: `openForEmission` por empresa/RNC/entorno, sin fallback cruzado | Solo pruebas locales | Prueba de emisión autorizada |
-| API Key TEST de RNC `133306001` | Sí: clave de 40 caracteres en el historial; DOSA la asoció explícitamente a ese RNC | No | No | Configurarla solo para la prueba de emisión autorizada; su vínculo con el RNC solo se confirma con una llamada real |
-| Clave `sk_` de sesiones | Sí: aparece en el ejemplo privado de DOSA | No | No | Confirmar que es la clave TEST vigente y configurarla |
+| API Key TEST de RNC `133306001` | Sí: clave de 40 caracteres en el historial; DOSA la asoció explícitamente a ese RNC | Sí: `.env.uat.local` local, emisión apagada | No | Su vínculo con el RNC solo se confirma con una llamada real |
+| Clave `sk_` de sesiones | Sí: aparece en el ejemplo privado de DOSA | No: en cuarentena, no cargada | No | Confirmar vigencia y activarla explícitamente |
 | Endpoint y campos de sesión | Sí | Sí: cliente implementado y validado | Solo pruebas locales | Una sesión real con `sk_` |
 | RNC TEST `133306001` vs FULLTECH SRL `133080206` | Sí, son distintos | Sí: no hay RNC TEST hardcodeado en producción | No | Usar empresa sintética UAT para `133306001`; no tocar FULLTECH SRL |
 | Secuencias TEST `113500–115500` | Sí, vencen `31/12/2028` | No | No | Registrarlas en la base UAT |
-| Endpoint `EnviarFactura` TEST | Sí | Parcial: ruta implementada; faltan base URL y API Key | No | Solo después de la certificación; emisión apagada |
+| Endpoint `EnviarFactura` TEST | Sí | Sí: ruta, `DOSA_BASE_URL` y API Key TEST en `.env.uat.local`; emisión apagada | No | Solo después de la certificación |
 | Certificado solicitado solo en DOSA | Sí: DOSA lo custodia, firma y transmite | Sí: rama DOSA no muestra carga de PFX/contraseña | Solo pruebas de widget | Confirmación visual en UAT |
 | Modo directo del SDK (`publishable-key`) | Sí | Sí: fallback implementado si no hay `session-url` | Solo pruebas locales | Build web autorizado con la clave pública |
 | Modo de sesiones privadas reutiliza RNC/correo | Sí: contrato de sesiones | Sí: backend lee RNC canónico y correo de empresa | Solo pruebas locales | Una sesión real; verificar que no pide datos dos veces |
-| Key ring de cifrado de URLs | No es un dato de DOSA | No | No | Generarlo y configurarlo en UAT |
+| Key ring de cifrado de URLs | No es un dato de DOSA | Sí: 2 versiones, escritura activa en la 2 | No | Probar rotación con una sesión real |
 | Empresa piloto y administrador UAT | No es un dato de DOSA | No | No | Crearlos y autorizarlos |
 
 `PROBADO REALMENTE` significa contra DOSA o contra su sandbox real, con una
 sesión o un webhook auténticos. Las pruebas unitarias, de contrato y E2E con
 dobles **no** cuentan como prueba real.
 
-Resultado: **casi todo está RECIBIDO, una parte está CONFIGURADA en código y nada
-está PROBADO REALMENTE contra DOSA**. Ninguna credencial DOSA está configurada
-hoy en este worktree: los `.env` locales solo contienen plantillas vacías. El
-paquete original de noviembre confirma además que la `publishable-key` es
-pública, la API Key TEST es secreta y la clave de sesiones no estaba acreditada
-en ese paquete; la clave `sk_` aparece después, en el ejemplo privado del 4 de
-noviembre, y aún debe confirmarse como vigente.
+Resultado: **casi todo está RECIBIDO, la configuración local está preparada y
+nada está PROBADO REALMENTE contra DOSA**. El `.env.uat.local` está cargado con
+las credenciales disponibles, el key ring y la base aislada; la `sk_` sigue en
+cuarentena y las banderas de sesión/webhook/emisión están apagadas. El paquete
+original de noviembre confirma que la `publishable-key` es pública, la API Key
+TEST es secreta y la clave de sesiones no estaba acreditada en ese paquete; la
+clave `sk_` aparece después, en el ejemplo privado del 4 de noviembre, y aún debe
+confirmarse como vigente.
 
 ## 1. Tareas nuestras
 
@@ -471,7 +474,12 @@ ejecutar builds o pruebas.
 - E2E locales: ejecutados con base desechable y DOSA simulado.
 - Emisión: **desactivada**.
 - Certificación: **no completada**.
-- Credenciales DOSA: **entregadas**, pero **no configuradas** en este worktree.
-- UAT oficial: **pendiente de configuración UAT y de R1–R4**. Ya no se deben
-  volver a solicitar el dominio, la fórmula HMAC, la API Key TEST, las
-  secuencias, el endpoint de sesiones ni el payload del webhook.
+- Base UAT local: **creada y migrada** (72 migraciones), vacía y aislada.
+- Credenciales DOSA: **configuradas localmente**, excepto `sk_`, que sigue en
+  cuarentena y no se carga.
+- Key ring UAT: **configurado** con dos versiones; escritura en la versión 2.
+- Webhook local: **configurado pero apagado**; falta un evento real.
+- UAT oficial: **pendiente de crear empresa/admin, confirmar `sk_`, corregir la
+  URL pública en DOSA y recibir un evento firmado**. Ya no se deben volver a
+  solicitar el dominio, la fórmula HMAC, la API Key TEST, las secuencias, el
+  endpoint de sesiones ni el payload del webhook.
