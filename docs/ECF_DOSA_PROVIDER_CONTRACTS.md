@@ -10,7 +10,7 @@ Estado actual tras la Fase 5:
 | Montaje del componente Web (`<dosa-cert-wizard>`) | **Verificado en navegador real** con el script oficial |
 | Atributos y eventos del componente | **Confirmados** por el código del script |
 | Modelo de sesiones y control de duplicados | **Verificado contra PostgreSQL real** |
-| Creación/consulta de sesiones en DOSA | **Bloqueado**: falta contrato |
+| Creación/consulta de sesiones en DOSA | **Contrato entregado (2026-11-04) e implementado**; activación operativa pendiente |
 | Webhook (`X-Dosa-Signature`) | **Bloqueado**: falta la fórmula |
 | Emisión fiscal (E31/E32/E34) | **Borrador**: falta cerrar el contrato |
 
@@ -19,10 +19,11 @@ Estado actual tras la Fase 5:
 ## 1. Crear sesiones — `POST /api/certificacion/sesiones`
 
 El script oficial dice textualmente que el enlace de sesión lo crea «el backend
-del partner con `POST /api/certificacion/sesiones` y su secret key». No publica
-el contrato.
+del partner con `POST /api/certificacion/sesiones` y su secret key». DOSA entregó
+el contrato el 2026-11-04 y está implementado en
+`dosa-certification-session.client.ts` y `dosa-certification-session.service.ts`.
 
-Necesitamos:
+Puntos aún pendientes de confirmación operativa:
 
 1. **URL base** exacta por entorno (pruebas y producción) y si el prefijo `/api`
    forma parte de la ruta.
@@ -39,8 +40,10 @@ Necesitamos:
 7. **Vigencia** del enlace de sesión: duración y comportamiento al expirar.
 8. **Límite de sesiones activas** por empresa/RNC.
 
-Mientras no lo tengamos: `EcfDosaSessionService.claim()` crea solo el registro
-**local**; no se llama a DOSA y el componente no se monta sin `session-url`.
+La implementación falla cerrado sin `DOSA_CERTIFICATION_SESSIONS_ENABLED=true`
+o sin `DOSA_SECRET_KEY`; en ese caso el cliente usa el portal existente como
+fallback. La apertura automática solo se activa cuando la configuración y la
+respuesta del proveedor son válidas.
 
 ---
 
