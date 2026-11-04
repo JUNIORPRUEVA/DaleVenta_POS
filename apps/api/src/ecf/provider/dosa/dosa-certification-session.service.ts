@@ -11,6 +11,7 @@ import type {
   DosaSessionClaim,
   DosaSessionClosedStatus,
 } from "./ecf-dosa-session.service";
+import { DosaSessionUrlCipher } from "./dosa-session-url-cipher";
 
 /**
  * Apertura de la sesión de certificación DOSA para una empresa.
@@ -43,7 +44,9 @@ export type DosaSessionOpenFailureCode =
   | "ECF_DOSA_SESSION_PROVIDER_ERROR"
   | "ECF_DOSA_SESSION_NOT_PERSISTED"
   | "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED"
-  | "ECF_DOSA_SESSION_EXPIRY_UNKNOWN";
+  | "ECF_DOSA_SESSION_EXPIRY_UNKNOWN"
+  | "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED"
+  | "ECF_DOSA_SESSION_URL_UNREADABLE";
 
 export type DosaSessionOpenResult =
   | {
@@ -76,12 +79,14 @@ export interface DosaContactEmailReader {
 /** Contrato estrecho de persistencia: permite probar sin base de datos. */
 export interface DosaSessionCoordinator {
   /**
-   * Historial ya reconciliado para esta empresa/RNC. La apertura automática no
-   * puede mutar esos expedientes: requieren una operación explícita y auditada.
+   * Historial ya reconciliado que sigue necesitando revisión porque no tiene
+   * una autorización explícita y vigente. La apertura automática no puede
+   * mutarlo sin esa autorización.
    */
-  hasReconciledIntent(
+  requiresHistoricalReview(
     companyId: string,
     rnc: string,
+    authorizationTtlMs: number,
   ): Promise<boolean>;
   findActiveSessionFor(
     companyId: string,
@@ -141,6 +146,9 @@ export const ECF_DOSA_SESSION_COORDINATOR = Symbol(
   "ECF_DOSA_SESSION_COORDINATOR",
 );
 export const ECF_DOSA_SESSION_CLIENT = Symbol("ECF_DOSA_SESSION_CLIENT");
+export const ECF_DOSA_SESSION_URL_CIPHER = Symbol(
+  "ECF_DOSA_SESSION_URL_CIPHER",
+);
 
 /** Margen para no reutilizar una sesión que caduca en segundos. */
 const EXPIRY_SKEW_MS = 30_000;
@@ -150,6 +158,8 @@ const EXPIRY_SKEW_MS = 30_000;
  * proceso muere, la reserva se libera sola al vencer.
  */
 export const DOSA_SESSION_DEFAULT_LEASE_MS = 180_000;
+/** Una autorización histórica caduca sola y exige una nueva revisión. */
+export const DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class DosaCertificationSessionService {
@@ -162,10 +172,13 @@ export class DosaCertificationSessionService {
     private readonly sessions: DosaSessionCoordinator,
     @Inject(ECF_DOSA_SESSION_CLIENT)
     private readonly client: DosaSessionClientPort,
+    @Inject(ECF_DOSA_SESSION_URL_CIPHER)
+    private readonly urlCipher: DosaSessionUrlCipher,
     private readonly options: {
       leaseMs?: number;
       pollAttempts?: number;
       pollDelayMs?: number;
+      historicalAuthorizationTtlMs?: number;
     } = {},
   ) {}
 
@@ -198,12 +211,18 @@ export class DosaCertificationSessionService {
     }
 
     // Un expediente reconciliado es histórico: la apertura automática no puede
-    // cambiar sus estados, fechas, referencias ni identificadores. La única
-    // vía es una operación explícita, autorizada y auditada.
-    if ((await this.sessions.hasReconciledIntent(companyId, rnc)) === true) {
+    // cambiar sus estados, fechas, referencias ni identificadores sin una
+    // autorización explícita, vigente y auditada.
+    const ttl =
+      this.options.historicalAuthorizationTtlMs ??
+      DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS;
+    if (
+      (await this.sessions.requiresHistoricalReview(companyId, rnc, ttl)) ===
+      true
+    ) {
       return failure(
         "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED",
-        "Este expediente tiene una revisión histórica registrada. La apertura automática está bloqueada: requiere una operación explícita y auditada.",
+        "Este expediente tiene una revisión histórica registrada. La apertura automática está bloqueada: requiere una autorización explícita y auditada.",
       );
     }
 
@@ -217,11 +236,24 @@ export class DosaCertificationSessionService {
         { providerCode: readiness.blockingReasons.join(",") },
       );
     }
+    if (!this.urlCipher.ready) {
+      // Sin clave de cifrado no se persiste una URL en claro.
+      return failure(
+        "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
+        "El cifrado de sesiones DOSA no está configurado. La apertura automática está deshabilitada.",
+      );
+    }
 
     // 1) Reutilización directa de una sesión vigente.
     const existing = await this.sessions.findActiveSessionFor(companyId, rnc);
-    const reusable = reusableUrl(existing);
-    if (reusable) return reusable;
+    const existingReusable = this.reusable(existing, companyId, rnc);
+    if (existingReusable === undefined) {
+      return failure(
+        "ECF_DOSA_SESSION_URL_UNREADABLE",
+        "La URL de la sesión guardada no se pudo descifrar. Requiere revisión.",
+      );
+    }
+    if (existingReusable) return existingReusable;
 
     // Una URL histórica sin fecha de vencimiento no se puede validar. Se trata
     // como revisión manual: ni se reutiliza ni se sobrescribe con una nueva
@@ -263,7 +295,13 @@ export class DosaCertificationSessionService {
     // El claim puede devolver un intento ya existente: hay que reevaluarlo,
     // porque otra petición pudo emitirlo mientras tanto.
     const afterClaim = await this.sessions.findActiveSessionFor(companyId, rnc);
-    const reusableAfterClaim = reusableUrl(afterClaim);
+    const reusableAfterClaim = this.reusable(afterClaim, companyId, rnc);
+    if (reusableAfterClaim === undefined) {
+      return failure(
+        "ECF_DOSA_SESSION_URL_UNREADABLE",
+        "La URL de la sesión guardada no se pudo descifrar. Requiere revisión.",
+      );
+    }
     if (reusableAfterClaim) return reusableAfterClaim;
     if (afterClaim && afterClaim.status === "ATTENTION") {
       return failure(
@@ -287,11 +325,25 @@ export class DosaCertificationSessionService {
         "Ya hay una apertura de sesión en curso para esta empresa.",
       );
     }
-    if (lease.sessionUrl && !isExpired(lease.sessionExpiresAt)) {
+    const leaseUrl = lease.sessionUrl
+      ? this.urlCipher.open({
+          companyId,
+          rnc,
+          sessionId: afterClaim?.id ?? claim.id,
+          stored: lease.sessionUrl,
+        })
+      : null;
+    if (lease.sessionUrl && !leaseUrl) {
+      return failure(
+        "ECF_DOSA_SESSION_URL_UNREADABLE",
+        "La URL de la sesión guardada no se pudo descifrar. Requiere revisión.",
+      );
+    }
+    if (leaseUrl && !isExpired(lease.sessionExpiresAt)) {
       // Otra petición emitió la sesión justo antes de ceder el candado.
       return {
         ok: true,
-        sessionUrl: lease.sessionUrl,
+        sessionUrl: leaseUrl,
         expiresAt: lease.sessionExpiresAt ?? "",
         attemptNo: claim.attemptNo,
         providerPostulationId: afterClaim?.providerPostulationId ?? "",
@@ -340,10 +392,16 @@ export class DosaCertificationSessionService {
       );
     }
 
+    const sealedUrl = this.urlCipher.seal({
+      companyId,
+      rnc,
+      sessionId: claim.id,
+      url: result.session.url,
+    });
     const recorded = await this.sessions.recordIssuedSession({
       companyId,
       rnc,
-      sessionUrl: result.session.url,
+      sessionUrl: sealedUrl,
       sessionExpiresAt: result.session.expiresAt,
       providerPostulationId: result.session.postulacionId,
     });
@@ -372,6 +430,34 @@ export class DosaCertificationSessionService {
     };
   }
 
+  /**
+   * Reutilización con descifrado. `undefined` significa criptograma ilegible:
+   * no se reutiliza, no se sobrescribe y se exige revisión.
+   */
+  private reusable(
+    active: DosaActiveSession | null,
+    companyId: string,
+    rnc: string,
+  ): DosaSessionOpenResult | null | undefined {
+    if (!active || !active.sessionUrl || !active.sessionExpiresAt) return null;
+    if (isExpired(active.sessionExpiresAt)) return null;
+    const sessionUrl = this.urlCipher.open({
+      companyId,
+      rnc,
+      sessionId: active.id,
+      stored: active.sessionUrl,
+    });
+    if (!sessionUrl) return undefined;
+    return {
+      ok: true,
+      sessionUrl,
+      expiresAt: active.sessionExpiresAt,
+      attemptNo: active.attemptNo,
+      providerPostulationId: active.providerPostulationId ?? "",
+      reused: true,
+    };
+  }
+
   /** Espera acotada a que la petición ganadora publique la URL. */
   private async waitForWinner(
     companyId: string,
@@ -382,7 +468,13 @@ export class DosaCertificationSessionService {
     for (let i = 0; i < attempts; i += 1) {
       if (delayMs > 0) await delay(delayMs);
       const active = await this.sessions.findActiveSessionFor(companyId, rnc);
-      const reusable = reusableUrl(active);
+      const reusable = this.reusable(active, companyId, rnc);
+      if (reusable === undefined) {
+        return failure(
+          "ECF_DOSA_SESSION_URL_UNREADABLE",
+          "La URL de la sesión guardada no se pudo descifrar. Requiere revisión.",
+        );
+      }
       if (reusable) return reusable;
       if (active && active.status === "ATTENTION") {
         return failure(
@@ -394,21 +486,6 @@ export class DosaCertificationSessionService {
     }
     return null;
   }
-}
-
-function reusableUrl(
-  active: DosaActiveSession | null,
-): DosaSessionOpenResult | null {
-  if (!active || !active.sessionUrl || !active.sessionExpiresAt) return null;
-  if (isExpired(active.sessionExpiresAt)) return null;
-  return {
-    ok: true,
-    sessionUrl: active.sessionUrl,
-    expiresAt: active.sessionExpiresAt,
-    attemptNo: active.attemptNo,
-    providerPostulationId: active.providerPostulationId ?? "",
-    reused: true,
-  };
 }
 
 function isExpired(expiresAt: string | null | undefined): boolean {

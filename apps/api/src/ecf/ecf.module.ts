@@ -82,12 +82,17 @@ import {
   ECF_DOSA_IDENTITY_READER,
   ECF_DOSA_SESSION_CLIENT,
   ECF_DOSA_SESSION_COORDINATOR,
+  ECF_DOSA_SESSION_URL_CIPHER,
   type DosaContactEmailReader,
   type DosaIdentityReader,
   type DosaSessionClientPort,
   type DosaSessionCoordinator,
 } from "./provider/dosa/dosa-certification-session.service";
 import { DosaCertificationSessionController } from "./provider/dosa/dosa-certification-session.controller";
+import {
+  DosaSessionUrlCipher,
+  createDosaSessionUrlCipher,
+} from "./provider/dosa/dosa-session-url-cipher";
 import {
   CanonicalDosaIdentityReader,
   PrismaDosaContactEmailReader,
@@ -282,20 +287,32 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
       useFactory: (): DosaSessionClientPort => createDosaSessionClient(process.env),
     },
     {
+      provide: ECF_DOSA_SESSION_URL_CIPHER,
+      useFactory: () => createDosaSessionUrlCipher(process.env),
+    },
+    {
       provide: DosaCertificationSessionService,
       inject: [
         ECF_DOSA_IDENTITY_READER,
         ECF_DOSA_CONTACT_EMAIL_READER,
         ECF_DOSA_SESSION_COORDINATOR,
         ECF_DOSA_SESSION_CLIENT,
+        ECF_DOSA_SESSION_URL_CIPHER,
       ],
       useFactory: (
         identity: DosaIdentityReader,
         emails: DosaContactEmailReader,
         sessions: DosaSessionCoordinator,
         client: DosaSessionClientPort,
+        cipher: DosaSessionUrlCipher,
       ) =>
-        new DosaCertificationSessionService(identity, emails, sessions, client),
+        new DosaCertificationSessionService(
+          identity,
+          emails,
+          sessions,
+          client,
+          cipher,
+        ),
     },
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,

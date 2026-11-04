@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { IsOptional, IsString, MaxLength, MinLength, IsUUID, Equals, IsIn } from "class-validator";
-import { Prisma, Role } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { Request } from "express";
 import { Permissions } from "../../../auth/roles.decorator";
 import { RolesGuard } from "../../../auth/roles.guard";
@@ -73,6 +73,17 @@ export class ReconcileDosaIntentDto {
   @IsString() @MinLength(8) @MaxLength(128) ownerApprovalReference!: string;
   @IsString() @MinLength(20) @MaxLength(500) reason!: string;
   @Equals("RECONCILE_EXISTING_DOSA_INTENT") confirmation!: string;
+}
+
+/**
+ * Autoriza UNA transición futura sobre un expediente histórico reconciliado.
+ * No la ejecuta: solo registra la autorización humana auditable.
+ */
+export class AuthorizeHistoricalTransitionDto {
+  @IsUUID() intentId!: string;
+  @IsString() @MinLength(8) @MaxLength(128) ownerApprovalReference!: string;
+  @IsString() @MinLength(20) @MaxLength(500) reason!: string;
+  @Equals("AUTHORIZE_HISTORICAL_TRANSITION") confirmation!: string;
 }
 
 export type DosaIntentHttpResponse = {
@@ -281,25 +292,11 @@ export class DosaCertificationIntentController {
     // fiscal verificable y no ambigua.
     const ecfEnabled = fiscal?.ecfEnabled === true;
     const blockingReasons = preview.ok ? [] : [preview.reason];
-    // La URL de sesión es una capacidad de acceso. Solo se devuelve a quien
-    // puede abrir el portal; `viewEcfOnboarding` basta para ver el estado, no
-    // para recibir la credencial.
-    const rawPermissions = user.userPermissions;
-    const permissionMap =
-      rawPermissions &&
-      typeof rawPermissions === "object" &&
-      !Array.isArray(rawPermissions)
-        ? (rawPermissions as Record<string, unknown>)
-        : {};
-    const canManageSession =
-      user.role === Role.ADMIN ||
-      user.role === "ADMINISTRADOR" ||
-      permissionMap.manageEcfOnboarding === true;
+    // La URL es una capacidad de acceso y en reposo está cifrada. El estado
+    // solo informa de su presencia; la URL utilizable se obtiene únicamente
+    // desde `POST /ecf/dosa/certification-session`.
     const session = described.session
-      ? {
-          ...described.session,
-          sessionUrl: canManageSession ? described.session.sessionUrl : null,
-        }
+      ? { ...described.session, sessionUrl: null }
       : null;
 
     return {
@@ -383,6 +380,153 @@ export class DosaCertificationIntentController {
         recordedProvider: recordedProvider([entry]),
       })),
     };
+  }
+
+  /**
+   * Registra una autorización explícita para que un expediente histórico
+   * reconciliado pueda transicionar UNA vez. No ejecuta la transición, no crea
+   * un intento nuevo y no elimina historial. La autorización caduca a las 24 h.
+   */
+  @Post("certification-intent/authorize-historical-transition")
+  @HttpCode(200)
+  @Permissions("manageEcfOnboarding")
+  async authorizeHistoricalTransition(
+    @Req() req: Request,
+    @Body() body: AuthorizeHistoricalTransitionDto,
+  ) {
+    const user = req.user as TenantUser;
+    const companyId = requireTenant(user);
+    if (user.role !== "ADMIN" && user.role !== "ADMINISTRADOR") {
+      throw new ForbiddenException("DOSA_HISTORICAL_TRANSITION_ADMIN_REQUIRED");
+    }
+    if (process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED !== "true") {
+      throw new ConflictException("DOSA_HISTORICAL_TRANSITION_DISABLED");
+    }
+    if (!isEcfPortalPilotCompany(companyId)) {
+      throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
+    }
+    if (
+      !body ||
+      body.confirmation !== "AUTHORIZE_HISTORICAL_TRANSITION" ||
+      !body.ownerApprovalReference?.trim() ||
+      !body.reason?.trim()
+    ) {
+      throw new BadRequestException(
+        "DOSA_HISTORICAL_TRANSITION_EVIDENCE_REQUIRED",
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const intent = await tx.ecfDosaCertificationSession.findFirst({
+        where: { id: body.intentId, companyId },
+        select: {
+          id: true,
+          rnc: true,
+          attemptNo: true,
+          status: true,
+          activeKey: true,
+          sessionUrl: true,
+          providerPostulationId: true,
+          lastEventType: true,
+          providerConfirmedAt: true,
+          closedAt: true,
+        },
+      });
+      if (!intent) {
+        throw new ConflictException(
+          "DOSA_HISTORICAL_TRANSITION_INTENT_NOT_FOUND",
+        );
+      }
+      // Solo el Intento 1 original, activo, sin referencias de proveedor y sin
+      // cierre. Nunca se autoriza un intento ya iniciado o uno nuevo.
+      if (
+        intent.attemptNo !== 1 ||
+        intent.status !== "NOT_STARTED" ||
+        !intent.activeKey ||
+        intent.sessionUrl ||
+        intent.providerPostulationId ||
+        intent.lastEventType ||
+        intent.providerConfirmedAt ||
+        intent.closedAt
+      ) {
+        throw new ConflictException(
+          "DOSA_HISTORICAL_TRANSITION_STATE_UNSAFE",
+        );
+      }
+
+      const reconciled = await tx.ecfAuditLog.findFirst({
+        where: {
+          companyId,
+          targetType: "DOSA_CERTIFICATION_INTENT",
+          targetId: intent.id,
+          action: "INTENT_PROVIDER_RECONCILED",
+        },
+        select: { id: true },
+      });
+      if (!reconciled) {
+        throw new ConflictException(
+          "DOSA_HISTORICAL_TRANSITION_NOT_RECONCILED",
+        );
+      }
+
+      const alreadyAuthorized = await tx.ecfAuditLog.findFirst({
+        where: {
+          companyId,
+          targetType: "DOSA_CERTIFICATION_INTENT",
+          targetId: intent.id,
+          action: "INTENT_HISTORICAL_TRANSITION_AUTHORIZED",
+          createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        select: { id: true },
+      });
+      if (alreadyAuthorized) {
+        throw new ConflictException(
+          "DOSA_HISTORICAL_TRANSITION_ALREADY_AUTHORIZED",
+        );
+      }
+
+      const audit = await tx.ecfAuditLog.create({
+        data: {
+          companyId,
+          actorUserId: user.id,
+          action: "INTENT_HISTORICAL_TRANSITION_AUTHORIZED",
+          targetType: "DOSA_CERTIFICATION_INTENT",
+          targetId: intent.id,
+          before: {
+            status: intent.status,
+            attemptNo: intent.attemptNo,
+            hasSessionUrl: Boolean(intent.sessionUrl),
+            hasProviderPostulationId: Boolean(intent.providerPostulationId),
+          },
+          after: {
+            status: intent.status,
+            attemptNo: intent.attemptNo,
+            authorization: "PENDING",
+          },
+          metadata: {
+            intentId: intent.id,
+            rnc: intent.rnc,
+            attemptNo: intent.attemptNo,
+            ownerApprovalReference: body.ownerApprovalReference.trim(),
+            reason: body.reason.trim(),
+            authorizedAt: new Date().toISOString(),
+            ttlHours: 24,
+          },
+        },
+        select: { id: true, createdAt: true },
+      });
+
+      return {
+        ok: true,
+        companyId,
+        intentId: intent.id,
+        attemptNo: intent.attemptNo,
+        auditId: audit.id,
+        authorizedAt: audit.createdAt,
+        ttlHours: 24,
+        fiscalAuthorizationGranted: false,
+      };
+    });
   }
 
   /** Records an owner-approved administrative decision; references must be

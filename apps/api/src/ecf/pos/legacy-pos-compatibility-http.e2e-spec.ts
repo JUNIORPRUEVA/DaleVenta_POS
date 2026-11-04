@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Client } from "pg";
 import request from "supertest";
@@ -84,13 +84,22 @@ uat("POS tradicional — compatibilidad con e-CF (HTTP + PostgreSQL)", () => {
 
     process.env.DATABASE_URL = appUrl;
     process.env.JWT_SECRET = process.env.JWT_SECRET || "legacy-pos-e2e-secret";
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
+    const prismaCandidates = [
+      resolve(process.cwd(), "node_modules", "prisma", "build", "index.js"),
+      resolve(
+        process.cwd(),
+        "..",
+        "..",
+        "node_modules",
+        "prisma",
+        "build",
+        "index.js",
+      ),
+    ];
+    const prismaCli = prismaCandidates.find((candidate) =>
+      existsSync(candidate),
     );
+    if (!prismaCli) throw new Error("PRISMA_CLI_NOT_FOUND");
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },

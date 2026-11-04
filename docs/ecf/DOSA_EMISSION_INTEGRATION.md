@@ -69,9 +69,14 @@ Definir en el entorno del backend (nunca en el repositorio):
 | `DOSA_SESSION_BASE_URL` | Base del API (por defecto `https://dosasystem.com`) |
 | `DOSA_SESSION_TIMEOUT_MS` | Timeout (por defecto 15000) |
 | `DOSA_SESSION_ALLOWED_RETURN_ORIGINS` | Orígenes permitidos para `return_url` |
+| `DOSA_SESSION_URL_KEYS` | Key ring `version:base64,...` para cifrar URLs en reposo |
+| `DOSA_SESSION_URL_ACTIVE_KEY_VERSION` | Versión de escritura del key ring |
+| `ECF_DOSA_HISTORICAL_TRANSITION_ENABLED` | Autoriza la transición auditada de un histórico (apagada por defecto) |
 
-Sin `DOSA_CERTIFICATION_SESSIONS_ENABLED=true` o sin `DOSA_SECRET_KEY`, el
-endpoint responde `503 ECF_DOSA_SESSION_DISABLED` y la app usa el asistente actual.
+Sin `DOSA_CERTIFICATION_SESSIONS_ENABLED=true`, sin `DOSA_SECRET_KEY` o sin
+claves de cifrado válidas, el endpoint falla cerrado (`503
+ECF_DOSA_SESSION_DISABLED` o `ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED`) y la
+app usa el asistente actual.
 
 ## Pruebas
 
@@ -95,23 +100,30 @@ exige una operación explícita, autorizada y auditada.
 
 ## URL de sesión: acceso, expiración y cifrado
 
-- La URL es una **capacidad de acceso**. Solo se devuelve a usuarios con
-  `manageEcfOnboarding`; `GET /ecf/dosa/certification-intent` la oculta a quien
-  solo tiene `viewEcfOnboarding`.
-- Se persiste en `ecf_dosa_certification_sessions.session_url`. El token
-  separado del proveedor no se persiste ni se devuelve.
+- La URL es una **capacidad de acceso**. Solo se devuelve desde
+  `POST /ecf/dosa/certification-session` a un usuario con
+  `manageEcfOnboarding`. `GET /ecf/dosa/certification-intent` nunca devuelve la
+  URL ni el criptograma: solo informa de su presencia.
+- Se persiste cifrada en `ecf_dosa_certification_sessions.session_url` con
+  AES-256-GCM y derivación HKDF por empresa + RNC + intento. El token separado
+  del proveedor no se persiste ni se devuelve.
+- Envoltorio versionado `fpv1:<keyVersion>:<iv>:<tag>:<ciphertext>`. Un valor sin
+  prefijo se acepta como texto plano histórico y se cifra en la siguiente
+  escritura.
+- Rotación: `DOSA_SESSION_URL_KEYS` admite un key ring
+  `version:base64,version:base64`; `DOSA_SESSION_URL_ACTIVE_KEY_VERSION` elige la
+  versión de escritura. Los criptogramas antiguos siguen abriéndose con su
+  versión. Si no hay claves válidas, la apertura automática falla cerrada con
+  `ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED` y nunca guarda texto claro.
 - La reutilización exige URL **y** fecha de vencimiento verificable. Una fila
   histórica con URL y sin vencimiento no se reutiliza ni se sobrescribe:
   responde `ECF_DOSA_SESSION_EXPIRY_UNKNOWN`.
+- Una URL cifrada que no se puede descifrar responde
+  `ECF_DOSA_SESSION_URL_UNREADABLE` y no se reutiliza ni se sobrescribe.
 - El lease por defecto es de 180 s, superior al timeout máximo del cliente
   (120 s), para que no expire mientras la petición ganadora espera al proveedor.
 - No se registran claves, tokens ni URLs en logs. `redactSessionUrl()` existe
   para diagnóstico y elimina query y fragmento.
-- **Cifrado en reposo:** evaluado y no implementado en esta fase. Cifrar la URL
-  exige una clave maestra, rotación y una migración de datos; la bóveda existente
-  (`DosaCredentialVault`) está diseñada para credenciales de emisión y su
-  `open()` no admite este propósito. Se recomienda una fase específica con
-  gestión de claves antes de almacenar sesiones de producción.
 
 ## Fuera de alcance respetado
 

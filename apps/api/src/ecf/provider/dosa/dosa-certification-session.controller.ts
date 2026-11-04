@@ -93,10 +93,12 @@ export class DosaCertificationSessionController {
         case "ECF_DOSA_SESSION_IN_PROGRESS":
         case "ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED":
         case "ECF_DOSA_SESSION_EXPIRY_UNKNOWN":
+        case "ECF_DOSA_SESSION_URL_UNREADABLE":
           throw new ConflictException(result.code);
         case "ECF_DOSA_SESSION_EMAIL_INVALID":
           throw new BadRequestException(result.code);
         case "ECF_DOSA_SESSION_DISABLED":
+        case "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED":
         case "ECF_DOSA_SESSION_UNCERTAIN":
         case "ECF_DOSA_SESSION_NOT_PERSISTED":
           // 503: el cliente cae al asistente manual (fallback seguro).

@@ -380,17 +380,15 @@ describe("GET /ecf/dosa/certification-intent", () => {
     expect(serialized).not.toMatch(/[A-Za-z0-9+/_-]{40,}/);
   });
 
-  it("solo devuelve la URL de sesión a quien puede abrir el portal", async () => {
+  it("nunca devuelve la URL de sesión desde el estado; solo su presencia", async () => {
     const { controller } = build({
       sessionUrl: "https://dosasystem.com/sesion/abc",
     });
 
-    const admin = await controller.state(
-      req(user({ role: "ADMIN" })),
-    );
-    expect(admin.session?.sessionUrl).toBe(
-      "https://dosasystem.com/sesion/abc",
-    );
+    const admin = await controller.state(req(user({ role: "ADMIN" })));
+    expect(admin.session?.status).toBe("RUNNING");
+    expect(admin.session?.sessionUrl).toBeNull();
+    expect(JSON.stringify(admin)).not.toContain("dosasystem.com");
 
     const viewer = await controller.state(
       req(
@@ -400,7 +398,6 @@ describe("GET /ecf/dosa/certification-intent", () => {
         }),
       ),
     );
-    expect(viewer.session?.status).toBe("RUNNING");
     expect(viewer.session?.sessionUrl).toBeNull();
   });
 

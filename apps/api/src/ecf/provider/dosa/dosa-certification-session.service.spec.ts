@@ -12,6 +12,7 @@ import type {
   DosaSessionClosedStatus,
 } from "./ecf-dosa-session.service";
 import type { DosaSessionResult } from "./dosa-certification-session.client";
+import { DosaSessionUrlCipher } from "./dosa-session-url-cipher";
 
 // Relativo al reloj real: la política de expiración compara con `Date.now()`.
 const NOW = Date.now();
@@ -52,6 +53,8 @@ class FakeSessions implements DosaSessionCoordinator {
   readonly uncertain: string[] = [];
   /** Expedientes históricos reconciliados que la apertura no puede mutar. */
   readonly reconciled = new Set<string>();
+  /** Autorizaciones explícitas que desbloquean una transición. */
+  readonly authorized = new Set<string>();
   lastLeaseMs: number | null = null;
   /** Simula a otra petición publicando la URL mientras esperamos. */
   publishOnPoll: Row | null = null;
@@ -60,8 +63,9 @@ class FakeSessions implements DosaSessionCoordinator {
     return `${companyId}:${rnc}`;
   }
 
-  async hasReconciledIntent(companyId: string, rnc: string) {
-    return this.reconciled.has(this.key(companyId, rnc));
+  async requiresHistoricalReview(companyId: string, rnc: string) {
+    const key = this.key(companyId, rnc);
+    return this.reconciled.has(key) && !this.authorized.has(key);
   }
 
   async findActiveSessionFor(
@@ -228,11 +232,19 @@ class FakeClient implements DosaSessionClientPort {
   }
 }
 
+function testCipher(): DosaSessionUrlCipher {
+  return new DosaSessionUrlCipher(
+    new Map([[1, Buffer.alloc(32, 7)]]),
+    1,
+  );
+}
+
 function build(options: {
   rncs?: Record<string, string | null>;
   emails?: Record<string, string>;
   client?: FakeClient;
   sessions?: FakeSessions;
+  cipher?: DosaSessionUrlCipher;
 }) {
   const sessions = options.sessions ?? new FakeSessions();
   const client = options.client ?? new FakeClient();
@@ -248,6 +260,7 @@ function build(options: {
     ),
     sessions,
     client,
+    options.cipher ?? testCipher(),
     { pollAttempts: 2, pollDelayMs: 0 },
   );
   return { service, sessions, client };
@@ -267,6 +280,10 @@ describe("DosaCertificationSessionService — apertura automática", () => {
     });
     expect(client.calls).toBe(1);
     expect(sessions.rows.get("company-a:101000001")?.status).toBe("RUNNING");
+    // En reposo solo queda el criptograma versionado, nunca la URL en claro.
+    const stored = sessions.rows.get("company-a:101000001")?.sessionUrl ?? "";
+    expect(stored.startsWith("fpv1:")).toBe(true);
+    expect(stored).not.toContain("dosasystem.com");
   });
 
   it("empresa sin correo: falla y NO llama al proveedor", async () => {
@@ -469,6 +486,37 @@ describe("DosaCertificationSessionService — apertura automática", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("sin cifrado configurado: falla cerrado y no llama al proveedor", async () => {
+    const { service, client } = build({
+      cipher: new DosaSessionUrlCipher(new Map(), 1),
+    });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
+    });
+    expect(client.calls).toBe(0);
+  });
+
+  it("una URL cifrada manipulada no se reutiliza ni se sobrescribe", async () => {
+    const sessions = new FakeSessions();
+    await sessions.claim({ companyId: "company-a", rnc: "101000001" });
+    const row = sessions.rows.get("company-a:101000001")!;
+    row.sessionUrl = "fpv1:1:AAAA:BBBB:CCCC";
+    row.sessionExpiresAt = FUTURE;
+    const { service, client } = build({ sessions });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_URL_UNREADABLE",
+    });
+    expect(client.calls).toBe(0);
+  });
+
   it("expediente reconciliado: bloquea la apertura automática sin mutarlo", async () => {
     const { service, sessions, client } = build({});
     sessions.reconciled.add("company-a:101000001");
@@ -481,6 +529,17 @@ describe("DosaCertificationSessionService — apertura automática", () => {
     });
     expect(sessions.claimed).toHaveLength(0);
     expect(client.calls).toBe(0);
+  });
+
+  it("con autorización explícita vigente, el expediente histórico puede abrir", async () => {
+    const { service, sessions, client } = build({});
+    sessions.reconciled.add("company-a:101000001");
+    sessions.authorized.add("company-a:101000001");
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result.ok).toBe(true);
+    expect(client.calls).toBe(1);
   });
 
   it("sesión histórica con URL pero sin vencimiento: no la reutiliza ni abre otra", async () => {

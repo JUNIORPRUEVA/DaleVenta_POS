@@ -138,28 +138,44 @@ export class EcfDosaSessionService {
   }
 
   /**
-   * Indica si la empresa/RNC tiene un expediente reconciliado en su historial.
+   * Indica si un intento activo reconciliado sigue necesitando revisión.
    *
-   * Es una lectura pura: no crea, no cierra y no actualiza nada. La apertura
-   * automática la usa para bloquear transiciones sobre expedientes históricos.
+   * Devuelve `false` solo si existe una autorización explícita y vigente
+   * (`INTENT_HISTORICAL_TRANSITION_AUTHORIZED`) registrada después de la
+   * reconciliación. Es una lectura pura: no crea, no cierra y no actualiza nada.
    */
-  async hasReconciledIntent(
+  async requiresHistoricalReview(
     companyId: string,
     rnc: string,
+    authorizationTtlMs: number,
   ): Promise<boolean> {
     const company = `${companyId ?? ""}`.trim();
     const normalized = normalizeRnc(rnc);
     if (!company || !normalized) return false;
+    const ttlSeconds = Math.max(1, Math.ceil(authorizationTtlMs / 1000));
     const rows = await this.store.$queryRaw<Array<{ found: number }>>`
       SELECT 1 AS "found"
         FROM "ecf_dosa_certification_sessions" s
-        JOIN "ecf_audit_logs" a
-          ON a."company_id" = s."company_id"
-         AND a."target_type" = 'DOSA_CERTIFICATION_INTENT'
-         AND a."target_id" = s."id"
-         AND a."action" = 'INTENT_PROVIDER_RECONCILED'
        WHERE s."company_id" = ${company}::uuid
          AND s."rnc" = ${normalized}
+         AND s."active_key" IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+             FROM "ecf_audit_logs" reconciled
+            WHERE reconciled."company_id" = s."company_id"
+              AND reconciled."target_type" = 'DOSA_CERTIFICATION_INTENT'
+              AND reconciled."target_id" = s."id"
+              AND reconciled."action" = 'INTENT_PROVIDER_RECONCILED'
+         )
+         AND NOT EXISTS (
+           SELECT 1
+             FROM "ecf_audit_logs" authorized
+            WHERE authorized."company_id" = s."company_id"
+              AND authorized."target_type" = 'DOSA_CERTIFICATION_INTENT'
+              AND authorized."target_id" = s."id"
+              AND authorized."action" = 'INTENT_HISTORICAL_TRANSITION_AUTHORIZED'
+              AND authorized."created_at" > NOW() - (${`${ttlSeconds}`} || ' seconds')::interval
+         )
        LIMIT 1
     `;
     return rows.length === 1;
