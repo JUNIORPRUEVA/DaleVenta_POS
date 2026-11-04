@@ -6,6 +6,7 @@ import 'package:daleventa_pos/features/ecf/data/ecf_application_repository.dart'
 import 'package:daleventa_pos/features/ecf/data/ecf_certification_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_platform_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
@@ -150,6 +151,7 @@ Widget _harness({
         _ApplicationRepository(),
       ),
       ecfPlatformStaffProvider.overrideWith((ref) async => false),
+      dosaPortalEligibilityProvider.overrideWith((ref) async => false),
       ecfSupportGrantsProvider.overrideWith(
         (ref) async => const EcfSupportGrantList(items: []),
       ),

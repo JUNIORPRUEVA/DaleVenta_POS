@@ -22,6 +22,7 @@ class EcfPreparationStep extends StatelessWidget {
     required this.onStart,
     required this.onGoCompany,
     required this.onGoCertificate,
+    this.dosaEntry,
   });
 
   final bool companyReady;
@@ -39,6 +40,9 @@ class EcfPreparationStep extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onGoCompany;
   final VoidCallback onGoCertificate;
+
+  /// Entrada al portal DOSA, independiente del motor de prueba legado.
+  final Widget? dosaEntry;
 
   bool get _canRun => canManage && simulationAvailable && certificateReady;
 
@@ -109,6 +113,7 @@ class EcfPreparationStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          if (dosaEntry != null) ...[dosaEntry!, const SizedBox(height: 12)],
           EcfSection(
             title: 'Postulación inteligente',
             icon: Icons.auto_awesome_outlined,
