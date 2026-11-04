@@ -84,7 +84,37 @@ endpoint responde `503 ECF_DOSA_SESSION_DISABLED` y la app usa el asistente actu
 - `settings.service.spec.ts` (validación y persistencia del correo).
 - Flutter: `test/features/ecf/dosa_certification_session_api_test.dart`.
 
+## Protección del Intento 1
+
+La apertura automática no puede mutar un expediente histórico reconciliado. El
+servicio consulta `ecf_audit_logs` por `INTENT_PROVIDER_RECONCILED` antes de
+reclamar o llamar al proveedor y responde
+`ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED` sin crear un segundo intento ni
+actualizar estados, fechas, URLs o identificadores. Cualquier transición futura
+exige una operación explícita, autorizada y auditada.
+
+## URL de sesión: acceso, expiración y cifrado
+
+- La URL es una **capacidad de acceso**. Solo se devuelve a usuarios con
+  `manageEcfOnboarding`; `GET /ecf/dosa/certification-intent` la oculta a quien
+  solo tiene `viewEcfOnboarding`.
+- Se persiste en `ecf_dosa_certification_sessions.session_url`. El token
+  separado del proveedor no se persiste ni se devuelve.
+- La reutilización exige URL **y** fecha de vencimiento verificable. Una fila
+  histórica con URL y sin vencimiento no se reutiliza ni se sobrescribe:
+  responde `ECF_DOSA_SESSION_EXPIRY_UNKNOWN`.
+- El lease por defecto es de 180 s, superior al timeout máximo del cliente
+  (120 s), para que no expire mientras la petición ganadora espera al proveedor.
+- No se registran claves, tokens ni URLs en logs. `redactSessionUrl()` existe
+  para diagnóstico y elimina query y fragmento.
+- **Cifrado en reposo:** evaluado y no implementado en esta fase. Cifrar la URL
+  exige una clave maestra, rotación y una migración de datos; la bóveda existente
+  (`DosaCredentialVault`) está diseñada para credenciales de emisión y su
+  `open()` no admite este propósito. Se recomienda una fase específica con
+  gestión de claves antes de almacenar sesiones de producción.
+
 ## Fuera de alcance respetado
 
-No se toca Intento 1, Guardian, ventas tradicionales, caja, inventario ni emisión
-fiscal. No se crean sesiones reales de DOSA durante las pruebas.
+No se toca el Intento 1 existente, Guardian, ventas tradicionales, caja,
+inventario ni emisión fiscal. No se crean sesiones reales de DOSA durante las
+pruebas.

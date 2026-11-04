@@ -58,28 +58,29 @@ documento y no se manipula su DOM.
 
 ---
 
-## 2. Precarga de datos: la única vía oficial y por qué está bloqueada
+## 2. Precarga de datos: vía oficial implementada
 
 El script afirma que el enlace de sesión lo crea *«el backend del partner con
 `POST /api/certificacion/sesiones` y su secret key»*. Esa es la vía oficial para
 que el cliente **no** vuelva a escribir su RNC.
 
-**Ese contrato no está publicado.** `ECF_DOSA_PROVIDER_CONTRACTS.md` documenta
-las ocho incógnitas pendientes: URL base por entorno, cabecera de autenticación,
-cuerpo de la petición (nombres de campo), forma de la respuesta (¿`session-url`
-listo o un identificador?), códigos de error, idempotencia, vigencia y límite de
-sesiones activas.
+El contrato fue entregado por DOSA el 2026-11-04 y está implementado en el
+backend:
 
-Consecuencia honesta:
+- `POST /api/certificacion/sesiones` con `X-Dosa-Secret-Key`.
+- Cuerpo `{ rnc_emisor, correo, return_url? }`.
+- Respuesta `201` con `url`, `path`, `token`, `expires_at`, `postulacion_id` y
+  `prueba`.
 
-- Hoy la postulación se abre con `publishable-key`, y **el cliente vuelve a
-  escribir RNC y correo dentro del asistente de DOSA**.
-- Eso **no se puede evitar** sin el contrato de sesiones. No se simula escribiendo
-  en el DOM ni interceptando el formulario del proveedor: sería frágil,
-  indocumentado y podría corromper una postulación oficial.
-- En cuanto DOSA entregue el contrato, el cambio queda localizado en el backend
-  (crear sesión → devolver `session-url`) y en el montaje del portal. El modelo
-  `DosaAssistantConfig` ya soporta `session-url` y ya lo prioriza.
+La apertura automática reutiliza una sesión vigente, cierra la caducada y no
+reintenta un resultado incierto. Sigue **apagada por defecto**: sin
+`DOSA_CERTIFICATION_SESSIONS_ENABLED=true` y `DOSA_SECRET_KEY`, el backend
+responde `ECF_DOSA_SESSION_DISABLED` y la app usa el portal existente como
+fallback seguro.
+
+No se simula escribiendo en el DOM ni interceptando el formulario del proveedor.
+Si el contrato del proveedor cambia, el cambio queda localizado en el cliente y
+el lanzador de sesiones del backend.
 
 ---
 
@@ -87,9 +88,8 @@ Consecuencia honesta:
 
 **Todos los requisitos del onboarding los captura DOSA dentro de su asistente:**
 archivo P12/PFX, contraseña del certificado y contraseña del Portal de
-Certificación DGII. No se transmite ninguna de ellas desde FullPOS, porque el
-mecanismo oficial para hacerlo es precisamente el de la sesión (bloqueado) y no
-existe ninguna otra vía documentada.
+Certificación DGII. No se transmite ninguna de ellas desde FullPOS: la sesión
+solo transporta RNC y correo, y el certificado se captura dentro del portal.
 
 Lo que cambió en FullPOS es **quitar el duplicado**, no mover las credenciales:
 
@@ -122,16 +122,21 @@ desaparece es la obligación de repetir la captura para poder postular.
 2. Reutiliza el intento existente si lo hay.
 3. Si no existe, registra la intención **una sola vez** con el mecanismo actual
    (idempotente en el backend).
-4. Pide el ticket de un solo uso (120 s) con las validaciones ya existentes.
+4. Intenta la API oficial de sesiones: reutiliza una sesión vigente o crea una
+   nueva. Si la API está deshabilitada, usa el ticket de un solo uso (120 s)
+   como fallback seguro.
 5. Abre el portal oficial con el asistente.
 
-Qué **no** hace: no crea ninguna postulación en DOSA, no pulsa «Conectar» por el
-usuario, no activa la emisión y no envía nada a la DGII. La intención registrada
-es local; el vínculo con el proveedor lo crea el usuario dentro del asistente.
+Qué **no** hace: no completa la postulación, no pulsa «Conectar» por el usuario,
+no activa la emisión y no envía nada a la DGII. Con la API de sesiones puede
+crear o reutilizar una sesión de certificación, pero el vínculo definitivo lo
+confirma el usuario dentro del asistente.
 
 Protecciones contra duplicados: un guardia de un solo disparo (`_autoOpened`),
-el flag `_openingPortal` que corta ráfagas de tickets, y la idempotencia del
-backend, que devuelve el intento existente con `created: false`.
+el flag `_openingPortal` que corta ráfagas, la idempotencia del backend, el
+lease por empresa, la reutilización de la sesión vigente y el bloqueo de
+expedientes históricos reconciliados. Un timeout o un 201 no verificable se
+marca incierto y **no** se reintenta automáticamente.
 
 
 ---
@@ -152,10 +157,9 @@ fiscal existente. No se crea un segundo expediente.
 
 ## 5. Qué sigue requiriendo al usuario
 
-Esto es lo que hoy **no** se puede automatizar de forma oficial:
+Esto es lo que sigue requiriendo al usuario dentro del asistente oficial:
 
-1. Escribir RNC y correo en el primer formulario de DOSA (falta el contrato de
-   sesiones).
+1. Revisar y confirmar los datos de la empresa que DOSA muestra en la sesión.
 2. Subir el certificado y su contraseña dentro del asistente.
 3. Escribir la contraseña del Portal de Certificación DGII dentro del asistente.
 4. Resolver los pasos que la DGII exige manualmente (pruebas, aceptación).
@@ -180,30 +184,26 @@ FullPOS **no** promete automatizar nada de eso.
 
 | Bloqueo | Qué desbloquea |
 | --- | --- |
-| Contrato de `POST /api/certificacion/sesiones` | Precarga real de RNC, razón social y correo: el cliente deja de escribirlos |
+| Activación operativa de `DOSA_CERTIFICATION_SESSIONS_ENABLED` y `DOSA_SECRET_KEY` | Habilitar la apertura automática real |
+| Confirmación de idempotencia y límite de sesiones activas | Evitar duplicados ante reintentos del proveedor |
 | Fórmula de `X-Dosa-Signature` | Webhooks verificables |
 | Enumeración oficial de estados | Distinguir «postulación presentada» de «DGII certificó» |
 
 ### 7.1 Qué debemos solicitar exactamente al proveedor
 
-Para implementar el autorrelleno por `session-url` —sin inventar nada ni tocar
-su DOM— necesitamos, por escrito:
+Para activar la apertura automática en producción necesitamos, por escrito:
 
-1. **URL base** del endpoint por entorno (pruebas y producción) y si el prefijo
-   `/api` forma parte de la ruta.
-2. **Cabecera de autenticación** exacta para la *secret key*: nombre, esquema y
-   si hay allowlist de IPs de origen (la nuestra es `31.97.99.70`).
-3. **Cuerpo de la petición**: nombre, tipo y obligatoriedad de cada campo.
-   Necesitamos enviar al menos RNC, razón social, correo y representante legal,
-   pero **no damos por hecho ningún nombre de campo**.
-4. **Respuesta**: ¿devuelve el `session-url` listo para el componente, o un
-   identificador con el que componerlo? ¿Qué vigencia tiene?
-5. **Idempotencia**: qué ocurre al repetir la petición para el mismo RNC, con y
+1. **URL base** de pruebas y producción del endpoint de sesiones.
+2. **Cabecera de autenticación** y si hay allowlist de IPs de origen (la nuestra
+   es `31.97.99.70`).
+3. **Idempotencia**: qué ocurre al repetir la petición para el mismo RNC, con y
    sin clave de idempotencia.
-6. **Límite de sesiones activas** por empresa/RNC y qué pasa si se supera.
-7. **Códigos de error** completos y cuáles son reintentables.
+4. **Límite de sesiones activas** por empresa/RNC y qué pasa si se supera.
+5. **Códigos de error** completos y cuáles son reintentables.
+6. **Alcance de `postulacion_id`**: si es único por empresa o global.
+7. **Vigencia exacta** de la URL y si es de un solo uso.
 
-Con esos siete puntos, la precarga es un cambio localizado en el backend (crear
-la sesión y devolver el enlace) y en el montaje del portal: `DosaAssistantConfig`
-ya prioriza `session-url` sobre `publishable-key`.
+Con esos siete puntos confirmados, la activación es un cambio de entorno
+(`DOSA_CERTIFICATION_SESSIONS_ENABLED`, `DOSA_SECRET_KEY`) y una migración
+aditiva ya validada; no requiere cambiar el flujo de la app.
 

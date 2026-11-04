@@ -313,9 +313,11 @@ void main() {
       expect(find.text('Calle 1'), findsOneWidget);
       expect(find.text('Manolo Lio'), findsOneWidget);
       expect(find.text('Certificado digital'), findsOneWidget);
-      expect(find.text('Validar certificado'), findsOneWidget);
-      // No se vuelve a pedir lo que FullPOS ya conoce.
-      expect(find.byType(TextField), findsOneWidget); // solo la contraseña
+      // Con DOSA al mando no se muestra el formulario tradicional de archivo
+      // ni la contraseña; solo se conserva el historial.
+      expect(find.text('Validar certificado'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.textContaining('No hay que subirlos aquí'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

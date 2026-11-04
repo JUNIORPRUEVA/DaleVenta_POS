@@ -7,6 +7,7 @@ import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_config.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_section.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,7 @@ void main() {
     String rnc = '133306001',
     bool portalOnly = false,
     _PortalApi? portalApi,
+    _SessionApi? sessionApi,
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -50,6 +52,16 @@ void main() {
         ),
         dosaCertificationIntentApiProvider.overrideWithValue(api),
         dosaPortalApiProvider.overrideWithValue(portalApi ?? _PortalApi()),
+        // Por defecto la API de sesiones está deshabilitada: así los casos
+        // históricos comprueban el fallback seguro al portal existente.
+        dosaCertificationSessionApiProvider.overrideWithValue(
+          sessionApi ??
+              _SessionApi(
+                error: DosaCertificationSessionException(
+                  'ECF_DOSA_SESSION_DISABLED',
+                ),
+              ),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -176,6 +188,60 @@ void main() {
     expect(portal.ticketCalls, 1);
   });
 
+  testWidgets('la API de sesiones abre la URL oficial sin pedir ticket', (
+    tester,
+  ) async {
+    final api = _IntentApi();
+    final portal = _PortalApi();
+    final sessionApi = _SessionApi(
+      session: const DosaCertificationSession(
+        companyId: 'company-a',
+        sessionUrl: 'mailto:sesion@example.test',
+        expiresAt: '2030-01-01T00:00:00Z',
+        attemptNo: 1,
+        reused: false,
+      ),
+    );
+
+    await pumpSection(
+      tester,
+      api: api,
+      portalOnly: true,
+      portalApi: portal,
+      sessionApi: sessionApi,
+    );
+
+    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.pumpAndSettle();
+
+    expect(sessionApi.calls, 1);
+    expect(portal.ticketCalls, 0);
+    expect(api.registerCalls, hasLength(1));
+  });
+
+  testWidgets('un resultado incierto NO cae al portal antiguo', (tester) async {
+    final api = _IntentApi();
+    final portal = _PortalApi();
+    final sessionApi = _SessionApi(
+      error: DosaCertificationSessionException('ECF_DOSA_SESSION_UNCERTAIN'),
+    );
+
+    await pumpSection(
+      tester,
+      api: api,
+      portalOnly: true,
+      portalApi: portal,
+      sessionApi: sessionApi,
+    );
+
+    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.pumpAndSettle();
+
+    expect(sessionApi.calls, 1);
+    expect(portal.ticketCalls, 0);
+    expect(find.textContaining('no confirmó la sesión'), findsOneWidget);
+  });
+
   testWidgets('intención existente ofrece portal sin pedir ticket al cargar', (
     tester,
   ) async {
@@ -198,8 +264,10 @@ void main() {
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
 
-    expect(find.textContaining('Revisa el intento de certificación existente'),
-        findsOneWidget);
+    expect(
+      find.textContaining('Revisa el intento de certificación existente'),
+      findsOneWidget,
+    );
     expect(find.text('Volver a abrir el asistente'), findsNothing);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
@@ -231,8 +299,9 @@ void main() {
     expect(find.textContaining('No se pudo abrir el navegador'), findsNothing);
   });
 
-  testWidgets('el botón registra una sola vez y entonces abre el asistente',
-      (tester) async {
+  testWidgets('el botón registra una sola vez y entonces abre el asistente', (
+    tester,
+  ) async {
     final api = _IntentApi();
 
     await pumpSection(tester, api: api);
@@ -248,54 +317,58 @@ void main() {
     expect(find.textContaining('Intento 1'), findsOneWidget);
   });
 
-  testWidgets('un usuario sin permiso administrativo no ve la acción',
-      (tester) async {
+  testWidgets('un usuario sin permiso administrativo no ve la acción', (
+    tester,
+  ) async {
     final api = _IntentApi();
 
     await pumpSection(tester, api: api, role: 'MARKETING');
 
     expect(api.registerCalls, isEmpty);
     expect(find.text('Preparar certificación'), findsNothing);
-    expect(find.textContaining('Solo un administrador autorizado'), findsOneWidget);
+    expect(
+      find.textContaining('Solo un administrador autorizado'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
-      'con intento ya registrado, el administrador ve el acceso al portal',
-      (tester) async {
-    final api = _IntentApi(hasSession: true);
+    'con intento ya registrado, el administrador ve el acceso al portal',
+    (tester) async {
+      final api = _IntentApi(hasSession: true);
 
-    await pumpSection(tester, api: api);
+      await pumpSection(tester, api: api);
 
-    expect(find.text('Continuar certificación'), findsOneWidget);
-    // Abrir el expediente sigue sin escribir nada.
-    expect(api.registerCalls, isEmpty);
-  });
+      expect(find.text('Continuar certificación'), findsOneWidget);
+      // Abrir el expediente sigue sin escribir nada.
+      expect(api.registerCalls, isEmpty);
+    },
+  );
 
   testWidgets(
-      'con intento ya registrado, un usuario sin permiso NO ve el portal',
-      (tester) async {
-    // Regresión: el panel se devolvía antes de comprobar el permiso, así que
-    // un usuario sin manageEcfOnboarding veía el botón del portal.
-    final api = _IntentApi(hasSession: true);
+    'con intento ya registrado, un usuario sin permiso NO ve el portal',
+    (tester) async {
+      // Regresión: el panel se devolvía antes de comprobar el permiso, así que
+      // un usuario sin manageEcfOnboarding veía el botón del portal.
+      final api = _IntentApi(hasSession: true);
 
-    await pumpSection(tester, api: api, role: 'MARKETING');
+      await pumpSection(tester, api: api, role: 'MARKETING');
 
-    expect(find.text('Continuar certificación'), findsNothing);
-    expect(api.registerCalls, isEmpty);
-  });
+      expect(find.text('Continuar certificación'), findsNothing);
+      expect(api.registerCalls, isEmpty);
+    },
+  );
 
-  testWidgets('un motivo del backend se explica y no abre el asistente',
-      (tester) async {
+  testWidgets('un motivo del backend se explica y no abre el asistente', (
+    tester,
+  ) async {
     final api = _IntentApi(blockingReasons: const ['COMPANY_RNC_NOT_VERIFIED']);
 
     await pumpSection(tester, api: api);
 
     expect(api.registerCalls, isEmpty);
     expect(find.text('Preparar certificación'), findsNothing);
-    expect(
-      find.textContaining('no tiene un RNC verificado'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('no tiene un RNC verificado'), findsOneWidget);
   });
 }
 
@@ -329,8 +402,11 @@ UserModel _user({String role = 'ADMIN', String companyId = 'company-a'}) {
 /// Doble del cliente HTTP: cuenta lecturas y escrituras por separado, que es
 /// justo la diferencia que estas pruebas vigilan.
 class _IntentApi implements DosaCertificationIntentApi {
-  _IntentApi({this.blockingReasons = const [], this.hasSession = false,
-    this.provider = 'DOSA'});
+  _IntentApi({
+    this.blockingReasons = const [],
+    this.hasSession = false,
+    this.provider = 'DOSA',
+  });
 
   final List<String> blockingReasons;
 
@@ -351,11 +427,7 @@ class _IntentApi implements DosaCertificationIntentApi {
       'canRegister': blockingReasons.isEmpty,
       'blockingReasons': blockingReasons,
       if (hasSession)
-        'session': {
-          'id': 'session-1',
-          'status': 'NOT_STARTED',
-          'attemptNo': 1,
-        },
+        'session': {'id': 'session-1', 'status': 'NOT_STARTED', 'attemptNo': 1},
     });
   }
 
@@ -372,6 +444,24 @@ class _IntentApi implements DosaCertificationIntentApi {
       'provider': 'DOSA',
       'ecfEnabled': false,
     });
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _SessionApi implements DosaCertificationSessionApi {
+  _SessionApi({this.error, this.session});
+
+  final DosaCertificationSessionException? error;
+  final DosaCertificationSession? session;
+  int calls = 0;
+
+  @override
+  Future<DosaCertificationSession> open() async {
+    calls += 1;
+    if (error != null) throw error!;
+    return session!;
   }
 
   @override

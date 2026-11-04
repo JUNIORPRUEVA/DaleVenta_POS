@@ -72,6 +72,13 @@ class DosaCertificationSessionException implements Exception {
         return 'El proveedor rechazó la apertura de la sesión.';
       case 'ECF_DOSA_SESSION_NOT_PERSISTED':
         return 'La sesión se creó pero no se pudo guardar. Revísalo con soporte.';
+      case 'ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED':
+        return 'Este expediente tiene una revisión histórica registrada. La '
+            'apertura automática está bloqueada y requiere una operación '
+            'explícita y auditada.';
+      case 'ECF_DOSA_SESSION_EXPIRY_UNKNOWN':
+        return 'Hay una sesión anterior sin fecha de vencimiento verificable. '
+            'Revísala antes de abrir otra.';
       case 'ECF_DOSA_SESSION_UNAUTHENTICATED':
         return 'La sesión no es válida. Vuelve a iniciar sesión.';
       default:
@@ -106,17 +113,17 @@ class DosaCertificationSessionApi {
     final code = data is Map && data['message'] is String
         ? data['message'] as String
         : data is Map &&
-                data['message'] is List &&
-                (data['message'] as List).isNotEmpty
-            ? '${(data['message'] as List).first}'
-            : status == 401
-                ? 'ECF_DOSA_SESSION_UNAUTHENTICATED'
-                : 'HTTP_$status';
+              data['message'] is List &&
+              (data['message'] as List).isNotEmpty
+        ? '${(data['message'] as List).first}'
+        : status == 401
+        ? 'ECF_DOSA_SESSION_UNAUTHENTICATED'
+        : 'HTTP_$status';
     return DosaCertificationSessionException(code, statusCode: status);
   }
 }
 
 final dosaCertificationSessionApiProvider =
     Provider<DosaCertificationSessionApi>((ref) {
-  return DosaCertificationSessionApi(ref.watch(dioProvider));
-});
+      return DosaCertificationSessionApi(ref.watch(dioProvider));
+    });

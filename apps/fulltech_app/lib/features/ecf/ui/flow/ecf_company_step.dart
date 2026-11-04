@@ -55,21 +55,28 @@ class EcfCompanyStep extends StatelessWidget {
       fiscalReady: fiscalReady,
       onEdit: onEditFiscalData,
     );
-    final cert = EcfSection(
-      title: 'Certificado digital',
-      icon: Icons.verified_user_outlined,
-      // La descripción refleja el tratamiento real: el archivo y la contraseña
-      // se validan en FullPOS Cloud (cifrados en tránsito) y no se guardan.
-      subtitle: certificateVerifiedHere
-          ? null
-          : dosaOwnsCertificate
-          ? 'El asistente de DOSA solicita el certificado durante la '
-                'postulación. Aquí solo se conserva el historial de la última '
-                'comprobación: no hay que subirlo dos veces.'
-          : 'Se comprueba en FullPOS Cloud y no se guarda. No se envía a la '
-                'la DGII ni al proveedor de certificación.',
-      child: certificate,
-    );
+    final cert = dosaOwnsCertificate
+        ? EcfSection(
+            title: 'Certificado digital',
+            icon: Icons.verified_user_outlined,
+            subtitle:
+                'El asistente oficial de DOSA solicita el certificado durante '
+                'la postulación. FullPOS no vuelve a pedir el archivo ni la '
+                'contraseña.',
+            child: _DosaCertificateHistory(verified: certificateReady),
+          )
+        : EcfSection(
+            title: 'Certificado digital',
+            icon: Icons.verified_user_outlined,
+            // La descripción refleja el tratamiento real: el archivo y la
+            // contraseña se validan en FullPOS Cloud (cifrados en tránsito) y
+            // no se guardan.
+            subtitle: certificateVerifiedHere
+                ? null
+                : 'Se comprueba en FullPOS Cloud y no se guarda. No se envía a '
+                      'la DGII ni al proveedor de certificación.',
+            child: certificate,
+          );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -126,6 +133,44 @@ class EcfCompanyStep extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Resumen histórico cuando el certificado lo gestiona DOSA.
+///
+/// No incluye selector de archivo, contraseña ni ninguna acción de carga: el
+/// expediente se completa dentro del asistente oficial. Si ya existía una
+/// validación previa, se conserva como información, no como formulario.
+class _DosaCertificateHistory extends StatelessWidget {
+  const _DosaCertificateHistory({required this.verified});
+
+  final bool verified;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          verified ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+          size: 20,
+          color: verified ? Colors.green.shade700 : theme.colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            verified
+                ? 'Validación previa registrada en FullPOS. Se conserva como '
+                      'historial; el certificado se vuelve a solicitar dentro '
+                      'del asistente de DOSA.'
+                : 'El certificado y sus credenciales se solicitan dentro del '
+                      'asistente de DOSA. No hay que subirlos aquí.',
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      ],
     );
   }
 }

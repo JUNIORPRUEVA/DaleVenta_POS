@@ -657,8 +657,11 @@ void main() {
     await tester.tap(find.text('Comenzar').first);
     await tester.pumpAndSettle();
     expect(find.text('Certificado digital'), findsOneWidget);
-    expect(find.text('Validar certificado'), findsOneWidget);
-    expect(find.text('Ningún archivo seleccionado'), findsOneWidget);
+    // DOSA gestiona el certificado: no se repite el formulario P12/PFX ni se
+    // pide la contraseña en FullPOS.
+    expect(find.text('Validar certificado'), findsNothing);
+    expect(find.text('Ningún archivo seleccionado'), findsNothing);
+    expect(find.textContaining('No hay que subirlos aquí'), findsOneWidget);
 
     // El certificado ya no es un requisito previo cuando la postulación se hace
     // en el asistente oficial de DOSA: se pide una sola vez, allí.

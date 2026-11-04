@@ -164,8 +164,9 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
   /// toque. Solo en Preparación (`portalOnly`); en Seguimiento la apertura
   /// sigue siendo manual.
   ///
-  /// Abrir el portal NO crea ninguna postulación externa ni pulsa «Conectar»
-  /// por el usuario: solo pide un ticket de un solo uso a nuestro backend.
+  /// Abrir el portal no pulsa «Conectar» por el usuario. Si la API oficial de
+  /// sesiones está habilitada, el backend puede crear o reutilizar la sesión
+  /// del expediente; si no, se usa el ticket de un solo uso como fallback.
   void _scheduleAutoOpen() {
     if (!widget.portalOnly || _autoOpened) return;
     _autoOpened = true;
@@ -550,6 +551,8 @@ class _DosaPortalCard extends StatelessWidget {
                       ? 'Volver a abrir el asistente'
                       : 'Continuar certificación',
                 ),
+              ),
+            ),
           ],
         ),
       ),
