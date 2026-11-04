@@ -106,17 +106,29 @@ Motivos del diseño:
 
 ---
 
-## 3. Qué falta del proveedor (no se inventa)
+## 3. Contrato confirmado y únicos puntos no verificados
 
-`DOSA_SIGNATURE_CONTRACT_PENDING` en
-`apps/api/src/ecf/provider/dosa-webhook.contract.ts`:
+Contrato confirmado por DOSA el 2026-11-04:
 
-1. Algoritmo exacto. **No se asume HMAC-SHA256 ni ninguna variante.**
-2. Qué se firma: cuerpo crudo, normalizado, o un resumen (y de qué campos).
-3. Si hay marca de tiempo, su formato y si entra en el cálculo.
-4. Codificación del valor de `X-Dosa-Signature` (hex, base64, prefijo de versión).
-5. Ventana de tolerancia anti-replay que acepta el proveedor.
-6. Alcance del secreto: por empresa, por entorno o compartido por partner.
+1. Algoritmo: **HMAC-SHA256**.
+2. Se firma: `t + "." + cuerpo crudo`.
+3. Cabecera: `X-Dosa-Signature: t=<hora>,v1=<firma>`.
+4. La firma se valida sobre los **bytes exactos** recibidos, nunca sobre JSON
+   re-serializado.
+5. No hay que firmar las consultas a la API; la sesión usa
+   `X-Dosa-Secret-Key`.
+
+Sigue sin verificarse contra un evento real:
+
+1. Unidad de `t` (segundos o milisegundos).
+2. Codificación del digest (hex o base64): el verificador acepta ambas.
+3. Codificación del secreto de 64 hex (texto UTF-8 o 32 bytes decodificados).
+4. Ventana anti-replay y alcance/rotación del secreto.
+
+Estos puntos se configuran con `DOSA_WEBHOOK_TIMESTAMP_UNIT`,
+`DOSA_WEBHOOK_SECRET_ENCODING`, `DOSA_WEBHOOK_TOLERANCE_SECONDS` y
+`DOSA_WEBHOOK_SECRET`; mientras no se reciba una firma real, la verificación
+falla cerrada.
 
 ---
 
@@ -140,14 +152,16 @@ Implementado:
 | `provider/dosa/dosa-webhook.spec.ts` | 29 pruebas de falsificación, replay, duplicado, esquema, secretos cruzados, falta de firma, doble entrega y empresa sin e-CF. |
 | `provider/dosa/dosa-webhook-postgres.integration-spec.ts` | 8 pruebas contra PostgreSQL real (doble entrega ⇒ una sola fila; credenciales ausentes de la fila; sesión intacta). |
 
-**Sigue sin implementarse a propósito:**
+**Estado real:**
 
-- Verificación criptográfica real de la firma. `DOSA_WEBHOOK_SIGNATURE_STRATEGY`
-  queda en `BLOCKED` hasta que el proveedor documente el algoritmo.
-- Persistencia de las credenciales que llegan en el evento. Se validan, se
-  redactan y se descartan; escribirlas en el gestor de secretos es un acto
-  humano posterior.
-- Cualquier llamada saliente a DOSA.
+- La verificación HMAC-SHA256 está implementada y probada localmente. La
+  estrategia sigue en `BLOCKED` por defecto hasta configurar
+  `DOSA_WEBHOOK_SIGNATURE_STRATEGY=HMAC_SHA256_TIMESTAMPED` y el secreto.
+- Las credenciales del evento se validan, se cifran y se guardan en estado
+  `PENDING_CONFIRMATION`; no activan emisión.
+- No hay llamadas salientes a DOSA desde el webhook.
+- Solo falta un `POST` real de DOSA para fijar la unidad de `t` y la
+  codificación del secreto.
 
 Garantías que ya se prueban automáticamente:
 

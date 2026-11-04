@@ -16,6 +16,35 @@ contra producción.
 | C. Prueba funcional RNC/correo y vinculación | Nuestro equipo, con credenciales de DOSA | No, depende de B |
 | D. Autorización de despliegue | Propietario / operaciones | No, depende de A+B+C |
 
+## 0.1 Reconciliación de lo ya entregado por DOSA
+
+Revisión hecha contra el historial de WhatsApp, el archivo del secreto y el
+código. No se copiaron valores de credenciales.
+
+| Elemento | Entregado por DOSA | Estado en FullPOS | Resultado |
+| --- | --- | --- | --- |
+| Script y clave pública del asistente | Sí, 01/11/2026 | No se usa en el backend; el asistente vive en DOSA | `ENTREGADO` |
+| Dominio `fullposcloud.fulltechrd.com` | Sí | Falta fijarlo en `DOSA_SESSION_ALLOWED_RETURN_ORIGINS` | `PENDIENTE DE PRUEBA` |
+| Secreto del webhook | Sí, archivo de 64 caracteres hex | No está en el `.env` local | `PENDIENTE DE PRUEBA` |
+| Firma HMAC-SHA256 `t=...,v1=...` | Sí, fórmula `t + "." + cuerpo` | Implementada en código; estrategia por defecto `BLOCKED` | `PENDIENTE DE PRUEBA` |
+| Unidad de `t` y encoding del secreto | No consta en el historial | Configurable; valores por defecto seguros | `PENDIENTE DE PRUEBA` |
+| Vinculación automática por dominio | Sí, del lado Partner | El backend exige además una sesión local para resolver RNC → empresa | `PENDIENTE DE PRUEBA` |
+| Webhook `empresa.conectada` con RNC, `postulacion_id` y credenciales | Sí, muestra entregada | Parser y persistencia implementados; tipo de evento se guarda como pendiente de clasificación | `PENDIENTE DE PRUEBA` |
+| API Key TEST para RNC `133306001` | Sí, entregada en el historial | No configurada; no se usará hasta la prueba autorizada | `PENDIENTE DE PRUEBA` |
+| Secuencias TEST `113500–115500`, vencimiento `31/12/2028` | Sí | No registradas aún en la base UAT | `PENDIENTE DE PRUEBA` |
+| Endpoint de emisión `POST .../fe/api/emision/ecf/EnviarFactura` | Sí, mismo endpoint para TEST | Ruta implementada; `DOSA_BASE_URL` y API Key TEST no configurados | `PENDIENTE DE PRUEBA` |
+| Sesiones `POST https://dosasystem.com/api/certificacion/sesiones` | Sí | Cliente implementado y validado | `PENDIENTE DE PRUEBA` |
+| Campos de sesión `rnc_emisor`, `correo`, `return_url` | Sí | Cliente implementado | `PENDIENTE DE PRUEBA` |
+| Respuesta `201` `url`, `path`, `token`, `expires_at`, `postulacion_id`, `prueba` | Sí | Cliente valida todos los campos | `PENDIENTE DE PRUEBA` |
+| Clave `sk_...` de sesiones | Sí, aparece en el ejemplo enviado por DOSA en el historial | No configurada; no está identificada explícitamente como TEST o PROD | `PENDIENTE DE PRUEBA` |
+| Certificado gestionado por DOSA | Sí: DOSA custodia, firma XML y transmite a DGII | No se almacena en FullPOS | `PENDIENTE DE PRUEBA` |
+| Retomar una sesión | Sí, informado por DOSA | Reutilización y lease implementados | `PENDIENTE DE PRUEBA` |
+
+Resultado de la revisión: **no hay que volver a pedir la mayoría de los datos**.
+Lo que falta es configurarlos en el entorno UAT y ejecutar las pruebas
+controladas. Ninguna credencial DOSA está configurada hoy en este worktree: los
+`.env` locales solo contienen plantillas vacías.
+
 ## 1. Tareas nuestras
 
 ### A1. Congelar alcance y ambiente
@@ -308,42 +337,53 @@ Conservar en una carpeta segura, sin secretos:
 No conservar: `DOSA_SECRET_KEY`, API Keys, `DATABASE_URL`, `JWT_SECRET`,
 `DOSA_SESSION_URL_KEYS`, URLs de sesión, tokens ni cookies.
 
-## 2. Tareas que requieren respuesta de DOSA
+## 2. Preguntas abiertas para DOSA
 
-| # | Solicitud | Evidencia que debe entregar DOSA | Estado |
+Solo quedan dudas que **no** están respondidas en el historial. No repetir las
+que ya constan en la tabla 0.1.
+
+| # | Duda abierta | ¿Bloquea? | Cómo se resuelve |
 | --- | --- | --- | --- |
-| D1 | Clave secreta sandbox de sesiones (`sk_...`) | Entrega por canal seguro | Pendiente |
-| D2 | API Key de emisión TEST | Etiqueta, entorno y alcance; valor por canal seguro | Pendiente |
-| D3 | URL base sandbox de sesiones y de emisión | URLs y vigencia | Pendiente |
-| D4 | Vinculación certificado ↔ RNC ↔ API Key | Regla escrita y validación del titular | Pendiente |
-| D5 | Idempotencia de `POST /api/certificacion/sesiones` | Comportamiento por RNC y respuesta ante duplicado | Pendiente |
-| D6 | Límite de sesiones activas | Regla y error esperado | Pendiente |
-| D7 | Vigencia y uso único de `session_url` | TTL exacto y política de reutilización | Pendiente |
-| D8 | Alcance de `postulacion_id` | Empresa o global; cómo se relaciona con RNC | Pendiente |
-| D9 | Catálogo de errores | Códigos, significado y reintentabilidad | Pendiente |
-| D10 | Firma de webhooks | Algoritmo, encoding, unidad de timestamp y secreto | Pendiente |
-| D11 | Estados oficiales | Diferencia entre «presentada» y «DGII certificó» | Pendiente |
-| D12 | Allowlist y rotación | IPs, rotación y revocación de claves | Pendiente |
-| D13 | Autorización de sandbox | Ventana, RNC de prueba y responsable DOSA | Pendiente |
+| R1 | ¿La `t` de `X-Dosa-Signature` viene en segundos o milisegundos? | Sí, para aceptar webhooks reales | Confirmación escrita o primer evento firmado con `DOSA_WEBHOOK_TIMESTAMP_UNIT` |
+| R2 | ¿El secreto de 64 hex se usa como texto UTF-8 o como 32 bytes decodificados? | Sí, para aceptar webhooks reales | Confirmación escrita o prueba controlada con `DOSA_WEBHOOK_SECRET_ENCODING` |
+| R3 | La URL que DOSA sugirió (`/webhook/dosa`) la sirve el PWA, no el API | Sí, para recibir el evento | Usar `https://fullposcloud.fulltechrd.com/api/webhook/dosa` y corregirla en DOSA/panel |
+| R4 | ¿La clave `sk_...` del ejemplo es la clave TEST vigente de FULLTECH? | Sí, para abrir sesiones | Confirmar etiqueta/vigencia; no usarla si es solo un ejemplo |
+| R5 | ¿Hay límite de sesiones activas o TTL de `session_url`? | No, el cliente ya reutiliza y falla cerrado | Observar en la primera prueba; no bloquear el inicio |
+| R6 | ¿El `postulacion_id` es único por empresa o global? | No, el vínculo local ya impide compartirlo entre empresas | Observar en la prueba; no bloquear el inicio |
 
-## 3. Orden de ejecución
+No hace falta volver a pedir: dominio, script/clave pública, secreto del webhook,
+fórmula HMAC, payload de `empresa.conectada`, API Key TEST para RNC
+`133306001`, secuencias `113500–115500` con vencimiento `31/12/2028`, endpoint de
+sesiones, campos de respuesta, endpoint `EnviarFactura`, manejo del certificado
+por DOSA ni el comportamiento de retomar sesión.
 
-1. Completar A1 y A2.
-2. Recibir D1–D4 y D5–D12 por escrito.
-3. Completar A3 y A4 en base aislada.
-4. Configurar UAT con emisión apagada (A7).
-5. Ejecutar A5 con una sola empresa piloto.
-6. Ejecutar A6 solo si A5 pasó y DOSA confirmó la vinculación.
-7. Recolectar evidencia A8.
-8. Revisión GO/NO-GO con propietario y operaciones.
-9. Solo después: autorizar despliegue y, más adelante, una prueba de emisión
-   oficial separada.
+## 3. Orden exacto para iniciar la UAT controlada
+
+1. Completar A1 y A2. Confirmar que la clave `sk_` es la de UAT y no una de
+   producción.
+2. Cargar el secreto del webhook y las claves en el gestor de secretos UAT. No
+   pegarlas en documentos, tickets ni capturas.
+3. Configurar `DOSA_SESSION_BASE_URL=https://dosasystem.com`,
+   `DOSA_SESSION_ALLOWED_RETURN_ORIGINS=https://fullposcloud.fulltechrd.com`,
+   `DOSA_CERTIFICATION_SESSIONS_ENABLED=true` y las banderas de emisión en
+   `false`.
+4. Completar A3 y A4 en base UAT aislada y verificar que el Intento 1 no cambió.
+5. Crear la empresa piloto y el administrador UAT. Registrar `ECF_PORTAL_PILOT_COMPANY_IDS`.
+6. Ejecutar A5 una sola vez con RNC `133306001` y el correo de la empresa. No
+   repetir a ciegas si hay timeout.
+7. Configurar el webhook con la URL pública confirmada y la estrategia
+   `HMAC_SHA256_TIMESTAMPED`. Recibir **un** evento firmado y validar R1/R2.
+8. Verificar que el evento guarda el `postulacion_id` del mismo intento y que la
+   credencial TEST queda cifrada y pendiente, sin activar emisión.
+9. Ejecutar A6 solo con autorización expresa; no antes.
+10. Recolectar evidencia A8 y revisar GO/NO-GO.
+11. Solo después: autorizar despliegue y una prueba de emisión oficial separada.
 
 ## 4. Criterios GO / NO-GO de la UAT
 
 GO para iniciar pruebas oficiales solo si:
 
-- todas las respuestas D1–D13 están escritas;
+- R1, R2, R3 y R4 están resueltos o verificados en una prueba controlada;
 - la base UAT está migrada y verificada;
 - el Intento 1 está intacto;
 - la emisión está apagada;
@@ -352,7 +392,8 @@ GO para iniciar pruebas oficiales solo si:
 
 NO-GO si:
 
-- falta cualquier credencial o confirmación de DOSA;
+- falta la clave de sesiones o no se sabe si es TEST;
+- no se puede verificar la firma del webhook;
 - la URL de base no se puede demostrar como UAT;
 - el Intento 1 cambió;
 - se intenta probar con una clave de producción;
@@ -399,4 +440,7 @@ ejecutar builds o pruebas.
 - E2E locales: ejecutados con base desechable y DOSA simulado.
 - Emisión: **desactivada**.
 - Certificación: **no completada**.
-- UAT oficial: **pendiente de respuestas y credenciales de DOSA**.
+- Credenciales DOSA: **entregadas**, pero **no configuradas** en este worktree.
+- UAT oficial: **pendiente de configuración UAT y de R1–R4**. Ya no se deben
+  volver a solicitar el dominio, la fórmula HMAC, la API Key TEST, las
+  secuencias, el endpoint de sesiones ni el payload del webhook.
