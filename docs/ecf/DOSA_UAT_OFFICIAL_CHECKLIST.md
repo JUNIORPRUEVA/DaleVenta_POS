@@ -9,6 +9,9 @@ contra producción.
 
 Entorno UAT local preparado: `docs/ecf/DOSA_UAT_ENVIRONMENT.md`.
 
+Primera postulación real de FULLTECH SRL:
+`docs/ecf/DOSA_FIRST_FULLTECH_POSTULATION_CHECKLIST.md`.
+
 ## 0. Separación de responsabilidades
 
 | Bloque | Responsable | Puede ejecutarse ya |
