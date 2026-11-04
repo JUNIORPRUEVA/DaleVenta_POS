@@ -148,12 +148,18 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         onRetry: () => ref.invalidate(dosaIntentStateProvider),
       ),
       data: (value) {
-        // Una intención existente ofrece el portal sin registrar otra.
+        // Solo una intención atribuida a DOSA ofrece el portal sin registrar otra.
         if (value.sessionId != null) {
+          if (value.provider != 'DOSA') {
+            return const _DosaIntentGate(
+              icon: Icons.info_outline,
+              message: 'Revisa el intento de certificación existente con un '
+                  'administrador antes de continuar.',
+            );
+          }
           return _panel(
             resolved,
             binding,
-            provider: value.provider,
             attemptNo: value.sessionAttemptNo ?? 0,
             created: false,
             canManage: canManage,
@@ -222,7 +228,6 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
               data: (registered) => _panel(
                 resolved,
                 binding,
-                provider: registered.provider,
                 attemptNo: registered.attemptNo,
                 created: registered.created,
                 canManage: true,
@@ -235,7 +240,6 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
   Widget _panel(
     DosaAssistantConfig resolved,
     DosaAssistantBinding binding, {
-    required String provider,
     required int attemptNo,
     required bool created,
     required bool canManage,
@@ -254,7 +258,6 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         _DosaIntentBanner(
           attemptNo: attemptNo,
           created: created,
-          provider: provider,
           onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
         ),
         if (!widget.portalOnly)
@@ -318,7 +321,7 @@ class _DosaPrepareCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    portalOnly ? 'Continuar con DOSA' : 'Certificación con DOSA',
+                    'Estado de certificación',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -337,7 +340,7 @@ class _DosaPrepareCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onPrepare,
                 icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Preparar certificación con DOSA'),
+                label: const Text('Preparar certificación'),
               ),
             ),
           ],
@@ -435,7 +438,7 @@ class _DosaPortalCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    portalOnly ? 'Continuar con DOSA' : 'Continuar certificación',
+                    'Estado de certificación',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -460,7 +463,7 @@ class _DosaPortalCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Iniciar o continuar certificación'),
+                label: const Text('Continuar certificación'),
               ),
             ),
           ],
@@ -478,13 +481,11 @@ class _DosaIntentBanner extends ConsumerWidget {
   const _DosaIntentBanner({
     required this.attemptNo,
     required this.created,
-    required this.provider,
     required this.onRefreshState,
   });
 
   final int attemptNo;
   final bool created;
-  final String provider;
   final VoidCallback onRefreshState;
 
   @override
@@ -495,15 +496,11 @@ class _DosaIntentBanner extends ConsumerWidget {
     final parts = <String>[
       'Intento $attemptNo',
       created ? 'registrado ahora' : 'ya estaba registrado',
-      'proveedor $provider',
     ];
 
     state.whenData((value) {
       if (value.sessionStatus != null) {
-        parts.add('sesion ${value.sessionStatus}');
-      }
-      if (value.credentialStatus != null) {
-        parts.add('credencial ${value.credentialStatus}');
+        parts.add(_statusLabel(value.sessionStatus!));
       }
     });
 
@@ -532,4 +529,15 @@ class _DosaIntentBanner extends ConsumerWidget {
       ),
     );
   }
+
+  static String _statusLabel(String status) => switch (status) {
+    'NOT_STARTED' => 'Preparación registrada',
+    'RUNNING' => 'En curso',
+    'ATTENTION' => 'Requiere atención',
+    'COMPLETED' => 'Paso del asistente completado',
+    'FAILED' => 'No completada',
+    'CANCELLED' => 'Cancelada',
+    'EXPIRED' => 'Vencida',
+    _ => 'Estado pendiente de confirmar',
+  };
 }

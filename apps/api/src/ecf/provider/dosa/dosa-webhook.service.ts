@@ -12,6 +12,7 @@ import {
 } from "./dosa-webhook-signature.policy";
 import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
+import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
 
 /** Cliente mínimo (SQL parametrizado). Se puede sustituir por un doble. */
 export interface DosaWebhookStore {
@@ -179,8 +180,9 @@ export class DosaWebhookService {
       };
     }
 
-    // 4. Opt-in de la empresa
-    if (!company.ecfEnabled) {
+    // La certificación del piloto precede a la activación de emisión. Fuera
+    // del piloto se conserva la compuerta histórica de e-CF habilitado.
+    if (!company.ecfEnabled && !isEcfPortalPilotCompany(company.companyId)) {
       return {
         accepted: false,
         status: 409,

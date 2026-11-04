@@ -111,6 +111,7 @@ export class EcfCertificationPortalService {
     if (!this.isPilotCompany(input.companyId)) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
+    await this.requireDosaIntention(input.companyId);
 
     const ticket = newToken();
     const expiresAt = new Date(Date.now() + PORTAL_TICKET_TTL_SECONDS * 1000);
@@ -157,6 +158,7 @@ export class EcfCertificationPortalService {
     if (!this.isPilotCompany(row.companyId)) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
+    await this.requireDosaIntention(row.companyId);
 
     // Si el navegador dice pertenecer a otra empresa, no se canjea nada: el
     // ticket manda y la discrepancia se reporta.
@@ -198,6 +200,7 @@ export class EcfCertificationPortalService {
   /** Contexto de la sesion. Solo lectura: no escribe nada en el proveedor. */
   async readContext(token: string | null | undefined): Promise<PortalContext> {
     const session = await this.requireSession(token);
+    await this.requireDosaIntention(session.companyId);
     await this.prisma.ecfCertificationPortalSession.update({
       where: { id: session.id },
       data: { lastSeenAt: new Date() },
@@ -235,6 +238,29 @@ export class EcfCertificationPortalService {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     return session;
+  }
+
+  /** Un ticket no puede reutilizar un intento histórico de otro proveedor. */
+  private async requireDosaIntention(companyId: string): Promise<void> {
+    const intention = await this.prisma.ecfDosaCertificationSession.findFirst({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!intention) throw new ConflictException("PORTAL_INTENTION_REQUIRED");
+    const audits = await this.prisma.ecfAuditLog.findMany({
+      where: { companyId, targetType: "DOSA_CERTIFICATION_INTENT", targetId: intention.id },
+      select: { metadata: true },
+    });
+    const providers = audits.map((entry) => {
+      const metadata = entry.metadata;
+      return metadata && typeof metadata === "object" && !Array.isArray(metadata)
+        ? (metadata as Record<string, unknown>).provider
+        : null;
+    });
+    if (providers.length === 0 || providers.some((provider) => provider !== "DOSA")) {
+      throw new ConflictException("PORTAL_INTENTION_PROVIDER_UNVERIFIED");
+    }
   }
 
   private async buildContext(

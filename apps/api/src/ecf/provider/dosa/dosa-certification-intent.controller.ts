@@ -81,6 +81,24 @@ export type DosaIntentStateResponse = {
   fiscalAuthorizationGranted: false;
 };
 
+type IntentAuditEntry = {
+  action: string;
+  createdAt: Date;
+  metadata: unknown;
+};
+
+function recordedProvider(entries: readonly IntentAuditEntry[]): string {
+  const providers = new Set(
+    entries.map((entry) => {
+      const metadata = entry.metadata;
+      if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+      const provider = (metadata as Record<string, unknown>).provider;
+      return provider === "DOSA" || provider === "ALANUBE" ? provider : null;
+    }).filter((value): value is "DOSA" | "ALANUBE" => value !== null),
+  );
+  return providers.size === 1 ? [...providers][0] : "UNVERIFIED";
+}
+
 const REJECTION_HTTP: Record<DosaIntentRejection, "CONFLICT" | "UNAVAILABLE"> = {
   COMPANY_RNC_NOT_VERIFIED: "CONFLICT",
   RNC_DOES_NOT_MATCH_COMPANY_IDENTITY: "CONFLICT",
@@ -169,17 +187,22 @@ export class DosaCertificationIntentController {
         throw new ConflictException(result.reason);
       }
 
-      // Sin configuración fiscal todavía, el proveedor del intento es DOSA por
-      // definición de este recurso; no se afirma nada sobre la configuración
-      // de la empresa, que sigue sin crearse ni modificarse.
-      const provider = fiscal?.provider ?? "DOSA";
+      // La configuración fiscal gobierna EMISIÓN, no la procedencia de una
+      // intención. Una intención nueva de esta ruta es DOSA; una existente
+      // conserva el proveedor registrado cuando se creó.
+      const provider = result.created
+        ? "DOSA"
+        : await this.intentProvider(companyId, result.sessionId);
 
-      await this.audit(user, companyId, result.sessionId, {
-        rnc: result.rnc,
-        attemptNo: result.attemptNo,
-        created: result.created,
-        provider,
-      });
+      if (result.created) {
+        await this.audit(user, companyId, result.sessionId, {
+          rnc: result.rnc,
+          attemptNo: result.attemptNo,
+          created: true,
+          provider,
+          configuredProvider: fiscal?.provider ?? null,
+        });
+      }
 
       return {
         ok: true,
@@ -227,7 +250,9 @@ export class DosaCertificationIntentController {
       canonicalRnc: described.canonicalRnc,
       canonicalSource: described.canonicalSource,
       ecfEnabled,
-      provider: fiscal?.provider ?? "DOSA",
+      provider: described.session
+        ? await this.intentProvider(companyId, described.session.id)
+        : "DOSA",
       canRegister: preview.ok,
       blockingReasons,
       session: described.session,
@@ -244,6 +269,59 @@ export class DosaCertificationIntentController {
         : null,
       fiscalAuthorizationGranted: false,
     };
+  }
+
+  @Get("certification-diagnostic")
+  @Permissions("manageEcfOnboarding")
+  async diagnostic(@Req() req: Request) {
+    const companyId = requireTenant(req.user as TenantUser);
+    const [fiscal, session] = await Promise.all([
+      this.fiscalConfig.read(companyId),
+      this.prisma.ecfDosaCertificationSession.findFirst({
+        where: { companyId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          attemptNo: true,
+          sessionUrl: true,
+          providerPostulationId: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    const audits = session ? await this.intentAudits(companyId, session.id) : [];
+    return {
+      companyId,
+      configuredEmissionProvider: fiscal?.provider ?? null,
+      ecfEnabled: fiscal?.ecfEnabled === true,
+      intention: session ? {
+        id: session.id,
+        attemptNo: session.attemptNo,
+        status: session.status,
+        recordedProvider: recordedProvider(audits),
+        hasProviderSessionUrl: Boolean(session.sessionUrl),
+        hasProviderPostulationId: Boolean(session.providerPostulationId),
+        createdAt: session.createdAt,
+      } : null,
+      audit: audits.map((entry) => ({
+        action: entry.action,
+        createdAt: entry.createdAt,
+        recordedProvider: recordedProvider([entry]),
+      })),
+    };
+  }
+
+  private async intentProvider(companyId: string, sessionId: string): Promise<string> {
+    return recordedProvider(await this.intentAudits(companyId, sessionId));
+  }
+
+  private async intentAudits(companyId: string, sessionId: string): Promise<IntentAuditEntry[]> {
+    return this.prisma.ecfAuditLog.findMany({
+      where: { companyId, targetType: "DOSA_CERTIFICATION_INTENT", targetId: sessionId },
+      orderBy: { createdAt: "asc" },
+      select: { action: true, createdAt: true, metadata: true },
+    });
   }
 
   /**

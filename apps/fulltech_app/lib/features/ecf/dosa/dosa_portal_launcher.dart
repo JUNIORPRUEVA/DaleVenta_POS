@@ -106,6 +106,10 @@ class DosaPortalApi {
       return 'El portal de certificación está en fase piloto y tu empresa '
           'todavía no está incluida.';
     }
+    if (code.contains('PORTAL_INTENTION_')) {
+      return 'Revisa el intento de certificación existente antes de abrir '
+          'el portal. Contacta con un administrador de FullPOS.';
+    }
     if (status == 401) {
       return 'Tu sesión no permite abrir el portal de certificación. '
           'Vuelve a iniciar sesión como administrador.';

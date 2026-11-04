@@ -891,11 +891,9 @@ class _EcfDgiiHabilitationPageState
           ? EcfPostulationXmlCard(onUploaded: () => setState(() {}))
           : null,
       extraSections: [
-        // Asistente de certificación DOSA: se ofrece EN la etapa de solicitud y
-        // solo a quien gestiona el proceso. Con la bandera apagada (valor por
-        // defecto) no pinta nada, así que la pantalla actual no cambia.
+        // Seguimiento reutiliza el mismo portal; el embed legado permanece oculto.
         if (stage == _EcfStage.application && canManage)
-          DosaAssistantSection(postulationExternalId: view.externalId),
+          const DosaAssistantSection(portalOnly: true),
         if (_submissionGuideOpen && view.state == 'APPLICATION_PENDING') ...[
           const EcfSurface(
             padding: EdgeInsets.fromLTRB(16, 14, 16, 16),

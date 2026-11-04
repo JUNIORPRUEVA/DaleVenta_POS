@@ -98,7 +98,7 @@
         </li>
       </ol>
       <div class="acciones">
-        <button class="primary" id="iniciar" type="button">Iniciar o continuar certificación</button>
+        <button class="primary" id="iniciar" type="button">Continuar certificación</button>
         <span class="nota" id="nota-intento"></span>
       </div>
       <p class="nota">
@@ -113,6 +113,7 @@
         Este navegador no permite incrustar el asistente. Ábrelo en una pestaña
         nueva con el botón de abajo si el componente lo ofrece.
       </div>
+      <p class="nota" id="estado-asistente" aria-live="polite">Asistente pendiente de abrir.</p>
       <dosa-cert-wizard id="wizard"
         publishable-key="__DOSA_PUBLISHABLE_KEY__"
         base-url="https://dosasystem.com"
@@ -253,13 +254,10 @@
         } catch (e) { /* navegador antiguo */ }
       }
 
-      function registrar(tipo, detalle) {
-        var linea = tipo;
-        try {
-          var j = JSON.stringify(detalle || {});
-          if (j && j !== '{}') linea += ' ' + j;
-        } catch (e) {}
-        elLog.textContent = (elLog.textContent ? elLog.textContent + '\n' : '') + linea;
+      function registrar(tipo) {
+        // Los eventos del navegador son pistas. Sus payloads pueden contener
+        // datos fiscales; no se muestran ni se usan como autoridad.
+        elLog.textContent = (elLog.textContent ? elLog.textContent + '\n' : '') + tipo;
       }
 
       // El componente NO se monta al abrir la página (Fase 5): solo cuando el
@@ -286,7 +284,21 @@
         ['cert:ready','cert:step','cert:postulacion','cert:attention','cert:complete',
          'cert:error','cert:blocked','cert:asistida_pago','cert:asistida_pagada']
           .forEach(function (tipo) {
-            document.addEventListener(tipo, function (evt) { registrar(tipo, evt.detail); }, true);
+            document.addEventListener(tipo, function () {
+              registrar(tipo);
+              if (tipo === 'cert:ready') {
+                texto('estado-asistente', 'Asistente disponible. Continúa cuando estés listo.');
+                ocultar(document.getElementById('aviso-asistente'));
+              } else if (tipo === 'cert:blocked' || tipo === 'cert:error') {
+                texto('estado-asistente', 'No se pudo continuar en el asistente. Revisa el aviso y vuelve a intentarlo.');
+                document.getElementById('aviso-asistente').textContent =
+                  'El asistente no está disponible aquí. Revisa que el dominio esté autorizado o ábrelo en otra pestaña si se ofrece esa opción.';
+                mostrar(document.getElementById('aviso-asistente'));
+              } else if (tipo === 'cert:postulacion' || tipo === 'cert:complete') {
+                texto('estado-asistente', 'Actualizando el estado confirmado por FullPOS…');
+                cargarContexto();
+              }
+            }, true);
           });
 
         elWizard.classList.remove('oculto');
