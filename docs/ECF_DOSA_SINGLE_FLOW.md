@@ -206,4 +206,3 @@ Para activar la apertura automática en producción necesitamos, por escrito:
 Con esos siete puntos confirmados, la activación es un cambio de entorno
 (`DOSA_CERTIFICATION_SESSIONS_ENABLED`, `DOSA_SECRET_KEY`) y una migración
 aditiva ya validada; no requiere cambiar el flujo de la app.
-
