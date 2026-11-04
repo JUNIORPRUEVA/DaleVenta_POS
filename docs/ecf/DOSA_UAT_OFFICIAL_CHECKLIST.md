@@ -26,19 +26,21 @@ código. No se copiaron valores de credenciales.
 | Script y clave pública del asistente | Sí, 01/11/2026 | No se usa en el backend; el asistente vive en DOSA | `ENTREGADO` |
 | Dominio `fullposcloud.fulltechrd.com` | Sí | Falta fijarlo en `DOSA_SESSION_ALLOWED_RETURN_ORIGINS` | `PENDIENTE DE PRUEBA` |
 | Secreto del webhook | Sí, archivo de 64 caracteres hex | No está en el `.env` local | `PENDIENTE DE PRUEBA` |
-| Firma HMAC-SHA256 `t=...,v1=...` | Sí, fórmula `t + "." + cuerpo` | Implementada en código; estrategia por defecto `BLOCKED` | `PENDIENTE DE PRUEBA` |
+| Firma HMAC-SHA256 `t=...,v1=...` | Sí, fórmula `t + "." + cuerpo` | `CONFIGURADO` en código; estrategia por defecto `BLOCKED` | `PENDIENTE DE PRUEBA` |
 | Unidad de `t` y encoding del secreto | No consta en el historial | Configurable; valores por defecto seguros | `PENDIENTE DE PRUEBA` |
 | Vinculación automática por dominio | Sí, del lado Partner | El backend exige además una sesión local para resolver RNC → empresa | `PENDIENTE DE PRUEBA` |
 | Webhook `empresa.conectada` con RNC, `postulacion_id` y credenciales | Sí, muestra entregada | Parser y persistencia implementados; tipo de evento se guarda como pendiente de clasificación | `PENDIENTE DE PRUEBA` |
 | API Key TEST para RNC `133306001` | Sí, entregada en el historial | No configurada; no se usará hasta la prueba autorizada | `PENDIENTE DE PRUEBA` |
 | Secuencias TEST `113500–115500`, vencimiento `31/12/2028` | Sí | No registradas aún en la base UAT | `PENDIENTE DE PRUEBA` |
 | Endpoint de emisión `POST .../fe/api/emision/ecf/EnviarFactura` | Sí, mismo endpoint para TEST | Ruta implementada; `DOSA_BASE_URL` y API Key TEST no configurados | `PENDIENTE DE PRUEBA` |
-| Sesiones `POST https://dosasystem.com/api/certificacion/sesiones` | Sí | Cliente implementado y validado | `PENDIENTE DE PRUEBA` |
-| Campos de sesión `rnc_emisor`, `correo`, `return_url` | Sí | Cliente implementado | `PENDIENTE DE PRUEBA` |
+| Sesiones `POST https://dosasystem.com/api/certificacion/sesiones` | Sí | `CONFIGURADO`: cliente implementado y validado | `PENDIENTE DE PRUEBA` |
+| Campos de sesión `rnc_emisor`, `correo`, `return_url` | Sí | `CONFIGURADO`: cliente implementado | `PENDIENTE DE PRUEBA` |
 | Respuesta `201` `url`, `path`, `token`, `expires_at`, `postulacion_id`, `prueba` | Sí | Cliente valida todos los campos | `PENDIENTE DE PRUEBA` |
 | Clave `sk_...` de sesiones | Sí, aparece en el ejemplo enviado por DOSA en el historial | No configurada; no está identificada explícitamente como TEST o PROD | `PENDIENTE DE PRUEBA` |
 | Certificado gestionado por DOSA | Sí: DOSA custodia, firma XML y transmite a DGII | No se almacena en FullPOS | `PENDIENTE DE PRUEBA` |
-| Retomar una sesión | Sí, informado por DOSA | Reutilización y lease implementados | `PENDIENTE DE PRUEBA` |
+| Retomar una sesión | Sí, informado por DOSA | `CONFIGURADO`: reutilización y lease implementados | `PENDIENTE DE PRUEBA` |
+| Key ring de cifrado de URLs | No es un dato de DOSA | No existe en el entorno local | `NO DISPONIBLE` |
+| Empresa piloto y administrador UAT | No es un dato de DOSA | No creados/verificados aún | `NO DISPONIBLE` |
 
 Resultado de la revisión: **no hay que volver a pedir la mayoría de los datos**.
 Lo que falta es configurarlos en el entorno UAT y ejecutar las pruebas
