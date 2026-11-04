@@ -19,6 +19,8 @@ class DosaDiagnosticAttempt {
     required this.number,
     required this.status,
     required this.recordedProvider,
+    required this.effectiveProvider,
+    required this.hasEffectiveAttribution,
     required this.hasProviderSessionUrl,
     required this.hasProviderPostulationId,
   });
@@ -26,6 +28,8 @@ class DosaDiagnosticAttempt {
   final int number;
   final String status;
   final String recordedProvider;
+  final String effectiveProvider;
+  final bool hasEffectiveAttribution;
   final bool hasProviderSessionUrl;
   final bool hasProviderPostulationId;
 }
@@ -44,9 +48,10 @@ class DosaCertificationDiagnostic {
   /// Misma regla conservadora que la compuerta de tickets del backend.
   bool get requiresReconciliation =>
       attempt != null &&
-      (attempt!.recordedProvider != 'DOSA' ||
-          providerHistory.isEmpty ||
-          providerHistory.any((provider) => provider != 'DOSA'));
+      (attempt!.effectiveProvider != 'DOSA' ||
+          (!attempt!.hasEffectiveAttribution &&
+              (providerHistory.isEmpty ||
+                  providerHistory.any((provider) => provider != 'DOSA'))));
 
   factory DosaCertificationDiagnostic.fromJson(Map<String, dynamic> json) {
     final companyId = json['companyId'];
@@ -71,12 +76,17 @@ class DosaCertificationDiagnostic {
               number: number!,
               status: '${attempt['status'] ?? ''}',
               recordedProvider: '${attempt['recordedProvider'] ?? ''}',
+              effectiveProvider: '${attempt['effectiveProvider'] ?? attempt['recordedProvider'] ?? ''}',
+              hasEffectiveAttribution: attempt.containsKey('effectiveProvider'),
               hasProviderSessionUrl: attempt['hasProviderSessionUrl'] == true,
               hasProviderPostulationId:
                   attempt['hasProviderPostulationId'] == true,
             ),
       providerHistory: List<String>.unmodifiable(
-        rawHistory.map((entry) {
+        rawHistory.where((entry) =>
+            entry is! Map<String, dynamic> ||
+            entry['action'] == null ||
+            entry['action'] == 'ONBOARDING_STARTED').map((entry) {
           if (entry is! Map<String, dynamic>) return 'UNVERIFIED';
           return '${entry['recordedProvider'] ?? 'UNVERIFIED'}';
         }),

@@ -114,7 +114,7 @@ class EcfPreparationStep extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (dosaEntry != null) ...[dosaEntry!, const SizedBox(height: 12)],
-          EcfSection(
+          if (simulationAvailable) EcfSection(
             title: 'Postulación inteligente',
             icon: Icons.auto_awesome_outlined,
             subtitle:

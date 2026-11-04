@@ -233,6 +233,26 @@ void main() {
     expect(dosa.requiresReconciliation, isFalse);
     expect(missingAudit.requiresReconciliation, isTrue);
   });
+
+  test('reconciliación efectiva conserva la atribución histórica', () {
+    final result = DosaCertificationDiagnostic.fromJson({
+      'companyId': 'company-a',
+      'intention': {
+        'attemptNo': 1,
+        'status': 'NOT_STARTED',
+        'recordedProvider': 'ALANUBE',
+        'effectiveProvider': 'DOSA',
+        'hasProviderSessionUrl': false,
+        'hasProviderPostulationId': false,
+      },
+      'audit': [
+        {'recordedProvider': 'ALANUBE'},
+      ],
+    });
+    expect(result.attempt!.recordedProvider, 'ALANUBE');
+    expect(result.attempt!.effectiveProvider, 'DOSA');
+    expect(result.requiresReconciliation, isFalse);
+  });
 }
 
 Map<String, dynamic> _json({String companyId = 'company-a'}) => {

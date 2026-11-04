@@ -116,12 +116,14 @@ function fiscalConfig(
 function auditLog(historicalProvider?: string) {
   const rows: Array<Record<string, unknown>> = [];
   if (historicalProvider) rows.push({
+    id: "audit-1",
     companyId: COMPANY,
     targetType: "DOSA_CERTIFICATION_INTENT",
     targetId: "session-1",
     action: "ONBOARDING_STARTED",
     createdAt: new Date("2026-11-01T00:00:00Z"),
-    metadata: { provider: historicalProvider },
+    metadata: { provider: historicalProvider, created: true, rnc: RNC, attemptNo: 1 },
+    actorUserId: "user-1",
   });
   const prisma = {
     ecfAuditLog: {
@@ -139,6 +141,8 @@ function auditLog(historicalProvider?: string) {
         if (input.where.companyId !== COMPANY) return null;
         return { id: "session-1", attemptNo: 1, status: "NOT_STARTED",
           sessionUrl: null, providerPostulationId: null,
+          rnc: RNC, createdByUserId: "user-1", lastEventType: null,
+          providerConfirmedAt: null, closedAt: null,
           createdAt: new Date("2026-11-01T00:00:00Z") };
       },
     },
@@ -250,7 +254,7 @@ describe("POST /ecf/dosa/certification-intent", () => {
       behaviour: "existing", historicalProvider: "ALANUBE",
     });
     const response = await controller.register(req(), {} as RegisterDosaIntentDto);
-    expect(response.provider).toBe("ALANUBE");
+    expect(response.provider).toBe("UNVERIFIED");
     expect(rows).toHaveLength(1);
   });
 
@@ -392,6 +396,8 @@ describe("GET /ecf/dosa/certification-diagnostic", () => {
       hasProviderSessionUrl: false, hasProviderPostulationId: false,
     });
     expect(diagnostic.configuredEmissionProvider).toBe("DOSA");
+    expect(diagnostic.intention?.effectiveProvider).toBe("UNVERIFIED");
+    expect(diagnostic.audit[0].id).toBe("audit-1");
     expect(rows).toHaveLength(1);
   });
 });

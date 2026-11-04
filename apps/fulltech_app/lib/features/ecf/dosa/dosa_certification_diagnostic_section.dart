@@ -93,6 +93,8 @@ class _DosaCertificationDiagnosticSectionState
           'Proveedor registrado',
           _provider(attempt.recordedProvider),
         ),
+        if (attempt.effectiveProvider != attempt.recordedProvider)
+          _line(context, 'Proveedor efectivo', _provider(attempt.effectiveProvider)),
         _line(
           context,
           'Sesión externa',

@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 
 import { PrismaService } from "../../prisma/prisma.service";
+import { effectiveIntentProvider } from "../provider/dosa/dosa-intent-attribution";
 import {
   PORTAL_PILOT_COMPANIES_ENV,
   isEcfPortalPilotCompany,
@@ -250,15 +251,9 @@ export class EcfCertificationPortalService {
     if (!intention) throw new ConflictException("PORTAL_INTENTION_REQUIRED");
     const audits = await this.prisma.ecfAuditLog.findMany({
       where: { companyId, targetType: "DOSA_CERTIFICATION_INTENT", targetId: intention.id },
-      select: { metadata: true },
+      select: { id: true, action: true, actorUserId: true, metadata: true, before: true, after: true },
     });
-    const providers = audits.map((entry) => {
-      const metadata = entry.metadata;
-      return metadata && typeof metadata === "object" && !Array.isArray(metadata)
-        ? (metadata as Record<string, unknown>).provider
-        : null;
-    });
-    if (providers.length === 0 || providers.some((provider) => provider !== "DOSA")) {
+    if (effectiveIntentProvider(audits) !== "DOSA") {
       throw new ConflictException("PORTAL_INTENTION_PROVIDER_UNVERIFIED");
     }
   }

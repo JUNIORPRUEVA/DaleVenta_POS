@@ -29,6 +29,7 @@ function makePrismaFake(seed?: {
   dosaSessions?: Array<Record<string, unknown>>;
   ecfConfigs?: Array<{ companyId: string; enabled: boolean }>;
   intentionProvider?: string | null;
+  reconciled?: boolean;
 }) {
   const tickets: Array<Record<string, any>> = [];
   const sessions: Array<Record<string, any>> = [];
@@ -122,7 +123,13 @@ function makePrismaFake(seed?: {
     },
     ecfAuditLog: {
       findMany: async () => seed?.intentionProvider === null ? [] : [
-        { metadata: { provider: seed?.intentionProvider ?? "DOSA" } },
+        { id: "audit-1", action: "ONBOARDING_STARTED",
+          metadata: { provider: seed?.intentionProvider ?? "DOSA", created: true } },
+        ...(seed?.reconciled ? [{ id: "audit-2", action: "INTENT_PROVIDER_RECONCILED",
+          actorUserId: "admin-a", before: { provider: "ALANUBE" },
+          after: { provider: "DOSA" }, metadata: { sourceAuditId: "audit-1",
+            externalReviewReference: "provider-review-123",
+            ownerApprovalReference: "owner-approval-123" } }] : []),
       ],
     },
     ecfCompanyConfiguration: {
@@ -182,6 +189,15 @@ describe("compuerta del piloto (por companyId)", () => {
     await expect(service.issueTicket({ companyId: "company-a", userId: "u" }))
       .rejects.toThrow("PORTAL_INTENTION_PROVIDER_UNVERIFIED");
     expect(prisma.__rows.tickets).toHaveLength(0);
+  });
+
+  it("acepta la reconciliación auditada solo para el intento y empresa piloto", async () => {
+    const prisma = makePrismaFake({ intentionProvider: "ALANUBE", reconciled: true });
+    const service = makeService(prisma, ["company-a"]);
+    await expect(service.issueTicket({ companyId: "company-a", userId: "admin-a" }))
+      .resolves.toHaveProperty("ticket");
+    await expect(service.issueTicket({ companyId: "company-b", userId: "admin-b" }))
+      .rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("no emite ticket sin intento verificado", async () => {
