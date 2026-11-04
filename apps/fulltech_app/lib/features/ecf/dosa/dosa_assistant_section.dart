@@ -18,8 +18,9 @@ import 'dosa_portal_launcher.dart';
 /// Es el único punto que lee la identidad fiscal de la empresa: el RNC sale de
 /// la configuración confirmada por el backend, nunca de un campo del asistente.
 ///
-/// Con la bandera apagada devuelve `SizedBox.shrink()`: la pantalla actual no
-/// cambia en absoluto para las empresas que no usan e-CF.
+/// En Seguimiento, la bandera del embed apagada devuelve `SizedBox.shrink()`.
+/// En Preparación, `portalOnly` usa el portal seguro y la elegibilidad del
+/// backend sin montar el embed de Flutter.
 ///
 /// **Abrir el expediente no registra nada.** Al montarse solo se consulta el
 /// estado (lectura). La intención se registra únicamente cuando un administrador
@@ -33,6 +34,7 @@ class DosaAssistantSection extends ConsumerStatefulWidget {
     this.onResume,
     this.onRefresh,
     this.config,
+    this.portalOnly = false,
   });
 
   /// Referencia externa del expediente, si ya existe.
@@ -48,6 +50,9 @@ class DosaAssistantSection extends ConsumerStatefulWidget {
 
   /// Solo para pruebas; en la app se lee del build.
   final DosaAssistantConfig? config;
+
+  /// En Preparación usa el portal existente sin depender del embed de Flutter.
+  final bool portalOnly;
 
   @override
   ConsumerState<DosaAssistantSection> createState() =>
@@ -68,11 +73,23 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
   /// autorizado. Por eso la acción siempre es "abrir el portal".
   Future<void> _openPortal() async {
     if (_openingPortal) return;
+    final user = ref.read(authStateProvider).user;
+    final companyId = user?.companyId?.trim() ?? '';
+    if (companyId.isEmpty ||
+        !hasUserPermission(user, AppPermission.manageEcfOnboarding)) {
+      return;
+    }
     setState(() => _openingPortal = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       final api = ref.read(dosaPortalApiProvider);
       final ticket = await api.requestTicket();
+      if (!mounted) return;
+      final currentUser = ref.read(authStateProvider).user;
+      if (currentUser?.companyId?.trim() != companyId ||
+          !hasUserPermission(currentUser, AppPermission.manageEcfOnboarding)) {
+        return;
+      }
       final opened = await openDosaPortal(ticket.url);
       if (!opened) {
         messenger?.showSnackBar(
@@ -93,7 +110,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
   @override
   Widget build(BuildContext context) {
     final resolved = widget.config ?? DosaAssistantConfig.fromEnvironment();
-    if (!resolved.enabled) return const SizedBox.shrink();
+    if (!widget.portalOnly && !resolved.enabled) return const SizedBox.shrink();
 
     final user = ref.watch(authStateProvider).user;
     final companyId = user?.companyId?.trim() ?? '';
@@ -103,6 +120,15 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
       user,
       AppPermission.manageEcfOnboarding,
     );
+    if (widget.portalOnly) {
+      if (companyId.isEmpty || !canManage) return const SizedBox.shrink();
+      final eligibility = ref.watch(dosaPortalEligibilityProvider);
+      if (eligibility.isLoading ||
+          eligibility.hasError ||
+          eligibility.valueOrNull != true) {
+        return const SizedBox.shrink();
+      }
+    }
 
     final binding = DosaAssistantBinding(
       companyId: companyId,
@@ -122,7 +148,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         onRetry: () => ref.invalidate(dosaIntentStateProvider),
       ),
       data: (value) {
-        // Ya hay una intención registrada: se abre el asistente existente.
+        // Una intención existente ofrece el portal sin registrar otra.
         if (value.sessionId != null) {
           return _panel(
             resolved,
@@ -160,6 +186,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
 
         if (!_requested) {
           return _DosaPrepareCard(
+            portalOnly: widget.portalOnly,
             onPrepare: () => setState(() => _requested = true),
           );
         }
@@ -219,28 +246,34 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         // La acción del portal exige el permiso administrativo: un usuario sin
         // él puede ver el estado, pero no pedir un ticket ni abrir el portal.
         if (canManage)
-          _DosaPortalCard(onOpen: _openPortal, busy: _openingPortal),
+          _DosaPortalCard(
+            onOpen: _openPortal,
+            busy: _openingPortal,
+            portalOnly: widget.portalOnly,
+          ),
         _DosaIntentBanner(
           attemptNo: attemptNo,
           created: created,
           provider: provider,
           onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
         ),
-        DosaAssistantPanel(
-          config: resolved,
-          session: DosaAssistantSession(
-            binding: binding,
-            phase:
-                widget.phase ?? _defaultPhase(widget.postulationExternalId),
+        if (!widget.portalOnly)
+          DosaAssistantPanel(
+            config: resolved,
+            session: DosaAssistantSession(
+              binding: binding,
+              phase:
+                  widget.phase ?? _defaultPhase(widget.postulationExternalId),
+            ),
+            onResume: widget.onResume,
+            // Un evento del navegador NO escribe nada: solo pide recargar.
+            onWizardEvent: _onWizardEvent,
+            onOpenExternally: resolved.hasSessionUrl
+                ? () => openDosaAssistantExternally(
+                    sessionUrl: resolved.sessionUrl!,
+                  )
+                : null,
           ),
-          onResume: widget.onResume,
-          // Un evento del navegador NO escribe nada: solo pide recargar.
-          onWizardEvent: _onWizardEvent,
-          onOpenExternally: resolved.hasSessionUrl
-              ? () =>
-                    openDosaAssistantExternally(sessionUrl: resolved.sessionUrl!)
-              : null,
-        ),
       ],
     );
   }
@@ -264,9 +297,10 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
 /// Paso previo explícito: explica qué va a pasar y espera la confirmación del
 /// administrador. Es la única puerta que registra la intención.
 class _DosaPrepareCard extends StatelessWidget {
-  const _DosaPrepareCard({required this.onPrepare});
+  const _DosaPrepareCard({required this.onPrepare, this.portalOnly = false});
 
   final VoidCallback onPrepare;
+  final bool portalOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +318,7 @@ class _DosaPrepareCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Certificación con DOSA',
+                    portalOnly ? 'Continuar con DOSA' : 'Certificación con DOSA',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -375,10 +409,15 @@ class _DosaIntentGate extends StatelessWidget {
 /// componente oficial solo se monta allí porque es el único origen que el
 /// proveedor permite enmarcar.
 class _DosaPortalCard extends StatelessWidget {
-  const _DosaPortalCard({required this.onOpen, required this.busy});
+  const _DosaPortalCard({
+    required this.onOpen,
+    required this.busy,
+    this.portalOnly = false,
+  });
 
   final VoidCallback onOpen;
   final bool busy;
+  final bool portalOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -396,7 +435,7 @@ class _DosaPortalCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Continuar certificación',
+                    portalOnly ? 'Continuar con DOSA' : 'Continuar certificación',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),

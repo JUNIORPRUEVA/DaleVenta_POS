@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
@@ -5,6 +7,7 @@ import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_config.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_section.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,11 +21,13 @@ void main() {
   DosaAssistantConfig enabledConfig() =>
       const DosaAssistantConfig(enabled: true);
 
-  Future<void> pumpSection(
+  Future<ProviderContainer> pumpSection(
     WidgetTester tester, {
     required _IntentApi api,
     String role = 'ADMIN',
     String rnc = '133306001',
+    bool portalOnly = false,
+    _PortalApi? portalApi,
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -44,6 +49,7 @@ void main() {
           ),
         ),
         dosaCertificationIntentApiProvider.overrideWithValue(api),
+        dosaPortalApiProvider.overrideWithValue(portalApi ?? _PortalApi()),
       ],
     );
     addTearDown(container.dispose);
@@ -54,13 +60,19 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: DosaAssistantSection(config: enabledConfig()),
+              child: DosaAssistantSection(
+                config: portalOnly
+                    ? const DosaAssistantConfig(enabled: false)
+                    : enabledConfig(),
+                portalOnly: portalOnly,
+              ),
             ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    return container;
   }
 
   testWidgets('abrir el expediente NO registra la intención', (tester) async {
@@ -73,6 +85,112 @@ void main() {
     expect(api.registerCalls, isEmpty);
     // Y se ofrece la acción explícita, no se ejecuta sola.
     expect(find.text('Preparar certificación con DOSA'), findsOneWidget);
+  });
+
+  testWidgets('portal en Preparación consulta elegibilidad sin escribir', (
+    tester,
+  ) async {
+    final api = _IntentApi();
+    final portal = _PortalApi();
+
+    await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
+
+    expect(portal.eligibilityCalls, 1);
+    expect(portal.ticketCalls, 0);
+    expect(api.stateCalls, 1);
+    expect(api.registerCalls, isEmpty);
+    expect(find.text('Continuar con DOSA'), findsOneWidget);
+    expect(find.text('Preparar certificación con DOSA'), findsOneWidget);
+  });
+
+  testWidgets('portal fuera del piloto falla cerrado', (tester) async {
+    final api = _IntentApi();
+    final portal = _PortalApi(eligible: false);
+
+    await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
+
+    expect(portal.eligibilityCalls, 1);
+    expect(portal.ticketCalls, 0);
+    expect(api.stateCalls, 0);
+    expect(api.registerCalls, isEmpty);
+    expect(find.text('Continuar con DOSA'), findsNothing);
+  });
+
+  testWidgets('portal sin permiso no consulta ni ofrece acciones', (
+    tester,
+  ) async {
+    final api = _IntentApi();
+    final portal = _PortalApi();
+
+    await pumpSection(
+      tester,
+      api: api,
+      role: 'MARKETING',
+      portalOnly: true,
+      portalApi: portal,
+    );
+
+    expect(portal.eligibilityCalls, 0);
+    expect(portal.ticketCalls, 0);
+    expect(api.stateCalls, 0);
+    expect(api.registerCalls, isEmpty);
+    expect(find.text('Continuar con DOSA'), findsNothing);
+  });
+
+  testWidgets('portal registra intención solo después del clic', (
+    tester,
+  ) async {
+    final api = _IntentApi();
+    final portal = _PortalApi();
+
+    await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
+    await tester.tap(find.text('Preparar certificación con DOSA'));
+    await tester.pumpAndSettle();
+
+    expect(api.registerCalls, hasLength(1));
+    expect(portal.ticketCalls, 0);
+    expect(find.text('Continuar con DOSA'), findsOneWidget);
+    expect(find.text('Iniciar o continuar certificación'), findsOneWidget);
+  });
+
+  testWidgets('intención existente ofrece portal sin pedir ticket al cargar', (
+    tester,
+  ) async {
+    final api = _IntentApi(hasSession: true);
+    final portal = _PortalApi();
+
+    await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
+
+    expect(find.text('Continuar con DOSA'), findsOneWidget);
+    expect(find.text('Iniciar o continuar certificación'), findsOneWidget);
+    expect(api.registerCalls, isEmpty);
+    expect(portal.ticketCalls, 0);
+  });
+
+  testWidgets('cambio de empresa durante el ticket no abre el portal', (
+    tester,
+  ) async {
+    final ticket = Completer<DosaPortalTicket>();
+    final portal = _PortalApi(pendingTicket: ticket);
+    final container = await pumpSection(
+      tester,
+      api: _IntentApi(hasSession: true),
+      portalOnly: true,
+      portalApi: portal,
+    );
+
+    await tester.tap(find.text('Iniciar o continuar certificación'));
+    await tester.pump();
+    expect(portal.ticketCalls, 1);
+
+    (container.read(authStateProvider.notifier) as _FixedAuthController)
+        .setTestUser(_user(companyId: 'company-b'));
+    ticket.complete(
+      const DosaPortalTicket(url: 'mailto:otro@example.test', expiresAt: ''),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No se pudo abrir el navegador'), findsNothing);
   });
 
   testWidgets('el botón registra una sola vez y entonces abre el asistente',
@@ -147,16 +265,25 @@ class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
     state = fixedState;
   }
+
+  void setTestUser(UserModel user) {
+    state = AuthState(
+      initialized: true,
+      isAuthenticated: true,
+      user: user,
+      hasSessionHint: true,
+    );
+  }
 }
 
-UserModel _user({String role = 'ADMIN'}) {
+UserModel _user({String role = 'ADMIN', String companyId = 'company-a'}) {
   return UserModel(
     id: 'user-a',
     email: 'user-a@test.local',
     nombreCompleto: 'Admin Prueba',
     telefono: '',
     role: role,
-    companyId: 'company-a',
+    companyId: companyId,
     companyName: 'FULLTECH, SRL',
   );
 }
@@ -205,6 +332,31 @@ class _IntentApi implements DosaCertificationIntentApi {
       'provider': 'DOSA',
       'ecfEnabled': false,
     });
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _PortalApi implements DosaPortalApi {
+  _PortalApi({this.eligible = true, this.pendingTicket});
+
+  final bool eligible;
+  final Completer<DosaPortalTicket>? pendingTicket;
+  int eligibilityCalls = 0;
+  int ticketCalls = 0;
+
+  @override
+  Future<bool> isEligible() async {
+    eligibilityCalls += 1;
+    return eligible;
+  }
+
+  @override
+  Future<DosaPortalTicket> requestTicket() async {
+    ticketCalls += 1;
+    if (pendingTicket != null) return pendingTicket!.future;
+    throw StateError('No se debe pedir un ticket sin un clic explícito.');
   }
 
   @override

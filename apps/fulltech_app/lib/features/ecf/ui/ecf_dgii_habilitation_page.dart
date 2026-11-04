@@ -553,6 +553,21 @@ class _EcfDgiiHabilitationPageState
                           EcfFlowStep.preparation => EcfPreparationStep(
                             companyReady: fiscalReady,
                             certificateReady: _certificateReady(view),
+                            dosaEntry:
+                                fiscalReady &&
+                                        _certificateReady(view) &&
+                                        hasUserPermission(
+                                          user,
+                                          AppPermission.manageEcfOnboarding,
+                                        )
+                                ? DosaAssistantSection(
+                                    key: ValueKey(
+                                      'dosa-preparation-${user?.companyId}',
+                                    ),
+                                    portalOnly: true,
+                                    postulationExternalId: view.externalId,
+                                  )
+                                : null,
                             dgiiAccessReady: _requirementResolved(
                               view,
                               'REQUIREMENTS',

@@ -9,6 +9,8 @@ import 'package:daleventa_pos/features/ecf/data/ecf_platform_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_application_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_certification_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
@@ -181,6 +183,7 @@ Widget _harness({
   Object? error,
   void Function()? onRead,
   CompanySettings? settings,
+  bool dosaEligible = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -202,6 +205,14 @@ Widget _harness({
       // La prueba fija la respuesta: sin esto quedaría una petición de red real
       // con su temporizador pendiente al desmontar el árbol.
       ecfPlatformStaffProvider.overrideWith((ref) async => false),
+      dosaPortalEligibilityProvider.overrideWith((ref) async => dosaEligible),
+      dosaIntentStateProvider.overrideWith(
+        (ref) async => DosaIntentState.fromJson(const {
+          'provider': 'DOSA',
+          'canRegister': true,
+          'blockingReasons': <String>[],
+        }),
+      ),
       // El panel de «Ayuda y soporte» muestra el estado de la asistencia
       // temporal: sin este stub haría una petición real y el `pumpAndSettle`
       // no terminaría nunca.
@@ -612,6 +623,45 @@ void main() {
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
     // Sin modo de prueba disponible no se muestra el distintivo de pruebas.
     expect(find.byKey(const ValueKey('ecf_test_mode_badge')), findsNothing);
+    expect(find.text('Continuar con DOSA'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('preparación ofrece DOSA al piloto sin activar el motor legado', (
+    tester,
+  ) async {
+    await _pumpPage(
+      tester,
+      _harness(
+        view: _view(progress: _certificateResolvedProgress()),
+        dosaEligible: true,
+      ),
+      step: null,
+      technical: false,
+    );
+
+    expect(find.text('Continuar con DOSA'), findsOneWidget);
+    expect(find.text('Preparar certificación con DOSA'), findsOneWidget);
+    final legacy = find.byKey(
+      const ValueKey('ecf_intelligent_certification_button'),
+    );
+    expect(tester.widget<FilledButton>(legacy).onPressed, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('entrada DOSA no desborda en móvil', (tester) async {
+    await _pumpPage(
+      tester,
+      _harness(
+        view: _view(progress: _certificateResolvedProgress()),
+        dosaEligible: true,
+      ),
+      size: const Size(360, 844),
+      step: null,
+      technical: false,
+    );
+
+    expect(find.text('Continuar con DOSA'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
