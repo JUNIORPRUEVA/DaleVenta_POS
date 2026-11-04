@@ -18,14 +18,33 @@ archivos locales ignorados por Git, con ACL restringida al usuario de Windows.
 | Base | `daleventa_uat_local` |
 | Usuario | `fullpos_uat_user` |
 | Migraciones aplicadas | **72** |
-| Datos de empresas | **0** |
+| Datos de empresas | **2 sintéticas** |
+| Administrador UAT | `uat.dosa.admin@fulltech.test` |
 | Sesiones DOSA | **0** |
-| Filas con RNC `133306001` | **0** |
+| Filas con RNC `133306001` | **1** (empresa sintética) |
 | Filas con RNC `133080206` | **0** |
 
 El contenedor está separado de `finanza-postgres` (55432),
 `daleventas_uat_postgres` (55433), `fullpos_alanube_uat_postgres` (56550) y
 cualquier base de producción.
+
+### Empresa sintética para simulaciones
+
+| Dato | Valor |
+| --- | --- |
+| `companyId` | `11111111-1111-4111-8111-111111111111` |
+| Nombre | `UAT DOSA Synthetic (NO FULLTECH)` |
+| RNC | `133306001` |
+| Correo | `uat.dosa@fulltech.test` |
+| Configuración e-CF | `enabled=true`, `provider=DOSA`, `environment=SANDBOX` |
+| Sesiones DOSA | **0** |
+
+Esta empresa **no es FULLTECH SRL** y no debe usarse como primera postulante
+oficial. Existe solo para simulaciones locales. `ECF_PORTAL_PILOT_COMPANY_IDS`
+apunta a este `companyId`. El password del administrador está solo en
+`.env.uat.local`; no se imprime.
+
+`133080206` no aparece en ninguna fila de la base UAT.
 
 ### Migraciones relevantes
 
@@ -172,8 +191,8 @@ Esto evita ocultar el formulario local a una empresa Alanube. Prueba añadida:
 ## 6. Qué falta para la primera conexión real
 
 1. Confirmar que la `sk_` en cuarentena está activa y es de pruebas.
-2. Crear empresa piloto UAT (RNC `133306001`) y administrador; llenar
-   `ECF_PORTAL_PILOT_COMPANY_IDS`.
+2. Usar la empresa sintética `11111111-1111-4111-8111-111111111111` para la
+   simulación local; no usar FULLTECH SRL en UAT.
 3. Cambiar `DOSA_CERTIFICATION_SESSIONS_ENABLED=true` solo para la ventana.
 4. Confirmar/ajustar la URL pública del webhook en DOSA.
 5. Recibir un evento firmado y fijar unidad/encoding.

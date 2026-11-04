@@ -47,7 +47,7 @@ código. No se copiaron valores de credenciales.
 | Modo directo del SDK (`publishable-key`) | Sí | Sí: fallback implementado si no hay `session-url` | Solo pruebas locales | Build web autorizado con la clave pública |
 | Modo de sesiones privadas reutiliza RNC/correo | Sí: contrato de sesiones | Sí: backend lee RNC canónico y correo de empresa | Solo pruebas locales | Una sesión real; verificar que no pide datos dos veces |
 | Key ring de cifrado de URLs | No es un dato de DOSA | Sí: 2 versiones, escritura activa en la 2 | No | Probar rotación con una sesión real |
-| Empresa piloto y administrador UAT | No es un dato de DOSA | No | No | Crearlos y autorizarlos |
+| Empresa piloto y administrador UAT | No es un dato de DOSA | Sí: empresa sintética RNC `133306001` y admin local | No | Usarla solo en simulación; no es FULLTECH SRL |
 
 `PROBADO REALMENTE` significa contra DOSA o contra su sandbox real, con una
 sesión o un webhook auténticos. Las pruebas unitarias, de contrato y E2E con
@@ -404,7 +404,9 @@ por DOSA ni el comportamiento de retomar sesión.
    `DOSA_CERTIFICATION_SESSIONS_ENABLED=true` y las banderas de emisión en
    `false`.
 4. Completar A3 y A4 en base UAT aislada y verificar que el Intento 1 no cambió.
-5. Crear la empresa piloto y el administrador UAT. Registrar `ECF_PORTAL_PILOT_COMPANY_IDS`.
+5. Verificar la empresa sintética y el administrador UAT ya creados; confirmar
+   `ECF_PORTAL_PILOT_COMPANY_IDS=11111111-1111-4111-8111-111111111111`. No usar
+   FULLTECH SRL para la simulación local.
 6. Ejecutar A5 una sola vez con una empresa sintética UAT de RNC `133306001`.
    No usar FULLTECH SRL (`133080206`) para esta prueba. No repetir a ciegas si
    hay timeout.
