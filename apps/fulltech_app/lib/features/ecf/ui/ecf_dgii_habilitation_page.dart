@@ -425,14 +425,16 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.recordEcfDgiiOfficialVerification,
     );
-    // El certificado del onboarding lo pide el asistente oficial de DOSA. Si
-    // este usuario puede abrir ese portal, la validación previa en FullPOS deja
-    // de ser un requisito del recorrido: se pide una sola vez, dentro de DOSA.
-    final dosaOwnsCertificate = hasUserPermission(
+    final canOnboard = hasUserPermission(
       user,
       AppPermission.manageEcfOnboarding,
     );
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
+    // El certificado solo lo gestiona DOSA cuando DOSA es el proveedor efectivo
+    // de la empresa. El permiso habilita la acción, pero no cambia el proveedor:
+    // una empresa con Alanube debe seguir viendo su carga local del certificado.
+    final dosaOwnsCertificate =
+        canOnboard && habilitation.valueOrNull?.provider == 'DOSA';
     final settingsState = ref.watch(companySettingsProvider);
     final settings = settingsState.valueOrNull;
 

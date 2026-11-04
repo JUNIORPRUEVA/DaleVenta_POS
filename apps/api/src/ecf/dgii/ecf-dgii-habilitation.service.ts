@@ -901,6 +901,7 @@ export class EcfDgiiHabilitationService {
       enabled: boolean;
       certificationStatus: string;
       productionEnabled: boolean;
+      provider: string;
       credentialsSecretRef: string | null;
       certificateSecretRef: string | null;
     } | null,
@@ -957,6 +958,9 @@ export class EcfDgiiHabilitationService {
       authorizationEvidenceId: record.authorizationEvidenceId,
       moduleEnabled: config?.enabled === true,
       certificationStatus: config?.certificationStatus ?? "NOT_STARTED",
+      // Proveedor efectivo de la empresa. La UI lo usa para no ocultar la carga
+      // local del certificado a una empresa que sigue usando Alanube.
+      provider: config?.provider ?? null,
       providerIntegrationConfigured: Boolean(
         config?.credentialsSecretRef && config?.certificateSecretRef,
       ),

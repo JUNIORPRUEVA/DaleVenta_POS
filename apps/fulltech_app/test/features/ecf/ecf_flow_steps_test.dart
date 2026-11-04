@@ -124,10 +124,12 @@ EcfDgiiHabilitationView _habilitation({
   String state = 'NOT_STARTED',
   EcfDgiiProgress? progress,
   bool official = false,
+  String? provider = 'DOSA',
 }) => EcfDgiiHabilitationView(
   companyId: 'company-a',
   state: state,
   observations: null,
+  provider: provider,
   officialAuthorization: official,
   officialAuthorizationBlockers: const [],
   authorizationSource: 'NONE',

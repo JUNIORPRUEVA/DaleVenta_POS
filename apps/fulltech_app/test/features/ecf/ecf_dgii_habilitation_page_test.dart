@@ -165,10 +165,12 @@ EcfDgiiHabilitationView _view({
   List<EcfDgiiEvidenceView> evidence = const [],
   EcfDgiiEmissionState emission = _noAuthorization,
   List<EcfDgiiBlocker> blockers = const [],
+  String? provider = 'DOSA',
 }) {
   return EcfDgiiHabilitationView(
     companyId: companyId,
     state: state,
+    provider: provider,
     observations: observations,
     officialAuthorization: officialAuthorization,
     officialAuthorizationBlockers: officialBlockers,
@@ -676,6 +678,33 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empresa Alanube conserva la carga local del certificado', (
+    tester,
+  ) async {
+    await _pumpPage(
+      tester,
+      _harness(
+        user: _adminUser(),
+        view: _view(provider: 'ALANUBE'),
+      ),
+      step: null,
+      technical: false,
+    );
+    await tester.tap(find.text('Comenzar').first);
+    await tester.pumpAndSettle();
+
+    // El permiso de onboarding no basta: con proveedor Alanube el formulario
+    // local sigue visible y el avance no se desbloquea solo.
+    expect(find.text('Validar certificado'), findsOneWidget);
+    expect(find.textContaining('No hay que subirlos aquí'), findsNothing);
+    final continueButton = find.byKey(
+      const ValueKey('ecf_company_step_continue'),
+    );
+    expect(continueButton, findsOneWidget);
+    expect(tester.widget<FilledButton>(continueButton).onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
 

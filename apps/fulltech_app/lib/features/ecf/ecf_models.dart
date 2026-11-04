@@ -980,6 +980,7 @@ class EcfDgiiHabilitationView {
     this.authorizedAt,
     required this.moduleEnabled,
     required this.certificationStatus,
+    this.provider,
     required this.providerIntegrationConfigured,
     required this.progress,
     required this.evidence,
@@ -1001,6 +1002,10 @@ class EcfDgiiHabilitationView {
   final DateTime? authorizedAt;
   final bool moduleEnabled;
   final String certificationStatus;
+
+  /// Proveedor efectivo de la empresa (`DOSA`, `ALANUBE` o `null` si el
+  /// servidor antiguo no lo envía). No se infiere del permiso del usuario.
+  final String? provider;
   final bool providerIntegrationConfigured;
   final EcfDgiiProgress progress;
   final List<EcfDgiiEvidenceView> evidence;
@@ -1124,6 +1129,7 @@ class EcfDgiiHabilitationView {
       moduleEnabled: json['moduleEnabled'] == true,
       certificationStatus:
           (json['certificationStatus'] ?? 'NOT_STARTED').toString(),
+      provider: text(json['provider']),
       providerIntegrationConfigured:
           json['providerIntegrationConfigured'] == true,
       progress: progress is Map
