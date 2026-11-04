@@ -49,6 +49,7 @@ class DosaCertificationSessionException implements Exception {
   /// versión del backend): se puede seguir con el asistente actual.
   bool get canFallBackToAssistant =>
       code == 'ECF_DOSA_SESSION_DISABLED' ||
+      code == 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED' ||
       code == 'HTTP_404' ||
       code == 'HTTP_501';
 
@@ -79,6 +80,10 @@ class DosaCertificationSessionException implements Exception {
       case 'ECF_DOSA_SESSION_EXPIRY_UNKNOWN':
         return 'Hay una sesión anterior sin fecha de vencimiento verificable. '
             'Revísala antes de abrir otra.';
+      case 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED':
+        return 'La apertura automática aún no está configurada de forma segura.';
+      case 'ECF_DOSA_SESSION_URL_UNREADABLE':
+        return 'La sesión guardada no se pudo verificar. Revísala con soporte.';
       case 'ECF_DOSA_SESSION_UNAUTHENTICATED':
         return 'La sesión no es válida. Vuelve a iniciar sesión.';
       default:

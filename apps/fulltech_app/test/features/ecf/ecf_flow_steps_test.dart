@@ -6,6 +6,8 @@ import 'package:daleventa_pos/features/ecf/data/ecf_application_repository.dart'
 import 'package:daleventa_pos/features/ecf/data/ecf_certification_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_platform_repository.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
+import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
@@ -31,6 +33,46 @@ class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
     state = fixedState;
   }
+}
+
+class _FakeIntentApi implements DosaCertificationIntentApi {
+  int registerCalls = 0;
+
+  @override
+  Future<DosaCertificationIntent> register({String? rnc}) async {
+    registerCalls += 1;
+    return DosaCertificationIntent.fromJson(const {
+      'companyId': 'company-a',
+      'rnc': '133020232',
+      'sessionId': 'session-1',
+      'attemptNo': 1,
+      'created': true,
+      'status': 'NOT_STARTED',
+      'provider': 'DOSA',
+      'ecfEnabled': false,
+    });
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeSessionApi implements DosaCertificationSessionApi {
+  _FakeSessionApi({this.session, this.error});
+
+  final DosaCertificationSession? session;
+  final DosaCertificationSessionException? error;
+  int openCalls = 0;
+
+  @override
+  Future<DosaCertificationSession> open() async {
+    openCalls += 1;
+    if (error != null) throw error!;
+    return session!;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _ApplicationRepository extends EcfApplicationRepository {
@@ -93,7 +135,8 @@ EcfDgiiHabilitationView _habilitation({
   moduleEnabled: true,
   certificationStatus: 'NOT_STARTED',
   providerIntegrationConfigured: false,
-  certificateValidation: progress?.requirements.any(
+  certificateValidation:
+      progress?.requirements.any(
             (item) => item.key == 'DIGITAL_CERTIFICATE' && item.resolved,
           ) ==
           true
@@ -149,6 +192,9 @@ Widget _harness({
   UserModel? user,
   CompanySettings? settings,
   bool simulationAvailable = false,
+  bool dosaEligible = false,
+  _FakeIntentApi? intentApi,
+  _FakeSessionApi? sessionApi,
 }) {
   return ProviderScope(
     key: UniqueKey(),
@@ -161,7 +207,25 @@ Widget _harness({
         _ApplicationRepository(),
       ),
       ecfPlatformStaffProvider.overrideWith((ref) async => false),
-      dosaPortalEligibilityProvider.overrideWith((ref) async => false),
+      dosaPortalEligibilityProvider.overrideWith((ref) async => dosaEligible),
+      dosaIntentStateProvider.overrideWith(
+        (ref) async => DosaIntentState.fromJson(const {
+          'provider': 'DOSA',
+          'canRegister': true,
+          'blockingReasons': <String>[],
+        }),
+      ),
+      dosaCertificationIntentApiProvider.overrideWithValue(
+        intentApi ?? _FakeIntentApi(),
+      ),
+      dosaCertificationSessionApiProvider.overrideWithValue(
+        sessionApi ??
+            _FakeSessionApi(
+              error: DosaCertificationSessionException(
+                'ECF_DOSA_SESSION_DISABLED',
+              ),
+            ),
+      ),
       ecfSupportGrantsProvider.overrideWith(
         (ref) async => const EcfSupportGrantList(items: []),
       ),
@@ -322,6 +386,44 @@ void main() {
     },
   );
 
+  testWidgets('recorrido UAT: empresa → preparación → un clic → sesión', (
+    tester,
+  ) async {
+    final intentApi = _FakeIntentApi();
+    final sessionApi = _FakeSessionApi(
+      session: const DosaCertificationSession(
+        companyId: 'company-a',
+        sessionUrl: 'mailto:sesion@example.test',
+        expiresAt: '2030-01-01T00:00:00Z',
+        attemptNo: 1,
+        reused: false,
+      ),
+    );
+    await _pump(
+      tester,
+      _harness(
+        dosaEligible: true,
+        intentApi: intentApi,
+        sessionApi: sessionApi,
+      ),
+      size: const Size(1280, 1400),
+    );
+    await _tapText(tester, 'Comenzar');
+    // El recorrido puede pasar primero por el paso de empresa; con DOSA al
+    // mando y los datos completos, «Continuar» lleva a Preparación.
+    if (find.text('Continuar').evaluate().isNotEmpty) {
+      await _tapText(tester, 'Continuar');
+    }
+
+    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
+    await _tapText(tester, 'Iniciar postulación electrónica');
+
+    expect(intentApi.registerCalls, 1);
+    expect(sessionApi.openCalls, 1);
+    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('empresa sin datos completos avisa y no deja continuar', (
     tester,
   ) async {
@@ -398,9 +500,7 @@ void main() {
   ) async {
     await _pump(
       tester,
-      _harness(
-        view: _habilitation(progress: _certificateResolvedProgress()),
-      ),
+      _harness(view: _habilitation(progress: _certificateResolvedProgress())),
     );
 
     expect(find.text('Antes de postular'), findsOneWidget);
