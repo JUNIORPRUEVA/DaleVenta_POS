@@ -583,6 +583,7 @@ class ApiRoutes {
   /// Validación criptográfica LOCAL del certificado PFX/P12 de la empresa.
   /// No envía el certificado al proveedor ni registra aceptación de la DGII.
   static const ecfDgiiCertificateValidate = '/ecf/dgii/certificate/validate';
+  static const ecfDgiiCertificateRestart = '/ecf/dgii/certificate/restart';
 
   /// Metadatos no sensibles: URL del tutorial y disponibilidad del modo de prueba.
   static const ecfDgiiPreparation = '/ecf/dgii/preparation';

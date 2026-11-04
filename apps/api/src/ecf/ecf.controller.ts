@@ -336,8 +336,9 @@ export class EcfController {
     if (!file) throw new BadRequestException("ECF_CERTIFICATE_FILE_REQUIRED");
     // La identidad esperada la pone el BACKEND desde el expediente fiscal.
     // Si la enviara el cliente, la comprobación no valdría nada.
+    const revision = await this.dgii.certificateIdentityRevision(user);
     const identity = await this.canonicalIdentity.resolve(companyId);
-    return this.certificate.validate({
+    const report = this.certificate.validate({
       fileName: file.originalname,
       buffer: file.buffer,
       size: file.size,
@@ -349,6 +350,17 @@ export class EcfController {
       // seguro que ve el administrador, nunca para completar datos.
       missingCanonicalFields: identity.missing,
     });
+    if (report.canProceed) {
+      await this.dgii.rememberCertificateValidation(user, report, revision);
+    }
+    return report;
+  }
+
+  @Post("dgii/certificate/restart")
+  @Permissions("manageEcfOnboarding", "manageEcfDgiiRequirements")
+  async restartCertificate(@Req() req: Request) {
+    await this.dgii.clearCertificateValidation(req.user as TenantUser);
+    return { restarted: true };
   }
 
   /**

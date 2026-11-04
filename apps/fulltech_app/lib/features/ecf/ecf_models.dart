@@ -985,6 +985,7 @@ class EcfDgiiHabilitationView {
     required this.evidence,
     required this.emission,
     required this.blockers,
+    this.certificateValidation,
   });
 
   final String companyId;
@@ -1005,6 +1006,7 @@ class EcfDgiiHabilitationView {
   final List<EcfDgiiEvidenceView> evidence;
   final EcfDgiiEmissionState emission;
   final List<EcfDgiiBlocker> blockers;
+  final EcfPersistedCertificateValidation? certificateValidation;
 
   /// Etiqueta legible del estado de seguimiento interno.
   String get stateLabel {
@@ -1143,8 +1145,34 @@ class EcfDgiiHabilitationView {
               productionEmissionImplemented: false,
             ),
       blockers: blockersOf(json['blockers']),
+      certificateValidation: json['certificateValidation'] is Map
+          ? EcfPersistedCertificateValidation.fromJson(
+              (json['certificateValidation'] as Map).cast<String, dynamic>(),
+            )
+          : null,
     );
   }
+}
+
+/// Resultado seguro de la comprobación del servidor para esta empresa.
+class EcfPersistedCertificateValidation {
+  const EcfPersistedCertificateValidation({
+    required this.ready,
+    required this.notAfter,
+    this.reason,
+  });
+
+  final bool ready;
+  final DateTime? notAfter;
+  final String? reason;
+
+  factory EcfPersistedCertificateValidation.fromJson(
+    Map<String, dynamic> json,
+  ) => EcfPersistedCertificateValidation(
+    ready: json['ready'] == true,
+    notAfter: DateTime.tryParse(json['notAfter']?.toString() ?? ''),
+    reason: json['reason']?.toString(),
+  );
 }
 
 class EcfCounters {

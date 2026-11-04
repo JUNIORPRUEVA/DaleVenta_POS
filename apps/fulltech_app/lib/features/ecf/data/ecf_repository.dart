@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
 import '../ecf_support_grant_models.dart';
 
@@ -53,6 +54,11 @@ final ecfOnboardingProvider = FutureProvider.autoDispose<EcfOnboardingView>((
 /// Habilitación DGII de la empresa: seguimiento interno + autorización oficial.
 final ecfDgiiHabilitationProvider =
     FutureProvider.autoDispose<EcfDgiiHabilitationView>((ref) {
+      ref.watch(authStateProvider.select((state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      )));
       return ref.watch(ecfRepositoryProvider).dgiiHabilitation();
     });
 

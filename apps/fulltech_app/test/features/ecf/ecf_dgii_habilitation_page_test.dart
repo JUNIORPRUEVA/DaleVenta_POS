@@ -32,6 +32,27 @@ class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
     state = fixedState;
   }
+
+  void replaceUser(UserModel? user) {
+    state = AuthState(
+      initialized: true,
+      isAuthenticated: user != null,
+      user: user,
+    );
+  }
+}
+
+class _SessionEcfRepository extends EcfRepository {
+  _SessionEcfRepository(this.companyId) : super(Dio());
+
+  final String Function() companyId;
+  int reads = 0;
+
+  @override
+  Future<EcfDgiiHabilitationView> dgiiHabilitation() async {
+    reads++;
+    return _view(companyId: companyId());
+  }
 }
 
 class _ApplicationRepository extends EcfApplicationRepository {
@@ -125,6 +146,12 @@ EcfDgiiProgress _certificateResolvedProgress() => const EcfDgiiProgress(
   pendingMandatory: <String>[],
 );
 
+EcfPersistedCertificateValidation _validCertificate() =>
+    EcfPersistedCertificateValidation(
+      ready: true,
+      notAfter: DateTime.utc(2027, 4, 16),
+    );
+
 EcfDgiiHabilitationView _view({
   String companyId = 'company-a',
   String state = 'NOT_STARTED',
@@ -134,6 +161,7 @@ EcfDgiiHabilitationView _view({
   String authorizationSource = 'NONE',
   DateTime? authorizedAt,
   EcfDgiiProgress? progress,
+  EcfPersistedCertificateValidation? certificateValidation,
   List<EcfDgiiEvidenceView> evidence = const [],
   EcfDgiiEmissionState emission = _noAuthorization,
   List<EcfDgiiBlocker> blockers = const [],
@@ -149,6 +177,7 @@ EcfDgiiHabilitationView _view({
     moduleEnabled: true,
     certificationStatus: 'NOT_STARTED',
     providerIntegrationConfigured: false,
+    certificateValidation: certificateValidation,
     progress: progress ?? EcfDgiiProgress.empty,
     evidence: evidence,
     emission: emission,
@@ -315,6 +344,55 @@ Future<void> _pumpPage(
 }
 
 void main() {
+  test('recarga el expediente al cambiar de empresa o iniciar otra sesión', () async {
+    late ProviderContainer container;
+    final repository = _SessionEcfRepository(
+      () => container.read(authStateProvider).user?.companyId ?? '',
+    );
+    container = ProviderContainer(overrides: [
+      authStateProvider.overrideWith(
+        (ref) => _FixedAuthController(
+          ref,
+          AuthState(
+            initialized: true,
+            isAuthenticated: true,
+            user: _adminUser(),
+          ),
+        ),
+      ),
+      ecfRepositoryProvider.overrideWithValue(repository),
+    ]);
+    final subscription = container.listen(
+      ecfDgiiHabilitationProvider,
+      (_, __) {},
+    );
+    addTearDown(() {
+      subscription.close();
+      container.dispose();
+    });
+
+    expect(
+      (await container.read(ecfDgiiHabilitationProvider.future)).companyId,
+      'company-a',
+    );
+    (container.read(authStateProvider.notifier) as _FixedAuthController).replaceUser(
+          _adminUser(companyId: 'company-b'),
+        );
+    expect(
+      (await container.read(ecfDgiiHabilitationProvider.future)).companyId,
+      'company-b',
+    );
+    (container.read(authStateProvider.notifier) as _FixedAuthController).replaceUser(null);
+    (container.read(authStateProvider.notifier) as _FixedAuthController).replaceUser(
+          _adminUser(companyId: 'company-b'),
+        );
+    expect(
+      (await container.read(ecfDgiiHabilitationProvider.future)).companyId,
+      'company-b',
+    );
+    expect(repository.reads, greaterThanOrEqualTo(3));
+  });
+
   for (final width in [320.0, 360.0, 768.0, 1024.0, 1366.0]) {
     testWidgets('tres hitos sin desbordes a ${width.toInt()} px', (
       tester,
@@ -608,7 +686,10 @@ void main() {
       tester,
       _harness(
         user: _adminUser(),
-        view: _view(progress: _certificateResolvedProgress()),
+        view: _view(
+          progress: _certificateResolvedProgress(),
+          certificateValidation: _validCertificate(),
+        ),
       ),
       step: null,
       technical: false,
@@ -626,13 +707,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('un requisito resuelto sin vigencia confirmada no salta al certificado', (
+    tester,
+  ) async {
+    await _pumpPage(
+      tester,
+      _harness(view: _view(progress: _certificateResolvedProgress())),
+      step: null,
+      technical: false,
+    );
+    expect(find.text('Tu empresa y el certificado'), findsOneWidget);
+    final button = find.byKey(const ValueKey('ecf_company_step_continue'));
+    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    expect(find.text('Continuar con DOSA'), findsNothing);
+  });
+
   testWidgets('preparación ofrece DOSA al piloto sin activar el motor legado', (
     tester,
   ) async {
     await _pumpPage(
       tester,
       _harness(
-        view: _view(progress: _certificateResolvedProgress()),
+        view: _view(
+          progress: _certificateResolvedProgress(),
+          certificateValidation: _validCertificate(),
+        ),
         dosaEligible: true,
       ),
       step: null,
@@ -654,7 +753,10 @@ void main() {
     await _pumpPage(
       tester,
       _harness(
-        view: _view(progress: _certificateResolvedProgress()),
+        view: _view(
+          progress: _certificateResolvedProgress(),
+          certificateValidation: _validCertificate(),
+        ),
         dosaEligible: true,
       ),
       size: const Size(360, 844),

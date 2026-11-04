@@ -38,7 +38,7 @@ EcfFlowStep initialEcfFlowStep({
   final started =
       state != 'NOT_STARTED' || hasResolvedRequirement || certificateValidated;
   if (!started) return EcfFlowStep.welcome;
-  if (!fiscalReady) return EcfFlowStep.company;
+  if (!fiscalReady || !certificateValidated) return EcfFlowStep.company;
   return EcfFlowStep.preparation;
 }
 

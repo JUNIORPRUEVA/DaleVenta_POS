@@ -92,6 +92,15 @@ EcfDgiiHabilitationView _habilitation({
   moduleEnabled: true,
   certificationStatus: 'NOT_STARTED',
   providerIntegrationConfigured: false,
+  certificateValidation: progress?.requirements.any(
+            (item) => item.key == 'DIGITAL_CERTIFICATE' && item.resolved,
+          ) ==
+          true
+      ? EcfPersistedCertificateValidation(
+          ready: true,
+          notAfter: DateTime.utc(2027, 4, 16),
+        )
+      : null,
   progress: progress ?? EcfDgiiProgress.empty,
   evidence: const [],
   emission: const EcfDgiiEmissionState(
@@ -236,6 +245,17 @@ void main() {
           officialAuthorization: false,
           fiscalReady: true,
           certificateValidated: false,
+          testsOrLater: false,
+        ),
+        EcfFlowStep.company,
+      );
+      expect(
+        initialEcfFlowStep(
+          state: 'IN_PROGRESS',
+          hasResolvedRequirement: true,
+          officialAuthorization: false,
+          fiscalReady: true,
+          certificateValidated: true,
           testsOrLater: false,
         ),
         EcfFlowStep.preparation,

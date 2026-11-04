@@ -57,7 +57,7 @@ class DosaAssistantPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final phase = config.canMount ? session.phase : DosaAssistantPhase.blocked;
     return EcfSection(
-      title: 'Asistente de certificación DOSA',
+      title: 'Asistente de certificación',
       icon: Icons.auto_awesome_outlined,
       subtitle:
           'Proceso oficial del proveedor. Complementa el expediente; no lo '

@@ -1,11 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../data/ecf_certificate_repository.dart';
 import '../ecf_certificate_models.dart';
+import '../ecf_models.dart';
 
 /// Archivo elegido por el usuario (nombre + contenido).
 typedef EcfPickedCertificate = ({String name, List<int> bytes});
@@ -19,8 +21,8 @@ typedef EcfCertificateVerified =
 
 /// Estado del certificado para decidir si se puede continuar.
 ///
-/// `ready` es la única señal que habilita el botón «Continuar» del paso; `reason`
-/// dice exactamente qué falta cuando no lo está.
+/// Informa el resultado local. El paso solo habilita «Continuar» cuando el
+/// expediente devuelve la validación persistida y vigente.
 class EcfCertificateGate {
   const EcfCertificateGate({required this.ready, this.reason});
 
@@ -51,6 +53,8 @@ class EcfCertificateCard extends ConsumerStatefulWidget {
     this.initialReport,
     this.initialFileName,
     this.onVerified,
+    this.persistedValidation,
+    this.onRestart,
   });
 
   /// Se avisa cuando el certificado queda utilizable **y** con titular
@@ -69,6 +73,8 @@ class EcfCertificateCard extends ConsumerStatefulWidget {
   final EcfCertificateReport? initialReport;
   final String? initialFileName;
   final EcfCertificateVerified? onVerified;
+  final EcfPersistedCertificateValidation? persistedValidation;
+  final Future<void> Function()? onRestart;
 
   @override
   ConsumerState<EcfCertificateCard> createState() => _EcfCertificateCardState();
@@ -83,6 +89,10 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   bool _showDetails = false;
   EcfCertificateReport? _report;
   String? _error;
+  bool _restarted = false;
+
+  bool get _persistedReady =>
+      !_restarted && widget.persistedValidation?.ready == true;
 
   @override
   void initState() {
@@ -135,7 +145,42 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
         ? await picker()
         : await _pickWithSystemDialog();
     if (picked == null) return;
+    if (!mounted) return;
+    if (widget.onRestart != null &&
+        (_persistedReady || _report?.canProceed == true)) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cambiar certificado'),
+          content: const Text(
+            'Se retirará la validación actual. Deberás validar el nuevo '
+            'certificado para continuar.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      try {
+        await widget.onRestart?.call();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _error =
+            'No se pudo reiniciar la validación. Inténtalo de nuevo.');
+        return;
+      }
+      if (!mounted) return;
+    }
     setState(() {
+      _restarted = true;
       _fileName = picked.name;
       _bytes = picked.bytes;
       _report = null;
@@ -205,9 +250,14 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final verified = _report?.canProceed == true;
+    final verified = _persistedReady ||
+        (_report?.canProceed == true && widget.persistedValidation == null);
     if (verified) {
-      final expiry = _report?.certificate?.notAfterLabel;
+      final persistedExpiry = widget.persistedValidation?.notAfter;
+      final expiry = _report?.certificate?.notAfterLabel ??
+          (persistedExpiry == null
+              ? null
+              : DateFormat('yyyy-MM-dd').format(persistedExpiry.toLocal()));
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -266,9 +316,16 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
                 ),
               ),
             const SizedBox(height: 8),
-            _ReportView(report: _report!),
-            const SizedBox(height: 10),
-            TextField(
+            if (_report != null) _ReportView(report: _report!),
+            if (_report == null)
+              const Text(
+                'Validación registrada por FullPOS Cloud. La cadena de '
+                'confianza, la revocación y la aceptación de la DGII siguen '
+                'pendientes de comprobación.',
+              ),
+            if (_report != null) ...[
+              const SizedBox(height: 10),
+              TextField(
               key: const ValueKey('ecf_certificate_password'),
               controller: _password,
               obscureText: _obscure,
@@ -277,7 +334,8 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
                 labelText: 'Contraseña del certificado',
                 isDense: true,
               ),
-            ),
+              ),
+            ],
           ],
         ],
       );

@@ -18,7 +18,7 @@ import '../../../core/auth/auth_repository.dart';
 const String defaultDosaPortalBaseUrl = 'https://fullposcloud.fulltechrd.com';
 
 /// Ruta del portal dentro del dominio autorizado.
-const String dosaPortalPath = '/ecf/certificacion';
+const String dosaPortalPath = '/ecf/certificacion/';
 
 /// URL del portal con el ticket. Función pura: se prueba sin red.
 String buildDosaPortalUrl({

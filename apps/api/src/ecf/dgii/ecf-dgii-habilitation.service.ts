@@ -38,6 +38,7 @@ import type {
   UpdateEcfDgiiHabilitationDto,
   UpdateEcfDgiiRequirementDto,
 } from "../dto/ecf-dgii.dto";
+import type { EcfCertificateReport } from "./certificate/ecf-certificate.service";
 
 /**
  * Seguimiento interno de UN requisito del catálogo.
@@ -102,7 +103,140 @@ export class EcfDgiiHabilitationService {
       }),
     ]);
 
-    return this.toView(record, steps, config, company, appConfig, evidence);
+    const certificate = await this.certificateValidation(companyId, record.requirements);
+    return {
+      ...this.toView(record, steps, config, company, appConfig, evidence),
+      certificateValidation: certificate,
+    };
+  }
+
+  /** Solo metadatos de una validación hecha por el servidor; nunca el P12. */
+  async certificateIdentityRevision(user: TenantUser) {
+    const companyId = requireTenant(user);
+    const [config, snapshot] = await Promise.all([
+      this.prisma.appConfig.findFirst({
+        where: { companyId },
+        select: { updatedAt: true },
+      }),
+      this.prisma.ecfDgiiApplicationSnapshot.findFirst({
+        where: { companyId },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      }),
+    ]);
+    return {
+      fiscalUpdatedAt: config?.updatedAt?.toISOString() ?? null,
+      snapshotVersion: snapshot?.version ?? null,
+    };
+  }
+
+  async rememberCertificateValidation(
+    user: TenantUser,
+    report: EcfCertificateReport,
+    expectedRevision: { fiscalUpdatedAt: string | null; snapshotVersion: number | null },
+  ) {
+    if (!report.canProceed) return;
+    if (!report.certificate?.notAfter) {
+      throw new BadRequestException("La validación no incluyó la vigencia del certificado.");
+    }
+    const companyId = requireTenant(user);
+    const revision = await this.certificateIdentityRevision(user);
+    if (revision.fiscalUpdatedAt !== expectedRevision.fiscalUpdatedAt ||
+        revision.snapshotVersion !== expectedRevision.snapshotVersion) {
+      throw new ConflictException(
+        "Los datos fiscales cambiaron durante la validación. Inténtalo de nuevo.",
+      );
+    }
+    const record = await this.ensureRecord(companyId, user.id);
+    const current = this.readRequirementTracking(record.requirements);
+    const validation = {
+      notAfter: report.certificate.notAfter,
+      ...revision,
+      validatedAt: new Date().toISOString(),
+    };
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.ecfDgiiHabilitation.updateMany({
+        where: { id: record.id, companyId, updatedAt: record.updatedAt },
+        data: {
+          requirements: {
+            ...current,
+            __certificateValidation: validation,
+          } as Prisma.InputJsonValue,
+          updatedByUserId: user.id,
+        },
+      });
+      if (changed.count !== 1) {
+        throw new ConflictException(
+          "El expediente cambió durante la validación. Inténtalo de nuevo.",
+        );
+      }
+      await this.writeAudit(
+        tx, companyId, user.id, EcfAuditAction.DGII_HABILITATION_UPDATED,
+        "EcfDgiiHabilitation", record.id,
+        { certificateValidation: current.__certificateValidation ?? null },
+        { certificateValidation: validation },
+      );
+    });
+  }
+
+  /** Reinicio explícito, autorizado y auditado; no altera otros requisitos. */
+  async clearCertificateValidation(user: TenantUser) {
+    const companyId = requireTenant(user);
+    const record = await this.ensureRecord(companyId, user.id);
+    const current = this.readRequirementTracking(record.requirements);
+    if (!current.__certificateValidation) return;
+    const next = { ...current };
+    delete next.__certificateValidation;
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.ecfDgiiHabilitation.updateMany({
+        where: { id: record.id, companyId, updatedAt: record.updatedAt },
+        data: { requirements: next as Prisma.InputJsonValue, updatedByUserId: user.id },
+      });
+      if (changed.count !== 1) {
+        throw new ConflictException("El expediente cambió. Recarga e inténtalo de nuevo.");
+      }
+      await this.writeAudit(
+        tx, companyId, user.id, EcfAuditAction.DGII_HABILITATION_UPDATED,
+        "EcfDgiiHabilitation", record.id,
+        { certificateValidation: current.__certificateValidation as Prisma.InputJsonValue },
+        { certificateValidation: null },
+      );
+    });
+  }
+
+  private async certificateValidation(
+    companyId: string,
+    requirements: Prisma.JsonValue | null,
+  ) {
+    const value = this.readRequirementTracking(requirements).__certificateValidation;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const row = value as Record<string, unknown>;
+    const notAfter = typeof row.notAfter === "string" ? row.notAfter : null;
+    const expiry = Date.parse(notAfter ?? "");
+    if (!notAfter || !Number.isFinite(expiry)) return null;
+    const [config, snapshot] = await Promise.all([
+      this.prisma.appConfig.findFirst({
+        where: { companyId },
+        select: { updatedAt: true },
+      }),
+      this.prisma.ecfDgiiApplicationSnapshot.findFirst({
+        where: { companyId },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      }),
+    ]);
+    const fiscalUnchanged =
+      row.fiscalUpdatedAt === (config?.updatedAt?.toISOString() ?? null) &&
+      row.snapshotVersion === (snapshot?.version ?? null);
+    return {
+      ready: fiscalUnchanged && expiry > Date.now() + 86_400_000,
+      notAfter,
+      reason: !fiscalUnchanged
+        ? "Los datos fiscales cambiaron. Vuelve a validar el certificado."
+        : expiry <= Date.now() + 86_400_000
+          ? "El certificado venció o no tiene vigencia suficiente. Vuelve a validarlo."
+          : null,
+    };
   }
 
   /** Historial de cambios de habilitación (solo de esta empresa). */
