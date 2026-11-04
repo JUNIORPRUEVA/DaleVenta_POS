@@ -543,6 +543,9 @@ class ApiRoutes {
   /// Preasociación empresa↔RNC antes de abrir el asistente DOSA. Registrar la
   /// intención no activa facturación electrónica ni inicia ninguna postulación.
   static const ecfDosaCertificationIntent = '/ecf/dosa/certification-intent';
+  static const ecfDosaCertificationDiagnostic =
+      '/ecf/dosa/certification-diagnostic';
+
   /// Ticket de un solo uso que abre el portal de certificación (DOSA).
   static const ecfCertificationPortalTickets =
       '/ecf/certification-portal/tickets';

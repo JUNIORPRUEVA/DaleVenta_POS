@@ -642,6 +642,8 @@ void main() {
 
     expect(find.text('Estado de certificación'), findsOneWidget);
     expect(find.text('Preparar certificación'), findsOneWidget);
+    expect(find.text('Diagnóstico administrativo'), findsOneWidget);
+    expect(find.text('Ver diagnóstico'), findsOneWidget);
     final legacy = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
