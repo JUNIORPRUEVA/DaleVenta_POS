@@ -231,6 +231,7 @@ export function assessDosaDocumentBarrier(
 
     const indicadorFacturacion = raw["indicadorFacturacion"];
     if (
+      indicadorFacturacion !== 0 &&
       indicadorFacturacion !== 1 &&
       indicadorFacturacion !== 2 &&
       indicadorFacturacion !== 3 &&
@@ -244,17 +245,19 @@ export function assessDosaDocumentBarrier(
       block(`${DOSA_BARRIER_BLOCKED.itemInvalid}:${label}:INDICADOR_BIENO_SERVICIO`);
     }
 
-    // Sin unidad de medida el documento no es transmisible para DOSA, y el
-    // valor debe ser un código del catálogo publicado (Integer 1..20). Es el
-    // dato que el mapeador traduce; la barrera lo vuelve a comprobar aquí porque
-    // un cuerpo puede llegar construido a mano.
+    // La unidad de medida es OPCIONAL en el contrato corregido. Si viene, debe
+    // ser un código entero del catálogo de la DGII (1..57); si no viene, no se
+    // inventa una. La barrera revalida porque un cuerpo puede llegar construido
+    // a mano.
     const unidad = raw["unidadMedida"];
-    if (
-      typeof unidad !== "number" ||
-      !Number.isInteger(unidad) ||
-      !DOSA_UNIDAD_MEDIDA_CODES.includes(unidad)
-    ) {
-      block(`${DOSA_BARRIER_BLOCKED.itemUnitMissing}:${label}`);
+    if (unidad !== undefined) {
+      if (
+        typeof unidad !== "number" ||
+        !Number.isInteger(unidad) ||
+        !DOSA_UNIDAD_MEDIDA_CODES.includes(unidad)
+      ) {
+        block(`${DOSA_BARRIER_BLOCKED.itemUnitMissing}:${label}`);
+      }
     }
 
     if (nonEmpty(raw["nombreItem"]) === null) {
@@ -291,7 +294,9 @@ export function assessDosaDocumentBarrier(
   const montoExento = cents(totales["MontoExento"]);
   const totalItbis = cents(totales["TotalITBIS"]);
   const montoTotal = cents(totales["MontoTotal"]);
-  const itbis1 = cents(totales["ITBIS1"]);
+  // `ITBIS1` es una TASA y la DGII la espera como número, no como importe.
+  const itbis1 =
+    typeof totales["ITBIS1"] === "number" ? totales["ITBIS1"] : null;
 
   if (
     montoGravadoTotal === null ||

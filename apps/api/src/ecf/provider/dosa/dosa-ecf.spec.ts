@@ -26,7 +26,7 @@ const metadata: EcfIssuanceMetadata = {
   incomeType: 1,
 };
 
-function withLine(overrides: Partial<EcfLine>): EcfFiscalDocument {
+function withLine(overrides: Partial<EcfLine> = {}): EcfFiscalDocument {
   const base: EcfLine = {
     lineNumber: 1,
     name: "Articulo de prueba",
@@ -38,7 +38,36 @@ function withLine(overrides: Partial<EcfLine>): EcfFiscalDocument {
     taxRate: "0.18",
     unitOfMeasure: "UNIT",
   };
-  return { ...validE31WithItbis, lines: [{ ...base, ...overrides }] };
+  const line = { ...base, ...overrides };
+  // Los totales se recalculan para que el documento sea coherente: el mapeador
+  // verifica base gravada e ITBIS contra las líneas y bloquea si no cuadran.
+  const amount =
+    Number(line.quantity) * Number(line.unitPrice) -
+    Number(line.discountAmount ?? 0);
+  const rate =
+    line.taxCategory === "ITBIS_18"
+      ? 0.18
+      : line.taxCategory === "ITBIS_16"
+        ? 0.16
+        : 0;
+  const exempt = line.taxCategory === "EXEMPT" ? amount : 0;
+  const taxable =
+    line.taxCategory === "EXEMPT" || line.taxCategory === "NON_BILLABLE"
+      ? 0
+      : amount;
+  const itbis = Math.round(amount * rate * 100) / 100;
+  return {
+    ...validE31WithItbis,
+    lines: [line],
+    totals: {
+      subtotal: amount.toFixed(2),
+      taxableBase: taxable.toFixed(2),
+      exemptAmount: exempt.toFixed(2),
+      discountAmount: "0.00",
+      itbisAmount: itbis.toFixed(2),
+      total: (taxable + exempt + itbis).toFixed(2),
+    },
+  };
 }
 
 describe("contrato DOSA — estructura y brechas declaradas", () => {
@@ -172,67 +201,91 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(item.montoItem).toBe("90.00");
   });
 
-  it("usa la naturaleza del ítem para indicadorFacturacion y no la categoría de impuesto", () => {
-    const productoGravado = mapEcfToDosaDraft(withLine({}), metadata);
-    const productoServicioExento = mapEcfToDosaDraft(
+  it("deriva indicadorFacturacion del tratamiento tributario de la línea", () => {
+    const gravado18 = mapEcfToDosaDraft(withLine({}), metadata);
+    const gravado16 = mapEcfToDosaDraft(
+      withLine({ taxCategory: "ITBIS_16", taxRate: "16" }),
+      metadata,
+    );
+    const tasaCero = mapEcfToDosaDraft(
+      withLine({ taxCategory: "ITBIS_0", taxRate: "0" }),
+      metadata,
+    );
+    const exento = mapEcfToDosaDraft(
       withLine({ taxCategory: "EXEMPT", taxRate: "0" }),
       metadata,
     );
-    const servicioGravado = mapEcfToDosaDraft(
-      withLine({ goodServiceIndicator: "SERVICE" }),
+
+    // Catálogo DGII: 1 = 18 %, 2 = 16 %, 3 = 0 %, 4 = exento.
+    expect(gravado18.ok && gravado18.draft.body.detallesItems[0].indicadorFacturacion).toBe(1);
+    expect(gravado16.ok && gravado16.draft.body.detallesItems[0].indicadorFacturacion).toBe(2);
+    expect(tasaCero.ok && tasaCero.draft.body.detallesItems[0].indicadorFacturacion).toBe(3);
+    expect(exento.ok && exento.draft.body.detallesItems[0].indicadorFacturacion).toBe(4);
+  });
+
+  it("no confunde tasa cero con exención", () => {
+    const tasaCero = mapEcfToDosaDraft(
+      withLine({ taxCategory: "ITBIS_0", taxRate: "0" }),
+      metadata,
+    );
+    const exento = mapEcfToDosaDraft(
+      withLine({ taxCategory: "EXEMPT", taxRate: "0" }),
       metadata,
     );
 
-    // 1 = Producto, 2 = Servicio. La categoría de impuesto NO cambia la naturaleza.
-    expect(productoGravado.ok && productoGravado.draft.body.detallesItems[0].indicadorFacturacion).toBe(1);
-    expect(productoServicioExento.ok && productoServicioExento.draft.body.detallesItems[0].indicadorFacturacion).toBe(1);
-    expect(servicioGravado.ok && servicioGravado.draft.body.detallesItems[0].indicadorFacturacion).toBe(2);
+    expect(tasaCero.ok).toBe(true);
+    expect(exento.ok).toBe(true);
+    if (!tasaCero.ok || !exento.ok) return;
+    // Tasa cero va a MontoGravadoI3; exento va a MontoExento.
+    expect(tasaCero.draft.body.encabezado.totales.MontoGravadoI3).toBe("100.00");
+    expect(tasaCero.draft.body.encabezado.totales.MontoExento).toBe("0.00");
+    expect(exento.draft.body.encabezado.totales.MontoExento).toBe("100.00");
+    expect(exento.draft.body.encabezado.totales.MontoGravadoI3).toBeUndefined();
   });
 
-  it("distingue bien de servicio con los códigos de DOSA (1 = servicio, 2 = bien)", () => {
+  it("distingue bien de servicio con el catálogo de la DGII (1 = bien, 2 = servicio)", () => {
     const bien = mapEcfToDosaDraft(withLine({}), metadata);
     const servicio = mapEcfToDosaDraft(
       withLine({ goodServiceIndicator: "SERVICE" }),
       metadata,
     );
 
-    expect(bien.ok && bien.draft.body.detallesItems[0].indicadorBienoServicio).toBe(2);
-    expect(servicio.ok && servicio.draft.body.detallesItems[0].indicadorBienoServicio).toBe(1);
+    expect(bien.ok && bien.draft.body.detallesItems[0].indicadorBienoServicio).toBe(1);
+    expect(servicio.ok && servicio.draft.body.detallesItems[0].indicadorBienoServicio).toBe(2);
   });
 
-  it("rechaza el documento cuando falta la unidad de medida", () => {
+  it("omite la unidad de medida cuando la línea no la trae (es opcional)", () => {
     const result = mapEcfToDosaDraft(
       withLine({ unitOfMeasure: undefined }),
       metadata,
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.blockedReason).toBe(
-      `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:1`,
-    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.draft.body.detallesItems[0].unidadMedida).toBeUndefined();
+    expect("unidadMedida" in result.draft.body.detallesItems[0]).toBe(false);
   });
 
-  it("rechaza la línea sin unidad aunque el resto del documento sea válido", () => {
+  it("omite la unidad cuando viene en blanco, sin bloquear el documento", () => {
     const result = mapEcfToDosaDraft(
       withLine({ lineNumber: 7, unitOfMeasure: "   " }),
       metadata,
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.blockedReason).toBe(
-      `${DOSA_MAPPER_BLOCKED.unitOfMeasureRequired}:7`,
-    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect("unidadMedida" in result.draft.body.detallesItems[0]).toBe(false);
   });
 
-  it("traduce la unidad de FullPOS al código entero del catálogo de DOSA", () => {
+  it("traduce la unidad de FullPOS al código entero del catálogo de la DGII", () => {
     const unit = mapEcfToDosaDraft(withLine({ unitOfMeasure: " unit " }), metadata);
     const yarda = mapEcfToDosaDraft(withLine({ unitOfMeasure: "YARD" }), metadata);
     const libra = mapEcfToDosaDraft(withLine({ unitOfMeasure: "pound" }), metadata);
 
-    // Catálogo oficial: 1 Unidad · 5 Libra · 11 Yarda.
-    expect(unit.ok && unit.draft.body.detallesItems[0].unidadMedida).toBe(1);
-    expect(yarda.ok && yarda.draft.body.detallesItems[0].unidadMedida).toBe(11);
-    expect(libra.ok && libra.draft.body.detallesItems[0].unidadMedida).toBe(5);
+    // Catálogo DGII: 43 Unidad · 23 Libra · 41 Yarda.
+    expect(unit.ok && unit.draft.body.detallesItems[0].unidadMedida).toBe(43);
+    expect(yarda.ok && yarda.draft.body.detallesItems[0].unidadMedida).toBe(41);
+    expect(libra.ok && libra.draft.body.detallesItems[0].unidadMedida).toBe(23);
   });
 
   it("rechaza un código de unidad que no está en la tabla verificada", () => {
@@ -271,24 +324,33 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
 
   it("traduce todas las unidades globales que FullPOS sí tiene", () => {
     const expected: Array<[string, number]> = [
-      ["UNIT", 1],
-      ["KILOGRAM", 3],
-      ["GRAM", 4],
-      ["POUND", 5],
-      ["OUNCE", 6],
-      ["METER", 7],
-      ["INCH", 9],
-      ["FOOT", 10],
-      ["YARD", 11],
-      ["LITER", 12],
-      ["MILLILITER", 13],
-      ["GALLON", 14],
+      ["UNIT", 43],
+      ["KILOGRAM", 21],
+      ["GRAM", 17],
+      ["POUND", 23],
+      ["METER", 26],
+      ["INCH", 55],
+      ["FOOT", 33],
+      ["YARD", 41],
+      ["LITER", 24],
+      ["GALLON", 15],
     ];
     for (const [code, dosaCode] of expected) {
       const result = mapEcfToDosaDraft(withLine({ unitOfMeasure: code }), metadata);
       expect(result.ok).toBe(true);
       if (!result.ok) continue;
       expect(result.draft.body.detallesItems[0].unidadMedida).toBe(dosaCode);
+    }
+  });
+
+  it("rechaza onza y mililitro: la DGII no tiene esos códigos", () => {
+    for (const code of ["OUNCE", "MILLILITER"]) {
+      const result = mapEcfToDosaDraft(withLine({ unitOfMeasure: code }), metadata);
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.blockedReason).toBe(
+        `${DOSA_MAPPER_BLOCKED.unitOfMeasureUnmapped}:1:${code}`,
+      );
     }
   });
 

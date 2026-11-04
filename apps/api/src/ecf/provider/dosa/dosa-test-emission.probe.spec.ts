@@ -42,8 +42,7 @@ function e31(overrides: Partial<DosaEcfRequestBody["encabezado"]> = {}): DosaEcf
       emisor: { RNCEmisor: RNC, RazonSocialEmisor: "EMPRESA DE PRUEBA" },
       totales: {
         MontoGravadoTotal: "100.00",
-        MontoGravadoI1: "100.00",
-        MontoExento: "0.00",
+        MontoGravadoI1: "100.00",        MontoExento: "0.00",
         ITBIS1: "18",
         TotalITBIS: "18.00",
         MontoTotal: "118.00",
@@ -174,9 +173,10 @@ describe("assessProbeReadiness", () => {
     );
   });
 
-  it("rechaza un código de unidad de medida fuera del catálogo de DOSA", () => {
+  it("rechaza un código de unidad de medida fuera del catálogo de la DGII", () => {
     const fueraDeCatalogo = e31();
-    fueraDeCatalogo.detallesItems[0].unidadMedida = 21;
+    // 999 no existe: el catálogo va de 1 a 57.
+    fueraDeCatalogo.detallesItems[0].unidadMedida = 999;
     expect(
       assessProbeReadiness({
         config: baseConfig(),
@@ -186,7 +186,7 @@ describe("assessProbeReadiness", () => {
     ).toContain(DOSA_PROBE_BLOCKED.unitOfMeasureInvalid);
 
     const comoTexto = e31();
-    comoTexto.detallesItems[0].unidadMedida = "1" as unknown as number;
+    comoTexto.detallesItems[0].unidadMedida = "43" as unknown as number;
     expect(
       assessProbeReadiness({ config: baseConfig(), body: comoTexto, encf: ENCF })
         .blockedReasons,

@@ -107,7 +107,8 @@ export function buildCoherentE31(input: {
         MontoGravadoTotal: money(amountCents),
         MontoGravadoI1: money(amountCents),
         MontoExento: "0.00",
-        ITBIS1: String(input.taxRate),
+        // Catálogo DGII: la tasa va como número, el monto como cadena.
+        ITBIS1: Number(input.taxRate),
         TotalITBIS: money(itbisCents),
         MontoTotal: money(totalCents),
       },
@@ -115,11 +116,11 @@ export function buildCoherentE31(input: {
     detallesItems: [
       {
         numeroLinea: 1,
-        // 1 = Producto (naturaleza del ítem, no el indicador de impuesto).
+        // 1 = ITBIS 18 % (indicador de facturación de la DGII).
         indicadorFacturacion: 1,
         nombreItem: "PRUEBA DE EMISION TEST",
-        // 2 = Bien en DOSA (al revés que el código de la DGII).
-        indicadorBienoServicio: 2,
+        // 1 = bien (catálogo DGII: 1 bien, 2 servicio).
+        indicadorBienoServicio: 1,
         unidadMedida: input.unitOfMeasure,
         cantidadItem: String(input.quantity),
         precioUnitarioItem: money(priceCents),
