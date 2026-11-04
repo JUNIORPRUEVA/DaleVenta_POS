@@ -39,6 +39,10 @@ Ya están confirmados el dominio, la fórmula HMAC, el payload de
 `empresa.conectada`, la API Key TEST de RNC `133306001`, las secuencias
 `113500–115500`, el endpoint de sesiones y el endpoint `EnviarFactura`.
 
+> `133306001` es el RNC de **prueba** entregado por DOSA. FULLTECH SRL usa
+> `133080206` en su configuración fiscal real. No mezclar ambos: la primera UAT
+> usa una empresa sintética con `133306001`; FULLTECH SRL no se toca.
+
 Solo queda por confirmar:
 
 1. Unidad de `t` en `X-Dosa-Signature` (segundos o milisegundos).
