@@ -12,6 +12,7 @@ import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_fiscal_data_page.dart';
+import 'package:daleventa_pos/features/ecf/ui/flow/ecf_company_step.dart';
 import 'package:daleventa_pos/features/ecf/ui/flow/ecf_flow_preview_button.dart';
 import 'package:daleventa_pos/features/ecf/ui/flow/ecf_flow_step.dart';
 import 'package:dio/dio.dart';
@@ -333,25 +334,60 @@ void main() {
     expect(find.text('Continuar'), findsNothing);
   });
 
-  testWidgets('empresa: «Continuar» bloqueado hasta validar el certificado', (
+  testWidgets(
+    'empresa: la vía DOSA no exige validar antes el certificado en FullPOS',
+    (tester) async {
+      await _pump(tester, _harness());
+      await _tapText(tester, 'Comenzar');
+
+      final button = find.byKey(const ValueKey('ecf_company_step_continue'));
+      expect(button, findsOneWidget);
+      // El certificado lo pide el asistente oficial de DOSA: bloquear aquí
+      // sería pedir el mismo dato dos veces.
+      expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
+      expect(
+        find.text(
+          'Puedes continuar: el certificado se pide dentro del asistente de DOSA.',
+        ),
+        findsOneWidget,
+      );
+      // Los datos ya registrados siguen a la vista y no se vuelven a pedir.
+      expect(find.text('133020232'), findsOneWidget);
+      expect(find.text('ECF Visual UAT Demo'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('empresa: sin la vía DOSA el certificado sigue bloqueando', (
     tester,
   ) async {
-    await _pump(tester, _harness());
-    await _tapText(tester, 'Comenzar');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EcfCompanyStep(
+            settings: _settings(),
+            fiscalReady: true,
+            certificate: const SizedBox.shrink(),
+            onEditFiscalData: () {},
+            onContinue: () {},
+            wide: false,
+            dosaOwnsCertificate: false,
+            certificateBlockedReason:
+                'Valida el certificado digital del representante legal para continuar.',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     final button = find.byKey(const ValueKey('ecf_company_step_continue'));
-    expect(button, findsOneWidget);
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    // Se dice exactamente qué falta, sin obligar a avanzar y volver.
     expect(
       find.text(
         'Valida el certificado digital del representante legal para continuar.',
       ),
       findsOneWidget,
     );
-    // Los datos ya registrados siguen a la vista y no se vuelven a pedir.
-    expect(find.text('133020232'), findsOneWidget);
-    expect(find.text('ECF Visual UAT Demo'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -381,9 +417,13 @@ void main() {
   testWidgets('preparación: el modo de prueba se declara cuando existe', (
     tester,
   ) async {
+    // Un usuario sin la vía DOSA: ahí sigue viviendo el motor de prueba legado.
+    // Con el portal oficial presente, ese bloque desaparece por diseño: un solo
+    // proceso y un solo botón principal.
     await _pump(
       tester,
       _harness(
+        user: _viewer(),
         simulationAvailable: true,
         view: _habilitation(progress: _certificateResolvedProgress()),
       ),

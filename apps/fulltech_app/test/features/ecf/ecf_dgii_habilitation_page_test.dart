@@ -660,16 +660,16 @@ void main() {
     expect(find.text('Validar certificado'), findsOneWidget);
     expect(find.text('Ningún archivo seleccionado'), findsOneWidget);
 
-    // Sin certificado validado no se puede avanzar, y se dice qué falta sin
-    // obligar a pasar de pantalla y volver.
+    // El certificado ya no es un requisito previo cuando la postulación se hace
+    // en el asistente oficial de DOSA: se pide una sola vez, allí.
     final continueButton = find.byKey(
       const ValueKey('ecf_company_step_continue'),
     );
     expect(continueButton, findsOneWidget);
-    expect(tester.widget<FilledButton>(continueButton).onPressed, isNull);
+    expect(tester.widget<FilledButton>(continueButton).onPressed, isNotNull);
     expect(
       find.text(
-        'Valida el certificado digital del representante legal para continuar.',
+        'Puedes continuar: el certificado se pide dentro del asistente de DOSA.',
       ),
       findsOneWidget,
     );
@@ -707,7 +707,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('un requisito resuelto sin vigencia confirmada no salta al certificado', (
+  testWidgets('un requisito resuelto sin vigencia confirmada deja el certificado a DOSA', (
     tester,
   ) async {
     await _pumpPage(
@@ -716,9 +716,10 @@ void main() {
       step: null,
       technical: false,
     );
-    expect(find.text('Tu empresa y el certificado'), findsOneWidget);
-    final button = find.byKey(const ValueKey('ecf_company_step_continue'));
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    // Sin vigencia confirmada no se finge que el certificado está validado,
+    // pero tampoco se bloquea el recorrido: el certificado lo pide DOSA.
+    expect(find.text('Antes de postular'), findsOneWidget);
+    expect(find.text('Se pide en el asistente de DOSA'), findsOneWidget);
     expect(find.text('Continuar con DOSA'), findsNothing);
   });
 
@@ -739,7 +740,8 @@ void main() {
     );
 
     expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Preparar certificación'), findsOneWidget);
+    // Un solo botón principal: inicia la postulación oficial de DOSA.
+    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
     expect(find.text('Diagnóstico administrativo'), findsOneWidget);
     expect(find.text('Ver diagnóstico'), findsOneWidget);
     final legacy = find.byKey(

@@ -425,6 +425,13 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.recordEcfDgiiOfficialVerification,
     );
+    // El certificado del onboarding lo pide el asistente oficial de DOSA. Si
+    // este usuario puede abrir ese portal, la validación previa en FullPOS deja
+    // de ser un requisito del recorrido: se pide una sola vez, dentro de DOSA.
+    final dosaOwnsCertificate = hasUserPermission(
+      user,
+      AppPermission.manageEcfOnboarding,
+    );
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
     final settingsState = ref.watch(companySettingsProvider);
     final settings = settingsState.valueOrNull;
@@ -479,6 +486,7 @@ class _EcfDgiiHabilitationPageState
                             officialAuthorization: view.officialAuthorization,
                             fiscalReady: fiscalReady,
                             certificateValidated: _certificateReady(view),
+                            dosaOwnsCertificate: dosaOwnsCertificate,
                             testsOrLater:
                                 stage == _EcfStage.tests ||
                                 stage == _EcfStage.activation,
@@ -555,6 +563,7 @@ class _EcfDgiiHabilitationPageState
                             certificateVerifiedHere:
                                 _verifiedCertificate != null ||
                                 view.certificateValidation?.ready == true,
+                            dosaOwnsCertificate: dosaOwnsCertificate,
                             certificateBlockedReason: _certificateBlockedReason(
                               view,
                             ),
@@ -596,6 +605,7 @@ class _EcfDgiiHabilitationPageState
                           EcfFlowStep.preparation => EcfPreparationStep(
                             companyReady: fiscalReady,
                             certificateReady: _certificateReady(view),
+                            dosaOwnsCertificate: dosaOwnsCertificate,
                             dosaEntry:
                                 hasUserPermission(
                                   user,
@@ -605,8 +615,11 @@ class _EcfDgiiHabilitationPageState
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      if (fiscalReady &&
-                                          _certificateReady(view)) ...[
+                                      // Abrir el portal solo exige los datos de
+                                      // la empresa y el permiso administrativo.
+                                      // El certificado lo pide DOSA dentro de su
+                                      // propio asistente: no se duplica aquí.
+                                      if (fiscalReady) ...[
                                         DosaAssistantSection(
                                           key: ValueKey(
                                             'dosa-preparation-${user?.companyId}',

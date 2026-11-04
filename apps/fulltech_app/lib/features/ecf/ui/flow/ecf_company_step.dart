@@ -20,6 +20,7 @@ class EcfCompanyStep extends StatelessWidget {
     this.certificateReady = false,
     this.certificateVerifiedHere = false,
     this.certificateBlockedReason,
+    this.dosaOwnsCertificate = false,
   });
 
   final CompanySettings? settings;
@@ -37,6 +38,11 @@ class EcfCompanyStep extends StatelessWidget {
 
   /// Qué falta exactamente cuando el certificado bloquea el avance.
   final String? certificateBlockedReason;
+
+  /// El certificado lo pide el asistente oficial de DOSA durante la
+  /// postulación. En ese caso la validación previa en FullPOS deja de ser un
+  /// requisito para avanzar: se conserva como historial, no como duplicado.
+  final bool dosaOwnsCertificate;
 
   final VoidCallback onEditFiscalData;
   final VoidCallback onContinue;
@@ -56,6 +62,10 @@ class EcfCompanyStep extends StatelessWidget {
       // se validan en FullPOS Cloud (cifrados en tránsito) y no se guardan.
       subtitle: certificateVerifiedHere
           ? null
+          : dosaOwnsCertificate
+          ? 'El asistente de DOSA solicita el certificado durante la '
+                'postulación. Aquí solo se conserva el historial de la última '
+                'comprobación: no hay que subirlo dos veces.'
           : 'Se comprueba en FullPOS Cloud y no se guarda. No se envía a la '
                 'la DGII ni al proveedor de certificación.',
       child: certificate,
@@ -67,10 +77,10 @@ class EcfCompanyStep extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const EcfStepTitle(
-            title: 'Tu empresa y el certificado',
+            title: 'Tu empresa',
             subtitle:
-                'Usamos los datos que ya tienes registrados en FullPOS. Solo '
-                'necesitamos comprobar el certificado del representante legal.',
+                'Usamos los datos que ya tienes registrados en FullPOS. No '
+                'tienes que volver a escribirlos.',
           ),
           const SizedBox(height: 14),
           if (wide)
@@ -99,11 +109,17 @@ class EcfCompanyStep extends StatelessWidget {
           else
             EcfPrimaryAction(
               label: 'Continuar',
-              // Bloqueado hasta que el certificado sea utilizable y el titular
-              // esté identificado: así no hay que avanzar y volver.
-              onPressed: certificateReady ? onContinue : null,
+              // Con DOSA al mando del certificado, avanzar solo depende de los
+              // datos de la empresa. Sin esa excepción se pediría el mismo
+              // certificado dos veces.
+              onPressed: (certificateReady || dosaOwnsCertificate)
+                  ? onContinue
+                  : null,
               helper: certificateReady
                   ? 'Certificado comprobado. Puedes continuar.'
+                  : dosaOwnsCertificate
+                  ? 'Puedes continuar: el certificado se pide dentro del '
+                        'asistente de DOSA.'
                   : (certificateBlockedReason ??
                         'Valida el certificado digital para continuar.'),
               buttonKey: const ValueKey('ecf_company_step_continue'),
