@@ -77,6 +77,23 @@ import {
 } from "./provider/dosa/dosa-certification-intent.service";
 import { DosaCertificationIntentController } from "./provider/dosa/dosa-certification-intent.controller";
 import {
+  DosaCertificationSessionService,
+  ECF_DOSA_CONTACT_EMAIL_READER,
+  ECF_DOSA_IDENTITY_READER,
+  ECF_DOSA_SESSION_CLIENT,
+  ECF_DOSA_SESSION_COORDINATOR,
+  type DosaContactEmailReader,
+  type DosaIdentityReader,
+  type DosaSessionClientPort,
+  type DosaSessionCoordinator,
+} from "./provider/dosa/dosa-certification-session.service";
+import { DosaCertificationSessionController } from "./provider/dosa/dosa-certification-session.controller";
+import {
+  CanonicalDosaIdentityReader,
+  PrismaDosaContactEmailReader,
+  createDosaSessionClient,
+} from "./provider/dosa/dosa-certification-session.adapters";
+import {
   DosaEmissionService,
   ECF_DOSA_EMISSION_TRANSPORT,
   ECF_DOSA_FISCAL_CONFIG,
@@ -94,7 +111,7 @@ import { EcfCertificationPortalController } from "./portal/ecf-certification-por
 import { EcfCertificationPortalService } from "./portal/ecf-certification-portal.service";
 
 @Module({
-  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, EcfCertificationPortalController],
+  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController],
   providers: [
     EcfService,
     EcfCertificationPortalService,
@@ -238,6 +255,47 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
         sessions: EcfDosaSessionService,
         rncOwners: DosaRncOwnersReader,
       ) => new DosaCertificationIntentService(identity, sessions, rncOwners),
+    },
+    // Apertura AUTOMATICA de la sesion de certificacion: RNC y correo salen del
+    // backend; candado por empresa; reutilizacion segura; incertidumbre sin
+    // reintento. Fail-closed si la bandera o la clave de servidor faltan.
+    {
+      provide: ECF_DOSA_IDENTITY_READER,
+      inject: [EcfCanonicalIdentityService],
+      useFactory: (identity: EcfCanonicalIdentityService): DosaIdentityReader =>
+        new CanonicalDosaIdentityReader(identity),
+    },
+    {
+      provide: ECF_DOSA_CONTACT_EMAIL_READER,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService): DosaContactEmailReader =>
+        new PrismaDosaContactEmailReader(prisma as never),
+    },
+    {
+      provide: ECF_DOSA_SESSION_COORDINATOR,
+      inject: [EcfDosaSessionService],
+      useFactory: (sessions: EcfDosaSessionService): DosaSessionCoordinator =>
+        sessions,
+    },
+    {
+      provide: ECF_DOSA_SESSION_CLIENT,
+      useFactory: (): DosaSessionClientPort => createDosaSessionClient(process.env),
+    },
+    {
+      provide: DosaCertificationSessionService,
+      inject: [
+        ECF_DOSA_IDENTITY_READER,
+        ECF_DOSA_CONTACT_EMAIL_READER,
+        ECF_DOSA_SESSION_COORDINATOR,
+        ECF_DOSA_SESSION_CLIENT,
+      ],
+      useFactory: (
+        identity: DosaIdentityReader,
+        emails: DosaContactEmailReader,
+        sessions: DosaSessionCoordinator,
+        client: DosaSessionClientPort,
+      ) =>
+        new DosaCertificationSessionService(identity, emails, sessions, client),
     },
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,

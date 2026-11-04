@@ -202,6 +202,14 @@ model EcfDosaCertificationSession {
   lastEventType         String?              @map("last_event_type") @db.VarChar(64)
   lastEventAt           DateTime?            @map("last_event_at")
   providerConfirmedAt   DateTime?            @map("provider_confirmed_at")
+  /// Expiración informada por el proveedor al emitir la sesión. Permite
+  /// reutilizar una sesión vigente y cerrar la caducada sin llamar de nuevo.
+  sessionExpiresAt      DateTime?            @map("session_expires_at")
+  /// Momento en que este backend emitió la sesión con el proveedor.
+  sessionIssuedAt       DateTime?            @map("session_issued_at")
+  /// Reserva temporal de la petición en vuelo: impide que dos clics creen dos
+  /// sesiones. Es una LEASE, no un estado fiscal; vence sola.
+  sessionLeaseUntil     DateTime?            @map("session_lease_until")
   closedAt              DateTime?            @map("closed_at")
   createdByUserId       String?              @map("created_by_user_id") @db.Uuid
   createdAt             DateTime             @default(now()) @map("created_at")
@@ -2591,6 +2599,10 @@ model AppConfig {
   description                      String   @default("")
   instagramUrl                     String   @default("") @map("instagram_url")
   facebookUrl                      String   @default("") @map("facebook_url")
+  /// Correo de facturación electrónica de la empresa. Se captura UNA vez en la
+  /// configuración y se reutiliza al abrir la sesión de certificación DOSA.
+  /// Vacío = no configurado.
+  ecfContactEmail                  String   @default("") @map("ecf_contact_email") @db.VarChar(254)
   websiteUrl                       String   @default("") @map("website_url")
   gpsLocationUrl                   String   @default("") @map("gps_location_url")
   businessHours                    String   @default("") @map("business_hours")

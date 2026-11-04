@@ -2304,6 +2304,7 @@ class _CompanySettingsEditorState
     extends ConsumerState<_CompanySettingsEditor> {
   late final TextEditingController _name;
   late final TextEditingController _rnc;
+  late final TextEditingController _ecfContactEmail;
   late final TextEditingController _phone;
   late final TextEditingController _phonePreferential;
   late final TextEditingController _address;
@@ -2339,6 +2340,7 @@ class _CompanySettingsEditorState
     super.initState();
     _name = TextEditingController();
     _rnc = TextEditingController();
+    _ecfContactEmail = TextEditingController();
     _phone = TextEditingController();
     _phonePreferential = TextEditingController();
     _address = TextEditingController();
@@ -2371,6 +2373,7 @@ class _CompanySettingsEditorState
   void _syncControllers(CompanySettings settings) {
     _name.text = settings.companyName;
     _rnc.text = settings.rnc;
+    _ecfContactEmail.text = settings.ecfContactEmail;
     _phone.text = settings.phone;
     _phonePreferential.text = settings.phonePreferential;
     _address.text = settings.address;
@@ -2580,6 +2583,7 @@ class _CompanySettingsEditorState
     final settingsDraft = widget.settings.copyWith(
       companyName: nameValue,
       rnc: _rnc.text.trim(),
+      ecfContactEmail: _ecfContactEmail.text.trim(),
       phone: _phone.text.trim(),
       phonePreferential: _phonePreferential.text.trim(),
       address: _address.text.trim(),
@@ -2741,6 +2745,12 @@ class _CompanySettingsEditorState
           children: [
             _field(_name, 'Nombre comercial', Icons.storefront_outlined),
             _field(_rnc, 'RNC / identificación fiscal', Icons.badge_outlined),
+            _field(
+              _ecfContactEmail,
+              'Correo de facturación electrónica',
+              Icons.mark_email_read_outlined,
+              keyboardType: TextInputType.emailAddress,
+            ),
             _field(_phone, 'Teléfono principal', Icons.phone_outlined),
             _field(
               _phonePreferential,
@@ -2907,6 +2917,7 @@ class _CompanySettingsEditorState
     String label,
     IconData icon, {
     int maxLines = 1,
+    TextInputType? keyboardType,
   }) {
     // El icono ya no se dibuja: con el rótulo encima el texto queda alineado y
     // el campo se ve limpio. Se conserva el parámetro para no tocar las ~20
@@ -2934,6 +2945,8 @@ class _CompanySettingsEditorState
         TextField(
           controller: controller,
           maxLines: maxLines,
+          keyboardType: keyboardType,
+          autocorrect: keyboardType == TextInputType.emailAddress ? false : true,
           // Key estable para pruebas: el rótulo ya no es descendiente del
           // campo, así que localizarlo por texto dejó de ser fiable.
           key: ValueKey('company_field_$label'),

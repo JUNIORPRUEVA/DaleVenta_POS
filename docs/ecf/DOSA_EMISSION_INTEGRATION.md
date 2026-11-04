@@ -1,0 +1,90 @@
+# Integración de emisión — sesiones de certificación DOSA
+
+Estado: **implementado en rama `agent/ecf-dosa-emission`** (no desplegado, migración no aplicada).
+
+## Qué resuelve
+
+FullPOS envía automáticamente el **RNC** y el **correo de facturación electrónica**
+de la empresa al abrir la sesión de certificación DOSA, sin volver a pedírselos al
+cliente ni pedir certificados o contraseñas en la app.
+
+## Fuentes de datos (una sola captura)
+
+| Dato | Origen | Nunca desde el navegador |
+| --- | --- | --- |
+| RNC | `EcfCanonicalIdentityService.resolve(companyId)` (expediente fiscal / `app_config.rnc`) | sí |
+| Correo | `app_config.ecf_contact_email` (Configuración de empresa) | sí |
+| Empresa | `requireTenant(user)` del JWT | sí |
+
+El correo se captura **una vez** en Configuración de empresa → campo compacto
+«Correo de facturación electrónica». Se valida en el backend (formato y longitud
+≤ 254). Guardar otros campos no lo borra (`undefined` = Prisma no toca la columna).
+
+## Backend
+
+- Cliente reutilizado: `dosa-certification-session.client.ts` (contrato
+  `POST /api/certificacion/sesiones`, cabecera `X-Dosa-Secret-Key`). Falla
+  cerrado sin bandera/clave y valida URL, token, `expires_at` y `postulacion_id`.
+- Lanzador: `dosa-certification-session.service.ts`
+  - reutiliza una sesión **vigente** (sin llamar al proveedor);
+  - cierra la **caducada** (`EXPIRED`) y emite una nueva;
+  - **candado por empresa** con un `UPDATE` condicional (lease) en la base, más
+    `inFlight` en el controlador: doble clic o dos instancias no duplican;
+  - timeout / 5xx / excepción → intento `ATTENTION` y **no se reintenta solo**;
+  - 4xx → error definitivo, se libera el candado para reintento **manual**.
+- Endpoint autenticado y aislado por empresa:
+  `POST /ecf/dosa/certification-session` — permiso `manageEcfOnboarding`.
+  Devuelve `{ companyId, sessionUrl, expiresAt, attemptNo, providerPostulationId, reused }`.
+  `companyId` permite al cliente comprobar que el enlace es de SU empresa.
+- Nunca se registran la clave de servidor, el token ni la URL de sesión.
+
+## Flutter
+
+- Campo «Correo de facturación electrónica» en Configuración de empresa.
+- Botón **«Iniciar postulación electrónica»**: primero abre la URL de sesión
+  devuelta por DOSA. Antes de abrir verifica que `companyId` coincide con el del
+  usuario autenticado y que tiene `manageEcfOnboarding`.
+- **Fallback seguro**: si la API de sesiones no está habilitada
+  (`ECF_DOSA_SESSION_DISABLED`, 404/501), se usa el asistente/portal actual.
+  Un resultado **incierto no cae al fallback** (evita duplicar postulaciones).
+
+## Migración
+
+`apps/api/prisma/migrations/20261104180000_ecf_dosa_session_emission/migration.sql`
+— aditiva y retrocompatible, sin backfill:
+
+- `app_config.ecf_contact_email VARCHAR(254) NOT NULL DEFAULT ''`
+- `ecf_dosa_certification_sessions.session_expires_at TIMESTAMPTZ NULL`
+- `ecf_dosa_certification_sessions.session_issued_at TIMESTAMPTZ NULL`
+- `ecf_dosa_certification_sessions.session_lease_until TIMESTAMPTZ NULL`
+
+## Configuración pendiente (ops)
+
+Definir en el entorno del backend (nunca en el repositorio):
+
+| Variable | Uso |
+| --- | --- |
+| `DOSA_CERTIFICATION_SESSIONS_ENABLED=true` | Habilita la apertura automática |
+| `DOSA_SECRET_KEY=sk_...` | Clave **de servidor** de DOSA (no la real en pruebas) |
+| `DOSA_SESSION_BASE_URL` | Base del API (por defecto `https://dosasystem.com`) |
+| `DOSA_SESSION_TIMEOUT_MS` | Timeout (por defecto 15000) |
+| `DOSA_SESSION_ALLOWED_RETURN_ORIGINS` | Orígenes permitidos para `return_url` |
+
+Sin `DOSA_CERTIFICATION_SESSIONS_ENABLED=true` o sin `DOSA_SECRET_KEY`, el
+endpoint responde `503 ECF_DOSA_SESSION_DISABLED` y la app usa el asistente actual.
+
+## Pruebas
+
+- `dosa-certification-session.client.spec.ts` (contrato del proveedor, 45 casos).
+- `dosa-certification-session.service.spec.ts` (empresa con/sin correo, correo
+  inválido, dos empresas, sesión vigente/caducada, doble clic, 4xx, incierto sin
+  reintento, clave ausente, empresa sin RNC, empresa sin e-CF).
+- `dosa-certification-session.controller.spec.ts` (permiso, empresa del token,
+  doble clic, mapeo de errores).
+- `settings.service.spec.ts` (validación y persistencia del correo).
+- Flutter: `test/features/ecf/dosa_certification_session_api_test.dart`.
+
+## Fuera de alcance respetado
+
+No se toca Intento 1, Guardian, ventas tradicionales, caja, inventario ni emisión
+fiscal. No se crean sesiones reales de DOSA durante las pruebas.

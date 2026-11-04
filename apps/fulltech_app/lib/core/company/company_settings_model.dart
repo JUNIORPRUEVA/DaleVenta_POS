@@ -45,6 +45,10 @@ class BankAccountEntry {
 class CompanySettings {
   final String companyName;
   final String rnc;
+
+  /// Correo de facturación electrónica. Se captura una sola vez y el backend lo
+  /// reutiliza al abrir la sesión de certificación DOSA.
+  final String ecfContactEmail;
   final String phone;
   final String phonePreferential;
   final String address;
@@ -95,6 +99,7 @@ class CompanySettings {
   const CompanySettings({
     required this.companyName,
     required this.rnc,
+    this.ecfContactEmail = '',
     required this.phone,
     this.phonePreferential = '',
     required this.address,
@@ -181,6 +186,7 @@ class CompanySettings {
   CompanySettings copyWith({
     String? companyName,
     String? rnc,
+    String? ecfContactEmail,
     String? phone,
     String? phonePreferential,
     String? address,
@@ -224,6 +230,7 @@ class CompanySettings {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
       rnc: rnc ?? this.rnc,
+      ecfContactEmail: ecfContactEmail ?? this.ecfContactEmail,
       phone: phone ?? this.phone,
       phonePreferential: phonePreferential ?? this.phonePreferential,
       address: address ?? this.address,
@@ -285,6 +292,7 @@ class CompanySettings {
   Map<String, dynamic> toMap() => {
     'companyName': companyName,
     'rnc': rnc,
+    'ecfContactEmail': ecfContactEmail,
     'phone': phone,
     'phonePreferential': phonePreferential,
     'address': address,
@@ -337,6 +345,7 @@ class CompanySettings {
     return CompanySettings(
       companyName: (map['companyName'] ?? '').toString(),
       rnc: (map['rnc'] ?? '').toString(),
+      ecfContactEmail: (map['ecfContactEmail'] ?? '').toString(),
       phone: (map['phone'] ?? '').toString(),
       phonePreferential: (map['phonePreferential'] ?? '').toString(),
       address: (map['address'] ?? '').toString(),
