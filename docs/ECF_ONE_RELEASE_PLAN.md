@@ -10,7 +10,7 @@ Este plan prepara la liberación; no autoriza desplegar, migrar, reconciliar el 
 4. Revisar `RUN_MIGRATIONS`, `PRISMA_SYNC_MODE`, `MIGRATION_STRICT` y `RUN_SEED` antes de iniciar la API: el arranque puede ejecutar migraciones por defecto y `MIGRATION_STRICT` tiene valor predeterminado `false`. Para esta liberación, verificar `RUN_MIGRATIONS=false`, `RUN_SEED=false` y `PRISMA_SYNC_MODE=migrate` antes de publicar la nueva API. Si se aprueba una migración pendiente, ejecutarla como paso separado y comprobar su resultado; nunca dejar que el despliegue la aplique de forma implícita ni continúe tras un fallo.
 5. Confirmar presencia de la configuración del portal, dominio autorizado, clave pública, piloto y validación de webhooks sin imprimir valores. La reconciliación administrativa debe continuar deshabilitada hasta completar la revisión de evidencias.
 
-No hay acceso autorizado de esta tarea a PostgreSQL de producción. El propietario puede ejecutar **una sola consulta de solo lectura** en EasyPanel; las dos migraciones, el enum, el índice y la ausencia de duplicados deben devolver `true`. La versión y el tamaño de la tabla ayudan a planear la ventana:
+La conexión SSH autorizada al VPS permitió consultar en modo de solo lectura `daleventapos_database` / `daleventa` el 2026-11-04. Las dos migraciones de PR #8, el enum y el índice **faltaban**; no había reconciliaciones duplicadas. La consulta siguiente queda disponible para repetir la verificación antes de cualquier migración; las dos migraciones, el enum, el índice y la ausencia de duplicados deben devolver `true` después de aplicarlas con autorización separada:
 
 ```sql
 WITH required(name) AS (
@@ -47,15 +47,15 @@ SELECT 'reconciliation_unique_partial_index', EXISTS (
     AND indexdef LIKE '%DOSA_CERTIFICATION_INTENT%'
 )::text
 UNION ALL
-SELECT 'no_duplicate_reconciliations', NOT EXISTS (
+SELECT 'no_duplicate_reconciliations', (NOT EXISTS (
   SELECT 1 FROM ecf_audit_logs
   WHERE action::text = 'INTENT_PROVIDER_RECONCILED'
     AND target_type = 'DOSA_CERTIFICATION_INTENT'
   GROUP BY company_id, target_id HAVING COUNT(*) > 1
-)::text;
+))::text;
 ```
 
-Las migraciones solo agregan un valor al enum y un índice único parcial sobre la auditoría e-CF; no borran ni actualizan registros, ni cambian tablas del POS tradicional. El índice se crea sin `CONCURRENTLY` y puede bloquear escrituras en `ecf_audit_logs` durante su construcción: medir el tamaño, ejecutar en ventana controlada y no prometer impacto nulo. La secuencia de dos migraciones separadas permite usar el nuevo valor del enum después de que la primera transacción se confirme. La validación local de PR #9 aplicó las 70 migraciones en PostgreSQL 17 desechable; la versión y el estado reales de producción siguen pendientes.
+Las migraciones solo agregan un valor al enum y un índice único parcial sobre la auditoría e-CF; no borran ni actualizan registros, ni cambian tablas del POS tradicional. El índice se crea sin `CONCURRENTLY` y puede bloquear escrituras en `ecf_audit_logs` durante su construcción: medir el tamaño, ejecutar en ventana controlada y no prometer impacto nulo. La secuencia de dos migraciones separadas permite usar el nuevo valor del enum después de que la primera transacción se confirme. La validación local de PR #9 aplicó las 70 migraciones en PostgreSQL 17 desechable; producción usa PostgreSQL 17.11 y aún carece de las dos migraciones de PR #8.
 
 ## Configuración DOSA, sin revelar valores
 
@@ -68,6 +68,62 @@ Las migraciones solo agregan un valor al enum y un índice único parcial sobre 
 | `DOSA_WEBHOOK_ENABLED`, estrategia de firma, secreto y URL `/api/webhook/dosa` | **Confirmado**: ruta y validación HMAC con rechazo por defecto; no concede autorización fiscal | **Pendiente**: presencia de configuración y confirmación con evento auténtico, sin activar un modo de laboratorio |
 | `DOSA_BASE_URL` y banderas de emisión DOSA/e-CF | **Confirmado**: cliente y barreras de emisión separadas del portal | **Bloqueante para emitir**; mantener emisión desactivada hasta aprobación distinta |
 | `DOSA_ASSISTANT_ENABLED` del Flutter embebido | **Confirmado**: apagado por defecto; el portal estático usa su propia clave pública | **Pendiente** solo si se pretende usar el componente embebido, no requisito demostrado del portal actual |
+
+## Respaldo previo y prueba aislada — preparado, NO ejecutado
+
+Preflight de solo lectura del 2026-11-04: `daleventapos_database` / `daleventa` usa PostgreSQL 17.11; `pg_dump` y `pg_restore` 17.11 están disponibles; la base ocupa aproximadamente 74 MB, hay aproximadamente 53,7 GB libres en el sistema de archivos de `/root` y `/var/lib/docker`, y `/root` pertenece a root con permisos `0700`. La ruta propuesta `/root/daleventa-pr9-pre-migration-20261104.dump` y su variante `.partial` no existían. Repetir estos controles al ejecutar. El respaldo incluye todos los esquemas, datos y objetos de **esa base**, pero no roles ni otras bases del clúster.
+
+**Requiere aprobación específica para escribir el archivo.** Ejecutar en la sesión SSH autorizada del VPS, en una ventana de baja carga, sin detener la API ni ejecutar migraciones:
+
+```sh
+set -eu
+umask 077
+db=$(docker ps --filter name=daleventapos_database --format '{{.ID}}' | head -n 1)
+test -n "$db"
+test "$(docker inspect -f '{{index .Config.Labels "com.docker.swarm.service.name"}}' "$db")" = daleventapos_database
+archive=/root/daleventa-pr9-pre-migration-20261104.dump
+partial="$archive.partial"
+test ! -e "$archive" && test ! -e "$partial"
+docker exec "$db" sh -c 'nice -n 10 ionice -c2 -n7 pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --compress=6' > "$partial"
+test -s "$partial"
+docker exec -i "$db" pg_restore --list < "$partial" > /dev/null
+mv -n -- "$partial" "$archive"
+test -s "$archive" && test ! -e "$partial"
+stat -c '%a %s %n' "$archive"
+sha256sum "$archive"
+```
+
+Registrar el tamaño y la suma de comprobación en el acta privada, sin divulgar el archivo. Un `pg_dump -Fc` usa una instantánea consistente de PostgreSQL y no escribe en tablas; puede consumir E/S y CPU. El proceso tiene prioridad reducida, pero **no puede prometerse latencia cero** para clientes: observar salud y carga, y detener el procedimiento ante degradación. Si falla, el archivo `.partial` no es respaldo válido; limpiar solo esa ruta exacta con autorización.
+
+**Requiere una segunda aprobación específica para levantar el contenedor y restaurar datos en él.** Usar la misma imagen PostgreSQL 17.11 que corre en producción, sin red, sin puertos, sin volúmenes de la aplicación y con recursos limitados. El archivo se monta en solo lectura; el volumen anónimo de datos del contenedor se elimina con `--rm` al detenerlo:
+
+```sh
+set -eu
+archive=/root/daleventa-pr9-pre-migration-20261104.dump
+test -r "$archive"
+db=$(docker ps --filter name=daleventapos_database --format '{{.ID}}' | head -n 1)
+image=$(docker inspect -f '{{.Image}}' "$db")
+probe=$(docker run --rm -d --name daleventa-pr9-restore-check --network none \
+  --cpus=0.5 --memory=768m --memory-swap=768m --pids-limit=128 \
+  --mount "type=bind,src=$archive,dst=/backup/production.dump,readonly" \
+  -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=restore_check "$image")
+trap 'docker stop "$probe" > /dev/null 2>&1 || true' EXIT
+test "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$probe")" = none
+ready=false
+for n in 1 2 3 4 5 6 7 8 9 10; do
+  if docker exec "$probe" pg_isready -U postgres -d restore_check > /dev/null 2>&1; then ready=true; break; fi
+  sleep 2
+done
+test "$ready" = true
+docker exec "$probe" pg_restore --exit-on-error --single-transaction \
+  --no-owner --no-acl -U postgres -d restore_check /backup/production.dump > /dev/null
+source_count=$(docker exec "$db" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT COUNT(*) FROM _prisma_migrations"')
+restored_count=$(docker exec "$probe" psql -U postgres -d restore_check -Atqc 'SELECT COUNT(*) FROM _prisma_migrations')
+test "$source_count" = "$restored_count"
+echo 'Restauración aislada completa; historial migratorio coincidente.'
+```
+
+No publicar puertos, unir el contenedor a redes de la aplicación ni dejar copias permanentes de la base de prueba. Una prueba exitosa valida el archivo en ese entorno; una futura restauración de **producción** sería una operación distinta, con autorización y plan para preservar las ventas posteriores al respaldo.
 
 ## Orden propuesto, sujeto a autorización separada
 
