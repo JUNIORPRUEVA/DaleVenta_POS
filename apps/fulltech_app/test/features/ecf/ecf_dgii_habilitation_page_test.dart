@@ -623,7 +623,7 @@ void main() {
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
     // Sin modo de prueba disponible no se muestra el distintivo de pruebas.
     expect(find.byKey(const ValueKey('ecf_test_mode_badge')), findsNothing);
-    expect(find.text('Continuar con DOSA'), findsNothing);
+    expect(find.text('Estado de certificación'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -640,8 +640,8 @@ void main() {
       technical: false,
     );
 
-    expect(find.text('Continuar con DOSA'), findsOneWidget);
-    expect(find.text('Preparar certificación con DOSA'), findsOneWidget);
+    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Preparar certificación'), findsOneWidget);
     final legacy = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
@@ -661,7 +661,7 @@ void main() {
       technical: false,
     );
 
-    expect(find.text('Continuar con DOSA'), findsOneWidget);
+    expect(find.text('Estado de certificación'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
