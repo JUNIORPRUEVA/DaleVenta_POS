@@ -23,22 +23,25 @@ del partner con `POST /api/certificacion/sesiones` y su secret key». DOSA entre
 el contrato el 2026-11-04 y está implementado en
 `dosa-certification-session.client.ts` y `dosa-certification-session.service.ts`.
 
-Puntos aún pendientes de confirmación operativa:
+Confirmado en la implementación:
 
-1. **URL base** exacta por entorno (pruebas y producción) y si el prefijo `/api`
-   forma parte de la ruta.
-2. **Cabecera de autenticación**: nombre exacto (¿`Authorization: Bearer`?,
-   ¿`X-Api-Key`?, ¿`X-Secret-Key`?) y esquema.
-3. **Cuerpo de la petición**: lista de campos con nombre, tipo y obligatoriedad.
-   Como mínimo esperamos poder enviar el RNC y la razón social del cliente, pero
-   **no damos por hecho ningún nombre de campo**.
-4. **Respuesta**: estructura completa. En particular, ¿incluye el `session-url`
-   listo para el componente, o un identificador con el que componerlo?
-5. **Códigos de error**: lista completa con su significado y si son reintentables.
-6. **Idempotencia**: ¿qué ocurre si enviamos dos veces la misma petición
-   (mismo RNC) con la misma clave de idempotencia? ¿Y sin ella?
-7. **Vigencia** del enlace de sesión: duración y comportamiento al expirar.
-8. **Límite de sesiones activas** por empresa/RNC.
+- URL base de pruebas/producción, ruta `/api/certificacion/sesiones`.
+- Cabecera `X-Dosa-Secret-Key` con clave `sk_...`.
+- Cuerpo `{ rnc_emisor, correo, return_url? }`.
+- Respuesta `201` con `url`, `path`, `token`, `expires_at`, `postulacion_id` y
+  `prueba`.
+- Validación de HTTPS, host de la URL de sesión y caducidad.
+
+Pendiente de confirmación operativa con DOSA:
+
+1. **Idempotencia**: qué ocurre al repetir la petición para el mismo RNC, con y
+   sin clave de idempotencia.
+2. **Límite de sesiones activas** por empresa/RNC.
+3. **Vigencia exacta** y si la URL es de un solo uso.
+4. **Alcance de `postulacion_id`**: único por empresa o global.
+5. **Códigos de error** completos y cuáles son reintentables.
+6. **Allowlist de IPs de origen** y rotación de la secret key.
+7. **Fórmula de `X-Dosa-Signature`** para webhooks.
 
 La implementación falla cerrado sin `DOSA_CERTIFICATION_SESSIONS_ENABLED=true`
 o sin `DOSA_SECRET_KEY`; en ese caso el cliente usa el portal existente como
