@@ -1,5 +1,7 @@
 # DOSA — pendientes externos para iniciar la UAT oficial
 
+Checklist ejecutable y ordenado: `docs/ecf/DOSA_UAT_OFFICIAL_CHECKLIST.md`.
+
 Este documento separa lo que depende de DOSA o de operaciones de lo que ya está
 implementado y probado localmente. No contiene credenciales ni valores reales.
 
