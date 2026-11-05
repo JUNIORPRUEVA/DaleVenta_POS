@@ -187,6 +187,32 @@ export class DosaCertificationSessionService {
     userId?: string | null;
   }): Promise<DosaSessionOpenResult> {
     const companyId = `${input.companyId ?? ""}`.trim();
+
+    // Configuración PRIMERO, datos de la empresa después.
+    //
+    // Con la apertura automática apagada o sin cifrado, la respuesta es
+    // DISABLED / ENCRYPTION_NOT_CONFIGURED aunque además falten el RNC o el
+    // correo. Si se validara el correo antes, una empresa sin correo recibiría
+    // EMAIL_REQUIRED y el cliente no podría caer al asistente embebido de DOSA
+    // (clave publicable), que no necesita ni correo ni clave secreta.
+    const readiness = this.client.describeReadiness();
+    if (!readiness.ready) {
+      // Fail-closed: sin bandera o sin clave, no se llama al proveedor. El
+      // cliente puede seguir usando el asistente oficial embebido.
+      return failure(
+        "ECF_DOSA_SESSION_DISABLED",
+        "La apertura automática de sesiones DOSA no está habilitada.",
+        { providerCode: readiness.blockingReasons.join(",") },
+      );
+    }
+    if (!this.urlCipher.ready) {
+      // Sin clave de cifrado no se persiste una URL en claro.
+      return failure(
+        "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
+        "El cifrado de sesiones DOSA no está configurado. La apertura automática está deshabilitada.",
+      );
+    }
+
     const canonical = await this.identity.resolve(companyId);
     const rnc = normalizeRnc(canonical.taxId ?? "");
     if (!rnc) {
@@ -207,24 +233,6 @@ export class DosaCertificationSessionService {
       return failure(
         "ECF_DOSA_SESSION_EMAIL_INVALID",
         "El correo de facturación electrónica no es válido.",
-      );
-    }
-
-    const readiness = this.client.describeReadiness();
-    if (!readiness.ready) {
-      // Fail-closed: sin bandera o sin clave, no se llama al proveedor. El
-      // cliente puede seguir usando el asistente manual.
-      return failure(
-        "ECF_DOSA_SESSION_DISABLED",
-        "La apertura automática de sesiones DOSA no está habilitada.",
-        { providerCode: readiness.blockingReasons.join(",") },
-      );
-    }
-    if (!this.urlCipher.ready) {
-      // Sin clave de cifrado no se persiste una URL en claro.
-      return failure(
-        "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
-        "El cifrado de sesiones DOSA no está configurado. La apertura automática está deshabilitada.",
       );
     }
 

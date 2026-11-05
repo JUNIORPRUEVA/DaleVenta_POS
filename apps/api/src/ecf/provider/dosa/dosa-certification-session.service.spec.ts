@@ -510,6 +510,48 @@ describe("DosaCertificationSessionService — apertura automática", () => {
     expect(client.calls).toBe(0);
   });
 
+  it("apertura deshabilitada y empresa sin correo: responde DISABLED, no EMAIL_REQUIRED", async () => {
+    // Caso real de producción: la empresa aún no tiene correo fiscal y la
+    // apertura automática está apagada. El cliente solo cae al asistente
+    // embebido (clave publicable) con el código DISABLED; si recibiera
+    // EMAIL_REQUIRED se quedaría bloqueado sin poder abrir el asistente.
+    const { service, client, sessions } = build({
+      client: new FakeClient(undefined, false),
+      emails: { "company-a": "" },
+    });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({ ok: false, code: "ECF_DOSA_SESSION_DISABLED" });
+    expect(client.calls).toBe(0);
+    expect(sessions.claimed).toHaveLength(0);
+  });
+
+  it("apertura deshabilitada y empresa sin RNC verificado: responde DISABLED", async () => {
+    const { service } = build({
+      client: new FakeClient(undefined, false),
+      rncs: { "company-a": null },
+    });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({ ok: false, code: "ECF_DOSA_SESSION_DISABLED" });
+  });
+
+  it("sin cifrado y empresa sin correo: responde ENCRYPTION_NOT_CONFIGURED", async () => {
+    const { service } = build({
+      cipher: new DosaSessionUrlCipher(new Map(), 1),
+      emails: { "company-a": "" },
+    });
+
+    const result = await service.open({ companyId: "company-a" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
+    });
+  });
+
   it("empresa sin RNC verificado: no crea nada", async () => {
     const { service, sessions, client } = build({
       rncs: { "company-a": null },

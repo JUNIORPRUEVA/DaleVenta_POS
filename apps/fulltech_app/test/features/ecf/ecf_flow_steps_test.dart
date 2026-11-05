@@ -419,21 +419,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('preparación incompleta pide completar sin duplicar el formulario', (
-    tester,
-  ) async {
-    await _pump(tester, _harness(settings: _settings(complete: false)));
-    await _tapText(tester, 'Comenzar');
-    await tester.pumpAndSettle();
+  testWidgets(
+    'preparación incompleta pide completar sin duplicar el formulario',
+    (tester) async {
+      await _pump(tester, _harness(settings: _settings(complete: false)));
+      await _tapText(tester, 'Comenzar');
+      await tester.pumpAndSettle();
 
-    expect(find.text('Completar datos'), findsOneWidget);
-    expect(find.text('Iniciar postulación'), findsNothing);
-    expect(find.byType(EcfFiscalDataContent), findsNothing);
+      expect(find.text('Completar datos'), findsOneWidget);
+      expect(find.text('Iniciar postulación'), findsNothing);
+      expect(find.byType(EcfFiscalDataContent), findsNothing);
 
-    await _tapText(tester, 'Completar datos');
-    expect(find.byType(EcfFiscalDataContent), findsOneWidget);
-    expect(find.text('Correo fiscal'), findsOneWidget);
-  });
+      await _tapText(tester, 'Completar datos');
+      expect(find.byType(EcfFiscalDataContent), findsOneWidget);
+      expect(find.text('Correo fiscal'), findsOneWidget);
+    },
+  );
 
   testWidgets('preparación DOSA: una sola acción y sin pedir certificado', (
     tester,
@@ -449,15 +450,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'preparación DOSA: RNC y correo se pueden copiar sin duplicarlos',
+    (tester) async {
+      await _pump(tester, _harness(dosaEligible: true));
+      await _tapText(tester, 'Comenzar');
+
+      // El asistente oficial los vuelve a pedir; se copian desde la ficha.
+      expect(find.byTooltip('Copiar RNC'), findsOneWidget);
+      expect(find.byTooltip('Copiar correo fiscal'), findsOneWidget);
+      // Sin duplicar el dato en pantalla.
+      expect(find.text('133020232'), findsOneWidget);
+      expect(find.text('facturacion@example.test'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('preparación sin correo: no ofrece copiar un dato que falta', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _harness(dosaEligible: true, settings: _settings(complete: false)),
+    );
+    await _tapText(tester, 'Comenzar');
+
+    expect(find.byTooltip('Copiar correo fiscal'), findsNothing);
+    expect(find.text('Falta el correo de facturación'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('preparación: sin datos no ofrece la postulación', (
     tester,
   ) async {
     await _pump(
       tester,
-      _harness(
-        dosaEligible: true,
-        settings: _settings(complete: false),
-      ),
+      _harness(dosaEligible: true, settings: _settings(complete: false)),
     );
     await _tapText(tester, 'Comenzar');
 
@@ -544,5 +572,4 @@ void main() {
     expect(find.text('Empresa'), findsNothing);
     expect(tester.takeException(), isNull);
   });
-
 }
