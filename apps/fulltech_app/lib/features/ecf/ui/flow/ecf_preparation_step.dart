@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/company/company_settings_model.dart';
 import 'ecf_flow_kit.dart';
@@ -64,8 +65,20 @@ class EcfPreparationStep extends StatelessWidget {
 
   bool get _dataReady => companyReady && contactEmailReady;
 
-  bool get _certificateReadyForDosa =>
-      certificateReady || dosaOwnsCertificate;
+  bool get _certificateReadyForDosa => certificateReady || dosaOwnsCertificate;
+
+  /// Copia un dato al portapapeles.
+  ///
+  /// El asistente oficial de DOSA vuelve a pedir el RNC y el correo y no
+  /// admite prellenado por clave publicable, así que se copian desde aquí en
+  /// lugar de reescribirlos.
+  Future<void> _copy(BuildContext context, String text, String message) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +116,14 @@ class EcfPreparationStep extends StatelessWidget {
                   label: 'Razón social',
                   value: companyName.isEmpty ? null : companyName,
                 ),
-                EcfField(label: 'RNC', value: rnc.isEmpty ? null : rnc),
+                EcfField(
+                  label: 'RNC',
+                  value: rnc.isEmpty ? null : rnc,
+                  onCopy: rnc.isEmpty
+                      ? null
+                      : () => _copy(context, rnc, 'RNC copiado'),
+                  copyTooltip: 'Copiar RNC',
+                ),
                 EcfSummaryRow(
                   label: 'Datos fiscales',
                   value: companyReady ? 'Completos' : 'Faltan datos',
@@ -117,6 +137,10 @@ class EcfPreparationStep extends StatelessWidget {
                       : 'Falta el correo de facturación',
                   tone: contactEmailReady ? EcfTone.done : EcfTone.warning,
                   onTap: contactEmailReady ? null : onEditFiscalData,
+                  onCopy: contactEmailReady
+                      ? () => _copy(context, email, 'Correo copiado')
+                      : null,
+                  copyTooltip: 'Copiar correo fiscal',
                 ),
                 // Con DOSA el certificado se carga dentro de su asistente.
                 // No se muestra aquí para no dar a entender que ya está
@@ -186,10 +210,7 @@ class EcfPreparationStep extends StatelessWidget {
               text:
                   'Un administrador con permiso de facturación electrónica debe iniciar la postulación.',
             ),
-          if (advanced != null) ...[
-            const SizedBox(height: 12),
-            advanced!,
-          ],
+          if (advanced != null) ...[const SizedBox(height: 12), advanced!],
         ],
       ),
     );
