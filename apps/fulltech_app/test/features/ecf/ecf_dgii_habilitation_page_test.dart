@@ -215,6 +215,7 @@ Widget _harness({
   void Function()? onRead,
   CompanySettings? settings,
   bool dosaEligible = false,
+  bool intentHasSession = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -242,10 +243,16 @@ Widget _harness({
       ecfPlatformStaffProvider.overrideWith((ref) async => false),
       dosaPortalEligibilityProvider.overrideWith((ref) async => dosaEligible),
       dosaIntentStateProvider.overrideWith(
-        (ref) async => DosaIntentState.fromJson(const {
+        (ref) async => DosaIntentState.fromJson(<String, dynamic>{
           'provider': 'DOSA',
           'canRegister': true,
-          'blockingReasons': <String>[],
+          'blockingReasons': const <String>[],
+          if (intentHasSession)
+            'session': const <String, dynamic>{
+              'id': 'intent-1',
+              'status': 'NOT_STARTED',
+              'attemptNo': 1,
+            },
         }),
       ),
       // El panel de «Ayuda y soporte» muestra el estado de la asistencia
@@ -692,6 +699,38 @@ void main() {
     expect(find.textContaining('No hay que subirlos aquí'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'empresa reconciliada a DOSA no exige validar el certificado en FullPOS',
+    (tester) async {
+      // Caso real de FULLTECH SRL: la configuración e-CF conserva el valor
+      // legado ALANUBE, pero su intento de certificación está atribuido a DOSA
+      // tras la reconciliación auditada. El certificado se gestiona dentro del
+      // asistente oficial, así que no se pide validarlo aquí y la acción
+      // ofrecida abre el asistente.
+      await _pumpPage(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(provider: 'ALANUBE', state: 'NOT_STARTED'),
+          dosaEligible: true,
+          intentHasSession: true,
+        ),
+        step: null,
+        technical: false,
+      );
+      await tester.tap(find.text('Comenzar').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Validar certificado'), findsNothing);
+      expect(find.text('Certificado digital'), findsNothing);
+      // El expediente ya existe: la acción abre el asistente oficial, no crea
+      // otro intento.
+      expect(find.text('Asistente de DOSA'), findsOneWidget);
+      expect(find.text('Continuar en DOSA'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('preparación: el botón de postulación espera al modo de prueba', (
     tester,

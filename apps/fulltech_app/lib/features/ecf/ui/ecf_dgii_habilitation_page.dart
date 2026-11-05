@@ -17,6 +17,7 @@ import '../data/ecf_platform_repository.dart';
 import '../data/ecf_repository.dart';
 import '../dosa/dosa_assistant_section.dart';
 import '../dosa/dosa_certification_diagnostic_section.dart';
+import '../dosa/dosa_certification_intent_api.dart';
 import '../domain/ecf_fiscal_readiness.dart';
 import '../ecf_certificate_models.dart';
 import '../ecf_certification_models.dart';
@@ -525,11 +526,26 @@ class _EcfDgiiHabilitationPageState
       AppPermission.manageEcfOnboarding,
     );
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
-    // El certificado solo lo gestiona DOSA cuando DOSA es el proveedor efectivo
-    // de la empresa. El permiso habilita la acción, pero no cambia el proveedor:
-    // una empresa con Alanube debe seguir viendo su carga local del certificado.
+    // El certificado lo gestiona DOSA cuando DOSA gobierna la certificación de
+    // la empresa. Dos fuentes, ambas del backend, y basta con una:
+    //
+    //  * La configuración e-CF ya declara DOSA.
+    //  * Existe un intento de certificación atribuido a DOSA (tras la
+    //    reconciliación auditada), aunque la configuración conserve el valor
+    //    anterior. Sin esto, una empresa reconciliada seguía viendo «Validar
+    //    certificado» y nunca llegaba al asistente oficial.
+    //
+    // Sin intento NO se asume nada: el backend informa `DOSA` por defecto
+    // cuando no hay expediente, y eso ocultaría la carga local del certificado
+    // a una empresa que todavía no ha decidido su proveedor.
+    final intentState = ref.watch(dosaIntentStateProvider).valueOrNull;
+    final intentIsDosa =
+        intentState != null &&
+        intentState.sessionId != null &&
+        intentState.provider == 'DOSA';
     final dosaOwnsCertificate =
-        canOnboard && habilitation.valueOrNull?.provider == 'DOSA';
+        canOnboard &&
+        (habilitation.valueOrNull?.provider == 'DOSA' || intentIsDosa);
     final settingsState = ref.watch(companySettingsProvider);
     final settings = settingsState.valueOrNull;
 
