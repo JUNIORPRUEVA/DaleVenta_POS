@@ -49,6 +49,38 @@ void main() {
       );
     });
 
+    test('un 503 sin código legible sigue cayendo al asistente', () {
+      // Caso real de producción: la apertura automática está apagada y el
+      // cliente solo vio el estado HTTP. No debe quedarse sin asistente.
+      for (final code in <String>['HTTP_503', 'HTTP_null', 'HTTP_500']) {
+        expect(
+          DosaCertificationSessionException(code).canFallBackToAssistant,
+          isTrue,
+          reason: code,
+        );
+      }
+    });
+
+    test('los estados que prohíben reintentar no caen al asistente', () {
+      for (final code in <String>[
+        'ECF_DOSA_SESSION_UNCERTAIN',
+        'ECF_DOSA_SESSION_NOT_PERSISTED',
+        'ECF_DOSA_SESSION_PROVIDER_ERROR',
+        'ECF_DOSA_SESSION_IN_PROGRESS',
+        'ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED',
+        'ECF_DOSA_SESSION_EMAIL_REQUIRED',
+        'ECF_DOSA_SESSION_EMAIL_INVALID',
+        'ECF_DOSA_SESSION_RNC_REQUIRED',
+        'ECF_DOSA_SESSION_UNAUTHENTICATED',
+      ]) {
+        expect(
+          DosaCertificationSessionException(code).canFallBackToAssistant,
+          isFalse,
+          reason: code,
+        );
+      }
+    });
+
     test('explica correo faltante con un texto de usuario', () {
       final error =
           DosaCertificationSessionException('ECF_DOSA_SESSION_EMAIL_REQUIRED');

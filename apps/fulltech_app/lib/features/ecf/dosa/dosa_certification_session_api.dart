@@ -49,11 +49,36 @@ class DosaCertificationSessionException implements Exception {
 
   /// La API de sesiones todavía no está habilitada (o no existe en esta
   /// versión del backend): se puede seguir con el asistente actual.
-  bool get canFallBackToAssistant =>
-      code == 'ECF_DOSA_SESSION_DISABLED' ||
-      code == 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED' ||
-      code == 'HTTP_404' ||
-      code == 'HTTP_501';
+  ///
+  /// Se expresa como **lista de exclusión** y no como lista de códigos
+  /// permitidos. La apertura automática es opcional: si falla por cualquier
+  /// motivo que no sea un estado que prohíbe reintentar, el administrador debe
+  /// poder seguir por la ruta oficial (el portal con boleto de un solo uso), que
+  /// es la que ya funciona. Con una lista de permitidos, un 503 real del
+  /// backend (`ECF_DOSA_SESSION_DISABLED` detrás de la bandera) se convertía en
+  /// `HTTP_503` si el cuerpo no llegaba como objeto y el administrador quedaba
+  /// bloqueado sin poder abrir nada.
+  bool get canFallBackToAssistant => !_mustNotFallBack.contains(code);
+
+  /// Estados en los que reintentar por otra vía sería incorrecto o peligroso.
+  static const Set<String> _mustNotFallBack = {
+    // El proveedor pudo haber creado la sesión: reintentar duplicaría.
+    'ECF_DOSA_SESSION_UNCERTAIN',
+    'ECF_DOSA_SESSION_NOT_PERSISTED',
+    'ECF_DOSA_SESSION_PROVIDER_ERROR',
+    // Ya hay una operación en curso para la empresa.
+    'ECF_DOSA_SESSION_IN_PROGRESS',
+    // El expediente exige una acción administrativa explícita.
+    'ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED',
+    'ECF_DOSA_SESSION_URL_UNREADABLE',
+    'ECF_DOSA_SESSION_EXPIRY_UNKNOWN',
+    // Datos de configuración que el administrador debe corregir y leer.
+    'ECF_DOSA_SESSION_EMAIL_REQUIRED',
+    'ECF_DOSA_SESSION_EMAIL_INVALID',
+    'ECF_DOSA_SESSION_RNC_REQUIRED',
+    // La sesión no es válida: hay que volver a iniciar sesión.
+    'ECF_DOSA_SESSION_UNAUTHENTICATED',
+  };
 
   String get message {
     switch (code) {
