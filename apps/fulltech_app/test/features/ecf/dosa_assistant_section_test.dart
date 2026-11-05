@@ -164,9 +164,12 @@ void main() {
     // Un toque: registra la intención (una vez) y pide el ticket del portal.
     expect(api.registerCalls, hasLength(1));
     expect(portal.ticketCalls, 1);
-    expect(find.text('Asistente de DOSA'), findsOneWidget);
+    expect(
+      find.text('Asistente de certificación electrónica'),
+      findsOneWidget,
+    );
     // La reapertura queda como acción secundaria, no como paso obligatorio.
-    expect(find.text('Continuar en DOSA'), findsOneWidget);
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
     expect(find.text('Iniciar postulación'), findsNothing);
   });
 
@@ -250,8 +253,11 @@ void main() {
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
 
-    expect(find.text('Asistente de DOSA'), findsOneWidget);
-    expect(find.text('Continuar en DOSA'), findsOneWidget);
+    expect(
+      find.text('Asistente de certificación electrónica'),
+      findsOneWidget,
+    );
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -268,7 +274,7 @@ void main() {
       find.textContaining('Revisa el intento de certificación existente'),
       findsOneWidget,
     );
-    expect(find.text('Continuar en DOSA'), findsNothing);
+    expect(find.text('Continuar con el asistente'), findsNothing);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -285,7 +291,7 @@ void main() {
       portalApi: portal,
     );
 
-    await tester.tap(find.text('Continuar en DOSA'));
+    await tester.tap(find.text('Continuar con el asistente'));
     await tester.pump();
     expect(portal.ticketCalls, 1);
 

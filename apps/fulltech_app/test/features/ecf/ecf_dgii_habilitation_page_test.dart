@@ -728,8 +728,11 @@ void main() {
       expect(find.text('Certificado digital'), findsNothing);
       // El expediente ya existe: la acción abre el asistente oficial, no crea
       // otro intento.
-      expect(find.text('Asistente de DOSA'), findsOneWidget);
-      expect(find.text('Continuar en DOSA'), findsOneWidget);
+      expect(
+        find.text('Asistente de certificación electrónica'),
+        findsOneWidget,
+      );
+      expect(find.text('Continuar con el asistente'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -755,7 +758,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Validar certificado'), findsNothing);
-      expect(find.text('Continuar en DOSA'), findsNothing);
+      expect(find.text('Continuar con el asistente'), findsNothing);
 
       // El paso obligatorio se ve de entrada: no vive dentro de un desplegable
       // «Avanzado» que se confunde con el otro panel administrativo.

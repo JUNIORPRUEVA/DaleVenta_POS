@@ -763,7 +763,7 @@ class _DosaPortalCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     portalOnly
-                        ? 'Asistente de DOSA'
+                        ? 'Asistente de certificación electrónica'
                         : 'Estado de certificación',
                     style: theme.textTheme.titleSmall,
                   ),
@@ -795,7 +795,7 @@ class _DosaPortalCard extends StatelessWidget {
                     : const Icon(Icons.play_arrow, size: 18),
                 label: Text(
                   portalOnly
-                      ? 'Continuar en DOSA'
+                      ? 'Continuar con el asistente'
                       : 'Continuar certificación',
                 ),
               ),

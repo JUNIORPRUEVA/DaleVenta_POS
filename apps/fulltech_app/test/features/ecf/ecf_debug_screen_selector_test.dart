@@ -71,7 +71,7 @@ void main() {
     expect(find.text('Pruebas'), findsOneWidget);
     expect(find.text('Certificación'), findsOneWidget);
     expect(find.text('Etapas'), findsNothing);
-    expect(find.text('Continuar en DOSA'), findsOneWidget);
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
     expect(find.textContaining('FullPOS'), findsNothing);
     expect(tester.takeException(), isNull);
   });
