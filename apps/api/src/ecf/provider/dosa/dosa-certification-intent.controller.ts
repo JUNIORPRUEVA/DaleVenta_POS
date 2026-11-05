@@ -30,7 +30,7 @@ import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service"
 import { ECF_DOSA_FISCAL_CONFIG } from "./dosa-emission.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
 import { effectiveIntentProvider, historicalIntentProvider, intentReconciliationKind, type DosaIntentAttributionAudit } from "./dosa-intent-attribution";
-import { DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS } from "./dosa-certification-session.service";
+import { DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS, DosaCertificationSessionService, type DosaIntegrationMode } from "./dosa-certification-session.service";
 import {
   INTERNAL_EVIDENCE_SCHEMA,
   internalEvidenceDigest,
@@ -138,6 +138,16 @@ export type DosaIntentStateResponse = {
   };
   /** `true` solo si una reconciliación histórica sigue necesitando la acción administrativa. */
   historicalReviewRequired: boolean;
+  /**
+   * Modo de integración disponible para la empresa, decidido por el backend.
+   *
+   * `PRIVATE_SESSION` → el backend puede abrir la sesión privada de DOSA.
+   * `PUBLIC_PORTAL` → no puede, y la ruta oficial es el portal con boleto.
+   *
+   * El cliente NO debe deducir el modo de un código de error: un error
+   * desconocido nunca autoriza a continuar por otra vía.
+   */
+  certificationMode: DosaIntegrationMode;
   fiscalAuthorizationGranted: false;
 };
 
@@ -212,6 +222,7 @@ export class DosaCertificationIntentController {
     // valor, asi que Nest no puede resolverla por tipo. Se inyecta por token.
     @Inject(ECF_DOSA_FISCAL_CONFIG)
     private readonly fiscalConfig: DosaCompanyFiscalConfigReader,
+    private readonly sessionIntegration: DosaCertificationSessionService,
   ) {}
 
   @Post("certification-intent")
@@ -352,6 +363,9 @@ export class DosaCertificationIntentController {
         production: productionCredential,
       },
       historicalReviewRequired,
+      // Modo decidido en el servidor con la configuración real de esta
+      // instalación: el cliente lo lee en lugar de interpretar errores.
+      certificationMode: this.sessionIntegration.describeIntegrationMode(),
       fiscalAuthorizationGranted: false,
     };
   }

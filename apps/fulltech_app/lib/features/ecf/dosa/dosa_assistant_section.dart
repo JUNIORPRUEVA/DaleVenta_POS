@@ -93,55 +93,69 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     setState(() => _openingPortal = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
+      // 0) La ruta la decide el BACKEND con `certificationMode`, no el código
+      // de un error HTTP. `PUBLIC_PORTAL` significa que esta instalación no
+      // puede abrir la sesión privada: se va directo al portal con boleto sin
+      // llamar a la apertura automática. Cualquier otro valor (incluido el de
+      // un backend antiguo) intenta la sesión privada y solo cae al portal si
+      // el backend afirma que la apertura está deshabilitada.
+      final mode =
+          ref.read(dosaIntentStateProvider).valueOrNull?.certificationMode ??
+          DosaCertificationMode.unknown;
+      final privateSessionAvailable =
+          mode != DosaCertificationMode.publicPortal;
+
       // 1) Apertura AUTOMÁTICA: el backend toma el RNC del expediente y el
       // correo ya guardado, y devuelve el enlace de sesión de DOSA. El cliente
       // no vuelve a escribir esos datos.
-      try {
-        final session = await ref
-            .read(dosaCertificationSessionApiProvider)
-            .open();
-        if (!mounted) return;
-        final currentUser = ref.read(authStateProvider).user;
-        // El enlace debe pertenecer a la empresa autenticada: se comprueba el
-        // `companyId` devuelto contra el del usuario actual.
-        if (currentUser?.companyId?.trim() != companyId ||
-            session.companyId.trim() != companyId ||
-            !hasUserPermission(
-              currentUser,
-              AppPermission.manageEcfOnboarding,
-            )) {
-          return;
-        }
-        if (session.sessionUrl.trim().isEmpty) {
-          messenger?.showSnackBar(
-            const SnackBar(
-              content: Text(
-                'El servidor no devolvió un enlace de sesión válido.',
+      if (privateSessionAvailable) {
+        try {
+          final session = await ref
+              .read(dosaCertificationSessionApiProvider)
+              .open();
+          if (!mounted) return;
+          final currentUser = ref.read(authStateProvider).user;
+          // El enlace debe pertenecer a la empresa autenticada: se comprueba el
+          // `companyId` devuelto contra el del usuario actual.
+          if (currentUser?.companyId?.trim() != companyId ||
+              session.companyId.trim() != companyId ||
+              !hasUserPermission(
+                currentUser,
+                AppPermission.manageEcfOnboarding,
+              )) {
+            return;
+          }
+          if (session.sessionUrl.trim().isEmpty) {
+            messenger?.showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'El servidor no devolvió un enlace de sesión válido.',
+                ),
               ),
-            ),
-          );
-          return;
-        }
-        final opened = await openDosaPortal(session.sessionUrl);
-        if (opened) {
-          widget.onSessionOpened?.call();
-        } else {
-          messenger?.showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No se pudo abrir el navegador. Copia el enlace desde el portal.',
+            );
+            return;
+          }
+          final opened = await openDosaPortal(session.sessionUrl);
+          if (opened) {
+            widget.onSessionOpened?.call();
+          } else {
+            messenger?.showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No se pudo abrir el navegador. Copia el enlace desde el portal.',
+                ),
               ),
-            ),
-          );
-        }
-        return;
-      } on DosaCertificationSessionException catch (error) {
-        // Un error definitivo (correo, RNC, incierto) se explica y NO se
-        // reintenta. Solo si la API aún no está habilitada se usa el asistente
-        // actual como alternativa segura.
-        if (!error.canFallBackToAssistant) {
-          messenger?.showSnackBar(SnackBar(content: Text(error.message)));
+            );
+          }
           return;
+        } on DosaCertificationSessionException catch (error) {
+          // Solo un estado que AFIRMA que la apertura no está disponible
+          // permite usar el portal. Un error desconocido o incierto se explica
+          // y NO se reintenta por otra vía: no se sabe si el proveedor creó algo.
+          if (!error.canFallBackToAssistant) {
+            messenger?.showSnackBar(SnackBar(content: Text(error.message)));
+            return;
+          }
         }
       }
 

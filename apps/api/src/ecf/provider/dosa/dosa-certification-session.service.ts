@@ -48,6 +48,20 @@ export type DosaSessionOpenFailureCode =
   | "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED"
   | "ECF_DOSA_SESSION_URL_UNREADABLE";
 
+/**
+ * Modo de integración que ESTA instalación puede ofrecer para la empresa.
+ *
+ * * `PRIVATE_SESSION` — el backend puede abrir (o reutilizar) la sesión privada
+ *   de DOSA: la bandera y el cifrado de URL están configurados.
+ * * `PUBLIC_PORTAL` — no puede: la ruta oficial es el portal con boleto de un
+ *   solo uso. El asistente público no necesita ni correo ni clave secreta.
+ *
+ * Se publica explícitamente para que el cliente **no** tenga que deducir el
+ * modo a partir de un código de error HTTP: un error desconocido nunca debe
+ * interpretarse como autorización para continuar por otra vía.
+ */
+export type DosaIntegrationMode = "PRIVATE_SESSION" | "PUBLIC_PORTAL";
+
 export type DosaSessionOpenResult =
   | {
       ok: true;
@@ -181,6 +195,20 @@ export class DosaCertificationSessionService {
       historicalAuthorizationTtlMs?: number;
     } = {},
   ) {}
+
+  /**
+   * Modo de integración disponible AHORA, sin leer ni escribir datos.
+   *
+   * Es la única fuente de verdad para que el cliente elija entre la sesión
+   * privada del backend y el portal público con boleto. Fail-closed: cualquier
+   * pieza faltante degrada a `PUBLIC_PORTAL`, no al revés.
+   */
+  describeIntegrationMode(): DosaIntegrationMode {
+    const readiness = this.client.describeReadiness();
+    if (!readiness.ready) return "PUBLIC_PORTAL";
+    if (!this.urlCipher.ready) return "PUBLIC_PORTAL";
+    return "PRIVATE_SESSION";
+  }
 
   async open(input: {
     companyId: string;

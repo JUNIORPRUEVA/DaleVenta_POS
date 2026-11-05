@@ -8,6 +8,10 @@ import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
 import type { PrismaService } from "../../../prisma/prisma.service";
 import type { TenantUser } from "../../../auth/tenant-context";
+import type {
+  DosaCertificationSessionService,
+  DosaIntegrationMode,
+} from "./dosa-certification-session.service";
 import type { Request } from "express";
 
 /**
@@ -190,18 +194,24 @@ function build(options: {
   configuredProvider?: string;
   sessionUrl?: string | null;
   credentials?: { test?: boolean; production?: boolean };
+  integrationMode?: DosaIntegrationMode;
 } = {}) {
   const intents = new FakeIntents(
     options.behaviour ?? "created",
     options.sessionUrl ?? null,
   );
   const { prisma, rows } = auditLog(options.historicalProvider);
+  const integrationMode = options.integrationMode ?? "PRIVATE_SESSION";
+  const sessionIntegration = {
+    describeIntegrationMode: () => integrationMode,
+  } as unknown as DosaCertificationSessionService;
   const controller = new DosaCertificationIntentController(
     prisma,
     intents as unknown as DosaCertificationIntentService,
     credentials(options.credentials),
     fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled,
       options.configuredProvider ?? "DOSA"),
+    sessionIntegration,
   );
   return { controller, intents, rows };
 }
@@ -366,6 +376,20 @@ describe("POST /ecf/dosa/certification-intent", () => {
 });
 
 describe("GET /ecf/dosa/certification-intent", () => {
+  it("declara el modo de integración que el backend puede ofrecer", async () => {
+    const enabled = build({ integrationMode: "PRIVATE_SESSION" });
+    await expect(enabled.controller.state(req())).resolves.toMatchObject({
+      certificationMode: "PRIVATE_SESSION",
+    });
+
+    // Con la apertura privada apagada el cliente no debe adivinar por el código
+    // de error: el estado ya dice que la ruta es el portal público.
+    const disabled = build({ integrationMode: "PUBLIC_PORTAL" });
+    await expect(disabled.controller.state(req())).resolves.toMatchObject({
+      certificationMode: "PUBLIC_PORTAL",
+    });
+  });
+
   it("devuelve el estado sin secretos", async () => {
     const { controller } = build();
     const state = await controller.state(req());

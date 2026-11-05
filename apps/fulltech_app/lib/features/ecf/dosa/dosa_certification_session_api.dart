@@ -47,13 +47,21 @@ class DosaCertificationSessionException implements Exception {
   final String code;
   final int? statusCode;
 
-  /// La API de sesiones todavía no está habilitada (o no existe en esta
-  /// versión del backend): se puede seguir con el asistente actual.
+  /// El backend declaró que **la apertura automática no está disponible** en
+  /// esta instalación, así que la ruta oficial es el portal con boleto.
+  ///
+  /// Es una lista de PERMITIDOS y solo contiene estados en los que el backend
+  /// afirmó explícitamente que no abrió nada: un error de transporte, un 5xx
+  /// sin código o un estado incierto NO habilitan otra vía, porque no se sabe
+  /// si el proveedor creó algo.
+  ///
+  /// La decisión normal no depende de esto: el backend publica
+  /// `certificationMode` en `GET /ecf/dosa/certification-intent` y el cliente
+  /// lo usa antes de llamar. Esto cubre solo backend antiguo o cambio de
+  /// configuración entre la lectura y la llamada.
   bool get canFallBackToAssistant =>
       code == 'ECF_DOSA_SESSION_DISABLED' ||
-      code == 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED' ||
-      code == 'HTTP_404' ||
-      code == 'HTTP_501';
+      code == 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED';
 
   String get message {
     switch (code) {
