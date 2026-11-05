@@ -9,6 +9,7 @@ import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_section.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,7 @@ void main() {
     bool portalOnly = false,
     _PortalApi? portalApi,
     _SessionApi? sessionApi,
+    DosaCertificationSessionApi? realSessionApi,
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -55,7 +57,8 @@ void main() {
         // Por defecto la API de sesiones está deshabilitada: así los casos
         // históricos comprueban el fallback seguro al portal existente.
         dosaCertificationSessionApiProvider.overrideWithValue(
-          sessionApi ??
+          realSessionApi ??
+              sessionApi ??
               _SessionApi(
                 error: DosaCertificationSessionException(
                   'ECF_DOSA_SESSION_DISABLED',
@@ -470,6 +473,96 @@ void main() {
     expect(api.registerCalls, isEmpty);
     expect(find.text('Preparar certificación'), findsNothing);
     expect(find.textContaining('no tiene un RNC verificado'), findsOneWidget);
+  });
+
+  group('secuencia real de producción: el 503 debe abrir el portal', () {
+    /// Dio que devuelve el estado y el cuerpo indicados, sin tocar la red.
+    Dio dioCon(Object? body, int status) {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) => handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.badResponse,
+              response: Response<dynamic>(
+                requestOptions: options,
+                statusCode: status,
+                data: body,
+              ),
+            ),
+          ),
+        ),
+      );
+      return dio;
+    }
+
+    /// Respuesta tal cual la devuelve el backend con la apertura apagada.
+    const cuerpoReal =
+        '{"message":"ECF_DOSA_SESSION_DISABLED","error":"Service Unavailable",'
+        '"statusCode":503}';
+
+    Future<_PortalApi> pulsarCon(
+      WidgetTester tester,
+      Dio dio,
+    ) async {
+      final portal = _PortalApi();
+      await pumpSection(
+        tester,
+        api: _IntentApi(hasSession: true),
+        portalOnly: true,
+        portalApi: portal,
+        realSessionApi: DosaCertificationSessionApi(dio),
+      );
+      await tester.tap(find.text('Continuar con el asistente'));
+      await tester.pumpAndSettle();
+      return portal;
+    }
+
+    testWidgets('503 con el cuerpo en texto: pide el ticket del portal', (
+      tester,
+    ) async {
+      final portal = await pulsarCon(tester, dioCon(cuerpoReal, 503));
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('503 con el cuerpo ya decodificado: pide el ticket', (
+      tester,
+    ) async {
+      final portal = await pulsarCon(
+        tester,
+        dioCon(const {'message': 'ECF_DOSA_SESSION_DISABLED'}, 503),
+      );
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('respuesta ausente (sin cuerpo): pide el ticket', (
+      tester,
+    ) async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) => handler.reject(
+            DioException.connectionError(
+              requestOptions: options,
+              reason: 'sin respuesta',
+            ),
+          ),
+        ),
+      );
+      final portal = await pulsarCon(tester, dio);
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('resultado incierto: NO pide ticket ni duplica', (
+      tester,
+    ) async {
+      final portal = await pulsarCon(
+        tester,
+        dioCon(const {'message': 'ECF_DOSA_SESSION_UNCERTAIN'}, 503),
+      );
+      expect(portal.ticketCalls, 0);
+    });
   });
 }
 
