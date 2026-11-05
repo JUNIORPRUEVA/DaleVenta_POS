@@ -266,6 +266,25 @@ function build(options: {
   return { service, sessions, client };
 }
 
+describe("DosaCertificationSessionService — modo de integración", () => {
+  it("con bandera y cifrado listos el modo es PRIVATE_SESSION", () => {
+    const { service } = build({});
+    expect(service.describeIntegrationMode()).toBe("PRIVATE_SESSION");
+  });
+
+  it("sin bandera degrada a PUBLIC_PORTAL (fail-closed)", () => {
+    const { service } = build({ client: new FakeClient(undefined, false) });
+    expect(service.describeIntegrationMode()).toBe("PUBLIC_PORTAL");
+  });
+
+  it("sin cifrado degrada a PUBLIC_PORTAL", () => {
+    const { service } = build({
+      cipher: new DosaSessionUrlCipher(new Map(), 1),
+    });
+    expect(service.describeIntegrationMode()).toBe("PUBLIC_PORTAL");
+  });
+});
+
 describe("DosaCertificationSessionService — apertura automática", () => {
   it("empresa con correo: crea la sesión una sola vez y devuelve la URL", async () => {
     const { service, client, sessions } = build({});
