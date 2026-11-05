@@ -8,15 +8,14 @@ import 'ecf_flow_kit.dart';
 /// Es una agrupación de PRESENTACIÓN: no crea estados nuevos ni sustituye al
 /// backend. El paso que se muestra al abrir la pantalla se deduce del expediente
 /// real (ver `initialEcfFlowStep`).
-enum EcfFlowStep { welcome, company, preparation, tracking }
+enum EcfFlowStep { welcome, preparation, tracking }
 
 extension EcfFlowStepLabels on EcfFlowStep {
   /// Etiqueta corta para la guía de pasos.
   String get railLabel => switch (this) {
     EcfFlowStep.welcome => 'Bienvenida',
-    EcfFlowStep.company => 'Empresa',
     EcfFlowStep.preparation => 'Preparación',
-    EcfFlowStep.tracking => 'Seguimiento',
+    EcfFlowStep.tracking => 'Tu postulación',
   };
 }
 
@@ -26,9 +25,8 @@ extension EcfFlowStepLabels on EcfFlowStep {
 ///  * Si la empresa todavía no empezó nada, se empieza por la bienvenida.
 ///  * Si ya hay expediente, requisitos resueltos o autorización, se entra
 ///    directamente a la etapa en la que está: nunca se reinicia el recorrido.
-///  * Cuando el certificado lo gestiona el asistente oficial de DOSA
-///    (`dosaOwnsCertificate`), su validación previa en FullPOS deja de ser un
-///    requisito para avanzar: no se pide dos veces la misma cosa.
+///  * Los datos de la empresa y el correo fiscal viven en Preparación, no en un
+///    paso separado: el cliente ve un único recorrido de tres etapas.
 EcfFlowStep initialEcfFlowStep({
   required String state,
   required bool hasResolvedRequirement,
@@ -42,19 +40,7 @@ EcfFlowStep initialEcfFlowStep({
   final started =
       state != 'NOT_STARTED' || hasResolvedRequirement || certificateValidated;
   if (!started) return EcfFlowStep.welcome;
-  if (!fiscalReady || (!certificateValidated && !dosaOwnsCertificate)) {
-    return EcfFlowStep.company;
-  }
   return EcfFlowStep.preparation;
-}
-
-/// Paso siguiente del recorrido. Tras el último vuelve al primero, para poder
-/// repasar el diseño completo sin reiniciar la aplicación.
-EcfFlowStep nextEcfFlowStep(EcfFlowStep current) {
-  final next = current.index + 1;
-  return next >= EcfFlowStep.values.length
-      ? EcfFlowStep.values.first
-      : EcfFlowStep.values[next];
 }
 
 /// Guía de pasos. Vertical en escritorio, en tira horizontal en móvil.
@@ -64,21 +50,16 @@ class EcfStepRail extends StatelessWidget {
     required this.current,
     required this.onSelect,
     this.horizontal = false,
-    this.allowForward = false,
   });
 
   final EcfFlowStep current;
 
   /// Solo se permite volver a un paso anterior; hacia delante manda el flujo.
-  /// Quien gestiona el proceso (administración) sí puede saltar al seguimiento.
   final ValueChanged<EcfFlowStep> onSelect;
 
   final bool horizontal;
 
-  final bool allowForward;
-
-  bool _reachable(int index) =>
-      index <= current.index || (allowForward && index != current.index);
+  bool _reachable(int index) => index < current.index;
 
   @override
   Widget build(BuildContext context) {

@@ -1285,7 +1285,7 @@ model EcfCompanyConfiguration {
   id                   String                 @id @default(uuid()) @db.Uuid
   companyId            String                 @unique @map("company_id") @db.Uuid
   enabled              Boolean                @default(false)
-  provider             EcfProvider            @default(ALANUBE)
+  provider             EcfProvider            @default(DOSA)
   environment          EcfEnvironment         @default(SANDBOX)
   certificationStatus  EcfCertificationStatus @default(NOT_STARTED) @map("certification_status")
   productionEnabled    Boolean                @default(false) @map("production_enabled")

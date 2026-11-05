@@ -26,136 +26,169 @@ class EcfWelcomeStep extends StatelessWidget {
   /// sin desplazamiento.
   final bool wide;
 
-  static const _requirements = <(String, String)>[
+  @override
+  Widget build(BuildContext context) {
+    final short = MediaQuery.sizeOf(context).height < 820;
+    final left = _WelcomeIntro(
+      short: short,
+      onStart: onStart,
+    );
+    final right = Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A0F172A),
+            blurRadius: 22,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: short ? 520 : 640),
+        child: EcfHabilitacionVideoCard(
+          videoUrl: videoUrl,
+          maxVideoWidth: short ? 500 : 620,
+        ),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = wide || constraints.maxWidth >= 900;
+        return Center(
+          child: SingleChildScrollView(
+            padding: short
+                ? const EdgeInsets.fromLTRB(20, 14, 20, 18)
+                : const EdgeInsets.fromLTRB(28, 22, 28, 28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1080),
+              child: twoColumns
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 4, child: left),
+                        const SizedBox(width: 40),
+                        Expanded(flex: 6, child: right),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        left,
+                        const SizedBox(height: 20),
+                        right,
+                      ],
+                    ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Columna izquierda: mensaje, paso a paso y única acción.
+///
+/// Sin iconos decorativos ni tarjetas anidadas. El orden visual es el mismo que
+/// seguirá el cliente al pulsar «Comenzar».
+class _WelcomeIntro extends StatelessWidget {
+  const _WelcomeIntro({required this.short, required this.onStart});
+
+  final bool short;
+  final VoidCallback onStart;
+
+  static const _steps = <(String, String)>[
     (
-      'Acceso al Portal de Certificación de la DGII',
-      'El usuario con el que tu representante entra al portal oficial.',
+      'Revisa tus datos',
+      'Usamos la información que ya tienes registrada en FullPOS.',
     ),
     (
-      'Certificado digital vigente',
-      'El archivo .pfx o .p12 del representante legal y su contraseña.',
+      'Completa lo que falte',
+      'Solo te pediremos el correo fiscal o algún dato obligatorio.',
     ),
     (
-      'Datos fiscales de la empresa',
-      'RNC, razón social, dirección y representante autorizado.',
+      'Inicia la postulación',
+      'Continúa el proceso acompañado, sin salir de FullPOS.',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // En ventanas bajas (portátiles, Windows con DPI alto) el vídeo se reduce
-    // para que el botón principal quede siempre a la vista.
-    final short = MediaQuery.sizeOf(context).height < 820;
-    final requirements = EcfSection(
-      title: 'Lo que necesitas',
-      icon: Icons.checklist_rounded,
-      subtitle: 'Se consigue una sola vez, antes de empezar.',
-      child: Column(
-        children: [
-          for (var index = 0; index < _requirements.length; index++)
-            _Requirement(
-              number: index + 1,
-              title: _requirements[index].$1,
-              hint: _requirements[index].$2,
-              isLast: index == _requirements.length - 1,
-            ),
-        ],
-      ),
-    );
-    final preparation = EcfSection(
-      title: 'Cómo prepararte',
-      icon: Icons.play_circle_outline_rounded,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: short ? 270 : 380),
-          child: EcfHabilitacionVideoCard(videoUrl: videoUrl),
-        ),
-      ),
-    );
-    return Center(
-      child: SingleChildScrollView(
-        padding: short
-            ? const EdgeInsets.fromLTRB(16, 8, 16, 12)
-            : const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: wide ? 900 : 620),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: AppColors.primarySoft,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.secondaryBorder),
-                  ),
-                  child: const Icon(
-                    Icons.receipt_long_rounded,
-                    size: 23,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Activa tu facturación electrónica',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Te acompañamos durante el proceso de habilitación ante la '
-                'DGII, paso a paso y de forma sencilla.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontSize: 13,
-                  height: 1.45,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (wide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: requirements),
-                    const SizedBox(width: 12),
-                    Expanded(child: preparation),
-                  ],
-                )
-              else ...[
-                requirements,
-                const SizedBox(height: 12),
-                preparation,
-              ],
-              const SizedBox(height: 10),
-              EcfPrimaryAction(
-                label: 'Comenzar',
-                icon: Icons.arrow_forward_rounded,
-                onPressed: onStart,
-                helper: short
-                    ? null
-                    : 'Podrás volver al paso anterior cuando quieras.',
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'FACTURACIÓN ELECTRÓNICA',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.3,
+            color: AppColors.primary,
           ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Text(
+          'Activa tu facturación electrónica',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontSize: 25,
+            fontWeight: FontWeight.w800,
+            height: 1.16,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Todo el proceso, acompañado por FullPOS y en un solo lugar. '
+          'Mira la guía y comienza cuando estés listo.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontSize: 13.5,
+            height: 1.5,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Paso a paso',
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (var index = 0; index < _steps.length; index++)
+          _WelcomeStepRow(
+            number: index + 1,
+            title: _steps[index].$1,
+            hint: _steps[index].$2,
+            isLast: index == _steps.length - 1,
+          ),
+        const SizedBox(height: 22),
+        SizedBox(
+          width: 340,
+          child: EcfPrimaryAction(
+            label: 'Comenzar',
+            icon: Icons.arrow_forward_rounded,
+            onPressed: onStart,
+            helper: short
+                ? null
+                : 'Podrás volver al paso anterior cuando quieras.',
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _Requirement extends StatelessWidget {
-  const _Requirement({
+class _WelcomeStepRow extends StatelessWidget {
+  const _WelcomeStepRow({
     required this.number,
     required this.title,
     required this.hint,
@@ -169,31 +202,36 @@ class _Requirement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.primarySoft,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.secondaryBorder),
-            ),
-            child: Text(
-              '$number',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 26,
+          child: Column(
+            children: [
+              Text(
+                number.toString().padLeft(2, '0'),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                  letterSpacing: 0.2,
+                ),
               ),
-            ),
+              if (!isLast)
+                Container(
+                  width: 1,
+                  height: 16,
+                  margin: const EdgeInsets.only(top: 5, bottom: 2),
+                  color: AppColors.border,
+                ),
+            ],
           ),
-          const SizedBox(width: 9),
-          Expanded(
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -201,25 +239,25 @@ class _Requirement extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     height: 1.3,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(height: 2),
                 Text(
                   hint,
                   style: const TextStyle(
-                    fontSize: 11.5,
-                    height: 1.35,
+                    fontSize: 11.8,
+                    height: 1.4,
                     color: AppColors.textMuted,
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

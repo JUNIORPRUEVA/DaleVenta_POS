@@ -69,10 +69,16 @@ void main() {
     expect(api.readCalls, 1);
     expect(find.text('Intento: 1'), findsOneWidget);
     expect(find.text('Estado: Sin iniciar'), findsOneWidget);
-    expect(find.text('Proveedor registrado: ALANUBE'), findsOneWidget);
+    expect(
+      find.text('Proveedor registrado: Proveedor anterior'),
+      findsOneWidget,
+    );
     expect(find.text('Sesión externa: Sin referencia'), findsOneWidget);
     expect(find.text('Postulación externa: Sin referencia'), findsOneWidget);
-    expect(find.text('Atribución histórica: ALANUBE'), findsOneWidget);
+    expect(
+      find.text('Atribución histórica: Proveedor anterior'),
+      findsOneWidget,
+    );
     expect(
       find.text(
         'Reconciliación administrativa: Necesaria antes de abrir el portal',

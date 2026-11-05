@@ -55,7 +55,7 @@ export class EcfProviderRegistry {
 
   constructor(
     providers: readonly EcfFiscalProviderPort[],
-    private readonly defaultProviderId: EcfFiscalProviderId = "ALANUBE",
+    private readonly defaultProviderId: EcfFiscalProviderId = "DOSA",
   ) {
     const map = new Map<EcfFiscalProviderId, EcfFiscalProviderPort>();
     for (const provider of providers) {
@@ -163,7 +163,7 @@ export function createEcfFiscalProviderRegistry(options: {
       new AlanubeFiscalProvider({ realEmissionEnabled: options.alanubeRealEmissionEnabled }),
       new DosaFiscalProvider(),
     ],
-    "ALANUBE",
+    "DOSA",
   );
 }
 

@@ -26,7 +26,7 @@ function config(overrides: Record<string, unknown> = {}) {
     id: "00000000-0000-4000-8000-000000000201",
     companyId,
     enabled: false,
-    provider: EcfProvider.ALANUBE,
+    provider: EcfProvider.DOSA,
     environment: EcfEnvironment.SANDBOX,
     certificationStatus: EcfCertificationStatus.NOT_STARTED,
     productionEnabled: false,
@@ -124,6 +124,7 @@ describe("EcfService", () => {
         data: expect.objectContaining({
           companyId,
           enabled: false,
+          provider: EcfProvider.DOSA,
           productionEnabled: false,
         }),
       }),
@@ -180,6 +181,22 @@ describe("EcfService", () => {
     await expect(
       service.updateConfig(user, { environment: EcfEnvironment.PRODUCTION }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("accepts DOSA as the provider and rejects the legacy provider", async () => {
+    const prisma = createPrismaMock();
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+
+    await service.updateConfig(user, { provider: EcfProvider.DOSA });
+    expect(prisma.ecfCompanyConfiguration.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ provider: EcfProvider.DOSA }),
+      }),
+    );
+
+    await expect(
+      service.updateConfig(user, { provider: EcfProvider.ALANUBE }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("rejects raw-looking secrets and accepts only secret references", async () => {

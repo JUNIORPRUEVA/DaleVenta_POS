@@ -172,14 +172,19 @@ class EcfSummaryRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          value,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: style.fg == AppColors.warning
-                ? AppColors.warning
-                : AppColors.textSecondary,
+        Flexible(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: style.fg == AppColors.warning
+                  ? AppColors.warning
+                  : AppColors.textSecondary,
+            ),
           ),
         ),
         if (onTap != null) ...[

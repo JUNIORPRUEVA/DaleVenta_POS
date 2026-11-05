@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,9 +27,9 @@ import 'ecf_dgii_application_wizard.dart';
 import 'ecf_fiscal_data_page.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
-import 'flow/ecf_company_step.dart';
+import 'debug/ecf_debug_screen_selector.dart';
+import 'flow/ecf_dosa_tracking_step.dart';
 import 'flow/ecf_flow_kit.dart';
-import 'flow/ecf_flow_preview_button.dart';
 import 'flow/ecf_flow_step.dart';
 import 'flow/ecf_preparation_step.dart';
 import 'flow/ecf_tracking_step.dart';
@@ -58,21 +59,11 @@ class EcfDgiiHabilitationPage extends ConsumerStatefulWidget {
 
 class _EcfDgiiHabilitationPageState
     extends ConsumerState<EcfDgiiHabilitationPage> {
-  /// RNC de la empresa de prueba con la que se compila la vista previa del
-  /// diseño. Vacío en cualquier compilación normal: sin esta variable el botón
-  /// de salto no existe.
-  static const _previewRnc = String.fromEnvironment(
-    'ECF_FLOW_PREVIEW_RNC',
-    defaultValue: '',
-  );
-
-  bool _previewFor(CompanySettings? settings) =>
-      _previewRnc.isNotEmpty &&
-      (settings?.rnc ?? '').trim() == _previewRnc.trim();
-
   bool _busy = false;
+  EcfDebugScreen? _debugScreen;
   bool _applicationOpen = false;
   bool _fiscalOpen = false;
+  bool _certificateOpen = false;
   bool _activationOpen = false;
   bool _submissionGuideOpen = false;
 
@@ -80,7 +71,6 @@ class _EcfDgiiHabilitationPageState
   ///
   /// El avance se decide con la respuesta persistida del backend. El informe
   /// temporal se invalida al cambiar archivo o contraseña.
-  EcfCertificateGate _certificateGate = EcfCertificateGate.pending;
   EcfCertificateReport? _verifiedCertificate;
   String? _verifiedCertificateFileName;
   bool _certificateRestarted = false;
@@ -100,12 +90,20 @@ class _EcfDgiiHabilitationPageState
   }
 
   void _navigateBack() {
+    if (kDebugMode && _debugScreen != null) {
+      setState(() => _debugScreen = null);
+      return;
+    }
     if (_applicationOpen) {
       _wizardKey.currentState?.goBack();
       return;
     }
     if (_activationOpen) {
       setState(() => _activationOpen = false);
+      return;
+    }
+    if (_certificateOpen) {
+      setState(() => _certificateOpen = false);
       return;
     }
     if (_fiscalOpen) {
@@ -121,8 +119,10 @@ class _EcfDgiiHabilitationPageState
   }
 
   bool get _canGoBack =>
+      (kDebugMode && _debugScreen != null) ||
       _applicationOpen ||
       _activationOpen ||
+      _certificateOpen ||
       _fiscalOpen ||
       (_step != null && _step != EcfFlowStep.welcome);
 
@@ -143,10 +143,11 @@ class _EcfDgiiHabilitationPageState
         if (previous == next || !mounted) return;
         setState(() {
           _step = null;
+          _debugScreen = null;
           _fiscalOpen = false;
+          _certificateOpen = false;
           _applicationOpen = false;
           _activationOpen = false;
-          _certificateGate = EcfCertificateGate.pending;
           _verifiedCertificate = null;
           _verifiedCertificateFileName = null;
           _certificateRestarted = false;
@@ -166,6 +167,15 @@ class _EcfDgiiHabilitationPageState
             tooltip: 'Ayuda y soporte',
             onPressed: _openSupport,
           ),
+          // Exclusivo de depuración. En release esta rama es constante y el
+          // selector no se registra ni se puede habilitar por URL/dart-define.
+          if (kDebugMode)
+            DesktopShellActionItem(
+              icon: Icons.visibility_outlined,
+              tooltip: 'Ver pantallas (solo depuración)',
+              label: 'Ver pantallas',
+              onPressed: _showDebugScreens,
+            ),
         ],
       );
     });
@@ -403,8 +413,93 @@ class _EcfDgiiHabilitationPageState
     );
   }
 
+  Future<void> _showDebugScreens() async {
+    if (!kDebugMode) return;
+    final selected = await showModalBottomSheet<EcfDebugScreen>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 4, 8, 10),
+                child: Text(
+                  'Ver pantallas',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              for (final screen in EcfDebugScreen.values)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(
+                    Icons.visibility_outlined,
+                    size: 19,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    screen.label,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: _debugScreen == screen
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          size: 18,
+                          color: AppColors.primary,
+                        )
+                      : const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                  onTap: () => Navigator.of(context).pop(screen),
+                ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: EcfInlineNote(
+                  tone: EcfTone.pending,
+                  icon: Icons.info_outline_rounded,
+                  text:
+                      'Solo depuración. Estas vistas usan datos en memoria y no ejecutan acciones del backend.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() => _debugScreen = selected);
+  }
+
+  Widget _buildDebugPreview(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: EcfDebugPreview(
+          screen: _debugScreen!,
+          onExit: () => setState(() => _debugScreen = null),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode && _debugScreen != null) {
+      return _buildDebugPreview(context);
+    }
     final user = ref.watch(authStateProvider).user;
     // Cada acción se gatea con EL MISMO permiso que valida `RolesGuard` en el
     // backend. Mostrar un botón que el servidor va a rechazar es peor que no
@@ -468,6 +563,9 @@ class _EcfDgiiHabilitationPageState
                       : LayoutBuilder(
                     builder: (context, constraints) {
                       final fiscalReady = fiscalDataReady(settings);
+                      final contactEmailReady = isEcfContactEmailValid(
+                        settings.ecfContactEmail,
+                      );
                       final stage = _stageOf(
                         view.progress,
                         view.state,
@@ -493,15 +591,11 @@ class _EcfDgiiHabilitationPageState
                                 stage == _EcfStage.tests ||
                                 stage == _EcfStage.activation,
                           );
-                      // Sin datos fiscales no hay nada que preparar: se resuelven
-                      // primero, en su propio paso, para no mostrar acciones que el
-                      // backend rechazaría. La vista previa del diseño sí puede
-                      // recorrer todas las pantallas.
-                      final preview = _previewFor(settings);
-                      if (!fiscalReady &&
-                          step != EcfFlowStep.welcome &&
-                          !preview) {
-                        step = EcfFlowStep.company;
+                      // Si el expediente ya avanzó pero faltan datos, se vuelve a
+                      // la única pantalla que puede resolverlos: Preparación.
+                      if ((!fiscalReady || !contactEmailReady) &&
+                          step == EcfFlowStep.tracking) {
+                        step = EcfFlowStep.preparation;
                       }
                       final wide = constraints.maxWidth >= 900;
                       final preparation = ref.watch(ecfPreparationProvider);
@@ -510,19 +604,19 @@ class _EcfDgiiHabilitationPageState
                       );
 
                       final Widget body;
-                      if (_applicationOpen) {
+                      // El expediente y la activación heredados solo se usan
+                      // cuando DOSA no es el proveedor efectivo. Una empresa con
+                      // DOSA no vuelve a ver formularios ni etapas duplicadas.
+                      if (_applicationOpen && !dosaOwnsCertificate) {
                         body = Padding(
                           padding: const EdgeInsets.all(16),
                           child: EcfDgiiApplicationWizard(
                             key: _wizardKey,
                             embedded: true,
                             onClose: () => setState(() {
-                              // Cerrar el expediente devuelve al paso de la
-                              // empresa, donde viven los datos fiscales: nunca a
-                              // un paso intermedio sin contexto.
                               _applicationOpen = false;
                               _fiscalOpen = true;
-                              _step = EcfFlowStep.company;
+                              _step = EcfFlowStep.preparation;
                             }),
                             onSubmitted: () => setState(() {
                               _applicationOpen = false;
@@ -530,13 +624,46 @@ class _EcfDgiiHabilitationPageState
                             }),
                           ),
                         );
-                      } else if (_activationOpen) {
+                      } else if (_activationOpen && !dosaOwnsCertificate) {
                         body = const Padding(
                           padding: EdgeInsets.all(16),
                           child: EcfActivationPage(embedded: true),
                         );
-                      } else if (step == EcfFlowStep.company &&
-                          (_fiscalOpen || (!fiscalReady && !preview))) {
+                      } else if (_certificateOpen && !dosaOwnsCertificate) {
+                        body = Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: EcfCertificateCard(
+                            persistedValidation: _certificateRestarted
+                                ? null
+                                : view.certificateValidation,
+                            onRestart: () async {
+                              await ref
+                                  .read(ecfCertificateRepositoryProvider)
+                                  .restart();
+                              if (mounted) {
+                                setState(() => _certificateRestarted = true);
+                              }
+                            },
+                            initialReport: _verifiedCertificate,
+                            initialFileName: _verifiedCertificateFileName,
+                            onVerified: (report, fileName) {
+                              setState(() {
+                                _verifiedCertificate = report;
+                                _verifiedCertificateFileName = fileName;
+                                _certificateRestarted = false;
+                                _certificateOpen = false;
+                              });
+                              ref.invalidate(ecfDgiiHabilitationProvider);
+                            },
+                            onGateChanged: (gate) => setState(() {
+                              if (!gate.ready) {
+                                _verifiedCertificate = null;
+                                _verifiedCertificateFileName = null;
+                              }
+                            }),
+                          ),
+                        );
+                      } else if (_fiscalOpen) {
                         body = Padding(
                           padding: const EdgeInsets.all(16),
                           child: EcfFiscalDataContent(
@@ -552,103 +679,34 @@ class _EcfDgiiHabilitationPageState
                           EcfFlowStep.welcome => EcfWelcomeStep(
                             videoUrl: preparation.valueOrNull?.videoUrl ?? '',
                             wide: wide,
-                            onStart: () => _goToStep(EcfFlowStep.company),
-                          ),
-                          EcfFlowStep.company => EcfCompanyStep(
-                            settings: settings,
-                            fiscalReady: fiscalReady,
-                            wide: wide,
-                            // El paso decide con el estado real: mientras el
-                            // certificado no sea utilizable y del titular, no
-                            // deja avanzar y explica qué falta.
-                            certificateReady: _certificateReady(view),
-                            certificateVerifiedHere:
-                                _verifiedCertificate != null ||
-                                view.certificateValidation?.ready == true,
-                            dosaOwnsCertificate: dosaOwnsCertificate,
-                            certificateBlockedReason: _certificateBlockedReason(
-                              view,
-                            ),
-                            certificate: EcfCertificateCard(
-                              persistedValidation: _certificateRestarted
-                                  ? null
-                                  : view.certificateValidation,
-                              onRestart: () async {
-                                await ref
-                                    .read(ecfCertificateRepositoryProvider)
-                                    .restart();
-                                if (mounted) {
-                                  setState(() => _certificateRestarted = true);
-                                }
-                              },
-                              initialReport: _verifiedCertificate,
-                              initialFileName: _verifiedCertificateFileName,
-                              onVerified: (report, fileName) {
-                                setState(() {
-                                  _verifiedCertificate = report;
-                                  _verifiedCertificateFileName = fileName;
-                                  _certificateRestarted = false;
-                                });
-                                ref.invalidate(ecfDgiiHabilitationProvider);
-                              },
-                              onGateChanged: (gate) => setState(() {
-                                _certificateGate = gate;
-                                if (!gate.ready) {
-                                  _verifiedCertificate = null;
-                                  _verifiedCertificateFileName = null;
-                                }
-                              }),
-                            ),
-                            onEditFiscalData: () =>
-                                setState(() => _fiscalOpen = true),
-                            onContinue: () =>
+                            onStart: () =>
                                 _goToStep(EcfFlowStep.preparation),
                           ),
                           EcfFlowStep.preparation => EcfPreparationStep(
+                            settings: settings,
                             companyReady: fiscalReady,
+                            contactEmailReady: contactEmailReady,
                             certificateReady: _certificateReady(view),
                             dosaOwnsCertificate: dosaOwnsCertificate,
                             dosaEntry:
-                                hasUserPermission(
-                                  user,
-                                  AppPermission.manageEcfOnboarding,
-                                )
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      // Abrir el portal solo exige los datos de
-                                      // la empresa y el permiso administrativo.
-                                      // El certificado lo pide DOSA dentro de su
-                                      // propio asistente: no se duplica aquí.
-                                      if (fiscalReady) ...[
-                                        DosaAssistantSection(
-                                          key: ValueKey(
-                                            'dosa-preparation-${user?.companyId}',
-                                          ),
-                                          portalOnly: true,
-                                          postulationExternalId:
-                                              view.externalId,
-                                        ),
-                                        const SizedBox(height: 12),
-                                      ],
-                                      DosaCertificationDiagnosticSection(
-                                        key: ValueKey(
-                                          'dosa-diagnostic-${user?.companyId}',
-                                        ),
-                                      ),
-                                    ],
+                                dosaOwnsCertificate &&
+                                    fiscalReady &&
+                                    contactEmailReady &&
+                                    canOnboard
+                                ? DosaAssistantSection(
+                                    key: ValueKey(
+                                      'dosa-preparation-${user?.companyId}',
+                                    ),
+                                    portalOnly: true,
+                                    postulationExternalId: view.externalId,
+                                    onSessionOpened: () => setState(() {
+                                      _step = EcfFlowStep.tracking;
+                                    }),
                                   )
                                 : null,
-                            dgiiAccessReady: _requirementResolved(
-                              view,
-                              'REQUIREMENTS',
-                            ),
-                            pendingRequirements: view.progress.requirements
-                                .where(
-                                  (item) => !item.resolved && item.mandatory,
-                                )
-                                .length,
+                            advanced: canManage
+                                ? _adminAdvanced(view, stage: stage)
+                                : null,
                             simulationAvailable:
                                 preparation.valueOrNull?.simulationAvailable ??
                                 false,
@@ -659,25 +717,51 @@ class _EcfDgiiHabilitationPageState
                             canManage: canManage,
                             busy: _busy,
                             onStart: _startIntelligentCertification,
-                            onGoCompany: () => _goToStep(EcfFlowStep.company),
+                            onEditFiscalData: () =>
+                                setState(() => _fiscalOpen = true),
+                            onGoCompany: () =>
+                                setState(() => _fiscalOpen = true),
                             onGoCertificate: () =>
-                                _goToStep(EcfFlowStep.company),
+                                setState(() => _certificateOpen = true),
                           ),
-                          EcfFlowStep.tracking => _trackingStep(
-                            view: view,
-                            stage: stage,
-                            wide: wide,
-                            canManage: canManage,
-                            canRecordAuthorization: canRecordAuthorization,
-                            canRegisterEvidence: canRegisterEvidence,
-                            canReviewEvidence: canReviewEvidence,
-                            activation: activation.valueOrNull,
-                            testBadge:
-                                preparation.valueOrNull?.simulationAvailable ==
-                                    true
-                                ? preparation.valueOrNull?.simulationBadge
-                                : null,
-                          ),
+                          EcfFlowStep.tracking => dosaOwnsCertificate
+                              ? EcfDosaTrackingStep(
+                                  milestone: _milestoneOf(stage).index,
+                                  statusLabel: _clientStateLabel(view),
+                                  statusMessage: _clientStatusMessage(view),
+                                  official: view.officialAuthorization,
+                                  portal: canOnboard
+                                      ? DosaAssistantSection(
+                                          key: ValueKey(
+                                            'dosa-tracking-${user?.companyId}',
+                                          ),
+                                          portalOnly: true,
+                                          postulationExternalId:
+                                              view.externalId,
+                                        )
+                                      : null,
+                                  advanced: canManage
+                                      ? _adminAdvanced(view, stage: stage)
+                                      : null,
+                                )
+                              : _trackingStep(
+                                  view: view,
+                                  stage: stage,
+                                  wide: wide,
+                                  canManage: canManage,
+                                  canRecordAuthorization:
+                                      canRecordAuthorization,
+                                  canRegisterEvidence: canRegisterEvidence,
+                                  canReviewEvidence: canReviewEvidence,
+                                  activation: activation.valueOrNull,
+                                  testBadge:
+                                      preparation
+                                              .valueOrNull
+                                              ?.simulationAvailable ==
+                                          true
+                                      ? preparation.valueOrNull?.simulationBadge
+                                      : null,
+                                ),
                         };
                       }
 
@@ -685,24 +769,6 @@ class _EcfDgiiHabilitationPageState
                       // para que un fallo se vea sin perder el contexto.
                       Widget framed(Widget child) => Column(
                         children: [
-                          // Atajo de vista previa: solo existe compilado con la
-                          // empresa de prueba y no escribe nada.
-                          if (preview)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: EcfFlowPreviewButton(
-                                  nextLabel: nextEcfFlowStep(step).railLabel,
-                                  onPressed: () => setState(() {
-                                    _applicationOpen = false;
-                                    _activationOpen = false;
-                                    _fiscalOpen = false;
-                                    _step = nextEcfFlowStep(step);
-                                  }),
-                                ),
-                              ),
-                            ),
                           if (_error != null)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -762,7 +828,6 @@ class _EcfDgiiHabilitationPageState
                             EcfStepRail(
                               current: step,
                               horizontal: true,
-                              allowForward: true,
                               onSelect: _goToStep,
                             ),
                             const Divider(height: 1),
@@ -782,7 +847,6 @@ class _EcfDgiiHabilitationPageState
                               child: SingleChildScrollView(
                                 child: EcfStepRail(
                                   current: step,
-                                  allowForward: true,
                                   onSelect: _goToStep,
                                 ),
                               ),
@@ -804,18 +868,6 @@ class _EcfDgiiHabilitationPageState
   /// Solo el estado persistido y vigente que devuelve el servidor permite avanzar.
   bool _certificateReady(EcfDgiiHabilitationView view) =>
       !_certificateRestarted && view.certificateValidation?.ready == true;
-
-  /// Qué falta exactamente para poder continuar. `null` si ya se puede.
-  String? _certificateBlockedReason(EcfDgiiHabilitationView view) {
-    if (_certificateReady(view)) return null;
-    return view.certificateValidation?.reason ?? _certificateGate.reason ??
-        'Valida el certificado digital del representante legal para continuar.';
-  }
-
-  bool _requirementResolved(EcfDgiiHabilitationView view, String key) => view
-      .progress
-      .requirements
-      .any((item) => item.key == key && item.resolved);
 
   /// Arranca el motor de postulación con las condiciones del servidor.
   Future<void> _startIntelligentCertification() async {
@@ -994,6 +1046,42 @@ class _EcfDgiiHabilitationPageState
           ),
       ],
       detailsBar: canManage ? _technicalDetails(view, stage: stage) : null,
+    );
+  }
+
+  /// Controles excepcionales fuera del recorrido del cliente.
+  ///
+  /// El diagnóstico, la evidencia y la autorización histórica siguen
+  /// existiendo, pero no compiten con la acción principal.
+  Widget _adminAdvanced(
+    EcfDgiiHabilitationView view, {
+    required _EcfStage stage,
+  }) {
+    final companyId = ref.read(authStateProvider).user?.companyId ?? '';
+    return EcfSurface(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: const Text(
+            'Avanzado',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          subtitle: const Text(
+            'Diagnóstico y controles exclusivos de administradores.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DosaCertificationDiagnosticSection(
+              key: ValueKey('dosa-diagnostic-$companyId'),
+            ),
+            const SizedBox(height: 10),
+            _technicalDetails(view, stage: stage),
+          ],
+        ),
+      ),
     );
   }
 

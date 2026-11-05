@@ -23,7 +23,7 @@ export class UpdateEcfConfigDto {
   enabled?: boolean;
 
   @IsOptional()
-  @IsIn([EcfProvider.ALANUBE])
+  @IsIn([EcfProvider.DOSA])
   provider?: EcfProvider;
 
   @IsOptional()
