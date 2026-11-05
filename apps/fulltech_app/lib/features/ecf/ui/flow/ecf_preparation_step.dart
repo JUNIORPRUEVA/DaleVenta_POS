@@ -1,76 +1,78 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/company/company_settings_model.dart';
 import 'ecf_flow_kit.dart';
 
-/// Paso «Preparación».
+/// Única pantalla de preparación antes de iniciar la postulación.
 ///
-/// Un resumen de cuatro líneas y una sola acción. El botón del motor se habilita
-/// exactamente con las mismas condiciones que valida el backend: no se fuerza
-/// nada desde la interfaz.
+/// Reutiliza los datos que FullPOS ya tiene registrados. Solo pide lo que falta
+/// y deja una única acción principal: completar los datos o iniciar el proceso
+/// oficial. El certificado y las credenciales se gestionan dentro de DOSA, así
+/// que no se duplican aquí.
 class EcfPreparationStep extends StatelessWidget {
   const EcfPreparationStep({
     super.key,
+    required this.settings,
     required this.companyReady,
+    required this.contactEmailReady,
     required this.certificateReady,
-    required this.dgiiAccessReady,
-    required this.pendingRequirements,
-    required this.simulationAvailable,
-    required this.simulationBadge,
-    required this.simulationReason,
+    required this.dosaOwnsCertificate,
     required this.canManage,
     required this.busy,
+    required this.onEditFiscalData,
     required this.onStart,
     required this.onGoCompany,
     required this.onGoCertificate,
     this.dosaEntry,
-    this.dosaOwnsCertificate = false,
+    this.advanced,
+    this.simulationAvailable = false,
+    this.simulationBadge,
+    this.simulationReason,
   });
 
+  final CompanySettings? settings;
+
+  /// Datos mínimos que exige la emisión (nombre, RNC y dirección).
   final bool companyReady;
+
+  /// Correo fiscal que el backend usa al abrir la sesión oficial.
+  final bool contactEmailReady;
+
+  /// Certificado validado previamente en FullPOS. Para DOSA es historial.
   final bool certificateReady;
-  final bool dgiiAccessReady;
 
-  /// Requisitos obligatorios aún pendientes según el expediente real.
-  final int pendingRequirements;
+  /// El certificado lo pide DOSA dentro de su propio asistente.
+  final bool dosaOwnsCertificate;
 
-  final bool simulationAvailable;
-  final String? simulationBadge;
-  final String? simulationReason;
   final bool canManage;
   final bool busy;
+
+  final VoidCallback onEditFiscalData;
   final VoidCallback onStart;
   final VoidCallback onGoCompany;
   final VoidCallback onGoCertificate;
 
-  /// Entrada al portal DOSA, independiente del motor de prueba legado.
+  /// Acción oficial de DOSA. Si existe, es la única acción principal.
   final Widget? dosaEntry;
 
-  /// El certificado lo gestiona el asistente oficial de DOSA. En ese caso no
-  /// se presenta como requisito previo de FullPOS ni como bloqueo.
-  final bool dosaOwnsCertificate;
+  /// Controles administrativos fuera del recorrido del cliente.
+  final Widget? advanced;
 
-  bool get _canRun => canManage && simulationAvailable && certificateReady;
+  final bool simulationAvailable;
+  final String? simulationBadge;
+  final String? simulationReason;
 
-  String get _blockedReason {
-    if (!companyReady) {
-      return 'Faltan datos de la empresa para postular.';
-    }
-    if (!certificateReady && !dosaOwnsCertificate) {
-      return 'Valida primero el certificado digital.';
-    }
-    if (!canManage) {
-      return 'Solo un usuario con permiso de gestión puede iniciar la postulación.';
-    }
-    if (!simulationAvailable) {
-      return simulationReason?.trim().isNotEmpty == true
-          ? simulationReason!.trim()
-          : 'El modo de prueba no está habilitado en este entorno.';
-    }
-    return 'Todo listo para iniciar.';
-  }
+  bool get _dataReady => companyReady && contactEmailReady;
+
+  bool get _certificateReadyForDosa =>
+      certificateReady || dosaOwnsCertificate;
 
   @override
   Widget build(BuildContext context) {
+    final companyName = (settings?.companyName ?? '').trim();
+    final rnc = (settings?.rnc ?? '').trim();
+    final email = (settings?.ecfContactEmail ?? '').trim();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -79,93 +81,115 @@ class EcfPreparationStep extends StatelessWidget {
           const EcfStepTitle(
             title: 'Preparación',
             subtitle:
-                'La postulación se realiza en el asistente oficial de DOSA. '
-                'Aquí solo reunimos lo que ya tenemos registrado.',
+                'Revisa los datos de tu empresa. Solo te pediremos lo que falte.',
           ),
           const SizedBox(height: 14),
           EcfSection(
-            title: 'Antes de postular',
-            icon: Icons.fact_check_outlined,
+            title: 'Tu empresa',
+            icon: Icons.storefront_outlined,
+            trailing: TextButton.icon(
+              onPressed: onEditFiscalData,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              icon: const Icon(Icons.edit_outlined, size: 15),
+              label: const Text('Revisar', style: TextStyle(fontSize: 12)),
+            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                EcfField(
+                  label: 'Razón social',
+                  value: companyName.isEmpty ? null : companyName,
+                ),
+                EcfField(label: 'RNC', value: rnc.isEmpty ? null : rnc),
                 EcfSummaryRow(
-                  label: 'Datos de la empresa',
-                  value: companyReady ? 'Listos' : 'Faltan datos',
+                  label: 'Datos fiscales',
+                  value: companyReady ? 'Completos' : 'Faltan datos',
                   tone: companyReady ? EcfTone.done : EcfTone.warning,
-                  onTap: companyReady ? null : onGoCompany,
+                  onTap: companyReady ? null : onEditFiscalData,
                 ),
                 EcfSummaryRow(
-                  label: 'Certificado digital',
-                  value: certificateReady
-                      ? 'Validado'
-                      : dosaOwnsCertificate
-                      ? 'Se pide en el asistente de DOSA'
-                      : 'Sin validar',
-                  tone: certificateReady
-                      ? EcfTone.done
-                      : dosaOwnsCertificate
-                      ? EcfTone.pending
-                      : EcfTone.warning,
-                  onTap: certificateReady || dosaOwnsCertificate
-                      ? null
-                      : onGoCertificate,
+                  label: 'Correo fiscal',
+                  value: contactEmailReady
+                      ? email
+                      : 'Falta el correo de facturación',
+                  tone: contactEmailReady ? EcfTone.done : EcfTone.warning,
+                  onTap: contactEmailReady ? null : onEditFiscalData,
                 ),
-                EcfSummaryRow(
-                  label: 'Acceso al portal de la DGII',
-                  value: dgiiAccessReady ? 'Confirmado' : 'Sin confirmar',
-                  tone: dgiiAccessReady ? EcfTone.done : EcfTone.pending,
-                ),
-                EcfSummaryRow(
-                  label: 'Requisitos pendientes',
-                  value: pendingRequirements == 0
-                      ? 'Ninguno'
-                      : '$pendingRequirements',
-                  tone: pendingRequirements == 0
-                      ? EcfTone.done
-                      : EcfTone.pending,
-                ),
+                // Con DOSA el certificado se carga dentro de su asistente.
+                // No se muestra aquí para no dar a entender que ya está
+                // registrado en FullPOS ni que hace falta subirlo antes.
+                if (!dosaOwnsCertificate)
+                  EcfSummaryRow(
+                    label: 'Certificado digital',
+                    value: certificateReady
+                        ? 'Registrado'
+                        : 'Pendiente de validar',
+                    tone: certificateReady ? EcfTone.done : EcfTone.pending,
+                    onTap: !certificateReady ? onGoCertificate : null,
+                  ),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          if (dosaEntry != null) ...[dosaEntry!, const SizedBox(height: 12)],
-          // Con el portal oficial presente no se ofrece un segundo camino de
-          // postulación: un solo proceso, un solo botón principal.
-          if (simulationAvailable && dosaEntry == null) EcfSection(
-            title: 'Postulación inteligente',
-            icon: Icons.auto_awesome_outlined,
-            subtitle:
-                'FullPOS ejecuta los pasos que dependen del proveedor '
-                'certificado. Lo que dependa de la DGII te lo indicaremos.',
-            trailing: simulationAvailable && (simulationBadge ?? '').isNotEmpty
-                ? EcfBadge(
-                    key: const ValueKey('ecf_test_mode_badge'),
-                    label: simulationBadge!,
-                  )
-                : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                EcfPrimaryAction(
-                  label: 'Iniciar postulación inteligente',
-                  buttonKey: const ValueKey(
-                    'ecf_intelligent_certification_button',
+          if (!_dataReady)
+            EcfPrimaryAction(
+              label: 'Completar datos',
+              icon: Icons.edit_outlined,
+              onPressed: onEditFiscalData,
+              helper:
+                  'Solo completarás la información que falta. El resto ya está guardado.',
+              buttonKey: const ValueKey('ecf_preparation_complete_data'),
+            )
+          else if (dosaEntry != null)
+            dosaEntry!
+          else if (!_certificateReadyForDosa)
+            EcfPrimaryAction(
+              label: 'Validar certificado',
+              icon: Icons.verified_user_outlined,
+              onPressed: onGoCertificate,
+            )
+          else if (simulationAvailable && canManage)
+            EcfSection(
+              title: 'Iniciar postulación',
+              icon: Icons.arrow_forward_rounded,
+              trailing: (simulationBadge ?? '').isNotEmpty
+                  ? EcfBadge(label: simulationBadge!)
+                  : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EcfPrimaryAction(
+                    label: 'Iniciar postulación',
+                    buttonKey: const ValueKey(
+                      'ecf_intelligent_certification_button',
+                    ),
+                    icon: Icons.arrow_forward_rounded,
+                    busy: busy,
+                    onPressed: onStart,
                   ),
-                  icon: Icons.auto_awesome_outlined,
-                  busy: busy,
-                  onPressed: _canRun ? onStart : null,
-                ),
-                const SizedBox(height: 8),
-                EcfInlineNote(
-                  tone: _canRun ? EcfTone.done : EcfTone.pending,
-                  icon: _canRun
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.info_outline_rounded,
-                  text: _blockedReason,
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  EcfInlineNote(
+                    tone: EcfTone.pending,
+                    text: simulationReason?.trim().isNotEmpty == true
+                        ? simulationReason!.trim()
+                        : 'El proceso se abrirá en el entorno de certificación.',
+                  ),
+                ],
+              ),
+            )
+          else
+            const EcfInlineNote(
+              tone: EcfTone.pending,
+              text:
+                  'Un administrador con permiso de facturación electrónica debe iniciar la postulación.',
             ),
-          ),
+          if (advanced != null) ...[
+            const SizedBox(height: 12),
+            advanced!,
+          ],
         ],
       ),
     );

@@ -10,11 +10,18 @@ import '../../../core/utils/safe_url_launcher.dart';
 /// URL, la tarjeta muestra la guía escrita y el enlace al portal oficial; nunca
 /// un reproductor vacío que aparente contenido que no hay.
 class EcfHabilitacionVideoCard extends StatelessWidget {
-  const EcfHabilitacionVideoCard({super.key, this.videoUrl = ''});
+  const EcfHabilitacionVideoCard({
+    super.key,
+    this.videoUrl = '',
+    this.maxVideoWidth = 520,
+  });
 
   /// URL servida por el API (`GET /ecf/dgii/preparation`). Si llega vacía se usa
   /// el valor de compilación, y si tampoco hay, se muestra el marcador.
   final String videoUrl;
+
+  /// La bienvenida puede pedir un vídeo más protagonista sin duplicar el widget.
+  final double maxVideoWidth;
 
   static const _envUrl = String.fromEnvironment(
     'ECF_HABILITATION_VIDEO_URL',
@@ -41,7 +48,7 @@ class EcfHabilitacionVideoCard extends StatelessWidget {
         // no domine la pantalla en Windows ni en web.
         Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: BoxConstraints(maxWidth: maxVideoWidth),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: AspectRatio(

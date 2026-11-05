@@ -219,7 +219,7 @@ export class EcfService {
         "Producción e-CF no está habilitada en esta fase.",
       );
     }
-    if (dto.provider && dto.provider !== EcfProvider.ALANUBE) {
+    if (dto.provider && dto.provider !== EcfProvider.DOSA) {
       throw new BadRequestException("Proveedor e-CF no soportado");
     }
     const allowedTypes = dto.allowedTypes
@@ -282,7 +282,7 @@ export class EcfService {
         data: {
           companyId,
           enabled: false,
-          provider: EcfProvider.ALANUBE,
+          provider: EcfProvider.DOSA,
           environment: EcfEnvironment.SANDBOX,
           certificationStatus: EcfCertificationStatus.NOT_STARTED,
           productionEnabled: false,

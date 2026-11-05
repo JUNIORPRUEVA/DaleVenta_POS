@@ -38,6 +38,7 @@ class DosaAssistantSection extends ConsumerStatefulWidget {
     this.onRefresh,
     this.config,
     this.portalOnly = false,
+    this.onSessionOpened,
   });
 
   /// Referencia externa del expediente, si ya existe.
@@ -56,6 +57,9 @@ class DosaAssistantSection extends ConsumerStatefulWidget {
 
   /// En Preparación usa el portal existente sin depender del embed de Flutter.
   final bool portalOnly;
+
+  /// Se invoca solo cuando el portal oficial se abrió correctamente.
+  final VoidCallback? onSessionOpened;
 
   @override
   ConsumerState<DosaAssistantSection> createState() =>
@@ -119,7 +123,9 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
           return;
         }
         final opened = await openDosaPortal(session.sessionUrl);
-        if (!opened) {
+        if (opened) {
+          widget.onSessionOpened?.call();
+        } else {
           messenger?.showSnackBar(
             const SnackBar(
               content: Text(
@@ -150,7 +156,9 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         return;
       }
       final opened = await openDosaPortal(ticket.url);
-      if (!opened) {
+      if (opened) {
+        widget.onSessionOpened?.call();
+      } else {
         messenger?.showSnackBar(
           const SnackBar(
             content: Text(
@@ -339,12 +347,14 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (historicalReviewRequired && canManage && intentId != null)
-          _DosaHistoricalReviewCard(
-            intentId: intentId,
-            onAuthorized: () {
-              ref.invalidate(dosaIntentStateProvider);
-              ref.invalidate(ecfOnboardingProvider);
-            },
+          _DosaAdminAdvanced(
+            child: _DosaHistoricalReviewCard(
+              intentId: intentId,
+              onAuthorized: () {
+                ref.invalidate(dosaIntentStateProvider);
+                ref.invalidate(ecfOnboardingProvider);
+              },
+            ),
           )
         else if (historicalReviewRequired)
           const _DosaIntentGate(
@@ -363,11 +373,12 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
             busy: _openingPortal,
             portalOnly: widget.portalOnly,
           ),
-        _DosaIntentBanner(
-          attemptNo: attemptNo,
-          created: created,
-          onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
-        ),
+        if (!widget.portalOnly)
+          _DosaIntentBanner(
+            attemptNo: attemptNo,
+            created: created,
+            onRefreshState: () => ref.invalidate(dosaIntentStateProvider),
+          ),
         if (!widget.portalOnly)
           DosaAssistantPanel(
             config: resolved,
@@ -430,7 +441,7 @@ class _DosaPrepareCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Estado de certificación',
+                    portalOnly ? 'Postulación electrónica' : 'Estado de certificación',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -439,11 +450,9 @@ class _DosaPrepareCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               portalOnly
-                  ? 'Abrimos el asistente oficial de DOSA con el RNC de tu '
-                        'empresa. El certificado y las contraseñas los pide '
-                        'DOSA dentro del asistente: no hay que subirlos aquí. '
-                        'No activa la facturación electrónica ni emite '
-                        'comprobantes.'
+                  ? 'Abriremos el asistente oficial de DOSA con los datos de '
+                        'tu empresa. Allí completarás el certificado y las '
+                        'credenciales. No se emite ningún comprobante.'
                   : 'Vincula esta empresa con su RNC verificado para abrir el '
                         'asistente del proveedor. No activa la facturación '
                         'electrónica, no emite comprobantes y no envía nada a '
@@ -457,9 +466,7 @@ class _DosaPrepareCard extends StatelessWidget {
                 onPressed: onPrepare,
                 icon: const Icon(Icons.play_arrow, size: 18),
                 label: Text(
-                  portalOnly
-                      ? 'Iniciar postulación electrónica'
-                      : 'Preparar certificación',
+                  portalOnly ? 'Iniciar postulación' : 'Preparar certificación',
                 ),
               ),
             ),
@@ -644,8 +651,8 @@ class _DosaHistoricalReviewCardState
               ),
               const SizedBox(height: 8),
               Text(
-                'Este expediente conserva una intención histórica de otro '
-                'proveedor que ya fue conciliada con DOSA. Para evitar cambiar '
+                'Este expediente conserva una intención histórica de un '
+                'proveedor anterior que ya fue conciliada con FullPOS. Para evitar cambiar '
                 'estados, fechas o referencias sin control, la transición '
                 'requiere aprobación del propietario y queda auditada.',
                 style: theme.textTheme.bodyMedium,
@@ -752,7 +759,9 @@ class _DosaPortalCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Estado de certificación',
+                    portalOnly
+                        ? 'Asistente de DOSA'
+                        : 'Estado de certificación',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -760,9 +769,13 @@ class _DosaPortalCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Se abre el portal seguro de FullPOS Cloud con el asistente de '
-              'certificación. Puedes empezar aquí y seguir desde otro dispositivo: el '
-              'proceso pertenece a la empresa, no al equipo.',
+              portalOnly
+                  ? 'Continúa en el asistente oficial de DOSA con los datos de '
+                        'tu empresa. Allí se solicitan el certificado y las '
+                        'credenciales.'
+                  : 'Se abre el asistente oficial de DOSA. Puedes empezar aquí y '
+                        'seguir desde otro dispositivo: el proceso pertenece a '
+                        'la empresa, no al equipo.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -779,13 +792,40 @@ class _DosaPortalCard extends StatelessWidget {
                     : const Icon(Icons.play_arrow, size: 18),
                 label: Text(
                   portalOnly
-                      ? 'Volver a abrir el asistente'
+                      ? 'Continuar en DOSA'
                       : 'Continuar certificación',
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Bloque plegable para controles excepcionales de administración.
+class _DosaAdminAdvanced extends StatelessWidget {
+  const _DosaAdminAdvanced({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+        childrenPadding: EdgeInsets.zero,
+        title: const Text(
+          'Avanzado',
+          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+        ),
+        subtitle: const Text(
+          'Controles exclusivos de administradores.',
+          style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+        ),
+        children: [child],
       ),
     );
   }

@@ -111,8 +111,8 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 1);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
+    expect(find.text('Postulación electrónica'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsOneWidget);
   });
 
   testWidgets('portal fuera del piloto falla cerrado', (tester) async {
@@ -125,7 +125,7 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 0);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Estado de certificación'), findsNothing);
+    expect(find.text('Postulación electrónica'), findsNothing);
   });
 
   testWidgets('portal sin permiso no consulta ni ofrece acciones', (
@@ -146,7 +146,7 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 0);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Estado de certificación'), findsNothing);
+    expect(find.text('Postulación electrónica'), findsNothing);
   });
 
   testWidgets('un solo clic registra la intención y abre el portal', (
@@ -158,16 +158,16 @@ void main() {
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
     expect(portal.ticketCalls, 0);
 
-    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.tap(find.text('Iniciar postulación'));
     await tester.pumpAndSettle();
 
     // Un toque: registra la intención (una vez) y pide el ticket del portal.
     expect(api.registerCalls, hasLength(1));
     expect(portal.ticketCalls, 1);
-    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Asistente de DOSA'), findsOneWidget);
     // La reapertura queda como acción secundaria, no como paso obligatorio.
-    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
-    expect(find.text('Iniciar postulación electrónica'), findsNothing);
+    expect(find.text('Continuar en DOSA'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsNothing);
   });
 
   testWidgets('doble clic no duplica la intención ni el ticket', (
@@ -177,7 +177,7 @@ void main() {
     final portal = _PortalApi();
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
-    final button = find.text('Iniciar postulación electrónica');
+    final button = find.text('Iniciar postulación');
 
     // Dos toques dentro del mismo frame: el segundo no debe crear nada nuevo.
     await tester.tap(button);
@@ -211,7 +211,7 @@ void main() {
       sessionApi: sessionApi,
     );
 
-    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.tap(find.text('Iniciar postulación'));
     await tester.pumpAndSettle();
 
     expect(sessionApi.calls, 1);
@@ -234,7 +234,7 @@ void main() {
       sessionApi: sessionApi,
     );
 
-    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.tap(find.text('Iniciar postulación'));
     await tester.pumpAndSettle();
 
     expect(sessionApi.calls, 1);
@@ -250,8 +250,8 @@ void main() {
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
 
-    expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
+    expect(find.text('Asistente de DOSA'), findsOneWidget);
+    expect(find.text('Continuar en DOSA'), findsOneWidget);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -268,7 +268,7 @@ void main() {
       find.textContaining('Revisa el intento de certificación existente'),
       findsOneWidget,
     );
-    expect(find.text('Volver a abrir el asistente'), findsNothing);
+    expect(find.text('Continuar en DOSA'), findsNothing);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -285,7 +285,7 @@ void main() {
       portalApi: portal,
     );
 
-    await tester.tap(find.text('Volver a abrir el asistente'));
+    await tester.tap(find.text('Continuar en DOSA'));
     await tester.pump();
     expect(portal.ticketCalls, 1);
 
@@ -366,6 +366,10 @@ void main() {
 
       await pumpSection(tester, api: api);
 
+      // Los controles históricos viven dentro de Avanzado.
+      await tester.tap(find.text('Avanzado'));
+      await tester.pumpAndSettle();
+
       expect(
         find.text('Autorización administrativa requerida'),
         findsOneWidget,
@@ -413,6 +417,9 @@ void main() {
       final api = _IntentApi(hasSession: true, historicalReviewRequired: true);
 
       await pumpSection(tester, api: api);
+
+      await tester.tap(find.text('Avanzado'));
+      await tester.pumpAndSettle();
 
       await tester.enterText(
         find.widgetWithText(

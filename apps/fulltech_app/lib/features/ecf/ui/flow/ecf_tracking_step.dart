@@ -71,7 +71,7 @@ class EcfTrackingStep extends StatelessWidget {
             children: [
               const Expanded(
                 child: EcfStepTitle(
-                  title: 'Seguimiento',
+                  title: 'Tu postulación',
                   subtitle: 'Aquí ves en qué punto está tu habilitación.',
                 ),
               ),

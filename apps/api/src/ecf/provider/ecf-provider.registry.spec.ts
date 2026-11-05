@@ -119,9 +119,9 @@ describe("EcfFiscalProvider port — adaptador DOSA", () => {
 describe("EcfProviderRegistry", () => {
   const registry = createEcfFiscalProviderRegistry({ alanubeRealEmissionEnabled: false });
 
-  it("registra Alanube y DOSA", () => {
+  it("registra Alanube y DOSA con DOSA como proveedor por defecto", () => {
     expect(registry.list().map((provider) => provider.id).sort()).toEqual(["ALANUBE", "DOSA"]);
-    expect(registry.defaultProvider.id).toBe("ALANUBE");
+    expect(registry.defaultProvider.id).toBe("DOSA");
   });
 
   it("informa la disponibilidad real de cada proveedor", () => {
