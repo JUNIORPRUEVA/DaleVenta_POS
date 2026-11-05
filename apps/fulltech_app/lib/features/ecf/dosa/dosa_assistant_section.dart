@@ -155,7 +155,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
           !hasUserPermission(currentUser, AppPermission.manageEcfOnboarding)) {
         return;
       }
-      final opened = await openDosaPortal(ticket.url);
+      final opened = await openDosaPortal(ticket.url, sameTab: true);
       if (opened) {
         widget.onSessionOpened?.call();
       } else {

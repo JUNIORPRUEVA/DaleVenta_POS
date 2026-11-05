@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow">
   <title>Certificación electrónica · FullPOS Cloud</title>
   <style>
@@ -11,116 +11,79 @@
       --brand:#1f4bd8; --ok:#0f7b52; --warn:#b54708; --radius:14px;
     }
     *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--ink);
-      font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-    .top{display:flex;align-items:center;gap:12px;padding:14px 18px;background:#fff;
-      border-bottom:1px solid var(--line)}
-    .logo{width:32px;height:32px;border-radius:9px;background:var(--brand);color:#fff;
-      display:grid;place-items:center;font-weight:700;font-size:14px;letter-spacing:.5px}
-    .top h1{font-size:15px;margin:0;font-weight:650}
-    .top p{margin:0;font-size:12px;color:var(--muted)}
-    .top .spacer{flex:1}
-    .empresa{text-align:right;font-size:12px;color:var(--muted);line-height:1.3}
-    .empresa b{display:block;color:var(--ink);font-size:13px}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+      font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      overflow:hidden}
+    /* Columna a pantalla completa: encabezado fijo, lienzo flexible. Una sola
+       barra de desplazamiento (la del componente), nunca la de la página. */
+    body{display:flex;flex-direction:column;height:100%}
+    /* Encabezado compacto propio de FullPOS */
+    .top{flex:none;display:flex;align-items:center;gap:12px;
+      padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}
+    .logo{width:30px;height:30px;border-radius:9px;background:var(--brand);color:#fff;
+      display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.5px;flex:none}
+    .marca{min-width:0}
+    .marca h1{font-size:14.5px;margin:0;font-weight:650;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis}
+    .marca p{margin:0;font-size:11.5px;color:var(--muted);white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis}
+    .spacer{flex:1}
+    .empresa{text-align:right;font-size:11.5px;color:var(--muted);line-height:1.25;min-width:0}
+    .empresa b{display:block;color:var(--ink);font-size:12.5px;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;max-width:36vw}
     .ghost{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:9px;
-      padding:7px 12px;font-size:12.5px;cursor:pointer}
+      padding:7px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap;flex:none}
     .ghost:hover{border-color:#c9cfda}
-    main{max-width:1024px;margin:0 auto;padding:18px}
-    .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-    .card + .card{margin-top:14px}
-    h2{font-size:15px;margin:0 0 6px}
-    .lead{color:var(--muted);margin:0 0 14px;font-size:13.5px}
-    /* Recorrido */
-    .pasos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0;padding:0;list-style:none}
-    .paso{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fbfcfe}
-    .paso .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
-      background:#eef2ff;color:var(--brand);font-size:12px;font-weight:700;margin-bottom:8px}
-    .paso b{display:block;font-size:13.5px}
-    .paso span{font-size:12px;color:var(--muted)}
-    .paso[data-estado="in_progress"]{border-color:#c7d2fe;background:#f5f7ff}
-    .paso[data-estado="done"]{border-color:#bbf7d0;background:#f0fdf5}
-    .paso[data-estado="done"] .n{background:#dcfce7;color:var(--ok)}
-    .paso[data-estado="locked"]{opacity:.6}
-    /* Acciones */
-    .acciones{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
-    .primary{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:11px 18px;
-      font-size:14px;font-weight:600;cursor:pointer}
-    .primary:disabled{opacity:.6;cursor:default}
-    .nota{font-size:12px;color:var(--muted);margin:10px 0 0}
-    /* Estados */
-    .aviso{border-radius:12px;padding:12px 14px;font-size:13px;border:1px solid}
+    /* Lienzo: el componente ocupa todo el alto disponible, sin scroll de página */
+    main{flex:1;min-height:0;width:100%;max-width:1180px;margin:0 auto;
+      padding:10px 16px 14px;display:flex;flex-direction:column;gap:10px}
+    .aviso{border-radius:12px;padding:11px 14px;font-size:13px;border:1px solid}
     .aviso.info{background:#f5f7ff;border-color:#c7d2fe;color:#293a80}
     .aviso.error{background:#fef3f2;border-color:#fecdca;color:#b42318}
     .aviso.warn{background:#fff8e6;border-color:#f0dcae;color:#6b4e00}
     .oculto{display:none !important}
-    /* Componente */
-    #asistente{margin-top:14px}
-    .log{font:12px/1.5 ui-monospace,Consolas,monospace;color:var(--muted);
-      margin-top:10px;white-space:pre-wrap;word-break:break-word}
+    #marco{flex:1;min-height:0;overflow:hidden;border:1px solid var(--line);
+      border-radius:var(--radius);background:#fff}
+    #wizard{display:block;width:100%;border:0;background:#fff}
+    .log{display:none}
     @media (max-width:720px){
-      .pasos{grid-template-columns:1fr}
-      .top{flex-wrap:wrap}
-      .empresa{text-align:left}
+      .top{flex-wrap:wrap;padding:10px 12px;row-gap:6px}
+      .empresa{text-align:left;order:3;width:100%}
+      .empresa b{max-width:100%}
+      .spacer{display:none}
+      .ghost{order:2;margin-left:auto}
+      main{padding:8px 10px 10px}
+      #marco{border-radius:12px}
     }
   </style>
 </head>
 <body>
   <header class="top">
     <div class="logo">FP</div>
-    <div>
+    <div class="marca">
       <h1>Certificación electrónica</h1>
       <p>FullPOS Cloud · DGII vía DOSA</p>
     </div>
     <div class="spacer"></div>
-    <div class="empresa" id="empresa">
+    <div class="empresa">
       <b id="empresa-nombre">—</b>
       <span id="empresa-rnc"></span>
     </div>
-    <button class="ghost" id="salir" type="button">Salir</button>
+    <button class="ghost" id="salir" type="button">Volver a FullPOS</button>
   </header>
 
   <main>
-    <div class="aviso info oculto" id="cargando">Validando tu acceso…</div>
+    <div class="aviso info" id="cargando">Validando tu acceso…</div>
     <div class="aviso error oculto" id="error"></div>
-
-    <section class="card oculto" id="resumen">
-      <h2>Tu recorrido</h2>
-      <p class="lead">El proceso pertenece a tu empresa, no a este equipo: puedes empezar aquí y continuar desde otro dispositivo.</p>
-      <ol class="pasos">
-        <li class="paso" id="paso-solicitud" data-estado="pending">
-          <span class="n">1</span><b>Solicitud</b><span id="estado-solicitud">Pendiente</span>
-        </li>
-        <li class="paso" id="paso-pruebas" data-estado="locked">
-          <span class="n">2</span><b>Pruebas</b><span id="estado-pruebas">Se abre al completar la solicitud</span>
-        </li>
-        <li class="paso" id="paso-certificacion" data-estado="locked">
-          <span class="n">3</span><b>Certificación</b><span id="estado-certificacion">Se abre al completar las pruebas</span>
-        </li>
-      </ol>
-      <div class="acciones">
-        <button class="primary" id="iniciar" type="button">Continuar certificación</button>
-        <span class="nota" id="nota-intento"></span>
-      </div>
-      <p class="nota">
-        El asistente oficial de DOSA se abre solo cuando lo pides. No activa la
-        facturación electrónica, no emite comprobantes y no envía nada a la DGII
-        hasta que tú completes cada paso dentro del asistente.
-      </p>
-    </section>
-
-    <section id="asistente" class="oculto">
-      <div class="aviso warn" id="aviso-asistente">
-        Este navegador no permite incrustar el asistente. Ábrelo en una pestaña
-        nueva con el botón de abajo si el componente lo ofrece.
-      </div>
-      <p class="nota" id="estado-asistente" aria-live="polite">Asistente pendiente de abrir.</p>
+    <div class="aviso warn oculto" id="aviso-asistente" role="alert"></div>
+    <div id="marco">
       <dosa-cert-wizard id="wizard"
         publishable-key="__DOSA_PUBLISHABLE_KEY__"
         base-url="https://dosasystem.com"
         theme="light"
-        height="900" class="oculto"></dosa-cert-wizard>
-      <div class="log" id="log" aria-live="polite"></div>
-    </section>
+        height="720" class="oculto"></dosa-cert-wizard>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
   </main>
 
   <script>
@@ -132,11 +95,10 @@
 
       var elCargando = document.getElementById('cargando');
       var elError = document.getElementById('error');
-      var elResumen = document.getElementById('resumen');
-      var elAsistente = document.getElementById('asistente');
+      var elAviso = document.getElementById('aviso-asistente');
+      var elMarco = document.getElementById('marco');
       var elWizard = document.getElementById('wizard');
       var elLog = document.getElementById('log');
-      var btnIniciar = document.getElementById('iniciar');
 
       function mostrar(el) { el.classList.remove('oculto'); }
       function ocultar(el) { el.classList.add('oculto'); }
@@ -144,7 +106,7 @@
 
       function fallar(mensaje) {
         ocultar(elCargando);
-        ocultar(elResumen);
+        ocultar(elWizard);
         elError.textContent = mensaje;
         mostrar(elError);
       }
@@ -171,34 +133,15 @@
         });
       }
 
-      var ETIQUETAS = {
-        pending: 'Pendiente',
-        in_progress: 'En curso',
-        done: 'Completada',
-        locked: 'Se abre más adelante'
-      };
-
+      // El encabezado es lo único que pinta el contexto: no hay pantalla
+      // intermedia. El asistente se monta justo después de validar el acceso.
       function pintarContexto(ctx) {
-        elCargando.classList.add('oculto');
-        var empresa = ctx.company || {};
+        var empresa = (ctx && ctx.company) || {};
         texto('empresa-nombre', empresa.commercialName || 'Mi empresa');
-        texto('empresa-rnc', empresa.taxId ? ('RNC ' + empresa.taxId) : '');
-
-        var m = ctx.milestones || {};
-        [['solicitud', m.application], ['pruebas', m.tests], ['certificacion', m.certification]]
-          .forEach(function (par) {
-            var paso = document.getElementById('paso-' + par[0]);
-            var estado = par[1] || 'pending';
-            paso.setAttribute('data-estado', estado);
-            texto('estado-' + par[0], ETIQUETAS[estado] || estado);
-          });
-
-        var p = ctx.postulation;
-        texto('nota-intento', p
-          ? ('Intento ' + p.attemptNo + ' · ' + p.status)
-          : 'Sin solicitud iniciada todavía');
-
-        mostrar(elResumen);
+        var rnc = empresa.taxId ? ('RNC ' + empresa.taxId) : '';
+        var p = ctx && ctx.postulation;
+        var intento = p && p.attemptNo ? ('Intento ' + p.attemptNo) : '';
+        texto('empresa-rnc', [rnc, intento].filter(Boolean).join(' · '));
       }
 
       function cargarContexto() {
@@ -206,17 +149,84 @@
           if (!r.ok) {
             olvidarToken();
             if (r.status === 401) {
-              fallar('Tu acceso al portal caducó. Vuelve a FullPOS y pulsa otra vez «Iniciar o continuar certificación».');
+              fallar('Tu acceso al portal caducó. Vuelve a FullPOS y pulsa otra vez «Continuar con el asistente».');
             } else {
               fallar('No se pudo cargar tu expediente. Inténtalo de nuevo en un momento.');
             }
-            return;
+            return false;
           }
           pintarContexto(r.data.context || {});
+          return true;
         }).catch(function () {
           fallar('No hay conexión con FullPOS Cloud. Revisa tu red y recarga.');
+          return false;
         });
       }
+
+      function registrar(tipo) {
+        // Los eventos del navegador son pistas. Sus payloads pueden contener
+        // datos fiscales; no se muestran ni se usan como autoridad.
+        elLog.textContent = (elLog.textContent ? elLog.textContent + '\n' : '') + tipo;
+      }
+
+      // Alto exacto del marco disponible: el componente no arrastra su propia
+      // página, así que no aparecen dos barras de desplazamiento.
+      function ajustarAltura() {
+        var alto = Math.floor(elMarco.getBoundingClientRect().height);
+        if (alto > 0) elWizard.setAttribute('height', String(alto));
+      }
+      window.addEventListener('resize', ajustarAltura);
+      window.addEventListener('orientationchange', ajustarAltura);
+
+      // Monta el componente oficial. No inicia ninguna postulación: el
+      // proveedor muestra su propio formulario y el usuario decide dentro.
+      function montarAsistente() {
+        ocultar(elCargando);
+        ocultar(elError);
+        ocultar(elAviso);
+
+        if (!document.querySelector('script[data-dosa-cert="1"]')) {
+          var s = document.createElement('script');
+          s.src = 'https://dosasystem.com/static/embed/dosa-cert.js';
+          s.async = true;
+          s.setAttribute('data-dosa-cert', '1');
+          s.onerror = function () {
+            elAviso.textContent =
+              'No se pudo cargar el asistente oficial. Revisa tu conexión y recarga la página.';
+            mostrar(elAviso);
+          };
+          document.head.appendChild(s);
+        }
+
+        ['cert:ready','cert:step','cert:postulacion','cert:attention','cert:complete',
+         'cert:error','cert:blocked','cert:asistida_pago','cert:asistida_pagada']
+          .forEach(function (tipo) {
+            document.addEventListener(tipo, function () {
+              registrar(tipo);
+              if (tipo === 'cert:ready') {
+                ocultar(elAviso);
+              } else if (tipo === 'cert:blocked' || tipo === 'cert:error') {
+                elAviso.textContent =
+                  'El asistente no está disponible aquí. Revisa que el dominio esté autorizado o ábrelo en otra pestaña si se ofrece esa opción.';
+                mostrar(elAviso);
+              } else if (tipo === 'cert:postulacion' || tipo === 'cert:complete') {
+                // Solo se refresca el encabezado: nada se da por confirmado
+                // hasta que el backend lo reporte.
+                cargarContexto();
+              }
+            }, true);
+          });
+
+        elWizard.classList.remove('oculto');
+        ajustarAltura();
+      }
+
+      document.getElementById('salir').addEventListener('click', function () {
+        apiFetch('/ecf/certification-portal/sessions', { method: 'DELETE' }).finally(function () {
+          olvidarToken();
+          window.location.assign('/');
+        });
+      });
 
       // El ticket viene de la app, es de un solo uso y dura 120 s. Se canjea
       // aquí y se borra de la barra de direcciones: no queda en el historial.
@@ -254,76 +264,21 @@
         } catch (e) { /* navegador antiguo */ }
       }
 
-      function registrar(tipo) {
-        // Los eventos del navegador son pistas. Sus payloads pueden contener
-        // datos fiscales; no se muestran ni se usan como autoridad.
-        elLog.textContent = (elLog.textContent ? elLog.textContent + '\n' : '') + tipo;
-      }
-
-      // El componente NO se monta al abrir la página (Fase 5): solo cuando el
-      // administrador lo pide. Así, consultar Configuración nunca crea una
-      // sesión técnica en DOSA.
-      function montarAsistente() {
-        btnIniciar.disabled = true;
-        mostrar(elAsistente);
-        ocultar(document.getElementById('aviso-asistente'));
-
-        if (!document.querySelector('script[data-dosa-cert="1"]')) {
-          var s = document.createElement('script');
-          s.src = 'https://dosasystem.com/static/embed/dosa-cert.js';
-          s.async = true;
-          s.setAttribute('data-dosa-cert', '1');
-          s.onerror = function () {
-            document.getElementById('aviso-asistente').textContent =
-              'No se pudo cargar el asistente oficial. Revisa tu conexión y recarga la página.';
-            mostrar(document.getElementById('aviso-asistente'));
-          };
-          document.head.appendChild(s);
-        }
-
-        ['cert:ready','cert:step','cert:postulacion','cert:attention','cert:complete',
-         'cert:error','cert:blocked','cert:asistida_pago','cert:asistida_pagada']
-          .forEach(function (tipo) {
-            document.addEventListener(tipo, function () {
-              registrar(tipo);
-              if (tipo === 'cert:ready') {
-                texto('estado-asistente', 'Asistente disponible. Continúa cuando estés listo.');
-                ocultar(document.getElementById('aviso-asistente'));
-              } else if (tipo === 'cert:blocked' || tipo === 'cert:error') {
-                texto('estado-asistente', 'No se pudo continuar en el asistente. Revisa el aviso y vuelve a intentarlo.');
-                document.getElementById('aviso-asistente').textContent =
-                  'El asistente no está disponible aquí. Revisa que el dominio esté autorizado o ábrelo en otra pestaña si se ofrece esa opción.';
-                mostrar(document.getElementById('aviso-asistente'));
-              } else if (tipo === 'cert:postulacion' || tipo === 'cert:complete') {
-                texto('estado-asistente', 'Actualizando el estado confirmado por FullPOS…');
-                cargarContexto();
-              }
-            }, true);
-          });
-
-        elWizard.classList.remove('oculto');
-        elWizard.setAttribute('height', String(Math.max(720, window.innerHeight - 240)));
-        btnIniciar.disabled = false;
-      }
-
-      btnIniciar.addEventListener('click', montarAsistente);
-
-      document.getElementById('salir').addEventListener('click', function () {
-        apiFetch('/ecf/certification-portal/sessions', { method: 'DELETE' }).finally(function () {
-          olvidarToken();
-          window.location.replace('/');
-        });
-      });
-
       var params = new URLSearchParams(window.location.search);
       var ticket = params.get('ticket');
       if (ticket) {
-        mostrar(elCargando);
+        // Un solo gesto del usuario: canjear el ticket y montar el asistente
+        // en la misma pantalla, sin clic adicional.
         limpiarUrl();
-        canjearTicket(ticket).then(function (ok) { if (!ok) return; });
+        canjearTicket(ticket).then(function (ok) {
+          if (ok) montarAsistente();
+        });
       } else if (token()) {
-        mostrar(elCargando);
-        cargarContexto();
+        // Recarga o vuelta atrás con sesión de portal vigente: se reanuda
+        // montando el asistente, sin pedir el ticket otra vez.
+        cargarContexto().then(function (ok) {
+          if (ok) montarAsistente();
+        });
       } else {
         fallar('Falta el enlace de acceso. Abre el portal desde FullPOS Cloud, en Configuración → Facturación electrónica.');
       }
