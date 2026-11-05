@@ -415,7 +415,7 @@ void main() {
 
     expect(intentApi.registerCalls, 1);
     expect(sessionApi.openCalls, 1);
-    expect(find.text('Continuar en DOSA'), findsOneWidget);
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

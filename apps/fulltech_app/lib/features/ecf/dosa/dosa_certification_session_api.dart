@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -114,7 +116,7 @@ class DosaCertificationSessionApi {
 
   DosaCertificationSessionException _mapError(DioException error) {
     final status = error.response?.statusCode;
-    final data = error.response?.data;
+    final data = _decodedBody(error.response?.data);
     final code = data is Map && data['message'] is String
         ? data['message'] as String
         : data is Map &&
@@ -125,6 +127,27 @@ class DosaCertificationSessionApi {
         ? 'ECF_DOSA_SESSION_UNAUTHENTICATED'
         : 'HTTP_$status';
     return DosaCertificationSessionException(code, statusCode: status);
+  }
+
+  /// El cuerpo del error puede llegar ya decodificado o como texto JSON.
+  ///
+  /// El backend responde `503 {"message":"ECF_DOSA_SESSION_DISABLED"}` cuando
+  /// la apertura automática está apagada. Si el adaptador HTTP entrega ese
+  /// cuerpo como cadena, `data['message']` no existe, el código se convertía en
+  /// `HTTP_503` y el cliente **no** caía al asistente público: el administrador
+  /// quedaba bloqueado sin abrir nada. Decodificar aquí mantiene el código real.
+  static Object? _decodedBody(Object? data) {
+    if (data is String) {
+      final text = data.trim();
+      if (text.startsWith('{') || text.startsWith('[')) {
+        try {
+          return jsonDecode(text);
+        } catch (_) {
+          return data;
+        }
+      }
+    }
+    return data;
   }
 }
 

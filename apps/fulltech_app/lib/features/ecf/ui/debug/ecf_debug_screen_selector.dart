@@ -83,10 +83,10 @@ class EcfDebugPreview extends StatelessWidget {
             'continuar en DOSA cuando lo necesites.',
         official: false,
         portal: _DebugActionCard(
-          title: 'Asistente de DOSA',
+          title: 'Asistente de certificación electrónica',
           message:
-              'Continúa el proceso en el asistente oficial de DOSA con los datos de tu empresa.',
-          label: 'Continuar en DOSA',
+              'Continúa el proceso en el asistente oficial con los datos de tu empresa.',
+          label: 'Continuar con el asistente',
         ),
       ),
     };
