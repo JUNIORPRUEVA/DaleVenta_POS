@@ -366,10 +366,7 @@ void main() {
 
       await pumpSection(tester, api: api);
 
-      // Los controles históricos viven dentro de Avanzado.
-      await tester.tap(find.text('Avanzado'));
-      await tester.pumpAndSettle();
-
+      // La autorización es el paso obligatorio: se muestra sin desplegarla.
       expect(
         find.text('Autorización administrativa requerida'),
         findsOneWidget,
@@ -417,9 +414,6 @@ void main() {
       final api = _IntentApi(hasSession: true, historicalReviewRequired: true);
 
       await pumpSection(tester, api: api);
-
-      await tester.tap(find.text('Avanzado'));
-      await tester.pumpAndSettle();
 
       await tester.enterText(
         find.widgetWithText(

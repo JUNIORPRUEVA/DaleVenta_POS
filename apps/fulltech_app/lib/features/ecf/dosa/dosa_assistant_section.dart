@@ -346,15 +346,18 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // La autorización histórica es el PASO OBLIGATORIO para continuar, no
+        // un control opcional: se muestra abierta y en primer plano. Antes vivía
+        // dentro de un desplegable «Avanzado», indistinguible del otro panel
+        // administrativo de la pantalla, y el administrador no encontraba cómo
+        // avanzar.
         if (historicalReviewRequired && canManage && intentId != null)
-          _DosaAdminAdvanced(
-            child: _DosaHistoricalReviewCard(
-              intentId: intentId,
-              onAuthorized: () {
-                ref.invalidate(dosaIntentStateProvider);
-                ref.invalidate(ecfOnboardingProvider);
-              },
-            ),
+          _DosaHistoricalReviewCard(
+            intentId: intentId,
+            onAuthorized: () {
+              ref.invalidate(dosaIntentStateProvider);
+              ref.invalidate(ecfOnboardingProvider);
+            },
           )
         else if (historicalReviewRequired)
           const _DosaIntentGate(
@@ -799,33 +802,6 @@ class _DosaPortalCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Bloque plegable para controles excepcionales de administración.
-class _DosaAdminAdvanced extends StatelessWidget {
-  const _DosaAdminAdvanced({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-        childrenPadding: EdgeInsets.zero,
-        title: const Text(
-          'Avanzado',
-          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-        ),
-        subtitle: const Text(
-          'Controles exclusivos de administradores.',
-          style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-        ),
-        children: [child],
       ),
     );
   }

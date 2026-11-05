@@ -216,6 +216,7 @@ Widget _harness({
   CompanySettings? settings,
   bool dosaEligible = false,
   bool intentHasSession = false,
+  bool intentHistoricalReview = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -247,6 +248,7 @@ Widget _harness({
           'provider': 'DOSA',
           'canRegister': true,
           'blockingReasons': const <String>[],
+          'historicalReviewRequired': intentHistoricalReview,
           if (intentHasSession)
             'session': const <String, dynamic>{
               'id': 'intent-1',
@@ -728,6 +730,44 @@ void main() {
       // otro intento.
       expect(find.text('Asistente de DOSA'), findsOneWidget);
       expect(find.text('Continuar en DOSA'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'expediente histórico: la autorización se muestra sin desplegar nada',
+    (tester) async {
+      // Estado real de FULLTECH antes de autorizar: configuración ALANUBE,
+      // intento DOSA reconciliado y revisión histórica pendiente.
+      await _pumpPage(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(provider: 'ALANUBE', state: 'NOT_STARTED'),
+          dosaEligible: true,
+          intentHasSession: true,
+          intentHistoricalReview: true,
+        ),
+        step: null,
+        technical: false,
+      );
+      await tester.tap(find.text('Comenzar').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Validar certificado'), findsNothing);
+      expect(find.text('Continuar en DOSA'), findsNothing);
+
+      // El paso obligatorio se ve de entrada: no vive dentro de un desplegable
+      // «Avanzado» que se confunde con el otro panel administrativo.
+      expect(
+        find.text('Autorización administrativa requerida'),
+        findsOneWidget,
+      );
+      expect(find.text('Autorizar transición'), findsOneWidget);
+      expect(
+        find.text('Referencia de aprobación del propietario'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
