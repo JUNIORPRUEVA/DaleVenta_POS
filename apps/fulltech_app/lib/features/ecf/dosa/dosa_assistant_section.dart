@@ -787,9 +787,8 @@ class _DosaPortalCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               portalOnly
-                  ? 'Continúa en el asistente oficial de DOSA con los datos de '
-                        'tu empresa. Allí se solicitan el certificado y las '
-                        'credenciales.'
+                  ? 'Continúa con el asistente de certificación electrónica de '
+                        'FullPOS. Te guiaremos paso a paso durante el proceso'
                   : 'Se abre el asistente oficial de DOSA. Puedes empezar aquí y '
                         'seguir desde otro dispositivo: el proceso pertenece a '
                         'la empresa, no al equipo.',

@@ -97,6 +97,9 @@ class Routes {
   static const ecf = '/ecf';
   static const ecfDocuments = '/ecf/documents';
   static const ecfConfig = '/ecf/config';
+  /// Interfaz administrativa separada: diagnóstico, evidencias y autorización
+  /// histórica. Nunca forma parte del recorrido del cliente.
+  static const ecfAdmin = '/ecf/administracion';
 
   /// Datos fiscales en versión enfocada al proceso e-CF.
   ///

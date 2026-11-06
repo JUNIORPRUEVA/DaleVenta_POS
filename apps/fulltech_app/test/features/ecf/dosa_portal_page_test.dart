@@ -66,9 +66,40 @@ void main() {
 
     test('sin doble barra de desplazamiento y adaptable', () {
       expect(html, contains('overflow:hidden'));
-      expect(html, contains('#marco{flex:1;min-height:0;overflow:hidden'));
+      // Lienzo de altura fija con el estado superpuesto: sin saltos por avisos.
+      expect(html, contains('#marco{position:relative;flex:1;min-height:0'));
+      expect(html, contains('.estado{position:absolute;inset:0'));
       expect(html, contains('@media (max-width:720px)'));
       expect(html, contains('ajustarAltura'));
+    });
+
+    test('regresa a Preparación sin cerrar la sesión de la app', () {
+      // Flecha visible y botón de texto con el mismo destino.
+      expect(html, contains('id="volver"'));
+      expect(html, contains('id="volver-texto"'));
+      expect(html, contains("var RUTA_FULLPOS = '/ecf';"));
+      expect(html, contains('window.location.assign(RUTA_FULLPOS)'));
+      // Solo se revoca la sesión temporal del portal.
+      expect(html, contains("method: 'DELETE'"));
+      expect(html, isNot(contains('sessionStorage.clear()')));
+      expect(html, isNot(contains('localStorage.clear()')));
+    });
+
+    test('el botón Atrás del navegador no deja un ticket caducado', () {
+      // El ticket sale de la URL antes de canjearlo y la vuelta desde caché
+      // vuelve a montar el asistente si la sesión del portal sigue viva.
+      expect(html, contains("addEventListener('pageshow'"));
+      expect(html, contains('evento.persisted'));
+      expect(html, contains("searchParams.delete('ticket')"));
+    });
+
+    test('transición discreta, nunca pantalla intermedia', () {
+      expect(html, contains('id="estado"'));
+      expect(html, contains('Cargando el asistente oficial'));
+      expect(html, contains('transition:opacity .18s'));
+      // Un solo punto de montaje y ni un botón que lo abra.
+      expect(html, isNot(contains('id="iniciar"')));
+      expect(html, isNot(contains('Continuar certificación')));
     });
 
     test('conserva los marcadores que rellena el build', () {

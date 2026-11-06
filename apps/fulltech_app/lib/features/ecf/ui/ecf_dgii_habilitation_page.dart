@@ -51,7 +51,12 @@ import 'flow/ecf_welcome_step.dart';
 ///  * Todos los datos provienen de la empresa autenticada: la aplicación nunca
 ///    envía un `companyId`.
 class EcfDgiiHabilitationPage extends ConsumerStatefulWidget {
-  const EcfDgiiHabilitationPage({super.key});
+  const EcfDgiiHabilitationPage({super.key, this.adminView = false});
+
+  /// Interfaz administrativa separada: diagnóstico, detalle técnico,
+  /// evidencias y autorización histórica. Nunca forma parte del recorrido del
+  /// cliente; se abre en su propia ruta y exige el permiso administrativo.
+  final bool adminView;
 
   @override
   ConsumerState<EcfDgiiHabilitationPage> createState() =>
@@ -720,7 +725,7 @@ class _EcfDgiiHabilitationPageState
                                     }),
                                   )
                                 : null,
-                            advanced: canManage
+                            advanced: widget.adminView && canManage
                                 ? _adminAdvanced(view, stage: stage)
                                 : null,
                             simulationAvailable:
@@ -756,7 +761,7 @@ class _EcfDgiiHabilitationPageState
                                               view.externalId,
                                         )
                                       : null,
-                                  advanced: canManage
+                                  advanced: widget.adminView && canManage
                                       ? _adminAdvanced(view, stage: stage)
                                       : null,
                                 )
@@ -1061,14 +1066,14 @@ class _EcfDgiiHabilitationPageState
             onReview: _reviewEvidence,
           ),
       ],
-      detailsBar: canManage ? _technicalDetails(view, stage: stage) : null,
+      // Los controles internos no viajan en el recorrido del cliente: solo se
+      // pintan en la interfaz administrativa separada (/ecf/administracion).
+      detailsBar: widget.adminView && canManage
+          ? _technicalDetails(view, stage: stage)
+          : null,
     );
   }
 
-  /// Controles excepcionales fuera del recorrido del cliente.
-  ///
-  /// El diagnóstico, la evidencia y la autorización histórica siguen
-  /// existiendo, pero no compiten con la acción principal.
   Widget _adminAdvanced(
     EcfDgiiHabilitationView view, {
     required _EcfStage stage,

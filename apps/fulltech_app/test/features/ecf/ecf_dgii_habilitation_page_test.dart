@@ -307,8 +307,21 @@ Widget _harness({
         ),
       ),
     ],
-    child: const MaterialApp(home: EcfDgiiHabilitationPage()),
+    child: const MaterialApp(home: _TestHome()),
   );
+}
+
+/// Monta la pantalla del cliente o la **interfaz administrativa separada**
+/// segun `_mountAdminView`. Se resuelve en `build`, después de que `_pumpPage`
+/// fije la bandera.
+bool _mountAdminView = false;
+
+class _TestHome extends StatelessWidget {
+  const _TestHome();
+
+  @override
+  Widget build(BuildContext context) =>
+      EcfDgiiHabilitationPage(adminView: _mountAdminView);
 }
 
 /// Monta la pantalla en una ventana amplia (objetivo Windows/Web).
@@ -347,8 +360,7 @@ Future<void> _pumpPage(
     }
   }
   // El detalle técnico (requisitos, emisión, seguimiento interno) no forma
-  // parte de la navegación del cliente: vive dentro de «Avanzado», solo para
-  // administradores. Se abre para poder verificarlo.
+  // parte de la navegación del cliente: vive en la administración separada.
   if (!technical) return;
   final advanced = find.text('Avanzado');
   if (advanced.evaluate().isNotEmpty) {
@@ -364,6 +376,22 @@ Future<void> _pumpPage(
     await tester.tap(block.first);
     await tester.pumpAndSettle();
   }
+}
+
+/// Monta la **interfaz administrativa separada**.
+///
+/// El diagnóstico, el detalle técnico, las evidencias y la autorización
+/// histórica ya no viven en el recorrido del cliente: se verifican aquí, con
+/// los mismos overrides del arnés.
+Future<void> _pumpAdmin(
+  WidgetTester tester,
+  Widget harness, {
+  Size size = const Size(1400, 2600),
+  String? step = 'Tu postulación',
+}) async {
+  _mountAdminView = true;
+  addTearDown(() => _mountAdminView = false);
+  await _pumpPage(tester, harness, size: size, step: step);
 }
 
 void main() {
@@ -516,7 +544,7 @@ void main() {
   testWidgets('empresa sin habilitación: no hay autorización oficial', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -575,7 +603,7 @@ void main() {
   testWidgets('empresa en proceso: muestra estado, progreso y requisitos', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -872,7 +900,7 @@ void main() {
   ) async {
     // El motor no es dueño de estas presentaciones: sin integración autorizada,
     // el paso queda esperando al cliente y nunca como completado.
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -902,7 +930,7 @@ void main() {
   testWidgets('requisitos pendientes: aparecen como bloqueo explícito', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -925,7 +953,7 @@ void main() {
   testWidgets('evidencia registrada: oficial y manual no se confunden', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -997,7 +1025,7 @@ void main() {
   testWidgets(
     'empresa distinta: solo muestra los datos de la empresa de la sesión',
     (tester) async {
-      await _pumpPage(
+      await _pumpAdmin(
         tester,
         _harness(
           user: _adminUser(companyId: 'company-b'),
@@ -1053,7 +1081,7 @@ void main() {
   testWidgets('aprobación oficial no verificada: se declara y no se aprueba', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -1093,7 +1121,7 @@ void main() {
   testWidgets('emisión real bloqueada: se declara que no está implementada', (
     tester,
   ) async {
-    await _pumpPage(tester, _harness(user: _adminUser()));
+    await _pumpAdmin(tester, _harness(user: _adminUser()));
 
     expect(find.text('Autorización para emitir'), findsOneWidget);
     expect(find.text('Emisión real'), findsOneWidget);
@@ -1122,7 +1150,7 @@ void main() {
   });
 
   testWidgets('disposición móvil: se ve sin desbordes', (tester) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -1155,7 +1183,7 @@ void main() {
 
     // Con permiso de GESTIÓN pero sin el de revisión: el botón no existe y se
     // explica por qué, en vez de ofrecer una acción que el backend rechazará.
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _userWith(const {'manageEcfOnboarding': true}),
@@ -1193,7 +1221,7 @@ void main() {
   testWidgets('el diálogo de revisión exige motivo al rechazar', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _userWith(const {
@@ -1233,7 +1261,7 @@ void main() {
   testWidgets('revisar no autoriza: la fila lo dice de forma explícita', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -1279,7 +1307,7 @@ void main() {
   testWidgets('el seguimiento interno se muestra pero no finge progreso', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -1331,7 +1359,7 @@ void main() {
       ],
     );
 
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _userWith(const {'viewEcfDgiiHabilitation': true}),
@@ -1358,7 +1386,7 @@ void main() {
   testWidgets('el diálogo de seguimiento valida el formato de la fecha', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -1398,7 +1426,7 @@ void main() {
   ) async {
     // Se recorren de verdad las tarjetas con botón de revisión, con seguimiento
     // interno y con las tres acciones de evidencia, en el ancho de un móvil.
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
