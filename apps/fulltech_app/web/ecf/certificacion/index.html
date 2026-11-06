@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" style="background:#f4f6fa">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -8,18 +8,22 @@
   <style>
     :root{
       --ink:#0b1220; --muted:#5b6474; --line:#e6e9ee; --bg:#f4f6fa;
-      --brand:#1f4bd8; --ok:#0f7b52; --warn:#b54708; --radius:14px;
+      --brand:#1f4bd8; --warn:#b54708; --radius:14px;
     }
     *{box-sizing:border-box}
+    /* Fondo desde el primer pintado: evita el destello blanco al navegar. */
     html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
       overflow:hidden}
-    /* Columna a pantalla completa: encabezado fijo, lienzo flexible. Una sola
-       barra de desplazamiento (la del componente), nunca la de la página. */
     body{display:flex;flex-direction:column;height:100%}
     /* Encabezado compacto propio de FullPOS */
-    .top{flex:none;display:flex;align-items:center;gap:12px;
-      padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}
+    .top{flex:none;display:flex;align-items:center;gap:10px;
+      padding:9px 16px;background:#fff;border-bottom:1px solid var(--line)}
+    .atras{display:inline-flex;align-items:center;justify-content:center;
+      width:32px;height:32px;border:1px solid var(--line);border-radius:9px;
+      background:#fff;color:var(--ink);cursor:pointer;flex:none;padding:0}
+    .atras:hover{border-color:#c9cfda;background:#f8fafc}
+    .atras svg{width:16px;height:16px}
     .logo{width:30px;height:30px;border-radius:9px;background:var(--brand);color:#fff;
       display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.5px;flex:none}
     .marca{min-width:0}
@@ -30,28 +34,40 @@
     .spacer{flex:1}
     .empresa{text-align:right;font-size:11.5px;color:var(--muted);line-height:1.25;min-width:0}
     .empresa b{display:block;color:var(--ink);font-size:12.5px;white-space:nowrap;
-      overflow:hidden;text-overflow:ellipsis;max-width:36vw}
-    .ghost{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:9px;
+      overflow:hidden;text-overflow:ellipsis;max-width:34vw}
+    .volver{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:9px;
       padding:7px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap;flex:none}
-    .ghost:hover{border-color:#c9cfda}
-    /* Lienzo: el componente ocupa todo el alto disponible, sin scroll de página */
+    .volver:hover{border-color:#c9cfda}
+    /* Un único lienzo de altura fija: sin saltos por avisos ni doble scroll. */
     main{flex:1;min-height:0;width:100%;max-width:1180px;margin:0 auto;
-      padding:10px 16px 14px;display:flex;flex-direction:column;gap:10px}
-    .aviso{border-radius:12px;padding:11px 14px;font-size:13px;border:1px solid}
-    .aviso.info{background:#f5f7ff;border-color:#c7d2fe;color:#293a80}
-    .aviso.error{background:#fef3f2;border-color:#fecdca;color:#b42318}
-    .aviso.warn{background:#fff8e6;border-color:#f0dcae;color:#6b4e00}
+      padding:10px 16px 14px;display:flex;flex-direction:column}
+    #marco{position:relative;flex:1;min-height:0;overflow:hidden;
+      border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+    #wizard{display:block;width:100%;border:0;background:#fff;
+      opacity:0;transition:opacity .18s ease-out}
+    #wizard.listo{opacity:1}
+    /* Transición discreta mientras el componente arranca. Nunca una pantalla
+       intermedia ni un segundo botón: solo esto, encima del propio lienzo. */
+    .estado{position:absolute;inset:0;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:12px;padding:24px;
+      background:#fff;text-align:center}
+    .estado.oculto{display:none}
+    .spinner{width:26px;height:26px;border-radius:50%;
+      border:2.5px solid #e6e9ee;border-top-color:var(--brand);
+      animation:girar .8s linear infinite}
+    .estado.error .spinner{display:none}
+    @keyframes girar{to{transform:rotate(360deg)}}
+    .estado p{margin:0;font-size:13.5px;color:var(--muted);max-width:46ch}
+    .estado p.titulo{font-size:14.5px;color:var(--ink);font-weight:600}
+    .estado p.detalle{font-size:12px;color:var(--warn)}
     .oculto{display:none !important}
-    #marco{flex:1;min-height:0;overflow:hidden;border:1px solid var(--line);
-      border-radius:var(--radius);background:#fff}
-    #wizard{display:block;width:100%;border:0;background:#fff}
     .log{display:none}
     @media (max-width:720px){
-      .top{flex-wrap:wrap;padding:10px 12px;row-gap:6px}
-      .empresa{text-align:left;order:3;width:100%}
+      .top{flex-wrap:wrap;padding:9px 12px;row-gap:6px}
+      .empresa{text-align:left;order:4;width:100%}
       .empresa b{max-width:100%}
       .spacer{display:none}
-      .ghost{order:2;margin-left:auto}
+      .volver{order:3;margin-left:auto}
       main{padding:8px 10px 10px}
       #marco{border-radius:12px}
     }
@@ -59,6 +75,12 @@
 </head>
 <body>
   <header class="top">
+    <button class="atras" id="volver" type="button" title="Volver a FullPOS" aria-label="Volver a FullPOS">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6"></path>
+      </svg>
+    </button>
     <div class="logo">FP</div>
     <div class="marca">
       <h1>Certificación electrónica</h1>
@@ -69,19 +91,22 @@
       <b id="empresa-nombre">—</b>
       <span id="empresa-rnc"></span>
     </div>
-    <button class="ghost" id="salir" type="button">Volver a FullPOS</button>
+    <button class="volver" id="volver-texto" type="button">Volver a FullPOS</button>
   </header>
 
   <main>
-    <div class="aviso info" id="cargando">Validando tu acceso…</div>
-    <div class="aviso error oculto" id="error"></div>
-    <div class="aviso warn oculto" id="aviso-asistente" role="alert"></div>
     <div id="marco">
       <dosa-cert-wizard id="wizard"
         publishable-key="__DOSA_PUBLISHABLE_KEY__"
         base-url="https://dosasystem.com"
         theme="light"
-        height="720" class="oculto"></dosa-cert-wizard>
+        height="600"></dosa-cert-wizard>
+      <div class="estado" id="estado" role="status" aria-live="polite">
+        <div class="spinner"></div>
+        <p class="titulo" id="estado-titulo">Validando tu acceso…</p>
+        <p id="estado-texto"></p>
+        <p class="detalle oculto" id="estado-detalle"></p>
+      </div>
     </div>
     <div class="log" id="log" aria-live="polite"></div>
   </main>
@@ -92,24 +117,55 @@
 
       var API = '__API_BASE__' || '/api';
       var CLAVE_TOKEN = 'fullpos-portal-token';
+      var RUTA_FULLPOS = '/ecf';
 
-      var elCargando = document.getElementById('cargando');
-      var elError = document.getElementById('error');
-      var elAviso = document.getElementById('aviso-asistente');
+      var elEstado = document.getElementById('estado');
+      var elTitulo = document.getElementById('estado-titulo');
+      var elTexto = document.getElementById('estado-texto');
+      var elDetalle = document.getElementById('estado-detalle');
       var elMarco = document.getElementById('marco');
       var elWizard = document.getElementById('wizard');
       var elLog = document.getElementById('log');
+
+      var revelado = false;
+      var temporizador = null;
 
       function mostrar(el) { el.classList.remove('oculto'); }
       function ocultar(el) { el.classList.add('oculto'); }
       function texto(id, valor) { document.getElementById(id).textContent = valor; }
 
-      function fallar(mensaje) {
-        ocultar(elCargando);
-        ocultar(elWizard);
-        elError.textContent = mensaje;
-        mostrar(elError);
+      function estado(titulo, mensaje, detalle, esError) {
+        revelado = false;
+        elWizard.classList.remove('listo');
+        elEstado.classList.remove('oculto');
+        elEstado.classList.toggle('error', !!esError);
+        elTitulo.textContent = titulo;
+        elTexto.textContent = mensaje || '';
+        elDetalle.textContent = detalle || '';
+        elDetalle.classList.toggle('oculto', !detalle);
       }
+
+      // El lienzo tiene altura fija desde el primer pintado: revelar el
+      // componente no mueve nada de sitio (sin saltos ni doble scroll).
+      function revelar(conFade) {
+        if (revelado) return;
+        revelado = true;
+        if (temporizador) { clearTimeout(temporizador); temporizador = null; }
+        elEstado.classList.add('oculto');
+        if (conFade !== false) elWizard.classList.add('listo');
+        ajustarAltura();
+      }
+
+      function altoDisponible() {
+        var alto = Math.floor(elMarco.getBoundingClientRect().height);
+        return alto > 0 ? alto : 600;
+      }
+
+      function ajustarAltura() {
+        elWizard.setAttribute('height', String(altoDisponible()));
+      }
+      window.addEventListener('resize', ajustarAltura);
+      window.addEventListener('orientationchange', ajustarAltura);
 
       function token() { try { return sessionStorage.getItem(CLAVE_TOKEN); } catch (e) { return null; } }
       function guardarToken(t) { try { sessionStorage.setItem(CLAVE_TOKEN, t); } catch (e) {} }
@@ -133,8 +189,6 @@
         });
       }
 
-      // El encabezado es lo único que pinta el contexto: no hay pantalla
-      // intermedia. El asistente se monta justo después de validar el acceso.
       function pintarContexto(ctx) {
         var empresa = (ctx && ctx.company) || {};
         texto('empresa-nombre', empresa.commercialName || 'Mi empresa');
@@ -144,46 +198,18 @@
         texto('empresa-rnc', [rnc, intento].filter(Boolean).join(' · '));
       }
 
-      function cargarContexto() {
-        return apiFetch('/ecf/certification-portal/context').then(function (r) {
-          if (!r.ok) {
-            olvidarToken();
-            if (r.status === 401) {
-              fallar('Tu acceso al portal caducó. Vuelve a FullPOS y pulsa otra vez «Continuar con el asistente».');
-            } else {
-              fallar('No se pudo cargar tu expediente. Inténtalo de nuevo en un momento.');
-            }
-            return false;
-          }
-          pintarContexto(r.data.context || {});
-          return true;
-        }).catch(function () {
-          fallar('No hay conexión con FullPOS Cloud. Revisa tu red y recarga.');
-          return false;
-        });
-      }
-
       function registrar(tipo) {
-        // Los eventos del navegador son pistas. Sus payloads pueden contener
-        // datos fiscales; no se muestran ni se usan como autoridad.
         elLog.textContent = (elLog.textContent ? elLog.textContent + '\n' : '') + tipo;
       }
 
-      // Alto exacto del marco disponible: el componente no arrastra su propia
-      // página, así que no aparecen dos barras de desplazamiento.
-      function ajustarAltura() {
-        var alto = Math.floor(elMarco.getBoundingClientRect().height);
-        if (alto > 0) elWizard.setAttribute('height', String(alto));
-      }
-      window.addEventListener('resize', ajustarAltura);
-      window.addEventListener('orientationchange', ajustarAltura);
-
-      // Monta el componente oficial. No inicia ninguna postulación: el
-      // proveedor muestra su propio formulario y el usuario decide dentro.
+      // Monta el componente oficial. No inicia ninguna postulación: el proveedor
+      // muestra su propio formulario y el usuario decide dentro.
       function montarAsistente() {
-        ocultar(elCargando);
-        ocultar(elError);
-        ocultar(elAviso);
+        revelado = false;
+        elWizard.classList.remove('listo');
+        ajustarAltura();
+        estado('Cargando el asistente oficial…',
+          'Estamos preparando el formulario de certificación.', '', false);
 
         if (!document.querySelector('script[data-dosa-cert="1"]')) {
           var s = document.createElement('script');
@@ -191,9 +217,8 @@
           s.async = true;
           s.setAttribute('data-dosa-cert', '1');
           s.onerror = function () {
-            elAviso.textContent =
-              'No se pudo cargar el asistente oficial. Revisa tu conexión y recarga la página.';
-            mostrar(elAviso);
+            estado('No se pudo cargar el asistente',
+              'Revisa tu conexión y vuelve a intentarlo.', '', true);
           };
           document.head.appendChild(s);
         }
@@ -204,32 +229,45 @@
             document.addEventListener(tipo, function () {
               registrar(tipo);
               if (tipo === 'cert:ready') {
-                ocultar(elAviso);
+                revelar(true);
               } else if (tipo === 'cert:blocked' || tipo === 'cert:error') {
-                elAviso.textContent =
-                  'El asistente no está disponible aquí. Revisa que el dominio esté autorizado o ábrelo en otra pestaña si se ofrece esa opción.';
-                mostrar(elAviso);
+                // El proveedor ya pintó su propio aviso dentro del lienzo: se
+                // revela tal cual, sin taparlo con un mensaje nuestro.
+                revelar(true);
               } else if (tipo === 'cert:postulacion' || tipo === 'cert:complete') {
-                // Solo se refresca el encabezado: nada se da por confirmado
-                // hasta que el backend lo reporte.
                 cargarContexto();
               }
             }, true);
           });
 
-        elWizard.classList.remove('oculto');
-        ajustarAltura();
+        // Si el proveedor tarda o no emite eventos, se revela igualmente: el
+        // componente es el que informa, no una pantalla nuestra.
+        temporizador = setTimeout(function () { revelar(true); }, 8000);
       }
 
-      document.getElementById('salir').addEventListener('click', function () {
-        apiFetch('/ecf/certification-portal/sessions', { method: 'DELETE' }).finally(function () {
-          olvidarToken();
-          window.location.assign('/');
+      function cargarContexto() {
+        return apiFetch('/ecf/certification-portal/context').then(function (r) {
+          if (!r.ok) {
+            olvidarToken();
+            if (r.status === 401) {
+              estado('Tu acceso caducó',
+                'Vuelve a FullPOS y pulsa otra vez «Continuar con el asistente».',
+                '', true);
+            } else {
+              estado('No se pudo cargar tu expediente',
+                'Inténtalo de nuevo en un momento.', '', true);
+            }
+            return false;
+          }
+          pintarContexto(r.data.context || {});
+          return true;
+        }).catch(function () {
+          estado('Sin conexión con FullPOS Cloud',
+            'Revisa tu red y recarga la página.', '', true);
+          return false;
         });
-      });
+      }
 
-      // El ticket viene de la app, es de un solo uso y dura 120 s. Se canjea
-      // aquí y se borra de la barra de direcciones: no queda en el historial.
       function canjearTicket(ticket) {
         return apiFetch('/ecf/certification-portal/sessions', {
           method: 'POST',
@@ -238,13 +276,18 @@
           if (!r.ok || !r.data.token) {
             var codigo = (r.data && r.data.message) || '';
             if (r.status === 409 || String(codigo).indexOf('ALREADY_USED') >= 0) {
-              fallar('Ese enlace ya se usó. Genera uno nuevo desde FullPOS.');
+              estado('Ese enlace ya se usó',
+                'Genera uno nuevo desde FullPOS.', '', true);
             } else if (r.status === 410 || String(codigo).indexOf('EXPIRED') >= 0) {
-              fallar('El enlace caducó (dura 2 minutos). Genera uno nuevo desde FullPOS.');
+              estado('El enlace caducó',
+                'Dura 2 minutos. Genera uno nuevo desde FullPOS.', '', true);
             } else if (r.status === 403 || String(codigo).indexOf('PILOT') >= 0) {
-              fallar('El portal de certificación está en fase piloto y tu empresa todavía no está incluida. Contacta con el equipo de FullPOS.');
+              estado('Portal en fase piloto',
+                'Tu empresa todavía no está incluida. Contacta con el equipo de FullPOS.',
+                '', true);
             } else {
-              fallar('El enlace de acceso no es válido. Genera uno nuevo desde FullPOS.');
+              estado('El enlace de acceso no es válido',
+                'Genera uno nuevo desde FullPOS.', '', true);
             }
             return false;
           }
@@ -264,23 +307,46 @@
         } catch (e) { /* navegador antiguo */ }
       }
 
+      // «Volver a FullPOS»: revoca SOLO la sesión temporal del portal y regresa
+      // a Preparación. No cierra la sesión de la app, no reinicia el onboarding
+      // y no crea ningún intento.
+      function volverAFullpos() {
+        var destino = function () {
+          olvidarToken();
+          window.location.assign(RUTA_FULLPOS);
+        };
+        apiFetch('/ecf/certification-portal/sessions', { method: 'DELETE' })
+          .then(destino, destino);
+      }
+      document.getElementById('volver').addEventListener('click', volverAFullpos);
+      document.getElementById('volver-texto').addEventListener('click', volverAFullpos);
+
+      // Volver con el botón del navegador (o restaurar desde caché) no puede
+      // dejar el ticket caducado en pantalla: el ticket se quitó de la URL y,
+      // si la sesión del portal sigue viva, el asistente se vuelve a montar.
+      window.addEventListener('pageshow', function (evento) {
+        if (!evento.persisted) return;
+        if (!token() || !revelado) return;
+        montarAsistente();
+      });
+
       var params = new URLSearchParams(window.location.search);
       var ticket = params.get('ticket');
       if (ticket) {
-        // Un solo gesto del usuario: canjear el ticket y montar el asistente
-        // en la misma pantalla, sin clic adicional.
         limpiarUrl();
+        estado('Validando tu acceso…', '', '', false);
         canjearTicket(ticket).then(function (ok) {
           if (ok) montarAsistente();
         });
       } else if (token()) {
-        // Recarga o vuelta atrás con sesión de portal vigente: se reanuda
-        // montando el asistente, sin pedir el ticket otra vez.
+        estado('Validando tu acceso…', '', '', false);
         cargarContexto().then(function (ok) {
           if (ok) montarAsistente();
         });
       } else {
-        fallar('Falta el enlace de acceso. Abre el portal desde FullPOS Cloud, en Configuración → Facturación electrónica.');
+        estado('Falta el enlace de acceso',
+          'Abre el portal desde FullPOS Cloud, en Configuración → Facturación electrónica.',
+          '', true);
       }
     })();
   </script>

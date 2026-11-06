@@ -178,6 +178,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const EcfDgiiHabilitationPage(),
           ),
           GoRoute(
+            path: Routes.ecfAdmin,
+            builder: (context, state) =>
+                const EcfDgiiHabilitationPage(adminView: true),
+          ),
+          GoRoute(
             path: Routes.ecfDocuments,
             builder: (context, state) => const EcfDocumentsPage(),
           ),
