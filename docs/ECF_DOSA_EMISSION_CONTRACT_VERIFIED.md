@@ -10,38 +10,50 @@ el documento se marca como **NO DOCUMENTADO**.
 | Campo | Tipo según el documento | Valores |
 | --- | --- | --- |
 | `numeroLinea` | Integer, requerido | secuencial |
-| `indicadorFacturacion` | Integer, requerido | **1** por producto · **2** por servicio · **3** mixta · **4** servicio profesional |
+| `indicadorFacturacion` | Integer, requerido | **tasa de ITBIS de la línea**: 1 = ITBIS 18 %, 2 = 16 %, 3 = 0 %, 4 = exento, 0 = no facturable. NO indica si es bien o servicio |
 | `nombreItem` | String, requerido | descripción |
-| `indicadorBienoServicio` | Integer, requerido | **1 Servicio** · **2 Bien** (al revés que el código de la DGII) |
+| `indicadorBienoServicio` | Integer, requerido | **1 = bien · 2 = servicio** |
 | `cantidadItem` | Decimal, requerido | cantidad |
-| `unidadMedida` | **Integer**, requerido | **código del catálogo 1..20** (ver tabla) |
+| `unidadMedida` | Integer, **opcional** | código del catálogo de la DGII (**43 = Unidad**, 41 = Yarda…) |
 | `precioUnitarioItem` | Decimal, requerido | precio unitario |
 | `montoItem` | Decimal, requerido | cantidad × precio |
 
-### Catálogo de Unidades de Medida (publicado por el proveedor)
+> **Corregido el 2026-11-07.** Esta tabla describía el contrato **anterior** del
+> proveedor. DOSA publicó una corrección («Versiones anteriores de este
+> documento tenían códigos que no son los de la DGII») y el mapeador
+> (`dosa-ecf.mapper.ts`) ya la implementa. La **referencia canónica** es
+> [`docs/ecf/research/DOSA_EMISSION_API_2026-11.md`](ecf/research/DOSA_EMISSION_API_2026-11.md)
+> §4 y §4.1. Enviar los códigos antiguos produce comprobantes con indicadores
+> fiscales equivocados.
 
-| Código | Unidad | Código FullPOS que lo produce |
+### Catálogo de Unidades de Medida (tabla vigente de la DGII)
+
+Tabla completa y fuentes en
+[`DOSA_EMISSION_API_2026-11.md`](ecf/research/DOSA_EMISSION_API_2026-11.md) §4.1.
+Solo se listan las unidades que FullPOS puede producir:
+
+| Código DGII | Unidad | Código FullPOS |
 | --- | --- | --- |
-| 1 | Unidad | `UNIT` |
-| 2 | Caja | — (FullPOS no tiene) |
-| 3 | Kilogramo | `KILOGRAM` |
-| 4 | Gramo | `GRAM` |
-| 5 | Libra | `POUND` |
-| 6 | Onza | `OUNCE` |
-| 7 | Metro | `METER` |
-| 8 | Centímetro | — (FullPOS no tiene) |
-| 9 | Pulgada | `INCH` |
-| 10 | Pie | `FOOT` |
-| 11 | Yarda | `YARD` |
-| 12 | Litro | `LITER` |
-| 13 | Mililitro | `MILLILITER` |
-| 14 | Galón | `GALLON` |
-| 15 | Docena | — (FullPOS no tiene) |
-| 16 | Paquete | — (FullPOS no tiene) |
-| 17 | Servicio | — (FullPOS no tiene) |
-| 18 | Hora | — (FullPOS no tiene) |
-| 19 | Día | — (FullPOS no tiene) |
-| 20 | Mes | — (FullPOS no tiene) |
+| 43 | Unidad | `UNIT` |
+| 6 | Caja | — |
+| 21 | Kilogramo | `KILOGRAM` |
+| 17 | Gramo | `GRAM` |
+| 23 | Libra | `POUND` |
+| 26 | Metro | `METER` |
+| 8 | Centímetro | — |
+| 55 | Pulgada | `INCH` |
+| 33 | Pie | `FOOT` |
+| 41 | Yarda | `YARD` |
+| 24 | Litro | `LITER` |
+| 15 | Galón | `GALLON` |
+| 13 | Docena | — |
+| 31 | Paquete | — |
+| 19 | Hora | — |
+| 12 | Día | — |
+
+**Onza, mililitro, servicio y mes no existen en la tabla de la DGII.** El campo
+es opcional: si la unidad de FullPOS no tiene equivalencia, se omite en lugar de
+inventar un código.
 
 Implementado en `DOSA_UNIDAD_MEDIDA_BY_FULLPOS_CODE`
 (`apps/api/src/ecf/provider/dosa/dosa-ecf.mapper.ts`). Un código de unidad que no
