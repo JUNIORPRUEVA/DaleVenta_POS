@@ -192,10 +192,18 @@ export class DosaWebhookService {
     }
 
     // 5. Idempotencia + 6. persistencia redactada
-    const dedupeKey = dedupeKeyOf(payload);
     const rawHash = createHash("sha256")
       .update(input.rawBody)
       .digest("hex");
+    // La identidad del evento combina la referencia lógica (postulación, estado,
+    // fecha de disponibilidad) con el cuerpo EXACTO recibido.
+    //
+    // Consecuencia buscada: un reintento idéntico sigue siendo `duplicate` (mismo
+    // cuerpo, mismo hash), pero un envío del mismo evento con **otro contenido**
+    // —por ejemplo credenciales nuevas— deja de descartarse en silencio y se
+    // procesa como evento propio. La política de rotación decide después qué
+    // hacer con las credenciales; aquí solo se garantiza que no se pierden.
+    const dedupeKey = dedupeKeyOf(payload, rawHash);
     // El tipo de evento sale de lo que el proveedor envía, no de una constante
     // nuestra: ver `classifyDosaEventType`.
     const classification = classifyDosaEventType(payload);
@@ -320,6 +328,26 @@ export class DosaWebhookService {
           reason: stored.blockedReason,
         };
       }
+
+      // Rotación no autorizada: el evento queda registrado, las credenciales
+      // vigentes quedan intactas y el caso pasa a revisión humana. Nunca se
+      // sustituye una clave activa porque un webhook lo diga.
+      if ((stored.conflicts ?? []).length > 0) {
+        await this.store.$queryRaw`
+          UPDATE "ecf_dosa_webhook_events"
+             SET "processing_state" = ${CONFLICT_STATE}
+           WHERE "id" = ${input.eventId}::uuid
+             AND "company_id" = ${input.companyId}::uuid
+        `;
+
+        return {
+          accepted: true,
+          status: 200,
+          duplicate: false,
+          eventId: input.eventId,
+          code: "ECF_DOSA_WEBHOOK_CONFLICT_PENDING_REVIEW",
+        };
+      }
     }
 
     await this.store.$queryRaw`
@@ -384,6 +412,12 @@ export class DosaWebhookService {
 /** Estados de procesamiento persistidos del evento. */
 export const PENDING_STATE = "PENDING_CREDENTIALS";
 export const COMPLETE_STATE = "COMPLETE";
+/**
+ * El evento llegó autenticado y traía credenciales que **no coinciden** con las
+ * vigentes. Se conserva como evidencia y se deja en revisión: la rotación es un
+ * acto humano, no un efecto automático de un webhook.
+ */
+export const CONFLICT_STATE = "CONFLICT_PENDING_REVIEW";
 
 /**
  * Etiqueta con la que se persiste un evento cuyo **tipo** no está confirmado.
@@ -434,14 +468,23 @@ export function classifyDosaEventType(
  * que sí es estable entre reintentos: postulación + estado + fecha de
  * disponibilidad. Se hashea para no exceder la columna.
  */
-export function dedupeKeyOf(payload: {
-  postulacionId: string;
-  estadoCertificacion: string;
-  disponiblesDesde: string;
-}): string {
+export function dedupeKeyOf(
+  payload: {
+    postulacionId: string;
+    estadoCertificacion: string;
+    disponiblesDesde: string;
+  },
+  /**
+   * SHA-256 del cuerpo exacto recibido. Sin él, un envío con el mismo
+   * identificador lógico pero contenido distinto se descartaría como duplicado y
+   * las credenciales nuevas se perderían. Es un hash del cuerpo: no expone
+   * valores y no es reversible.
+   */
+  rawBodySha256 = "",
+): string {
   return createHash("sha256")
     .update(
-      `${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}`,
+      `${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}|${rawBodySha256}`,
     )
     .digest("hex");
 }

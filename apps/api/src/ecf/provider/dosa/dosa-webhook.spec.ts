@@ -396,18 +396,36 @@ describe("DosaWebhookService — idempotencia", () => {
   });
 
   it("la clave de deduplicación es estable y no contiene secretos", () => {
-    const key = dedupeKeyOf({
-      postulacionId: "post-0001",
-      estadoCertificacion: "finalizado",
-      disponiblesDesde: "2026-11-01T22:50:12Z",
-    });
+    const bodyHash = createHash("sha256").update("cuerpo-exacto").digest("hex");
+    const key = dedupeKeyOf(
+      {
+        postulacionId: "post-0001",
+        estadoCertificacion: "finalizado",
+        disponiblesDesde: "2026-11-01T22:50:12Z",
+      },
+      bodyHash,
+    );
     expect(key).toBe(
       createHash("sha256")
-        .update("post-0001|finalizado|2026-11-01T22:50:12Z")
+        .update(`post-0001|finalizado|2026-11-01T22:50:12Z|${bodyHash}`)
         .digest("hex"),
     );
     expect(key).toHaveLength(64);
     expect(key).not.toContain("KEY");
+  });
+
+  it("dos envíos con el mismo identificador y cuerpo distinto no son duplicados", () => {
+    const base = {
+      postulacionId: "post-0001",
+      estadoCertificacion: "finalizado",
+      disponiblesDesde: "2026-11-01T22:50:12Z",
+    };
+    const first = dedupeKeyOf(base, "hash-a");
+    const retry = dedupeKeyOf(base, "hash-a");
+    const rotated = dedupeKeyOf(base, "hash-b");
+
+    expect(retry).toBe(first);
+    expect(rotated).not.toBe(first);
   });
 
   it("usa INSERT ... ON CONFLICT para que la carrera no duplique", async () => {

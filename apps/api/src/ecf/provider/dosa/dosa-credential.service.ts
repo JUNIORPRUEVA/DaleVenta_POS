@@ -224,6 +224,11 @@ export type DosaCredentialIngestResult =
       stored: DosaCredentialIngestStored[];
       /** Ambientes que el paquete no traía y por tanto no se tocaron. */
       skipped: DosaCredentialEnvironment[];
+      /**
+       * Ambientes cuyo material entrante difiere del ya ACTIVO o CONFIRMADO.
+       * No se escribieron: una rotación así exige revisión humana.
+       */
+      conflicts: DosaCredentialEnvironment[];
     }
   | { ok: false; blockedReason: string };
 
@@ -279,7 +284,7 @@ export class DosaCredentialService {
       };
     }
 
-    const split = splitCredentialsByEnvironment(input.bundle);
+    const split = splitCredentialsByEnvironment(input.bundle, input.environment);
     if (split.targets.length === 0) {
       return {
         ok: false,
@@ -288,6 +293,8 @@ export class DosaCredentialService {
     }
 
     const stored: DosaCredentialIngestStored[] = [];
+    const conflicts: DosaCredentialEnvironment[] = [];
+
     for (const target of split.targets) {
       const context: DosaCredentialContext = {
         companyId: input.companyId,
@@ -300,6 +307,22 @@ export class DosaCredentialService {
         sealed = this.vault.seal(context, target.bundle);
       } catch (error) {
         return { ok: false, blockedReason: codeOf(error) };
+      }
+
+      // Una credencial ya confirmada o activa NO se sustituye por otra que
+      // llegue por webhook. Rotarla es una decisión humana: se registra el
+      // conflicto, se deja la fila intacta y el evento queda en revisión.
+      const current = await this.store.find({
+        companyId: input.companyId,
+        rnc: normalizeRnc(input.rnc),
+        environment: target.environment,
+      });
+      const isProtected =
+        current !== null &&
+        (current.status === "CONFIRMED" || current.status === "ACTIVE");
+      if (isProtected && current.sealed.fingerprint !== sealed.fingerprint) {
+        conflicts.push(target.environment);
+        continue;
       }
 
       await this.store.upsert({
@@ -319,6 +342,18 @@ export class DosaCredentialService {
       });
     }
 
+    // Si todo lo que venía era un conflicto, no hay nada nuevo que guardar.
+    if (stored.length === 0 && conflicts.length > 0) {
+      return {
+        ok: true,
+        status: "PENDING_CONFIRMATION",
+        fingerprint: "",
+        stored: [],
+        skipped: split.skipped.map((entry) => entry.environment),
+        conflicts,
+      };
+    }
+
     const primary =
       stored.find((entry) => entry.environment === "production") ?? stored[0];
 
@@ -328,6 +363,7 @@ export class DosaCredentialService {
       fingerprint: primary.fingerprint,
       stored,
       skipped: split.skipped.map((entry) => entry.environment),
+      conflicts,
     };
   }
 

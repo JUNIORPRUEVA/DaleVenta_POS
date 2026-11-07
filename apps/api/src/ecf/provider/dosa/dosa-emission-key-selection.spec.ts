@@ -404,6 +404,15 @@ describe("Caché del cliente — empresa, RNC, ambiente y versión de credencial
       idempotencyKey: "k-1",
     });
 
+    // Rotación **autorizada**: primero se retira la credencial de servicio
+    // (vuelve a PENDING_CONFIRMATION), luego llega la clave nueva y se reactiva.
+    // Un webhook por sí solo ya no puede sustituir una clave activa.
+    await store.setStatus({
+      companyId: COMPANY,
+      rnc: RNC,
+      environment: "test",
+      status: "PENDING_CONFIRMATION",
+    });
     await credentials.ingestFromProvider({
       companyId: COMPANY,
       rnc: RNC,
@@ -431,6 +440,39 @@ describe("Caché del cliente — empresa, RNC, ambiente y versión de credencial
     expect(transport.keys).toEqual(["CLAVE-VIEJA", "CLAVE-NUEVA"]);
     // La clave vieja no se vuelve a usar después de la rotación.
     expect(transport.keys.filter((k) => k === "CLAVE-VIEJA")).toHaveLength(1);
+  });
+
+  it("un webhook NO rota una clave activa: queda en conflicto y se sigue usando la vigente", async () => {
+    const { service, credentials, transport } = await build({
+      bundle: { apiKeyTest: "CLAVE-VIGENTE" },
+      status: "ACTIVE",
+    });
+
+    const ingest = await credentials.ingestFromProvider({
+      companyId: COMPANY,
+      rnc: RNC,
+      environment: "test",
+      bundle: { apiKeyTest: "CLAVE-INTRUSA" },
+      signatureAuthenticated: true,
+    });
+
+    expect(ingest.ok).toBe(true);
+    if (ingest.ok) {
+      expect(ingest.conflicts).toEqual(["test"]);
+      expect(ingest.stored).toHaveLength(0);
+    }
+
+    await service.emit({
+      companyId: COMPANY,
+      rnc: RNC,
+      documentType: "E31",
+      senderTaxId: RNC,
+      sequenceAvailable: true,
+      body: BODY,
+      idempotencyKey: "k-conflicto",
+    });
+
+    expect(transport.keys).toEqual(["CLAVE-VIGENTE"]);
   });
 
   it("el RNC forma parte de la clave de caché (no comparte cliente entre RNC)", async () => {

@@ -20,7 +20,11 @@ import type {
  *
  * * `apiKeyProduccion` → fila `production`
  * * `apiKeyTest` → fila `test`
- * * `apiSecret` → acompaña a ambas (es el mismo secreto de firma del proveedor)
+ * * `apiSecret` → **una sola fila**, la que declare el evento (o la única que
+ *   exista si el evento no declara ninguna). No se copia a los dos ambientes:
+ *   compartir un secreto entre entornos es una decisión de contrato del
+ *   proveedor que todavía no está validada, y duplicarlo sin necesidad amplía
+ *   la superficie de exposición.
  *
  * Un ambiente solo se escribe si trae **su clave identificadora**. Así un
  * evento que solo aporte, por ejemplo, `apiSecret` no puede dejar una fila a
@@ -64,9 +68,13 @@ function hasValue(value: string | undefined): boolean {
 /**
  * Reparte el paquete. Nunca inventa claves y nunca descarta una que venga con
  * valor: cada una acaba en su fila.
+ *
+ * @param declaredEnvironment Ambiente que declaró el evento. Solo se usa para
+ *   decidir en qué fila única se guarda `apiSecret`.
  */
 export function splitCredentialsByEnvironment(
   bundle: DosaCredentialBundle,
+  declaredEnvironment?: DosaCredentialEnvironment,
 ): DosaCredentialSplit {
   const targets: DosaEnvironmentBundle[] = [];
   const skipped: DosaSkippedEnvironment[] = [];
@@ -78,13 +86,19 @@ export function splitCredentialsByEnvironment(
       continue;
     }
 
-    const slice: DosaCredentialBundle = {
-      [definingKey]: bundle[definingKey]?.trim(),
-    };
-    // El secreto compartido acompaña a cada ambiente que tenga su clave.
-    if (hasValue(bundle.apiSecret)) slice.apiSecret = bundle.apiSecret?.trim();
+    targets.push({
+      environment,
+      bundle: { [definingKey]: bundle[definingKey]?.trim() },
+    });
+  }
 
-    targets.push({ environment, bundle: slice });
+  // El secreto va a UNA sola fila: la que declaró el evento si existe entre los
+  // destinos; si no, la única disponible. Nunca a las dos.
+  if (hasValue(bundle.apiSecret) && targets.length > 0) {
+    const preferred =
+      targets.find((target) => target.environment === declaredEnvironment) ??
+      targets[0];
+    preferred.bundle.apiSecret = bundle.apiSecret?.trim();
   }
 
   return { targets, skipped };

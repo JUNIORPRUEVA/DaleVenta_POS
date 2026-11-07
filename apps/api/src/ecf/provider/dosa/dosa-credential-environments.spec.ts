@@ -89,10 +89,24 @@ describe("reparto por ambiente", () => {
       environment: "production",
       bundle: { apiKeyProduccion: "prod-value", apiSecret: "shared-secret" },
     });
+    // El secreto NO se duplica: va solo a la fila que declare el evento (aquí,
+    // por defecto, la primera disponible).
     expect(split.targets[1]).toEqual({
       environment: "test",
-      bundle: { apiKeyTest: "test-value", apiSecret: "shared-secret" },
+      bundle: { apiKeyTest: "test-value" },
     });
+  });
+
+  it("el ambiente declarado decide en qué fila queda el secreto", () => {
+    const declaredTest = splitCredentialsByEnvironment(
+      { apiKeyProduccion: "p", apiKeyTest: "t", apiSecret: "s" },
+      "test",
+    );
+    expect(declaredTest.targets[1]).toEqual({
+      environment: "test",
+      bundle: { apiKeyTest: "t", apiSecret: "s" },
+    });
+    expect(declaredTest.targets[0].bundle).toEqual({ apiKeyProduccion: "p" });
   });
 
   it("no inventa el ambiente que no trae su llave", () => {
@@ -147,7 +161,7 @@ describe("ingesta: cada llave en su ambiente", () => {
     expect(test.sealed.present).toEqual({
       apiKeyProduccion: false,
       apiKeyTest: true,
-      apiSecret: true,
+      apiSecret: false,
     });
     // Ambos entran sin activar nada.
     expect(prod.status).toBe("PENDING_CONFIRMATION");
@@ -324,7 +338,7 @@ describe("reclasificación de lo ya guardado", () => {
     expect(rows.get(`${COMPANY_A}|${RNC}|test`)!.sealed.present).toEqual({
       apiKeyProduccion: false,
       apiKeyTest: true,
-      apiSecret: true,
+      apiSecret: false,
     });
   });
 

@@ -48,7 +48,7 @@ export type DosaEmissionGateInput = {
   /** Entorno en el que se quiere emitir. */
   environment: DosaCredentialEnvironment;
   senderTaxId: string | null;
-  configuredTestRnc: string | null;
+  expectedTestRnc: string | null;
   /** `DOSA_EMISSION_ENABLED`. */
   providerEmissionEnabled: boolean;
   /** `DOSA_PRODUCTION_EMISSION_ENABLED`. */
@@ -100,7 +100,7 @@ export function assessDosaEmissionGate(
   const identity = verifyFiscalIdentity({
     environment: input.environment,
     senderTaxId: input.senderTaxId,
-    configuredTestRnc: input.configuredTestRnc,
+    expectedTestRnc: input.expectedTestRnc,
   });
   if (!identity.ok) {
     blockingReasons.push(`${DOSA_GATE_BLOCKED.identityRejected}:${identity.reason}`);
