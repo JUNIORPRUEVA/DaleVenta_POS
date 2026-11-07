@@ -1230,6 +1230,7 @@ model Company {
   ecfDosaWebhookEvents             EcfDosaWebhookEvent[]
   ecfDosaCompanyCredentials        EcfDosaCompanyCredential[]
   ecfDosaIncidents                 EcfDosaIncident[]
+  ecfPortalEnrollments             EcfPortalEnrollment[]
   ecfPortalTickets                 EcfCertificationPortalTicket[]
   ecfPortalSessions                EcfCertificationPortalSession[]
   ecfCertificationAttempts         EcfCertificationAttempt[]
@@ -1448,6 +1449,39 @@ model EcfDosaIncident {
   @@index([companyId, status])
   @@index([status, nextAttemptAt])
   @@map("ecf_dosa_incidents")
+}
+
+/// Autorización POR EMPRESA para usar el asistente e-CF.
+///
+/// Sustituye a la variable de despliegue `ECF_PORTAL_PILOT_COMPANY_IDS`: una
+/// empresa nueva ya no exige editar el entorno, y queda registro de quién la
+/// autorizó, por qué y hasta cuándo.
+///
+/// * Historial: revocar marca `revokedAt`, no borra.
+/// * Como mucho una fila `ACTIVE` por empresa (índice único parcial en la
+///   migración).
+/// * Fail-closed: sin autorización vigente no hay elegibilidad.
+/// * No guarda credenciales ni datos fiscales.
+model EcfPortalEnrollment {
+  id                 String    @id @default(uuid()) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  /// `ADMIN_AUTHORIZATION` | `CONTRACT_REFERENCE` | `AUTO_ELIGIBLE`
+  source             String    @db.VarChar(32)
+  status             String    @default("ACTIVE") @db.VarChar(16)
+  reason             String?   @db.VarChar(500)
+  contractReference  String?   @map("contract_reference") @db.VarChar(160)
+  authorizedByUserId String?   @map("authorized_by_user_id") @db.Uuid
+  expiresAt          DateTime? @map("expires_at")
+  revokedAt          DateTime? @map("revoked_at")
+  revokedByUserId    String?   @map("revoked_by_user_id") @db.Uuid
+  revocationReason   String?   @map("revocation_reason") @db.VarChar(500)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@map("ecf_portal_enrollments")
 }
 
 /// Habilitación DGII POR EMPRESA: seguimiento del proceso de incorporación a la

@@ -1,6 +1,7 @@
 import {
   Body,
   ConflictException,
+  BadRequestException,
   Controller,
   Get,
   NotFoundException,
@@ -25,9 +26,15 @@ import {
   ReviewEcfDgiiEvidenceDto,
   UpdateEcfDgiiRequirementDto,
 } from "../dto/ecf-dgii.dto";
-import { DecideEcfDgiiApplicationDto, CloseDosaIncidentDto } from "../dto/ecf-platform.dto";
+import {
+  DecideEcfDgiiApplicationDto,
+  CloseDosaIncidentDto,
+  GrantEcfPortalEnrollmentDto,
+  RevokeEcfPortalEnrollmentDto,
+} from "../dto/ecf-platform.dto";
 import { PlatformStaffGuard } from "./platform-staff.guard";
 import { DosaIncidentService } from "../provider/dosa/dosa-incident.service";
+import { EcfPortalEnrollmentService } from "../portal/ecf-portal-enrollment.service";
 import { EcfSupportGrantGuard } from "../dgii/ecf-support-grant.guard";
 import { EcfSupportGrantService } from "../dgii/ecf-support-grant.service";
 
@@ -58,6 +65,7 @@ export class EcfPlatformController {
     private readonly activation: EcfDgiiActivationService,
     private readonly grants: EcfSupportGrantService,
     private readonly dosaIncidents: DosaIncidentService,
+    private readonly portalEnrollments: EcfPortalEnrollmentService,
   ) {}
 
   /**
@@ -327,6 +335,76 @@ export class EcfPlatformController {
   @Post("dosa/incidents/sweep")
   async sweepDosaIncidents() {
     return this.dosaIncidents.scan();
+  }
+
+  /**
+   * Estado del acceso al asistente e-CF para una empresa concreta.
+   *
+   * Devuelve la decisión vigente y el histórico de autorizaciones. Es de solo
+   * lectura: no inscribe a nadie.
+   */
+  @Get("dosa/portal-enrollments/:companyId")
+  async getPortalEnrollment(
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+  ) {
+    const [eligibility, history] = await Promise.all([
+      this.portalEnrollments.eligibility(companyId),
+      this.portalEnrollments.history(companyId),
+    ]);
+    return { eligibility, history };
+  }
+
+  /**
+   * Autoriza el asistente e-CF para una empresa.
+   *
+   * Sustituye a la lista de entorno: la autorización queda en base de datos,
+   * es idempotente (no duplica una vigente) y registra quién la dio y por qué.
+   * NO emite comprobantes, no habilita la transmisión y no toca credenciales.
+   */
+  @Post("dosa/portal-enrollments/:companyId/grant")
+  async grantPortalEnrollment(
+    @Req() req: Request,
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+    @Body() dto: GrantEcfPortalEnrollmentDto,
+  ) {
+    const result = await this.portalEnrollments.grant({
+      companyId,
+      source: dto.source,
+      reason: dto.reason,
+      contractReference: dto.contractReference ?? null,
+      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      actorUserId: (req.user as TenantUser).id,
+    });
+    if (!result.ok) {
+      throw new BadRequestException(result.blockedReason);
+    }
+    return {
+      companyId,
+      created: result.created,
+      enrollmentId: result.id,
+    };
+  }
+
+  /**
+   * Revoca la autorización vigente de una empresa.
+   *
+   * Conserva la fila (nunca borra) para que el histórico siga siendo auditable.
+   */
+  @Post("dosa/portal-enrollments/:companyId/revoke")
+  async revokePortalEnrollment(
+    @Req() req: Request,
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+    @Body() dto: RevokeEcfPortalEnrollmentDto,
+  ) {
+    const result = await this.portalEnrollments.revoke({
+      companyId,
+      reason: dto.reason,
+      actorUserId: (req.user as TenantUser).id,
+    });
+    if (!result.ok) {
+      throw new BadRequestException(result.blockedReason);
+    }
+    return { companyId, revoked: result.revoked };
   }
 
   /**

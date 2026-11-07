@@ -52,6 +52,11 @@ describe("SettingsService company master data protection", () => {
       ecfCompanyConfiguration: {
         findUnique: jest.fn().mockResolvedValue(null),
       },
+      // La elegibilidad del asistente e-CF se lee de una tabla por empresa. Sin
+      // fila, el valor seguro es "no elegible".
+      ecfPortalEnrollment: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
       ...prisma,
     };
     const productSourceResolver = {

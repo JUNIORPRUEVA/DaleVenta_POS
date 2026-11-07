@@ -130,7 +130,13 @@ real("Cierre de hallazgos — PostgreSQL real", () => {
       const resolved = await new PrismaDosaCompanyResolver(prisma).resolveByRnc(
         RNC_SHARED,
       );
-      expect(resolved).toEqual({ companyId: COMPANY_A, ecfEnabled: true });
+      // `portalEligible` es ahora parte del contrato: sin autorización registrada
+      // en `ecf_portal_enrollments` (ni lista heredada) es `false`.
+      expect(resolved).toEqual({
+        companyId: COMPANY_A,
+        ecfEnabled: true,
+        portalEligible: false,
+      });
     });
 
     it("si dos empresas comparten el RNC, la segunda queda bloqueada", async () => {

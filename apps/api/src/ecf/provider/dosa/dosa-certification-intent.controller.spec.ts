@@ -212,6 +212,9 @@ function build(options: {
     fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled,
       options.configuredProvider ?? "DOSA"),
     sessionIntegration,
+    // Autorización por empresa: en estas pruebas se concede siempre, para que la
+    // lógica bajo prueba sea la del intento y no la de la compuerta.
+    { isEligible: async () => true } as never,
   );
   return { controller, intents, rows };
 }

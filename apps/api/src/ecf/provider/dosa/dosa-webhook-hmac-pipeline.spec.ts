@@ -7,6 +7,7 @@ import {
   type DosaWebhookStore,
 } from "./dosa-webhook.service";
 import type { DosaSignatureConfig } from "./dosa-webhook-signature.policy";
+import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
 
 /**
  * Pipeline del webhook con **firma HMAC real**.
@@ -83,11 +84,31 @@ function fakeStore(responses: {
   return { store, calls };
 }
 
+/**
+ * Doble del resolutor de empresa.
+ *
+ * Reproduce el CONTRATO real: la elegibilidad del asistente ya no la decide el
+ * servicio del webhook, la resuelve el resolutor junto con la empresa (fila en
+ * `ecf_portal_enrollments` o lista heredada del entorno). Aquí se emula con la
+ * lista heredada para no depender de la base.
+ */
 const resolverOf =
-  (mapping: Record<string, { companyId: string; ecfEnabled: boolean }>): DosaCompanyResolver =>
+  (
+    mapping: Record<
+      string,
+      { companyId: string; ecfEnabled: boolean; portalEligible?: boolean }
+    >,
+  ): DosaCompanyResolver =>
   ({
     async resolveByRnc(rnc: string) {
-      return mapping[rnc] ?? null;
+      const row = mapping[rnc];
+      if (!row) return null;
+      return {
+        companyId: row.companyId,
+        ecfEnabled: row.ecfEnabled,
+        portalEligible:
+          row.portalEligible ?? isEcfPortalPilotCompany(row.companyId),
+      };
     },
   });
 

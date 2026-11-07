@@ -27,6 +27,7 @@ import {
 } from "../inventory/zero-config-inventory";
 import { DEFAULT_UNIT_OF_MEASURE_ID } from "../products/unit-of-measure.util";
 import { isEcfPortalPilotCompany } from "../ecf/portal/ecf-portal-pilot.policy";
+import { decidePortalEligibility } from "../ecf/portal/ecf-portal-enrollment.policy";
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -363,11 +364,30 @@ export class SettingsService {
       wholesalePriceListsEnabled:
         company?.wholesalePriceListsEnabled === true,
       ecfEnabled,
-      // Piloto de certificación: viaja en la MISMA carga útil de configuración
-      // para que el menú no tenga que pedirlo aparte (una petición por cada
-      // build del menú era tráfico gratuito y un fallo de red visible).
-      ecfPilotEligible: isEcfPortalPilotCompany(companyId),
+      // Autorización del asistente e-CF POR EMPRESA (base de datos). Viaja en la
+      // MISMA carga útil para que el menú no tenga que pedirla aparte.
+      ecfPilotEligible: await this.isEcfPortalEligible(companyId),
     };
+  }
+
+  /**
+   * Elegibilidad del asistente, con la regla compartida.
+   *
+   * Se lee de `ecf_portal_enrollments` y se decide con
+   * `decidePortalEligibility`, la MISMA función que usa el portal. Así la
+   * interfaz no puede ofrecer una entrada que el backend rechace.
+   */
+  private async isEcfPortalEligible(companyId: string): Promise<boolean> {
+    const row = await this.prisma.ecfPortalEnrollment.findFirst({
+      where: { companyId },
+      orderBy: [{ createdAt: "desc" }],
+      select: { status: true, source: true, expiresAt: true, revokedAt: true },
+    });
+    return decidePortalEligibility({
+      enrollment: row,
+      legacyEligible: isEcfPortalPilotCompany(companyId),
+      now: new Date(),
+    }).eligible;
   }
 
   private async assertSafeMultiWarehouseDisable(

@@ -13,6 +13,7 @@ import {
   milestonesFor,
   parsePilotCompanyIds,
 } from "./ecf-certification-portal.service";
+import { EcfPortalEnrollmentService } from "./ecf-portal-enrollment.service";
 
 /** Empresas autorizadas en las pruebas, salvo que el test diga otra cosa. */
 const PILOT = ["company-a", "company-b"];
@@ -30,6 +31,7 @@ function makePrismaFake(seed?: {
   ecfConfigs?: Array<{ companyId: string; enabled: boolean }>;
   intentionProvider?: string | null;
   reconciled?: boolean;
+  enrollments?: Array<Record<string, any>>;
 }) {
   const tickets: Array<Record<string, any>> = [];
   const sessions: Array<Record<string, any>> = [];
@@ -136,6 +138,20 @@ function makePrismaFake(seed?: {
       findUnique: async ({ where }: any) =>
         ecfConfigs.find((c) => c.companyId === where.companyId) ?? null,
     },
+    // Autorizaciones POR EMPRESA. Por defecto vacio: la elegibilidad de estas
+    // pruebas viene de la lista heredada, que es el caso de compatibilidad.
+    ecfPortalEnrollment: {
+      findFirst: async ({ where }: any) =>
+        (seed?.enrollments ?? []).find((e: any) => e.companyId === where.companyId) ?? null,
+      findMany: async ({ where }: any) =>
+        (seed?.enrollments ?? []).filter((e: any) => e.companyId === where.companyId),
+      create: async ({ data }: any) => ({ id: "enrollment-1", ...data }),
+      updateMany: async () => ({ count: 0 }),
+    },
+    company: {
+      findUnique: async ({ where }: any) =>
+        companies.find((c) => c.id === where.id) ?? null,
+    },
     // El servicio usa $transaction(array); en el doble basta con ejecutarlo.
     $transaction: async (ops: Array<Promise<unknown>>) => Promise.all(ops),
     __rows: { tickets, sessions },
@@ -146,39 +162,109 @@ function makePrismaFake(seed?: {
 
 function makeService(prisma: any, pilot: string[] = PILOT) {
   process.env.ECF_PORTAL_PILOT_COMPANY_IDS = pilot.join(',');
-  return new EcfCertificationPortalService(prisma);
+  return new EcfCertificationPortalService(
+    prisma,
+    new EcfPortalEnrollmentService(prisma),
+  );
 }
 
 describe("elegibilidad (solo lectura)", () => {
-  it("la empresa piloto es elegible sin activar la emision", () => {
+  it("la empresa autorizada por entorno es elegible sin activar la emision", async () => {
     const service = makeService(makePrismaFake(), ["company-a"]);
-    const result = service.eligibility("company-a");
+    const result = await service.eligibility("company-a");
     expect(result.eligible).toBe(true);
-    expect(result.reason).toBe("ELIGIBLE");
+    expect(result.reason).toBe("ENROLLED_LEGACY_ENV");
     expect(result.portalPath).toBe("/ecf/certificacion");
   });
 
-  it("una empresa fuera del piloto no es elegible, y el motivo lo dice", () => {
+  it("una empresa sin autorizacion no es elegible, y el motivo lo dice", async () => {
     const service = makeService(makePrismaFake(), ["company-a"]);
-    const result = service.eligibility("company-b");
+    const result = await service.eligibility("company-b");
     expect(result.eligible).toBe(false);
-    expect(result.reason).toBe("PILOT_NOT_INCLUDED");
+    expect(result.reason).toBe("NO_AUTHORIZATION");
   });
 
-  it("sin piloto configurado nadie es elegible (cerrado por defecto)", () => {
+  it("sin piloto configurado nadie es elegible (cerrado por defecto)", async () => {
     const service = makeService(makePrismaFake(), []);
-    expect(service.eligibility("company-a").eligible).toBe(false);
+    expect((await service.eligibility("company-a")).eligible).toBe(false);
   });
 
-  it("consultar la elegibilidad no crea tickets ni sesiones", () => {
+  it("consultar la elegibilidad no crea tickets ni sesiones", async () => {
     const prisma = makePrismaFake();
     const service = makeService(prisma, ["company-a"]);
 
-    service.eligibility("company-a");
-    service.eligibility("company-b");
+    await service.eligibility("company-a");
+    await service.eligibility("company-b");
 
     expect(prisma.__rows.tickets).toHaveLength(0);
     expect(prisma.__rows.sessions).toHaveLength(0);
+  });
+});
+
+describe("autorizacion por empresa (base de datos, no entorno)", () => {
+  const ACTIVE = (companyId: string, extra: Record<string, unknown> = {}) => ({
+    companyId,
+    status: "ACTIVE",
+    source: "ADMIN_AUTHORIZATION",
+    expiresAt: null,
+    revokedAt: null,
+    ...extra,
+  });
+
+  it("una empresa inscrita es elegible SIN figurar en la lista del entorno", async () => {
+    const prisma = makePrismaFake({ enrollments: [ACTIVE("company-b")] });
+    // La lista heredada solo contiene company-a: company-b entra por su fila.
+    const service = makeService(prisma, ["company-a"]);
+
+    const result = await service.eligibility("company-b");
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toBe("ENROLLED");
+    await expect(
+      service.issueTicket({ companyId: "company-b", userId: "admin-b" }),
+    ).resolves.toHaveProperty("ticket");
+  });
+
+  it("con la lista del entorno vacia, la fila de la empresa sigue sirviendo", async () => {
+    const prisma = makePrismaFake({ enrollments: [ACTIVE("company-a")] });
+    const service = makeService(prisma, []);
+    expect((await service.eligibility("company-a")).eligible).toBe(true);
+  });
+
+  it("una autorizacion caducada deja de servir sin tocar el entorno", async () => {
+    const prisma = makePrismaFake({
+      enrollments: [ACTIVE("company-a", { expiresAt: new Date("2020-01-01T00:00:00Z") })],
+    });
+    const service = makeService(prisma, []);
+    const result = await service.eligibility("company-a");
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe("AUTHORIZATION_EXPIRED");
+  });
+
+  it("una autorizacion revocada corta el acceso del ticket ya emitido", async () => {
+    const prisma = makePrismaFake();
+    const { ticket } = await makeService(prisma, ["company-a"]).issueTicket({
+      companyId: "company-a",
+      userId: "u",
+    });
+
+    // Se revoca en la base (la lista heredada se deja como estaba a proposito:
+    // la revocacion debe ganarle).
+    (prisma as any).ecfPortalEnrollment.findFirst = async () =>
+      ACTIVE("company-a", { status: "REVOKED", revokedAt: new Date() });
+
+    await expect(
+      makeService(prisma, ["company-a"]).exchangeTicket({ ticket }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("la autorizacion de una empresa no habilita a otra", async () => {
+    const prisma = makePrismaFake({ enrollments: [ACTIVE("company-a")] });
+    const service = makeService(prisma, []);
+
+    await expect(
+      service.issueTicket({ companyId: "company-b", userId: "admin-b" }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.__rows.tickets).toHaveLength(0);
   });
 });
 
@@ -211,7 +297,7 @@ describe("compuerta del piloto (por companyId)", () => {
     const prisma = makePrismaFake();
     const service = makeService(prisma, []);
 
-    expect(service.isPilotCompany("company-a")).toBe(false);
+    expect(await service.isPilotCompany("company-a")).toBe(false);
     await expect(
       service.issueTicket({ companyId: "company-a", userId: "u" }),
     ).rejects.toBeInstanceOf(ForbiddenException);

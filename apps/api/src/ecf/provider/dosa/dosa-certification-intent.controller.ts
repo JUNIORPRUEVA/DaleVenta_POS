@@ -20,7 +20,7 @@ import { Permissions } from "../../../auth/roles.decorator";
 import { RolesGuard } from "../../../auth/roles.guard";
 import { requireTenant, type TenantUser } from "../../../auth/tenant-context";
 import { PrismaService } from "../../../prisma/prisma.service";
-import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
+import { EcfPortalEnrollmentService } from "../../portal/ecf-portal-enrollment.service";
 import {
   DosaCertificationIntentService,
   type DosaIntentRejection,
@@ -223,6 +223,10 @@ export class DosaCertificationIntentController {
     @Inject(ECF_DOSA_FISCAL_CONFIG)
     private readonly fiscalConfig: DosaCompanyFiscalConfigReader,
     private readonly sessionIntegration: DosaCertificationSessionService,
+    // Autorización del asistente POR EMPRESA (base de datos), no por variable de
+    // entorno. Las dos rutas administrativas de abajo exigen que la empresa esté
+    // autorizada, igual que el portal.
+    private readonly portalEnrollment: EcfPortalEnrollmentService,
   ) {}
 
   @Post("certification-intent")
@@ -446,7 +450,7 @@ export class DosaCertificationIntentController {
     if (process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED !== "true") {
       throw new ConflictException("DOSA_HISTORICAL_TRANSITION_DISABLED");
     }
-    if (!isEcfPortalPilotCompany(companyId)) {
+    if (!(await this.portalEnrollment.isEligible(companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     if (
@@ -598,7 +602,7 @@ export class DosaCertificationIntentController {
     ) {
       throw new ConflictException("DOSA_INTENT_RECONCILIATION_INTERNAL_DISABLED");
     }
-    if (!isEcfPortalPilotCompany(companyId)) {
+    if (!(await this.portalEnrollment.isEligible(companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     if (!body || body.confirmation !== "RECONCILE_EXISTING_DOSA_INTENT" ||

@@ -13,7 +13,6 @@ import {
 } from "./dosa-webhook-signature.policy";
 import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
-import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
 
 /** Cliente mínimo (SQL parametrizado). Se puede sustituir por un doble. */
 export interface DosaWebhookStore {
@@ -33,9 +32,16 @@ export const ECF_DOSA_WEBHOOK_STORE = Symbol("ECF_DOSA_WEBHOOK_STORE");
  * llega en el evento es una PISTA: nunca selecciona tenant por sí solo.
  */
 export interface DosaCompanyResolver {
-  resolveByRnc(
-    rnc: string,
-  ): Promise<{ companyId: string; ecfEnabled: boolean } | null>;
+  resolveByRnc(rnc: string): Promise<{
+    companyId: string;
+    ecfEnabled: boolean;
+    /**
+     * `true` si la empresa tiene autorización vigente para el asistente.
+     * Lo resuelve el servidor junto con el resto de la fila, para que el webhook
+     * no tenga que leer entorno ni hacer una segunda consulta.
+     */
+    portalEligible?: boolean;
+  } | null>;
 }
 
 export const ECF_DOSA_COMPANY_RESOLVER = Symbol("ECF_DOSA_COMPANY_RESOLVER");
@@ -183,7 +189,9 @@ export class DosaWebhookService {
 
     // La certificación del piloto precede a la activación de emisión. Fuera
     // del piloto se conserva la compuerta histórica de e-CF habilitado.
-    if (!company.ecfEnabled && !isEcfPortalPilotCompany(company.companyId)) {
+    // `portalEligible` lo resuelve el servidor desde la autorización POR EMPRESA
+    // guardada en base; ya no depende de una variable del despliegue.
+    if (!company.ecfEnabled && company.portalEligible !== true) {
       return {
         accepted: false,
         status: 409,

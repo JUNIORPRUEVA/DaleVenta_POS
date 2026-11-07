@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import {
   ECF_DGII_HABILITATION_STATES,
   type EcfDgiiHabilitationState,
@@ -49,4 +49,44 @@ export class DecideEcfDgiiApplicationDto {
 export class CloseDosaIncidentDto {
   @IsIn([...DOSA_INCIDENT_RESOLUTIONS])
   resolution!: (typeof DOSA_INCIDENT_RESOLUTIONS)[number];
+}
+
+/**
+ * Autorización del asistente e-CF para UNA empresa.
+ *
+ * `reason` es obligatorio: una autorización sin motivo no es auditable.
+ * `source` es una lista cerrada; `AUTO_ELIGIBLE` NO se acepta por esta vía
+ * porque esa inscripción la escribe solo la regla automática.
+ */
+export const ECF_PORTAL_ENROLLMENT_ALLOWED_SOURCES = [
+  "ADMIN_AUTHORIZATION",
+  "CONTRACT_REFERENCE",
+] as const;
+
+export class GrantEcfPortalEnrollmentDto {
+  @IsIn([...ECF_PORTAL_ENROLLMENT_ALLOWED_SOURCES])
+  source!: (typeof ECF_PORTAL_ENROLLMENT_ALLOWED_SOURCES)[number];
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(500)
+  reason!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  contractReference?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  expiresAt?: string | null;
+}
+
+/** Revocación: el motivo también es obligatorio. */
+export class RevokeEcfPortalEnrollmentDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(500)
+  reason!: string;
 }

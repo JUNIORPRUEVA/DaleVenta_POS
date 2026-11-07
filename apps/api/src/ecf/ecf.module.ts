@@ -122,11 +122,13 @@ import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
 import { EcfCertificationPortalController } from "./portal/ecf-certification-portal.controller";
 import { EcfCertificationPortalService } from "./portal/ecf-certification-portal.service";
+import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.service";
 
 @Module({
   controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController],
   providers: [
     EcfService,
+    EcfPortalEnrollmentService,
     EcfCertificationPortalService,
     EcfDgiiHabilitationService,
     EcfDgiiApplicationService,

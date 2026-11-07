@@ -44,7 +44,8 @@ function fixture(overrides: { sourceCreated?: boolean; externalActivity?: boolea
   };
   const controller = new DosaCertificationIntentController(prisma as PrismaService,
     {} as DosaCertificationIntentService, {} as DosaCredentialService,
-    { read: async () => null });
+    { read: async () => null }, {} as never,
+    { isEligible: async () => true } as never);
   const user = { id: "admin-2", companyId: overrides.owner ?? COMPANY,
     role: "ADMIN" } as TenantUser;
   const request = { user } as any;
