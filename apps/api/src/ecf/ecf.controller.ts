@@ -43,6 +43,7 @@ import { EcfDgiiDocumentsService } from "./dgii/ecf-dgii-documents.service";
 import { EcfDgiiHabilitationService } from "./dgii/ecf-dgii-habilitation.service";
 import { EcfCertificateService } from "./dgii/certificate/ecf-certificate.service";
 import { EcfCanonicalIdentityService } from "./dgii/certificate/ecf-canonical-identity.service";
+import { EcfCertificationActivationService } from "./certification/ecf-certification-activation.service";
 import {
   ECF_POSTULATION_XML_ERRORS,
   ECF_POSTULATION_XML_MESSAGES,
@@ -75,6 +76,7 @@ export class EcfController {
     private readonly canonicalIdentity: EcfCanonicalIdentityService,
     private readonly recovery: EcfCertificationRecoveryService,
     private readonly preparation: EcfPreparationMetadataService,
+    private readonly certificationActivation: EcfCertificationActivationService,
   ) {}
 
   /**
@@ -298,11 +300,23 @@ export class EcfController {
    */
   @Post("dgii/authorization")
   @Permissions("recordEcfDgiiOfficialVerification")
-  recordDgiiAuthorization(
+  async recordDgiiAuthorization(
     @Req() req: Request,
     @Body() dto: RecordEcfDgiiAuthorizationDto,
   ) {
-    return this.dgii.recordAuthorization(req.user as TenantUser, dto);
+    const result = await this.dgii.recordAuthorization(req.user as TenantUser, dto);
+
+    // Esta autorización es el ÚLTIMO eslabón de la cadena de evidencia que
+    // `DosaActivationService` exige para activar una credencial. Se intenta
+    // aquí para que el cliente no necesite ninguna acción de Fulltech. El
+    // intento NUNCA lanza: su autorización ya está guardada y no puede
+    // perderse por un fallo posterior. Si falta evidencia, la ruta
+    // `POST /ecf/dosa/activation/attempt` dirá exactamente qué.
+    await this.certificationActivation.attemptSafely(
+      requireTenant(req.user as TenantUser),
+    );
+
+    return result;
   }
 
   @Post("dgii/authorization/revoke")

@@ -12,6 +12,14 @@ autor, sin motivo y sin historial.
 
 Esta ruta lo sustituye por una operación auditada.
 
+> **La autorización normal ya NO pasa por aquí.** El cliente se autoriza solo
+> completando su propia evidencia (credencial `ACTIVE` → estado derivado), sin
+> intervención de nadie: ver `ECF_SELF_SERVICE_ACTIVATION.md`.
+>
+> Esta ruta queda para lo que sí es un acto humano: **retirar** una autorización,
+> **suspender** una empresa con incidente fiscal o **corregir** un caso de soporte,
+> siempre con motivo, actor y auditoría.
+
 ## 1. Qué hace y qué NO hace
 
 **Hace:**

@@ -135,13 +135,16 @@ import { EcfCertificationPortalController } from "./portal/ecf-certification-por
 import { EcfCertificationPortalService } from "./portal/ecf-certification-portal.service";
 import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.service";
 import { EcfCertificationAuthorizationService } from "./certification/ecf-certification-authorization.service";
+import { EcfCertificationActivationService } from "./certification/ecf-certification-activation.service";
+import { EcfCertificationActivationController } from "./certification/ecf-certification-activation.controller";
 
 @Module({
-  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController],
+  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController, EcfCertificationActivationController],
   providers: [
     EcfService,
     EcfPortalEnrollmentService,
     EcfCertificationAuthorizationService,
+    EcfCertificationActivationService,
     EcfCertificationPortalService,
     EcfDgiiHabilitationService,
     EcfDgiiApplicationService,
