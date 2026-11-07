@@ -5,6 +5,7 @@ import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { fingerprint } from "../../documents/ecf-document-idempotency.service";
 import type { EcfDocumentType } from "../../fiscal-core/ecf-fiscal-document";
 import { mapEcfToDosaDraft } from "./dosa-ecf.mapper";
+import { assessDosaProviderResponse } from "./dosa-provider-response";
 import { DosaEmissionService } from "./dosa-emission.service";
 import { DosaEmissionWire } from "./dosa-emission.wire";
 
@@ -187,8 +188,21 @@ export class DosaEmissionDispatchService {
       user,
       documentId,
       wire,
-      // Huella del cuerpo REALMENTE enviado, no la del payload preparado.
-      { body, fingerprint: fingerprint(body) },
+      {
+        // Huella del cuerpo REALMENTE enviado, no la del payload preparado.
+        body,
+        fingerprint: fingerprint(body),
+        // La respuesta de DOSA es plana (`trackId`, `encf`, `estado`,
+        // `secuenciaUtilizada`) y no correlaciona con el evaluador común, que
+        // está modelado sobre Alanube. Sin este evaluador, una respuesta
+        // perfectamente legible quedaría como «resultado desconocido».
+        observe: ({ statusCode, body: responseBody }) =>
+          assessDosaProviderResponse(statusCode, responseBody, {
+            documentType,
+            expectedEncf: encf,
+            expectedTaxId: senderTaxId,
+          }),
+      },
     );
 
     return {

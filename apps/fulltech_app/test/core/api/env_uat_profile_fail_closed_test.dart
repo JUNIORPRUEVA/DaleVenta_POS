@@ -25,6 +25,10 @@ const bool _uatProfile = bool.fromEnvironment(
   'FULLPOS_UAT_PROFILE',
   defaultValue: false,
 );
+const String _apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: '',
+);
 
 bool get _perfilUatActivo =>
     _uatProfile || _appEnv.trim().toLowerCase() == 'uat';
@@ -37,7 +41,7 @@ void main() {
 
     test('sin URL explícita: cierra en UAT y usa el default comercial fuera',
         () {
-      if (_perfilUatActivo) {
+      if (_perfilUatActivo && _apiBaseUrl.trim().isEmpty) {
         expect(
           () => Env.apiBaseUrl,
           throwsA(
@@ -49,6 +53,9 @@ void main() {
           ),
           reason: 'un build del perfil UAT no puede resolver la URL por defecto',
         );
+      } else if (_perfilUatActivo) {
+        // Con URL explícita el perfil UAT la acepta sin tocar el fallback.
+        expect(Env.apiBaseUrl, _apiBaseUrl.trim());
       } else {
         // Comportamiento comercial intacto: no se cambia el fallback histórico.
         expect(Env.apiBaseUrl, ProductConfig.productionApiBaseUrl);
@@ -70,6 +77,20 @@ void main() {
         ),
         isNull,
       );
+    });
+
+    test('la URL declarada es la EFECTIVAMENTE seleccionada, no el fallback', () {
+      if (_apiBaseUrl.trim().isEmpty) {
+        // Sin define no hay nada que seleccionar: cubierto por la prueba
+        // anterior (fallback comercial o cierre en UAT).
+        return;
+      }
+      // Con `--dart-define=API_BASE_URL=...` la aplicación usa exactamente ese
+      // valor. Esto es lo que hace que la comprobación del bundle («la URL
+      // declarada está presente») equivalga a «esta es la URL seleccionada»:
+      // el literal se inlinea y `Env.apiBaseUrl` lo devuelve tal cual.
+      expect(Env.apiBaseUrl, _apiBaseUrl.trim());
+      expect(Env.apiBaseUrl, isNot(ProductConfig.productionApiBaseUrl));
     });
   });
 }

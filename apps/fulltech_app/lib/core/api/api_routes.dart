@@ -571,6 +571,14 @@ class ApiRoutes {
   /// apagado). Sirve para validar la cadena completa; nunca es emisión fiscal.
   static String ecfDocumentSimulateDispatch(String id) =>
       '/ecf/documents/$id/simulate-dispatch';
+
+  /// Despacho AUTORIZADO al proveedor DOSA de la empresa.
+  ///
+  /// El backend aplica la barrera del documento, la compuerta fiscal y la bóveda
+  /// de credenciales de ESTA empresa y ESTE ambiente. Puede responder `ok:false`
+  /// con motivos, que la interfaz debe mostrar tal cual.
+  static String ecfDocumentDispatchDosa(String id) =>
+      '/ecf/documents/$id/dispatch-dosa';
   static const ecfSequences = '/ecf/sequences';
   static const ecfSequencesRenew = '/ecf/sequences/renew';
 

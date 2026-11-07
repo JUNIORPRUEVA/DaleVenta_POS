@@ -7,6 +7,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
+import '../ecf_dosa_dispatch_models.dart';
 import '../ecf_support_grant_models.dart';
 
 Map<String, dynamic> _asMap(dynamic data) {
@@ -316,6 +317,20 @@ class EcfRepository {
       data: {'scenario': scenario},
     );
     return EcfSimulatedDispatchOutcome.fromJson(_asMap(res.data));
+  }
+
+  /// DESPACHO AUTORIZADO al proveedor DOSA de la empresa.
+  ///
+  /// A diferencia del despacho simulado, este camino es el real: el backend
+  /// aplica barrera del documento, compuerta fiscal y credenciales de ESTA
+  /// empresa y ESTE ambiente.
+  ///
+  /// Un rechazo fiscal no lanza: llega con `ok: false`, `code` y
+  /// `blockingReasons` para que la interfaz explique qué falta. Los códigos 4xx
+  /// sí son excepciones (permiso, documento inexistente, doble intento).
+  Future<EcfDosaDispatchOutcome> dispatchDosa(String documentId) async {
+    final res = await _dio.post(ApiRoutes.ecfDocumentDispatchDosa(documentId));
+    return EcfDosaDispatchOutcome.fromJson(_asMap(res.data));
   }
 
   /// Prepara un borrador local (E31) a partir de una venta real.

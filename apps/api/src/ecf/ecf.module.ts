@@ -123,6 +123,7 @@ import {
   type DosaHttpTransport,
 } from "./provider/dosa/dosa-emission.client";
 import { DosaEmissionDispatchService } from "./provider/dosa/dosa-emission-dispatch.service";
+import { validateDosaEmissionStartup } from "./provider/dosa/dosa-emission.startup";
 import {
   FakeDosaHttpTransport,
   resolveFakeTransportSelection,
@@ -365,6 +366,16 @@ import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.servi
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,
       useFactory: () => {
+        // Validación de arranque: un transporte falso, una URL no HTTPS o un
+        // ambiente desconocido no pueden quedar activos en silencio. Las
+        // advertencias (p. ej. PRODUCCIÓN configurada pero no autorizada) no
+        // impiden arrancar: la compuerta rechaza cada emisión con su motivo.
+        const startup = validateDosaEmissionStartup(process.env);
+        if (!startup.ok) {
+          throw new Error(
+            `DOSA_EMISSION_CONFIG_INVALID: ${startup.problems.join(", ")}`,
+          );
+        }
         // El transporte FALSO sólo se elige en una UAT local y de forma
         // explícita; fuera de ahí la fábrica lanza al arrancar (falla cerrado).
         if (resolveFakeTransportSelection(process.env) === "FAKE") {

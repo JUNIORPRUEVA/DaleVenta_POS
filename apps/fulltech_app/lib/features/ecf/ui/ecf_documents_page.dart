@@ -7,6 +7,7 @@ import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import '../ecf_status_presentation.dart';
 import 'ecf_simulated_dispatch_action.dart';
+import 'ecf_dosa_dispatch_action.dart';
 
 /// Tamaño de página de la bandeja.
 const int kEcfTrayPageSize = 25;
@@ -964,6 +965,13 @@ class _DetailBody extends StatelessWidget {
         // Validación local: solo aparece en un perfil UAT, con la empresa
         // habilitada, con permiso y en un estado despachable.
         EcfSimulatedDispatchAction(
+          documentId: detail.summary.id,
+          status: summary.status,
+        ),
+        // Emisión AUTORIZADA: el backend decide en cada intento (barrera,
+        // compuerta y credenciales de esta empresa). Aquí solo se ofrece cuando
+        // la empresa está en condiciones de emitir ahora mismo.
+        EcfDosaDispatchAction(
           documentId: detail.summary.id,
           status: summary.status,
         ),
