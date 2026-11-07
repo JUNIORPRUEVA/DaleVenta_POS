@@ -27,14 +27,17 @@ import {
   UpdateEcfDgiiRequirementDto,
 } from "../dto/ecf-dgii.dto";
 import {
+  AuthorizeEcfCertificationDto,
   DecideEcfDgiiApplicationDto,
   CloseDosaIncidentDto,
   GrantEcfPortalEnrollmentDto,
+  RevokeEcfCertificationDto,
   RevokeEcfPortalEnrollmentDto,
 } from "../dto/ecf-platform.dto";
 import { PlatformStaffGuard } from "./platform-staff.guard";
 import { DosaIncidentService } from "../provider/dosa/dosa-incident.service";
 import { EcfPortalEnrollmentService } from "../portal/ecf-portal-enrollment.service";
+import { EcfCertificationAuthorizationService } from "../certification/ecf-certification-authorization.service";
 import { EcfSupportGrantGuard } from "../dgii/ecf-support-grant.guard";
 import { EcfSupportGrantService } from "../dgii/ecf-support-grant.service";
 
@@ -66,6 +69,7 @@ export class EcfPlatformController {
     private readonly grants: EcfSupportGrantService,
     private readonly dosaIncidents: DosaIncidentService,
     private readonly portalEnrollments: EcfPortalEnrollmentService,
+    private readonly certification: EcfCertificationAuthorizationService,
   ) {}
 
   /**
@@ -497,5 +501,92 @@ export class EcfPlatformController {
     res.setHeader("X-Content-SHA256", doc.sha256 ?? "");
     res.setHeader("Cache-Control", "no-store");
     return doc.buffer;
+  }
+
+  /**
+   * Situación de AUTORIZACIÓN DE EMISIÓN de una empresa. Solo lectura.
+   *
+   * Devuelve el estado de certificación vigente, los objetivos que la política
+   * permite ahora y el histórico de autorizaciones. No cambia nada.
+   */
+  @Get("dosa/certification/:companyId")
+  async getCertificationAuthorization(
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+  ) {
+    const snapshot = await this.certification.snapshot(companyId);
+    if (!snapshot) {
+      throw new NotFoundException("ECF_CERTIFICATION_CONFIGURATION_NOT_FOUND");
+    }
+    return snapshot;
+  }
+
+  /**
+   * Autoriza la emisión electrónica de una empresa.
+   *
+   * Sustituye al `UPDATE` manual en la base: la transición se valida contra la
+   * política (`AUTHORIZED_SANDBOX` antes de `PRODUCTION_READY`, nunca desde
+   * `BLOCKED`), el motivo es obligatorio y la fila de auditoría guarda estado
+   * anterior, estado nuevo, actor y referencia de evidencia.
+   *
+   * NO emite: la emisión sigue exigiendo configuración habilitada, proveedor
+   * DOSA, credenciales activas y la bandera global. Esta ruta solo levanta la
+   * compuerta de certificación.
+   */
+  @Post("dosa/certification/:companyId/authorize")
+  async authorizeEcfCertification(
+    @Req() req: Request,
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+    @Body() dto: AuthorizeEcfCertificationDto,
+  ) {
+    const result = await this.certification.authorize({
+      companyId,
+      target: dto.target,
+      reason: dto.reason,
+      evidenceReference: dto.evidenceReference ?? null,
+      actorUserId: (req.user as TenantUser).id,
+    });
+    if (!result.ok) {
+      // Un rechazo de política es un conflicto con el estado actual, no una
+      // petición mal formada: el operador tiene que resolver algo antes.
+      throw result.blockedReason === "ECF_CERTIFICATION_CONFIGURATION_NOT_FOUND"
+        ? new NotFoundException(result.blockedReason)
+        : new ConflictException(result.blockedReason);
+    }
+    return {
+      companyId: result.companyId,
+      changed: result.changed,
+      from: result.from,
+      to: result.to,
+    };
+  }
+
+  /**
+   * Revoca la autorización de emisión de una empresa.
+   *
+   * Deja el estado en `SUSPENDED`, que la derivación automática no puede
+   * levantar: reactivar exige una nueva autorización explícita por esta vía.
+   */
+  @Post("dosa/certification/:companyId/revoke")
+  async revokeEcfCertification(
+    @Req() req: Request,
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+    @Body() dto: RevokeEcfCertificationDto,
+  ) {
+    const result = await this.certification.revoke({
+      companyId,
+      reason: dto.reason,
+      actorUserId: (req.user as TenantUser).id,
+    });
+    if (!result.ok) {
+      throw result.blockedReason === "ECF_CERTIFICATION_CONFIGURATION_NOT_FOUND"
+        ? new NotFoundException(result.blockedReason)
+        : new ConflictException(result.blockedReason);
+    }
+    return {
+      companyId: result.companyId,
+      changed: result.changed,
+      from: result.from,
+      to: result.to,
+    };
   }
 }

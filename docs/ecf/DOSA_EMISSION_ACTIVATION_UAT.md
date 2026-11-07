@@ -72,7 +72,9 @@ es una llamada. El procedimiento es:
 
 1. Autorizar explícitamente una ventana de TEST.
 2. Elegir **una** empresa con credencial TEST `ACTIVE` y certificación
-   `AUTHORIZED_SANDBOX`.
+   `AUTHORIZED_SANDBOX` (se concede con
+   `POST /ecf/platform/dosa/certification/:companyId/authorize`; ver
+   `ECF_CERTIFICATION_AUTHORIZATION.md`).
 3. Preparar un comprobante de importe mínimo y despachar por
    `POST /ecf/documents/:id/dispatch-dosa`.
 4. Verificar en la respuesta: `ok`, `environment: TEST`, `httpStatus`, y el
@@ -128,6 +130,9 @@ Por cada empresa, en este orden y parando si algo falla:
 - [ ] Postulación DOSA iniciada y credenciales recibidas (webhook verificado).
 - [ ] Credencial del ambiente en `ACTIVE`.
 - [ ] `certification_status` en `AUTHORIZED_SANDBOX` (TEST) o `PRODUCTION_READY`.
+      Se concede por ruta administrativa auditada, nunca con un `UPDATE` manual:
+      `POST /ecf/platform/dosa/certification/:companyId/authorize` (ver
+      `ECF_CERTIFICATION_AUTHORIZATION.md`).
 - [ ] `GET /ecf/capabilities` → `emissionPathAvailable: true`.
 - [ ] Una venta de importe mínimo preparada y despachada.
 - [ ] Estado del documento revisado; si quedó en revisión humana, se cierra con

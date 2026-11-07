@@ -243,9 +243,15 @@ No se declara la interfaz aprobada por compilar. Compilar no es validar.
 | 6 | Asignar secuencias/permisos sin flujo administrativo | **C** operativa | `POST /ecf/sequences` por empresa con permisos; asignación es acto administrativo auditado |
 | 7 | Secreto global tratado como si fuera de una empresa | **A** interna | **CORREGIDA**: credenciales cifradas por `(empresa, ambiente)` con AAD `companyId:rnc:environment`; `api_secret` único es limitación declarada (P6) |
 | 8 | `DOSA_TEST_RNC` como identidad de prueba | **A** interna | **CORREGIDA**: se usa el RNC de la empresa emisora |
-| 9 | Habilitar la certificación e-CF de un cliente | **B** externa (acto administrativo + requisito DGII) | Requiere autorización humana; no se automatiza |
+| 9 | Habilitar la certificación e-CF de un cliente | **B** externa (acto administrativo + requisito DGII) | La **decisión** sigue siendo humana y no se automatiza. El **mecanismo** dejó de ser un `UPDATE` manual: `POST /ecf/platform/dosa/certification/:companyId/authorize` aplica la política de transiciones, exige motivo y audita actor, estado anterior y nuevo (`ECF_CERTIFICATION_AUTHORIZATION.md`) |
 | 10 | Activar credenciales (`PENDING_CONFIRMATION` → `ACTIVE`) | **B** externa | Exige evidencia: identidad vinculada, postulación, confirmación del proveedor, DGII, autorización administrativa |
 | 11 | Conceder acceso al asistente a una empresa nueva | **C** operativa (nueva) | `POST …/portal-enrollments/:id/grant` con motivo, autor y caducidad. Una acción de negocio, no de infraestructura |
+
+Nota de cierre (07/11/2026): la fila 9 se actualizó cuando se añadió la ruta de
+autorización de emisión. Antes, promover una empresa a `AUTHORIZED_SANDBOX` o
+`PRODUCTION_READY` exigía escribir `certification_status` a mano en la base,
+porque `deriveCertificationStatus` solo produce `NOT_STARTED`, `IN_PROGRESS`,
+`BLOCKED` y `READY_FOR_REVIEW`.
 
 ---
 

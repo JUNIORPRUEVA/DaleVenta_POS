@@ -1,5 +1,9 @@
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import {
+  ECF_CERTIFICATION_GRANT_TARGETS,
+  type EcfCertificationGrantTarget,
+} from "../certification/ecf-certification-authorization.policy";
+import {
   ECF_DGII_HABILITATION_STATES,
   type EcfDgiiHabilitationState,
 } from "../dgii/ecf-dgii-habilitation.policy";
@@ -85,6 +89,43 @@ export class GrantEcfPortalEnrollmentDto {
 
 /** Revocación: el motivo también es obligatorio. */
 export class RevokeEcfPortalEnrollmentDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(500)
+  reason!: string;
+}
+
+/**
+ * Autorización de EMISIÓN por empresa.
+ *
+ * `target` es una lista cerrada con dos valores y el servidor aplica además las
+ * transiciones de la política: pedir `PRODUCTION_READY` sin haber pasado por
+ * `AUTHORIZED_SANDBOX` se rechaza. El DTO no decide nada por sí solo.
+ *
+ * `reason` es obligatorio porque el estado que se escribe habilita comprobantes
+ * fiscales; una autorización sin motivo no es auditable.
+ *
+ * No existe campo para `enabled`, `environment`, `productionEnabled` ni para
+ * ninguna bandera de entorno: esta ruta solo cambia el estado de certificación y
+ * no puede activar la emisión.
+ */
+export class AuthorizeEcfCertificationDto {
+  @IsIn([...ECF_CERTIFICATION_GRANT_TARGETS])
+  target!: EcfCertificationGrantTarget;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(500)
+  reason!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  evidenceReference?: string | null;
+}
+
+/** Revocación de la autorización de emisión: motivo obligatorio. */
+export class RevokeEcfCertificationDto {
   @IsString()
   @MinLength(8)
   @MaxLength(500)

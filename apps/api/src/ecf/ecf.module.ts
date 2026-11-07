@@ -134,12 +134,14 @@ import { EcfService } from "./ecf.service";
 import { EcfCertificationPortalController } from "./portal/ecf-certification-portal.controller";
 import { EcfCertificationPortalService } from "./portal/ecf-certification-portal.service";
 import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.service";
+import { EcfCertificationAuthorizationService } from "./certification/ecf-certification-authorization.service";
 
 @Module({
   controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController],
   providers: [
     EcfService,
     EcfPortalEnrollmentService,
+    EcfCertificationAuthorizationService,
     EcfCertificationPortalService,
     EcfDgiiHabilitationService,
     EcfDgiiApplicationService,
