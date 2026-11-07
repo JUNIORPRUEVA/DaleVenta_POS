@@ -242,8 +242,10 @@ describe("DosaCredentialService", () => {
     });
 
     expect(inspection).not.toBeNull();
+    // Cada fila declara SOLO las claves de su ambiente: la de producción no
+    // aparece en la fila de pruebas aunque haya llegado en el mismo evento.
     expect(inspection?.present).toEqual({
-      apiKeyProduccion: true,
+      apiKeyProduccion: false,
       apiKeyTest: true,
       apiSecret: true,
     });
@@ -429,8 +431,11 @@ describe("DosaCredentialService", () => {
     });
 
     const listA = await service.listForCompany(COMPANY_A);
-    expect(listA).toHaveLength(1);
-    expect(listA[0].companyId).toBe(COMPANY_A);
+    // El paquete traía las dos llaves: una fila por ambiente, ninguna de otra
+    // empresa.
+    expect(listA).toHaveLength(2);
+    expect(listA.every((row) => row.companyId === COMPANY_A)).toBe(true);
+    expect(listA.map((row) => row.environment).sort()).toEqual(["production", "test"]);
     expect(JSON.stringify(listA)).not.toContain("DE-B");
   });
 });

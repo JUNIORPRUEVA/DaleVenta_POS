@@ -71,6 +71,21 @@ export type DosaCredentialContext = {
   environment: DosaCredentialEnvironment;
 };
 
+/**
+ * Propósitos con los que se puede abrir un criptograma.
+ *
+ * * `EMISSION` — el camino de emisión: lo declara `openForEmission` cuando la
+ *   compuerta ya autorizó.
+ * * `REMEDIATION` — **solo herramientas de mantenimiento auditadas**. Existe
+ *   para repartir un paquete ya cifrado entre sus ambientes (corrección del
+ *   07/11/2026) sin pedirle al proveedor un reenvío. Igual que `EMISSION`,
+ *   exige `authorized: true`; no abre nada por su cuenta.
+ *
+ * No se permite ningún otro valor: mantener la lista cerrada es lo que impide
+ * que un llamador invente un propósito para leer credenciales.
+ */
+export type DosaCredentialOpenPurpose = "EMISSION" | "REMEDIATION";
+
 export type DosaCredentialVaultRejection =
   | "DOSA_CREDENTIALS_KEY_MISSING"
   | "DOSA_CREDENTIALS_KEY_INVALID"
@@ -139,7 +154,7 @@ export class DosaCredentialVault {
   open(input: {
     sealed: SealedDosaCredential;
     context: DosaCredentialContext;
-    purpose: "EMISSION";
+    purpose: DosaCredentialOpenPurpose;
     authorized: boolean;
   }): DosaCredentialBundle {
     if (!input.authorized) {

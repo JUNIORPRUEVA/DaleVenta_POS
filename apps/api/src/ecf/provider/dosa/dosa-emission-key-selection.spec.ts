@@ -184,6 +184,8 @@ describe("Selección de API Key — sin sustitución entre ambientes", () => {
   });
 
   it("TEST SIN clave de prueba NO emite aunque exista clave de producción", async () => {
+    // Con el reparto por ambiente, un paquete que solo trae la clave de
+    // producción ya no crea fila `test`: el bloqueo llega en la compuerta.
     const { service, transport } = await build({
       bundle: { apiKeyProduccion: "CLAVE-PROD" },
       status: "ACTIVE",
@@ -202,10 +204,52 @@ describe("Selección de API Key — sin sustitución entre ambientes", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.blockingReasons.join(" ")).toContain(
-        "ECF_DOSA_CREDENTIALS_MISSING_FOR_ENVIRONMENT:TEST",
+        "ECF_DOSA_GATE_CREDENTIALS_MISSING",
       );
     }
     // Lo importante: no salió ni una petición.
+    expect(transport.keys).toHaveLength(0);
+  });
+
+  it("una fila TEST heredada sin su clave tampoco emite (defensa en profundidad)", async () => {
+    const { service, transport, store } = await build({
+      bundle: { apiKeyTest: "CLAVE-TEST" },
+      status: "ACTIVE",
+    });
+
+    // Fila antigua o corrupta: existe `test` pero no trae la clave del entorno.
+    // El reparto por ambiente no puede crearla, así que se siembra a mano para
+    // fijar que la comprobación defensiva sigue viva.
+    const vault = new DosaCredentialVault(MASTER);
+    await store.upsert({
+      companyId: COMPANY,
+      rnc: RNC,
+      environment: "test",
+      status: "ACTIVE",
+      source: "WEBHOOK",
+      sealed: vault.seal(
+        { companyId: COMPANY, rnc: RNC, environment: "test" },
+        { apiSecret: "solo-secreto" },
+      ),
+      updatedAt: null,
+    });
+
+    const result = await service.emit({
+      companyId: COMPANY,
+      rnc: RNC,
+      documentType: "E31",
+      senderTaxId: RNC,
+      sequenceAvailable: true,
+      body: BODY,
+      idempotencyKey: "k-2",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.blockingReasons.join(" ")).toContain(
+        "ECF_DOSA_CREDENTIALS_MISSING_FOR_ENVIRONMENT:TEST",
+      );
+    }
     expect(transport.keys).toHaveLength(0);
   });
 
