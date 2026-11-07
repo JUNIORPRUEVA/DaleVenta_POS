@@ -170,7 +170,16 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
   }, 60000);
 
   afterAll(async () => {
-    if (prisma) await prisma.$disconnect();
+    if (!prisma) return;
+    // Se limpia la fixture completa: `resolveByRnc` busca en TODA la tabla de
+    // sesiones, así que dejar sesiones con estos RNC vivos contaminaba otras
+    // suites del módulo con AMBIGUOUS_RNC cuando se ejecutaban juntas.
+    await prisma.$executeRaw`DELETE FROM "ecf_dosa_webhook_events" WHERE "company_id" = ANY(${ids}::uuid[])`;
+    await prisma.$executeRaw`DELETE FROM "ecf_dosa_company_credentials" WHERE "company_id" = ANY(${ids}::uuid[])`;
+    await prisma.$executeRaw`DELETE FROM "ecf_dosa_certification_sessions" WHERE "company_id" = ANY(${ids}::uuid[])`;
+    await prisma.$executeRaw`DELETE FROM "ecf_company_configurations" WHERE "company_id" = ANY(${ids}::uuid[])`;
+    await prisma.$executeRaw`DELETE FROM "companies" WHERE "id" = ANY(${ids}::uuid[])`;
+    await prisma.$disconnect();
   });
 
   async function rowsOf(companyId: string) {
@@ -389,7 +398,7 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
 
     expect(outcome).toMatchObject({
       accepted: false,
-      status: 503,
+      status: 401,
       code: "ECF_DOSA_WEBHOOK_BLOCKED",
       reason: "SIGNATURE_MISMATCH",
     });
@@ -412,7 +421,7 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
 
     expect(outcome).toMatchObject({
       accepted: false,
-      status: 503,
+      status: 401,
       reason: "SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE",
     });
   });

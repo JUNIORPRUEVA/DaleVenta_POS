@@ -176,7 +176,7 @@ describe("DosaWebhookService — firma", () => {
 
     expect(outcome).toEqual({
       accepted: false,
-      status: 503,
+      status: 401,
       code: "ECF_DOSA_WEBHOOK_BLOCKED",
       reason: "SIGNATURE_HEADER_MISSING",
     });
@@ -213,7 +213,9 @@ describe("DosaWebhookService — firma", () => {
 
     expect(outcome).toMatchObject({
       accepted: false,
-      status: 503,
+      // 401 y no 503: una firma falsa no se arregla reintentando, así que no se
+      // le pide al proveedor que reintente.
+      status: 401,
       reason: "SIGNATURE_MISMATCH",
     });
     expect(store.rows).toHaveLength(0);

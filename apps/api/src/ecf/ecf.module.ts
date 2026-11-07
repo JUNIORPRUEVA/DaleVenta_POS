@@ -53,8 +53,16 @@ import {
   ECF_DOSA_SESSION_HINTS,
   ECF_DOSA_WEBHOOK_STORE,
   DosaWebhookService,
+  type DosaSessionHintRecorder,
 } from "./provider/dosa/dosa-webhook.service";
 import { PrismaDosaCompanyResolver } from "./provider/dosa/dosa-company-resolver.service";
+import {
+  DosaIncidentService,
+  ECF_DOSA_INCIDENT_RETRY,
+  type DosaIncidentRetryRunner,
+} from "./provider/dosa/dosa-incident.service";
+import { DosaIncidentRetryAdapter } from "./provider/dosa/dosa-incident-retry.adapter";
+import { DosaIncidentScheduler } from "./provider/dosa/dosa-incident.scheduler";
 import {
   DosaCredentialService,
   ECF_DOSA_CREDENTIAL_STORE,
@@ -223,6 +231,24 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
       inject: [EcfDosaSessionService],
       useFactory: (sessions: EcfDosaSessionService) => sessions,
     },
+    // Vigilancia de incidencias del flujo DOSA.
+    //
+    // El reintento automático se limita a la vinculación de la postulación, que
+    // es idempotente. Cualquier otra operación (rotar, activar, emitir) sigue
+    // siendo un acto humano.
+    {
+      provide: ECF_DOSA_INCIDENT_RETRY,
+      inject: [ECF_DOSA_SESSION_HINTS],
+      useFactory: (hints: DosaSessionHintRecorder) =>
+        new DosaIncidentRetryAdapter(hints),
+    },
+    {
+      provide: DosaIncidentService,
+      inject: [PrismaService, ECF_DOSA_INCIDENT_RETRY],
+      useFactory: (prisma: PrismaService, retry: DosaIncidentRetryRunner) =>
+        new DosaIncidentService(prisma, retry),
+    },
+    DosaIncidentScheduler,
     // Emision DOSA detras de compuertas. Sin `DOSA_EMISSION_ENABLED=true` el
     // cliente no hace ni una peticion.
     {

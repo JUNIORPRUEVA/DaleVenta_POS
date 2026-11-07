@@ -9,6 +9,7 @@ import {
   readDosaSignatureConfig,
   verifyDosaSignature,
   type DosaSignatureConfig,
+  type DosaSignatureRejection,
 } from "./dosa-webhook-signature.policy";
 import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
@@ -140,7 +141,7 @@ export class DosaWebhookService {
     if (!signature.ok) {
       return {
         accepted: false,
-        status: 503,
+        status: httpStatusForSignatureRejection(signature.reason),
         code: "ECF_DOSA_WEBHOOK_BLOCKED",
         reason: signature.reason,
       };
@@ -410,14 +411,49 @@ export class DosaWebhookService {
 }
 
 /** Estados de procesamiento persistidos del evento. */
-export const PENDING_STATE = "PENDING_CREDENTIALS";
-export const COMPLETE_STATE = "COMPLETE";
+export const PENDING_STATE = "PENDING_CREDENTIALS";export const COMPLETE_STATE = "COMPLETE";
 /**
  * El evento llegó autenticado y traía credenciales que **no coinciden** con las
  * vigentes. Se conserva como evidencia y se deja en revisión: la rotación es un
  * acto humano, no un efecto automático de un webhook.
  */
 export const CONFLICT_STATE = "CONFLICT_PENDING_REVIEW";
+
+/**
+ * Código HTTP correcto para cada rechazo de firma.
+ *
+ * Por qué importa: un `5xx` es, por convención, «el servidor tuvo un problema,
+ * vuelve a intentarlo». Devolverlo ante una firma inválida o un timestamp
+ * expirado le dice al proveedor exactamente lo contrario de lo que pasa: el
+ * evento **no se va a aceptar** repitiéndolo, así que solo se consigue que
+ * reintente en vano (y que el reintento llegue aún más caducado).
+ *
+ * * `401` — no autenticado. Repetir con la misma cabecera no puede funcionar;
+ *   el proveedor debe renovar la firma o revisar su secreto.
+ * * `503` — el receptor está mal configurado (estrategia bloqueada, secreto
+ *   ausente o inválido). Es transitorio desde el punto de vista del proveedor,
+ *   así que reintentar sí tiene sentido cuando operaciones corrija el secreto.
+ * * `500` — fallo propio del receptor (no pudimos leer el cuerpo crudo). No es
+ *   culpa del emisor y no se arregla reintentando, pero tampoco es un problema
+ *   de autenticación.
+ *
+ * La seguridad no cambia: el evento se rechaza igual en los tres casos y no se
+ * ejecuta ninguna consulta. Solo cambia lo que el emisor entiende.
+ */
+export function httpStatusForSignatureRejection(
+  reason: DosaSignatureRejection,
+): number {
+  switch (reason) {
+    case "STRATEGY_BLOCKED":
+    case "SECRET_NOT_CONFIGURED":
+    case "CONFIG_INVALID":
+      return 503;
+    case "RAW_BODY_UNAVAILABLE":
+      return 500;
+    default:
+      return 401;
+  }
+}
 
 /**
  * Etiqueta con la que se persiste un evento cuyo **tipo** no está confirmado.

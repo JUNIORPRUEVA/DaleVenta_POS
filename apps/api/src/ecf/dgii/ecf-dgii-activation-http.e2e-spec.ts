@@ -7,7 +7,7 @@ import {
 } from "@prisma/client";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePrismaCliPath } from "../../testing/prisma-cli";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../../app.module";
@@ -88,13 +88,7 @@ uat("motor de activación e-CF — E2E HTTP + PostgreSQL desechable", () => {
     process.env[TRANSPORT_ENV] = "simulated";
     delete process.env[SCENARIO_ENV];
 
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
+    const prismaCli = resolvePrismaCliPath();
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },

@@ -3,6 +3,7 @@ import {
   ECF_DGII_HABILITATION_STATES,
   type EcfDgiiHabilitationState,
 } from "../dgii/ecf-dgii-habilitation.policy";
+import { DOSA_INCIDENT_RESOLUTIONS } from "../provider/dosa/dosa-incident.policy";
 
 /** Estados que la COLA de revisión puede filtrar. Lista cerrada. */
 export const ECF_PLATFORM_QUEUE_STATES = ECF_DGII_HABILITATION_STATES;
@@ -33,4 +34,19 @@ export class DecideEcfDgiiApplicationDto {
   @IsString()
   @MaxLength(2000)
   observations?: string | null;
+}
+
+/**
+ * Cierre de una incidencia DOSA.
+ *
+ * `resolution` es una lista cerrada (ver `dosa-incident.policy.ts`): cerrar una
+ * incidencia es una afirmación auditable, así que se elige de un catálogo y no
+ * se escribe texto libre en un campo que luego se lee como estado.
+ *
+ * No hay campo para «activar credenciales» ni para «rotar»: cerrar la
+ * incidencia no toca las credenciales de la empresa.
+ */
+export class CloseDosaIncidentDto {
+  @IsIn([...DOSA_INCIDENT_RESOLUTIONS])
+  resolution!: (typeof DOSA_INCIDENT_RESOLUTIONS)[number];
 }

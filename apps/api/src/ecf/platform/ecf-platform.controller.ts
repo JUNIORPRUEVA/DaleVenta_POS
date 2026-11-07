@@ -1,11 +1,13 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   NotFoundException,
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
   Req,
   Res,
@@ -23,8 +25,9 @@ import {
   ReviewEcfDgiiEvidenceDto,
   UpdateEcfDgiiRequirementDto,
 } from "../dto/ecf-dgii.dto";
-import { DecideEcfDgiiApplicationDto } from "../dto/ecf-platform.dto";
+import { DecideEcfDgiiApplicationDto, CloseDosaIncidentDto } from "../dto/ecf-platform.dto";
 import { PlatformStaffGuard } from "./platform-staff.guard";
+import { DosaIncidentService } from "../provider/dosa/dosa-incident.service";
 import { EcfSupportGrantGuard } from "../dgii/ecf-support-grant.guard";
 import { EcfSupportGrantService } from "../dgii/ecf-support-grant.service";
 
@@ -54,6 +57,7 @@ export class EcfPlatformController {
     private readonly documents: EcfDgiiDocumentsService,
     private readonly activation: EcfDgiiActivationService,
     private readonly grants: EcfSupportGrantService,
+    private readonly dosaIncidents: DosaIncidentService,
   ) {}
 
   /**
@@ -277,6 +281,77 @@ export class EcfPlatformController {
   ) {
     const grant = await this.grants.activeGrantForCompany(companyId);
     return { companyId, grant };
+  }
+
+  /**
+   * Bandeja de incidencias del flujo DOSA.
+   *
+   * Mismo criterio que la bandeja DGII: solo empresas que autorizaron
+   * asistencia. Sin ese filtro, el estado operativo de un cliente sin concesión
+   * se filtraría por el simple hecho de pertenecer al staff.
+   *
+   * No expone credenciales: la incidencia guarda referencias (empresa, RNC,
+   * postulación) y estados, nunca claves ni el cuerpo del evento.
+   */
+  @Get("dosa/incidents")
+  async listDosaIncidents(
+    @Query("status") status?: string,
+    @Query("take") take?: string,
+    @Query("skip") skip?: string,
+  ) {
+    const grantedCompanyIds = await this.grants.activeCompanyIds();
+    return this.dosaIncidents.list({
+      companyIds: grantedCompanyIds,
+      status: status ?? null,
+      take: Number(take) || undefined,
+      skip: Number(skip) || undefined,
+    });
+  }
+
+  /** Incidencias de UNA empresa. El guard ya validó la concesión. */
+  @Get("dosa/incidents/:companyId")
+  async listCompanyDosaIncidents(
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+    @Query("status") status?: string,
+  ) {
+    return this.dosaIncidents.list({ companyIds: [companyId], status: status ?? null });
+  }
+
+  /**
+   * Ejecuta un barrido AHORA.
+   *
+   * Es la misma rutina que corre el planificador; existe para que un
+   * administrador pueda refrescar sin esperar el ciclo. No reenvía nada a DOSA
+   * ni relaja ninguna verificación.
+   */
+  @Post("dosa/incidents/sweep")
+  async sweepDosaIncidents() {
+    return this.dosaIncidents.scan();
+  }
+
+  /**
+   * Cierra una incidencia con un motivo del catálogo.
+   *
+   * Cerrar NO activa credenciales, no rota material y no cambia el estado de
+   * certificación: solo deja constancia de que una persona revisó el caso.
+   */
+  @Post("dosa/incidents/:companyId/:incidentId/close")
+  async closeDosaIncident(
+    @Req() req: Request,
+    @Param("companyId", new ParseUUIDPipe()) companyId: string,
+    @Param("incidentId", new ParseUUIDPipe()) incidentId: string,
+    @Body() dto: CloseDosaIncidentDto,
+  ) {
+    const result = await this.dosaIncidents.close({
+      incidentId,
+      companyId,
+      resolution: dto.resolution,
+      actorUserId: (req.user as TenantUser).id,
+    });
+    if (!result.ok) {
+      throw new ConflictException(result.blockedReason);
+    }
+    return { ok: true };
   }
 
   /**

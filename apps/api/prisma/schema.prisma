@@ -1229,6 +1229,7 @@ model Company {
   ecfDosaCertificationSessions     EcfDosaCertificationSession[]
   ecfDosaWebhookEvents             EcfDosaWebhookEvent[]
   ecfDosaCompanyCredentials        EcfDosaCompanyCredential[]
+  ecfDosaIncidents                 EcfDosaIncident[]
   ecfPortalTickets                 EcfCertificationPortalTicket[]
   ecfPortalSessions                EcfCertificationPortalSession[]
   ecfCertificationAttempts         EcfCertificationAttempt[]
@@ -1406,6 +1407,47 @@ model EcfAuditLog {
   @@index([companyId, action])
   @@index([targetType, targetId])
   @@map("ecf_audit_logs")
+}
+
+/// Incidencia del flujo DOSA (evento atascado, conflicto de credenciales,
+/// postulación sin vincular). Seguimiento operativo AISLADO por empresa.
+///
+/// Nunca contiene credenciales, secretos ni el cuerpo del evento: solo
+/// referencias (postulación, RNC) y el estado del seguimiento. El índice único
+/// `(companyId, incidentKey)` es lo que impide alertas repetidas por el mismo
+/// incidente; el barrido hace UPSERT sobre esa clave.
+///
+/// `status` y `kind` son texto, no enums, para que añadir un tipo de incidencia
+/// no exija una migración de tipo en producción. El catálogo válido vive en
+/// `dosa-incident.policy.ts`.
+model EcfDosaIncident {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  rnc              String?   @db.VarChar(32)
+  incidentKey      String    @map("incident_key") @db.VarChar(160)
+  kind             String    @db.VarChar(48)
+  severity         String    @db.VarChar(8)
+  status           String    @default("OPEN") @db.VarChar(16)
+  subjectType      String?   @map("subject_type") @db.VarChar(32)
+  subjectRef       String?   @map("subject_ref") @db.VarChar(96)
+  detail           Json?
+  attempts         Int       @default(0)
+  lastAttemptAt    DateTime? @map("last_attempt_at")
+  nextAttemptAt    DateTime? @map("next_attempt_at")
+  lastErrorCode    String?   @map("last_error_code") @db.VarChar(64)
+  resolution       String?   @db.VarChar(48)
+  resolvedAt       DateTime? @map("resolved_at")
+  resolvedByUserId String?   @map("resolved_by_user_id") @db.Uuid
+  firstSeenAt      DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt       DateTime  @default(now()) @map("last_seen_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, incidentKey])
+  @@index([companyId, status])
+  @@index([status, nextAttemptAt])
+  @@map("ecf_dosa_incidents")
 }
 
 /// Habilitación DGII POR EMPRESA: seguimiento del proceso de incorporación a la

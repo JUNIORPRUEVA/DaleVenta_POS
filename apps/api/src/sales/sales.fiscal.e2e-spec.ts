@@ -4,7 +4,7 @@ import { CompanyMemberRole, Role } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePrismaCliPath } from "../testing/prisma-cli";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../app.module";
@@ -133,13 +133,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
     // Esta suite valida el flujo LEGACY (POST /sales sin originCashSessionId);
     // sin la bandera el contrato legacy se rechaza con 409 LEGACY_MISSING_SESSION.
     process.env.FINANCIAL_LEGACY_COMPAT = "true";
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
+    const prismaCli = resolvePrismaCliPath();
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },
