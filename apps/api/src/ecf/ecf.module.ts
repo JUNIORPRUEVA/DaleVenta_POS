@@ -64,6 +64,11 @@ import {
 import { DosaIncidentRetryAdapter } from "./provider/dosa/dosa-incident-retry.adapter";
 import { DosaIncidentScheduler } from "./provider/dosa/dosa-incident.scheduler";
 import {
+  ECF_DOSA_INCIDENT_NOTIFIER,
+  LoggingDosaIncidentNotifier,
+  type DosaIncidentNotifier,
+} from "./provider/dosa/dosa-incident-notifier";
+import {
   DosaCredentialService,
   ECF_DOSA_CREDENTIAL_STORE,
   PrismaDosaCredentialStore,
@@ -244,11 +249,21 @@ import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.servi
       useFactory: (hints: DosaSessionHintRecorder) =>
         new DosaIncidentRetryAdapter(hints),
     },
+    // Aviso de incidencias. Por defecto solo deja un registro estructurado: no
+    // hay canal externo autorizado. Para cambiar a WhatsApp/correo se sustituye
+    // esta entrada por el proveedor real, sin tocar el servicio.
+    {
+      provide: ECF_DOSA_INCIDENT_NOTIFIER,
+      useFactory: () => new LoggingDosaIncidentNotifier(),
+    },
     {
       provide: DosaIncidentService,
-      inject: [PrismaService, ECF_DOSA_INCIDENT_RETRY],
-      useFactory: (prisma: PrismaService, retry: DosaIncidentRetryRunner) =>
-        new DosaIncidentService(prisma, retry),
+      inject: [PrismaService, ECF_DOSA_INCIDENT_RETRY, ECF_DOSA_INCIDENT_NOTIFIER],
+      useFactory: (
+        prisma: PrismaService,
+        retry: DosaIncidentRetryRunner,
+        notifier: DosaIncidentNotifier,
+      ) => new DosaIncidentService(prisma, retry, notifier),
     },
     DosaIncidentScheduler,
     // Emision DOSA detras de compuertas. Sin `DOSA_EMISSION_ENABLED=true` el

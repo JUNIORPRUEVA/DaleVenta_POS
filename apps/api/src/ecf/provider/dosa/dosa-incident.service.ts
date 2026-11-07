@@ -15,6 +15,11 @@ import {
   type DosaIncidentCandidate,
   type DosaIncidentOpenRow,
 } from "./dosa-incident.reconcile";
+import {
+  ECF_DOSA_INCIDENT_NOTIFIER,
+  isNotifiableSeverity,
+  type DosaIncidentNotifier,
+} from "./dosa-incident-notifier";
 
 /**
  * Ejecutor de reintentos seguros.
@@ -76,6 +81,11 @@ export class DosaIncidentService {
     @Optional()
     @Inject(ECF_DOSA_INCIDENT_RETRY)
     private readonly retry?: DosaIncidentRetryRunner,
+    // Canal de aviso. Es opcional a proposito: sin proveedor registrado el barrido
+    // sigue funcionando y la incidencia queda en la bandeja.
+    @Optional()
+    @Inject(ECF_DOSA_INCIDENT_NOTIFIER)
+    private readonly notifier?: DosaIncidentNotifier,
   ) {}
 
   /**
@@ -137,6 +147,7 @@ export class DosaIncidentService {
                 now,
               );
               summary.created += 1;
+              await this.safeNotify(companyId, created.id, action.candidate.kind, action.severity);
               // Si la incidencia es de un tipo recuperable, se intenta ya: la
               // alternativa sería esperar un ciclo completo de 10 minutos para
               // un reintento que sabemos que es seguro e idempotente.
@@ -491,6 +502,38 @@ export class DosaIncidentService {
       where: { id, companyId },
       data: { lastSeenAt: now },
     });
+  }
+
+  /**
+   * Avisa de una incidencia recién creada sin poder romper el barrido.
+   *
+   * El aviso es un efecto SECUNDARIO: si el canal falla, la incidencia ya está
+   * persistida y visible en la bandeja. Por eso el error se registra y se
+   * descarta, nunca se propaga.
+   */
+  private async safeNotify(
+    companyId: string,
+    incidentId: string,
+    kind: string,
+    severity: string,
+  ): Promise<void> {
+    if (!this.notifier) return;
+    if (!isNotifiableSeverity(severity)) return;
+    try {
+      await this.notifier.notify({
+        companyId,
+        incidentId,
+        kind,
+        severity,
+        occurrences: 1,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo emitir el aviso de la incidencia ${incidentId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private async escalateIncident(companyId: string, id: string, now: Date) {
