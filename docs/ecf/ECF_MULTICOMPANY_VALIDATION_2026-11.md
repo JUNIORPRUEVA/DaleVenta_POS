@@ -139,6 +139,13 @@ POST /ecf/documents/:id/simulate-dispatch → EcfSimulatedDispatchService
 
 ### 3.4 PIEZA FALTANTE (defecto real de arquitectura)
 
+> **ACTUALIZACIÓN 2026-11-07 (commit `53db1157`).** Esta pieza **ya está
+> implementada y probada con transporte falso**:
+> `DosaEmissionDispatchService` + `POST /ecf/documents/:id/dispatch-dosa`. Lo que
+> sigue se conserva como registro del hallazgo original; el estado vigente está
+> en `docs/ecf/ECF_DOSA_EMISSION_ORCHESTRATION.md`. La emisión **real** sigue
+> bloqueada por P1/P2/P6 y por el propio encargo.
+
 **No existe orquestación de emisión DOSA desde una venta.** Hechos verificados:
 
 1. `DosaEmissionService.emit` (compuerta + credenciales + cliente) **no tiene
@@ -302,9 +309,9 @@ antes de cada corrida; 75 migraciones.
 | Ámbito | Veredicto | Motivo |
 | --- | --- | --- |
 | **Asistente multiempresa** | **GO** | Elegibilidad persistente por empresa, sin variables por cliente; aislamiento probado en unitario, PostgreSQL real y HTTP; 12 casos integrales + 8 HTTP + 30 del portal |
-| **Facturación electrónica multiempresa** | **NO-GO** | Preparación y aislamiento correctos, pero **no existe orquestación de emisión DOSA** y la propia API declara `emissionPathAvailable:false` |
-| **Despliegue en UAT** | **GO WITH ISSUES** | Desplegable: migraciones aditivas, banderas apagadas, sin emisión. La interfaz queda sin validar y la emisión sin camino |
-| **Producción** | **NO-GO** | Emisión inexistente + P1/P2/P6 sin resolver + interfaz no validada |
+| **Facturación electrónica multiempresa** | **GO para emisión simulada** | Orquestador implementado y probado por HTTP con transporte falso; **emisión real NO-GO** hasta resolver P1/P2/P6 |
+| **Despliegue en UAT** | **GO WITH ISSUES** | Desplegable: migraciones aditivas, banderas apagadas, transporte real inaccesible. La interfaz queda sin validar |
+| **Producción** | **NO-GO** | P1/P2/P6 sin resolver + interfaz no validada + emisión real nunca ejecutada |
 
 No se confunde ninguna capa: **pruebas de backend** (verdes) ≠ **pruebas de
 interfaz** (no ejecutadas) ≠ **pruebas con DOSA real** (ninguna).
