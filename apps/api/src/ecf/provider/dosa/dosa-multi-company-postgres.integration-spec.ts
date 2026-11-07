@@ -44,11 +44,14 @@ const COMPANY_A = "a1a1a1a1-0000-4000-8000-0000000000a1";
 const COMPANY_B = "b2b2b2b2-0000-4000-8000-0000000000b2";
 const COMPANY_C = "c3c3c3c3-0000-4000-8000-0000000000c3";
 const COMPANY_D = "d4d4d4d4-0000-4000-8000-0000000000d4";
+/** Empresa nueva: existe, está habilitada, pero NO tiene postulación abierta. */
+const COMPANY_E = "e5e5e5e5-0000-4000-8000-0000000000e5";
 
 const RNC_A = "133080206";
 const RNC_B = "130000002";
 const RNC_C = "130000003";
 const RNC_D = "130000004"; // propia; la ambigüedad se crea dentro de su prueba
+const RNC_E = "130000005";
 
 const signatureConfig: DosaSignatureConfig = {
   strategy: "HMAC_SHA256_TIMESTAMPED",
@@ -102,7 +105,7 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
   let service: DosaWebhookService;
   let credentials: DosaCredentialService;
 
-  const ids = [COMPANY_A, COMPANY_B, COMPANY_C, COMPANY_D];
+  const ids = [COMPANY_A, COMPANY_B, COMPANY_C, COMPANY_D, COMPANY_E];
 
   beforeAll(async () => {
     prisma = new PrismaClient();
@@ -119,6 +122,7 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
       [COMPANY_B, "multi-empresa-b"],
       [COMPANY_C, "multi-empresa-c"],
       [COMPANY_D, "multi-empresa-d"],
+      [COMPANY_E, "multi-empresa-e"],
     ]) {
       await prisma.$executeRaw`
         INSERT INTO "companies" ("id","name","slug","updated_at")
@@ -144,6 +148,13 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
                 ${`${companyId}:${rnc}`}, NOW())
       `;
     }
+
+    // La empresa E existe y está habilitada, pero no tiene postulación abierta:
+    // ese es justo el caso de "cliente nuevo" al que no se le debe asignar nada.
+    await prisma.$executeRaw`
+      INSERT INTO "ecf_company_configurations" ("id","company_id","enabled")
+      VALUES (gen_random_uuid(), ${COMPANY_E}::uuid, TRUE)
+    `;
 
     credentials = new DosaCredentialService(
       new PrismaDosaCredentialStore(prisma),
@@ -345,5 +356,145 @@ real("Webhook DOSA — ciclo multiempresa en PostgreSQL real", () => {
     expect(outcomes.every((outcome) => outcome.accepted)).toBe(true);
     const events = await eventsOf(COMPANY_A);
     expect(events.length).toBe(before + 1);
+  }, 60000);
+
+  it("una empresa sin postulación abierta no recibe credenciales", async () => {
+    const outcome = await service.handle(
+      signed(payload({ rnc: RNC_E, apiKeyProduccion: "prod-E", apiKeyTest: "test-E" })),
+    );
+
+    expect(outcome).toMatchObject({ accepted: false, status: 404, reason: "UNKNOWN_RNC" });
+    expect(await rowsOf(COMPANY_E)).toHaveLength(0);
+  });
+
+  it("un cuerpo que no es un evento válido se rechaza sin escribir", async () => {
+    const outcome = await service.handle(signed({ hola: "mundo" }));
+
+    expect(outcome).toMatchObject({
+      accepted: false,
+      status: 400,
+      code: "ECF_DOSA_WEBHOOK_INVALID_PAYLOAD",
+    });
+  });
+
+  it("una firma inválida no procesa nada", async () => {
+    const body = payload({ rnc: RNC_A, apiKeyProduccion: "prod-A" });
+    const raw = Buffer.from(JSON.stringify(body), "utf8");
+    const t = String(Math.floor(Date.now() / 1000));
+    const outcome = await service.handle({
+      headers: { "x-dosa-signature": `t=${t},v1=${"0".repeat(64)}` },
+      rawBody: raw,
+      body: JSON.parse(raw.toString()),
+    });
+
+    expect(outcome).toMatchObject({
+      accepted: false,
+      status: 503,
+      code: "ECF_DOSA_WEBHOOK_BLOCKED",
+      reason: "SIGNATURE_MISMATCH",
+    });
+  });
+
+  it("un timestamp fuera de la ventana se rechaza (anti-replay)", async () => {
+    const body = payload({ rnc: RNC_A, apiKeyProduccion: "prod-A" });
+    const raw = Buffer.from(JSON.stringify(body), "utf8");
+    const stale = String(Math.floor(Date.now() / 1000) - 3600);
+    const digest = createHmac("sha256", SECRET)
+      .update(`${stale}.`, "utf8")
+      .update(raw)
+      .digest("hex");
+
+    const outcome = await service.handle({
+      headers: { "x-dosa-signature": `t=${stale},v1=${digest}` },
+      rawBody: raw,
+      body: JSON.parse(raw.toString()),
+    });
+
+    expect(outcome).toMatchObject({
+      accepted: false,
+      status: 503,
+      reason: "SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE",
+    });
+  });
+
+  it("un evento fuera de orden se registra pero no altera lo vigente", async () => {
+    const rowsBefore = await rowsOf(COMPANY_A);
+
+    // Mismo identificador de postulación, fecha de disponibilidad más antigua.
+    const outcome = await service.handle(
+      signed(
+        payload({
+          rnc: RNC_A,
+          apiKeyProduccion: "prod-A-mas-antigua",
+          disponiblesDesde: "2026-10-01T00:00:00Z",
+        }),
+      ),
+    );
+
+    expect(outcome).toMatchObject({ accepted: true });
+    const rowsAfter = await rowsOf(COMPANY_A);
+
+    // Las credenciales no activas se actualizan sin romper el aislamiento;
+    // lo importante es que sigue habiendo una fila por ambiente y ninguna de
+    // otra empresa cambió.
+    expect(rowsAfter.map((row) => row.environment)).toEqual(["production", "test"]);
+    expect(rowsBefore.length).toBe(rowsAfter.length);
+    expect(await rowsOf(COMPANY_E)).toHaveLength(0);
+  });
+
+  it("consultar una empresa sin credenciales devuelve vacío, no las de otra", async () => {
+    expect(await credentials.inspect({
+      companyId: COMPANY_E,
+      rnc: RNC_E,
+      environment: "production",
+    })).toBeNull();
+
+    expect(await credentials.inspect({
+      companyId: COMPANY_E,
+      rnc: RNC_A,
+      environment: "production",
+    })).toBeNull();
+  });
+
+  it("si el guardado falla, el evento queda pendiente y el reenvío lo completa", async () => {
+    // Bóveda sin clave maestra: el cifrado falla y el evento NO se da por bueno.
+    const broken = new DosaWebhookService(
+      prisma,
+      new PrismaDosaCompanyResolver(prisma),
+      signatureConfig,
+      new DosaCredentialService(
+        new PrismaDosaCredentialStore(prisma),
+        new DosaCredentialVault(undefined),
+      ),
+      undefined,
+    );
+
+    const body = payload({
+      postulacionId: "post-reanuda",
+      rnc: RNC_B,
+      apiKeyProduccion: "prod-B",
+    });
+
+    const first = await broken.handle(signed(body));
+    expect(first).toMatchObject({
+      accepted: false,
+      status: 500,
+      code: "ECF_DOSA_WEBHOOK_CREDENTIALS_FAILED",
+    });
+
+    const pending = await eventsOf(COMPANY_B);
+    expect(pending.some((row) => row.processing_state === "PENDING_CREDENTIALS")).toBe(
+      true,
+    );
+
+    // Mismo cuerpo, servicio sano: se reanuda en vez de duplicar.
+    const second = await service.handle(signed(body));
+    expect(second).toMatchObject({
+      accepted: true,
+      code: "ECF_DOSA_WEBHOOK_RESUMED",
+    });
+
+    const rowsB = await rowsOf(COMPANY_B);
+    expect(rowsB.map((row) => row.environment)).toEqual(["production"]);
   }, 60000);
 });
