@@ -15,6 +15,7 @@ class EcfDosaTrackingStep extends StatelessWidget {
     required this.statusMessage,
     required this.official,
     this.activation,
+    this.sequence,
     this.portal,
     this.advanced,
   });
@@ -29,6 +30,9 @@ class EcfDosaTrackingStep extends StatelessWidget {
   /// botón para reintentar. Sin esto, el cliente que vuelve días después no
   /// tiene forma de saber en qué quedó su trámite.
   final Widget? activation;
+
+  /// Declaración del rango de numeración (e-NCF). Se oculta sola si ya existe.
+  final Widget? sequence;
 
   final Widget? portal;
   final Widget? advanced;
@@ -78,6 +82,10 @@ class EcfDosaTrackingStep extends StatelessWidget {
           if (activation != null) ...[
             const SizedBox(height: 14),
             activation!,
+          ],
+          if (sequence != null) ...[
+            const SizedBox(height: 12),
+            sequence!,
           ],
           if (portal != null) ...[
             const SizedBox(height: 12),

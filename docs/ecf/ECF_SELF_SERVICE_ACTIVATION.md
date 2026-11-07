@@ -165,6 +165,41 @@ El bloque (`EcfDosaActivationStatus`):
 - No se muestra ni se consulta sin el permiso `manageEcfOnboarding`, porque el
   backend respondería 403.
 
+### Entrada al asistente sin intervención de Fulltech
+
+La elegibilidad del asistente ya no exige que alguien inscriba a la empresa:
+
+| Antes | Ahora |
+| --- | --- |
+| Sin fila de inscripción → sin elegibilidad → **sin botón de asistente** | La empresa que cumple la regla entra sola |
+| La regla automática exigía una sesión de DOSA que solo existe *después* de entrar (circular) | La regla exige e-CF habilitado + RNC registrado |
+| `ECF_PORTAL_AUTO_ENROLL_ENABLED` apagada por defecto | **Encendida por defecto** (opt-out) |
+
+Lo que NO cambia:
+
+- **Una revocación gana siempre.** Si la empresa tiene una inscripción revocada o
+  caducada, la regla automática no la resucita.
+- **La lectura no escribe.** `eligibility` decide, pero la inscripción se persiste
+  en el camino de escritura (al emitir el ticket del portal), con origen
+  `AUTO_ELIGIBLE`, fecha y motivo.
+- **Interruptor de emergencia:** `ECF_PORTAL_AUTO_ENROLL_ENABLED=false` vuelve al
+  comportamiento anterior sin desplegar código.
+
+### Numeración de comprobantes (e-NCF)
+
+`EcfSequenceRangeSection`, también dentro del recorrido:
+
+- Sin rango activo **no se puede preparar ningún comprobante**: el backend
+  responde `ECF_SEQUENCE_EXHAUSTED`, que no explica nada. Antes no existía
+  ninguna pantalla para declararlo y el cliente quedaba autorizado pero incapaz
+  de facturar.
+- Solo pide **dos números** (desde / hasta). El prefijo lo deriva el backend del
+  tipo de comprobante.
+- **Se oculta sola** cuando ya hay un rango `E31` activo con números disponibles.
+- Valida en local (final ≥ inicial, solo dígitos) y traduce los rechazos del
+  servidor (`ALREADY_EXISTS`, `REUSE_BLOCKED`, `RANGE_INVALID`).
+- Gateada con `manageEcfSequences`, el mismo permiso que exige el backend.
+
 ### Lo que se simplificó del recorrido
 
 Con DOSA gobernando el certificado, el paso de Preparación ocultaba el bloque del
@@ -184,9 +219,6 @@ prellenado.
    espacio; falta cargar la URL.
 2. **La primera emisión real contra DOSA**, que sigue pendiente de autorización
    de negocio.
-3. **P1/P2** (firma de webhooks entrantes): sin confirmar, una empresa nueva no
-   puede recibir credenciales, así que el circuito solo funciona con las
-   credenciales que ya llegaron.
-4. **La inscripción del asistente** (`portal-enrollments`) sigue siendo una
-   concesión: sin ella la empresa no puede abrir el portal de certificación. Es
-   una decisión comercial, no técnica.
+3. **P1/P2/P5** (firma de webhooks entrantes): sin confirmar, una empresa nueva no
+   puede recibir credenciales. Ver `DOSA_WEBHOOK_AUDIT_2026-11.md`.
+4. **Encender el webhook** en el ambiente: bandera + estrategia + secreto.

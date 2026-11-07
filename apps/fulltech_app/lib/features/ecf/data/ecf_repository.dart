@@ -170,6 +170,31 @@ class EcfRepository {
         .toList(growable: false);
   }
 
+  /// Declara el rango de numeración (e-NCF) que la DGII asignó a la empresa.
+  ///
+  /// Sin un rango activo no se puede preparar ningún comprobante: el backend
+  /// responde `ECF_SEQUENCE_EXHAUSTED`, que no explica nada al cliente. El
+  /// prefijo NO se envía: lo deriva el backend del tipo de comprobante
+  /// (`E31` → `E310000000001`).
+  ///
+  /// Un error aquí sí es una excepción: `ECF_SEQUENCE_ALREADY_EXISTS` (ya hay uno
+  /// activo), `ECF_SEQUENCE_RANGE_INVALID` (desde/hasta incoherentes) o
+  /// `ECF_SEQUENCE_REUSE_BLOCKED` (empezar por debajo de lo ya consumido).
+  Future<void> registerSequence({
+    required String documentType,
+    required int startNumber,
+    required int endNumber,
+    String? validUntil,
+  }) async {
+    await _dio.post(ApiRoutes.ecfSequences, data: {
+      'documentType': documentType,
+      'startNumber': startNumber,
+      'endNumber': endNumber,
+      if (validUntil != null && validUntil.trim().isNotEmpty)
+        'validUntil': validUntil.trim(),
+    });
+  }
+
   Future<List<EcfEligibleOriginal>> eligibleOriginals() async {
     final res = await _dio.get(ApiRoutes.ecfDocumentsEligibleOriginals);
     return _asList(res.data)

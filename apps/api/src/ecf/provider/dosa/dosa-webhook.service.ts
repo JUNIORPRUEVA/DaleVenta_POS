@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import {
   parseDosaWebhookPayload,
@@ -106,6 +106,17 @@ export type DosaWebhookOutcome =
  */
 @Injectable()
 export class DosaWebhookService {
+  /**
+   * Registro de RECHAZOS.
+   *
+   * Un evento rechazado no deja fila en la base, así que sin esta línea un
+   * webhook mal configurado (estrategia `BLOCKED`, secreto distinto, unidad de
+   * `t` equivocada, RNC desconocido) fallaría en completo silencio: el cliente
+   * se queda esperando credenciales y nada lo explica. Se registran solo el
+   * código y el motivo: nunca el cuerpo, ni cabeceras, ni el secreto.
+   */
+  private readonly logger = new Logger(DosaWebhookService.name);
+
   constructor(
     @Inject(ECF_DOSA_WEBHOOK_STORE) private readonly store: DosaWebhookStore,
     @Inject(ECF_DOSA_COMPANY_RESOLVER)
@@ -145,6 +156,10 @@ export class DosaWebhookService {
       rawBody: input.rawBody,
     });
     if (!signature.ok) {
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_BLOCKED / ${signature.reason} ` +
+          `(estrategia ${signature.strategy})`,
+      );
       return {
         accepted: false,
         status: httpStatusForSignatureRejection(signature.reason),
@@ -167,6 +182,11 @@ export class DosaWebhookService {
     // 2. Esquema
     const parsed = parseDosaWebhookPayload(input.body);
     if (!parsed.ok) {
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_INVALID_PAYLOAD / ${parsed.reason}${
+          parsed.field ? `:${parsed.field}` : ""
+        }`,
+      );
       return {
         accepted: false,
         status: 400,
@@ -179,6 +199,11 @@ export class DosaWebhookService {
     // 3. Correlación server-side
     const company = await this.resolver.resolveByRnc(payload.rnc);
     if (!company) {
+      // El RNC es la única forma de correlacionar: si no lo conocemos, el evento
+      // se rechaza sin guardar. Sin esta línea sería invisible.
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_UNKNOWN_RNC / rnc=${payload.rnc}`,
+      );
       return {
         accepted: false,
         status: 404,
@@ -192,6 +217,9 @@ export class DosaWebhookService {
     // `portalEligible` lo resuelve el servidor desde la autorización POR EMPRESA
     // guardada en base; ya no depende de una variable del despliegue.
     if (!company.ecfEnabled && company.portalEligible !== true) {
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_ECF_DISABLED / company=${company.companyId}`,
+      );
       return {
         accepted: false,
         status: 409,

@@ -60,6 +60,23 @@ class _FakeEcfRepository extends EcfRepository {
     attempts++;
     return outcome;
   }
+
+  /// Numeración ya declarada: la sección de e-NCF no aparece y estas pruebas
+  /// siguen midiendo el recorrido, no el formulario de numeración.
+  @override
+  Future<List<EcfSequenceInfo>> sequences() async => const [
+    EcfSequenceInfo(
+      id: 'seq-1',
+      documentType: 'E31',
+      prefix: 'E31',
+      startNumber: 1,
+      nextNumber: 2,
+      endNumber: 100,
+      active: true,
+      consumed: 1,
+      remaining: 99,
+    ),
+  ];
 }
 
 class _FixedAuthController extends AuthController {

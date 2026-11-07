@@ -96,15 +96,60 @@ afterEach(() => {
 });
 
 describe("isPortalAutoEnrollmentEnabled", () => {
-  it("esta apagada por defecto", () => {
-    expect(isPortalAutoEnrollmentEnabled({})).toBe(false);
-    expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: "" })).toBe(false);
-    expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: "no" })).toBe(false);
+  it("esta encendida por defecto: sin ella ninguna empresa nueva puede entrar", () => {
+    expect(isPortalAutoEnrollmentEnabled({})).toBe(true);
+    expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: "" })).toBe(true);
+    expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: "no" })).toBe(true);
   });
 
-  it("solo se enciende con 'true' explicito", () => {
+  it("solo se apaga con 'false' explicito (interruptor de emergencia)", () => {
+    expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: "false" })).toBe(false);
+    expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: " FALSE " })).toBe(false);
     expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: "true" })).toBe(true);
     expect(isPortalAutoEnrollmentEnabled({ ECF_PORTAL_AUTO_ENROLL_ENABLED: " TRUE " })).toBe(true);
+  });
+});
+
+describe("EcfPortalEnrollmentService.eligibility — autoservicio", () => {
+  it("una empresa que cumple la regla entra sola, sin inscripción previa", async () => {
+    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = "";
+    const service = new EcfPortalEnrollmentService(
+      makePrismaFake({ autoRuleMet: true }),
+    );
+
+    const result = await service.eligibility("company-a");
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toBe("AUTO_ELIGIBLE");
+  });
+
+  it("una revocación gana sobre la regla automática", async () => {
+    // Sin esto, revocar a una empresa no serviría de nada: volvería a entrar
+    // sola en la siguiente petición.
+    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = "";
+    const service = new EcfPortalEnrollmentService(
+      makePrismaFake({
+        autoRuleMet: true,
+        enrollments: [
+          { companyId: "company-a", status: "REVOKED", revokedAt: new Date() },
+        ],
+      }),
+    );
+
+    const result = await service.eligibility("company-a");
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe("AUTHORIZATION_REVOKED");
+  });
+
+  it("con la bandera apagada la regla no se aplica", async () => {
+    const service = new EcfPortalEnrollmentService(
+      makePrismaFake({ autoRuleMet: true }),
+    );
+
+    const result = await service.eligibility("company-a", {
+      env: { ECF_PORTAL_PILOT_COMPANY_IDS: "", ECF_PORTAL_AUTO_ENROLL_ENABLED: "false" },
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe("NO_AUTHORIZATION");
   });
 });
 
@@ -339,8 +384,8 @@ describe("EcfPortalEnrollmentService.revoke", () => {
 });
 
 describe("EcfPortalEnrollmentService.ensureAutoEnrollment", () => {
-  it("esta apagada por defecto: no inscribe a nadie", async () => {
-    process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED = "";
+  it("con la bandera apagada no inscribe a nadie (interruptor de emergencia)", async () => {
+    process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED = "false";
     const prisma = makePrismaFake({ autoRuleMet: true });
     const service = new EcfPortalEnrollmentService(prisma);
 

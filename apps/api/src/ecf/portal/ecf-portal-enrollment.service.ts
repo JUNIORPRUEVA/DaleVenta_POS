@@ -51,21 +51,29 @@ export const ECF_PORTAL_ENROLLMENT_STATUS = {
 /**
  * ¿Está habilitada la inscripción automática?
  *
- * Apagada por defecto: mientras no se autorice explícitamente, una empresa nueva
- * necesita una autorización registrada (una acción de negocio, no un cambio de
- * infraestructura). Con la bandera encendida, la regla inscribe sola a quien
- * cumpla las condiciones.
+ * **Encendida por defecto** (opt-out). Antes era opt-in y el resultado real era
+ * que ninguna empresa nueva podía abrir el asistente: sin fila de inscripción no
+ * había elegibilidad, y la única forma de entrar era que alguien de Fulltech
+ * concediera el acceso a mano. Eso contradecía el objetivo del producto, que es
+ * que el cliente complete su trámite solo.
+ *
+ * Sigue siendo un interruptor: `ECF_PORTAL_AUTO_ENROLL_ENABLED=false` la apaga
+ * sin desplegar código, y una empresa concreta se sigue bloqueando revocando su
+ * inscripción (una revocación gana siempre sobre esta regla).
  */
 export function isPortalAutoEnrollmentEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  return (env.ECF_PORTAL_AUTO_ENROLL_ENABLED ?? "").trim().toLowerCase() === "true";
+  return (
+    (env.ECF_PORTAL_AUTO_ENROLL_ENABLED ?? "true").trim().toLowerCase() !== "false"
+  );
 }
 
 /** Motivo de elegibilidad. Se devuelve a la interfaz para no adivinar nada. */
 export type EcfPortalEligibilityReason =
   | "ENROLLED"
   | "ENROLLED_LEGACY_ENV"
+  | "AUTO_ELIGIBLE"
   | "NO_AUTHORIZATION"
   | "AUTHORIZATION_EXPIRED"
   | "AUTHORIZATION_REVOKED"
@@ -130,6 +138,12 @@ export class EcfPortalEnrollmentService {
         options.env?.["ECF_PORTAL_PILOT_COMPANY_IDS"],
       ),
       now,
+      // La regla se evalúa aquí para que la lectura NO ofrezca una entrada que
+      // el backend luego rechace. No escribe: persistir la inscripción es tarea
+      // del camino de escritura (`ensureAutoEnrollment`).
+      autoEligible:
+        isPortalAutoEnrollmentEnabled(options.env) &&
+        (await this.meetsAutoEnrollmentRule(id)),
     });
 
     return {
@@ -299,7 +313,21 @@ export class EcfPortalEnrollmentService {
     }
   }
 
-  private async meetsAutoEnrollmentRule(companyId: string): Promise<boolean> {
+  /**
+   * Regla de autoservicio: la empresa puede entrar sola al asistente.
+   *
+   * Condiciones, todas verificables en la base:
+   *
+   * 1. e-CF habilitado en su configuración,
+   * 2. identidad fiscal registrada (RNC).
+   *
+   * Antes exigía además que existiera una sesión de certificación. Eso hacía la
+   * regla **circular**: la sesión solo existe después de entrar al asistente, y
+   * al asistente solo se entra estando inscrito. Ninguna empresa nueva podía
+   * inscribirse nunca. La condición se retiró; el resto del control sigue igual
+   * (permisos, revocación, y la compuerta de emisión que no depende de esto).
+   */
+  async meetsAutoEnrollmentRule(companyId: string): Promise<boolean> {
     const rows = await this.prisma.$queryRaw<Array<{ ok: boolean }>>`
       SELECT (
         EXISTS (
@@ -310,10 +338,6 @@ export class EcfPortalEnrollmentService {
           SELECT 1 FROM "app_config" a
            WHERE a."company_id" = ${companyId}::uuid
              AND COALESCE(a."rnc", '') <> ''
-        )
-        AND EXISTS (
-          SELECT 1 FROM "ecf_dosa_certification_sessions" s
-           WHERE s."company_id" = ${companyId}::uuid
         )
       ) AS "ok"
     `;

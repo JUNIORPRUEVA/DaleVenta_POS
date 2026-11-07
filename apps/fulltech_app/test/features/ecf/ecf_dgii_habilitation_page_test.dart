@@ -84,6 +84,23 @@ class _ActivationOnlyEcfRepository extends EcfRepository {
   @override
   Future<EcfDosaActivationOutcome> attemptDosaActivation() async =>
       _fakeActivationOutcome();
+
+  /// Numeración declarada: la sección de e-NCF no aparece y estas pruebas
+  /// siguen midiendo la pantalla, no ese formulario.
+  @override
+  Future<List<EcfSequenceInfo>> sequences() async => const [
+    EcfSequenceInfo(
+      id: 'seq-1',
+      documentType: 'E31',
+      prefix: 'E31',
+      startNumber: 1,
+      nextNumber: 2,
+      endNumber: 100,
+      active: true,
+      consumed: 1,
+      remaining: 99,
+    ),
+  ];
 }
 
 class _ApplicationRepository extends EcfApplicationRepository {

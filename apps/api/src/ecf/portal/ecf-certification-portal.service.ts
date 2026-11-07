@@ -81,14 +81,12 @@ export class EcfCertificationPortalService {
    * surte efecto sin reiniciar el servicio y sin editar el entorno.
    */
   async isPilotCompany(companyId: string): Promise<boolean> {
-    const decision = await this.enrollment.eligibility(companyId);
-    // Mientras la regla automática esté autorizada, una empresa que cumple las
-    // condiciones se inscribe sola. Es best-effort y no altera esta respuesta.
-    if (!decision.eligible) {
-      await this.enrollment.ensureAutoEnrollment(companyId);
-      return (await this.enrollment.eligibility(companyId)).eligible;
-    }
-    return true;
+    // Best-effort y SIEMPRE: si la empresa cumple la regla de autoservicio y no
+    // tiene inscripción, se persiste aquí —el camino de escritura— para que la
+    // autorización quede con fecha, motivo y origen. La lectura (`eligibility`)
+    // no escribe nunca; por eso la persistencia no puede vivir ahí.
+    await this.enrollment.ensureAutoEnrollment(companyId);
+    return (await this.enrollment.eligibility(companyId)).eligible;
   }
 
   /**

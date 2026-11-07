@@ -32,6 +32,7 @@ function makePrismaFake(seed?: {
   intentionProvider?: string | null;
   reconciled?: boolean;
   enrollments?: Array<Record<string, any>>;
+  autoRuleMet?: boolean;
 }) {
   const tickets: Array<Record<string, any>> = [];
   const sessions: Array<Record<string, any>> = [];
@@ -51,6 +52,9 @@ function makePrismaFake(seed?: {
   const nextId = (prefix: string) => `${prefix}-${++seq}`;
 
   const prisma: any = {
+    // Regla de autoservicio: por defecto NO se cumple, de modo que estas
+    // pruebas siguen midiendo la autorización explícita y la lista heredada.
+    $queryRaw: async () => [{ ok: seed?.autoRuleMet === true }],
     ecfCertificationPortalTicket: {
       create: async ({ data }: any) => {
         const row = {

@@ -26,6 +26,7 @@ class EcfPreparationStep extends StatelessWidget {
     required this.onGoCertificate,
     this.dosaEntry,
     this.activation,
+    this.sequence,
     this.advanced,
     this.simulationAvailable = false,
     this.simulationBadge,
@@ -63,6 +64,9 @@ class EcfPreparationStep extends StatelessWidget {
   /// cuando vuelve días después aparece con lo que le falta sin tener que
   /// buscar otro sitio.
   final Widget? activation;
+
+  /// Declaración del rango de numeración (e-NCF). Se oculta sola si ya existe.
+  final Widget? sequence;
 
   /// Controles administrativos fuera del recorrido del cliente.
   final Widget? advanced;
@@ -234,6 +238,10 @@ class EcfPreparationStep extends StatelessWidget {
           if (activation != null) ...[
             const SizedBox(height: 14),
             activation!,
+          ],
+          if (sequence != null) ...[
+            const SizedBox(height: 12),
+            sequence!,
           ],
           if (advanced != null) ...[const SizedBox(height: 12), advanced!],
         ],
