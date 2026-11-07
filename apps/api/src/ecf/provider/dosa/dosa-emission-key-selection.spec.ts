@@ -67,8 +67,17 @@ class MemoryStore implements DosaCredentialStore {
   }) {
     return `${row.companyId}|${row.rnc}|${row.environment}`;
   }
-  async upsert(row: StoredDosaCredential) {
+  async upsert(row: StoredDosaCredential): Promise<boolean> {
+    const existing = this.rows.get(this.key(row));
+    if (
+      existing &&
+      (existing.status === "CONFIRMED" || existing.status === "ACTIVE") &&
+      existing.sealed.fingerprint !== row.sealed.fingerprint
+    ) {
+      return false;
+    }
     this.rows.set(this.key(row), row);
+    return true;
   }
   async find(row: {
     companyId: string;
@@ -220,8 +229,13 @@ describe("Selección de API Key — sin sustitución entre ambientes", () => {
     // Fila antigua o corrupta: existe `test` pero no trae la clave del entorno.
     // El reparto por ambiente no puede crearla, así que se siembra a mano para
     // fijar que la comprobación defensiva sigue viva.
+    //
+    // Se escribe DIRECTAMENTE en el mapa y no con `upsert`: desde la auditoría
+    // del 07/11/2026 el `upsert` (y su equivalente SQL) se niega a sustituir una
+    // fila ACTIVE con otro material, que es justo la protección que queremos.
+    // Sembrar así simula la fila heredada sin pasar por esa guarda.
     const vault = new DosaCredentialVault(MASTER);
-    await store.upsert({
+    store.rows.set(`${COMPANY}|${RNC}|test`, {
       companyId: COMPANY,
       rnc: RNC,
       environment: "test",

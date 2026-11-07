@@ -48,13 +48,13 @@ describe("resolveCertificationStatus — solo promociona", () => {
     ).toBe(EcfCertificationStatus.BLOCKED);
   });
 
-  it("BLOCKED y SUSPENDED son pegajosos: una etapa resuelta no los borra", () => {
+  it("BLOCKED es pegajoso: una etapa resuelta no los borra", () => {
     expect(
       resolveCertificationStatus({
-        current: EcfCertificationStatus.BLOCKED,
+        current: EcfCertificationStatus.SUSPENDED,
         derived: EcfCertificationStatus.IN_PROGRESS,
       }),
-    ).toBe(EcfCertificationStatus.BLOCKED);
+    ).toBe(EcfCertificationStatus.SUSPENDED);
 
     expect(
       resolveCertificationStatus({
@@ -62,6 +62,42 @@ describe("resolveCertificationStatus — solo promociona", () => {
         derived: EcfCertificationStatus.READY_FOR_REVIEW,
       }),
     ).toBe(EcfCertificationStatus.SUSPENDED);
+  });
+
+  // Regresión del defecto detectado en la auditoría del 07/11/2026: si BLOCKED
+  // fuera pegajoso, una empresa bloqueada una vez no podría salir nunca, porque
+  // ninguna otra ruta escribe `certification_status`.
+  it("resolver la etapa bloqueada LEVANTA el bloqueo", () => {
+    expect(
+      resolveCertificationStatus({
+        current: EcfCertificationStatus.BLOCKED,
+        derived: EcfCertificationStatus.IN_PROGRESS,
+      }),
+    ).toBe(EcfCertificationStatus.IN_PROGRESS);
+
+    expect(
+      resolveCertificationStatus({
+        current: EcfCertificationStatus.BLOCKED,
+        derived: EcfCertificationStatus.READY_FOR_REVIEW,
+      }),
+    ).toBe(EcfCertificationStatus.READY_FOR_REVIEW);
+  });
+
+  it("un bloqueo vigente se mantiene mientras la evidencia lo diga", () => {
+    expect(
+      resolveCertificationStatus({
+        current: EcfCertificationStatus.BLOCKED,
+        derived: EcfCertificationStatus.BLOCKED,
+      }),
+    ).toBe(EcfCertificationStatus.BLOCKED);
+
+    // Sin avanzar: no se degrada a NOT_STARTED por sí solo.
+    expect(
+      resolveCertificationStatus({
+        current: EcfCertificationStatus.BLOCKED,
+        derived: EcfCertificationStatus.NOT_STARTED,
+      }),
+    ).toBe(EcfCertificationStatus.BLOCKED);
   });
 
   it("nunca produce un estado de certificación por inferencia", () => {

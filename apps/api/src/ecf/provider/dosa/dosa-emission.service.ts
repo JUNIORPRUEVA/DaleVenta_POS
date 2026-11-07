@@ -123,10 +123,11 @@ export class DosaEmissionService {
       credentialEnvironment: credential?.environment ?? null,
       environment,
       senderTaxId: input.senderTaxId,
-        // Identidad esperada en TEST: la de la EMPRESA que emite, no una
-        // variable global. Cualquier empresa nueva queda cubierta sin configurar
-        // nada, y el aislamiento lo garantiza el `rnc` de la peticion.
-        expectedTestRnc: input.rnc,
+      // Identidad esperada en TEST: la de la EMPRESA que emite, no una variable
+      // global. Cualquier empresa nueva queda cubierta sin configurar nada, y el
+      // aislamiento lo garantiza el `rnc` de la petición (que la barrera del
+      // documento ya contrasta con el emisor real del cuerpo).
+      expectedTestRnc: input.rnc,
       providerEmissionEnabled: this.deps.config.enabled,
       productionEmissionEnabled: this.deps.config.productionEnabled,
       sequenceAvailable: input.sequenceAvailable,

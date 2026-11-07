@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../prisma/prisma.service";
 import {
   DOSA_INCIDENT_STATUS,
+  backoffDelayMs,
   isDosaIncidentResolution,
   isRetryableIncident,
   type DosaIncidentKind,
@@ -515,18 +516,65 @@ export class DosaIncidentService {
     });
   }
 
-  /** Devuelve `true` si el reintento resolvió la incidencia. */
+  /**
+   * Reclama el intento. `UPDATE ... RETURNING` es la sección crítica: solo una
+   * instancia obtiene la fila, y solo si el backoff ya venció.
+   *
+   * @returns el número de intentos YA incrementado, o `null` si no se reclamó.
+   */
+  private async claimAttempt(
+    companyId: string,
+    id: string,
+    now: Date,
+  ): Promise<number | null> {
+    // Backoff provisional calculado con el intento que se está reclamando. Si el
+    // intento tiene éxito, el cierre lo pone a NULL; si falla, ya está puesto y
+    // el siguiente barrido lo respeta.
+    const provisionalDelayMs = backoffDelayMs(1);
+    const rows = await this.prisma.$queryRaw<Array<{ attempts: number }>>`
+      UPDATE "ecf_dosa_incidents"
+         SET "attempts" = "attempts" + 1,
+             "last_attempt_at" = ${now},
+             "last_seen_at" = ${now},
+             "next_attempt_at" = ${now} + (${provisionalDelayMs}::int * INTERVAL '1 millisecond')
+       WHERE "id" = ${id}::uuid
+         AND "company_id" = ${companyId}::uuid
+         AND "status" = ${DOSA_INCIDENT_STATUS.OPEN}
+         AND ("next_attempt_at" IS NULL OR "next_attempt_at" <= ${now})
+      RETURNING "attempts"
+    `;
+    if (rows.length === 0) return null;
+    const value = rows[0]?.attempts;
+    return typeof value === "number" ? value : Number(value) || null;
+  }
+
+  /**
+   * Reintenta la vinculación, con **reclamo atómico** del intento.
+   *
+   * Con varias réplicas del backend, dos barridos pueden coincidir en la misma
+   * incidencia. El `UPDATE ... RETURNING` de abajo es lo que decide quién
+   * ejecuta: solo la instancia que consigue la fila reintenta. Sin él, ambas
+   * ejecutaban el reintento (inofensivo, porque es idempotente) pero contaban el
+   * intento dos veces y agotaban el backoff antes de tiempo.
+   *
+   * El `next_attempt_at` se fija **antes** de ejecutar, no después: si el proceso
+   * muere entre el reclamo y el cierre, la incidencia espera el backoff en lugar
+   * de quedar reintentable de inmediato en bucle.
+   *
+   * @returns `true` si el reintento resolvió la incidencia.
+   */
   private async runRetry(
     companyId: string,
     id: string,
     candidate: DosaIncidentCandidate,
     now: Date,
   ): Promise<boolean> {
-    const row = await this.prisma.ecfDosaIncident.findFirst({
-      where: { id, companyId },
-      select: { attempts: true },
-    });
-    const attempts = row?.attempts ?? 0;
+    const claimed = await this.claimAttempt(companyId, id, now);
+    if (claimed === null) {
+      // Otra instancia (u otro ciclo) tomó este intento: no se ejecuta dos veces.
+      return false;
+    }
+    const attempts = claimed;
 
     let succeeded = false;
     let errorCode: string | null = null;
@@ -558,12 +606,18 @@ export class DosaIncidentService {
       }
     }
 
-    const outcome = outcomeOfAttempt({ attempts, now, succeeded, errorCode });
+    // `attempts` ya viene incrementado por el reclamo; `outcomeOfAttempt` recibe
+    // el número de intentos PREVIOS, de ahí el `- 1`. Así la regla de backoff y
+    // de escalado sigue viviendo en un solo sitio.
+    const outcome = outcomeOfAttempt({
+      attempts: Math.max(0, attempts - 1),
+      now,
+      succeeded,
+      errorCode,
+    });
     await this.prisma.ecfDosaIncident.updateMany({
       where: { id, companyId },
       data: {
-        attempts: outcome.attempts,
-        lastAttemptAt: now,
         lastSeenAt: now,
         nextAttemptAt: outcome.nextAttemptAt,
         status: outcome.status,

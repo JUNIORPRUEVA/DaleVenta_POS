@@ -48,8 +48,19 @@ class MemoryStore implements DosaCredentialStore {
     return `${row.companyId}|${row.rnc}|${row.environment}`;
   }
 
-  async upsert(row: StoredDosaCredential): Promise<void> {
+  async upsert(row: StoredDosaCredential): Promise<boolean> {
+    const existing = this.rows.get(this.key(row));
+    // Misma guarda atómica que el SQL real: el material confirmado/activo no se
+    // sustituye por otro distinto.
+    if (
+      existing &&
+      (existing.status === "CONFIRMED" || existing.status === "ACTIVE") &&
+      existing.sealed.fingerprint !== row.sealed.fingerprint
+    ) {
+      return false;
+    }
     this.rows.set(this.key(row), { ...row, updatedAt: new Date().toISOString() });
+    return true;
   }
 
   async find(row: {

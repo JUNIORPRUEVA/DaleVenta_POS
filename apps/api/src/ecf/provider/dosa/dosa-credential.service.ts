@@ -39,7 +39,7 @@ export type StoredDosaCredential = {
 };
 
 export interface DosaCredentialStore {
-  upsert(row: StoredDosaCredential): Promise<void>;
+  upsert(row: StoredDosaCredential): Promise<boolean>;
   find(input: {
     companyId: string;
     rnc: string;
@@ -95,11 +95,21 @@ export class PrismaDosaCredentialStore implements DosaCredentialStore {
    * 3. **`created_at` no se actualiza.** Es la fecha de alta, no la de edición;
    *    `updated_at` sí.
    *
+   * La protección de (1) se aplica **en el propio `WHERE`**, no solo en el
+   * servicio: leer el estado y después escribir dejaba una ventana en la que una
+   * confirmación concurrente podía convertir la fila en `ACTIVE` y aun así recibir
+   * el criptograma nuevo. Con la guarda en el SQL, una fila protegida es
+   * inmutable por esta vía, y `RETURNING` permite informar con exactitud si la
+   * escritura se aplicó.
+   *
    * La clave única `(company_id, rnc, environment)` sigue siendo el aislamiento:
    * un ambiente no puede escribir la fila de otro.
+   *
+   * @returns `true` si la fila se insertó o actualizó; `false` si el material
+   *   vigente está protegido (`CONFIRMED`/`ACTIVE`) y tiene otro `fingerprint`.
    */
-  async upsert(row: StoredDosaCredential): Promise<void> {
-    await this.prisma.$queryRaw`
+  async upsert(row: StoredDosaCredential): Promise<boolean> {
+    const applied = await this.prisma.$queryRaw<{ id: string }[]>`
       INSERT INTO "ecf_dosa_company_credentials"
         ("id","company_id","rnc","environment","status","source","key_version",
          "ciphertext","iv","auth_tag","fingerprint","present","created_at","updated_at")
@@ -125,7 +135,14 @@ export class PrismaDosaCredentialStore implements DosaCredentialStore {
         "updated_at" = NOW()
       WHERE "ecf_dosa_company_credentials"."fingerprint"
             IS DISTINCT FROM EXCLUDED."fingerprint"
+        -- Guarda atómica: una credencial ya confirmada o activa no se sustituye
+        -- aunque la comprobación previa del servicio se haya quedado atrás por
+        -- una confirmación concurrente.
+        AND "ecf_dosa_company_credentials"."status"
+            NOT IN ('CONFIRMED','ACTIVE')
+      RETURNING "id"
     `;
+    return applied.length > 0;
   }
 
   async find(input: {
@@ -325,7 +342,11 @@ export class DosaCredentialService {
         continue;
       }
 
-      await this.store.upsert({
+      // Lo anterior es una foto. La guarda atómica del `upsert` es la que
+      // garantiza que una fila protegida no se sustituya si algo cambió entre la
+      // lectura y la escritura; aquí se usa su resultado para no afirmar que se
+      // guardó algo que la base rechazó.
+      const applied = await this.store.upsert({
         companyId: input.companyId,
         rnc: normalizeRnc(input.rnc),
         environment: target.environment,
@@ -334,6 +355,10 @@ export class DosaCredentialService {
         sealed,
         updatedAt: null,
       });
+      if (!applied) {
+        conflicts.push(target.environment);
+        continue;
+      }
 
       stored.push({
         environment: target.environment,
@@ -484,7 +509,7 @@ export class DosaCredentialService {
       }
 
       if (!dryRun) {
-        await this.store.upsert({
+        const applied = await this.store.upsert({
           companyId: input.companyId,
           rnc: normalizeRnc(input.rnc),
           environment: target.environment,
@@ -493,6 +518,12 @@ export class DosaCredentialService {
           sealed,
           updatedAt: null,
         });
+        if (!applied) {
+          // El destino tiene material confirmado/activo distinto y la guarda
+          // atómica no lo sustituyó: no se escribe y se informa como ya presente.
+          already.push(target.environment);
+          continue;
+        }
       }
 
       written.push({

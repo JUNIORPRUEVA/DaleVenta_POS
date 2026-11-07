@@ -48,8 +48,17 @@ function memoryStore() {
 
   const store: DosaCredentialStore = {
     async upsert(row) {
-      writes.push(row.environment);
       const existing = rows.get(keyOf(row));
+      // Igual que el SQL real: una fila confirmada/activa con otro fingerprint no
+      // se sobrescribe, y la escritura se informa como no aplicada.
+      if (
+        existing &&
+        (existing.status === "CONFIRMED" || existing.status === "ACTIVE") &&
+        existing.sealed.fingerprint !== row.sealed.fingerprint
+      ) {
+        return false;
+      }
+      writes.push(row.environment);
       rows.set(keyOf(row), {
         ...row,
         // Igual que el SQL: nunca se degrada un estado ya alcanzado.
@@ -58,6 +67,7 @@ function memoryStore() {
             ? existing.status
             : row.status,
       });
+      return true;
     },
     async find(input) {
       return rows.get(keyOf(input)) ?? null;

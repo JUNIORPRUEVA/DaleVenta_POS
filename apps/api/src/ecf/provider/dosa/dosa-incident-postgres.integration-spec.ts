@@ -251,8 +251,45 @@ real("Incidencias DOSA — detección y recuperación en PostgreSQL real", () =>
     expect(unbound?.attempts).toBe(1);
   }, 60000);
 
-  it("no reintenta una condición que dejaría de ser segura", async () => {
-    // Sin sesión activa no hay nada que vincular: la condición ni siquiera se
+  // Con varias réplicas del backend, dos barridos pueden coincidir. El reclamo
+  // atómico (`UPDATE ... RETURNING`) debe dejar que solo uno ejecute y cuente el
+  // intento: si no, el backoff se agota antes de tiempo.
+  it("dos barridos simultáneos cuentan el intento UNA sola vez", async () => {
+    await activeSession(COMPANY_B, RNC_B);
+    await event({
+      companyId: COMPANY_B,
+      rnc: RNC_B,
+      postulacionId: "post-carrera",
+      processingState: "COMPLETE",
+      eventType: "EMPRESA_CONECTADA",
+    });
+
+    const [first, second] = await Promise.all([
+      service.scan({ staleMinutes: 0 }),
+      service.scan({ staleMinutes: 0 }),
+    ]);
+
+    // La vinculación es idempotente, así que el estado final es el correcto…
+    const bound = await prisma.$queryRaw<Array<{ provider_postulation_id: string | null }>>`
+      SELECT "provider_postulation_id"
+        FROM "ecf_dosa_certification_sessions"
+       WHERE "company_id" = ${COMPANY_B}::uuid AND "rnc" = ${RNC_B}
+    `;
+    expect(bound[0].provider_postulation_id).toBe("post-carrera");
+
+    // …y el intento se contó una sola vez entre los dos barridos.
+    const rows = await prisma.$queryRaw<Array<{ attempts: number; status: string }>>`
+      SELECT "attempts","status"
+        FROM "ecf_dosa_incidents"
+       WHERE "company_id" = ${COMPANY_B}::uuid AND "kind" = 'POSTULATION_NOT_BOUND'
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].attempts).toBe(1);
+    expect(rows[0].status).toBe(DOSA_INCIDENT_STATUS.RESOLVED);
+    expect(first.retrySucceeded + second.retrySucceeded).toBeLessThanOrEqual(1);
+  }, 60000);
+
+  it("no reintenta una condición que dejaría de ser segura", async () => {    // Sin sesión activa no hay nada que vincular: la condición ni siquiera se
     // detecta, así que no se genera un reintento inútil.
     await event({
       companyId: COMPANY_B,

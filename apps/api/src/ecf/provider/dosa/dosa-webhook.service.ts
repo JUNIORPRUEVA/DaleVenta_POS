@@ -411,7 +411,8 @@ export class DosaWebhookService {
 }
 
 /** Estados de procesamiento persistidos del evento. */
-export const PENDING_STATE = "PENDING_CREDENTIALS";export const COMPLETE_STATE = "COMPLETE";
+export const PENDING_STATE = "PENDING_CREDENTIALS";
+export const COMPLETE_STATE = "COMPLETE";
 /**
  * El evento llegó autenticado y traía credenciales que **no coinciden** con las
  * vigentes. Se conserva como evidencia y se deja en revisión: la rotación es un

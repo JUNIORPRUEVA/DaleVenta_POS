@@ -68,8 +68,16 @@ real("Credenciales DOSA — PostgreSQL real", () => {
   }
 
   async function rawRows(companyId: string) {
-    return prisma.$queryRaw<Array<{ ciphertext: string; present: unknown }>>`
-      SELECT "ciphertext","present"
+    return prisma.$queryRaw<
+      Array<{
+        ciphertext: string;
+        present: unknown;
+        environment: string;
+        status: string;
+        fingerprint: string;
+      }>
+    >`
+      SELECT "ciphertext","present","environment","status","fingerprint"
         FROM "ecf_dosa_company_credentials"
        WHERE "company_id" = ${companyId}::uuid
     `;
@@ -171,6 +179,83 @@ real("Credenciales DOSA — PostgreSQL real", () => {
         authorized: true,
       }),
     ).rejects.toThrow();
+  });
+
+  // Regresión de la auditoría del 07/11/2026: la protección de una credencial
+  // vigente estaba en el servicio (leer y después escribir), así que una
+  // confirmación concurrente podía dejar la fila en `ACTIVE` y aun así recibir el
+  // criptograma nuevo. La guarda ahora está en el `WHERE` del UPSERT.
+  it("una fila ACTIVE no se sobrescribe con material distinto", async () => {
+    await service.ingestFromProvider({
+      companyId: COMPANY_A,
+      rnc: RNC_A,
+      environment: "test",
+      bundle: { apiKeyTest: "CLAVE-VIGENTE" },
+      signatureAuthenticated: true,
+    });
+    await service.promote({
+      companyId: COMPANY_A,
+      rnc: RNC_A,
+      environment: "test",
+      to: "ACTIVE",
+      evidence: {
+        identityLinked: true,
+        postulationBound: true,
+        providerConfirmed: true,
+        dgiiApproved: true,
+        administrativeAuthorized: true,
+        details: {
+          attemptNo: 1,
+          attemptStartedAt: "2026-11-02T12:00:00.000Z",
+          postulacionId: "post-cred",
+          linkedSessions: 1,
+          authenticatedProviderEvents: 1,
+          providerEventsForOtherPostulations: 0,
+          dgiiState: "AUTHORIZED",
+          dgiiSource: "DGII_OFFICIAL_RECORD",
+          dgiiAuthorizedAt: "2026-11-02T12:00:00.000Z",
+          lastDecision: "AUTHORIZED",
+          lastDecisionAt: "2026-11-02T12:05:00.000Z",
+          lastRecordedAt: "2026-11-02T12:05:00.000Z",
+          authorizationsRecorded: 1,
+          authorizationsRevoked: 0,
+        },
+      },
+    });
+
+    const before = await rawRows(COMPANY_A);
+    const active = before.find((row) => row.environment === "test");
+    expect(active?.status).toBe("ACTIVE");
+
+    const result = await service.ingestFromProvider({
+      companyId: COMPANY_A,
+      rnc: RNC_A,
+      environment: "test",
+      bundle: { apiKeyTest: "CLAVE-NUEVA-NO-AUTORIZADA" },
+      signatureAuthenticated: true,
+    });
+
+    // Se informa como conflicto y la fila vigente queda intacta.
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.conflicts).toContain("test");
+      expect(result.stored).toHaveLength(0);
+    }
+
+    const after = await rawRows(COMPANY_A);
+    const sameRow = after.find((row) => row.environment === "test");
+    expect(sameRow?.status).toBe("ACTIVE");
+    expect(sameRow?.fingerprint).toBe(active?.fingerprint);
+    expect(sameRow?.ciphertext).toBe(active?.ciphertext);
+
+    // Y la clave que se puede abrir sigue siendo la vigente, no la rechazada.
+    const opened = await service.openForEmission({
+      companyId: COMPANY_A,
+      rnc: RNC_A,
+      environment: "test",
+      authorized: true,
+    });
+    expect(opened.apiKeyTest).toBe("CLAVE-VIGENTE");
   });
 
   it("el estado avanza solo con la evidencia persistida completa", async () => {

@@ -16,6 +16,8 @@ function buildPrisma(options: {
   openCompanies?: string[];
   openRowsByCompany?: Record<string, unknown[]>;
   attempts?: number;
+  /** `false` simula que otra instancia reclamó el intento. */
+  claim?: boolean;
 } = {}) {
   const detections = [...(options.detections ?? [[], [], [], [], []])];
   const openRows = options.openRowsByCompany ?? {};
@@ -35,7 +37,23 @@ function buildPrisma(options: {
   };
 
   const prisma = {
-    $queryRaw: jest.fn(async () => detections.shift() ?? []),
+    $queryRaw: jest.fn(
+      async (
+        strings: TemplateStringsArray,
+        ..._values: unknown[]
+      ): Promise<unknown[]> => {
+        // El reclamo del intento usa UPDATE ... RETURNING; las detecciones son
+        // SELECT. Se distinguen por el texto de la consulta, no por el orden,
+        // para que el doble no dependa de cuántas detecciones haya.
+        const sql = strings.join(" ");
+        if (sql.includes('RETURNING "attempts"')) {
+          return options.claim === false
+            ? []
+            : [{ attempts: (options.attempts ?? 0) + 1 }];
+        }
+        return detections.shift() ?? [];
+      },
+    ),
     $transaction: jest.fn(async (operations: Promise<unknown>[]) =>
       Promise.all(operations),
     ),
@@ -204,10 +222,33 @@ describe("DosaIncidentService — reintento seguro", () => {
       providerPostulationId: "post-1",
     });
     const data = (incidents.updateMany.mock.calls[0][0] as {
-      data: { status: string; attempts: number };
+      data: { status: string; attempts?: number };
     }).data;
     expect(data.status).toBe(DOSA_INCIDENT_STATUS.RESOLVED);
-    expect(data.attempts).toBe(1);
+    // `attempts` lo incrementa el reclamo atómico, no el cierre: escribirlo otra
+    // vez desde aquí fue justo lo que permitía contarlo dos veces con varias
+    // réplicas.
+    expect(data.attempts).toBeUndefined();
+  });
+
+  it("si otra instancia reclama el intento, no se ejecuta dos veces", async () => {
+    const { prisma, incidents } = buildPrisma({
+      detections: [[], [], [], [detection()], []],
+      openCompanies: ["company-a"],
+      openRowsByCompany: { "company-a": [unboundRow] },
+      // El reclamo devuelve 0 filas: otra réplica se lo llevó.
+      claim: false,
+    });
+    const runner = buildRunner(true);
+    const service = new DosaIncidentService(prisma as never, runner);
+
+    const summary = await service.scan({ now: new Date("2026-11-07T12:00:00Z") });
+
+    expect(summary.retried).toBe(1);
+    expect(summary.retrySucceeded).toBe(0);
+    expect(runner.retryBinding).not.toHaveBeenCalled();
+    // Y no se toca el estado de la incidencia: la resolvió quien ganó el reclamo.
+    expect(incidents.updateMany).not.toHaveBeenCalled();
   });
 
   it("si el reintento falla, agenda el siguiente y no escala de inmediato", async () => {
