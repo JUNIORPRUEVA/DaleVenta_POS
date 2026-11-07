@@ -18,6 +18,7 @@ import { EcfDocumentQueryService } from "./documents/ecf-document-query.service"
 import { EcfLineClassificationService } from "./documents/ecf-line-classification.service";
 import { EcfPreparationService } from "./documents/ecf-preparation.service";
 import { EcfSimulatedDispatchService } from "./documents/ecf-simulated-dispatch.service";
+import { DosaEmissionDispatchService } from "./provider/dosa/dosa-emission-dispatch.service";
 
 // Read-only, tenant-scoped surface for the client applications, plus ONE
 // deliberately simulated write path. Preparing a draft against the REAL provider
@@ -34,6 +35,7 @@ export class EcfDocumentsController {
     private readonly preparation: EcfPreparationService,
     private readonly simulatedDispatch: EcfSimulatedDispatchService,
     private readonly lineClassifications: EcfLineClassificationService,
+    private readonly dosaDispatch: DosaEmissionDispatchService,
   ) {}
 
   /**
@@ -151,6 +153,24 @@ export class EcfDocumentsController {
       id,
       dto.scenario ?? "PROVIDER_ACCEPTED",
     );
+  }
+
+  /**
+   * DESPACHO AUTORIZADO al proveedor DOSA de la empresa.
+   *
+   * Es la acción que dispara la emisión real cuando las compuertas lo permiten.
+   * No abre ninguna puerta por sí sola: el orquestador pasa por la barrera del
+   * documento, la compuerta fiscal y la bóveda de credenciales de ESA empresa y
+   * ESE ambiente. Con `DOSA_EMISSION_ENABLED=false` (valor por defecto) la
+   * compuerta rechaza antes de tocar la red.
+   *
+   * El permiso es el mismo que ya gobierna preparar y simular: emitir un
+   * comprobante no puede quedar al alcance de quien no puede prepararlo.
+   */
+  @Post("documents/:id/dispatch-dosa")
+  @Permissions("prepareEcfDocuments")
+  dispatchDosa(@Req() req: Request, @Param("id") id: string) {
+    return this.dosaDispatch.dispatch(req.user as TenantUser, id);
   }
 
   @Get("documents")

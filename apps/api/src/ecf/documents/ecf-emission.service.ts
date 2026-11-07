@@ -96,8 +96,19 @@ export class EcfEmissionService {
 
   // Single dispatch attempt. Claims and commits the attempt BEFORE the network so
   // a crash or timeout can never produce a second POST for the same document.
-  async dispatchOnce(user: TenantUser, documentId: string, wire: EcfEmissionWire) {
+  //
+  // `override` permite enviar el cuerpo del PROVEEDOR cuando no coincide con el
+  // payload preparado por defecto (caso DOSA: su contrato no es el DOM interno).
+  // La huella que se registra es SIEMPRE la del cuerpo realmente enviado, nunca
+  // la del preparado, para que la evidencia no mienta sobre lo que salió.
+  async dispatchOnce(
+    user: TenantUser,
+    documentId: string,
+    wire: EcfEmissionWire,
+    override?: { body: unknown; fingerprint: string },
+  ) {
     const companyId = requireTenant(user);
+    const requestFingerprint = override?.fingerprint;
     const claim = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ecf_electronic_documents WHERE company_id = ${companyId}::uuid AND id = ${documentId}::uuid FOR UPDATE`;
       const document = await tx.ecfElectronicDocument.findFirst({ where: { companyId, id: documentId } });
@@ -126,14 +137,16 @@ export class EcfEmissionService {
       await tx.ecfElectronicDocumentStatusLog.create({ data: { companyId, documentId, statusBefore: document.status,
         statusAfter: "SEND_IN_PROGRESS", reasonCode: "EMISSION_DISPATCH_CLAIMED", changedByUserId: user.id } });
       const attempt = await tx.ecfElectronicDocumentAttempt.create({ data: { companyId, documentId,
-        operation: "SEND_TO_PROVIDER", idempotencyKey: document.idempotencyKey, requestFingerprint: emission.fingerprint,
+        operation: "SEND_TO_PROVIDER", idempotencyKey: document.idempotencyKey,
+        requestFingerprint: requestFingerprint ?? emission.fingerprint,
         statusBefore: document.status, statusAfter: "SEND_IN_PROGRESS", createdByUserId: user.id } });
       return { attempt: attempt.id, emission, documentType: document.documentType as EcfDocumentType,
         idempotencyKey: document.idempotencyKey, payloadFingerprint: document.payloadFingerprint };
     });
 
+    const sentBody = override?.body ?? claim.emission.payload;
     let result: EcfEmissionWireResult;
-    try { result = await wire.execute({ method: "POST", path: "/invoices", body: claim.emission.payload, requestId: claim.attempt }); }
+    try { result = await wire.execute({ method: "POST", path: "/invoices", body: sentBody, requestId: claim.attempt }); }
     catch { result = { ok: false, errorCode: "NETWORK_ERROR", safeMessage: "ECF_RESULT_UNKNOWN" }; }
 
     const body = result.ok ? result.body : null;
@@ -160,7 +173,8 @@ export class EcfEmissionService {
       const raw = Buffer.from(JSON.stringify(body));
       await new EcfEvidenceIngestionService(this.prisma, new EcfBlockedAuthenticityVerifier()).ingest(user, {
         documentId, attemptId: claim.attempt, operationKey: claim.idempotencyKey,
-        documentFingerprint: claim.payloadFingerprint, requestFingerprint: claim.emission.fingerprint,
+        documentFingerprint: claim.payloadFingerprint,
+        requestFingerprint: requestFingerprint ?? claim.emission.fingerprint,
         source: "PROVIDER_RESPONSE", eventKey: `emission:${claim.attempt}`, raw,
         httpStatus: result.statusCode,
       });

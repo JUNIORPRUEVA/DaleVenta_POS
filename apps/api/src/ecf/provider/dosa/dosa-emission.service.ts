@@ -56,6 +56,24 @@ export type DosaEmitDone = {
 export type DosaEmitResult = DosaEmitBlocked | DosaEmitDone;
 
 /**
+ * Resultado de autorizar un despacho sin enviarlo.
+ *
+ * `client` sólo existe cuando TODAS las compuertas pasaron. Es la credencial de
+ * esa empresa y de ese ambiente, ya cacheada por huella.
+ */
+export type DosaDispatchAuthorization =
+  | {
+      ok: false;
+      code: "ECF_DOSA_DOCUMENT_BLOCKED" | "ECF_DOSA_GATE_BLOCKED" | "ECF_DOSA_CREDENTIALS_UNAVAILABLE";
+      blockingReasons: readonly string[];
+    }
+  | {
+      ok: true;
+      client: DosaEmissionClient;
+      environment: DosaCredentialEnvironment;
+    };
+
+/**
  * Emisión DOSA conectada a las compuertas reales.
  *
  * Orden obligatorio, sin atajos:
@@ -93,6 +111,11 @@ export class DosaEmissionService {
       transport: DosaHttpTransport;
     },
   ) {}
+
+  /** Ambiente de emisión configurado en el servidor (`TEST` o `PRODUCTION`). */
+  get environment(): DosaCredentialEnvironment {
+    return this.deps.config.environment === "PRODUCTION" ? "production" : "test";
+  }
 
   /** Decide sin efectos. Útil para mostrar al operador qué falta exactamente. */
   async assess(input: {
@@ -151,6 +174,50 @@ export class DosaEmissionService {
     /** Clave de idempotencia: la tentativa ya reclamada por el orquestador. */
     idempotencyKey?: string;
   }): Promise<DosaEmitResult> {
+    const authorized = await this.authorizeForDispatch(input);
+    if (!authorized.ok) {
+      return {
+        ok: false,
+        code: authorized.code,
+        blockingReasons: authorized.blockingReasons,
+      };
+    }
+
+    const idempotencyKey = input.idempotencyKey ?? randomUUID();
+    const result = await authorized.client.sendEcf({
+      body: input.body,
+      idempotencyKey,
+    });
+    return { ok: true, result, idempotencyKey };
+  }
+
+  /**
+   * Autoriza un despacho y devuelve el CLIENTE ya configurado, **sin enviar**.
+   *
+   * Existe para que la persistencia y el envío puedan vivir en capas distintas
+   * sin duplicar la política: `DosaEmissionDispatchService` necesita el cliente
+   * autorizado para pasárselo a `EcfEmissionService.dispatchOnce`, que es quien
+   * reclama la tentativa y guarda la evidencia. Si la autorización se repitiera
+   * allí, tendríamos dos copias de las mismas reglas y una acabaría divergiendo.
+   *
+   * El orden es deliberado y no depende de ninguna bandera:
+   *
+   *  1. **Barrera del documento** — el cuerpo debe ser el contrato y su emisor
+   *     debe ser la empresa autenticada. Un borrador extraído no se convierte
+   *     en comprobante por el hecho de pedir el despacho.
+   *  2. **Compuerta de configuración** — e-CF habilitado, proveedor DOSA,
+   *     credencial ACTIVE, ambiente coherente, numeración disponible.
+   *  3. **Bóveda** — se abre sólo después de que la compuerta autorice, y sólo
+   *     la clave del ambiente seleccionado.
+   */
+  async authorizeForDispatch(input: {
+    companyId: string;
+    rnc: string;
+    documentType: EcfDocumentType;
+    senderTaxId: string | null;
+    sequenceAvailable: boolean;
+    body: DosaEcfRequestBody;
+  }): Promise<DosaDispatchAuthorization> {
     // La barrera del documento va ANTES de la compuerta de configuración y no
     // depende de ninguna bandera: extraer el JSON de un borrador no convierte
     // el borrador en un comprobante transmisible.
@@ -222,9 +289,7 @@ export class DosaEmissionService {
       apiKey,
     );
 
-    const idempotencyKey = input.idempotencyKey ?? randomUUID();
-    const result = await client.sendEcf({ body: input.body, idempotencyKey });
-    return { ok: true, result, idempotencyKey };
+    return { ok: true, client, environment };
   }
 
   /**

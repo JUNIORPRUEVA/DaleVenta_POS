@@ -122,6 +122,11 @@ import {
   readDosaEmissionConfig,
   type DosaHttpTransport,
 } from "./provider/dosa/dosa-emission.client";
+import { DosaEmissionDispatchService } from "./provider/dosa/dosa-emission-dispatch.service";
+import {
+  FakeDosaHttpTransport,
+  resolveFakeTransportSelection,
+} from "./provider/dosa/dosa-emission.fake-transport";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
@@ -359,7 +364,14 @@ import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.servi
     },
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,
-      useFactory: () => createFetchDosaTransport(),
+      useFactory: () => {
+        // El transporte FALSO sólo se elige en una UAT local y de forma
+        // explícita; fuera de ahí la fábrica lanza al arrancar (falla cerrado).
+        if (resolveFakeTransportSelection(process.env) === "FAKE") {
+          return new FakeDosaHttpTransport();
+        }
+        return createFetchDosaTransport();
+      },
     },
     {
       provide: DosaEmissionService,
@@ -379,6 +391,16 @@ import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.servi
           config: readDosaEmissionConfig(process.env),
           transport,
         }),
+    },
+    {
+      provide: DosaEmissionDispatchService,
+      inject: [PrismaService, DosaEmissionService],
+      useFactory: (prisma: PrismaService, dosa: DosaEmissionService) =>
+        new DosaEmissionDispatchService(
+          prisma,
+          dosa,
+          new EcfEmissionService(prisma),
+        ),
     },
     EcfAlanubeCertificationClient,
     {
