@@ -139,13 +139,54 @@ autorización automática, idempotencia, auditoría con actor nulo, producción,
 credencial revocada, `BLOCKED`, `SUSPENDED`, ausencia de configuración,
 aislamiento entre empresas y acceso sin token.
 
-## 7. Lo que aún falta
+## 7. Lo que ve el cliente
 
-1. **La pantalla del cliente** que muestre `blockingReasons` y ofrezca el
-   reintento. Hoy la ruta existe y la activación ocurre sola al registrar la
-   autorización DGII, pero la app no muestra qué falta cuando algo falla.
+No hay pantallas nuevas. El recorrido es el que ya existía —Bienvenida →
+Preparación → Seguimiento— y lo único que se añadió es **un bloque dentro de los
+dos últimos pasos**:
+
+```
+Bienvenida (vídeo)          →  «Empezar»
+Preparación                 →  datos ya registrados + abrir el asistente DOSA
+                               + bloque de autorización
+Asistente DOSA              →  todo el trabajo pesado ocurre allí
+Seguimiento                 →  en qué quedó + qué falta + «Actualizar estado»
+```
+
+El bloque (`EcfDosaActivationStatus`):
+
+- **Consulta solo al aparecer**, sin que el cliente pulse nada: quien vuelve días
+  después ve su estado actualizado.
+- Si ya está autorizado, lo dice en una línea y no deja nada por hacer.
+- Si falta algo, lista los motivos en español (los seis códigos de
+  `activationBlockers`). Un motivo nuevo se muestra en crudo: esconderlo dejaría
+  al cliente sin nada que decirle a soporte.
+- Un fallo de red se distingue de «falta evidencia»: son cosas distintas.
+- No se muestra ni se consulta sin el permiso `manageEcfOnboarding`, porque el
+  backend respondería 403.
+
+### Lo que se simplificó del recorrido
+
+Con DOSA gobernando el certificado, el paso de Preparación ocultaba el bloque del
+certificado (ya lo hacía) y ahora además:
+
+- no ofrece «Revisar» cuando los datos ya están completos —no hay nada que
+  revisar—,
+- no muestra la fila «Datos fiscales: Completos», que solo era ruido,
+
+pero **conserva** el RNC y el correo fiscal con su botón de copiar, porque son
+exactamente los dos datos que el asistente de DOSA vuelve a pedir y no acepta
+prellenado.
+
+## 8. Lo que aún falta
+
+1. **El vídeo de bienvenida** se configura en el backend y la pantalla ya tiene su
+   espacio; falta cargar la URL.
 2. **La primera emisión real contra DOSA**, que sigue pendiente de autorización
    de negocio.
 3. **P1/P2** (firma de webhooks entrantes): sin confirmar, una empresa nueva no
    puede recibir credenciales, así que el circuito solo funciona con las
    credenciales que ya llegaron.
+4. **La inscripción del asistente** (`portal-enrollments`) sigue siendo una
+   concesión: sin ella la empresa no puede abrir el portal de certificación. Es
+   una decisión comercial, no técnica.

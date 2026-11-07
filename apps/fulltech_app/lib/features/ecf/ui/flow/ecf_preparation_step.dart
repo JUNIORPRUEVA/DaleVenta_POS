@@ -25,6 +25,7 @@ class EcfPreparationStep extends StatelessWidget {
     required this.onGoCompany,
     required this.onGoCertificate,
     this.dosaEntry,
+    this.activation,
     this.advanced,
     this.simulationAvailable = false,
     this.simulationBadge,
@@ -55,6 +56,13 @@ class EcfPreparationStep extends StatelessWidget {
 
   /// Acción oficial de DOSA. Si existe, es la única acción principal.
   final Widget? dosaEntry;
+
+  /// Estado de la autorización de emisión (lo que falta para poder facturar).
+  ///
+  /// Va aquí y no en una pantalla aparte: el cliente ve el mismo recorrido, y
+  /// cuando vuelve días después aparece con lo que le falta sin tener que
+  /// buscar otro sitio.
+  final Widget? activation;
 
   /// Controles administrativos fuera del recorrido del cliente.
   final Widget? advanced;
@@ -100,15 +108,23 @@ class EcfPreparationStep extends StatelessWidget {
           EcfSection(
             title: 'Tu empresa',
             icon: Icons.storefront_outlined,
-            trailing: TextButton.icon(
-              onPressed: onEditFiscalData,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, 30),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              icon: const Icon(Icons.edit_outlined, size: 15),
-              label: const Text('Revisar', style: TextStyle(fontSize: 12)),
-            ),
+            // Con DOSA y todos los datos listos no hay nada que revisar: se
+            // oculta el botón en lugar de ofrecer una acción que no cambia
+            // nada. Si falta algo, sigue estando ahí.
+            trailing: dosaOwnsCertificate && _dataReady
+                ? null
+                : TextButton.icon(
+                    onPressed: onEditFiscalData,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 30),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    icon: const Icon(Icons.edit_outlined, size: 15),
+                    label: const Text(
+                      'Revisar',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -124,12 +140,15 @@ class EcfPreparationStep extends StatelessWidget {
                       : () => _copy(context, rnc, 'RNC copiado'),
                   copyTooltip: 'Copiar RNC',
                 ),
-                EcfSummaryRow(
-                  label: 'Datos fiscales',
-                  value: companyReady ? 'Completos' : 'Faltan datos',
-                  tone: companyReady ? EcfTone.done : EcfTone.warning,
-                  onTap: companyReady ? null : onEditFiscalData,
-                ),
+                // Con DOSA, «Completos» no aporta nada al cliente: solo se
+                // muestra cuando falta algo y hay que actuar.
+                if (!(dosaOwnsCertificate && companyReady))
+                  EcfSummaryRow(
+                    label: 'Datos fiscales',
+                    value: companyReady ? 'Completos' : 'Faltan datos',
+                    tone: companyReady ? EcfTone.done : EcfTone.warning,
+                    onTap: companyReady ? null : onEditFiscalData,
+                  ),
                 EcfSummaryRow(
                   label: 'Correo fiscal',
                   value: contactEmailReady
@@ -210,6 +229,12 @@ class EcfPreparationStep extends StatelessWidget {
               text:
                   'Un administrador con permiso de facturación electrónica debe iniciar la postulación.',
             ),
+          // Después de la acción principal: primero se abre el asistente, luego
+          // se explica qué falta para poder facturar.
+          if (activation != null) ...[
+            const SizedBox(height: 14),
+            activation!,
+          ],
           if (advanced != null) ...[const SizedBox(height: 12), advanced!],
         ],
       ),

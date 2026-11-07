@@ -547,6 +547,13 @@ class ApiRoutes {
   static const ecfDosaAuthorizeHistoricalTransition =
       '/ecf/dosa/certification-intent/authorize-historical-transition';
   static const ecfDosaCertificationSession = '/ecf/dosa/certification-session';
+  /// Activación y autorización de emisión del PROPIO cliente.
+  ///
+  /// Evalúa la evidencia que él mismo produjo (sesión, confirmación de DOSA,
+  /// aprobación DGII y su propia autorización) y, si está completa, activa la
+  /// credencial y deriva el estado de certificación. Es idempotente y responde
+  /// `200` aunque falte algo, con los motivos en `blockingReasons`.
+  static const ecfDosaActivationAttempt = '/ecf/dosa/activation/attempt';
   static const ecfDosaCertificationDiagnostic =
       '/ecf/dosa/certification-diagnostic';
 

@@ -8,6 +8,7 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
 import '../ecf_dosa_dispatch_models.dart';
+import '../ecf_dosa_activation_models.dart';
 import '../ecf_support_grant_models.dart';
 
 Map<String, dynamic> _asMap(dynamic data) {
@@ -331,6 +332,20 @@ class EcfRepository {
   Future<EcfDosaDispatchOutcome> dispatchDosa(String documentId) async {
     final res = await _dio.post(ApiRoutes.ecfDocumentDispatchDosa(documentId));
     return EcfDosaDispatchOutcome.fromJson(_asMap(res.data));
+  }
+
+  /// Intenta ACTIVAR y AUTORIZAR la emisión con la evidencia del cliente.
+  ///
+  /// Es la llamada que permite al cliente terminar el proceso sin que nadie de
+  /// Fulltech intervenga: el backend evalúa la sesión, la confirmación de DOSA,
+  /// la aprobación de la DGII y la autorización del propio cliente, y si están
+  /// las cuatro activa la credencial y deriva el estado de certificación.
+  ///
+  /// Un «todavía no» NO lanza: llega con `ok: false` y `blockingReasons`, que la
+  /// interfaz muestra tal cual. Repetir la llamada es seguro (idempotente).
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async {
+    final res = await _dio.post(ApiRoutes.ecfDosaActivationAttempt);
+    return EcfDosaActivationOutcome.fromJson(_asMap(res.data));
   }
 
   /// Prepara un borrador local (E31) a partir de una venta real.

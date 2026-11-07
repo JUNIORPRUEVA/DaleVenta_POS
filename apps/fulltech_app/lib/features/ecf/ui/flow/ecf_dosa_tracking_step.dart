@@ -14,6 +14,7 @@ class EcfDosaTrackingStep extends StatelessWidget {
     required this.statusLabel,
     required this.statusMessage,
     required this.official,
+    this.activation,
     this.portal,
     this.advanced,
   });
@@ -23,6 +24,12 @@ class EcfDosaTrackingStep extends StatelessWidget {
   final String statusLabel;
   final String statusMessage;
   final bool official;
+
+  /// Estado de la autorización de emisión: qué falta para poder facturar y el
+  /// botón para reintentar. Sin esto, el cliente que vuelve días después no
+  /// tiene forma de saber en qué quedó su trámite.
+  final Widget? activation;
+
   final Widget? portal;
   final Widget? advanced;
 
@@ -68,6 +75,10 @@ class EcfDosaTrackingStep extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
+          if (activation != null) ...[
+            const SizedBox(height: 14),
+            activation!,
+          ],
           if (portal != null) ...[
             const SizedBox(height: 12),
             portal!,
