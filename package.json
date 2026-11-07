@@ -32,7 +32,8 @@
     "api:seed": "npm --workspace apps/api run prisma:seed",
     "web:dev": "npm --workspace apps/web run dev",
     "web:build": "npm --workspace apps/web run build",
-    "web:preview": "npm --workspace apps/web run preview"
+    "web:preview": "npm --workspace apps/web run preview",
+    "verify:bundle:env": "node scripts/release/verify_build_env.cjs"
   },
   "devDependencies": {
     "@types/node-forge": "^1.3.14"

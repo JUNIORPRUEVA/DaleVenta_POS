@@ -29,8 +29,31 @@ reversión). Aquí está lo que hay que comprobar, no cómo hacerlo.
         --dart-define=API_BASE_URL=https://<backend> --dart-define=APP_BASE_URL=https://<backend>
       ```
       **Sin `API_BASE_URL`, el bundle apunta a PRODUCCIÓN por defecto**
-      (`Env._defaultApiBaseUrl = ProductConfig.productionApiBaseUrl`). Comprobarlo
-      buscando el host en `build/web/main.dart.js` antes de publicar.
+      (`Env._defaultApiBaseUrl = ProductConfig.productionApiBaseUrl`).
+- [ ] **Comprobación automática del bundle** (no basta con revisar el comando):
+      ```powershell
+      npm run verify:bundle:env -- --bundle apps/fulltech_app/build/web/main.dart.js `
+        --expect-api 127.0.0.1:4004
+      ```
+      Criterio de éxito: `VERIFICACIÓN CORRECTA` y exit 0. Un artefacto
+      compilado sin `--dart-define=API_BASE_URL` **falla** con
+      «falta la URL declarada».
+
+      Nota de precisión: los hosts productivos (`daleventapos-backend...`,
+      `31.97.99.70`, …) son constantes de `ProductConfig` y aparecen en
+      **cualquier** build, incluido el correcto; por eso el criterio es la
+      **presencia de la URL declarada**, no la ausencia del host productivo.
+- [ ] Para un artefacto comercial, la comprobación inversa:
+      ```powershell
+      npm run verify:bundle:env -- --bundle <bundle> `
+        --expect-api <host-de-produccion> --forbid-api 127.0.0.1:4004
+      ```
+- [ ] Prueba de regresión del perfil UAT (debe pasar en ambos modos):
+      ```powershell
+      cd apps/fulltech_app
+      flutter test test/core/api/env_uat_profile_fail_closed_test.dart
+      flutter test test/core/api/env_uat_profile_fail_closed_test.dart --dart-define=APP_ENV=uat
+      ```
 - [ ] Variables de bandera en el entorno destino: `DOSA_EMISSION_ENABLED=false`,
       `DOSA_PRODUCTION_EMISSION_ENABLED=false`, `DOSA_WEBHOOK_ENABLED=true`,
       `DOSA_INCIDENT_MONITOR_ENABLED` decidido de forma explícita.
@@ -46,7 +69,23 @@ reversión). Aquí está lo que hay que comprobar, no cómo hacerlo.
 
 ## 3. Migración
 
-- [ ] Única migración nueva: `20261107120000_ecf_dosa_incidents` (aditiva, una tabla).
+- [ ] Migraciones nuevas de esta rama (aditivas, solo tablas):
+      `20261107120000_ecf_dosa_incidents` y `20261107180000_ecf_portal_enrollments`.
+- [ ] `ecf_portal_enrollments` es la autorización del asistente **por empresa**
+      (ver `docs/ecf/ECF_PORTAL_ENROLLMENT.md`). El backend anterior no la
+      conoce: la tabla vacía se comporta como «nadie autorizado» y la decisión
+      sigue cayendo en la lista heredada del entorno, así que un despliegue
+      gradual es seguro.
+- [ ] Antes de retirar `ECF_PORTAL_PILOT_COMPANY_IDS`, comprobar que cada
+      empresa activa tiene su fila:
+      ```sql
+      SELECT c.id, c.name
+        FROM companies c
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ecf_portal_enrollments e
+          WHERE e.company_id = c.id AND e.status = 'ACTIVE');
+      ```
+      Una lista vacía es la condición para vaciar la variable.
 - [ ] Ensayada en UAT: `npx prisma migrate deploy` dos veces → la segunda informa
       «No pending migrations to apply».
 - [ ] `npx prisma migrate status` → «Database schema is up to date».
