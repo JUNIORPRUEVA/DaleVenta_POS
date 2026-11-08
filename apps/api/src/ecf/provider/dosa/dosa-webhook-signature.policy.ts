@@ -9,20 +9,18 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * * Formato `t=<hora>,v1=<firma>`.
  * * `firma = HMAC-SHA256(webhookSecret, t + "." + rawRequestBody)`.
  *
- * Lo que el proveedor **no** confirmó, y que este archivo NO inventa:
+ * Lo que el proveedor **no** confirmó, y que este archivo YA NO deja abierto:
  *
- * * La **unidad de `t`** (segundos epoch vs milisegundos epoch). Se configura con
- *   `DOSA_WEBHOOK_TIMESTAMP_UNIT`; el valor por defecto (`seconds`) es una
- *   SUPOSICIÓN documentada. Si el proveedor usa milisegundos, el peor efecto es
- *   rechazar eventos por estar fuera de tolerancia (falla cerrado), nunca
- *   aceptar uno falso.
+ * * La **unidad de `t`** (segundos epoch vs milisegundos epoch). Ver §P1: se
+ *   resuelve por **magnitud**, que es aritmética y no una suposición.
  * * La **codificación del digest** (hex vs base64). Se aceptan ambas: exigir el
  *   HMAC correcto del cuerpo exacto no se debilita por admitir dos formas de
  *   escribir el mismo resultado.
+ * * La **interpretación del secreto** (texto literal vs 32 bytes de hex). Ver
+ *   §P5: se aceptan las dos lecturas ACOTADAS del mismo secreto.
  * * Que `t` sea epoch Unix en absoluto.
  *
- * Estas dudas viven en `DOSA_WEBHOOK_PENDING_QUESTIONS` para que viajen con el
- * código y no dependan de una conversación.
+ * Las dudas que siguen vivas viajan en `DOSA_WEBHOOK_PENDING_QUESTIONS`.
  *
  * Estrategias:
  *
@@ -58,6 +56,21 @@ export type DosaSignatureResult =
 export type DosaTimestampUnit = "seconds" | "milliseconds";
 
 /**
+ * Ajuste de la unidad de `t`.
+ *
+ * `auto` (por defecto) **deduce** la unidad del propio valor, con aritmética:
+ * un epoch en segundos del siglo XXI tiene 10 dígitos (~1.7e9) y uno en
+ * milisegundos tiene 13 (~1.7e12). El umbral es 1e11, que en segundos sería el
+ * año 5138 y en milisegundos 1973: no hay ninguna fecha plausible en el medio.
+ *
+ * Esto **no debilita la protección anti-replay**: si el valor es ambiguo, está
+ * a miles de años de «ahora» y la ventana de 300 s lo rechaza igual. La unidad
+ * solo decide qué motivo de rechazo se informa, nunca si un evento caducado se
+ * acepta.
+ */
+export type DosaTimestampUnitSetting = DosaTimestampUnit | "auto";
+
+/**
  * Cómo se interpreta el secreto del webhook. **No confirmado.**
  *
  * El secreto entregado tiene 64 caracteres hexadecimales. Eso admite dos
@@ -74,37 +87,52 @@ export type DosaTimestampUnit = "seconds" | "milliseconds";
  */
 export type DosaSecretEncoding = "utf8" | "hex";
 
+/**
+ * Ajuste de la interpretación del secreto.
+ *
+ * `auto` (por defecto) acepta **las dos lecturas acotadas** de un secreto hex:
+ * los caracteres tal cual (utf8) o los 32 bytes que codifican (hex). Son dos
+ * interpretaciones fijas del MISMO secreto, no una prueba a ciegas de variantes:
+ * la firma sigue teniendo que ser el HMAC correcto del cuerpo exacto.
+ *
+ * La seguridad no se reduce: el atacante necesita el mismo secreto en cualquier
+ * caso, y el conjunto de claves aceptadas se deriva determinísticamente de él.
+ * Es la misma tolerancia que ya se aplica al digest (hex o base64).
+ */
+export type DosaSecretEncodingSetting = DosaSecretEncoding | "auto";
+
 export type DosaSignatureConfig = {
   strategy: DosaSignatureStrategyId;
   /** Secreto del webhook. Nunca se registra ni se devuelve. */
   secret: string | null;
   /**
-   * Unidad de `t`. Ver las dudas pendientes en la cabecera del archivo.
+   * Unidad de `t`. `auto` por defecto: se deduce por magnitud.
    * Opcional para no romper dobles de prueba: `readDosaSignatureConfig`
    * siempre la rellena.
    */
-  timestampUnit?: DosaTimestampUnit;
+  timestampUnit?: DosaTimestampUnitSetting;
   /** Ventana anti-replay, en segundos. Por defecto 300. */
   toleranceSeconds?: number;
-  /** Cómo se interpretan los caracteres del secreto. Por defecto `utf8`. */
-  secretEncoding?: DosaSecretEncoding;
+  /** Cómo se interpretan los caracteres del secreto. `auto` por defecto. */
+  secretEncoding?: DosaSecretEncodingSetting;
   /** Motivo por el que la estrategia pedida no se aplicó, si aplica. */
   downgradedFrom?: DosaSignatureStrategyId;
   downgradeReason?: "NOT_A_LOCAL_LAB_ENVIRONMENT";
 };
 
 /**
- * Datos que dependen del proveedor y siguen SIN confirmar.
+ * Datos que dependen del proveedor.
  *
- * Se mantienen en código a propósito: mientras alguna de estas respuestas no
- * llegue, la verificación funciona pero no puede darse por «cerrada al 100 %».
+ * P1 y P5 **ya no son bloqueantes**: el receptor resuelve la unidad de `t` por
+ * magnitud y acepta las dos lecturas acotadas de un secreto hex. Lo que sigue
+ * aquí es lo que aún no tiene respuesta y sí puede afectar la operación.
  */
 export const DOSA_WEBHOOK_PENDING_QUESTIONS = [
-  "¿`t` son segundos o milisegundos epoch? (se configura; por defecto segundos)",
+  "¿`t` son segundos o milisegundos? RESUELTO por magnitud; falta la confirmación escrita del proveedor",
   "¿El digest de `v1` va en hex o en base64? (se aceptan ambos)",
   "¿`t` es realmente epoch Unix, o el timestamp de su reloj interno?",
   "¿Hay rotación de secreto? Si la hay, ¿se envían varios `v1` en la cabecera?",
-  "¿El secreto de 64 caracteres hex es TEXTO LITERAL o 32 bytes decodificados de hex? (se configura con DOSA_WEBHOOK_SECRET_ENCODING; por defecto utf8)",
+  "¿El secreto de 64 caracteres hex es TEXTO LITERAL o 32 bytes decodificados? RESUELTO: se aceptan las dos lecturas acotadas",
 ] as const;
 
 export const DOSA_SIGNATURE_HEADER = "x-dosa-signature";
@@ -246,34 +274,77 @@ export function readDosaSignatureConfig(env: DosaSafetyEnv): DosaSignatureConfig
 /**
  * Lectura de la codificación del secreto.
  *
- * Solo `hex` es una lectura distinta; cualquier otro valor (incluido vacío) cae
- * a `utf8`, que es la interpretación que no transforma nada.
+ * `auto` por defecto: se prueban las dos lecturas cuando el secreto es hex.
+ * Un valor no reconocido cae a `auto`, nunca a una lectura forzada.
  */
-function parseSecretEncoding(value: string | undefined): DosaSecretEncoding {
-  return (value ?? "").trim().toLowerCase() === "hex" ? "hex" : "utf8";
+function parseSecretEncoding(
+  value: string | undefined,
+): DosaSecretEncodingSetting {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (raw === "hex") return "hex";
+  if (raw === "utf8") return "utf8";
+  return "auto";
+}
+
+type KeyCandidate = { encoding: DosaSecretEncoding; key: Buffer };
+
+/**
+ * Claves HMAC candidatas para el secreto configurado.
+ *
+ * `utf8` y `hex` fuerzan una sola lectura. `auto` devuelve las dos **solo si el
+ * secreto es hex de longitud par**: fuera de ese caso `hex` no es una lectura
+ * posible y fingirla sería inventar.
+ *
+ * Devolver `null` significa «la configuración es imposible» (se pidió `hex` y el
+ * secreto no lo es). No se cae a `utf8` en silencio: reinterpretar el secreto
+ * cambiaria el resultado de la verificación sin que nadie se entere.
+ */
+function keyCandidates(
+  secret: string,
+  encoding: DosaSecretEncodingSetting,
+): KeyCandidate[] | null {
+  const isEvenHex = /^[0-9A-Fa-f]+$/.test(secret) && secret.length % 2 === 0;
+  if (encoding === "hex") {
+    if (!isEvenHex) return null;
+    return [{ encoding: "hex", key: Buffer.from(secret, "hex") }];
+  }
+  if (encoding === "utf8") {
+    return [{ encoding: "utf8", key: Buffer.from(secret, "utf8") }];
+  }
+  const candidates: KeyCandidate[] = [
+    { encoding: "utf8", key: Buffer.from(secret, "utf8") },
+  ];
+  if (isEvenHex) {
+    candidates.push({ encoding: "hex", key: Buffer.from(secret, "hex") });
+  }
+  return candidates;
 }
 
 /**
- * Convierte el secreto configurado en la clave HMAC.
+ * Unidad de `t` efectiva.
  *
- * `utf8` = los caracteres tal cual. `hex` = decodificar los caracteres a bytes.
- * Si se pide `hex` y el valor no es hex válido se devuelve `null` en vez de caer
- * a `utf8` en silencio: reinterpretar el secreto cambiaría el resultado de la
- * verificación sin que nadie se entere.
+ * Con un ajuste explicito se respeta. Con `auto` se deduce del orden de
+ * magnitud: `>= 1e11` no puede ser un epoch en segundos de este siglo, asi que
+ * se interpreta como milisegundos. Ver `DosaTimestampUnitSetting`.
  */
-function secretKey(secret: string, encoding: DosaSecretEncoding): Buffer | null {
-  if (encoding === "hex") {
-    if (!/^[0-9A-Fa-f]+$/.test(secret) || secret.length % 2 !== 0) return null;
-    return Buffer.from(secret, "hex");
-  }
-  return Buffer.from(secret, "utf8");
+export function resolveTimestampUnit(
+  timestampRaw: string,
+  setting: DosaTimestampUnitSetting,
+): DosaTimestampUnit {
+  if (setting !== "auto") return setting;
+  const value = Number.parseInt(`${timestampRaw}`.trim(), 10);
+  if (!Number.isFinite(value)) return "seconds";
+  return value >= 100_000_000_000 ? "milliseconds" : "seconds";
 }
 
-function parseTimestampUnit(value: string | undefined): DosaTimestampUnit {
+function parseTimestampUnit(
+  value: string | undefined,
+): DosaTimestampUnitSetting {
   const raw = (value ?? "").trim().toLowerCase();
   if (raw === "milliseconds" || raw === "ms") return "milliseconds";
-  // Suposición documentada: epoch en segundos es lo habitual.
-  return "seconds";
+  if (raw === "seconds" || raw === "s") return "seconds";
+  // `auto` por defecto: deducir por magnitud en vez de suponer.
+  return "auto";
 }
 
 function parseTolerance(value: string | undefined): number {
@@ -287,6 +358,12 @@ function parseTolerance(value: string | undefined): number {
   return Math.min(parsed, 86_400);
 }
 
+/** Interpretación que efectivamente validó la firma. Es evidencia, no un secreto. */
+export type DosaResolvedInterpretation = {
+  timestampUnit: DosaTimestampUnit;
+  secretEncoding: DosaSecretEncoding;
+};
+
 export function verifyDosaSignature(input: {
   headers: Record<string, string | string[] | undefined>;
   config: DosaSignatureConfig;
@@ -294,6 +371,12 @@ export function verifyDosaSignature(input: {
   rawBody?: Buffer;
   /** Inyectable para pruebas deterministas. */
   nowMs?: number;
+  /**
+   * Se invoca SOLO cuando la firma es válida, con la interpretación que la
+   * validó. Sirve para poder responder «¿segundos o milisegundos?» y «¿texto o
+   * hex?» con un hecho en vez de con una suposición, sin registrar secretos.
+   */
+  onResolved?: (info: DosaResolvedInterpretation) => void;
 }): DosaSignatureResult {
   const { config } = input;
   const provided = headerValue(input.headers, DOSA_SIGNATURE_HEADER);
@@ -331,11 +414,12 @@ export function verifyDosaSignature(input: {
   return verifyHmacTimestamped({
     header: provided,
     secret: config.secret,
-    secretEncoding: config.secretEncoding ?? "utf8",
+    secretEncoding: config.secretEncoding ?? "auto",
     rawBody: input.rawBody,
-    timestampUnit: config.timestampUnit ?? "seconds",
+    timestampUnit: config.timestampUnit ?? "auto",
     toleranceSeconds: config.toleranceSeconds ?? DOSA_DEFAULT_TOLERANCE_SECONDS,
     nowMs: input.nowMs ?? Date.now(),
+    onResolved: input.onResolved,
   });
 }
 
@@ -349,11 +433,12 @@ export function verifyDosaSignature(input: {
 function verifyHmacTimestamped(input: {
   header: string;
   secret: string;
-  secretEncoding: DosaSecretEncoding;
+  secretEncoding: DosaSecretEncodingSetting;
   rawBody: Buffer | undefined;
-  timestampUnit: DosaTimestampUnit;
+  timestampUnit: DosaTimestampUnitSetting;
   toleranceSeconds: number;
   nowMs: number;
+  onResolved?: (info: DosaResolvedInterpretation) => void;
 }): DosaSignatureResult {
   const strategy: DosaSignatureStrategyId = "HMAC_SHA256_TIMESTAMPED";
   const fail = (reason: DosaSignatureRejection): DosaSignatureResult => ({
@@ -372,32 +457,47 @@ function verifyHmacTimestamped(input: {
 
   const { timestampRaw, signature } = parsed;
 
-  const key = secretKey(input.secret, input.secretEncoding);
-  if (key === null) {
+  const candidates = keyCandidates(input.secret, input.secretEncoding);
+  if (candidates === null) {
     // Un secreto que dice ser hex y no lo es: no se reinterpreta en silencio.
     return fail("CONFIG_INVALID");
   }
 
   // Digest del mensaje firmado: `t` TAL CUAL llegó, un punto, y el cuerpo.
-  const expected = createHmac("sha256", key)
-    .update(`${timestampRaw}.`, "utf8")
-    .update(input.rawBody)
-    .digest();
-
-  // Se compara en tiempo constante contra las codificaciones admitidas.
-  if (!matchesAnyEncoding(expected, signature)) {
+  // Se prueban las interpretaciones ACOTADAS del mismo secreto (una, o dos con
+  // `auto`). No es una búsqueda de variantes hasta que alguna funcione: la
+  // firma tiene que ser el HMAC exacto del cuerpo exacto con la clave correcta.
+  let matched: KeyCandidate | null = null;
+  for (const candidate of candidates) {
+    const expected = createHmac("sha256", candidate.key)
+      .update(`${timestampRaw}.`, "utf8")
+      .update(input.rawBody)
+      .digest();
+    // Se compara en tiempo constante contra las codificaciones admitidas.
+    if (matchesAnyEncoding(expected, signature)) {
+      matched = candidate;
+      break;
+    }
+  }
+  if (matched === null) {
     return fail("SIGNATURE_MISMATCH");
   }
 
   // Anti-replay: solo se evalúa DESPUÉS de autenticar, para no revelar el
   // comportamiento de la ventana a quien no tiene el secreto.
-  const stampMs = toEpochMs(timestampRaw, input.timestampUnit);
+  const unit = resolveTimestampUnit(timestampRaw, input.timestampUnit);
+  const stampMs = toEpochMs(timestampRaw, unit);
   if (stampMs === null) return fail("SIGNATURE_TIMESTAMP_INVALID");
   const toleranceMs = input.toleranceSeconds * 1000;
   if (Math.abs(input.nowMs - stampMs) > toleranceMs) {
     return fail("SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE");
   }
 
+  // Evidencia: qué interpretación validó la firma. No es un secreto.
+  input.onResolved?.({
+    timestampUnit: unit,
+    secretEncoding: matched.encoding,
+  });
   return { ok: true, strategy };
 }
 

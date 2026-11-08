@@ -47,19 +47,41 @@ Consecuencias que ya están en el código:
 
 ## 2. Lo que NO está verificado
 
-| # | Pregunta | Por qué importa | Valor actual (suposición declarada) |
+| # | Pregunta | Por qué importa | Estado (2026-11-07) |
 | --- | --- | --- | --- |
-| P1 | ¿`t` está en segundos o milisegundos? | Elegir mal rechaza TODOS los eventos | `DOSA_WEBHOOK_TIMESTAMP_UNIT` (por defecto `seconds`) |
-| P2 | ¿El secreto de 64 hex se usa como texto literal o como 32 bytes decodificados? | Elegir mal rechaza TODAS las firmas | `DOSA_WEBHOOK_SECRET_ENCODING` (por defecto `utf8`) |
+| P1 | ¿`t` está en segundos o milisegundos? | Elegir mal rechaza TODOS los eventos | **RESUELTO por diseño**: se deduce por magnitud (`>= 1e11` → ms). El ajuste explícito sigue disponible |
+| P2 | ¿El secreto de 64 hex se usa como texto literal o como 32 bytes decodificados? | Elegir mal rechaza TODAS las firmas | **RESUELTO por compatibilidad acotada**: se aceptan las dos lecturas del mismo secreto |
 | P3 | ¿Existe un **identificador único de entrega**? | Hoy la deduplicación usa `sha256(postulación + estado + disponibles_desde + hash del cuerpo)` | No hay campo; se deduce del contenido |
 | P4 | ¿Existe un campo que diga el **tipo de evento**? | Hoy `event_type` se guarda como `PENDING_CLASSIFICATION` | La muestra no lo trae |
 | P5 | ¿Hay más tipos de evento además de la entrega de credenciales? | Condiciona el contrato del receptor | Solo se conoce uno |
 | P6 | ¿`api_secret` es único por empresa o distinto por ambiente? | Si es distinto, C2 del informe es un riesgo real | Un solo secreto en la muestra |
-| P7 | Política de reintento: ¿cuántos, cada cuánto, re-firmando? | Un reintento con `t` viejo siempre falla (ver §4) | Observado ≈5 min; no confirmado |
+| P7 | Política de reintento: ¿cuántos, cada cuánto, re-firando? | Un reintento con `t` viejo siempre falla (ver §4) | Observado ≈5 min; no confirmado |
 | P8 | ¿Hay reenvío manual (*replay*) desde el panel? | Define cómo se recupera un evento perdido | No documentado |
 | P9 | Procedimiento autorizado de rotación y revocación | Rotar sin guía puede dejar la empresa sin emitir | No documentado |
 | P10 | ¿TEST y PRODUCCIÓN comparten host? | Hoy solo existe `DOSA_BASE_URL` | Un único host configurable |
-| P11 | Condiciones exactas de activación de una credencial | Hoy `ACTIVE` exige acto humano | No documentado por el proveedor |
+| P11 | Condiciones exactas de activación de una credencial | Ninguna empresa recibe credenciales nuevas sin esto | No documentado por el proveedor |
+
+### Cómo se resolvieron P1 y P2 sin confirmación del proveedor
+
+Ninguna de las dos admitía una respuesta por evidencia: en el repositorio no
+existe **ninguna muestra real** de la cabecera `X-Dosa-Signature` ni del secreto,
+y los eventos que llegaron no dejaron guardado el valor de `t`. Se resolvieron por
+**diseño**, sin relajar la seguridad:
+
+- **P1**: un epoch en segundos del siglo XXI tiene 10 dígitos (~1.7e9) y uno en
+  milisegundos 13 (~1.7e12). El umbral `1e11` cae en una zona donde ninguna fecha
+  es plausible, así que la deducción es aritmética, no una suposición. Y si el
+  valor fuera ambiguo, estaría a miles de años de «ahora»: la ventana de 300 s lo
+  rechaza igual. La unidad solo cambia el **motivo** del rechazo, nunca si un
+  evento caducado se acepta.
+- **P2**: el secreto hex admite exactamente dos lecturas (los 64 caracteres o los
+  32 bytes que codifican). Se aceptan las dos, igual que ya se aceptaba el digest
+  en hex o base64. La firma sigue teniendo que ser el HMAC-SHA256 exacto del
+  cuerpo exacto: el atacante necesita el mismo secreto en cualquier caso.
+
+Ambas quedan registradas como evidencia en el log de cada evento autenticado
+(`t=seconds|milliseconds, secreto=utf8|hex`), así que la primera entrega real
+dirá cuál usa DOSA sin necesidad de preguntarlo.
 
 ### Discrepancia documental detectada (se reporta, no se resuelve)
 

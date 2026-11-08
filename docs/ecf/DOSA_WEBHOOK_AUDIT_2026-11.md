@@ -16,7 +16,7 @@ Consecuencia si se queda así: **ninguna credencial nueva entra al sistema**. El
 cliente completa el asistente, DOSA intenta avisar, y el sistema lo rechaza sin
 guardar nada. El estado del cliente se queda en «DOSA aún no ha confirmado».
 
-## 2. Ruta correcta (esto ya falló antes)
+## 2. Ruta correcta — DEMOSTRADA
 
 | Dato | Valor |
 | --- | --- |
@@ -24,9 +24,18 @@ guardar nada. El estado del cliente se queda en «DOSA aún no ha confirmado».
 | URL pública | `https://fullposcloud.fulltechrd.com/api/webhook/dosa` |
 | `rawBody` | Se preserva para `/webhook/` **y** `/api/webhook/` |
 
-El proxy delante del backend **quita** `/api`. La URL que sugirió el proveedor
-(`/webhook/dosa` sin `/api`) devuelve el HTML del PWA y **no** debe usarse: el
-evento nunca llega al backend y no queda ni rastro.
+No es una suposición: son sondas de solo lectura ejecutadas el 2026-11-04 contra
+el dominio público.
+
+```text
+/api/health              -> 200 application/json
+/api/webhook/dosa        -> 404 application/json   (NestJS alcanzado; GET no es su método)
+/webhook/dosa            -> 200 text/html          (PWA: no usar)
+```
+
+La ruta que sugirió el proveedor (`/webhook/dosa`, sin `/api`) la sirve el PWA y el
+evento nunca llega al backend. **La ruta no se cambia**: ya está demostrado cuál
+funciona.
 
 ## 3. Verificación de firma
 
@@ -55,21 +64,32 @@ cosas: `DOSA_WEBHOOK_ENABLED=true` **y**
 `DOSA_WEBHOOK_SIGNATURE_STRATEGY=HMAC_SHA256_TIMESTAMPED` con
 `DOSA_WEBHOOK_SECRET` configurado.
 
-## 4. Lo que el proveedor NO confirmó (y puede romper todo)
+## 4. P1 y P5 — RESUELTOS POR DISEÑO (07/11/2026)
 
-| # | Duda | Variable | Por defecto | Si nos equivocamos |
-| --- | --- | --- | --- | --- |
-| P1 | ¿`t` en segundos o milisegundos? | `DOSA_WEBHOOK_TIMESTAMP_UNIT` | `seconds` | Todos los eventos rechazados por estar fuera de tolerancia (401) |
-| P2 | ¿El digest en hex o base64? | — | Se aceptan **ambos** | — (no puede fallar por esto) |
-| P5 | ¿El secreto de 64 caracteres es texto o 32 bytes hex? | `DOSA_WEBHOOK_SECRET_ENCODING` | `utf8` | Todos los eventos rechazados por `SIGNATURE_MISMATCH` (401) |
-| — | ¿Hay rotación de secreto? ¿varios `v1`? | — | No soportado | Durante una rotación, rechazos hasta cambiar el secreto |
+En el repositorio **no existe ninguna muestra real** de la cabecera ni del secreto,
+y los eventos recibidos no guardaron el valor de `t`, así que la respuesta no
+podía salir de la evidencia. Se resolvieron por diseño, sin relajar la seguridad:
 
-Los tres fallos son **cerrados**: rechazan, nunca aceptan algo falso. Pero son
-silenciosos en cuanto a la causa, y el efecto visible para el cliente es siempre
-el mismo: «DOSA no confirma».
+| # | Duda | Cómo queda | Garantía |
+| --- | --- | --- | --- |
+| P1 | ¿`t` en segundos o milisegundos? | Se **deduce por magnitud**: `>= 1e11` → ms | Si el valor es ambiguo está a miles de años de «ahora» y la ventana de 300 s lo rechaza igual |
+| P2 | ¿El digest en hex o base64? | Se aceptan **ambos** | La firma debe ser el HMAC exacto |
+| P5 | ¿El secreto es texto o 32 bytes hex? | Se aceptan **las dos lecturas acotadas** del mismo secreto | Es el mismo HMAC exacto con una clave derivada del mismo secreto |
+| — | ¿Hay rotación de secreto? ¿varios `v1`? | **Pendiente**: no soportado | Durante una rotación habrá rechazos |
 
-**Cómo se distingue uno de otro:** por el motivo registrado (§7). `MISMATCH`
-apunta a P5 o a secreto distinto; `TIMESTAMP_OUT_OF_TOLERANCE` apunta a P1.
+Ajustes explícitos siguen disponibles y **mandan** sobre la deducción:
+`DOSA_WEBHOOK_TIMESTAMP_UNIT=seconds|milliseconds` y
+`DOSA_WEBHOOK_SECRET_ENCODING=utf8|hex`.
+
+Además, cada evento autenticado deja en el log la interpretación que lo validó:
+
+```
+LOG [DosaWebhookService] Webhook DOSA autenticado: t=seconds, secreto=utf8
+```
+
+Eso convierte una duda en un hecho en la primera entrega real, sin preguntar a
+nadie y sin registrar el secreto ni la firma.
+
 
 ## 5. Todos los códigos de rechazo
 

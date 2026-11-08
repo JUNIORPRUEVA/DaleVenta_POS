@@ -8,6 +8,7 @@ import {
 import {
   readDosaSignatureConfig,
   verifyDosaSignature,
+  type DosaResolvedInterpretation,
   type DosaSignatureConfig,
   type DosaSignatureRejection,
 } from "./dosa-webhook-signature.policy";
@@ -150,10 +151,19 @@ export class DosaWebhookService {
   }): Promise<DosaWebhookOutcome> {
     // 1. Firma — se verifica sobre los BYTES ORIGINALES, nunca sobre el JSON
     //    re-serializado: `HMAC-SHA256(secret, t + "." + rawBody)`.
+    //
+    // `resolved` captura la interpretación que efectivamente validó la firma
+    // (unidad de `t` y lectura del secreto). Es la evidencia que faltaba para
+    // responder P1/P5 con un hecho en vez de con una suposición; no es un
+    // secreto y no se registra ningún valor de firma ni de clave.
+    let resolved: DosaResolvedInterpretation | null = null;
     const signature = verifyDosaSignature({
       headers: input.headers,
       config: this.signature,
       rawBody: input.rawBody,
+      onResolved: (info) => {
+        resolved = info;
+      },
     });
     if (!signature.ok) {
       this.logger.warn(
@@ -166,6 +176,12 @@ export class DosaWebhookService {
         code: "ECF_DOSA_WEBHOOK_BLOCKED",
         reason: signature.reason,
       };
+    }
+    if (resolved !== null) {
+      const info = resolved as DosaResolvedInterpretation;
+      this.logger.log(
+        `Webhook DOSA autenticado: t=${info.timestampUnit}, secreto=${info.secretEncoding}`,
+      );
     }
 
     if (!input.rawBody) {
