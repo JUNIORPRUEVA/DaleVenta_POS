@@ -227,6 +227,13 @@ function parseExpiry(value: string | null | undefined): Date | null {
   if (value === null || value === undefined) return null;
   const trimmed = `${value}`.trim();
   if (trimmed.length === 0) return null;
+  // Fecha sin hora: la DGII autoriza hasta el ÚLTIMO día inclusive, así que se
+  // interpreta como fin de ese día. Parsearla a medianoche bloquearía la
+  // emisión justo ese día.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const endOfDay = new Date(`${trimmed}T23:59:59.999Z`);
+    return Number.isNaN(endOfDay.getTime()) ? null : endOfDay;
+  }
   const parsed = new Date(trimmed);
   // Una fecha inválida se trata como «sin vencimiento» solo si venía vacía;
   // si venía con contenido y no se puede leer, se rechaza más arriba como rango

@@ -210,6 +210,10 @@ class _EcfSequenceRangeSectionState
   String get _quantityError => 'La cantidad aprobada debe ser mayor que cero.';
 
   /// Acepta `31/12/2027` o una fecha ISO. Vacío = sin vencimiento (N/A).
+  ///
+  /// La fecha se envía como **fin del día** (23:59:59.999Z): la DGII autoriza
+  /// hasta el último día inclusive, y mandarla a medianoche bloquearía la
+  /// emisión precisamente ese día.
   String? _normalizeExpiry(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return null;
@@ -217,7 +221,7 @@ class _EcfSequenceRangeSectionState
     if (parts.length == 3 && parts[0].length <= 2) {
       final day = parts[0].padLeft(2, '0');
       final month = parts[1].padLeft(2, '0');
-      return '${parts[2]}-$month-${day}T00:00:00.000Z';
+      return '${parts[2]}-$month-${day}T23:59:59.999Z';
     }
     return text;
   }

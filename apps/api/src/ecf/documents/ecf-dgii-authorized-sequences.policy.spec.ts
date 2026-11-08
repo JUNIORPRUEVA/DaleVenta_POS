@@ -130,6 +130,34 @@ describe("validateAuthorizationDeclaration", () => {
     if (!result.ok) return;
     expect(result.expiresAt).toBeNull();
   });
+
+  it("una fecha sin hora vale hasta el FIN de ese día", () => {
+    const result = validateAuthorizationDeclaration(
+      declaration({ expiresAt: "2027-12-31" }),
+      NOW,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.expiresAt?.toISOString()).toBe("2027-12-31T23:59:59.999Z");
+  });
+
+  it("el último día autorizado todavía permite declarar", () => {
+    const lastDay = new Date("2027-12-31T12:00:00.000Z");
+    const result = validateAuthorizationDeclaration(
+      declaration({ expiresAt: "2027-12-31" }),
+      lastDay,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("el día siguiente al vencimiento ya no permite declarar", () => {
+    const nextDay = new Date("2028-01-01T00:00:00.001Z");
+    const result = validateAuthorizationDeclaration(
+      declaration({ expiresAt: "2027-12-31" }),
+      nextDay,
+    );
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe("checkDeclaredRangeWithinAuthorization", () => {
