@@ -22,6 +22,7 @@ import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import { TaxService } from "../tax/tax.service";
+import { EcfPreparationService } from "../ecf/documents/ecf-preparation.service";
 import {
   DEFAULT_UNIT_OF_MEASURE,
   unitSnapshotFields,
@@ -2670,6 +2671,131 @@ export class SalesService {
     return { ok: true };
   }
 
+  /**
+   * Nota de crédito E34 de una devolución ya confirmada.
+   *
+   * Solo se prepara cuando la venta original tiene un comprobante electrónico
+   * ACEPTADO por la DGII y la empresa tiene el e-CF habilitado. En cualquier otro
+   * caso la devolución se comporta exactamente como siempre: no se reserva
+   * numeración ni se crea documento fiscal alguno.
+   *
+   * La numeración y la reserva las hace el módulo e-CF, idempotente por
+   * `clientRequestId`, así que repetir la misma devolución reutiliza el mismo
+   * e-NCF y nunca duplica el crédito fiscal. Un fallo aquí NUNCA deshace la
+   * devolución —ya está confirmada— pero tampoco se oculta: queda registrado con
+   * su código para revisión, y el barrido de pendientes puede completar el envío.
+   */
+  private async prepareRefundCreditNote(
+    user: TenantUser,
+    companyId: string,
+    originalSaleId: string,
+    refundSaleId: string,
+    reason?: string,
+  ) {
+    try {
+      const original = await this.prisma.ecfElectronicDocument.findFirst({
+        where: {
+          companyId,
+          sourceType: "SALE",
+          sourceId: originalSaleId,
+          documentType: { in: ["E31", "E32"] },
+          status: "DGII_ACCEPTED",
+        },
+        select: { id: true, documentType: true },
+      });
+      if (!original) return null;
+
+      // Mismo orden que el adaptador fiscal (createdAt asc): así el `lineNumber`
+      // de una nota parcial apunta a la línea real del comprobante original.
+      const originalItems = await this.prisma.saleItem.findMany({
+        where: { saleId: originalSaleId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, qty: true },
+      });
+      if (originalItems.length === 0) return null;
+      const lineNumberByItem = new Map(
+        originalItems.map((item, index) => [item.id, index + 1]),
+      );
+
+      // Cantidades ya devueltas de esta venta, incluida la recién confirmada:
+      // con eso se distingue nota TOTAL de PARCIAL.
+      const refundedItems = await this.prisma.saleItem.findMany({
+        where: {
+          sale: {
+            companyId,
+            refundedSaleId: originalSaleId,
+            isDeleted: false,
+          },
+        },
+        select: { refundedSaleItemId: true, qty: true },
+      });
+      const refundedByItem = new Map<string, Prisma.Decimal>();
+      for (const item of refundedItems) {
+        if (!item.refundedSaleItemId) continue;
+        refundedByItem.set(
+          item.refundedSaleItemId,
+          (refundedByItem.get(item.refundedSaleItemId) ?? new Prisma.Decimal(0))
+            .plus(item.qty.abs()),
+        );
+      }
+      const refundKind: "TOTAL" | "PARTIAL" = originalItems.every((item) =>
+        (refundedByItem.get(item.id) ?? new Prisma.Decimal(0)).gte(
+          new Prisma.Decimal(item.qty).abs(),
+        ),
+      )
+        ? "TOTAL"
+        : "PARTIAL";
+
+      let lines: { lineNumber: number; quantity: string }[] | undefined;
+      if (refundKind === "PARTIAL") {
+        const thisRefundItems = await this.prisma.saleItem.findMany({
+          where: { saleId: refundSaleId },
+          select: { refundedSaleItemId: true, qty: true },
+        });
+        lines = [];
+        for (const item of thisRefundItems) {
+          const lineNumber = item.refundedSaleItemId
+            ? lineNumberByItem.get(item.refundedSaleItemId)
+            : undefined;
+          if (!lineNumber) {
+            this.logger.warn(
+              `ECF_E34_CREDIT_LINE_UNMAPPED company=${companyId} saleId=${originalSaleId} refundSaleId=${refundSaleId}`,
+            );
+            return null;
+          }
+          lines.push({ lineNumber, quantity: item.qty.abs().toFixed(2) });
+        }
+        if (lines.length === 0) return null;
+      }
+
+      const result = await new EcfPreparationService(
+        this.prisma,
+      ).prepareCreditNote(user, {
+        originalDocumentId: original.id,
+        clientRequestId: `refund:${refundSaleId}`,
+        refundKind,
+        ...(lines ? { lines } : {}),
+        modificationCode: refundKind === "TOTAL" ? 1 : 3,
+        modificationReason: reason?.trim() || "Devolucion de venta",
+        paymentType: 1,
+        creditNoteIndicator: 0,
+      });
+      if (!result.ok) {
+        this.logger.warn(
+          `ECF_E34_CREDIT_NOT_PREPARED company=${companyId} saleId=${originalSaleId} refundSaleId=${refundSaleId} code=${result.code} message=${result.safeMessage}`,
+        );
+        return null;
+      }
+      return result.value;
+    } catch (error) {
+      this.logger.error(
+        `ECF_E34_CREDIT_PREPARATION_FAILED company=${companyId} saleId=${originalSaleId} refundSaleId=${refundSaleId} ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return null;
+    }
+  }
+
   async returnSale(
     requestUser: TenantUser,
     saleId: string,
@@ -2694,7 +2820,16 @@ export class SalesService {
           where: { companyId, clientRequestId, kind: "refund" },
           include: this.saleInclude(),
         });
-        if (existing) return existing;
+        if (existing) {
+          const ecfCreditNote = await this.prepareRefundCreditNote(
+            requestUser,
+            companyId,
+            saleId,
+            existing.id,
+            dto.reason,
+          );
+          return ecfCreditNote ? { ...existing, ecfCreditNote } : existing;
+        }
       }
 
       const refundPath = classifyFinancialContract(
@@ -3140,7 +3275,14 @@ export class SalesService {
         cashSessionId: returned.cashSessionId,
         saleDate: returned.saleDate,
       });
-      return returned;
+      const ecfCreditNote = await this.prepareRefundCreditNote(
+        requestUser,
+        companyId,
+        saleId,
+        returned.id,
+        dto.reason,
+      );
+      return ecfCreditNote ? { ...returned, ecfCreditNote } : returned;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
