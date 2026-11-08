@@ -343,3 +343,60 @@ abre su pantalla de estado o registra su autorización DGII.
 - No despliega, ni reinicia servicios, ni aplica migraciones.
 - No lee ni imprime secretos.
 - No modifica datos ni variables del panel.
+
+---
+
+## 9. Activación de la emisión TEST (sin emitir de verdad a la DGII)
+
+**HECHO (2026-11-07)**: estado real leído de producción y de la compuerta
+`assessDosaEmissionGate`. Para que una emisión TEST pase hoy faltan seis cosas;
+**cinco son datos o configuración, no variables de entorno**.
+
+| # | Requisito | Estado real hoy | Cómo se resuelve |
+| --- | --- | --- | --- |
+| 1 | `DOSA_BASE_URL` presente y HTTPS | **ausente** | Panel: `https://dosasystem.com`. **Obligatoria ANTES de encender la bandera**: sin ella el backend **no arranca** (`DOSA_STARTUP_BASE_URL_REQUIRED`) |
+| 2 | `DOSA_EMISSION_ENABLED=true` | `false` | Panel, **en el mismo guardado** que el punto 1 |
+| 3 | `DOSA_EMISSION_ENVIRONMENT=TEST` | ausente (el código ya asume `TEST`) | Panel, explícita por claridad |
+| 4 | `ecf_company_configurations.provider` = `DOSA` | **`ALANUBE`** | Endpoint de configuración e-CF, que ya solo acepta `DOSA` |
+| 5 | Fila de credencial `test` en `ACTIVE` | **no existe fila `test`**; el paquete completo está en la fila `production` con `PENDING_CONFIRMATION` | Reclasificar con el script + activación normal del producto |
+| 6 | Secuencia e-NCF disponible | sin verificar | Pantalla de rango de numeración |
+
+**No hay que tocar**: `DOSA_PRODUCTION_EMISSION_ENABLED=false` (queda apagado y
+es lo que impide emitir de verdad) y `DOSA_TEST_API_KEY` (la emisión **no la
+usa**: lee la credencial cifrada de la empresa desde la bóveda).
+
+### Por qué no existe la fila `test`
+
+El paquete del webhook se guardaba bajo el `ambiente` declarado por el evento
+(`Produccion`), con las tres claves juntas dentro. Este release lo corrige
+(`ca9dd3b0`) repartiendo por nombre de clave. Para el dato **ya guardado** existe
+una herramienta manual:
+
+```bash
+# 1) Ver qué haría (no escribe nada)
+npm run dosa:credentials:reclassify -- --company-id 165e3fca-6225-479b-8805-d2205f10536c --rnc 133080206
+
+# 2) Aplicar (exige la confirmación en el entorno)
+DOSA_CREDENTIALS_RECLASSIFY=CONFIRM \
+  npm run dosa:credentials:reclassify -- --company-id 165e3fca-6225-479b-8805-d2205f10536c --rnc 133080206 --apply
+```
+
+- El script vive en la **imagen**: solo puede ejecutarse **después de desplegar**.
+- Dry-run por defecto; `--apply` exige `DOSA_CREDENTIALS_RECLASSIFY=CONFIRM`.
+- **No activa nada**: lo que escribe entra como `PENDING_CONFIRMATION`.
+- **No toca** la fila de origen; es idempotente por huella.
+
+Después, la credencial `test` se activa por la vía normal del producto (abrir la
+pantalla de estado e-CF o registrar la autorización DGII), que es la que produce
+la evidencia que la activación exige.
+
+### Orden seguro
+
+1. Fusionar el PR y desplegar backend (las variables 1–3 se pueden poner antes o
+   en el mismo guardado; **nunca** la 2 sin la 1).
+2. Cambiar `provider` a `DOSA` en la configuración e-CF de la empresa.
+3. Dry-run de la reclasificación → `--apply` → comprobar que aparece la fila `test`.
+4. Activar la credencial desde la pantalla de estado e-CF del cliente.
+5. Confirmar la secuencia e-NCF y recién entonces emitir **un** comprobante TEST.
+6. `DOSA_PRODUCTION_EMISSION_ENABLED` se queda en `false` hasta que el TEST esté
+   validado; emitir de verdad es un acto aparte, con su propia autorización.
