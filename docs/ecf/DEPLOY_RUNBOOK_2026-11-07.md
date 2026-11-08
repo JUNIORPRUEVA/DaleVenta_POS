@@ -118,6 +118,30 @@ el código de este release. Solo se extrajo la parte izquierda de cada
 una entrada vacía. No rompe el arranque, pero conviene limpiarlo la próxima vez
 que se editen las variables del panel.
 
+### 3.5 Panel de EasyPanel — verificado el 2026-11-07
+
+**HECHO**: el propietario mostró la lista de variables del panel. Comparada con
+el spec del servicio en ejecución:
+
+| Variable | Panel | Servicio | Veredicto |
+| --- | --- | --- | --- |
+| `DOSA_SESSION_BASE_URL` | `https://dosasystem.com` | igual | Correcto (HTTPS, sin barra final) |
+| `DOSA_SESSION_URL_KEYS` | `1:…` (truncado en la captura) | contiene **versiones 1 y 2** | Correcto: la activa es `2` y existe |
+| `DOSA_SESSION_URL_ACTIVE_KEY_VERSION` | `2` | `2` | Correcto |
+| `DOSA_WEBHOOK_SIGNATURE_STRATEGY` | `HMAC_SHA2…` | `HMAC_SHA256_TIMESTAMPED` | Correcto, valor exacto |
+| `DOSA_CREDENTIALS_MASTER_KEY` | presente | 44 caracteres | Correcto |
+| `ECF_PORTAL_AUTO_ENROLL_ENABLED` | `true` | **ausente** | Normal: el panel va por delante; «Implementar» la aplicará (ver §5) |
+| `DOSA_SECRET_KEY` | `sk_SU_LLAVE_SECRETA` | 19 caracteres | **Marcador de ejemplo, no es una clave real** |
+| `DOSA_INCIDENT_MONITOR_ENABLED` | ausente | ausente | Vigilancia de incidencias apagada |
+
+**`DOSA_SECRET_KEY` es un marcador.** Solo lo usan `dosa-api.client.ts` (con
+`DOSA_API_QUERIES_ENABLED=true`) y `dosa-certification-session.client.ts` (con
+`DOSA_CERTIFICATION_SESSIONS_ENABLED=true`). Las dos banderas están apagadas o
+ausentes, así que **hoy no tiene efecto**. Ojo: la validación de arranque solo
+comprueba el prefijo `sk_`, que el marcador **sí** cumple, así que no falla
+rápido: al encender cualquiera de las dos banderas el rechazo llegará del
+proveedor. **Sustituirla por la clave real de DOSA antes de eso.**
+
 ---
 
 ## 4. Los dos riesgos reales
@@ -190,7 +214,11 @@ imprimir el valor en logs compartidos).
 
 ---
 
-## 5. Decisión de producto pendiente (antes de desplegar)
+## 5. Decisión de producto: `ECF_PORTAL_AUTO_ENROLL_ENABLED`
+
+**HECHO (2026-11-07)**: el panel ya la define en **`true`** y el servicio en
+ejecución todavía no la tiene, así que «Implementar» la aplicará. La decisión
+está tomada; queda escrito aquí qué significa.
 
 `ECF_PORTAL_AUTO_ENROLL_ENABLED` por defecto `true` significa que **cualquier
 empresa que abra el asistente queda autorizada sola** para el portal de
