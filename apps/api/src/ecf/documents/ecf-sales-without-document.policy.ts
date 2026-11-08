@@ -39,7 +39,6 @@ export const ECF_WITHOUT_DOCUMENT_ERRORS = {
   reasonRequired: "ECF_WITHOUT_DOCUMENT_REASON_REQUIRED",
   /** La venta ya tiene un e-CF: registrarla como «sin comprobante» sería falso. */
   saleHasDocument: "ECF_SALES_WITHOUT_DOCUMENT_HAS_ECF",
-  saleAlreadyRegistered: "ECF_SALES_WITHOUT_DOCUMENT_ALREADY_REGISTERED",
   saleNotFound: "ECF_SALES_WITHOUT_DOCUMENT_SALE_NOT_FOUND",
   expectedTypeInvalid: "ECF_WITHOUT_DOCUMENT_EXPECTED_TYPE_INVALID",
 } as const;
