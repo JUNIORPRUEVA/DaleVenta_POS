@@ -41,7 +41,6 @@ import '../../features/catalogo/application/catalog_controller.dart';
 import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
-import '../../features/contabilidad/data/contabilidad_repository.dart';
 import '../../features/ecf/data/ecf_repository.dart';
 import '../../features/ecf/ecf_models.dart';
 import '../../features/price_lists/data/price_lists_repository.dart';
@@ -54,25 +53,6 @@ import 'ecf_pos_fiscal.dart';
 import 'ecf_pos_fiscal_selector.dart';
 import 'fiscal_voucher_options.dart';
 import 'sales_models.dart';
-
-/// Secuencias NCF de la empresa actual.
-///
-/// No es `autoDispose`: se mantiene vivo durante la sesión para no volver a
-/// consultar `/ncf/sequences` en cada entrada al POS. Al depender de
-/// `authStateProvider` se recarga automáticamente al cambiar de empresa,
-/// hacer logout o iniciar sesión con otra empresa (aislamiento multiempresa).
-///
-/// NOTA FISCAL: esta lista es solo informativa (tipos, prefijos, estado). El
-/// siguiente número NCF asignado a una venta se reserva SIEMPRE en el backend
-/// con incremento atómico transaccional (`NcfService.reserveNextNcf`), por lo
-/// que esta caché en memoria nunca garantiza ni duplica numeración fiscal.
-final posNcfSequencesProvider = FutureProvider<List<NcfSequenceModel>>((ref) {
-  final companyId = ref.watch(authStateProvider).user?.companyId ?? '';
-  if (companyId.isEmpty) {
-    return Future.value(const <NcfSequenceModel>[]);
-  }
-  return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
-});
 
 @visibleForTesting
 Set<String> sanitizePosSelectedCategories(
@@ -218,7 +198,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   String? _lastWholesaleManualPriceListId;
   int _wholesalePricingRequest = 0;
   bool _wholesalePricingBusy = false;
-  String? _selectedFiscalVoucherType;
 
   /// Modo fiscal e-CF con el que se cerrará la venta cuando la empresa factura
   /// electrónicamente. `null` = todavía no decidido (se autoselecciona).
@@ -634,7 +613,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       _cart = const [];
       _selectedClient = null;
       _manualPriceListId = null;
-      _selectedFiscalVoucherType = null;
       _selectedCategories.clear();
       _serverCategoryCounts = const <String, int>{};
       _searchCtrl.clear();
@@ -645,7 +623,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     ref.invalidate(catalogControllerProvider);
     ref.invalidate(ventasControllerProvider);
     ref.invalidate(companySettingsProvider);
-    ref.invalidate(posNcfSequencesProvider);
     if (nextCompanyId.isNotEmpty) {
       // La lista paginada se reincia con la nueva empresa (pagina 1) y las
       // categorias se recalculan en el servidor.
@@ -960,7 +937,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             _cart = [];
             _selectedClient = null;
             _manualPriceListId = null;
-            _selectedFiscalVoucherType = null;
             _noteCtrl.clear();
           });
         },
@@ -1160,31 +1136,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     // provocaría una caída silenciosa al talón B01/B02.
     final ecfActive = companySettings?.ecfEnabled == true;
     final ecfModes = ecfPosFiscalModesFromCapabilities(ecfCapabilities);
-    final showFiscalVoucherControl =
-        !ecfActive &&
-        shouldShowFiscalVoucherControl(
-          taxEnabled: taxConfig?.settings.taxEnabled == true,
-          ncfEnabled: taxConfig?.settings.ncfEnabled == true,
-        );
-    final ncfSequences = showFiscalVoucherControl
-        ? ref.watch(posNcfSequencesProvider)
-        : const AsyncValue<List<NcfSequenceModel>>.data([]);
-    final fiscalVoucherOptions = fiscalVoucherOptionsFromConfiguredTypes(
-      taxEnabled: taxConfig?.settings.taxEnabled == true,
-      ncfEnabled: taxConfig?.settings.ncfEnabled == true,
-      configuredTypes: (ncfSequences.valueOrNull ?? const <NcfSequenceModel>[])
-          .where((sequence) => sequence.active && sequence.remaining > 0)
-          .map((sequence) => sequence.voucherType),
-    );
-    if (ncfSequences.hasValue &&
-        shouldResetFiscalVoucherSelection(
-          selectedType: _selectedFiscalVoucherType,
-          options: fiscalVoucherOptions,
-        )) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _selectedFiscalVoucherType = null);
-      });
-    }
     if (ecfActive) {
       // La autoselección depende de los datos del receptor actuales. Si cambian
       // y el vendedor no eligió a mano, se recalcula: con RNC + nombre toca E31,
@@ -1424,8 +1375,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   isCompact: isCompact,
                                   showInlineTotals: showInlineTotals,
                                   taxSummary: cartTaxSummary,
-                                  fiscalVoucherOptions: fiscalVoucherOptions,
-                                  fiscalVoucherLoading: ncfSequences.isLoading,
                                   saleWarehouseContext: saleWarehouseContext,
                                 ),
                               ),
@@ -1688,8 +1637,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
 
   Widget _buildMobileCartPanel({
     required _CartTaxSummary taxSummary,
-    required List<FiscalVoucherOption> fiscalVoucherOptions,
-    required bool fiscalVoucherLoading,
     required _SaleWarehouseContext? saleWarehouseContext,
   }) {
     final theme = Theme.of(context);
@@ -1942,27 +1889,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         compact: true,
                         onSelected: _selectEcfMode,
                       ),
-                    )
-                  else if (fiscalVoucherLoading ||
-                      fiscalVoucherOptions.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _FiscalVoucherSelectorButton(
-                            selectedType: _selectedFiscalVoucherType,
-                            options: fiscalVoucherOptions,
-                            loading: fiscalVoucherLoading,
-                            onPressed: () =>
-                                _openFiscalVoucherPicker(fiscalVoucherOptions),
-                          ),
-                          if (_b01ClientRequirementMissing) ...[
-                            const SizedBox(height: 4),
-                            const _B01ClientRequirementNotice(),
-                          ],
-                        ],
-                      ),
                     ),
                   if (saleWarehouseContext != null) ...[
                     const SizedBox(height: 4),
@@ -2055,7 +1981,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                                   _cart = [];
                                   _selectedClient = null;
                                   _manualPriceListId = null;
-                                  _selectedFiscalVoucherType = null;
                                   _noteCtrl.clear();
                                 }),
                           icon: const Icon(Icons.delete_sweep_outlined),
@@ -2138,16 +2063,12 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     required bool isCompact,
     required bool showInlineTotals,
     required _CartTaxSummary taxSummary,
-    required List<FiscalVoucherOption> fiscalVoucherOptions,
-    required bool fiscalVoucherLoading,
     required _SaleWarehouseContext? saleWarehouseContext,
   }) {
     final isWide = MediaQuery.of(context).size.width >= 1024;
     if (!isWide) {
       return _buildMobileCartPanel(
         taxSummary: taxSummary,
-        fiscalVoucherOptions: fiscalVoucherOptions,
-        fiscalVoucherLoading: fiscalVoucherLoading,
         saleWarehouseContext: saleWarehouseContext,
       );
     }
@@ -2391,22 +2312,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         missingBuyer: _ecfModeMissingBuyer,
                         compact: true,
                         onSelected: _selectEcfMode,
-                      )
-                    else if (fiscalVoucherLoading ||
-                        fiscalVoucherOptions.isNotEmpty) ...[
-                      _FiscalVoucherSelectorButton(
-                        selectedType: _selectedFiscalVoucherType,
-                        options: fiscalVoucherOptions,
-                        loading: fiscalVoucherLoading,
-                        onPressed: () =>
-                            _openFiscalVoucherPicker(fiscalVoucherOptions),
                       ),
-                      if (_b01ClientRequirementMissing) ...[
-                        const SizedBox(height: 4),
-                        const _B01ClientRequirementNotice(),
-                      ],
-                      const SizedBox(height: 4),
-                    ],
                     if (saleWarehouseContext != null) ...[
                       _SaleWarehouseIndicator(
                         contextInfo: saleWarehouseContext,
@@ -2475,7 +2381,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                             _cart = [];
                             _selectedClient = null;
                             _manualPriceListId = null;
-                            _selectedFiscalVoucherType = null;
                             _noteCtrl.clear();
                           }),
                           style: OutlinedButton.styleFrom(
@@ -2708,53 +2613,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     }
   }
 
-  Future<void> _openFiscalVoucherPicker(
-    List<FiscalVoucherOption> options,
-  ) async {
-    if (options.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No hay comprobantes fiscales configurados.'),
-        ),
-      );
-      return;
-    }
-    final selected = await showModalBottomSheet<String?>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.receipt_long_outlined),
-                title: const Text(fiscalVoucherNoneLabel),
-                selected: _selectedFiscalVoucherType == null,
-                onTap: () => Navigator.of(context).pop(''),
-              ),
-              for (final option in options)
-                ListTile(
-                  leading: const Icon(Icons.description_outlined),
-                  title: Text(option.label),
-                  selected: _selectedFiscalVoucherType == option.type,
-                  onTap: () => Navigator.of(context).pop(option.type),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-    if (!mounted || selected == null) return;
-
-    final normalized = selected.trim().toUpperCase();
-    if (normalized.isEmpty) {
-      setState(() => _selectedFiscalVoucherType = null);
-      return;
-    }
-    setState(() => _selectedFiscalVoucherType = normalized);
-  }
-
   String? get _selectedClientTaxId => _selectedClient?.taxId?.trim();
 
   String? get _selectedClientFiscalName {
@@ -2763,10 +2621,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final businessName = _selectedClient?.businessName?.trim();
     return businessName == null || businessName.isEmpty ? null : businessName;
   }
-
-  bool get _b01ClientRequirementMissing =>
-      _selectedFiscalVoucherType == 'B01' &&
-      !isB01FiscalClientValid(_selectedClientTaxId, _selectedClientFiscalName);
 
   // Estado e-CF para los paneles del carrito. Se lee del proveedor, que el
   // `build` principal ya observa: cuando cambia la configuración, todo se
@@ -2808,7 +2662,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     );
   }
 
-  Future<void> _showB01ClientRequiredDialog(String message) async {
+  Future<void> _showEcfBuyerRequiredDialog(String message) async {
     final shouldSelectClient = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -3687,31 +3541,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       return;
     }
 
-    if (_selectedFiscalVoucherType == 'B01') {
-      if (_selectedClient == null) {
-        await _showB01ClientRequiredDialog(
-          'Para emitir un comprobante B01 debes seleccionar un cliente.',
-        );
-        return;
-      }
-      final hasTaxId = normalizeTaxId(_selectedClientTaxId).length >= 9;
-      final hasName = (_selectedClientFiscalName ?? '').trim().isNotEmpty;
-      if (!hasTaxId) {
-        await _showB01ClientRequiredDialog(
-          'El cliente seleccionado debe tener RNC/Cédula para emitir este comprobante.',
-        );
-        return;
-      }
-      if (!hasName) {
-        await _showB01ClientRequiredDialog(
-          'El cliente debe tener nombre para emitir este comprobante.',
-        );
-        return;
-      }
-    }
-
     // La empresa factura electrónicamente: el destino fiscal de la venta lo
-    // decide el comprobante seleccionado, no un talonario B01/B02.
+    // decide el comprobante electrónico seleccionado.
     final ecfActive = _ecfActive;
     final ecfModes = _ecfModes;
     final ecfMode = _selectedEcfMode;
@@ -3729,7 +3560,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
             _selectedClientTaxId,
             _selectedClientFiscalName,
           )) {
-        await _showB01ClientRequiredDialog(
+        await _showEcfBuyerRequiredDialog(
           'E31 exige un cliente con RNC/Cédula y nombre. Selecciona el '
           'cliente o emite E32 de consumo.',
         );
@@ -3752,7 +3583,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     if (!mounted) return;
 
     debugPrint(
-      '[FISCAL] voucherType=${_selectedFiscalVoucherType ?? 'none'} '
+      '[FISCAL] ecf=${ecfActive ? (ecfMode?.code ?? 'none') : 'sin e-CF'} '
       'customerId=${_selectedClient?.id ?? 'none'} '
       'customerTaxId=${_selectedClientTaxId ?? 'none'} '
       'customerLegalName=${_selectedClientFiscalName ?? 'none'}',
@@ -3813,7 +3644,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         _cart = [];
         _selectedClient = null;
         _manualPriceListId = null;
-        _selectedFiscalVoucherType = null;
         _selectedEcfMode = null;
         _ecfModeChosenByUser = false;
         _ecfAutoSelectionKey = null;
@@ -3881,7 +3711,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final tax = _cartTaxSummary(
       ref.read(productTaxUiConfigProvider).valueOrNull,
     );
-    final ecfActive = _ecfActive;
     final sale = await ref
         .read(ventasRepositoryProvider)
         .createSale(
@@ -3897,9 +3726,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           priceListId: _effectiveManualPriceListId,
           priceListManualOverride: _hasManualPriceListOverride,
           expectedTotalSold: tax.total,
-          // Con e-CF activa la venta NO consume talón B01/B02: su comprobante
-          // electrónico se prepara después, con numeración autorizada.
-          fiscalVoucherType: ecfActive ? null : _selectedFiscalVoucherType,
+          // La venta NUNCA consume talón B01/B02: su comprobante electrónico se
+          // prepara después, con numeración autorizada por la DGII.
+          fiscalVoucherType: null,
           optimisticTaxableBase: tax.taxableBase,
           optimisticTaxAmount: tax.taxAmount,
           optimisticExemptAmount: tax.exemptAmount,
@@ -4397,72 +4226,6 @@ class _TaxActiveIndicator extends StatelessWidget {
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: color,
             fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FiscalVoucherSelectorButton extends StatelessWidget {
-  const _FiscalVoucherSelectorButton({
-    required this.selectedType,
-    required this.options,
-    required this.loading,
-    required this.onPressed,
-  });
-
-  final String? selectedType;
-  final List<FiscalVoucherOption> options;
-  final bool loading;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasOptions = options.isNotEmpty;
-    return OutlinedButton.icon(
-      onPressed: loading || !hasOptions ? null : onPressed,
-      icon: loading
-          ? const SizedBox.square(
-              dimension: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.receipt_long_outlined, size: 16),
-      label: Text(
-        'Comprobante: ${fiscalVoucherLabel(selectedType)}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-      ),
-      style: OutlinedButton.styleFrom(
-        alignment: Alignment.centerLeft,
-        visualDensity: VisualDensity.compact,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        textStyle: const TextStyle(fontSize: 11),
-      ),
-    );
-  }
-}
-
-class _B01ClientRequirementNotice extends StatelessWidget {
-  const _B01ClientRequirementNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.error;
-    return Row(
-      children: [
-        Icon(Icons.info_outline_rounded, size: 14, color: color),
-        const SizedBox(width: 5),
-        Expanded(
-          child: Text(
-            'Requiere un cliente con RNC/Cédula y nombre.',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w800,
-            ),
           ),
         ),
       ],

@@ -437,7 +437,6 @@ Future<_TestAuthController> _pumpPos(
         dioProvider.overrideWithValue(_buildServerBackedDio(products)),
         warehousesProvider.overrideWith((ref) async => warehouses),
         warehouseTerminalsProvider.overrideWith((ref) async => terminals),
-        posNcfSequencesProvider.overrideWith((ref) async => const []),
       ],
       child: const MaterialApp(home: RegistrarVentaScreen()),
     ),
