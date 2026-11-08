@@ -1,7 +1,7 @@
 # Facturación unificada del POS sobre e-CF — decisión y plan
 
-Fecha: 2026-11-08 · Estado: **decisión tomada, implementación pendiente**
-Rama de trabajo: `agent/ecf-pos-unified-invoicing` (a crear desde `production-main`)
+Fecha: 2026-11-08 · Estado: **implementado en rama `agent/ecf-pos-unified-invoicing`; sin push ni despliegue**
+Rama de trabajo: `agent/ecf-pos-unified-invoicing` (apilada sobre el release pendiente)
 
 ## 1. Decisión del propietario (HECHO)
 
@@ -15,7 +15,13 @@ Dos modos por empresa:
 | `allowSalesWithoutEcf` | Comportamiento del POS |
 | --- | --- |
 | `false` (por defecto) | El tipo se selecciona **automáticamente** (E31 o E32). Se muestra antes de cobrar y solo se corrige entre tipos permitidos. **«Normal» no existe** como opción |
-| `true` | Aparecen **Normal**, E31 y E32. **Normal** viene preseleccionado en cada venta nueva. Exige **motivo** y registra la excepción |
+| `true` | Aparecen **Normal**, E31 y E32. La preselección sigue siendo **E31/E32**; **Normal** nunca se preselecciona y exige **motivo**, que queda registrado |
+
+> **Corrección sobre el borrador inicial.** El primer borrador de esta tabla decía que con
+> la bandera activa «Normal» venía preseleccionado. Se cambió a propósito: preseleccionar
+> la excepción convertiría en camino por defecto la venta **sin** comprobante, justo lo
+> contrario de «el POS genera automáticamente el comprobante correspondiente». La opción
+> sigue disponible, pero hay que elegirla y justificarla.
 
 Regla automática acordada: **cliente con RNC → E31**; **sin RNC → E32**; si el cliente
 pide consumo teniendo RNC, se permite E32 entre los tipos habilitados. Si falta un dato
@@ -68,7 +74,62 @@ Conclusión: **no es un interruptor**, es integrar dos sistemas que hoy no se ha
 - Sin emisión duplicada: se reutiliza la idempotencia existente.
 - Permisos, rangos e-NCF, estado de certificación y aislamiento multiempresa intactos.
 
-## 5. Qué falta para arrancar
+## 5. Estado de implementación (HECHO)
 
-Nada de producto. Falta ejecutar la Fase 1 en una rama nueva, con sus pruebas, y no
-tocar la interfaz hasta que la numeración E32 esté cerrada.
+Rama `agent/ecf-pos-unified-invoicing`, apilada sobre el release pendiente porque la
+numeración necesita la autorización DGII declarada de la rama anterior.
+
+### Fase 1 — cerrada
+- `EcfSequenceService` numera `E31`, `E32` y `E34`; patrón `E(31|32|34)`.
+- `prepareConsumoFromSale` reutiliza el orquestador de emisión: asigna el e-NCF del
+  rango autorizado, lo persiste y es idempotente por venta (un reintento reutiliza el
+  número, no quema otro). Si no hay e-NCF, falla en cerrado.
+- `DosaEmissionDispatchService` acepta los mismos tipos que su compuerta fiscal, sin
+  repetir la lista.
+- `allocatable` se deriva del motor real en lugar de estar cableado.
+- Cobertura nueva: rango propio de E32, idempotencia, rechazo sin autorización DGII y
+  bandeja mostrando el e-NCF. Suites Postgres: 47/47 en secuencias, consumo,
+  preparación y consulta.
+
+### Fase 2 — cerrada
+- Migración aditiva `20261108180000_ecf_allow_sales_without_document`:
+  `allow_sales_without_ecf` (default `false`) y tabla `ecf_sales_without_document`.
+- `EcfSalesWithoutDocumentService` rechaza registrar cuando la empresa no habilitó la
+  excepción o cuando la venta ya tiene comprobante (NCF legado o e-CF preparado), y es
+  idempotente por venta.
+- El aviso fiscal vive en el servidor y viaja en las capacidades.
+- Interfaz: interruptor con el aviso completo en rojo y confirmación explícita.
+- Cobertura: 9 pruebas de política + 9 de integración Postgres + 8 de widget.
+
+### Fase 3 — cerrada en lo verificable sin emisión real
+- `modules/ventas/ecf_pos_fiscal.dart` decide qué se ofrece y qué se preselecciona
+  (RNC + nombre → E31; sin receptor → E32; nunca E34; «Normal» solo con la bandera).
+- `EcfPosFiscalSelector` sustituye visualmente al selector B01/B02 cuando la empresa
+  factura electrónicamente; B01/B02 siguen existiendo para las demás empresas.
+- El cierre de venta envía `fiscalVoucherType: null` con e-CF activo, pide el motivo
+  antes de cobrar cuando es «Normal», y prepara el comprobante después de guardar. Un
+  fallo de preparación **no** degrada la venta: se informa y se resuelve en Mis Ventas.
+- Cobertura: 15 pruebas de la regla de selección.
+
+### Pendiente de una autorización explícita
+- **Emission real**: E32 ya numera y se prepara, pero enviar al proveedor sigue
+  gobernado por las banderas de certificación de cada empresa.
+- **Retiro físico del código B01/B02**: se retiró del flujo de venta de las empresas con
+  e-CF, pero el módulo legado (`/ncf`, `fiscal_voucher_options.dart`, impresión con
+  `ncf`) sigue vivo porque hay empresas que todavía facturan con NCF tradicionales.
+  Borrarlo exige migrar esos talonarios primero; hacerlo ahora rompería su facturación.
+
+## 6. Riesgo conocido y su remedio (HIPÓTESIS no verificada en producción)
+
+El POS decide si usa e-CF leyendo `GET /ecf/capabilities`, que exige el permiso
+`viewEcfDocuments`. Si un vendedor **no** tiene ese permiso, o la llamada falla, el POS
+no puede saber que su empresa factura electrónicamente y cae al selector legado.
+
+Remedio recomendado (**RECOMENDACIÓN**, no implementado aquí porque cambia la
+permisología del módulo): exponer una proyección mínima para el POS
+(`enabled`, `allowSalesWithoutEcf`, aviso y tipos) bajo el permiso que el cajero ya
+necesita para vender, en lugar de reutilizar el endpoint de administración. Mientras
+tanto, el backend sigue siendo la última barrera: rechaza un talón si `ncfEnabled` está
+apagado y rechaza la excepción si la bandera está apagada.
+
+

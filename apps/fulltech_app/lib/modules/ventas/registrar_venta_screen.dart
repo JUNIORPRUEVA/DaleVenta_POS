@@ -42,12 +42,16 @@ import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/contabilidad/data/contabilidad_repository.dart';
+import '../../features/ecf/data/ecf_repository.dart';
+import '../../features/ecf/ecf_models.dart';
 import '../../features/price_lists/data/price_lists_repository.dart';
 import '../../features/warehouses/data/warehouse_repository.dart';
 import '../cash/cash_dialogs.dart';
 import '../clientes/cliente_model.dart';
 import 'application/ventas_controller.dart';
 import 'data/ventas_repository.dart';
+import 'ecf_pos_fiscal.dart';
+import 'ecf_pos_fiscal_selector.dart';
 import 'fiscal_voucher_options.dart';
 import 'sales_models.dart';
 
@@ -215,6 +219,25 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   int _wholesalePricingRequest = 0;
   bool _wholesalePricingBusy = false;
   String? _selectedFiscalVoucherType;
+
+  /// Modo fiscal e-CF con el que se cerrará la venta cuando la empresa factura
+  /// electrónicamente. `null` = todavía no decidido (se autoselecciona).
+  EcfPosFiscalMode? _selectedEcfMode;
+
+  /// El vendedor eligió el modo a mano: la autoselección deja de imponerse.
+  bool _ecfModeChosenByUser = false;
+
+  /// Firma del último estado de receptor usado para autoseleccionar, para no
+  /// repintar en cada build.
+  String? _ecfAutoSelectionKey;
+
+  /// Motivo declarado cuando se elige «Normal». Se pide antes de cobrar y se
+  /// envía al registro de excepciones después de guardar la venta.
+  String? _ecfWithoutDocumentReason;
+
+  /// Vencimiento de la secuencia del E31 (campo `idDoc.sequenceDueDate`, que el
+  /// contrato del proveedor exige). Se pide, no se inventa.
+  String? _ecfSequenceDueDate;
 
   String _money(double value) => formatRdCurrencyAccounting(value);
 
@@ -1126,10 +1149,23 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           )
         : null;
     final cartTaxSummary = _cartTaxSummary(taxConfig);
-    final showFiscalVoucherControl = shouldShowFiscalVoucherControl(
-      taxEnabled: taxConfig?.settings.taxEnabled == true,
-      ncfEnabled: taxConfig?.settings.ncfEnabled == true,
-    );
+    // Sustitución del selector fiscal antiguo: si la empresa factura
+    // electrónicamente, el POS deja de ofrecer B01/B02 y ofrece el comprobante
+    // electrónico que corresponde. B01/B02 siguen existiendo para las empresas
+    // que NO usan e-CF, porque quitarles el talón les rompería la facturación.
+    final ecfCapabilities = ref.watch(ecfCapabilitiesProvider).valueOrNull;
+    // Quién factura electrónicamente lo dice la CONFIGURACIÓN DE EMPRESA, que ya
+    // viaja en los ajustes que esta pantalla carga. No se deduce del endpoint de
+    // capacidades porque ese exige permiso de administración: un cajero sin él
+    // provocaría una caída silenciosa al talón B01/B02.
+    final ecfActive = companySettings?.ecfEnabled == true;
+    final ecfModes = ecfPosFiscalModesFromCapabilities(ecfCapabilities);
+    final showFiscalVoucherControl =
+        !ecfActive &&
+        shouldShowFiscalVoucherControl(
+          taxEnabled: taxConfig?.settings.taxEnabled == true,
+          ncfEnabled: taxConfig?.settings.ncfEnabled == true,
+        );
     final ncfSequences = showFiscalVoucherControl
         ? ref.watch(posNcfSequencesProvider)
         : const AsyncValue<List<NcfSequenceModel>>.data([]);
@@ -1149,7 +1185,33 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         if (mounted) setState(() => _selectedFiscalVoucherType = null);
       });
     }
-
+    if (ecfActive) {
+      // La autoselección depende de los datos del receptor actuales. Si cambian
+      // y el vendedor no eligió a mano, se recalcula: con RNC + nombre toca E31,
+      // sin ellos toca E32.
+      final key =
+          '${normalizeTaxId(_selectedClientTaxId)}|'
+          '${(_selectedClientFiscalName ?? '').trim()}|'
+          '${ecfModes.join(",")}';
+      if (key != _ecfAutoSelectionKey) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() {
+            _ecfAutoSelectionKey = key;
+            if (!_ecfModeChosenByUser) {
+              _selectedEcfMode = defaultEcfPosFiscalMode(
+                available: ecfModes,
+                clientTaxId: _selectedClientTaxId,
+                clientLegalName: _selectedClientFiscalName,
+              );
+              if (_selectedEcfMode != EcfPosFiscalMode.normal) {
+                _ecfWithoutDocumentReason = null;
+              }
+            }
+          });
+        });
+      }
+    }
     return Scaffold(
       backgroundColor: isWide ? null : AppColors.background,
       appBar: CustomAppBar(
@@ -1869,7 +1931,20 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         value: _money(taxSummary.taxAmount),
                       ),
                   ],
-                  if (fiscalVoucherLoading || fiscalVoucherOptions.isNotEmpty)
+                  if (_ecfActive)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: EcfPosFiscalSelector(
+                        modes: _ecfModes,
+                        selected: _selectedEcfMode,
+                        warning: _ecfCaps?.salesWithoutEcfWarning ?? '',
+                        missingBuyer: _ecfModeMissingBuyer,
+                        compact: true,
+                        onSelected: _selectEcfMode,
+                      ),
+                    )
+                  else if (fiscalVoucherLoading ||
+                      fiscalVoucherOptions.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Column(
@@ -2308,7 +2383,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                         ),
                       const SizedBox(height: 2),
                     ],
-                    if (fiscalVoucherLoading ||
+                    if (_ecfActive)
+                      EcfPosFiscalSelector(
+                        modes: _ecfModes,
+                        selected: _selectedEcfMode,
+                        warning: _ecfCaps?.salesWithoutEcfWarning ?? '',
+                        missingBuyer: _ecfModeMissingBuyer,
+                        compact: true,
+                        onSelected: _selectEcfMode,
+                      )
+                    else if (fiscalVoucherLoading ||
                         fiscalVoucherOptions.isNotEmpty) ...[
                       _FiscalVoucherSelectorButton(
                         selectedType: _selectedFiscalVoucherType,
@@ -2453,6 +2537,166 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     }
   }
 
+  /// El vendedor eligió el comprobante: la autoselección deja de imponerse.
+  void _selectEcfMode(EcfPosFiscalMode mode) {
+    setState(() {
+      _ecfModeChosenByUser = true;
+      _selectedEcfMode = mode;
+      if (mode != EcfPosFiscalMode.normal) {
+        _ecfWithoutDocumentReason = null;
+      }
+    });
+  }
+
+  /// Pide el motivo de una venta sin comprobante y exige contenido real.
+  /// El aviso fiscal se muestra íntegro, tal como lo envía el servidor.
+  Future<String?> _askEcfWithoutDocumentReason() async {
+    final warning =
+        ref.read(ecfCapabilitiesProvider).valueOrNull?.salesWithoutEcfWarning ??
+        '';
+    final controller = TextEditingController(
+      text: _ecfWithoutDocumentReason ?? '',
+    );
+    String? errorText;
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Venta sin comprobante electrónico'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (warning.isNotEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.errorBorder),
+                    ),
+                    child: Text(
+                      warning,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.4,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 3,
+                  maxLength: 500,
+                  decoration: InputDecoration(
+                    labelText: 'Motivo (obligatorio)',
+                    hintText: 'Por qué esta venta no lleva comprobante',
+                    errorText: errorText,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (!isEcfWithoutDocumentReasonValid(value)) {
+                  setDialogState(() {
+                    errorText =
+                        'Escribe el motivo (al menos '
+                        '$ecfWithoutDocumentReasonMinLength caracteres).';
+                  });
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result;
+  }
+
+  /// Pide el vencimiento de la secuencia del E31 (exigido por el contrato).
+  Future<String?> _askEcfSequenceDueDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: DateTime(now.year + 2, 12, 31),
+      helpText: 'Vencimiento de la secuencia (E31)',
+    );
+    if (picked == null) return null;
+    final month = picked.month.toString().padLeft(2, '0');
+    final day = picked.day.toString().padLeft(2, '0');
+    return '${picked.year}-$month-$day';
+  }
+
+  /// Aplica el modo fiscal elegido DESPUÉS de guardar la venta.
+  ///
+  /// La venta ya existe y no se deshace: si la preparación falla se informa con
+  /// claridad y el comprobante se puede preparar desde Mis Ventas. Nunca se
+  /// degrada la venta a «sin comprobante» por un error.
+  Future<String?> _applyEcfFiscalMode(
+    SaleModel sale,
+    EcfPosFiscalMode? mode,
+  ) async {
+    if (mode == null) return null;
+    final repository = ref.read(ecfRepositoryProvider);
+    try {
+      if (mode == EcfPosFiscalMode.normal) {
+        final reason = (_ecfWithoutDocumentReason ?? '').trim();
+        if (!isEcfWithoutDocumentReasonValid(reason)) {
+          return 'La venta se guardó, pero no se registró el motivo de la '
+              'excepción.';
+        }
+        await repository.registerSaleWithoutDocument(
+          saleId: sale.id,
+          reason: reason,
+          expectedDocumentType: 'E32',
+        );
+        return null;
+      }
+      // El POS cobra el total: no hay crédito, así que la forma de pago del
+      // contrato es 1 (contado) y el ingreso 1 (operaciones de venta).
+      final outcome = mode == EcfPosFiscalMode.e31
+          ? await repository.prepareFromSale(
+              saleId: sale.id,
+              paymentType: 1,
+              incomeType: 1,
+              sequenceDueDate: _ecfSequenceDueDate ?? '',
+            )
+          : await repository.prepareConsumoFromSale(
+              saleId: sale.id,
+              paymentType: 1,
+              incomeType: 1,
+            );
+      if (!outcome.ok) {
+        return 'La venta se guardó, pero el comprobante ${mode.code} no se '
+            'pudo preparar: ${outcome.message}';
+      }
+      return null;
+    } catch (error) {
+      return 'La venta se guardó, pero el comprobante ${mode.code} no se pudo '
+          'preparar. Prepáralo desde Mis Ventas.';
+    }
+  }
+
   Future<void> _openFiscalVoucherPicker(
     List<FiscalVoucherOption> options,
   ) async {
@@ -2464,7 +2708,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       );
       return;
     }
-
     final selected = await showModalBottomSheet<String?>(
       context: context,
       showDragHandle: true,
@@ -2513,6 +2756,46 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
   bool get _b01ClientRequirementMissing =>
       _selectedFiscalVoucherType == 'B01' &&
       !isB01FiscalClientValid(_selectedClientTaxId, _selectedClientFiscalName);
+
+  // Estado e-CF para los paneles del carrito. Se lee del proveedor, que el
+  // `build` principal ya observa: cuando cambia la configuración, todo se
+  // reconstruye con el valor nuevo.
+  EcfCapabilities? get _ecfCaps =>
+      ref.read(ecfCapabilitiesProvider).valueOrNull;
+
+  /// La empresa factura electrónicamente. Sale de la configuración de empresa
+  /// (fuente que el POS ya tiene), no de las capacidades: así un cajero sin el
+  /// permiso `viewEcfDocuments` no cae al talón legado por un 403.
+  bool get _ecfActive =>
+      ref.read(companySettingsProvider).valueOrNull?.ecfEnabled == true;
+
+  List<EcfPosFiscalMode> get _ecfModes =>
+      ecfPosFiscalModesFromCapabilities(_ecfCaps);
+
+  /// El modo elegido exige receptor y todavía no está identificado.
+  bool get _ecfModeMissingBuyer =>
+      _selectedEcfMode == EcfPosFiscalMode.e31 &&
+      !ecfBuyerIdentityComplete(
+        _selectedClientTaxId,
+        _selectedClientFiscalName,
+      );
+
+  /// Aviso bloqueante cuando el modo fiscal e-CF no se puede aplicar.
+  Future<void> _showEcfBlockedDialog(String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Comprobante electrónico'),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _showB01ClientRequiredDialog(String message) async {
     final shouldSelectClient = await showDialog<bool>(
@@ -3384,7 +3667,11 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           item.qty <= 0 || item.priceSoldUnit < 0 || item.costUnitSnapshot < 0,
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La cantidad de cada producto debe ser mayor que cero. El precio y el costo no pueden ser negativos.')),
+        const SnackBar(
+          content: Text(
+            'La cantidad de cada producto debe ser mayor que cero. El precio y el costo no pueden ser negativos.',
+          ),
+        ),
       );
       return;
     }
@@ -3412,6 +3699,47 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       }
     }
 
+    // La empresa factura electrónicamente: el destino fiscal de la venta lo
+    // decide el comprobante seleccionado, no un talonario B01/B02.
+    final ecfActive = _ecfActive;
+    final ecfModes = _ecfModes;
+    final ecfMode = _selectedEcfMode;
+    if (ecfActive) {
+      if (ecfMode == null || ecfModes.isEmpty) {
+        await _showEcfBlockedDialog(
+          'Esta empresa factura electrónicamente y el POS no pudo determinar '
+          'qué comprobante corresponde. Revisa la configuración e-CF y la '
+          'numeración autorizada por la DGII antes de cobrar.',
+        );
+        return;
+      }
+      if (ecfMode.requiresBuyer &&
+          !ecfBuyerIdentityComplete(
+            _selectedClientTaxId,
+            _selectedClientFiscalName,
+          )) {
+        await _showB01ClientRequiredDialog(
+          'E31 exige un cliente con RNC/Cédula y nombre. Selecciona el '
+          'cliente o emite E32 de consumo.',
+        );
+        return;
+      }
+      if (ecfMode == EcfPosFiscalMode.e31 &&
+          (_ecfSequenceDueDate ?? '').trim().isEmpty) {
+        final dueDate = await _askEcfSequenceDueDate();
+        if (dueDate == null) return;
+        setState(() => _ecfSequenceDueDate = dueDate);
+      }
+      if (ecfMode == EcfPosFiscalMode.normal) {
+        // El motivo se pide ANTES de cobrar: si se cancela, no se cierra la venta.
+        final reason = await _askEcfWithoutDocumentReason();
+        if (reason == null) return;
+        setState(() => _ecfWithoutDocumentReason = reason);
+      }
+    }
+    // Los diálogos fiscales anteriores pueden haber desmontado la pantalla.
+    if (!mounted) return;
+
     debugPrint(
       '[FISCAL] voucherType=${_selectedFiscalVoucherType ?? 'none'} '
       'customerId=${_selectedClient?.id ?? 'none'} '
@@ -3438,6 +3766,10 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         clientRequestId: saleAttemptClientRequestId,
       );
       if (created == null) return;
+      // La venta ya existe: ahora se le asigna su comprobante electrónico (o se
+      // registra la excepción). Un fallo aquí NO deshace la venta y no la
+      // degrada a «sin comprobante»: se informa y se resuelve desde Mis Ventas.
+      final ecfIssue = await _applyEcfFiscalMode(created, ecfMode);
       debugPrint(
         '[SALE PRINT] cashierSnapshot=${created.userName ?? 'none'} '
         'ncf=${created.ncf ?? 'none'} '
@@ -3471,8 +3803,18 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         _selectedClient = null;
         _manualPriceListId = null;
         _selectedFiscalVoucherType = null;
+        _selectedEcfMode = null;
+        _ecfModeChosenByUser = false;
+        _ecfAutoSelectionKey = null;
+        _ecfWithoutDocumentReason = null;
+        _ecfSequenceDueDate = null;
         _noteCtrl.clear();
       });
+
+      if (ecfIssue != null && mounted) {
+        await _showEcfBlockedDialog(ecfIssue);
+        if (!mounted) return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(saleSavedConfirmationMessage(created))),
@@ -3485,7 +3827,8 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback: 'No pudimos confirmar el resultado del cobro. Revisa el historial con el encargado antes de volver a cobrar.',
+              fallback:
+                  'No pudimos confirmar el resultado del cobro. Revisa el historial con el encargado antes de volver a cobrar.',
             ),
           ),
         ),
@@ -3527,6 +3870,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
     final tax = _cartTaxSummary(
       ref.read(productTaxUiConfigProvider).valueOrNull,
     );
+    final ecfActive = _ecfActive;
     final sale = await ref
         .read(ventasRepositoryProvider)
         .createSale(
@@ -3542,7 +3886,9 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           priceListId: _effectiveManualPriceListId,
           priceListManualOverride: _hasManualPriceListOverride,
           expectedTotalSold: tax.total,
-          fiscalVoucherType: _selectedFiscalVoucherType,
+          // Con e-CF activa la venta NO consume talón B01/B02: su comprobante
+          // electrónico se prepara después, con numeración autorizada.
+          fiscalVoucherType: ecfActive ? null : _selectedFiscalVoucherType,
           optimisticTaxableBase: tax.taxableBase,
           optimisticTaxAmount: tax.taxAmount,
           optimisticExemptAmount: tax.exemptAmount,

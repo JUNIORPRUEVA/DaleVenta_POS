@@ -506,10 +506,7 @@ class _EcfSalesWithoutDocumentSectionState
                   ),
                 )
               else
-                Switch(
-                  value: enabled,
-                  onChanged: canManage ? _toggle : null,
-                ),
+                Switch(value: enabled, onChanged: canManage ? _toggle : null),
             ],
           ),
           if (enabled && warning.isNotEmpty) ...[
