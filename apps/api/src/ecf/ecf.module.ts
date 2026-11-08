@@ -9,6 +9,7 @@ import {
 import { AlanubeReconciliationService } from "./alanube/alanube-reconciliation.service";
 import { EcfDocumentIdempotencyService } from "./documents/ecf-document-idempotency.service";
 import { EcfDocumentQueryService } from "./documents/ecf-document-query.service";
+import { EcfSalesWithoutDocumentService } from "./documents/ecf-sales-without-document.service";
 import { EcfLineClassificationService } from "./documents/ecf-line-classification.service";
 import { EcfEmissionService } from "./documents/ecf-emission.service";
 import { EcfSimulatedDispatchService } from "./documents/ecf-simulated-dispatch.service";
@@ -174,6 +175,7 @@ import { EcfCertificationActivationController } from "./certification/ecf-certif
     EcfDocumentQueryService,
     EcfLineClassificationService,
     EcfE34CreditService,
+    EcfSalesWithoutDocumentService,
     EcfPreparationService,
     EcfEmissionService,
     EcfSimulatedDispatchService,

@@ -12,12 +12,14 @@ import {
   PrepareEcfCreditNoteDto,
   PrepareEcfDocumentDto,
   RegisterEcfSequenceDto,
+  RegisterEcfSaleWithoutDocumentDto,
   RenewEcfSequenceDto,
   SimulateEcfDispatchDto,
 } from "./dto/ecf-documents.dto";
 import { EcfDocumentQueryService } from "./documents/ecf-document-query.service";
 import { EcfLineClassificationService } from "./documents/ecf-line-classification.service";
 import { EcfPreparationService } from "./documents/ecf-preparation.service";
+import { EcfSalesWithoutDocumentService } from "./documents/ecf-sales-without-document.service";
 import { EcfSimulatedDispatchService } from "./documents/ecf-simulated-dispatch.service";
 import { DosaEmissionDispatchService } from "./provider/dosa/dosa-emission-dispatch.service";
 
@@ -37,6 +39,7 @@ export class EcfDocumentsController {
     private readonly simulatedDispatch: EcfSimulatedDispatchService,
     private readonly lineClassifications: EcfLineClassificationService,
     private readonly dosaDispatch: DosaEmissionDispatchService,
+    private readonly salesWithoutDocument: EcfSalesWithoutDocumentService,
   ) {}
 
   /**
@@ -235,5 +238,29 @@ export class EcfDocumentsController {
     @Body() dto: DeclareEcfAuthorizedSequenceDto,
   ) {
     return this.documents.declareAuthorizedSequence(req.user as TenantUser, dto);
+  }
+
+  /** Excepciones registradas: ventas hechas sin comprobante electrónico. */
+  @Get("sales-without-document")
+  @Permissions("viewEcfDocuments")
+  listSalesWithoutDocument(@Req() req: Request) {
+    return this.salesWithoutDocument.list(req.user as TenantUser);
+  }
+
+  /**
+   * Registra que una venta se hizo SIN comprobante electrónico.
+   *
+   * Es la contraparte de la opción «Normal»: el servidor exige que la empresa
+   * haya habilitado la excepción y guarda el motivo con la venta y el usuario.
+   * Se pide permiso fiscal de preparación porque decide el destino fiscal de una
+   * venta ya cerrada; no es una acción genérica de ventas.
+   */
+  @Post("sales-without-document")
+  @Permissions("prepareEcfDocuments")
+  registerSaleWithoutDocument(
+    @Req() req: Request,
+    @Body() dto: RegisterEcfSaleWithoutDocumentDto,
+  ) {
+    return this.salesWithoutDocument.register(req.user as TenantUser, dto);
   }
 }

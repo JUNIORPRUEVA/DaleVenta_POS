@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/app_permissions.dart';
+import '../../../core/auth/auth_provider.dart';
+import '../../../core/theme/app_colors.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import 'ecf_credit_note_action.dart';
@@ -86,6 +89,19 @@ class EcfConfigPage extends ConsumerWidget {
                         for (final type in caps.documentTypes)
                           _DocumentTypeRow(type: type),
                       ],
+                    ),
+                  ),
+                ],
+                // Solo tiene sentido cuando la empresa YA factura
+                // electrónicamente: sin e-CF no hay comprobante del que
+                // prescindir.
+                if (caps != null && caps.enabled) ...[
+                  const SizedBox(height: 10),
+                  EcfSalesWithoutDocumentSection(
+                    capabilities: caps,
+                    canManage: hasUserPermission(
+                      ref.watch(authStateProvider).user,
+                      AppPermission.manageEcfConfig,
                     ),
                   ),
                 ],
@@ -337,6 +353,214 @@ class _Muted extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
+    );
+  }
+}
+
+/// Interruptor de la excepción fiscal «vender sin comprobante electrónico».
+///
+/// Es la única puerta por la que el POS puede ofrecer la opción «Normal», y está
+/// apagada por defecto. Al encenderla se muestra el aviso **completo** que envía
+/// el servidor: no se resume ni se suaviza, porque es lo que la empresa está
+/// aceptando. Cada venta que use la excepción queda en el registro de auditoría
+/// con su motivo y su usuario.
+class EcfSalesWithoutDocumentSection extends ConsumerStatefulWidget {
+  const EcfSalesWithoutDocumentSection({
+    super.key,
+    required this.capabilities,
+    required this.canManage,
+  });
+
+  final EcfCapabilities capabilities;
+
+  /// Mismo permiso que exige el backend (`manageEcfConfig`).
+  final bool canManage;
+
+  @override
+  ConsumerState<EcfSalesWithoutDocumentSection> createState() =>
+      _EcfSalesWithoutDocumentSectionState();
+}
+
+class _EcfSalesWithoutDocumentSectionState
+    extends ConsumerState<EcfSalesWithoutDocumentSection> {
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _toggle(bool value) async {
+    if (_saving) return;
+    final confirmed = await _confirm(value);
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(ecfRepositoryProvider)
+          .updateAllowSalesWithoutEcf(allow: value);
+      // La verdad la tiene el servidor: se relee en lugar de asumir el cambio.
+      ref.invalidate(ecfCapabilitiesProvider);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = 'No se pudo guardar el cambio. Revisa la conexión.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<bool?> _confirm(bool value) {
+    final warning = widget.capabilities.salesWithoutEcfWarning;
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          value
+              ? 'Habilitar ventas sin comprobante'
+              : 'Deshabilitar ventas sin comprobante',
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (value && warning.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorSoft,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.errorBorder),
+                  ),
+                  child: Text(
+                    warning,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      height: 1.4,
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              else
+                const Text(
+                  'El POS dejará de ofrecer la opción de registrar ventas sin '
+                  'comprobante electrónico. Las ventas ya registradas con la '
+                  'excepción se conservan como evidencia.',
+                  style: TextStyle(fontSize: 12.5, height: 1.4),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(value ? 'Entiendo y habilito' : 'Deshabilitar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.capabilities.allowSalesWithoutEcf;
+    final warning = widget.capabilities.salesWithoutEcfWarning;
+    final canManage = widget.canManage;
+
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SectionTitle('Ventas sin comprobante electrónico'),
+                    SizedBox(height: 2),
+                    _Muted(
+                      'Permite cerrar una venta sin emitir e-CF, solo para '
+                      'operaciones que la normativa permita. Cada uso queda '
+                      'registrado con su motivo y su usuario.',
+                    ),
+                  ],
+                ),
+              ),
+              if (_saving)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4, left: 8),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else
+                Switch(
+                  value: enabled,
+                  onChanged: canManage ? _toggle : null,
+                ),
+            ],
+          ),
+          if (enabled && warning.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.errorSoft,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.errorBorder),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: AppColors.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      warning,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.4,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: const TextStyle(fontSize: 11.5, color: AppColors.error),
+            ),
+          ],
+          if (!canManage) ...[
+            const SizedBox(height: 8),
+            const _Muted(
+              'Solo un administrador con permiso de configuración e-CF puede '
+              'cambiar esta opción.',
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

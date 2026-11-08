@@ -1243,6 +1243,7 @@ model Company {
   ecfElectronicDocumentStatusLogs  EcfElectronicDocumentStatusLog[]
   ecfSequences                     EcfSequence[]
   ecfDgiiAuthorizedSequences       EcfDgiiAuthorizedSequence[]
+  ecfSalesWithoutDocument          EcfSaleWithoutDocument[]
   ecfSequenceAuditLogs             EcfSequenceAuditLog[]
   ecfLineClassifications           EcfLineClassification[]
 
@@ -1298,6 +1299,11 @@ model EcfCompanyConfiguration {
   certificateSecretRef String?                @map("certificate_secret_ref") @db.VarChar(256)
   webhookSecretRef     String?                @map("webhook_secret_ref") @db.VarChar(256)
   allowedTypes         Json?                  @map("allowed_types")
+  /// Habilita registrar ventas SIN comprobante electrónico desde el POS. Por
+  /// defecto está apagado: una venta sin e-CF es una excepción fiscal y solo se
+  /// permite cuando la empresa lo autoriza de forma explícita. Cada uso queda en
+  /// `ecf_sales_without_document` con su motivo, usuario y venta.
+  allowSalesWithoutEcf Boolean                @default(false) @map("allow_sales_without_ecf")
   notes                String?                @db.Text
   createdByUserId      String?                @map("created_by_user_id") @db.Uuid
   updatedByUserId      String?                @map("updated_by_user_id") @db.Uuid
@@ -4105,6 +4111,29 @@ model EcfDgiiAuthorizedSequence {
   @@unique([companyId, documentType])
   @@index([companyId])
   @@map("ecf_dgii_authorized_sequences")
+}
+
+/// Registro de ventas registradas SIN comprobante electrónico.
+///
+/// No es un permiso: es la huella de que la excepción ocurrió. Solo se escribe
+/// cuando la empresa habilitó `allowSalesWithoutEcf`, y guarda quién lo hizo, por
+/// qué y con qué comprobante se esperaba cubrirla. Una fila por venta: registrar
+/// dos veces la misma venta es un error, no un dato nuevo.
+model EcfSaleWithoutDocument {
+  id                   String   @id @default(uuid()) @db.Uuid
+  companyId            String   @map("company_id") @db.Uuid
+  saleId               String   @map("sale_id") @db.Uuid
+  reason               String   @db.Text
+  /// Tipo de comprobante que correspondería emitir después (E31/E32), si se sabe.
+  expectedDocumentType String?  @map("expected_document_type")
+  registeredByUserId   String?  @map("registered_by_user_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, saleId])
+  @@index([companyId, createdAt])
+  @@map("ecf_sales_without_document")
 }
 
 model EcfSequenceAuditLog {

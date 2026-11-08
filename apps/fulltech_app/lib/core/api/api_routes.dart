@@ -593,6 +593,9 @@ class ApiRoutes {
   /// Es la fuente de verdad contra la que se valida lo que se declara.
   static const ecfDgiiAuthorizedSequences = '/ecf/dgii/authorized-sequences';
 
+  /// Registro de ventas hechas SIN comprobante electrónico (excepciones).
+  static const ecfSalesWithoutDocument = '/ecf/sales-without-document';
+
   /// Proceso INTERNO de habilitación e-CF de la empresa (pasos y auditoría).
   static const ecfOnboarding = '/ecf/onboarding';
 

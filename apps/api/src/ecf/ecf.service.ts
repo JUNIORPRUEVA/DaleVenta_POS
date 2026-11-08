@@ -238,6 +238,9 @@ export class EcfService {
       : undefined;
     return {
       ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
+      ...(dto.allowSalesWithoutEcf !== undefined
+        ? { allowSalesWithoutEcf: dto.allowSalesWithoutEcf }
+        : {}),
       ...(dto.provider !== undefined ? { provider: dto.provider } : {}),
       ...(dto.environment !== undefined ? { environment: dto.environment } : {}),
       ...(dto.alanubeCompanyId !== undefined
@@ -495,6 +498,7 @@ export class EcfService {
     id: string;
     companyId: string;
     enabled: boolean;
+    allowSalesWithoutEcf: boolean;
     provider: EcfProvider;
     environment: EcfEnvironment;
     certificationStatus: EcfCertificationStatus;
@@ -512,6 +516,7 @@ export class EcfService {
       id: config.id,
       companyId: config.companyId,
       enabled: config.enabled,
+      allowSalesWithoutEcf: config.allowSalesWithoutEcf,
       provider: config.provider,
       environment: config.environment,
       certificationStatus: config.certificationStatus,
@@ -605,6 +610,7 @@ export class EcfService {
   private toConfigAuditSnapshot(config: unknown) {
     const row = config as {
       enabled?: boolean;
+      allowSalesWithoutEcf?: boolean;
       provider?: EcfProvider;
       environment?: EcfEnvironment;
       certificationStatus?: EcfCertificationStatus;
@@ -619,6 +625,7 @@ export class EcfService {
     if (!row) return null;
     return {
       enabled: row.enabled,
+      allowSalesWithoutEcf: row.allowSalesWithoutEcf,
       provider: row.provider,
       environment: row.environment,
       certificationStatus: row.certificationStatus,

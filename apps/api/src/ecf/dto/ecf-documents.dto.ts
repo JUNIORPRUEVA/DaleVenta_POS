@@ -163,9 +163,8 @@ export class DeclareEcfAuthorizedSequenceDto {
   declarationAccepted!: boolean;
 }
 
-// Preparación de CONSUMO (E32). Flujo independiente del genérico: no consume el
-// rango de numeración de la empresa, no toca el cupo único de sandbox y no
-// emite. El e-NCF lo entrega su propio flujo, nunca este.
+// Preparación de CONSUMO (E32). Toma su e-NCF del rango autorizado para E32,
+// igual que E31, de forma idempotente por venta. No emite.
 export class PrepareEcfConsumoDto {
   @IsString()
   @IsUUID()
@@ -311,4 +310,27 @@ export class PrepareEcfCreditNoteDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   sequenceDueDate?: string;
+}
+
+/**
+ * Registro de una venta hecha SIN comprobante electrónico.
+ *
+ * El motivo es obligatorio y con longitud mínima: una excepción fiscal sin
+ * justificación escrita no es auditable. El tipo esperado es opcional porque la
+ * app ya lo deduce del receptor; se guarda para saber qué comprobante quedó
+ * pendiente.
+ */
+export class RegisterEcfSaleWithoutDocumentDto {
+  @IsString()
+  @IsUUID()
+  saleId!: string;
+
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  reason!: string;
+
+  @IsOptional()
+  @IsIn(["E31", "E32"])
+  expectedDocumentType?: "E31" | "E32" | null;
 }

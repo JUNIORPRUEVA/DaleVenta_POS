@@ -16,6 +16,7 @@ import {
 } from "../dto/ecf-documents.dto";
 import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
 import { ECF_SEQUENCE_TYPES } from "./ecf-dgii-authorized-sequences.policy";
+import { ECF_WITHOUT_DOCUMENT_WARNING } from "./ecf-sales-without-document.policy";
 import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
 
@@ -87,6 +88,11 @@ export class EcfDocumentQueryService {
       simulatedDispatchPathAvailable: true,
       // Bandera del SERVIDOR, no de la empresa.
       providerEmissionEnabled,
+      // Venta sin comprobante electrónico: la empresa decide, y el texto del
+      // aviso viaja desde aquí para que la interfaz no tenga una copia propia
+      // que pueda suavizarse con el tiempo.
+      allowSalesWithoutEcf: config?.allowSalesWithoutEcf === true,
+      salesWithoutEcfWarning: ECF_WITHOUT_DOCUMENT_WARNING,
       documentTypes: ECF_ALLOWED_DOCUMENT_TYPES.map((documentType) => {
         const entry = ECF_ALANUBE_CONTRACT_REGISTRY.find(
           (item) => item.documentType === documentType,

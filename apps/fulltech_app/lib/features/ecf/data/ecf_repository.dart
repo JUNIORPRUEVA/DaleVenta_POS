@@ -336,6 +336,38 @@ class EcfRepository {
     await _dio.patch(ApiRoutes.ecfConfig, data: {'enabled': enabled});
   }
 
+  /// Habilita o deshabilita registrar ventas SIN comprobante electrónico.
+  ///
+  /// Es una excepción fiscal: el backend la respalda con el registro de
+  /// excepciones, que guarda motivo y usuario de cada uso. Requiere el permiso
+  /// `manageEcfConfig`.
+  Future<void> updateAllowSalesWithoutEcf({required bool allow}) async {
+    await _dio.patch(
+      ApiRoutes.ecfConfig,
+      data: {'allowSalesWithoutEcf': allow},
+    );
+  }
+
+  /// Registra que una venta se cerró SIN comprobante electrónico.
+  ///
+  /// Falla si la empresa no habilitó la excepción o si la venta ya tiene
+  /// comprobante: el servidor manda, la interfaz no improvisa.
+  Future<void> registerSaleWithoutDocument({
+    required String saleId,
+    required String reason,
+    String? expectedDocumentType,
+  }) async {
+    await _dio.post(
+      ApiRoutes.ecfSalesWithoutDocument,
+      data: {
+        'saleId': saleId,
+        'reason': reason,
+        if (expectedDocumentType != null)
+          'expectedDocumentType': expectedDocumentType,
+      },
+    );
+  }
+
   /// Proceso INTERNO de habilitación e-CF de la empresa.
   ///
   /// Los estados que devuelve son internos del proceso administrativo: no
