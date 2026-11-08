@@ -113,3 +113,111 @@ el flujo de certificación de `E32`.
 **HECHO**: lo que falta es el registro de la autorización DGII y la validación contra él, más
 soportar `E32` de producción y el selector de tipo en la interfaz.
 **RECOMENDACIÓN**: proceder con las fases A → B → C, en rama aparte y sin tocar lo desplegado.
+
+---
+
+## 10. Declaración del cliente y pantalla (diseño propuesto)
+
+### 10.1 Principio
+
+**HECHO**: no existe una API pública de la DGII que FullPOS pueda consultar para leer la
+autorización de cada empresa. La autorización la ve el propietario en la Oficina Virtual.
+
+**RECOMENDACIÓN**: por tanto el control es **declarativo y trazable**: el cliente transcribe lo que
+la DGII le autorizó y **firma una declaración explícita**; el sistema guarda quién, cuándo y qué
+declaró, y **valida todo lo que puede validar** (coherencia del rango, tipo, vencimiento, que lo
+numerado no exceda lo declarado).
+
+**Nunca se prellena** con lo que dijo el proveedor. El dato de la DGII manda.
+
+### 10.2 Textos exactos
+
+**Título de la tarjeta:** `Numeración autorizada por la DGII`
+
+**Texto de ayuda (una sola frase):**
+> Transcribe los datos tal como aparecen en la Oficina Virtual de la DGII. Sin esta información no
+> se puede emitir.
+
+**Campos:**
+
+| Etiqueta | Ayuda bajo el campo | Obligatorio |
+| --- | --- | --- |
+| Tipo de comprobante | — | Sí |
+| N.º de autorización | Como aparece en la DGII | Sí |
+| Desde | Solo el número; el prefijo lo agrega el sistema | Sí |
+| Hasta | No puede superar lo aprobado | Sí |
+| Cantidad aprobada | La que indica la DGII, no la solicitada | Sí |
+| Vence | Déjalo vacío si la DGII muestra «N/A» | No |
+
+**Declaración (casilla, obligatoria para guardar):**
+> **Declaro que estos datos son los que la DGII autorizó a mi empresa**, que la numeración que
+> registro corresponde a ese rango y que no usaré números fuera de él. Entiendo que emitir fuera del
+> rango autorizado puede invalidar el comprobante.
+
+**Botón:** `Guardar declaración y numeración`
+
+### 10.3 Reglas y mensajes
+
+| Situación | Comportamiento | Mensaje |
+| --- | --- | --- |
+| No hay declaración registrada para el tipo | Se bloquea la emisión de ese tipo | «Falta declarar la numeración autorizada por la DGII para {tipo}.» |
+| `Desde` < 1 o `Hasta` < `Desde` | Se rechaza en el formulario | «El número final no puede ser menor que el inicial.» |
+| `Hasta` − `Desde` + 1 > cantidad aprobada | Se rechaza | «La DGII aprobó {n} comprobantes; estás declarando {m}. Corrige el rango.» |
+| Casilla sin marcar | Botón deshabilitado | — |
+| Rango ya declarado y activo | No se duplica; se ofrece renovar | «Ya tienes numeración activa para {tipo}. Puedes declarar un rango nuevo que empiece en {n} o más.» |
+| Vencimiento pasado | Se rechaza | «La autorización de la DGII venció el {fecha}.». |
+
+### 10.4 Pantalla (una tarjeta por tipo, mismo lenguaje visual del módulo)
+
+```text
+┌ Numeración autorizada por la DGII ─────────────────────────────┐
+│ Transcribe los datos tal como aparecen en la Oficina Virtual    │
+│ de la DGII. Sin esta información no se puede emitir.            │
+│                                                                 │
+│ Tipo de comprobante                                            │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ Factura de Crédito Fiscal (E31)                          ▾  │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ N.º de autorización        Desde            Hasta              │
+│ ┌───────────────────┐  ┌──────────┐  ┌──────────┐              │
+│ │ 6005190128        │  │ 1        │  │ 150      │              │
+│ └───────────────────┘  └──────────┘  └──────────┘              │
+│                                                                 │
+│ Cantidad aprobada          Vence                               │
+│ ┌───────────────────┐  ┌──────────────┐                        │
+│ │ 150               │  │ 31/12/2027   │                        │
+│ └───────────────────┘  └──────────────┘                        │
+│                                                                 │
+│ ☐ Declaro que estos datos son los que la DGII autorizó a mi     │
+│   empresa, que la numeración registrada corresponde a ese rango │
+│   y que no usaré números fuera de él. Entiendo que emitir fuera │
+│   del rango autorizado puede invalidar el comprobante.          │
+│                                                                 │
+│                                   [ Guardar declaración ]       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Detalle de acabado (para que quede limpio y coherente con el módulo):**
+
+- Una tarjeta, un tipo, un botón. Sin pasos intermedios ni diálogos extra.
+- Mismo componente de tarjeta, tipografía y espaciado que el resto del recorrido e-CF.
+- Los tres campos numéricos en una fila; los dos secundarios en otra. En móvil, a una columna.
+- El aviso de estado va **dentro** de la tarjeta, no como banner global.
+- Después de guardar, la tarjeta colapsa a un resumen de una línea con el rango y la fecha, y un
+  enlace discreto «Ver detalle» / «Renovar».
+- Si la empresa tiene varios tipos autorizados, se muestra una tarjeta por tipo, en el orden
+  E31 → E32 → E34.
+
+### 10.5 Qué se guarda de la declaración
+
+`ecf_dgii_authorized_sequences` (una fila por empresa y tipo):
+
+`companyId`, `documentType`, `authorizationNumber`, `rangeFrom`, `rangeTo`, `approvedQuantity`,
+`expiresAt?`, `evidenceId?`, `declaredByUserId`, `declaredAt`, `declarationVersion`, `active`.
+
+La declaración **no es un texto libre**: se guarda la versión del texto mostrado, de modo que la
+auditoría pueda reconstruir qué aceptó exactamente el cliente. El texto vive en una constante del
+código, con versión (`v1`), y la fila guarda `declarationVersion = 'v1'`.
+
+
