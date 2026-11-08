@@ -81,6 +81,43 @@ Si esa copia no tiene todas las variables, **las borra**.
 **HECHO**: con la emisión apagada, la validación de arranque no exige nada y la
 API arranca aunque falten `DOSA_BASE_URL` o las claves.
 
+### 3.4 Comprobación contra el servicio real (nombres, sin valores)
+
+**HECHO (2026-11-07)**: se listaron los **nombres** de las variables del
+servicio `daleventapos_backend` en producción y se compararon con las que lee
+el código de este release. Solo se extrajo la parte izquierda de cada
+`NOMBRE=valor`; **ningún valor se leyó ni se imprimió**.
+
+**Están presentes** todas las críticas de §3.1: `DOSA_CREDENTIALS_MASTER_KEY`,
+`DOSA_WEBHOOK_ENABLED`, `DOSA_WEBHOOK_SIGNATURE_STRATEGY`, `DOSA_WEBHOOK_SECRET`,
+`DOSA_WEBHOOK_SECRET_ENCODING`, `DOSA_WEBHOOK_TIMESTAMP_UNIT`,
+`DOSA_CERTIFICATION_SESSIONS_ENABLED`, `DOSA_SESSION_BASE_URL`,
+`DOSA_SESSION_URL_KEYS`, `DOSA_SESSION_URL_ACTIVE_KEY_VERSION`,
+`ECF_DOSA_HISTORICAL_TRANSITION_ENABLED`, `ECF_PORTAL_PILOT_COMPANY_IDS`,
+`DATABASE_URL`, `JWT_SECRET`, `FINANCIAL_LEGACY_COMPAT`,
+`FULLPOS_UPDATE_PILOT_CLIENT_KEYS`, `FULLPOS_UPDATE_PILOT_RELEASE_JSON`,
+`RUN_MIGRATIONS`, `MIGRATION_STRICT`.
+
+**Ausentes y con consecuencia real:**
+
+| Variable ausente | Valor efectivo al no estar | ¿Hay que hacer algo? |
+| --- | --- | --- |
+| `ECF_PORTAL_AUTO_ENROLL_ENABLED` | **`true`** (`?? "true"` en `ecf-portal-enrollment.service.ts`) | **Sí, es la decisión de §5.** Al desplegar, toda empresa que abra el asistente queda inscrita sola. Para estrenarlo de forma controlada hay que definirla en `false` **antes** de pulsar |
+| `DOSA_INCIDENT_MONITOR_ENABLED` | `false` | No es un fallo: la vigilancia de incidencias nueva **no arranca**. Si se quiere activa, definirla en `true` de forma explícita |
+
+**Ausentes y sin efecto hoy** (leen con valor por defecto seguro):
+`DOSA_EMISSION_TRANSPORT` (ausente = `FETCH`, nunca el transporte falso),
+`DOSA_EMISSION_ENVIRONMENT` (`TEST`), `DOSA_API_QUERIES_ENABLED`,
+`DOSA_BASE_URL`, `DOSA_TEST_API_KEY`, `DOSA_PRODUCTION_API_KEY`,
+`ECF_DOSA_INTENT_RECONCILIATION_ENABLED`,
+`ECF_DOSA_INTENT_RECONCILIATION_INTERNAL_ENABLED`, `DOSA_QUERY_TIMEOUT_MS`,
+`DOSA_SESSION_TIMEOUT_MS`, `DOSA_EMISSION_TIMEOUT_MS`, `ECF_EMISSION_ENABLED`,
+`ECF_DOCKER_SECRETS_DIR` (`/run/secrets`), `ECF_DGII_STORAGE_DIR`.
+
+**Anomalía menor detectada**: el spec del servicio tiene `PORT` **duplicado** y
+una entrada vacía. No rompe el arranque, pero conviene limpiarlo la próxima vez
+que se editen las variables del panel.
+
 ---
 
 ## 4. Los dos riesgos reales
@@ -196,14 +233,13 @@ docker image tag <imagen-pwa-actual>     fullpos/daleventapos-pwa:pre-ecf-202611
 
 ### Paso 2 — Llevar el código a `production-main`
 
-Falta hacerlo: **la rama no está publicada** (`git ls-remote` no devuelve nada).
+**HECHO (2026-11-07)**: la rama **ya está publicada**.
+`origin/agent/dosa-credentials-split-20261107` apunta al mismo commit que el
+árbol local y el PR está abierto contra `production-main`. **No hay que volver
+a empujar nada**; el paso que queda es fusionar.
 
-```bash
-git push -u origin agent/dosa-credentials-split-20261107
-```
-
-Después, PR contra `production-main` y fusión (*fast-forward*, sin conflictos
-porque `aad1e7b9` es ancestro).
+La fusión es *fast-forward*, sin conflictos: `git merge-base --is-ancestor
+origin/production-main HEAD` devuelve 0, así que `aad1e7b9` es ancestro.
 
 ### Paso 3 — Revisar variables en el panel
 
