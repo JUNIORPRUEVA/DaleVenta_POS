@@ -96,12 +96,27 @@ real("Fase F — DOSA en PostgreSQL real", () => {
   }
 
   describe("enum ecf_provider", () => {
-    it("el valor por defecto sigue siendo ALANUBE", async () => {
+    // El valor por defecto de la columna pasó de ALANUBE a DOSA en la migración
+    // `20261105223000_ecf_provider_default_dosa`. Este caso afirmaba el valor
+    // anterior, así que describía el esquema de antes de esa migración: una fila
+    // creada sin declarar proveedor nacía como ALANUBE aunque FullPOS solo
+    // soporte DOSA (`buildConfigUpdate` rechaza cualquier otro). Se conserva
+    // ALANUBE en el enum para leer el historial, no como valor por defecto.
+    it("el valor por defecto es DOSA y ALANUBE sigue existiendo en el enum", async () => {
       await prisma.$executeRaw`
         INSERT INTO "ecf_company_configurations" ("id","company_id")
         VALUES (gen_random_uuid(), ${COMPANY_OTHER}::uuid)
       `;
-      expect(await providerOf(COMPANY_OTHER)).toBe("ALANUBE");
+      expect(await providerOf(COMPANY_OTHER)).toBe("DOSA");
+
+      // El enum conserva ALANUBE para no invalidar las filas históricas.
+      const values = await prisma.$queryRaw<Array<{ value: string }>>`
+        SELECT e.enumlabel AS "value"
+          FROM pg_enum e
+          JOIN pg_type t ON t.oid = e.enumtypid
+         WHERE t.typname = 'ecf_provider'
+      `;
+      expect(values.map((row) => row.value).sort()).toEqual(["ALANUBE", "DOSA"]);
     });
 
     it("una empresa puede seleccionar DOSA y volver a abrirla sin errores", async () => {

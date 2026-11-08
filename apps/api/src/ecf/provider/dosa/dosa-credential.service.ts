@@ -13,6 +13,7 @@ import {
   activationBlockers,
   type DosaActivationEvidence,
 } from "./dosa-activation-authority.service";
+import { splitCredentialsByEnvironment } from "./dosa-credential-environments";
 
 /**
  * Persistencia de credenciales fiscales cifradas, **aislada por empresa/RNC y
@@ -38,7 +39,7 @@ export type StoredDosaCredential = {
 };
 
 export interface DosaCredentialStore {
-  upsert(row: StoredDosaCredential): Promise<void>;
+  upsert(row: StoredDosaCredential): Promise<boolean>;
   find(input: {
     companyId: string;
     rnc: string;
@@ -81,8 +82,34 @@ type CredentialRow = {
 export class PrismaDosaCredentialStore implements DosaCredentialStore {
   constructor(private readonly prisma: DosaRawClient) {}
 
-  async upsert(row: StoredDosaCredential): Promise<void> {
-    await this.prisma.$queryRaw`
+  /**
+   * Escribe la credencial de UN ambiente.
+   *
+   * Reglas del `ON CONFLICT` (aprendidas del incidente del 07/11):
+   *
+   * 1. **Nunca degrada un estado ya alcanzado.** Una fila `CONFIRMED` o
+   *    `ACTIVE` conserva su estado aunque llegue material nuevo (rotación
+   *    autorizada); solo una fila en `PENDING_CONFIRMATION` puede seguir siéndolo.
+   * 2. **No reescribe si nada cambió.** El `WHERE` compara el `fingerprint` del
+   *    criptograma: un reintento del mismo paquete no toca la fila ni su fecha.
+   * 3. **`created_at` no se actualiza.** Es la fecha de alta, no la de edición;
+   *    `updated_at` sí.
+   *
+   * La protección de (1) se aplica **en el propio `WHERE`**, no solo en el
+   * servicio: leer el estado y después escribir dejaba una ventana en la que una
+   * confirmación concurrente podía convertir la fila en `ACTIVE` y aun así recibir
+   * el criptograma nuevo. Con la guarda en el SQL, una fila protegida es
+   * inmutable por esta vía, y `RETURNING` permite informar con exactitud si la
+   * escritura se aplicó.
+   *
+   * La clave única `(company_id, rnc, environment)` sigue siendo el aislamiento:
+   * un ambiente no puede escribir la fila de otro.
+   *
+   * @returns `true` si la fila se insertó o actualizó; `false` si el material
+   *   vigente está protegido (`CONFIRMED`/`ACTIVE`) y tiene otro `fingerprint`.
+   */
+  async upsert(row: StoredDosaCredential): Promise<boolean> {
+    const applied = await this.prisma.$queryRaw<{ id: string }[]>`
       INSERT INTO "ecf_dosa_company_credentials"
         ("id","company_id","rnc","environment","status","source","key_version",
          "ciphertext","iv","auth_tag","fingerprint","present","created_at","updated_at")
@@ -93,7 +120,11 @@ export class PrismaDosaCredentialStore implements DosaCredentialStore {
          ${row.sealed.fingerprint}, ${JSON.stringify(row.sealed.present)}::jsonb,
          NOW(), NOW())
       ON CONFLICT ("company_id","rnc","environment") DO UPDATE SET
-        "status" = EXCLUDED."status",
+        "status" = CASE
+          WHEN "ecf_dosa_company_credentials"."status" IN ('CONFIRMED','ACTIVE')
+            THEN "ecf_dosa_company_credentials"."status"
+          ELSE EXCLUDED."status"
+        END,
         "source" = EXCLUDED."source",
         "key_version" = EXCLUDED."key_version",
         "ciphertext" = EXCLUDED."ciphertext",
@@ -102,7 +133,16 @@ export class PrismaDosaCredentialStore implements DosaCredentialStore {
         "fingerprint" = EXCLUDED."fingerprint",
         "present" = EXCLUDED."present",
         "updated_at" = NOW()
+      WHERE "ecf_dosa_company_credentials"."fingerprint"
+            IS DISTINCT FROM EXCLUDED."fingerprint"
+        -- Guarda atómica: una credencial ya confirmada o activa no se sustituye
+        -- aunque la comprobación previa del servicio se haya quedado atrás por
+        -- una confirmación concurrente.
+        AND "ecf_dosa_company_credentials"."status"
+            NOT IN ('CONFIRMED','ACTIVE')
+      RETURNING "id"
     `;
+    return applied.length > 0;
   }
 
   async find(input: {
@@ -182,8 +222,31 @@ function normalizeRnc(value: string): string {
   return (value ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
 }
 
+export type DosaCredentialIngestStored = {
+  environment: DosaCredentialEnvironment;
+  status: DosaCredentialStatus;
+  fingerprint: string;
+};
+
 export type DosaCredentialIngestResult =
-  | { ok: true; status: DosaCredentialStatus; fingerprint: string }
+  | {
+      ok: true;
+      /**
+       * Estado y huella del ambiente principal (producción si vino, si no test).
+       * Se conservan para no romper a los llamadores existentes.
+       */
+      status: DosaCredentialStatus;
+      fingerprint: string;
+      /** Qué se guardó y en qué ambiente. Sin valores. */
+      stored: DosaCredentialIngestStored[];
+      /** Ambientes que el paquete no traía y por tanto no se tocaron. */
+      skipped: DosaCredentialEnvironment[];
+      /**
+       * Ambientes cuyo material entrante difiere del ya ACTIVO o CONFIRMADO.
+       * No se escribieron: una rotación así exige revisión humana.
+       */
+      conflicts: DosaCredentialEnvironment[];
+    }
   | { ok: false; blockedReason: string };
 
 /**
@@ -208,9 +271,24 @@ export class DosaCredentialService {
     private readonly vault: DosaCredentialVault,
   ) {}
 
+  /**
+   * Ingesta de credenciales recibidas del proveedor (evento ya autenticado).
+   *
+   * **Reparte por ambiente.** El campo `environment` de la entrada describe el
+   * ambiente de la CERTIFICACIÓN declarado por el evento; no decide dónde va
+   * cada clave. `apiKeyProduccion` va a la fila `production`, `apiKeyTest` a la
+   * fila `test` y `apiSecret` acompaña a ambas. Ver
+   * `dosa-credential-environments.ts`.
+   *
+   * Consecuencia buscada: un evento `ambiente=Produccion` que trae las dos
+   * llaves deja de esconder la de TEST dentro de producción. Y un evento que
+   * solo trae una de las dos **no borra** la otra: el ambiente sin su clave
+   * identificadora no se toca.
+   */
   async ingestFromProvider(input: {
     companyId: string;
     rnc: string;
+    /** Ambiente declarado por el evento (evidencia). No ubica las claves. */
     environment: DosaCredentialEnvironment;
     bundle: DosaCredentialBundle;
     /** Verdadero solo si la firma del evento se verificó. */
@@ -222,24 +300,240 @@ export class DosaCredentialService {
         blockedReason: "ECF_DOSA_CREDENTIALS_EVENT_NOT_AUTHENTICATED",
       };
     }
-    const context = contextOf(input);
-    let sealed: SealedDosaCredential;
-    try {
-      sealed = this.vault.seal(context, input.bundle);
-    } catch (error) {
-      return { ok: false, blockedReason: codeOf(error) };
+
+    const split = splitCredentialsByEnvironment(input.bundle, input.environment);
+    if (split.targets.length === 0) {
+      return {
+        ok: false,
+        blockedReason: "ECF_DOSA_CREDENTIALS_EMPTY_BUNDLE",
+      };
     }
 
-    await this.store.upsert({
+    const stored: DosaCredentialIngestStored[] = [];
+    const conflicts: DosaCredentialEnvironment[] = [];
+
+    for (const target of split.targets) {
+      const context: DosaCredentialContext = {
+        companyId: input.companyId,
+        rnc: normalizeRnc(input.rnc),
+        environment: target.environment,
+      };
+
+      let sealed: SealedDosaCredential;
+      try {
+        sealed = this.vault.seal(context, target.bundle);
+      } catch (error) {
+        return { ok: false, blockedReason: codeOf(error) };
+      }
+
+      // Una credencial ya confirmada o activa NO se sustituye por otra que
+      // llegue por webhook. Rotarla es una decisión humana: se registra el
+      // conflicto, se deja la fila intacta y el evento queda en revisión.
+      const current = await this.store.find({
+        companyId: input.companyId,
+        rnc: normalizeRnc(input.rnc),
+        environment: target.environment,
+      });
+      const isProtected =
+        current !== null &&
+        (current.status === "CONFIRMED" || current.status === "ACTIVE");
+      if (isProtected && current.sealed.fingerprint !== sealed.fingerprint) {
+        conflicts.push(target.environment);
+        continue;
+      }
+
+      // Lo anterior es una foto. La guarda atómica del `upsert` es la que
+      // garantiza que una fila protegida no se sustituya si algo cambió entre la
+      // lectura y la escritura; aquí se usa su resultado para no afirmar que se
+      // guardó algo que la base rechazó.
+      const applied = await this.store.upsert({
+        companyId: input.companyId,
+        rnc: normalizeRnc(input.rnc),
+        environment: target.environment,
+        status: "PENDING_CONFIRMATION",
+        source: "WEBHOOK",
+        sealed,
+        updatedAt: null,
+      });
+      if (!applied) {
+        conflicts.push(target.environment);
+        continue;
+      }
+
+      stored.push({
+        environment: target.environment,
+        status: "PENDING_CONFIRMATION",
+        fingerprint: sealed.fingerprint,
+      });
+    }
+
+    // Si todo lo que venía era un conflicto, no hay nada nuevo que guardar.
+    if (stored.length === 0 && conflicts.length > 0) {
+      return {
+        ok: true,
+        status: "PENDING_CONFIRMATION",
+        fingerprint: "",
+        stored: [],
+        skipped: split.skipped.map((entry) => entry.environment),
+        conflicts,
+      };
+    }
+
+    const primary =
+      stored.find((entry) => entry.environment === "production") ?? stored[0];
+
+    return {
+      ok: true,
+      status: primary.status,
+      fingerprint: primary.fingerprint,
+      stored,
+      skipped: split.skipped.map((entry) => entry.environment),
+      conflicts,
+    };
+  }
+
+  /**
+   * Reclasifica un paquete ya guardado: separa la clave TEST que pudo quedar
+   * dentro de la fila de producción.
+   *
+   * Para qué existe: la primera entrega real (06–07/11/2026) guardó las dos
+   * llaves bajo `environment=production`. Sin este camino habría que pedirle al
+   * proveedor un reenvío solo para recolocar una clave que **ya** está cifrada
+   * en la bóveda.
+   *
+   * Garantías:
+   *
+   * 1. **Requiere autorización explícita** (`authorized`); la bóveda rechaza el
+   *    descifrado sin ella (`DOSA_CREDENTIALS_OPEN_NOT_AUTHORIZED`).
+   * 2. **No modifica la fila de origen.** Solo escribe los ambientes que faltan
+   *    o cuyo `fingerprint` difiere; `production` nunca se toca.
+   * 3. **Idempotente**: si el ambiente destino ya tiene el mismo `fingerprint`,
+   *    informa `already` y no escribe.
+   * 4. **Sin valores en la respuesta**: solo ambientes, estados y huellas.
+   * 5. No activa nada: lo que escriba entra como `PENDING_CONFIRMATION`.
+   */
+  async reclassifyStoredCredentials(input: {
+    companyId: string;
+    rnc: string;
+    /** Ambiente que contiene el paquete completo a repartir. */
+    sourceEnvironment: DosaCredentialEnvironment;
+    authorized: boolean;
+    /** Con `true` calcula el resultado pero no escribe nada. */
+    dryRun?: boolean;
+  }): Promise<{
+    ok: boolean;
+    blockedReason?: string;
+    /** Ambientes que se escribirían (o se escribieron, si no es dry-run). */
+    written: DosaCredentialIngestStored[];
+    already: DosaCredentialEnvironment[];
+    applied: boolean;
+  }> {
+    const dryRun = input.dryRun === true;
+    const source = await this.store.find({
       companyId: input.companyId,
-      rnc: normalizeRnc(input.rnc),
-      environment: input.environment,
-      status: "PENDING_CONFIRMATION",
-      source: "WEBHOOK",
-      sealed,
-      updatedAt: null,
+      rnc: input.rnc,
+      environment: input.sourceEnvironment,
     });
-    return { ok: true, status: "PENDING_CONFIRMATION", fingerprint: sealed.fingerprint };
+    if (!source) {
+      return {
+        ok: false,
+        blockedReason: "DOSA_CREDENTIALS_NOT_FOUND",
+        written: [],
+        already: [],
+        applied: false,
+      };
+    }
+
+    let bundle: DosaCredentialBundle;
+    try {
+      bundle = this.vault.open({
+        sealed: source.sealed,
+        context: {
+          companyId: source.companyId,
+          rnc: source.rnc,
+          environment: source.environment,
+        },
+        purpose: "REMEDIATION",
+        authorized: input.authorized,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        blockedReason: codeOf(error),
+        written: [],
+        already: [],
+        applied: false,
+      };
+    }
+
+    const split = splitCredentialsByEnvironment(bundle);
+    const written: DosaCredentialIngestStored[] = [];
+    const already: DosaCredentialEnvironment[] = [];
+
+    for (const target of split.targets) {
+      // El ambiente de origen no se reescribe: su contenido no cambia.
+      if (target.environment === input.sourceEnvironment) {
+        already.push(target.environment);
+        continue;
+      }
+
+      const current = await this.store.find({
+        companyId: input.companyId,
+        rnc: input.rnc,
+        environment: target.environment,
+      });
+
+      let sealed: SealedDosaCredential;
+      try {
+        sealed = this.vault.seal(
+          {
+            companyId: input.companyId,
+            rnc: normalizeRnc(input.rnc),
+            environment: target.environment,
+          },
+          target.bundle,
+        );
+      } catch (error) {
+        return {
+          ok: false,
+          blockedReason: codeOf(error),
+          written,
+          already,
+          applied: false,
+        };
+      }
+
+      if (current && current.sealed.fingerprint === sealed.fingerprint) {
+        already.push(target.environment);
+        continue;
+      }
+
+      if (!dryRun) {
+        const applied = await this.store.upsert({
+          companyId: input.companyId,
+          rnc: normalizeRnc(input.rnc),
+          environment: target.environment,
+          status: "PENDING_CONFIRMATION",
+          source: "WEBHOOK",
+          sealed,
+          updatedAt: null,
+        });
+        if (!applied) {
+          // El destino tiene material confirmado/activo distinto y la guarda
+          // atómica no lo sustituyó: no se escribe y se informa como ya presente.
+          already.push(target.environment);
+          continue;
+        }
+      }
+
+      written.push({
+        environment: target.environment,
+        status: "PENDING_CONFIRMATION",
+        fingerprint: sealed.fingerprint,
+      });
+    }
+
+    return { ok: true, written, already, applied: !dryRun };
   }
 
   async inspect(input: {

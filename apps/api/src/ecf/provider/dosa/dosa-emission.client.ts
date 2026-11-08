@@ -23,6 +23,7 @@ import {
   classifyDosaResponse,
   type DosaResponseClassification,
 } from "./dosa-response.mapper";
+import { outboundAuthViolation } from "./dosa-outbound-auth.policy";
 
 /**
  * Cliente HTTP de emisión de DOSA — **sin autorización de red por defecto**.
@@ -233,6 +234,17 @@ export class DosaEmissionClient {
       "Content-Type": "application/json",
       [DOSA_AUTH_HEADER]: this.config.apiKey,
     };
+
+    // La autenticación SALIENTE no es la firma del webhook entrante. Se comprueba
+    // antes de tocar la red: si alguien añadiera `X-Dosa-Signature` o usara el
+    // secreto del webhook como API Key, la petición no sale.
+    const authViolation = outboundAuthViolation(headers, {
+      apiKey: this.config.apiKey,
+    });
+    if (authViolation) {
+      return { ok: false, blockedReason: authViolation };
+    }
+
     const url = `${this.config.baseUrl}${emissionPathFor(input.body)}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);

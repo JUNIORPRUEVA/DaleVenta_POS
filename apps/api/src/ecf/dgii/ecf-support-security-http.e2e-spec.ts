@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePrismaCliPath } from "../../testing/prisma-cli";
 import { Client } from "pg";
 import request from "supertest";
 import { EcfAuditAction } from "@prisma/client";
@@ -73,13 +73,7 @@ uat("asistencia autorizada — aislamiento y auditoría", () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || "ecf-security-e2e-secret";
     process.env[PLATFORM_STAFF_ENV] = "";
 
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
+    const prismaCli = resolvePrismaCliPath();
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },

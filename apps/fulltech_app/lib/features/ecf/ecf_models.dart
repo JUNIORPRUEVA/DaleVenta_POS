@@ -410,8 +410,9 @@ class EcfCapabilities {
   final bool productionEnabled;
   final List<String> allowedTypes;
 
-  /// `false` mientras no exista un endpoint autorizado de emisión. La interfaz
-  /// usa esto para no ofrecer nunca un botón de envío real.
+  /// `true` sólo cuando ESTA empresa puede emitir ahora mismo: proveedor DOSA,
+  /// emisión encendida en el servidor y certificación autorizada. La interfaz
+  /// usa esto para no ofrecer un botón de envío que el backend rechazaría.
   final bool emissionPathAvailable;
   final List<EcfDocumentTypeCapability> documentTypes;
 

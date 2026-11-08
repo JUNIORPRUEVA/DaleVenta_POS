@@ -7,6 +7,8 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
+import '../ecf_dosa_dispatch_models.dart';
+import '../ecf_dosa_activation_models.dart';
 import '../ecf_support_grant_models.dart';
 
 Map<String, dynamic> _asMap(dynamic data) {
@@ -168,6 +170,31 @@ class EcfRepository {
         .toList(growable: false);
   }
 
+  /// Declara el rango de numeración (e-NCF) que la DGII asignó a la empresa.
+  ///
+  /// Sin un rango activo no se puede preparar ningún comprobante: el backend
+  /// responde `ECF_SEQUENCE_EXHAUSTED`, que no explica nada al cliente. El
+  /// prefijo NO se envía: lo deriva el backend del tipo de comprobante
+  /// (`E31` → `E310000000001`).
+  ///
+  /// Un error aquí sí es una excepción: `ECF_SEQUENCE_ALREADY_EXISTS` (ya hay uno
+  /// activo), `ECF_SEQUENCE_RANGE_INVALID` (desde/hasta incoherentes) o
+  /// `ECF_SEQUENCE_REUSE_BLOCKED` (empezar por debajo de lo ya consumido).
+  Future<void> registerSequence({
+    required String documentType,
+    required int startNumber,
+    required int endNumber,
+    String? validUntil,
+  }) async {
+    await _dio.post(ApiRoutes.ecfSequences, data: {
+      'documentType': documentType,
+      'startNumber': startNumber,
+      'endNumber': endNumber,
+      if (validUntil != null && validUntil.trim().isNotEmpty)
+        'validUntil': validUntil.trim(),
+    });
+  }
+
   Future<List<EcfEligibleOriginal>> eligibleOriginals() async {
     final res = await _dio.get(ApiRoutes.ecfDocumentsEligibleOriginals);
     return _asList(res.data)
@@ -316,6 +343,34 @@ class EcfRepository {
       data: {'scenario': scenario},
     );
     return EcfSimulatedDispatchOutcome.fromJson(_asMap(res.data));
+  }
+
+  /// DESPACHO AUTORIZADO al proveedor DOSA de la empresa.
+  ///
+  /// A diferencia del despacho simulado, este camino es el real: el backend
+  /// aplica barrera del documento, compuerta fiscal y credenciales de ESTA
+  /// empresa y ESTE ambiente.
+  ///
+  /// Un rechazo fiscal no lanza: llega con `ok: false`, `code` y
+  /// `blockingReasons` para que la interfaz explique qué falta. Los códigos 4xx
+  /// sí son excepciones (permiso, documento inexistente, doble intento).
+  Future<EcfDosaDispatchOutcome> dispatchDosa(String documentId) async {
+    final res = await _dio.post(ApiRoutes.ecfDocumentDispatchDosa(documentId));
+    return EcfDosaDispatchOutcome.fromJson(_asMap(res.data));
+  }
+
+  /// Intenta ACTIVAR y AUTORIZAR la emisión con la evidencia del cliente.
+  ///
+  /// Es la llamada que permite al cliente terminar el proceso sin que nadie de
+  /// Fulltech intervenga: el backend evalúa la sesión, la confirmación de DOSA,
+  /// la aprobación de la DGII y la autorización del propio cliente, y si están
+  /// las cuatro activa la credencial y deriva el estado de certificación.
+  ///
+  /// Un «todavía no» NO lanza: llega con `ok: false` y `blockingReasons`, que la
+  /// interfaz muestra tal cual. Repetir la llamada es seguro (idempotente).
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async {
+    final res = await _dio.post(ApiRoutes.ecfDosaActivationAttempt);
+    return EcfDosaActivationOutcome.fromJson(_asMap(res.data));
   }
 
   /// Prepara un borrador local (E31) a partir de una venta real.

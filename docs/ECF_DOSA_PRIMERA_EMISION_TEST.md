@@ -35,21 +35,28 @@ Un único comprobante por ejecución, con una sola tentativa por documento
    `DOSA_TEST_SEQUENCE_PREFIX` / `_FROM` / `_TO`. No se inventa un rango ni se
    reutiliza uno productivo.
 6. **Código de unidad de medida** (`--unidad` o `DOSA_TEST_UNIT_OF_MEASURE`), entero
-del catálogo publicado por DOSA (1..20). El código identifica una unidad fiscal
+del catálogo **vigente de la DGII**. El código identifica una unidad fiscal
 concreta: **no hay valor por defecto**, lo aporta el operador.
+
+   > **Corregido el 2026-11-07.** La tabla que aparecía aquí (1 = Unidad,
+   > 11 = Yarda) era la del contrato **anterior** del proveedor. Referencia
+   > canónica: [`docs/ecf/research/DOSA_EMISSION_API_2026-11.md`](ecf/research/DOSA_EMISSION_API_2026-11.md)
+   > §4.1. Ver también `ECF_DOSA_EMISSION_CONTRACT_VERIFIED.md`.
 
    | Código | Unidad | Código | Unidad |
    | --- | --- | --- | --- |
-   | 1 | Unidad | 11 | Yarda |
-   | 2 | Caja | 12 | Litro |
-   | 3 | Kilogramo | 13 | Mililitro |
-   | 4 | Gramo | 14 | Galón |
-   | 5 | Libra | 15 | Docena |
-   | 6 | Onza | 16 | Paquete |
-   | 7 | Metro | 17 | Servicio |
-   | 8 | Centímetro | 18 | Hora |
-   | 9 | Pulgada | 19 | Día |
-   | 10 | Pie | 20 | Mes |
+   | 43 | Unidad | 41 | Yarda |
+   | 6 | Caja | 24 | Litro |
+   | 21 | Kilogramo | 15 | Galón |
+   | 17 | Gramo | 13 | Docena |
+   | 23 | Libra | 31 | Paquete |
+   | 26 | Metro | 19 | Hora |
+   | 8 | Centímetro | 12 | Día |
+   | 55 | Pulgada | 33 | Pie |
+
+   Onza, mililitro, servicio y mes **no existen** en la tabla de la DGII: si el
+   operador los necesita, se omite el campo (es opcional) en lugar de inventar
+   un código.
 7. Almacén de evidencia escribible (`DOSA_PROBE_EVIDENCE_FILE`, por defecto
    `.dosa-probe/evidence.jsonl`).
 
@@ -63,7 +70,7 @@ Desde `apps/api`, con `dist` construido:
 
 ```
 node dist/ecf/provider/dosa/dosa-test-emission.probe.cli.js \
-  --encf=E31000113500 --unidad=<1..20> --dry-run
+  --encf=E31000113500 --unidad=<codigo-dgii> --dry-run
 ```
 
 Qué comprueba, en este orden:
@@ -92,7 +99,7 @@ Solo con la autorización del punto 2.1 y tras un dry-run en verde:
 
 ```
 node dist/ecf/provider/dosa/dosa-test-emission.probe.cli.js \
-  --encf=<ENCF_AUTORIZADO> --unidad=<1..20> --token=<TOKEN_DE_AUTORIZACION>
+  --encf=<ENCF_AUTORIZADO> --unidad=<codigo-dgii> --token=<TOKEN_DE_AUTORIZACION>
 ```
 
 El `token` lo calcula `probeAuthorizationToken(encf)`; existe para que un envío

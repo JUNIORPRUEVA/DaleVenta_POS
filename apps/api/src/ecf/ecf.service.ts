@@ -18,6 +18,10 @@ import {
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
 import {
+  isReadyForReviewEvidence,
+  resolveCertificationStatus,
+} from "./ecf-certification-status.policy";
+import {
   ECF_ALLOWED_DOCUMENT_TYPES,
   ECF_DEFAULT_STEP_MODES,
   ECF_ONBOARDING_STEP_ORDER,
@@ -157,13 +161,20 @@ export class EcfService {
         include: { evidence: true },
       });
       if (!step) throw new NotFoundException("Etapa e-CF no encontrada");
+      const currentConfig = await tx.ecfCompanyConfiguration.findUnique({
+        where: { companyId },
+        select: { certificationStatus: true },
+      });
+      const derived = await this.deriveCertificationStatus(tx, companyId);
       await tx.ecfCompanyConfiguration.update({
         where: { companyId },
         data: {
-          certificationStatus: await this.deriveCertificationStatus(
-            tx,
-            companyId,
-          ),
+          // Solo promociona: tocar una etapa no puede degradar una empresa que
+          // ya tenía una autorización legitima (ver `resolveCertificationStatus`).
+          certificationStatus: resolveCertificationStatus({
+            current: currentConfig?.certificationStatus ?? null,
+            derived,
+          }),
           updatedByUserId: user.id,
         },
       });
@@ -439,6 +450,18 @@ export class EcfService {
       steps.some((step) => activeStatuses.has(step.status))
     ) {
       return EcfCertificationStatus.IN_PROGRESS;
+    }
+    // Evidencia externa del proveedor: un evento autenticado y completo de DOSA
+    // no certifica nada ni habilita emisión, pero sí demuestra que existe algo
+    // pendiente de revisión. Antes esta función solo miraba los pasos internos,
+    // así que una empresa a la que DOSA ya le había entregado credenciales
+    // seguía apareciendo como NOT_STARTED: un estado que no describía la
+    // realidad y escondía el trabajo pendiente.
+    const completeWebhookEvents = await tx.ecfDosaWebhookEvent.count({
+      where: { companyId, processingState: "COMPLETE" },
+    });
+    if (isReadyForReviewEvidence({ completeWebhookEvents })) {
+      return EcfCertificationStatus.READY_FOR_REVIEW;
     }
     return EcfCertificationStatus.NOT_STARTED;
   }

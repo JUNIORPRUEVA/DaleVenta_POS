@@ -176,7 +176,7 @@ describe("DosaWebhookService — firma", () => {
 
     expect(outcome).toEqual({
       accepted: false,
-      status: 503,
+      status: 401,
       code: "ECF_DOSA_WEBHOOK_BLOCKED",
       reason: "SIGNATURE_HEADER_MISSING",
     });
@@ -213,7 +213,9 @@ describe("DosaWebhookService — firma", () => {
 
     expect(outcome).toMatchObject({
       accepted: false,
-      status: 503,
+      // 401 y no 503: una firma falsa no se arregla reintentando, así que no se
+      // le pide al proveedor que reintente.
+      status: 401,
       reason: "SIGNATURE_MISMATCH",
     });
     expect(store.rows).toHaveLength(0);
@@ -227,7 +229,7 @@ describe("DosaWebhookService — firma", () => {
 });
 
 describe("DosaWebhookService — esquema", () => {
-  it("rechaza un payload sin postulacion_id", async () => {
+  it("ACEPTA un payload sin postulacion_id (primer evento de conexión)", async () => {
     const { service, store } = build({});
     const body = samplePayload();
     delete (body as Record<string, unknown>).postulacion_id;
@@ -235,12 +237,20 @@ describe("DosaWebhookService — esquema", () => {
     const outcome = await service.handle(request(body, SECRET));
 
     expect(outcome).toMatchObject({
-      accepted: false,
-      status: 400,
-      code: "ECF_DOSA_WEBHOOK_INVALID_PAYLOAD",
+      accepted: true,
+      status: 200,
+      duplicate: false,
     });
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("rechaza un postulacion_id que no es texto", async () => {
+    const { service } = build({});
+    const outcome = await service.handle(
+      request(samplePayload({ postulacion_id: 12345 }), SECRET),
+    );
+    expect(outcome).toMatchObject({ accepted: false, status: 400 });
     expect((outcome as { reason: string }).reason).toContain("postulacion_id");
-    expect(store.rows).toHaveLength(0);
   });
 
   it("rechaza un RNC con formato imposible", async () => {
@@ -396,18 +406,36 @@ describe("DosaWebhookService — idempotencia", () => {
   });
 
   it("la clave de deduplicación es estable y no contiene secretos", () => {
-    const key = dedupeKeyOf({
-      postulacionId: "post-0001",
-      estadoCertificacion: "finalizado",
-      disponiblesDesde: "2026-11-01T22:50:12Z",
-    });
+    const bodyHash = createHash("sha256").update("cuerpo-exacto").digest("hex");
+    const key = dedupeKeyOf(
+      {
+        postulacionId: "post-0001",
+        estadoCertificacion: "finalizado",
+        disponiblesDesde: "2026-11-01T22:50:12Z",
+      },
+      bodyHash,
+    );
     expect(key).toBe(
       createHash("sha256")
-        .update("post-0001|finalizado|2026-11-01T22:50:12Z")
+        .update(`post-0001|finalizado|2026-11-01T22:50:12Z|${bodyHash}`)
         .digest("hex"),
     );
     expect(key).toHaveLength(64);
     expect(key).not.toContain("KEY");
+  });
+
+  it("dos envíos con el mismo identificador y cuerpo distinto no son duplicados", () => {
+    const base = {
+      postulacionId: "post-0001",
+      estadoCertificacion: "finalizado",
+      disponiblesDesde: "2026-11-01T22:50:12Z",
+    };
+    const first = dedupeKeyOf(base, "hash-a");
+    const retry = dedupeKeyOf(base, "hash-a");
+    const rotated = dedupeKeyOf(base, "hash-b");
+
+    expect(retry).toBe(first);
+    expect(rotated).not.toBe(first);
   });
 
   it("usa INSERT ... ON CONFLICT para que la carrera no duplique", async () => {

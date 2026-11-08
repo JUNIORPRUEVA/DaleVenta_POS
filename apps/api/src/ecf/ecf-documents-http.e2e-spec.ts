@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePrismaCliPath } from "../testing/prisma-cli";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../app.module";
@@ -57,6 +57,7 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
   let appUrl: string;
   let adminUrl: string;
   let unitId: string;
+  let previousUatLocalOnly: string | undefined;
 
   const http = () => request(app.getHttpServer());
 
@@ -77,13 +78,14 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
 
     process.env.DATABASE_URL = appUrl;
     process.env.JWT_SECRET = process.env.JWT_SECRET || "ecf-http-e2e-secret";
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
+    // El despacho SIMULADO exige un entorno UAT LOCAL
+    // (`simulatedDispatchRefusal` → `ECF_SIMULATED_DISPATCH_REFUSED_NOT_LOCAL_UAT`).
+    // Sin esta seña la ruta responde 409, correctamente: el simulador no debe
+    // funcionar en producción. Aquí se declara el entorno de la prueba antes de
+    // crear la aplicación, porque `ConfigService` lee `process.env` al arrancar.
+    previousUatLocalOnly = process.env.UAT_LOCAL_ONLY;
+    process.env.UAT_LOCAL_ONLY = "true";
+    const prismaCli = resolvePrismaCliPath();
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },
@@ -105,6 +107,9 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
 
   afterAll(async () => {
     if (app) await app.close();
+    // No se deja la seña del simulador activa para las demás suites.
+    if (previousUatLocalOnly === undefined) delete process.env.UAT_LOCAL_ONLY;
+    else process.env.UAT_LOCAL_ONLY = previousUatLocalOnly;
     if (adminUrl && dbName && SAFE_DB.test(dbName)) {
       const admin = new Client({ connectionString: adminUrl });
       await admin.connect();

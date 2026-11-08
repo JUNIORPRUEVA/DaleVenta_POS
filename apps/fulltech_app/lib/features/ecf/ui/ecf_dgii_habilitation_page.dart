@@ -29,6 +29,8 @@ import 'ecf_fiscal_data_page.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
 import 'debug/ecf_debug_screen_selector.dart';
+import 'flow/ecf_dosa_activation_status.dart';
+import 'flow/ecf_sequence_range_section.dart';
 import 'flow/ecf_dosa_tracking_step.dart';
 import 'flow/ecf_flow_kit.dart';
 import 'flow/ecf_flow_step.dart';
@@ -530,6 +532,12 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.manageEcfOnboarding,
     );
+    // Permiso propio de la numeración: el backend lo exige con
+    // `manageEcfSequences`, así que la sección se gatea con el mismo.
+    final canManageSequences = hasUserPermission(
+      user,
+      AppPermission.manageEcfSequences,
+    );
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
     // El certificado lo gestiona DOSA cuando DOSA gobierna la certificación de
     // la empresa. Dos fuentes, ambas del backend, y basta con una:
@@ -728,6 +736,26 @@ class _EcfDgiiHabilitationPageState
                             advanced: widget.adminView && canManage
                                 ? _adminAdvanced(view, stage: stage)
                                 : null,
+                            // Qué falta para poder facturar. Vive en el mismo
+                            // recorrido: sin esto, el cliente que vuelve días
+                            // después no sabe en qué quedó su trámite.
+                            activation: dosaOwnsCertificate && canOnboard
+                                ? EcfDosaActivationStatus(
+                                    key: ValueKey(
+                                      'dosa-activation-preparation-${user?.companyId}',
+                                    ),
+                                    canManage: canOnboard,
+                                    compact: true,
+                                  )
+                                : null,
+                            sequence: dosaOwnsCertificate && canManageSequences
+                                ? EcfSequenceRangeSection(
+                                    key: ValueKey(
+                                      'dosa-sequences-preparation-${user?.companyId}',
+                                    ),
+                                    canManage: canManageSequences,
+                                  )
+                                : null,
                             simulationAvailable:
                                 preparation.valueOrNull?.simulationAvailable ??
                                 false,
@@ -751,6 +779,22 @@ class _EcfDgiiHabilitationPageState
                                   statusLabel: _clientStateLabel(view),
                                   statusMessage: _clientStatusMessage(view),
                                   official: view.officialAuthorization,
+                                  activation: canOnboard
+                                      ? EcfDosaActivationStatus(
+                                          key: ValueKey(
+                                            'dosa-activation-tracking-${user?.companyId}',
+                                          ),
+                                          canManage: canOnboard,
+                                        )
+                                      : null,
+                                  sequence: canManageSequences
+                                      ? EcfSequenceRangeSection(
+                                          key: ValueKey(
+                                            'dosa-sequences-tracking-${user?.companyId}',
+                                          ),
+                                          canManage: canManageSequences,
+                                        )
+                                      : null,
                                   portal: canOnboard
                                       ? DosaAssistantSection(
                                           key: ValueKey(

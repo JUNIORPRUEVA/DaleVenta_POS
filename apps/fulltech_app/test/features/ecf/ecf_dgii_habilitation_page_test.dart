@@ -12,6 +12,7 @@ import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
+import 'package:daleventa_pos/features/ecf/ecf_dosa_activation_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
@@ -53,6 +54,53 @@ class _SessionEcfRepository extends EcfRepository {
     reads++;
     return _view(companyId: companyId());
   }
+
+  @override
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async =>
+      _fakeActivationOutcome();
+}
+
+/// El bloque de autorización consulta al aparecer: sin este doble, la prueba
+/// saldría a la red y dejaría un temporizador pendiente al desmontar.
+EcfDosaActivationOutcome _fakeActivationOutcome() =>
+    EcfDosaActivationOutcome.fromJson(const {
+      'ok': false,
+      'companyId': 'company-a',
+      'certificationStatus': 'IN_PROGRESS',
+      'changed': false,
+      'environments': [
+        {
+          'environment': 'test',
+          'status': 'PENDING_CONFIRMATION',
+          'activated': false,
+          'blockingReasons': ['ECF_DOSA_ACTIVATION_PROVIDER_NOT_CONFIRMED'],
+        },
+      ],
+    });
+
+class _ActivationOnlyEcfRepository extends EcfRepository {
+  _ActivationOnlyEcfRepository() : super(Dio());
+
+  @override
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async =>
+      _fakeActivationOutcome();
+
+  /// Numeración declarada: la sección de e-NCF no aparece y estas pruebas
+  /// siguen midiendo la pantalla, no ese formulario.
+  @override
+  Future<List<EcfSequenceInfo>> sequences() async => const [
+    EcfSequenceInfo(
+      id: 'seq-1',
+      documentType: 'E31',
+      prefix: 'E31',
+      startNumber: 1,
+      nextNumber: 2,
+      endNumber: 100,
+      active: true,
+      consumed: 1,
+      remaining: 99,
+    ),
+  ];
 }
 
 class _ApplicationRepository extends EcfApplicationRepository {
@@ -225,6 +273,7 @@ Widget _harness({
     // mediría al usuario anterior.
     key: UniqueKey(),
     overrides: [
+      ecfRepositoryProvider.overrideWithValue(_ActivationOnlyEcfRepository()),
       ecfDgiiHabilitationProvider.overrideWith((ref) async {
         onRead?.call();
         if (error != null) throw error;

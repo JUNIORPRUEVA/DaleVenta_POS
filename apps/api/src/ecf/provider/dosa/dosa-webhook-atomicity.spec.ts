@@ -233,3 +233,54 @@ describe("Webhook — evento completo solo con las credenciales guardadas", () =
     expect(serialized).not.toContain("certification_status");
   });
 });
+
+/**
+ * Caso real del 07/11/2026: el proveedor generó la llave TEST que faltaba y
+ * reenvío `empresa.credenciales` con el MISMO `postulacion_id`, el mismo
+ * `estado_certificacion` y el mismo `disponibles_desde`; solo cambiaban las
+ * credenciales. La versión desplegada ignoraba el contenido en la clave de
+ * idempotencia, así que el reenvío se descartó con `duplicate: true` y la llave
+ * nunca se guardó.
+ *
+ * La identidad del evento debe incluir el cuerpo recibido: repetir lo mismo es
+ * duplicado, corregir el contenido no lo es.
+ */
+describe("Webhook — un reenvío corregido no se pierde como duplicado", () => {
+  it("mismo postulacion_id con credenciales distintas se procesa como evento nuevo", async () => {
+    const credentials = new FlakyCredentials("ok");
+    const { events, service } = build(credentials);
+
+    const first = await service.handle(
+      payload({ credenciales: { api_key_test: "CLAVE-TEST-ANTIGUA" } }),
+    );
+    expect(first).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      code: "ECF_DOSA_WEBHOOK_RECORDED",
+    });
+
+    // El proveedor reenvía la misma postulación con la llave correcta.
+    const second = await service.handle(
+      payload({ credenciales: { api_key_test: "CLAVE-TEST-NUEVA" } }),
+    );
+
+    expect(second).toMatchObject({
+      accepted: true,
+      status: 200,
+      duplicate: false,
+      code: "ECF_DOSA_WEBHOOK_RECORDED",
+    });
+    expect(credentials.calls).toBe(2);
+    expect(events.rows.size).toBe(2);
+  });
+
+  it("cambiar solo el ambiente también cuenta como contenido nuevo", async () => {
+    const { events, service } = build(new FlakyCredentials("ok"));
+
+    await service.handle(payload({ ambiente: "Test" }));
+    const second = await service.handle(payload({ ambiente: "Produccion" }));
+
+    expect(second).toMatchObject({ duplicate: false });
+    expect(events.rows.size).toBe(2);
+  });
+});

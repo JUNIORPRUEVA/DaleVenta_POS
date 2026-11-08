@@ -96,6 +96,11 @@ function createPrismaMock() {
       create: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
     },
+    // Evidencia externa que ahora consulta `deriveCertificationStatus`.
+    // Por defecto CERO: sin eventos completos, el estado derivado no cambia.
+    ecfDosaWebhookEvent: {
+      count: jest.fn().mockResolvedValue(0),
+    },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   return prisma;

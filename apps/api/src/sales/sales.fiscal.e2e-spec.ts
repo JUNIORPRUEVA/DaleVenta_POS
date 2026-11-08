@@ -4,7 +4,7 @@ import { CompanyMemberRole, Role } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePrismaCliPath } from "../testing/prisma-cli";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../app.module";
@@ -133,13 +133,7 @@ describe("Fiscal authenticated HTTP E2E", () => {
     // Esta suite valida el flujo LEGACY (POST /sales sin originCashSessionId);
     // sin la bandera el contrato legacy se rechaza con 409 LEGACY_MISSING_SESSION.
     process.env.FINANCIAL_LEGACY_COMPAT = "true";
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
+    const prismaCli = resolvePrismaCliPath();
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },
@@ -585,9 +579,17 @@ describe("Fiscal authenticated HTTP E2E", () => {
           },
         ],
       })
-      .expect(201);
+      // Mismo `clientRequestId` con contenido DISTINTO ya no devuelve la venta
+      // original con 201: el servicio lo rechaza con 409
+      // `IDEMPOTENCY_PAYLOAD_MISMATCH` (ver `sales.service.ts` y su prueba
+      // unitaria `sales.service.tenant.spec.ts`). Devolver 201 con el cuerpo
+      // alterado aceptaría en silencio un importe que nunca se cobró.
+      .expect(409);
 
-    expect(retry.body.id).toBe(first.body.id);
+    expect(retry.body.code).toBe("IDEMPOTENCY_PAYLOAD_MISMATCH");
+    // La venta original se señala en el conflicto, para que el cliente sepa qué
+    // operación sí existe.
+    expect(retry.body.saleId).toBe(first.body.id);
 
     const sales = await prisma.sale.findMany({
       where: {

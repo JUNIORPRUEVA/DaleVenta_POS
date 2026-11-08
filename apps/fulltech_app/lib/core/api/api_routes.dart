@@ -547,6 +547,13 @@ class ApiRoutes {
   static const ecfDosaAuthorizeHistoricalTransition =
       '/ecf/dosa/certification-intent/authorize-historical-transition';
   static const ecfDosaCertificationSession = '/ecf/dosa/certification-session';
+  /// Activación y autorización de emisión del PROPIO cliente.
+  ///
+  /// Evalúa la evidencia que él mismo produjo (sesión, confirmación de DOSA,
+  /// aprobación DGII y su propia autorización) y, si está completa, activa la
+  /// credencial y deriva el estado de certificación. Es idempotente y responde
+  /// `200` aunque falte algo, con los motivos en `blockingReasons`.
+  static const ecfDosaActivationAttempt = '/ecf/dosa/activation/attempt';
   static const ecfDosaCertificationDiagnostic =
       '/ecf/dosa/certification-diagnostic';
 
@@ -571,6 +578,14 @@ class ApiRoutes {
   /// apagado). Sirve para validar la cadena completa; nunca es emisión fiscal.
   static String ecfDocumentSimulateDispatch(String id) =>
       '/ecf/documents/$id/simulate-dispatch';
+
+  /// Despacho AUTORIZADO al proveedor DOSA de la empresa.
+  ///
+  /// El backend aplica la barrera del documento, la compuerta fiscal y la bóveda
+  /// de credenciales de ESTA empresa y ESTE ambiente. Puede responder `ok:false`
+  /// con motivos, que la interfaz debe mostrar tal cual.
+  static String ecfDocumentDispatchDosa(String id) =>
+      '/ecf/documents/$id/dispatch-dosa';
   static const ecfSequences = '/ecf/sequences';
   static const ecfSequencesRenew = '/ecf/sequences/renew';
 

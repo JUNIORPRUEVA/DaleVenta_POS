@@ -10,6 +10,7 @@ import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.da
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
+import 'package:daleventa_pos/features/ecf/ecf_dosa_activation_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
@@ -26,6 +27,57 @@ import 'package:flutter_test/flutter_test.dart';
 /// bienvenida sin formularios técnicos, que sus datos se reutilicen, que el
 /// seguimiento muestre **tres hitos** y no quince operaciones, y que el detalle
 /// técnico quede fuera del camino salvo para quien puede gestionarlo.
+
+/// Repositorio falso: el bloque de autorización consulta al aparecer y **ninguna
+/// prueba puede salir a la red** (ni siquiera a un host real por defecto).
+class _FakeEcfRepository extends EcfRepository {
+  _FakeEcfRepository({EcfDosaActivationOutcome? outcome})
+    : outcome =
+           outcome ??
+           EcfDosaActivationOutcome.fromJson(const {
+             'ok': false,
+             'companyId': 'company-a',
+             'certificationStatus': 'IN_PROGRESS',
+             'changed': false,
+             'environments': [
+               {
+                 'environment': 'test',
+                 'status': 'PENDING_CONFIRMATION',
+                 'activated': false,
+                 'blockingReasons': [
+                   'ECF_DOSA_ACTIVATION_PROVIDER_NOT_CONFIRMED',
+                 ],
+               },
+             ],
+           }),
+       super(Dio());
+
+  final EcfDosaActivationOutcome outcome;
+  int attempts = 0;
+
+  @override
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async {
+    attempts++;
+    return outcome;
+  }
+
+  /// Numeración ya declarada: la sección de e-NCF no aparece y estas pruebas
+  /// siguen midiendo el recorrido, no el formulario de numeración.
+  @override
+  Future<List<EcfSequenceInfo>> sequences() async => const [
+    EcfSequenceInfo(
+      id: 'seq-1',
+      documentType: 'E31',
+      prefix: 'E31',
+      startNumber: 1,
+      nextNumber: 2,
+      endNumber: 100,
+      active: true,
+      consumed: 1,
+      remaining: 99,
+    ),
+  ];
+}
 
 class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
@@ -196,10 +248,12 @@ Widget _harness({
   bool dosaEligible = false,
   _FakeIntentApi? intentApi,
   _FakeSessionApi? sessionApi,
+  _FakeEcfRepository? repository,
 }) {
   return ProviderScope(
     key: UniqueKey(),
     overrides: [
+      ecfRepositoryProvider.overrideWithValue(repository ?? _FakeEcfRepository()),
       ecfDgiiHabilitationProvider.overrideWith(
         (ref) async => view ?? _habilitation(),
       ),
