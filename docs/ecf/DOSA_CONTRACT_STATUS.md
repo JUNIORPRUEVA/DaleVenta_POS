@@ -16,6 +16,7 @@ declara **NO VERIFICADO**. No se rellena con suposiciones.
 | `credenciales` = `{ api_key_produccion, api_key_test, api_secret }` | CONFIRMADO por muestra real | El DTO los lee con esos nombres exactos |
 | Endpoint de sesiones de certificación | CONFIRMADO | `DOSA_SESSION_DEFAULT_BASE_URL = https://dosasystem.com` |
 | Endpoint de emisión (`EnviarFactura`) | CONFIRMADO | `dosa-emission.client.ts` (`emissionPathFor`) |
+| `postulacion_id` y `estado_certificacion` pueden llegar en `null` | CONFIRMADO (proveedor, 2026-11-06) | `dosa-webhook.dto.ts` (`nullableText`) + `dosa-webhook-connection-event.spec.ts` (18 casos) |
 
 ### Estructura de `empresa.credenciales` (la muestra real)
 
@@ -45,6 +46,45 @@ Consecuencias que ya están en el código:
 - **Un solo `api_secret`** para los dos ambientes. Si DOSA emitiera secretos
   distintos, el modelo actual no podría representarlo (ver §3).
 
+### Estructura de `empresa.conectada` y `webhook.prueba`
+
+Confirmado por el proveedor el 2026-11-06:
+
+> «Solo les pedimos que su receptor acepte `postulacion_id` y
+> `estado_certificacion` en `null` en el primer evento de conexión
+> (`empresa.conectada`) y en el de prueba de firma (`webhook.prueba`), porque en
+> ese momento todavía no existe el proceso de certificación.»
+
+```json
+{
+  "postulacion_id": null,
+  "rnc": "…",
+  "razon_social": "…",
+  "correo": "…",
+  "ambiente": "Produccion",
+  "estado_certificacion": null
+}
+```
+
+Y, según el mismo mensaje, **solo los eventos de llaves traen
+`disponibles_desde`** («los de llaves traen además `disponibles_desde`»).
+
+Regla del receptor, ya implementada:
+
+| Campo | Ausente / `null` | Presente con tipo válido | Presente con tipo inválido |
+| --- | --- | --- | --- |
+| `postulacion_id` | Aceptado (`null`) | Aceptado | Rechazado (400) |
+| `estado_certificacion` | Aceptado (`null`) | Aceptado | Rechazado (400) |
+| `disponibles_desde` | Aceptado (`null`) | Aceptado si es fecha | Rechazado (400) |
+| `credenciales_pendientes` | Aceptado (`false`) | Aceptado si es booleano | Rechazado (400) |
+| `rnc` | **Rechazado (400)** | Aceptado | Rechazado (400) |
+| `razon_social` | **Rechazado (400)** | Aceptado | Rechazado (400) |
+
+La identidad y la correlación siguen siendo obligatorias; solo se relajan los
+campos que el proveedor no puede rellenar antes de que exista postulación.
+Ninguno de los relajados autoriza nada: la empresa sale del RNC (server-side), la
+firma se verifica antes y las credenciales viajan solo en los eventos de llaves.
+
 ## 2. Lo que NO está verificado
 
 | # | Pregunta | Por qué importa | Estado (2026-11-07) |
@@ -53,7 +93,7 @@ Consecuencias que ya están en el código:
 | P2 | ¿El secreto de 64 hex se usa como texto literal o como 32 bytes decodificados? | Elegir mal rechaza TODAS las firmas | **RESUELTO por compatibilidad acotada**: se aceptan las dos lecturas del mismo secreto |
 | P3 | ¿Existe un **identificador único de entrega**? | Hoy la deduplicación usa `sha256(postulación + estado + disponibles_desde + hash del cuerpo)` | No hay campo; se deduce del contenido |
 | P4 | ¿Existe un campo que diga el **tipo de evento**? | Hoy `event_type` se guarda como `PENDING_CLASSIFICATION` | La muestra no lo trae |
-| P5 | ¿Hay más tipos de evento además de la entrega de credenciales? | Condiciona el contrato del receptor | Solo se conoce uno |
+| P5 | ¿Hay más tipos de evento además de la entrega de credenciales? | Condiciona el contrato del receptor | **CONFIRMADO por el proveedor (2026-11-06)**: existen al menos `empresa.conectada` (conexión), `webhook.prueba` (prueba de firma) y `empresa.credenciales` (llaves). Los dos primeros llegan con `postulacion_id` y `estado_certificacion` en `null` |
 | P6 | ¿`api_secret` es único por empresa o distinto por ambiente? | Si es distinto, C2 del informe es un riesgo real | Un solo secreto en la muestra |
 | P7 | Política de reintento: ¿cuántos, cada cuánto, re-firando? | Un reintento con `t` viejo siempre falla (ver §4) | Observado ≈5 min; no confirmado |
 | P8 | ¿Hay reenvío manual (*replay*) desde el panel? | Define cómo se recupera un evento perdido | No documentado |

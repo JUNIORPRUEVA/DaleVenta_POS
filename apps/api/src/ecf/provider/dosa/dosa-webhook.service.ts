@@ -341,7 +341,12 @@ export class DosaWebhookService {
     eventId: string;
     companyId: string;
     dedupeKey: string;
-    payload: { rnc: string; ambiente: string; postulacionId: string };
+    payload: {
+      rnc: string;
+      ambiente: string;
+      /** `null` en los eventos previos a la postulación. */
+      postulacionId: string | null;
+    };
     secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string };
     /** Tipo de evento que se persistió: clasificado o pendiente de clasificación. */
     eventType: string;
@@ -439,14 +444,22 @@ export class DosaWebhookService {
       // Si devuelve `false` no se fuerza nada: el evento ya está persistido con
       // su `postulacion_id`, así que la reconciliación es posible después. Este
       // servicio NO crea sesiones ni elige una «a la primera que aparezca».
-      try {
-        await this.sessionHints.bindProviderPostulation({
-          companyId: input.companyId,
-          rnc: input.payload.rnc,
-          providerPostulationId: input.payload.postulacionId,
-        });
-      } catch {
-        // Igual que la pista: el hecho fiscal ya quedó registrado.
+      //
+      // Sin `postulacion_id` no hay nada que vincular: los eventos de conexión
+      // (`empresa.conectada`) y de prueba de firma (`webhook.prueba`) llegan con
+      // `null` porque todavía no existe postulación. Se omite la llamada en vez
+      // de enviar un identificador vacío.
+      const postulacionId = (input.payload.postulacionId ?? "").trim();
+      if (postulacionId.length > 0) {
+        try {
+          await this.sessionHints.bindProviderPostulation({
+            companyId: input.companyId,
+            rnc: input.payload.rnc,
+            providerPostulationId: postulacionId,
+          });
+        } catch {
+          // Igual que la pista: el hecho fiscal ya quedó registrado.
+        }
       }
     }
 
@@ -559,9 +572,10 @@ export function classifyDosaEventType(
  */
 export function dedupeKeyOf(
   payload: {
-    postulacionId: string;
-    estadoCertificacion: string;
-    disponiblesDesde: string;
+    /** `null` en los eventos previos a la postulación: se normaliza a "". */
+    postulacionId: string | null;
+    estadoCertificacion: string | null;
+    disponiblesDesde: string | null;
   },
   /**
    * SHA-256 del cuerpo exacto recibido. Sin él, un envío con el mismo
@@ -571,9 +585,12 @@ export function dedupeKeyOf(
    */
   rawBodySha256 = "",
 ): string {
+  // Los nulos se normalizan a cadena vacía para que la clave siga siendo estable
+  // entre reintentos idénticos. La parte que distingue dos eventos de conexión
+  // distintos es el hash del cuerpo, no estos identificadores.
   return createHash("sha256")
     .update(
-      `${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}|${rawBodySha256}`,
+      `${payload.postulacionId ?? ""}|${payload.estadoCertificacion ?? ""}|${payload.disponiblesDesde ?? ""}|${rawBodySha256}`,
     )
     .digest("hex");
 }

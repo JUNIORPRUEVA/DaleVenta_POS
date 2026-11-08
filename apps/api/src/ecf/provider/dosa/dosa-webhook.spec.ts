@@ -229,7 +229,7 @@ describe("DosaWebhookService — firma", () => {
 });
 
 describe("DosaWebhookService — esquema", () => {
-  it("rechaza un payload sin postulacion_id", async () => {
+  it("ACEPTA un payload sin postulacion_id (primer evento de conexión)", async () => {
     const { service, store } = build({});
     const body = samplePayload();
     delete (body as Record<string, unknown>).postulacion_id;
@@ -237,12 +237,20 @@ describe("DosaWebhookService — esquema", () => {
     const outcome = await service.handle(request(body, SECRET));
 
     expect(outcome).toMatchObject({
-      accepted: false,
-      status: 400,
-      code: "ECF_DOSA_WEBHOOK_INVALID_PAYLOAD",
+      accepted: true,
+      status: 200,
+      duplicate: false,
     });
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("rechaza un postulacion_id que no es texto", async () => {
+    const { service } = build({});
+    const outcome = await service.handle(
+      request(samplePayload({ postulacion_id: 12345 }), SECRET),
+    );
+    expect(outcome).toMatchObject({ accepted: false, status: 400 });
     expect((outcome as { reason: string }).reason).toContain("postulacion_id");
-    expect(store.rows).toHaveLength(0);
   });
 
   it("rechaza un RNC con formato imposible", async () => {
