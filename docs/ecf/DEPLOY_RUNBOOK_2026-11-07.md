@@ -108,6 +108,41 @@ inexistente.
   arriba, ejecutar a mano:
   `docker exec <contenedor-backend-nuevo> npx prisma migrate deploy`
 
+### Estado real: migración YA aplicada (2026-11-08 02:52 UTC)
+
+Se eligió una tercera vía, más segura que A1 y A2: **aplicar las migraciones
+antes de desplegar**, dejando `RUN_MIGRATIONS=false` como está.
+
+Verificado en producción antes de escribir:
+
+| Comprobación | Resultado |
+| --- | --- |
+| `prisma migrate status` en el contenedor vivo | `Database schema is up to date!` (73 migraciones) → sin `P3009` pendiente |
+| Migraciones pendientes tras copiar las 2 nuevas | **exactamente 2**: `20261107120000_ecf_dosa_incidents` y `20261107180000_ecf_portal_enrollments` |
+| Respaldo previo | `/root/daleventas-backups/pre-ecf-202611080252.dump` (7.5 MB, 163 entradas `TABLE DATA`, verificadas con `pg_restore --list`) |
+
+Ejecutado: `docker cp` de las dos carpetas al contenedor vivo y
+`npx prisma migrate deploy` → `All migrations have been successfully applied.`
+
+Verificado después:
+
+| Comprobación | Resultado |
+| --- | --- |
+| `prisma migrate status` | `Database schema is up to date!` (75 migraciones) |
+| Tablas nuevas | `ecf_dosa_incidents` y `ecf_portal_enrollments` existen |
+| `_prisma_migrations` | las dos filas con `finished_at` no nulo, `applied_steps_count = 1` |
+| Datos previos | `companies` 2 · `users` 4 · `ecf_dosa_webhook_events` 2 · `ecf_dosa_company_credentials` 1 — intactos |
+| Salud pública | `GET /api/health` → **200** `{"status":"ok"}` |
+
+**Consecuencia para el despliegue:** el contenedor nuevo encontrará el esquema
+ya actualizado. `RUN_MIGRATIONS` puede quedarse en `false`; si se pone en `true`,
+`migrate deploy` será un no-op.
+
+Nota: la "migración fallida" que resuelve `start-prod.sh`
+(`20260502043000_add_status_history_user_name_and_created_at`) **no existe en el
+repo** y **no está bloqueando** la base: el estado real era «up to date». El
+resolver no se ejecutó.
+
 ### Riesgo B — pérdida de variables al recrear el spec
 
 Ver §3.1. **RECOMENDACIÓN**: antes de pulsar «Implementar», abrir la pestaña de
