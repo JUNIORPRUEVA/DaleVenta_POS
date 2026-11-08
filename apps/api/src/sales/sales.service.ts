@@ -2672,6 +2672,30 @@ export class SalesService {
   }
 
   /**
+   * El módulo e-CF exige un UUID como identificador de operación. Se deriva de
+   * forma DETERMINISTA del id de la devolución (UUID v5 con SHA-1) para que un
+   * reintento de la misma devolución reutilice la misma nota en lugar de crear
+   * otra o consumir numeración adicional.
+   */
+  private refundCreditRequestId(refundSaleId: string): string {
+    const digest = crypto
+      .createHash("sha1")
+      .update(`ecf-refund:${refundSaleId.toLowerCase()}`)
+      .digest();
+    const bytes = Buffer.from(digest.subarray(0, 16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x50;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = bytes.toString("hex");
+    return [
+      hex.slice(0, 8),
+      hex.slice(8, 12),
+      hex.slice(12, 16),
+      hex.slice(16, 20),
+      hex.slice(20),
+    ].join("-");
+  }
+
+  /**
    * Nota de crédito E34 de una devolución ya confirmada.
    *
    * Solo se prepara cuando la venta original tiene un comprobante electrónico
@@ -2772,7 +2796,7 @@ export class SalesService {
         this.prisma,
       ).prepareCreditNote(user, {
         originalDocumentId: original.id,
-        clientRequestId: `refund:${refundSaleId}`,
+        clientRequestId: this.refundCreditRequestId(refundSaleId),
         refundKind,
         ...(lines ? { lines } : {}),
         modificationCode: refundKind === "TOTAL" ? 1 : 3,
