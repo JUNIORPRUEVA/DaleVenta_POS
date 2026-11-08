@@ -7,6 +7,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
+import '../ecf_authorized_sequence_models.dart';
 import '../ecf_dosa_dispatch_models.dart';
 import '../ecf_dosa_activation_models.dart';
 import '../ecf_support_grant_models.dart';
@@ -192,6 +193,36 @@ class EcfRepository {
       'endNumber': endNumber,
       if (validUntil != null && validUntil.trim().isNotEmpty)
         'validUntil': validUntil.trim(),
+    });
+  }
+
+  /// Numeración que la DGII autorizó a esta empresa, por tipo de comprobante.
+  Future<EcfAuthorizedSequencesView> authorizedSequences() async {
+    final res = await _dio.get(ApiRoutes.ecfDgiiAuthorizedSequences);
+    return EcfAuthorizedSequencesView.fromJson(_asMap(res.data));
+  }
+
+  /// Declara lo que la DGII autorizó. El backend guarda quién lo declaró, cuándo
+  /// y la versión del texto aceptado; sin esta fila no se puede declarar
+  /// numeración (`ECF_SEQUENCE_NOT_AUTHORIZED`).
+  Future<void> declareAuthorizedSequence({
+    required String documentType,
+    required String authorizationNumber,
+    required int rangeFrom,
+    required int rangeTo,
+    required int approvedQuantity,
+    String? expiresAt,
+    required bool declarationAccepted,
+  }) async {
+    await _dio.post(ApiRoutes.ecfDgiiAuthorizedSequences, data: {
+      'documentType': documentType,
+      'authorizationNumber': authorizationNumber.trim(),
+      'rangeFrom': rangeFrom,
+      'rangeTo': rangeTo,
+      'approvedQuantity': approvedQuantity,
+      if (expiresAt != null && expiresAt.trim().isNotEmpty)
+        'expiresAt': expiresAt.trim(),
+      'declarationAccepted': declarationAccepted,
     });
   }
 

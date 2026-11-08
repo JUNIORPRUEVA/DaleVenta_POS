@@ -9,10 +9,12 @@ import {
 import { ECF_ALLOWED_DOCUMENT_TYPES } from "../ecf.constants";
 import {
   ECF_GROUP_STATUSES,
+  type DeclareEcfAuthorizedSequenceDto,
   type EcfStatusGroup,
   type ListEcfDocumentsQueryDto,
   type RegisterEcfSequenceDto,
 } from "../dto/ecf-documents.dto";
+import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
 import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
 
@@ -303,6 +305,30 @@ export class EcfDocumentQueryService {
     });
     return { id: renewed.id, documentType: renewed.documentType, startNumber: renewed.startNumber,
       endNumber: renewed.endNumber, validUntil: renewed.validUntil, active: renewed.active };
+  }
+
+  /** Autorizaciones que la DGII otorgó a esta empresa, por tipo de comprobante. */
+  async listAuthorizedSequences(user: TenantUser) {
+    return new EcfDgiiAuthorizedSequencesService(this.prisma).list(user);
+  }
+
+  /**
+   * Registra la declaración del cliente sobre lo que la DGII le autorizó. La
+   * cardinalidad es una fila por tipo: volver a declarar actualiza el rango.
+   */
+  async declareAuthorizedSequence(
+    user: TenantUser,
+    dto: DeclareEcfAuthorizedSequenceDto,
+  ) {
+    return new EcfDgiiAuthorizedSequencesService(this.prisma).declare(user, {
+      documentType: dto.documentType,
+      authorizationNumber: dto.authorizationNumber,
+      rangeFrom: dto.rangeFrom,
+      rangeTo: dto.rangeTo,
+      approvedQuantity: dto.approvedQuantity,
+      expiresAt: dto.expiresAt ?? null,
+      declarationAccepted: dto.declarationAccepted === true,
+    });
   }
 
   private toListItem(row: {

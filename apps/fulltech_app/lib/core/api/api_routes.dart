@@ -589,6 +589,10 @@ class ApiRoutes {
   static const ecfSequences = '/ecf/sequences';
   static const ecfSequencesRenew = '/ecf/sequences/renew';
 
+  /// Numeración que la DGII autorizó a la empresa, por tipo de comprobante.
+  /// Es la fuente de verdad contra la que se valida lo que se declara.
+  static const ecfDgiiAuthorizedSequences = '/ecf/dgii/authorized-sequences';
+
   /// Proceso INTERNO de habilitación e-CF de la empresa (pasos y auditoría).
   static const ecfOnboarding = '/ecf/onboarding';
 

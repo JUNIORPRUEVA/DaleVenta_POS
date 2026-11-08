@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Injectable } from "@nestjs/comm
 import type { Prisma } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
 import { PrismaService } from "../../prisma/prisma.service";
+import { checkDeclaredRangeWithinAuthorization } from "./ecf-dgii-authorized-sequences.policy";
+import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
 
 type Tx = Prisma.TransactionClient;
 export type EcfSequenceDocumentType = "E31" | "E34";
@@ -37,6 +39,25 @@ export class EcfSequenceService {
     return documentType as EcfSequenceDocumentType;
   }
 
+  /**
+   * El rango declarado debe caber dentro de lo que la DGII autorizó a ESTA
+   * empresa para ESE tipo. Sin autorización registrada no se declara nada: es la
+   * compuerta que impide pedir más números de los aprobados.
+   */
+  private async assertWithinAuthorization(
+    companyId: string,
+    documentType: EcfSequenceDocumentType,
+    range: { startNumber: number; endNumber: number },
+  ) {
+    const authorization = await new EcfDgiiAuthorizedSequencesService(
+      this.prisma,
+    ).findFor(companyId, documentType);
+    const check = checkDeclaredRangeWithinAuthorization(range, authorization);
+    if (!check.ok) {
+      throw new ConflictException(`${check.code}: ${check.message}`);
+    }
+  }
+
   private assertRange(input: { startNumber: number; endNumber: number }) {
     const valid = Number.isInteger(input.startNumber) && Number.isInteger(input.endNumber)
       && input.startNumber >= 1 && input.endNumber >= input.startNumber
@@ -64,6 +85,7 @@ export class EcfSequenceService {
     const companyId = requireTenant(user);
     const documentType = this.assertType(input.documentType);
     this.assertRange(input);
+    await this.assertWithinAuthorization(companyId, documentType, input);
     const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.ecfSequence.findFirst({ where: { companyId, documentType, active: true } });
@@ -83,6 +105,7 @@ export class EcfSequenceService {
     const companyId = requireTenant(user);
     const documentType = this.assertType(input.documentType);
     this.assertRange(input);
+    await this.assertWithinAuthorization(companyId, documentType, input);
     const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ecf_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} FOR UPDATE`;

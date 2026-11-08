@@ -6,6 +6,7 @@ import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import {
   ConfirmEcfLineClassificationDto,
+  DeclareEcfAuthorizedSequenceDto,
   ListEcfDocumentsQueryDto,
   PrepareEcfConsumoDto,
   PrepareEcfCreditNoteDto,
@@ -212,5 +213,27 @@ export class EcfDocumentsController {
   @Permissions("manageEcfSequences")
   renewSequence(@Req() req: Request, @Body() dto: RenewEcfSequenceDto) {
     return this.documents.renewSequence(req.user as TenantUser, dto);
+  }
+
+  /** Lo que la DGII autorizó a esta empresa, por tipo de comprobante. */
+  @Get("dgii/authorized-sequences")
+  @Permissions("viewEcfDocuments")
+  listAuthorizedSequences(@Req() req: Request) {
+    return this.documents.listAuthorizedSequences(req.user as TenantUser);
+  }
+
+  /**
+   * Declaración del cliente sobre la numeración autorizada por la DGII.
+   *
+   * Es la única puerta para habilitar la numeración: sin esta fila, registrar un
+   * rango falla con `ECF_SEQUENCE_NOT_AUTHORIZED`.
+   */
+  @Post("dgii/authorized-sequences")
+  @Permissions("manageEcfSequences")
+  declareAuthorizedSequence(
+    @Req() req: Request,
+    @Body() dto: DeclareEcfAuthorizedSequenceDto,
+  ) {
+    return this.documents.declareAuthorizedSequence(req.user as TenantUser, dto);
   }
 }

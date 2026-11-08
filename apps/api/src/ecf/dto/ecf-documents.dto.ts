@@ -121,6 +121,48 @@ export class RegisterEcfSequenceDto {
 
 export class RenewEcfSequenceDto extends RegisterEcfSequenceDto {}
 
+/**
+ * Declaración de la numeración que la DGII autorizó a la empresa.
+ *
+ * Se transcribe desde la Oficina Virtual; no hay API que lo entregue. La
+ * declaración es obligatoria y su versión de texto queda registrada.
+ */
+export class DeclareEcfAuthorizedSequenceDto {
+  @IsIn(["E31", "E34"])
+  documentType!: "E31" | "E34";
+
+  @IsString()
+  @Matches(/^[0-9A-Za-z-]{4,64}$/, {
+    message: "ECF_DGII_SEQUENCE_AUTHORIZATION_REQUIRED",
+  })
+  authorizationNumber!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  rangeFrom!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  rangeTo!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  approvedQuantity!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  expiresAt?: string | null;
+
+  @IsIn([true], {
+    message: "ECF_DGII_DECLARATION_REQUIRED",
+  })
+  declarationAccepted!: boolean;
+}
+
 // Preparación de CONSUMO (E32). Flujo independiente del genérico: no consume el
 // rango de numeración de la empresa, no toca el cupo único de sandbox y no
 // emite. El e-NCF lo entrega su propio flujo, nunca este.

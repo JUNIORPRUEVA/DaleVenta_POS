@@ -1241,6 +1241,7 @@ model Company {
   ecfElectronicDocumentAttempts    EcfElectronicDocumentAttempt[]
   ecfElectronicDocumentStatusLogs  EcfElectronicDocumentStatusLog[]
   ecfSequences                     EcfSequence[]
+  ecfDgiiAuthorizedSequences       EcfDgiiAuthorizedSequence[]
   ecfSequenceAuditLogs             EcfSequenceAuditLog[]
   ecfLineClassifications           EcfLineClassification[]
 
@@ -4073,6 +4074,36 @@ model EcfSequence {
   // cannot express a partial index, so it is not declared here.
   @@index([companyId, documentType, active])
   @@map("ecf_sequences")
+}
+
+/// Autorización de numeración que la DGII otorgó a UNA empresa para UN tipo de
+/// comprobante. Es la fuente de verdad contra la que se valida cualquier rango
+/// declarado: sin esta fila no se puede declarar numeración (fail-closed).
+///
+/// El dato no lo entrega ninguna API: lo transcribe el cliente desde la Oficina
+/// Virtual y lo firma con una declaración explícita. Por eso se guarda quién lo
+/// declaró, cuándo y la versión del texto aceptado.
+model EcfDgiiAuthorizedSequence {
+  id                 String    @id @default(uuid()) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  documentType       String    @map("document_type")
+  authorizationNumber String   @map("authorization_number")
+  rangeFrom          Int       @map("range_from")
+  rangeTo            Int       @map("range_to")
+  approvedQuantity   Int       @map("approved_quantity")
+  expiresAt          DateTime? @map("expires_at")
+  evidenceId         String?   @map("evidence_id") @db.Uuid
+  declaredByUserId   String?   @map("declared_by_user_id") @db.Uuid
+  declaredAt         DateTime  @default(now()) @map("declared_at")
+  declarationVersion String    @map("declaration_version")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, documentType])
+  @@index([companyId])
+  @@map("ecf_dgii_authorized_sequences")
 }
 
 model EcfSequenceAuditLog {
