@@ -73,7 +73,6 @@ import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
 import '../ventas/data/ventas_repository.dart';
 import '../ventas/application/ventas_controller.dart';
-import '../ventas/fiscal_voucher_options.dart';
 import '../ventas/sales_credit_screen.dart';
 import '../ventas/sales_models.dart';
 import '../ventas/utils/sales_pdf_service.dart';
@@ -2210,16 +2209,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   bool get _quoteTaxEnabled => _quoteTaxSummary.taxEnabled;
 
-  /// True cuando la empresa tiene habilitado el flujo fiscal completo
-  /// (Utilizar impuestos y comprobantes/NCF activos). Fuente de verdad:
-  /// `companySettingsProvider` (taxEnabled + ncfEnabled), scoped por empresa.
-  bool get _fiscalFlowEnabled {
-    final settings = _currentTaxConfig?.settings;
-    return shouldShowFiscalVoucherControl(
-      taxEnabled: settings?.taxEnabled == true,
-      ncfEnabled: settings?.ncfEnabled == true,
-    );
-  }
+  /// El comprobante fiscal electrónico (E31/E32) se decide al FACTURAR la
+  /// venta, no al cotizar. El motor NCF tradicional se retiró, así que una
+  /// cotización ya no selecciona talonario y este flujo queda apagado.
+  bool get _fiscalFlowEnabled => false;
 
   /// Tipo de comprobante fiscal EFECTIVO del ticket. Si la empresa tiene
   /// impuestos/comprobantes OFF (Utilizar impuestos = OFF), el ticket se
@@ -2509,33 +2502,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return _fiscalVoucherValidationMessage == null;
   }
 
-  String? get _fiscalVoucherValidationMessage {
-    final type = _effectiveFiscalVoucherType;
-    if (type.isEmpty) return null;
-    if (type == 'B01') {
-      final hasClient =
-          (_selectedClientId ?? '').trim().isNotEmpty &&
-          _selectedClientName.trim() != 'Sin cliente';
-      if (!hasClient) {
-        return 'Selecciona un cliente para emitir esta factura fiscal.';
-      }
-      if (!isB01FiscalClientValid(_fiscalCustomerTaxId, _fiscalCustomerName)) {
-        return 'El cliente seleccionado debe tener RNC/Cédula para emitir esta factura fiscal.';
-      }
-    }
-    return null;
-  }
+  /// Ya no hay comprobante NCF que validar: la cotización no emite documento
+  /// fiscal. Se conserva el getter para no cambiar el contrato de la pantalla.
+  String? get _fiscalVoucherValidationMessage => null;
 
   String get _fiscalInvoiceLabel {
     final type = _effectiveFiscalVoucherType;
     return type.isEmpty ? 'Factura normal' : 'Fiscal · $type';
   }
 
-  /// True cuando el ticket activo usa un comprobante que exige identificación
-  /// fiscal del cliente (ej. B01), por lo que Nombre y RNC/Cédula son
-  /// obligatorios al crear/editar el cliente desde Facturación.
-  bool get _activeTicketRequiresFiscalCustomer =>
-      _effectiveFiscalVoucherType == 'B01';
+  /// Ningún comprobante de cotización exige hoy identificación fiscal del
+  /// cliente: el e-CF se emite al facturar y allí se valida el receptor.
+  bool get _activeTicketRequiresFiscalCustomer => false;
 
   Future<bool> _ensurePosActionPermission(
     AppPermission permission,
@@ -16007,28 +15985,12 @@ class _DesktopFiscalInvoicePanel extends ConsumerStatefulWidget {
 
 class _DesktopFiscalInvoicePanelState
     extends ConsumerState<_DesktopFiscalInvoicePanel> {
-  late String _invoiceType;
   late String _voucherType;
 
   @override
   void initState() {
     super.initState();
-    final initial = widget.initialVoucherType.trim().toUpperCase();
-    _voucherType = initial;
-    _invoiceType = initial.isEmpty ? 'normal' : 'fiscal';
-  }
-
-  void _selectInvoiceType(String type) {
-    setState(() {
-      _invoiceType = type;
-      if (type == 'normal') {
-        _voucherType = '';
-      }
-    });
-  }
-
-  void _selectVoucher(String type) {
-    setState(() => _voucherType = type.trim().toUpperCase());
+    _voucherType = widget.initialVoucherType.trim().toUpperCase();
   }
 
   bool _closing = false;
@@ -16042,19 +16004,6 @@ class _DesktopFiscalInvoicePanelState
 
   @override
   Widget build(BuildContext context) {
-    final config = ref.watch(productTaxUiConfigProvider).valueOrNull;
-    final settings = config?.settings;
-    final taxEnabled = settings?.taxEnabled == true;
-    final ncfEnabled = settings?.ncfEnabled == true;
-    // El motor NCF tradicional se retiró: una cotización ya no elige talón. El
-    // comprobante electrónico (E31/E32) se decide al facturar la venta.
-    final options = const <FiscalVoucherOption>[];
-    final fiscalDisabled = !taxEnabled || !ncfEnabled;
-    final showFiscal = _invoiceType == 'fiscal';
-    // Fuente de verdad: con "Utilizar impuestos" OFF NO se ofrece la opción
-    // Fiscal (el ticket es siempre Normal / sin comprobante fiscal).
-    final showFiscalOption = taxEnabled;
-
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
@@ -16088,80 +16037,13 @@ class _DesktopFiscalInvoicePanelState
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    const _SectionHeader('Tipo de factura'),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _InvoiceTypeTile(
-                            label: 'Normal',
-                            icon: Icons.receipt_outlined,
-                            selected: _invoiceType == 'normal',
-                            onTap: () => _selectInvoiceType('normal'),
-                          ),
-                        ),
-                        if (showFiscalOption) ...[
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _InvoiceTypeTile(
-                              label: 'Fiscal',
-                              icon: Icons.fact_check_outlined,
-                              selected: showFiscal,
-                              onTap: () => _selectInvoiceType('fiscal'),
-                            ),
-                          ),
-                        ],
-                      ],
+                    const _InfoBlock(
+                      icon: Icons.receipt_long_outlined,
+                      message:
+                          'Esta cotización no emite comprobante fiscal: el e-CF (E31/E32) se elige al facturar la venta.',
+                      color: Color(0xFFF8FBFF),
+                      borderColor: _billingBorderColor,
                     ),
-                    const SizedBox(height: 16),
-                    if (showFiscal) ...[
-                      const _SectionHeader('Tipo de comprobante'),
-                      const SizedBox(height: 10),
-                      if (fiscalDisabled)
-                        const _InfoBlock(
-                          icon: Icons.warning_amber_rounded,
-                          message:
-                              'Los comprobantes fiscales están desactivados. Actívalos en Configuración de empresa.',
-                          color: Color(0xFFFFFBEB),
-                          borderColor: Color(0xFFF7D070),
-                          textColor: Color(0xFF7A4B00),
-                        )
-                      else if (options.isEmpty)
-                        const _InfoBlock(
-                          icon: Icons.info_outline_rounded,
-                          message:
-                              'No hay secuencias NCF activas configuradas para B01/B02.',
-                          color: Color(0xFFF8FBFF),
-                          borderColor: _billingBorderColor,
-                        )
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final option in options)
-                              _VoucherChoiceChip(
-                                label: option.label,
-                                selected: _voucherType == option.type,
-                                onTap: () => _selectVoucher(option.type),
-                              ),
-                          ],
-                        ),
-                      const SizedBox(height: 12),
-                      const _InfoBlock(
-                        icon: Icons.assignment_outlined,
-                        message: 'El NCF se asigna al emitir la venta.',
-                        color: Color(0xFFEAF1FF),
-                        borderColor: Color(0xFFB8CCFF),
-                        textColor: Color(0xFF1957E6),
-                      ),
-                    ] else
-                      const _InfoBlock(
-                        icon: Icons.receipt_long_outlined,
-                        message: 'Venta sin comprobante fiscal.',
-                        color: Color(0xFFF8FBFF),
-                        borderColor: _billingBorderColor,
-                      ),
                   ],
                 ),
               ),
@@ -16189,42 +16071,22 @@ class _DesktopFiscalInvoicePanelState
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w900,
-        color: Color(0xFF647985),
-        letterSpacing: 0.8,
-      ),
-    );
-  }
-}
-
 class _InfoBlock extends StatelessWidget {
   const _InfoBlock({
     required this.message,
     required this.color,
     required this.borderColor,
     this.icon = Icons.info_outline_rounded,
-    this.textColor = const Color(0xFF5B6B7A),
   });
 
   final String message;
   final Color color;
   final Color borderColor;
   final IconData icon;
-  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
+    const textColor = Color(0xFF5B6B7A);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -16248,103 +16110,6 @@ class _InfoBlock extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _InvoiceTypeTile extends StatelessWidget {
-  const _InvoiceTypeTile({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF1957E6) : const Color(0xFF52697A);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFFEAF1FF) : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? const Color(0xFF1957E6) : _billingBorderColor,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VoucherChoiceChip extends StatelessWidget {
-  const _VoucherChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFFEAF1FF) : scheme.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? const Color(0xFF1957E6) : _billingBorderColor,
-              width: selected ? 1.3 : 1,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              color: selected
-                  ? const Color(0xFF1957E6)
-                  : const Color(0xFF52697A),
-            ),
-          ),
-        ),
       ),
     );
   }

@@ -1,36 +1,12 @@
-class FiscalVoucherOption {
-  const FiscalVoucherOption({
-    required this.type,
-    required this.label,
-    required this.shortLabel,
-  });
-
-  final String type;
-  final String label;
-  final String shortLabel;
-}
-
 const fiscalVoucherNoneLabel = 'Sin comprobante';
 
-const _supportedFiscalVoucherOptions = <String, FiscalVoucherOption>{
-  'B01': FiscalVoucherOption(
-    type: 'B01',
-    label: 'B01 - Credito Fiscal',
-    shortLabel: 'B01',
-  ),
-  'B02': FiscalVoucherOption(
-    type: 'B02',
-    label: 'B02 - Consumo',
-    shortLabel: 'B02',
-  ),
+/// Etiquetas de los comprobantes NCF retirados. Solo se usan para mostrar el
+/// histórico: el POS ya no ofrece B01/B02, el comprobante fiscal actual es el
+/// e-CF (E31/E32) y se elige en la venta.
+const _legacyVoucherLabels = <String, String>{
+  'B01': 'B01 - Credito Fiscal',
+  'B02': 'B02 - Consumo',
 };
-
-bool shouldShowFiscalVoucherControl({
-  required bool taxEnabled,
-  required bool ncfEnabled,
-}) {
-  return taxEnabled && ncfEnabled;
-}
 
 /// Normaliza un RNC / Cédula a solo dígitos para comparaciones consistentes.
 /// `133020253` y `1-33-02025-3` se consideran el mismo documento.
@@ -40,16 +16,10 @@ String normalizeTaxId(String? input) {
   return raw.replaceAll(RegExp(r'\D'), '');
 }
 
-bool isB01FiscalClientValid(String? taxId, [String? fiscalName]) {
-  final digits = normalizeTaxId(taxId);
-  final name = (fiscalName ?? '').trim();
-  return digits.length >= 9 && name.isNotEmpty;
-}
-
 String fiscalVoucherLabel(String? type) {
   final normalized = type?.trim().toUpperCase();
   if (normalized == null || normalized.isEmpty) {
     return fiscalVoucherNoneLabel;
   }
-  return _supportedFiscalVoucherOptions[normalized]?.label ?? normalized;
+  return _legacyVoucherLabels[normalized] ?? normalized;
 }
