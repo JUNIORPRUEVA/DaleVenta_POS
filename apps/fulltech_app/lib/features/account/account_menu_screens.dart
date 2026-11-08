@@ -524,7 +524,6 @@ class AccountCompanySettingsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
           // El checklist interno de 15 pasos de la era ALANUBE ya no se pinta
           // aquí: al encender la facturación electrónica inundaba la pantalla
           // con un proceso que el cliente completa dentro del módulo. Vive en

@@ -355,12 +355,12 @@ class _EcfSequenceRangeSectionState
             ),
             const SizedBox(height: 8),
             const Text(
-              'Escribe solo los números del rango. El prefijo lo agrega el '
-              'sistema. Si la DGII muestra «N/A», deja «Vence» vacío.',
+              'Escribe solo los números: el prefijo lo agrega el sistema. Si la '
+              'DGII muestra «N/A», deja «Vence» vacío.',
               style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
             const SizedBox(height: 14),
-            _declarationBox(),
+            _declaration(),
             if (_success != null) ...[
               const SizedBox(height: 10),
               EcfInlineNote(tone: EcfTone.done, text: _success!),
@@ -409,56 +409,51 @@ class _EcfSequenceRangeSectionState
     );
   }
 
-  /// La declaración es el acto del cliente: se presenta como un bloque propio,
-  /// no como un checkbox suelto, para que se lea antes de aceptar.
-  Widget _declarationBox() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Checkbox(
-                key: const ValueKey('ecf_dgii_declaration_check'),
-                value: _declarationAccepted,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() {
-                        _declarationAccepted = value ?? false;
-                        _error = null;
-                      }),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(
-                    _authorized.declarationText.isEmpty
-                        ? 'Declaro que estos datos son los que la DGII autorizó '
-                              'a mi empresa y que no usaré números fuera de ese '
-                              'rango.'
-                        : _authorized.declarationText,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.4,
-                      color: AppColors.textPrimary,
-                    ),
+  /// La declaración es el acto del cliente: se presenta como un bloque propio
+  /// separado por una línea, **no** como una tarjeta dentro de la tarjeta. El
+  /// kit del módulo prohíbe anidar superficies: eso es exactamente el ruido que
+  /// el recorrido debe evitar.
+  Widget _declaration() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 1, color: AppColors.border),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              key: const ValueKey('ecf_dgii_declaration_check'),
+              value: _declarationAccepted,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                      _declarationAccepted = value ?? false;
+                      _error = null;
+                    }),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _authorized.declarationText.isEmpty
+                      ? 'Declaro que estos datos son los que la DGII autorizó a '
+                            'mi empresa y que no usaré números fuera de ese rango.'
+                      : _authorized.declarationText,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
