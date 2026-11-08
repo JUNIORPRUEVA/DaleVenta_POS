@@ -302,6 +302,19 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
   }
 
   async function registerSequence(tenant: Tenant) {
+    // La numeración exige la autorización DGII declarada (fail-closed).
+    const declared = await http()
+      .post("/ecf/dgii/authorized-sequences")
+      .set("Authorization", `Bearer ${tenant.token}`)
+      .send({
+        documentType: "E31",
+        authorizationNumber: "SYNTH-E31-1-50",
+        rangeFrom: 1,
+        rangeTo: 50,
+        approvedQuantity: 50,
+        declarationAccepted: true,
+      });
+    expect(declared.status).toBe(201);
     const res = await http()
       .post("/ecf/sequences")
       .set("Authorization", `Bearer ${tenant.token}`)
