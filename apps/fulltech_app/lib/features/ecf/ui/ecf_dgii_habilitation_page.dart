@@ -26,6 +26,7 @@ import 'ecf_activation_page.dart';
 import 'ecf_certificate_card.dart';
 import 'ecf_dgii_application_wizard.dart';
 import 'ecf_fiscal_data_page.dart';
+import 'ecf_onboarding_section.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
 import 'debug/ecf_debug_screen_selector.dart';
@@ -1144,6 +1145,10 @@ class _EcfDgiiHabilitationPageState
             ),
             const SizedBox(height: 10),
             _technicalDetails(view, stage: stage),
+            // Checklist interno heredado: solo administrativo, nunca en el
+            // recorrido del cliente ni en Ajustes de empresa.
+            const SizedBox(height: 10),
+            const EcfOnboardingSection(),
           ],
         ),
       ),
