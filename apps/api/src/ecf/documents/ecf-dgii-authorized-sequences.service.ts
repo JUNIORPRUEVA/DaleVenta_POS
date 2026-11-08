@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { EcfAuditAction, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
 import {
@@ -57,18 +58,48 @@ export class EcfDgiiAuthorizedSequencesService {
       declarationVersion: ECF_DGII_DECLARATION_VERSION,
     };
 
-    const saved = await this.prisma.ecfDgiiAuthorizedSequence.upsert({
-      where: {
-        companyId_documentType: {
-          companyId,
-          documentType: validated.documentType,
+    // Declarar y auditar en la MISMA transacción: si la auditoría falla, la
+    // declaración no se guarda. Volver a declarar deja el antes y el después en
+    // el historial, porque la fila solo conserva el estado vigente.
+    return this.prisma.$transaction(async (tx) => {
+      const previous = await tx.ecfDgiiAuthorizedSequence.findUnique({
+        where: {
+          companyId_documentType: {
+            companyId,
+            documentType: validated.documentType,
+          },
         },
-      },
-      create: { companyId, documentType: validated.documentType, ...data },
-      update: data,
-    });
+      });
 
-    return toView(saved);
+      const saved = await tx.ecfDgiiAuthorizedSequence.upsert({
+        where: {
+          companyId_documentType: {
+            companyId,
+            documentType: validated.documentType,
+          },
+        },
+        create: { companyId, documentType: validated.documentType, ...data },
+        update: data,
+      });
+
+      await tx.ecfAuditLog.create({
+        data: {
+          companyId,
+          actorUserId: user.id,
+          action: EcfAuditAction.DGII_AUTHORIZED_SEQUENCES_DECLARED,
+          targetType: "EcfDgiiAuthorizedSequence",
+          targetId: saved.id,
+          before: previous === null ? Prisma.JsonNull : toAuditSnapshot(previous),
+          after: toAuditSnapshot(saved),
+          metadata: {
+            declarationVersion: ECF_DGII_DECLARATION_VERSION,
+            declaredByUserId: user.id,
+          },
+        },
+      });
+
+      return toView(saved);
+    });
   }
 
   /** Autorización vigente de una empresa para un tipo, o `null` si no declaró. */
@@ -115,6 +146,24 @@ function toView(row: AuthorizedRow) {
     approvedQuantity: row.approvedQuantity,
     expiresAt: row.expiresAt,
     declaredAt: row.declaredAt,
+    declarationVersion: row.declarationVersion,
+  };
+}
+
+/**
+ * Snapshot para la auditoría: rango, autorización y fechas. **Sin secretos** y
+ * sin datos de otras empresas.
+ */
+function toAuditSnapshot(row: AuthorizedRow & { declaredByUserId?: string | null }) {
+  return {
+    documentType: row.documentType,
+    authorizationNumber: row.authorizationNumber,
+    rangeFrom: row.rangeFrom,
+    rangeTo: row.rangeTo,
+    approvedQuantity: row.approvedQuantity,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    declaredByUserId: row.declaredByUserId ?? null,
+    declaredAt: row.declaredAt.toISOString(),
     declarationVersion: row.declarationVersion,
   };
 }

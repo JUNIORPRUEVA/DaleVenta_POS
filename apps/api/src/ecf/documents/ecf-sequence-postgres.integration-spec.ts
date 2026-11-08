@@ -29,6 +29,22 @@ uat("e-CF numbering ranges (E31/E34) on PostgreSQL", () => {
   async function tenant() {
     const companyId = randomUUID();
     await prisma.company.create({ data: { id: companyId, name: "Synthetic numbering", slug: `ecf-seq-${companyId}` } });
+    // La numeración exige autorización DGII declarada (fail-closed). La suite
+    // declara una amplia para poder probar la asignación en sí misma.
+    for (const documentType of ["E31", "E34"]) {
+      await prisma.ecfDgiiAuthorizedSequence.create({
+        data: {
+          companyId,
+          documentType,
+          authorizationNumber: `SYNTH-${documentType}`,
+          rangeFrom: 1,
+          rangeTo: 10_000,
+          approvedQuantity: 10_000,
+          declarationVersion: "v1",
+          declaredByUserId: actor,
+        },
+      });
+    }
     return { companyId, user: { id: actor, role: "ADMIN", companyId } as TenantUser };
   }
   const range = (user: TenantUser, documentType: string, startNumber: number, endNumber: number, validUntil?: Date) =>

@@ -58,6 +58,37 @@ export class EcfSequenceService {
     }
   }
 
+  /**
+   * Comprueba el número concreto que se va a entregar contra la autorización de
+   * la DGII. Se ejecuta DENTRO de la transacción que bloquea la secuencia, así
+   * que ni una llamada concurrente ni un camino alternativo pueden saltárselo.
+   */
+  private async assertNumberWithinAuthorization(
+    tx: Tx,
+    companyId: string,
+    documentType: EcfSequenceDocumentType,
+    number: number,
+  ) {
+    const authorization = await tx.ecfDgiiAuthorizedSequence.findUnique({
+      where: { companyId_documentType: { companyId, documentType } },
+    });
+    const check = checkDeclaredRangeWithinAuthorization(
+      { startNumber: number, endNumber: number },
+      authorization === null
+        ? null
+        : {
+            authorizationNumber: authorization.authorizationNumber,
+            rangeFrom: authorization.rangeFrom,
+            rangeTo: authorization.rangeTo,
+            approvedQuantity: authorization.approvedQuantity,
+            expiresAt: authorization.expiresAt,
+          },
+    );
+    if (!check.ok) {
+      throw new ConflictException(`${check.code}: ${check.message}`);
+    }
+  }
+
   private assertRange(input: { startNumber: number; endNumber: number }) {
     const valid = Number.isInteger(input.startNumber) && Number.isInteger(input.endNumber)
       && input.startNumber >= 1 && input.endNumber >= input.startNumber
@@ -166,6 +197,15 @@ export class EcfSequenceService {
     if (!sequence) throw new BadRequestException("ECF_SEQUENCE_EXHAUSTED");
     const encf = EcfSequenceService.encf(sequence.prefix, sequence.next_number);
     if (!ENCF_PATTERN.test(encf)) throw new ConflictException("ECF_SEQUENCE_PREFIX_INVALID");
+    // Blindaje de último paso: NINGÚN e-NCF sale fuera del rango que la DGII
+    // autorizó a esta empresa para este tipo, aunque alguien llame al asignador
+    // sin pasar por `register`. Sin autorización declarada no se entrega número.
+    await this.assertNumberWithinAuthorization(
+      tx,
+      params.companyId,
+      type,
+      sequence.next_number,
+    );
     // Consumed permanently: the increment is the only mutation, and it is inside
     // the locked transaction, so two concurrent allocations can never collide.
     await tx.ecfSequence.update({ where: { id: sequence.id }, data: { nextNumber: { increment: 1 } } });
