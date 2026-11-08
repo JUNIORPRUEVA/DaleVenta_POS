@@ -181,3 +181,33 @@ bloquea con un mensaje explícito: falla en cerrado en vez de emitir un talón p
 
 
 
+
+## 11. E34 en devoluciones: integrado y probado
+
+La devolución (`POST /sales/:id/return`) ya prepara su **nota de crédito E34** cuando la venta
+original conserva un comprobante E31/E32 **aceptado por la DGII**. Si no lo tiene, la devolución
+se comporta exactamente como antes y no se reserva numeración ni se crea documento alguno.
+
+Reglas implementadas en `SalesService.prepareRefundCreditNote`:
+
+- **Tipo**: `TOTAL` cuando la suma de cantidades devueltas (incluida la recién creada) cubre todo
+  el original; `PARTIAL` en cualquier otro caso.
+- **Líneas**: salen del original, no de la petición. El `lineNumber` se calcula con el **mismo
+  orden que el adaptador fiscal** (`sale.items.createdAt asc`), así la acreditación parcial apunta
+  a la línea real del comprobante.
+- **Idempotencia**: el módulo e-CF exige un UUID como identificador de operación, así que se deriva
+  uno determinista (UUID v5 SHA-1) del id de la devolución. Repetir la devolución devuelve la misma
+  nota y no consume otro e-NCF.
+- **Fallo fiscal no rompe la devolución**: ya está confirmada. Se registra
+  `ECF_E34_CREDIT_NOT_PREPARED` / `ECF_E34_CREDIT_PREPARATION_FAILED` con su código y stack, y el
+  documento queda para revisión supervisada.
+- **Despacho**: no hay envío inmediato. La nota queda en `LOCAL_VALIDATED` y el barrido
+  `POST /ecf/documents/dispatch-pending` la recoge; `DOSA_GATE_SUPPORTED_TYPES` incluye `E34`.
+
+Evidencia: `apps/api/src/sales/sales-return-ecf-credit-postgres.integration-spec.ts` (5 pruebas
+contra la base efímera): parcial con reserva `59.00`, dos parciales con notas distintas, total con
+reserva `177.00`, reintento sin duplicar y venta sin comprobante electrónico sin nota.
+
+En el cliente, `returnSale` devuelve la venta **y** su nota (`SaleReturnResult`), y las pantallas
+de devolución (Mis Ventas y TPV) muestran el e-NCF en el aviso de éxito. E34 nunca aparece como
+comprobante de una venta nueva.
