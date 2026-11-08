@@ -372,6 +372,18 @@ El paquete del webhook se guardaba bajo el `ambiente` declarado por el evento
 (`ca9dd3b0`) repartiendo por nombre de clave. Para el dato **ya guardado** existe
 una herramienta manual:
 
+**HECHO (2026-11-07)**: el reenvío de DOSA **sí funcionó**. El evento de
+`2026-11-07 13:54:38` trae `apiKeyTest` con valor (el del `2026-11-06 23:15:14`
+lo traía en `null`), firma `HMAC_SHA256_TIMESTAMPED`, `processing_state =
+COMPLETE`, `credentials_stored_at = 13:54:38.282` y una `dedupe_key` distinta de
+la del día anterior. La fila de credencial se actualizó 3 ms después. Es decir:
+la clave TEST **nueva de FULLTECH** está guardada; lo que falta es reclasificarla
+en su propia fila y activarla. (El `duplicate: true` que reportó el proveedor no
+impidió el guardado.)
+
+La clave TEST que aparece escrita en la conversación corresponde al RNC de
+pruebas `133306001` de DOSA y **no sirve para FULLTECH**.
+
 ```bash
 # 1) Ver qué haría (no escribe nada)
 npm run dosa:credentials:reclassify -- --company-id 165e3fca-6225-479b-8805-d2205f10536c --rnc 133080206
