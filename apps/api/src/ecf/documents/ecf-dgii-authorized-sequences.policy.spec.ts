@@ -60,17 +60,35 @@ describe("validateAuthorizationDeclaration", () => {
     );
   });
 
-  it("rechaza tipos que todavía no se pueden emitir", () => {
+  it("acepta E32 como tipo declarable", () => {
     const result = validateAuthorizationDeclaration(
-      declaration({ documentType: "E32" }),
+      declaration({
+        documentType: " e32 ",
+        authorizationNumber: "6005190129",
+        rangeFrom: 1,
+        rangeTo: 10000,
+        approvedQuantity: 10000,
+      }),
       NOW,
     );
-    expect(result).toEqual(
-      expect.objectContaining({
-        ok: false,
-        code: ECF_DGII_DECLARATION_ERRORS.typeUnsupported,
-      }),
-    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.documentType).toBe("E32");
+  });
+
+  it("rechaza tipos que el motor no puede numerar", () => {
+    for (const documentType of ["E43", "E46", "B01", ""]) {
+      const result = validateAuthorizationDeclaration(
+        declaration({ documentType }),
+        NOW,
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          ok: false,
+          code: ECF_DGII_DECLARATION_ERRORS.typeUnsupported,
+        }),
+      );
+    }
   });
 
   it("exige un número de autorización con forma válida", () => {

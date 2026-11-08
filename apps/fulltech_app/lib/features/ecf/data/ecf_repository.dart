@@ -446,9 +446,9 @@ class EcfRepository {
 
   /// Prepara un borrador local de CONSUMO (E32) desde una venta real.
   ///
-  /// Es un flujo independiente de E31: el backend NO consume numeración de la
-  /// empresa y NO toca el cupo único de sandbox, así que el borrador queda sin
-  /// e-NCF hasta que ese cupo lo entregue. No emite.
+  /// Numera igual que E31: el backend consume un e-NCF del rango que la DGII
+  /// autorizó para facturas de consumo, de forma idempotente por venta (un
+  /// reintento reutiliza el número ya asignado). No emite.
   Future<EcfPreparationOutcome> prepareConsumoFromSale({
     required String saleId,
     required int paymentType,

@@ -100,11 +100,11 @@ export type EcfConsumoPreparationResult = {
   documentType: "E32";
   status: string;
   /**
-   * Siempre `null`: E32 no toma numeración del rango de la empresa. Su e-NCF
-   * llega con el cupo único de sandbox, nunca desde este flujo.
+   * e-NCF asignado del rango que la DGII autorizó a ESTA empresa para E32.
+   * Nunca `null`: un comprobante de consumo sin numeración no es emitible.
    */
-  encf: null;
-  numberingState: "PENDING_SANDBOX_SLOT";
+  encf: string;
+  numberingState: "ALLOCATED_FROM_AUTHORIZED_RANGE";
   saleId: string;
   evidence: EcfSaleFiscalSnapshot["evidence"];
 };
@@ -209,11 +209,14 @@ export class EcfPreparationService {
   /**
    * Prepara localmente un comprobante de CONSUMO (E32) a partir de una venta.
    *
-   * E32 es un flujo INDEPENDIENTE del genérico: aquí NO se asigna e-NCF, NO se
-   * consume el rango de numeración de la empresa y NO se contacta al proveedor.
-   * El comprobante queda como borrador validado en local, listo para su cupo
-   * único de sandbox. La validación del esquema contratado se hace cuando el
-   * cupo entrega el e-NCF: sin número no se puede construir el payload.
+   * E32 toma su e-NCF del rango que la DGII autorizó a la empresa, igual que
+   * E31: un comprobante de consumo sin numeración fiscal no sirve para nada y
+   * no puede enviarse al proveedor. La asignación es **idempotente por venta**
+   * (la clave de operación se ancla en la venta origen), así que un reintento,
+   * un doble clic o un reinicio de la app reutilizan el número ya consumido en
+   * lugar de gastar otro.
+   *
+   * Sigue sin emitir: no se contacta al proveedor ni se declara aceptación.
    */
   async prepareConsumoFromSale(
     user: TenantUser,
@@ -257,14 +260,38 @@ export class EcfPreparationService {
       );
     }
 
+    const metadata: EcfIssuanceMetadata = {
+      paymentType: input.paymentType,
+      ...(input.incomeType ? { incomeType: input.incomeType } : {}),
+      ...(input.sequenceDueDate ? { sequenceDueDate: input.sequenceDueDate } : {}),
+      ...(input.paymentDeadline ? { paymentDeadline: input.paymentDeadline } : {}),
+    } as EcfIssuanceMetadata;
+
+    const metadataCheck = this.assertContractMetadata(input.documentType, metadata);
+    if (!metadataCheck.ok) return metadataCheck;
+
     const document = mapSaleSnapshotToEcfDocument(built.value.snapshot);
-    const prepared = await new EcfDocumentIdempotencyService(this.prisma).prepareLocalDocument({
-      companyId,
-      userId: user.id,
+    // Se usa el MISMO orquestador que E31: él resuelve la numeración desde el
+    // rango autorizado, la consume de forma permanente y guarda el resumen de
+    // emisión con el e-NCF. Reimplementarlo aquí abriría un segundo camino de
+    // numeración, que es justo lo que no debe existir.
+    const prepared = await new EcfEmissionService(this.prisma).prepare(user, {
+      document,
+      metadata,
       sourceType: "SALE",
       sourceId: built.value.saleId,
-      document,
     });
+
+    const emission = (prepared.payloadSummary as Record<string, unknown> | null)
+      ?.emission as { encf?: string } | undefined;
+    // Sin e-NCF no hay comprobante de consumo válido: se falla el cerrado en vez
+    // de devolver un borrador sin numeración que después nadie puede emitir.
+    if (!emission?.encf) {
+      return fiscalFailure(
+        "ECF_CONSUMO_NUMBERING_REQUIRED",
+        "No se pudo asignar el e-NCF de consumo. Declara la numeración E32 autorizada por la DGII.",
+      );
+    }
 
     return {
       ok: true,
@@ -272,8 +299,8 @@ export class EcfPreparationService {
         documentId: prepared.id,
         documentType: "E32",
         status: prepared.status,
-        encf: null,
-        numberingState: "PENDING_SANDBOX_SLOT",
+        encf: emission.encf,
+        numberingState: "ALLOCATED_FROM_AUTHORIZED_RANGE",
         saleId: built.value.saleId,
         evidence: built.value.evidence,
       },
@@ -460,7 +487,7 @@ export class EcfPreparationService {
    * lista inventada aquí. El e-NCF se controla aparte (lo asigna el servidor).
    */
   private assertContractMetadata(
-    documentType: "E31" | "E34",
+    documentType: "E31" | "E32" | "E34",
     metadata: EcfIssuanceMetadata,
   ): EcfFiscalResult<true> {
     const required = ALANUBE_OFFICIAL_REQUIRED_FIELDS[documentType]

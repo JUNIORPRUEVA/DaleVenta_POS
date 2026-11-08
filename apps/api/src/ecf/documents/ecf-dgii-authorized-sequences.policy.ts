@@ -27,11 +27,15 @@ export const ECF_DGII_DECLARATION_TEXT =
   "invalidar el comprobante.";
 
 /**
- * Tipos que hoy pueden declarar numeración. Se amplía cuando el camino de
- * emisión soporte el tipo; declarar un rango que no se puede usar solo confunde.
- * `E32` queda fuera hasta separar su prueba de sandbox del flujo comercial.
+ * Tipos que pueden declarar numeración autorizada por la DGII.
+ *
+ * `E32` (consumo) entra con el mismo derecho que E31 y E34: el POS emite
+ * facturas de consumo con numeración propia, así que la autorización que la
+ * DGII concede para ese tipo debe poder declararse y validarse. Antes E32
+ * quedaba fuera porque su e-NCF lo daba un cupo de sandbox de un solo uso; ese
+ * camino ya no es el de producción.
  */
-export const ECF_SEQUENCE_TYPES = ["E31", "E34"] as const;
+export const ECF_SEQUENCE_TYPES = ["E31", "E32", "E34"] as const;
 export type EcfSequenceType = (typeof ECF_SEQUENCE_TYPES)[number];
 
 export const ECF_DGII_DECLARATION_ERRORS = {

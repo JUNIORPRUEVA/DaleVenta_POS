@@ -79,8 +79,8 @@ class EcfConfigPage extends ConsumerWidget {
                         const _SectionTitle('Tipos de comprobante'),
                         const SizedBox(height: 2),
                         const _Muted(
-                          'E32 usa un cupo de un solo uso; E31 y E34 consumen '
-                          'el rango de numeración de la empresa.',
+                          'E31, E32 y E34 consumen el rango de numeración que la '
+                          'DGII autorizó a la empresa.',
                         ),
                         const SizedBox(height: 8),
                         for (final type in caps.documentTypes)

@@ -224,6 +224,20 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
   }
 
   async function registerSequence(tenant: Tenant, start: number, end: number) {
+    // La numeración exige la autorización DGII declarada: es la compuerta real
+    // del módulo, así que la prueba la declara por la misma vía que el cliente.
+    const declared = await http()
+      .post("/ecf/dgii/authorized-sequences")
+      .set("Authorization", `Bearer ${tenant.token}`)
+      .send({
+        documentType: "E31",
+        authorizationNumber: `SYNTH-E31-${start}-${end}`,
+        rangeFrom: start,
+        rangeTo: end,
+        approvedQuantity: end - start + 1,
+        declarationAccepted: true,
+      });
+    expect(declared.status).toBe(201);
     const res = await http()
       .post("/ecf/sequences")
       .set("Authorization", `Bearer ${tenant.token}`)

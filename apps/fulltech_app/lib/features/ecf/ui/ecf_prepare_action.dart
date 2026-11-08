@@ -228,8 +228,8 @@ class _EcfPrepareActionState extends ConsumerState<EcfPrepareAction> {
     setState(() => _running = true);
     try {
       final repository = ref.read(ecfRepositoryProvider);
-      // E32 va por su flujo propio: no consume numeración de la empresa ni el
-      // cupo único de sandbox, y devuelve el borrador sin e-NCF.
+      // E32 va por su flujo propio de preparación de consumo, pero numera igual
+      // que E31: consume un e-NCF del rango autorizado para facturas de consumo.
       final outcome = documentType == 'E32'
           ? await repository.prepareConsumoFromSale(
               saleId: widget.saleId,

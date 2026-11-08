@@ -60,6 +60,19 @@ uat("EcfPreparationService (venta → borrador e-CF) on PostgreSQL", () => {
     });
     const user = { id: userId, role: "ADMIN", companyId } as TenantUser;
     if (options.withRange !== false) {
+      // La numeración exige autorización DGII declarada (fail-closed).
+      await prisma.ecfDgiiAuthorizedSequence.create({
+        data: {
+          companyId,
+          documentType: "E31",
+          authorizationNumber: "SYNTH-E31",
+          rangeFrom: 1,
+          rangeTo: 10_000,
+          approvedQuantity: 10_000,
+          declarationVersion: "v1",
+          declaredByUserId: userId,
+        },
+      });
       await new EcfSequenceService(prisma).register(user, {
         documentType: "E31",
         startNumber: 1,

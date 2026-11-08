@@ -128,8 +128,8 @@ export class RenewEcfSequenceDto extends RegisterEcfSequenceDto {}
  * declaración es obligatoria y su versión de texto queda registrada.
  */
 export class DeclareEcfAuthorizedSequenceDto {
-  @IsIn(["E31", "E34"])
-  documentType!: "E31" | "E34";
+  @IsIn(["E31", "E32", "E34"])
+  documentType!: "E31" | "E32" | "E34";
 
   @IsString()
   @Matches(/^[0-9A-Za-z-]{4,64}$/, {

@@ -5,6 +5,7 @@ import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { fingerprint } from "../../documents/ecf-document-idempotency.service";
 import type { EcfDocumentType } from "../../fiscal-core/ecf-fiscal-document";
 import { mapEcfToDosaDraft } from "./dosa-ecf.mapper";
+import { DOSA_GATE_SUPPORTED_TYPES } from "./dosa-emission.gate";
 import { assessDosaProviderResponse } from "./dosa-provider-response";
 import { DosaEmissionService } from "./dosa-emission.service";
 import { DosaEmissionWire } from "./dosa-emission.wire";
@@ -83,7 +84,10 @@ export class DosaEmissionDispatchService {
     }
 
     const documentType = document.documentType as EcfDocumentType;
-    if (documentType !== "E31" && documentType !== "E34") {
+    // Los mismos tipos que la compuerta fiscal admite: E31 (crédito fiscal),
+    // E32 (consumo) y E34 (nota de crédito). La lista se reutiliza en vez de
+    // repetirse para que despacho y compuerta no puedan divergir.
+    if (!DOSA_GATE_SUPPORTED_TYPES.includes(documentType)) {
       return {
         ok: false as const,
         code: "ECF_DOSA_DISPATCH_TYPE_UNSUPPORTED",

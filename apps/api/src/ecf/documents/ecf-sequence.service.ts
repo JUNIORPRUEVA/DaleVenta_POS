@@ -6,13 +6,15 @@ import { checkDeclaredRangeWithinAuthorization } from "./ecf-dgii-authorized-seq
 import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
 
 type Tx = Prisma.TransactionClient;
-export type EcfSequenceDocumentType = "E31" | "E34";
+export type EcfSequenceDocumentType = "E31" | "E32" | "E34";
 
-// Only the document types that use a company e-CF range. E32 keeps its own
-// single-use sandbox slot: it is deliberately NOT allocatable here.
-const ALLOCATABLE: readonly EcfSequenceDocumentType[] = ["E31", "E34"];
+// Los tres tipos que consumen el rango e-CF de la empresa. E32 (consumo) entra
+// aquí porque el POS emite facturas de consumo con su propia numeración
+// autorizada; antes estaba reservado al cupo único de sandbox, que solo servía
+// para pruebas y dejaba los comprobantes reales sin número fiscal.
+const ALLOCATABLE: readonly EcfSequenceDocumentType[] = ["E31", "E32", "E34"];
 // e-NCF = letter + 2-digit type + 10 digits (13 characters total).
-const ENCF_PATTERN = /^E(31|34)\d{10}$/;
+const ENCF_PATTERN = /^E(31|32|34)\d{10}$/;
 const MAX_SEQUENCE_NUMBER = 9_999_999_999;
 
 type SequenceRow = {
@@ -34,19 +36,13 @@ export class EcfSequenceService {
 
   private assertType(documentType: string): EcfSequenceDocumentType {
     if (!ALLOCATABLE.includes(documentType as EcfSequenceDocumentType)) {
-      // E32 no es un tipo «inválido»: es un tipo pendiente de contrato con el
-      // proveedor. La preparación de consumo no asigna e-NCF (`encf: null`), así
-      // que habilitarlo aquí produciría comprobantes sin numeración. Se rechaza
-      // con un motivo que el operador puede accionar, no con un código seco.
+      // Un tipo desconocido no está «pendiente»: no tiene contrato, no tiene
+      // autorización y no hay forma de numerarlo. Se rechaza con un motivo que
+      // el operador puede accionar, no con un código seco.
       const normalized = `${documentType ?? ""}`.trim().toUpperCase();
-      const reason =
-        normalized === "E32"
-          ? "La factura de consumo (E32) todavía no declara numeración: su " +
-            "e-NCF lo entrega el flujo de certificación. Requiere confirmación " +
-            "del proveedor antes de habilitarla."
-          : "Tipo de comprobante no soportado para numeración.";
       throw new ConflictException(
-        `ECF_SEQUENCE_TYPE_UNSUPPORTED: ${reason}`,
+        `ECF_SEQUENCE_TYPE_UNSUPPORTED: Tipo de comprobante no numerable: ` +
+          `${normalized || "(vacío)"}. Tipos admitidos: ${ALLOCATABLE.join(", ")}.`,
       );
     }
     return documentType as EcfSequenceDocumentType;

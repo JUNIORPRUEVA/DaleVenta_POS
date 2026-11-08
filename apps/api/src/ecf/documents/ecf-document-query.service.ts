@@ -15,6 +15,7 @@ import {
   type RegisterEcfSequenceDto,
 } from "../dto/ecf-documents.dto";
 import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
+import { ECF_SEQUENCE_TYPES } from "./ecf-dgii-authorized-sequences.policy";
 import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
 
@@ -95,9 +96,11 @@ export class EcfDocumentQueryService {
           contractStatus: entry?.status ?? "UNVERIFIED",
           contractAllowsEmission: contractAllowsEmission(documentType),
           allowedForCompany: allowed.includes(documentType),
-          // E32 keeps its own single-use sandbox slot and is never allocated
-          // from the company numbering range.
-          allocatable: documentType !== "E32",
+          // Se deriva del motor real de numeración, no de una lista aparte: si
+          // un tipo deja de ser asignable, la capacidad lo refleja sola. Hoy los
+          // tres tipos consumen rango autorizado, E32 incluido, porque el POS
+          // emite facturas de consumo reales con e-NCF propio.
+          allocatable: (ECF_SEQUENCE_TYPES as readonly string[]).includes(documentType),
         };
       }),
     };
