@@ -32,38 +32,6 @@ bool shouldShowFiscalVoucherControl({
   return taxEnabled && ncfEnabled;
 }
 
-List<FiscalVoucherOption> fiscalVoucherOptionsFromConfiguredTypes({
-  required bool taxEnabled,
-  required bool ncfEnabled,
-  required Iterable<String> configuredTypes,
-}) {
-  if (!shouldShowFiscalVoucherControl(
-    taxEnabled: taxEnabled,
-    ncfEnabled: ncfEnabled,
-  )) {
-    return const [];
-  }
-
-  final normalized = configuredTypes
-      .map((value) => value.trim().toUpperCase())
-      .where(_supportedFiscalVoucherOptions.containsKey)
-      .toSet();
-
-  return [
-    for (final type in const ['B01', 'B02'])
-      if (normalized.contains(type)) _supportedFiscalVoucherOptions[type]!,
-  ];
-}
-
-bool shouldResetFiscalVoucherSelection({
-  required String? selectedType,
-  required Iterable<FiscalVoucherOption> options,
-}) {
-  final normalized = selectedType?.trim().toUpperCase();
-  if (normalized == null || normalized.isEmpty) return false;
-  return !options.any((option) => option.type == normalized);
-}
-
 /// Normaliza un RNC / Cédula a solo dígitos para comparaciones consistentes.
 /// `133020253` y `1-33-02025-3` se consideran el mismo documento.
 String normalizeTaxId(String? input) {

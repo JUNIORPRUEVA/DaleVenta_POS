@@ -167,10 +167,6 @@ class _AccountingExecutivePage extends StatelessWidget {
                               route: Routes.contabilidadDepositos,
                             ),
                             _AccountingWorkflowItem(
-                              label: 'Registrar factura fiscal',
-                              route: Routes.contabilidadFacturaFiscal,
-                            ),
-                            _AccountingWorkflowItem(
                               label: 'Programar pagos',
                               route: Routes.contabilidadPagosPendientes,
                             ),
@@ -198,14 +194,6 @@ class _AccountingExecutivePage extends StatelessWidget {
                               icon: Icons.account_balance_outlined,
                               route: Routes.contabilidadDepositos,
                               accent: Color(0xFF0891B2),
-                            ),
-                            _AccountingDesktopTile(
-                              title: 'Factura fiscal',
-                              subtitle:
-                                  'Comprobantes, compras fiscales y documentos.',
-                              icon: Icons.receipt_long_outlined,
-                              route: Routes.contabilidadFacturaFiscal,
-                              accent: Color(0xFF7C3AED),
                             ),
                             _AccountingDesktopTile(
                               title: 'Pagos pendientes',

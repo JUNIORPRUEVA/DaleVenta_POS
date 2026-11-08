@@ -16,7 +16,6 @@ import '../../features/splash/splash_screen.dart';
 import '../../features/contabilidad/contabilidad_screen.dart';
 import '../../features/contabilidad/cierres_diarios_screen.dart';
 import '../../features/contabilidad/depositos_bancarios_screen.dart';
-import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
 import '../../features/ecf/ui/ecf_config_page.dart';
 import '../../features/ecf/ui/ecf_certification_recovery_page.dart';
@@ -282,10 +281,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.contabilidadDepositos,
             builder: (context, state) => const DepositosBancariosScreen(),
-          ),
-          GoRoute(
-            path: Routes.contabilidadFacturaFiscal,
-            builder: (context, state) => const FacturaFiscalScreen(),
           ),
           GoRoute(
             path: Routes.contabilidadPagosPendientes,

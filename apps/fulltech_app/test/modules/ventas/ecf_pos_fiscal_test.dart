@@ -215,6 +215,16 @@ void main() {
   });
 
   group('contrato del modo', () {
+    test('normaliza el RNC para comparar el mismo documento', () {
+      // La regla E31 compara documentos: con y sin guiones es el mismo RNC.
+      expect(ecfBuyerIdentityComplete('1-33-02025-3', 'Cliente SA'), isTrue);
+      expect(ecfBuyerIdentityComplete('1 33 02025 3', 'Cliente SA'), isTrue);
+      expect(ecfBuyerIdentityComplete('133020253', 'Cliente SA'), isTrue);
+      expect(ecfBuyerIdentityComplete('13302025', 'Cliente SA'), isFalse);
+      expect(ecfBuyerIdentityComplete(null, 'Cliente SA'), isFalse);
+      expect(ecfBuyerIdentityComplete('133020253', '  '), isFalse);
+    });
+
     test('solo E31 exige receptor y solo Normal exige motivo', () {
       expect(EcfPosFiscalMode.e31.requiresBuyer, isTrue);
       expect(EcfPosFiscalMode.e32.requiresBuyer, isFalse);

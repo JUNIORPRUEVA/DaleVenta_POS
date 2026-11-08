@@ -78,7 +78,6 @@ import '../ventas/sales_credit_screen.dart';
 import '../ventas/sales_models.dart';
 import '../ventas/utils/sales_pdf_service.dart';
 import '../ventas/widgets/recent_sales_panel.dart';
-import '../../features/contabilidad/data/contabilidad_repository.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
@@ -16047,12 +16046,9 @@ class _DesktopFiscalInvoicePanelState
     final settings = config?.settings;
     final taxEnabled = settings?.taxEnabled == true;
     final ncfEnabled = settings?.ncfEnabled == true;
-    final sequences = ref.watch(ncfSequencesProvider).valueOrNull ?? const [];
-    final options = fiscalVoucherOptionsFromConfiguredTypes(
-      taxEnabled: taxEnabled,
-      ncfEnabled: ncfEnabled,
-      configuredTypes: sequences.map((sequence) => sequence.voucherType),
-    );
+    // El motor NCF tradicional se retiró: una cotización ya no elige talón. El
+    // comprobante electrónico (E31/E32) se decide al facturar la venta.
+    final options = const <FiscalVoucherOption>[];
     final fiscalDisabled = !taxEnabled || !ncfEnabled;
     final showFiscal = _invoiceType == 'fiscal';
     // Fuente de verdad: con "Utilizar impuestos" OFF NO se ofrece la opción

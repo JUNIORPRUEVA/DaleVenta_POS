@@ -19,8 +19,6 @@ class ApiRoutes {
   static const settingsCompanyName = '/settings/company-name';
   static const fiscalSettings = '/company/fiscal-settings';
   static const taxes = '/taxes';
-  static const ncfSequences = '/ncf/sequences';
-  static String ncfSequence(String id) => '/ncf/sequences/$id';
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
   static const license = '/license';
