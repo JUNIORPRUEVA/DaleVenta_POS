@@ -122,13 +122,36 @@ void main() {
       originalSaleCashSessionId: 'cash-original',
     );
 
-    expect(sale.id, 'sale-1');
-    expect(captured.last.path, '/sales/sale-1/return');
+    expect(sale.sale.id, 'sale-1');
+    expect(sale.creditNote, isNull);    expect(captured.last.path, '/sales/sale-1/return');
     final body = (captured.last.data as Map).cast<String, dynamic>();
     expect(body['clientRequestId'], 'return-request-1');
     expect(body['originalSaleCashSessionId'], 'cash-original');
     expect(body['operationCashSessionId'], 'cash-1');
     expect(body['operationOccurredAt'], isA<String>());
+  });
+
+  test('returnSale expone la nota de crédito E34 del backend', () async {
+    final repository = buildRepository(
+      (options) => jsonResponse({
+        ...saleRow(),
+        'ecfCreditNote': {
+          'documentId': 'doc-e34',
+          'encf': 'E340000000001',
+          'status': 'LOCAL_VALIDATED',
+        },
+      }),
+    );
+
+    final result = await repository.returnSale(
+      'sale-1',
+      clientRequestId: 'return-request-1',
+      originalSaleCashSessionId: 'cash-original',
+    );
+
+    expect(result.hasCreditNote, isTrue);
+    expect(result.creditNote?.encf, 'E340000000001');
+    expect(result.creditNote?.status, 'LOCAL_VALIDATED');
   });
 
   test(

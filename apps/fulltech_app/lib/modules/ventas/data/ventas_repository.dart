@@ -785,7 +785,9 @@ class VentasRepository {
     }
   }
 
-  Future<SaleModel> returnSale(
+  /// Devuelve la venta y, si la original tenía comprobante electrónico
+  /// aceptado, su nota de crédito E34.
+  Future<SaleReturnResult> returnSale(
     String id, {
     String? clientRequestId,
     String? originalSaleCashSessionId,
@@ -832,7 +834,7 @@ class VentasRepository {
           payload: payload,
           occurredAt: operationOccurredAt,
         );
-        return _minimalPendingSale('local_$requestId');
+        return SaleReturnResult(sale: _minimalPendingSale('local_$requestId'));
       }
       throw ApiErrorMapper.fromDio(
         e,
@@ -842,7 +844,7 @@ class VentasRepository {
     }
   }
 
-  Future<SaleModel> _returnSaleRemote(
+  Future<SaleReturnResult> _returnSaleRemote(
     String id, {
     String? clientRequestId,
     String? originalSaleCashSessionId,
@@ -862,7 +864,12 @@ class VentasRepository {
           'operationOccurredAt': operationOccurredAt!.trim(),
       },
     );
-    return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
+    return SaleReturnResult(
+      sale: SaleModel.fromJson((res.data as Map).cast<String, dynamic>()),
+      creditNote: EcfReturnCreditNote.fromJson(
+        (res.data as Map)['ecfCreditNote'],
+      ),
+    );
   }
 
   String _returnClientRequestId(String saleId) {
