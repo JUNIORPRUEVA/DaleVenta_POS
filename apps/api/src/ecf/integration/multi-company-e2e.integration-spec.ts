@@ -268,15 +268,8 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
         defaultTaxId: tax.body.id,
         defaultTaxRate: 0.18,
         pricesIncludeTax: true,
-        ncfEnabled: true,
       });
     expect(fiscal.status).toBe(200);
-
-    const sequence = await http()
-      .post("/ncf/sequences")
-      .set("Authorization", `Bearer ${tenant.token}`)
-      .send({ voucherType: "B01", prefix: "B01", startNumber: 1, endNumber: 10 });
-    expect(sequence.status).toBe(201);
   }
 
   async function openCashSession(tenant: Tenant) {
@@ -340,7 +333,6 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
         originCashSessionId: sessionId,
         paymentMethod: "cash",
         paymentCashAmount: 118,
-        fiscalVoucherType: "B01",
         customerId: client.id,
         expectedTotalSold: 118,
         items: [

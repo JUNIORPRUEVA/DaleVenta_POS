@@ -4,16 +4,12 @@ import { Request } from "express";
 import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import { TaxService } from "./tax.service";
-import { CreateNcfSequenceDto, UpdateFiscalSettingsDto, UpdateNcfSequenceDto, UpsertTaxDto } from "./tax.dto";
-import { NcfService } from "./ncf.service";
+import { UpdateFiscalSettingsDto, UpsertTaxDto } from "./tax.dto";
 
 @UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller()
 export class TaxController {
-  constructor(
-    private readonly taxes: TaxService,
-    private readonly ncf: NcfService,
-  ) {}
+  constructor(private readonly taxes: TaxService) {}
 
   @Get("taxes")
   listTaxes(@Req() req: Request) {
@@ -38,24 +34,5 @@ export class TaxController {
   @Patch("company/fiscal-settings")
   updateFiscalSettings(@Req() req: Request, @Body() dto: UpdateFiscalSettingsDto) {
     return this.taxes.updateFiscalSettings(req.user as TenantUser, dto);
-  }
-
-  @Get("ncf/sequences")
-  listNcfSequences(@Req() req: Request) {
-    return this.ncf.listSequences(req.user as TenantUser);
-  }
-
-  @Post("ncf/sequences")
-  createNcfSequence(@Req() req: Request, @Body() dto: CreateNcfSequenceDto) {
-    return this.ncf.createSequence(req.user as TenantUser, dto);
-  }
-
-  @Patch("ncf/sequences/:id")
-  updateNcfSequence(
-    @Req() req: Request,
-    @Param("id") id: string,
-    @Body() dto: UpdateNcfSequenceDto,
-  ) {
-    return this.ncf.updateSequence(req.user as TenantUser, id, dto);
   }
 }

@@ -60,11 +60,6 @@ function serviceWith(prisma: Record<string, unknown>, inventory: any) {
       resolvePriceMode: jest.fn().mockReturnValue("TAX_ADDED"),
       calculatorService: taxCalculator(),
     } as never,
-    {
-      normalizeType: jest.fn(),
-      reserveNextNcf: jest.fn(),
-      markIssued: jest.fn(),
-    } as never,
     inventory as never,
   );
 }

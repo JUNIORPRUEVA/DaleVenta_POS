@@ -28,7 +28,6 @@ import {
   validateQuantityForUnit,
   type UnitOfMeasureSnapshot,
 } from "../products/unit-of-measure.util";
-import { NcfService } from "../tax/ncf.service";
 import {
   isAdminLike,
   requireTenant,
@@ -129,7 +128,6 @@ export class SalesService {
     private readonly config: ConfigService,
     private readonly realtime: CatalogRealtimeRelayService,
     private readonly taxes: TaxService,
-    private readonly ncf: NcfService,
     @Optional()
     private readonly inventoryMutations?: InventoryMutationService,
     @Optional()
@@ -1963,61 +1961,25 @@ export class SalesService {
     );
     perf?.mark("cash_gate");
 
-    const requestedVoucherType = dto.fiscalVoucherType?.trim()
-      ? this.ncf.normalizeType(dto.fiscalVoucherType)
-      : null;
+    // El motor NCF tradicional se retiró: una venta nueva no consume talón. Si
+    // un cliente antiguo todavía pide B01/B02 se rechaza con un motivo claro en
+    // lugar de crear la venta sin el comprobante que esperaba.
+    if ((dto.fiscalVoucherType ?? "").trim().length > 0) {
+      throw new BadRequestException(
+        "ECF_LEGACY_NCF_RETIRED: el comprobante NCF tradicional ya no se emite. " +
+          "La venta se registra sin comprobante y su e-CF (E31/E32) se prepara con numeración autorizada.",
+      );
+    }
     const customerSnapshotTaxId = customerFiscalSnapshot?.taxId?.trim() || null;
     const customerSnapshotName =
       customerFiscalSnapshot?.nombre?.trim() ||
       customerFiscalSnapshot?.businessName?.trim() ||
       null;
 
-    if (
-      requestedVoucherType === "B01" &&
-      (!customerId || !customerFiscalSnapshot)
-    ) {
-      throw new BadRequestException(
-        "Para emitir un comprobante B01 debes seleccionar un cliente con RNC/Cédula y nombre.",
-      );
-    }
-
     const fiscalCustomerTaxId =
-      customerSnapshotTaxId ||
-      (requestedVoucherType === "B01"
-        ? null
-        : dto.fiscalCustomerTaxId?.trim()) ||
-      null;
+      customerSnapshotTaxId || dto.fiscalCustomerTaxId?.trim() || null;
     const fiscalCustomerName =
-      customerSnapshotName ||
-      (requestedVoucherType === "B01"
-        ? null
-        : dto.fiscalCustomerName?.trim()) ||
-      null;
-
-    if (requestedVoucherType && !fiscalSettings.ncfEnabled) {
-      throw new BadRequestException(
-        "Los comprobantes fiscales no están activados para esta empresa.",
-      );
-    }
-
-    if (fiscalSettings.ncfEnabled && requestedVoucherType) {
-      this.taxes.calculatorService.validateFiscalCustomer({
-        voucherType: requestedVoucherType,
-        customerTaxId: fiscalCustomerTaxId,
-        customerBusinessName: fiscalCustomerName,
-      });
-      if (
-        requestedVoucherType === "B01" &&
-        (!fiscalCustomerTaxId || !fiscalCustomerName)
-      ) {
-        throw new BadRequestException(
-          "Para emitir un comprobante B01 debes seleccionar un cliente con RNC/Cédula y nombre.",
-        );
-      }
-      if (requestedVoucherType === "B02") {
-        // B02 is allowed for final consumers; customer fiscal data is optional.
-      }
-    }
+      customerSnapshotName || dto.fiscalCustomerName?.trim() || null;
 
     const payment = this.normalizeSalePayment(dto, totalSold);
     const {
@@ -2049,14 +2011,6 @@ export class SalesService {
                 requestedWarehouseId: dto.warehouseId,
               })
             : null;
-
-        const reservedNcf = requestedVoucherType
-          ? await this.ncf.reserveNextNcf(tx, {
-              companyId,
-              userId: user.id,
-              voucherType: requestedVoucherType,
-            })
-          : null;
 
         const sale = await tx.sale.create({
           data: {
@@ -2105,9 +2059,9 @@ export class SalesService {
               : totalDirectCommercialLineDiscount.plus(
                   new Prisma.Decimal(taxCalculation.discountAmount),
                 ),
-            fiscalVoucherType: requestedVoucherType,
-            ncf: reservedNcf?.ncf ?? null,
-            ncfExpirationDate: reservedNcf?.validUntil ?? null,
+            fiscalVoucherType: null,
+            ncf: null,
+            ncfExpirationDate: null,
             issuerNameSnapshot,
             issuerTaxIdSnapshot,
             issuerAddressSnapshot,
@@ -2242,17 +2196,6 @@ export class SalesService {
           await tx.client.update({
             where: { id: customerId },
             data: { lastActivityAt: createdSale.saleDate },
-          });
-        }
-
-        if (reservedNcf) {
-          await this.ncf.markIssued(tx, {
-            companyId,
-            sequenceId: reservedNcf.sequenceId,
-            saleId: createdSale.id,
-            userId: user.id,
-            ncf: reservedNcf.ncf,
-            type: reservedNcf.type,
           });
         }
 

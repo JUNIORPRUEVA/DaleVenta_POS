@@ -63,11 +63,6 @@ describe("SalesService UoM decimal foundation", () => {
         resolvePriceMode: jest.fn().mockReturnValue("NO_TAX"),
         calculatorService: taxCalculator(),
       } as never,
-      {
-        normalizeType: jest.fn(),
-        reserveNextNcf: jest.fn(),
-        markIssued: jest.fn(),
-      } as never,
       inventory as never,
     );
   }
