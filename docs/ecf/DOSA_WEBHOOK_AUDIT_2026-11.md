@@ -7,35 +7,46 @@ llegue por sorpresa.
 Sin cambios de contrato, sin datos tocados. Solo se añadió registro de rechazos
 (ver §7).
 
-## 1. Estado actual: el webhook está APAGADO
+> **Hallazgo de la conversación con el proveedor (07/11/2026):** el webhook ya
+> está **encendido y funcionando en producción**. Llegaron eventos reales, la
+> validación **HMAC pasó** y se respondió 200. Eso **resuelve P1 y P5 con
+> evidencia real**, no por diseño. Ver §10.
+>
+> El bloqueo que queda es otro: la deduplicación desplegada ignora el contenido,
+> así que el **reenvío corregido con la llave TEST se descartó como
+> `duplicate: true`**. El arreglo existe en este árbol y **no está desplegado**.
 
-`POST /webhook/dosa` responde **503** con `ECF_DOSA_WEBHOOK_DISABLED` mientras
-`DOSA_WEBHOOK_ENABLED` no sea exactamente `true`.
+## 1. Comportamiento por defecto: apagado (en producción ya está encendido)
 
-Consecuencia si se queda así: **ninguna credencial nueva entra al sistema**. El
-cliente completa el asistente, DOSA intenta avisar, y el sistema lo rechaza sin
-guardar nada. El estado del cliente se queda en «DOSA aún no ha confirmado».
+Por defecto `POST /webhook/dosa` responde **503** con
+`ECF_DOSA_WEBHOOK_DISABLED` mientras `DOSA_WEBHOOK_ENABLED` no sea exactamente
+`true`. Ese interruptor sigue siendo el correcto como valor por defecto.
 
-## 2. Ruta correcta — DEMOSTRADA
+**En producción ya se encendió**, y el 06/11 se recibieron eventos reales con
+respuesta 200 (§10.1). Consecuencia: el camino de recepción está probado en
+realidad, no solo en tests.
+
+## 2. Ruta correcta
 
 | Dato | Valor |
 | --- | --- |
 | Ruta interna | `POST /webhook/dosa` |
-| URL pública | `https://fullposcloud.fulltechrd.com/api/webhook/dosa` |
+| URL preferida | `https://fullposcloud.fulltechrd.com/api/webhook/dosa` |
+| URL en uso por DOSA | `https://fullposcloud.fulltechrd.com/webhook/dosa` (también funciona) |
 | `rawBody` | Se preserva para `/webhook/` **y** `/api/webhook/` |
 
-No es una suposición: son sondas de solo lectura ejecutadas el 2026-11-04 contra
-el dominio público.
+Sondas de solo lectura del 2026-11-04:
 
 ```text
 /api/health              -> 200 application/json
 /api/webhook/dosa        -> 404 application/json   (NestJS alcanzado; GET no es su método)
-/webhook/dosa            -> 200 text/html          (PWA: no usar)
+/webhook/dosa            -> 200 text/html          (GET: lo sirve el PWA)
 ```
 
-La ruta que sugirió el proveedor (`/webhook/dosa`, sin `/api`) la sirve el PWA y el
-evento nunca llega al backend. **La ruta no se cambia**: ya está demostrado cuál
-funciona.
+El `200 text/html` del GET hizo pensar que esa ruta no servía. **El tráfico real
+del 06/11 demuestra lo contrario**: un `POST /webhook/dosa` sí llega a NestJS y
+sí procesa el evento (§10.1). Ambas URLs son válidas; `/api/webhook/dosa` es la
+preferida porque es explícita.
 
 ## 3. Verificación de firma
 
@@ -175,12 +186,124 @@ atomicidad.
 
 ## 9. Pendientes que no son código
 
-1. **Encender el webhook** en el ambiente: `DOSA_WEBHOOK_ENABLED=true` +
-   `DOSA_WEBHOOK_SIGNATURE_STRATEGY=HMAC_SHA256_TIMESTAMPED` +
-   `DOSA_WEBHOOK_SECRET`.
-2. **Confirmar P1, P5 y la rotación** con el proveedor. Mientras no se confirmen,
-   el primer evento real será la prueba: si llega `MISMATCH`, cambiar
-   `DOSA_WEBHOOK_SECRET_ENCODING`; si llega `TIMESTAMP_OUT_OF_TOLERANCE`, cambiar
-   `DOSA_WEBHOOK_TIMESTAMP_UNIT`.
-3. **Registrar la URL pública correcta** (`/api/webhook/dosa`) en el panel de
-   DOSA, no la que sugirieron.
+1. **Desplegar el arreglo de deduplicación** (ver §10.4). Sin eso, cualquier
+   reenvío corregido de DOSA se sigue descartando como duplicado.
+2. **Confirmar la rotación** con el proveedor (P1 y P5 ya no son bloqueantes:
+   resueltos con evidencia real, ver §10.2).
+
+## 10. Evidencia real de la conversación con el proveedor
+
+Revisión de los exports de WhatsApp con el contacto de DOSA y de los archivos
+adjuntos. Lo importante aquí es que hay **tráfico real** de por medio, no
+suposiciones.
+
+### 10.1 La URL registrada en DOSA funciona: `/webhook/dosa` (sin `/api`)
+
+El 05/11 el proveedor reportó **HTTP 405 en 4 intentos** contra
+`https://fullposcloud.fulltechrd.com/webhook/dosa`. Ese dato hizo pensar que la
+ruta era incorrecta.
+
+**El tráfico del 06/11 lo desmiente.** Ese mismo día llegaron eventos reales a
+esa misma URL y el backend los procesó:
+
+| Hora (RD) | Respuesta | Código | Origen |
+| --- | --- | --- | --- |
+| 17:13:14 | HTTP 400 | `ECF_DOSA_WEBHOOK_INVALID_PAYLOAD` / `MISSING_FIELD:postulacion_id` | nuestro |
+| 17:13:15 | HTTP 400 | `ECF_DOSA_WEBHOOK_INVALID_PAYLOAD` / `MISSING_FIELD:estado_certificacion` | nuestro |
+| 19:27 | **HTTP 200** | credenciales aceptadas | nuestro |
+
+`ECF_DOSA_WEBHOOK_INVALID_PAYLOAD` es un código **nuestro**: si aparece, la
+petición atravesó nginx y llegó a NestJS. Por tanto:
+
+- `/webhook/dosa` **sin `/api` es alcanzable y funciona**. El 405 del 05/11 fue
+  un estado transitorio (despliegue anterior o configuración intermedia), no un
+  error de ruta permanente.
+- No hace falta cambiar nada en el panel de DOSA por este motivo.
+- Conclusion: la URL no era la causa final. La causa fue el **contrato del
+  payload**, que el proveedor corrigió el 06/11 a las 16:52 («era un campo que
+  faltaba, se lo agregué al webhook»).
+
+### 10.2 P1 y P5 quedan resueltos con evidencia real
+
+El proveedor recibió y comentó nuestros códigos de error, y el mensaje de
+respuesta aclara el punto decisivo:
+
+> «Ambas solicitudes **pasaron la validación HMAC**, pero nuestro sistema no
+> encontró esos campos en el nivel principal del JSON.»
+
+Es decir: con la configuración que estaba en producción, la firma real de DOSA
+**verificó correctamente**. Un evento real, firmado por el proveedor, fue
+validado. Entonces:
+
+- **P1 (unidad de `t`) — RESUELTO.** Si `t` viniera en la unidad equivocada
+  habría saltado `TIMESTAMP_OUT_OF_TOLERANCE` o la firma no habría coincidido.
+  No ocurrió. La unidad que llega es la que el verificador acepta.
+- **P5 (lectura del secreto) — RESUELTO.** Si la lectura fuera la incorrecta
+  habría fallado el HMAC con `MISMATCH`. No ocurrió.
+- La detección automática (§4) queda como red de seguridad para otra empresa u
+  otro formato, pero **ya no hace falta esperar ninguna confirmación escrita**.
+
+No hay que cambiar `DOSA_WEBHOOK_TIMESTAMP_UNIT` ni `DOSA_WEBHOOK_SECRET_ENCODING`.
+
+### 10.3 Confirmaciones de contrato
+
+- `X-Dosa-Signature` **no** contiene el secreto: es un HMAC-SHA256 con formato
+  `t=<hora>,v1=<firma>` sobre `t + "." + cuerpo` (02/11 y 05/11).
+- El digest de `v1` va **en hex** («HMAC-SHA256 en hex de `t.cuerpo`», 05/11).
+  Nuestro verificador ya aceptaba hex y base64.
+- El payload real lleva `postulacion_id`, `rnc`, `razon_social`, `correo`,
+  `ambiente`, `estado_certificacion`, `credenciales` (`api_key_produccion`,
+  `api_key_test`, `api_secret`), `credenciales_pendientes`, `disponibles_desde`.
+  **No trae campo de tipo de evento**: por eso existe `classifyDosaEventType`.
+- El 06/11 el proveedor pidió aceptar `postulacion_id` y `estado_certificacion`
+  en `null` en el primer evento de conexión (`empresa.conectada`).
+- Requisito operativo del 05/11: responder 200 en **menos de 8 segundos**.
+
+### 10.4 El bloqueo real: la deduplicación descarta el reenvío corregido
+
+El 07/11 a las 09:52 el proveedor generó la llave TEST que faltaba y reenvió el
+evento:
+
+> «Ya la activamos y les reenviamos el webhook `empresa.credenciales` con las dos
+> llaves (producción y test). Su receptor respondió 200, pero lo marcó como
+> `duplicate: true`, así que es posible que no haya guardado la llave nueva.»
+
+**Ese diagnóstico del proveedor es correcto, y la causa está verificada en el
+código desplegado.** La versión que corre en producción compone la clave de
+idempotencia así:
+
+```ts
+`${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}`
+```
+
+El reenvío corregido trae el **mismo** `postulacion_id`, el **mismo**
+`estado_certificacion` y el **mismo** `disponibles_desde`; solo cambia el
+contenido de `credenciales`. La clave resultante es idéntica, el `ON CONFLICT DO
+NOTHING` no inserta nada y la respuesta es `duplicate: true`. **La llave TEST
+nunca se guardó.**
+
+Este árbol ya lo corrige: la clave incluye además el hash del cuerpo exacto
+(`rawBodySha256`), de modo que un reenvío idéntico sigue siendo duplicado pero un
+reenvío con **contenido distinto** se procesa como evento propio.
+
+```ts
+`${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}|${rawBodySha256}`
+```
+
+Verificado: el arreglo está en el commit `497636c9` y **solo existe en esta rama
+local**. `integration/ecf-into-production`, `ultimos-trabajos` y
+`feature/ecf-alanube` conservan la versión sin el hash. Por eso el reenvío se
+perdió.
+
+**Para cerrar:** desplegar un build con `497636c9`, pedir a DOSA que reenvíe
+`empresa.credenciales`, y luego activar la llave TEST (llega como
+`PENDING_CONFIRMATION`, no activa).
+
+### 10.5 Seguridad
+
+En el export aparece un archivo con el secreto del webhook. No se copió al
+repositorio y su valor no se imprimió en ningún momento; solo se verificó su
+forma (64 caracteres hex). Está en una carpeta de Descargas sin cifrar: conviene
+retirarlo de ahí y de cualquier archivo compartido.
+
+
