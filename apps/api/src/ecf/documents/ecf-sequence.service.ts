@@ -34,7 +34,20 @@ export class EcfSequenceService {
 
   private assertType(documentType: string): EcfSequenceDocumentType {
     if (!ALLOCATABLE.includes(documentType as EcfSequenceDocumentType)) {
-      throw new ConflictException("ECF_SEQUENCE_TYPE_UNSUPPORTED");
+      // E32 no es un tipo «inválido»: es un tipo pendiente de contrato con el
+      // proveedor. La preparación de consumo no asigna e-NCF (`encf: null`), así
+      // que habilitarlo aquí produciría comprobantes sin numeración. Se rechaza
+      // con un motivo que el operador puede accionar, no con un código seco.
+      const normalized = `${documentType ?? ""}`.trim().toUpperCase();
+      const reason =
+        normalized === "E32"
+          ? "La factura de consumo (E32) todavía no declara numeración: su " +
+            "e-NCF lo entrega el flujo de certificación. Requiere confirmación " +
+            "del proveedor antes de habilitarla."
+          : "Tipo de comprobante no soportado para numeración.";
+      throw new ConflictException(
+        `ECF_SEQUENCE_TYPE_UNSUPPORTED: ${reason}`,
+      );
     }
     return documentType as EcfSequenceDocumentType;
   }
