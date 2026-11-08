@@ -2690,6 +2690,17 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
         return 'La venta se guardó, pero el comprobante ${mode.code} no se '
             'pudo preparar: ${outcome.message}';
       }
+      // Emisión automática: si la empresa está autorizada a emitir, el
+      // comprobante no se queda preparado. La compuerta fiscal la decide el
+      // backend; si bloquea, el documento queda pendiente y recuperable sin
+      // duplicados (`POST /ecf/documents/dispatch-pending`).
+      if (_ecfCaps?.emissionPathAvailable == true) {
+        final dispatch = await repository.dispatchDosa(outcome.documentId);
+        if (!dispatch.ok) {
+          return 'El comprobante ${mode.code} quedó preparado pero no se pudo '
+              'enviar al proveedor: ${dispatch.message}';
+        }
+      }
       return null;
     } catch (error) {
       return 'La venta se guardó, pero el comprobante ${mode.code} no se pudo '

@@ -157,6 +157,51 @@ void main() {
       );
     });
 
+    test('con la excepción habilitada, Normal gana sobre E31 y E32', () {
+      const withNormal = [
+        EcfPosFiscalMode.e31,
+        EcfPosFiscalMode.e32,
+        EcfPosFiscalMode.normal,
+      ];
+      // Con receptor calificado: seguiría siendo válido E31, pero la decisión
+      // del propietario es que Normal venga preseleccionado.
+      expect(
+        defaultEcfPosFiscalMode(
+          available: withNormal,
+          clientTaxId: '133020253',
+          clientLegalName: 'Cliente SA',
+        ),
+        EcfPosFiscalMode.normal,
+      );
+      expect(
+        defaultEcfPosFiscalMode(
+          available: withNormal,
+          clientTaxId: null,
+          clientLegalName: null,
+        ),
+        EcfPosFiscalMode.normal,
+      );
+    });
+
+    test('con la excepción apagada, el comprobante se elige solo', () {
+      expect(
+        defaultEcfPosFiscalMode(
+          available: both,
+          clientTaxId: '133020253',
+          clientLegalName: 'Cliente SA',
+        ),
+        EcfPosFiscalMode.e31,
+      );
+      expect(
+        defaultEcfPosFiscalMode(
+          available: both,
+          clientTaxId: null,
+          clientLegalName: null,
+        ),
+        EcfPosFiscalMode.e32,
+      );
+    });
+
     test('sin opciones no inventa un modo', () {
       expect(
         defaultEcfPosFiscalMode(

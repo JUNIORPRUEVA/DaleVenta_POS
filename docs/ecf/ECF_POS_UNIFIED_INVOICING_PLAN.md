@@ -18,10 +18,11 @@ Dos modos por empresa:
 | `true` | Aparecen **Normal**, E31 y E32. La preselección sigue siendo **E31/E32**; **Normal** nunca se preselecciona y exige **motivo**, que queda registrado |
 
 > **Corrección sobre el borrador inicial.** El primer borrador de esta tabla decía que con
-> la bandera activa «Normal» venía preseleccionado. Se cambió a propósito: preseleccionar
-> la excepción convertiría en camino por defecto la venta **sin** comprobante, justo lo
-> contrario de «el POS genera automáticamente el comprobante correspondiente». La opción
-> sigue disponible, pero hay que elegirla y justificarla.
+> la bandera activa «Normal» venía preseleccionado. Se implementó primero lo contrario y el
+> propietario lo corrigió: **con la excepción habilitada, Normal es la opción preseleccionada**
+> en cada venta nueva, sujeta a las reglas fiscales aplicables (cambio manual a E31/E32,
+> motivo obligatorio y validación del servidor). Con la excepción apagada, el comprobante se
+> elige solo. Implementado en `defaultEcfPosFiscalMode` con cobertura de ambos modos.
 
 Regla automática acordada: **cliente con RNC → E31**; **sin RNC → E32**; si el cliente
 pide consumo teniendo RNC, se permite E32 entre los tipos habilitados. Si falta un dato
@@ -103,33 +104,80 @@ numeración necesita la autorización DGII declarada de la rama anterior.
 
 ### Fase 3 — cerrada en lo verificable sin emisión real
 - `modules/ventas/ecf_pos_fiscal.dart` decide qué se ofrece y qué se preselecciona
-  (RNC + nombre → E31; sin receptor → E32; nunca E34; «Normal» solo con la bandera).
+  (con la excepción habilitada, «Normal» por defecto; sin ella, RNC + nombre → E31 y sin
+  receptor → E32; E34 nunca).
 - `EcfPosFiscalSelector` sustituye visualmente al selector B01/B02 cuando la empresa
   factura electrónicamente; B01/B02 siguen existiendo para las demás empresas.
 - El cierre de venta envía `fiscalVoucherType: null` con e-CF activo, pide el motivo
   antes de cobrar cuando es «Normal», y prepara el comprobante después de guardar. Un
   fallo de preparación **no** degrada la venta: se informa y se resuelve en Mis Ventas.
-- Cobertura: 15 pruebas de la regla de selección.
+- Cobertura: 17 pruebas de la regla de selección.
 
 ### Pendiente de una autorización explícita
-- **Emission real**: E32 ya numera y se prepara, pero enviar al proveedor sigue
-  gobernado por las banderas de certificación de cada empresa.
-- **Retiro físico del código B01/B02**: se retiró del flujo de venta de las empresas con
-  e-CF, pero el módulo legado (`/ncf`, `fiscal_voucher_options.dart`, impresión con
-  `ncf`) sigue vivo porque hay empresas que todavía facturan con NCF tradicionales.
-  Borrarlo exige migrar esos talonarios primero; hacerlo ahora rompería su facturación.
+- **Emission real**: la cadena ya está completa (preparar → despachar → registrar
+  resultado → recuperar pendientes), pero que salga un comprobante real depende de las
+  banderas de certificación de cada empresa. En producción esas banderas siguen apagadas.
+- **Retiro físico del resto del módulo B01/B02**: ver §7.
 
-## 6. Riesgo conocido y su remedio (HIPÓTESIS no verificada en producción)
+## 7. Evidencia de producción sobre B01/B02 (HECHO, solo lectura, 2026-11-08)
 
-El POS decide si usa e-CF leyendo `GET /ecf/capabilities`, que exige el permiso
-`viewEcfDocuments`. Si un vendedor **no** tiene ese permiso, o la llamada falla, el POS
-no puede saber que su empresa factura electrónicamente y cae al selector legado.
+Consultas `SELECT` sobre la base de producción, sin escribir nada:
 
-Remedio recomendado (**RECOMENDACIÓN**, no implementado aquí porque cambia la
-permisología del módulo): exponer una proyección mínima para el POS
-(`enabled`, `allowSalesWithoutEcf`, aviso y tipos) bajo el permiso que el cajero ya
-necesita para vender, en lugar de reutilizar el endpoint de administración. Mientras
-tanto, el backend sigue siendo la última barrera: rechaza un talón si `ncfEnabled` está
-apagado y rechaza la excepción si la bandera está apagada.
+| Dato | Valor |
+| --- | --- |
+| Empresas totales | 37 |
+| Empresas con `ncf_enabled = true` | **1** (`little-party` / CORITO DOMINO, ACTIVA) |
+| Ventas de esa empresa | 22, **0 con comprobante**, **0 rangos NCF registrados** |
+| Ventas B02 en 90 días | **0** |
+| Ventas B01 en 90 días | **3**, todas de `daleventa-pos` (FULLTECH) en agosto |
+| Histórico total con NCF | **3 ventas** (21-22 ago 2026) |
+| Empresas con e-CF activa | 1 (FULLTECH) |
+| Solape e-CF + NCF | ninguno |
+
+Conclusión: **ninguna empresa depende de B01/B02 para operar**. La única con NCF
+encendido nunca registró un talonario ni emitió. Los 3 comprobantes históricos viven en
+`Sale.fiscal_voucher_type` y no dependen del módulo, así que se conservan aunque el
+selector desaparezca.
+
+Lo que **sí** se retiró: el POS de las empresas con e-CF ya no ofrece B01/B02 (Fase 3).
+Lo que **falta** retirar es el resto de la rama legada dentro de la pantalla de venta
+(selector B01/B02, selector de secuencias NCF, aviso de cliente B01 y su proveedor
+`posNcfSequencesProvider`): ~20 puntos en un archivo de 4.000 líneas. Es un borrado
+mecánico pero de alto riesgo que merece su propio commit y su propia corrida de
+regresión completa; hacerlo junto con el resto de cambios de esta tanda habría mezclado
+una sustitución de comportamiento con una limpieza estructural.
+
+## 8. Emisión automática y recuperación (HECHO)
+
+- Tras preparar, el POS **despacha** al proveedor si la empresa tiene la emisión
+  autorizada (`emissionPathAvailable`). El resultado se muestra al vendedor y el backend
+  registra estado e intento.
+- `GET /ecf/documents/pending-dispatch`: comprobantes preparados que nunca salieron.
+- `POST /ecf/documents/dispatch-pending`: reintenta esos envíos. **No puede duplicar**:
+  `dispatchOnce` exige cero intentos `SEND_TO_PROVIDER`, reclama el documento de forma
+  atómica y registra el intento antes de la red. Un documento con intento previo no entra
+  en la lista: su conciliación es un acto humano.
+- Cobertura: 5 pruebas Postgres que demuestran que un documento ya intentado no se
+  vuelve a enviar y que un bloqueo fiscal no crea intentos nuevos.
+
+## 9. Las dos suites Postgres rojas: causa y solución (HECHO)
+
+No estaban rotas. `E32SandboxService.tenant()` y `E32ReconciliationExecutor.reconcile()`
+comprueban **tres** condiciones: `APP_ENV=uat`, `UAT_LOCAL_ONLY=true` y `DATABASE_URL` en
+la allowlist local. El comando de pruebas documentado solo fijaba la tercera. Con las tres,
+las dos suites pasan **41/41** contra la base efímera. Corregido en la nota operativa de
+entorno de pruebas.
+
+## 10. Riesgo de permisos del POS: cerrado
+
+El POS decidía si usaba e-CF leyendo `GET /ecf/capabilities`, que exige el permiso
+`viewEcfDocuments`. Un vendedor sin ese permiso (o una llamada fallida) dejaba al POS sin
+saber que su empresa factura electrónicamente y lo hacía caer al selector legado.
+
+**Corregido:** el POS decide con `CompanySettings.ecfEnabled`, que ya viaja en los ajustes
+de empresa que la pantalla carga, y usa las capacidades solo para construir las opciones
+(tipos, bandera y aviso). Si las capacidades no cargan, no hay opciones y el cobro se
+bloquea con un mensaje explícito: falla en cerrado en vez de emitir un talón por error.
+
 
 

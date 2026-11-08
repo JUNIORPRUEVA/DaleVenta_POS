@@ -194,6 +194,29 @@ export class EcfDocumentsController {
     return this.documents.eligibleOriginals(req.user as TenantUser);
   }
 
+  /**
+   * Comprobantes preparados que nunca llegaron al proveedor.
+   *
+   * Se declara ANTES de `documents/:id` porque Nest resuelve por orden de
+   * declaración y, si no, `pending-dispatch` se leería como un id.
+   */
+  @Get("documents/pending-dispatch")
+  @Permissions("viewEcfDocuments")
+  pendingDispatch(@Req() req: Request) {
+    return this.dosaDispatch.pending(req.user as TenantUser);
+  }
+
+  /**
+   * Recupera las operaciones pendientes: reintenta el envío de lo que quedó
+   * preparado sin salir. No puede duplicar comprobantes: cada envío exige cero
+   * intentos previos y se reclama antes de la red.
+   */
+  @Post("documents/dispatch-pending")
+  @Permissions("prepareEcfDocuments")
+  dispatchPending(@Req() req: Request) {
+    return this.dosaDispatch.dispatchPending(req.user as TenantUser);
+  }
+
   @Get("documents/:id")
   @Permissions("viewEcfDocuments")
   detail(@Req() req: Request, @Param("id") id: string) {

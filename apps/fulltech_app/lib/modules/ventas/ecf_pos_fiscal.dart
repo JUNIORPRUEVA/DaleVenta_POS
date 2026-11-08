@@ -114,25 +114,31 @@ bool ecfBuyerIdentityComplete(String? taxId, String? legalName) {
 
 /// Preselección automática del comprobante.
 ///
-/// Con RNC/Cédula **y** nombre se elige E31 (crédito fiscal); sin esos datos,
-/// E32 (consumo). Si E31 no está disponible se usa E32, y si tampoco hay
-/// numeración disponible queda «Normal» — siempre que la empresa lo permita.
-/// Si nada es posible, devuelve `null` y la venta no se puede cerrar con un modo
-/// fiscal válido: preferimos no elegir antes que inventar un comprobante.
+/// **Decisión del propietario:** si la empresa habilitó «Permitir ventas
+/// normales sin e-CF», la opción **Normal** es la preseleccionada en cada venta
+/// nueva. Sigue sujeta a las reglas fiscales aplicables: el vendedor puede
+/// cambiarla por E31/E32, el motivo es obligatorio y el servidor vuelve a
+/// validar que la excepción esté habilitada antes de registrarla.
+///
+/// Con la excepción apagada, el comprobante se elige solo: con RNC/Cédula **y**
+/// nombre toca E31 (crédito fiscal); sin esos datos toca E32 (consumo). Si E31 no
+/// está disponible se usa E32, y al contrario. Si nada es posible devuelve `null`
+/// y la venta no se cierra: preferimos no elegir antes que inventar un
+/// comprobante.
 EcfPosFiscalMode? defaultEcfPosFiscalMode({
   required List<EcfPosFiscalMode> available,
   required String? clientTaxId,
   required String? clientLegalName,
 }) {
   if (available.isEmpty) return null;
+  if (available.contains(EcfPosFiscalMode.normal)) {
+    return EcfPosFiscalMode.normal;
+  }
   final hasBuyer = ecfBuyerIdentityComplete(clientTaxId, clientLegalName);
   final wantsE31 = hasBuyer && available.contains(EcfPosFiscalMode.e31);
   if (wantsE31) return EcfPosFiscalMode.e31;
   if (available.contains(EcfPosFiscalMode.e32)) return EcfPosFiscalMode.e32;
   if (available.contains(EcfPosFiscalMode.e31)) return EcfPosFiscalMode.e31;
-  if (available.contains(EcfPosFiscalMode.normal)) {
-    return EcfPosFiscalMode.normal;
-  }
   return null;
 }
 
