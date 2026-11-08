@@ -79,6 +79,7 @@ describe("SalesService UoM decimal foundation", () => {
       return Promise.resolve({ count: 1 });
     });
     const prisma = {
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       product: {
         findMany: jest.fn().mockResolvedValue([
           {

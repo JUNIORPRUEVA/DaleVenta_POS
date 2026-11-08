@@ -212,6 +212,9 @@ function buildReturnHarness(
         .mockResolvedValueOnce(options.existingRefund ?? null)
         .mockResolvedValue(null),
     },
+    // Sin comprobante electrónico en la venta original: el arnés prueba el
+    // camino SIN nota de crédito E34.
+    ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
     cashSession: {
       findFirst: jest
         .fn()
