@@ -263,6 +263,8 @@ describe("SalesService UoM decimal foundation", () => {
       inventoryTrackedSnapshot: true,
     };
     const prisma = {
+      // Venta sin comprobante electrónico: el arnés prueba el camino SIN nota E34.
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       sale: {
         findFirst: jest.fn().mockResolvedValue({
           id: "sale-1",
