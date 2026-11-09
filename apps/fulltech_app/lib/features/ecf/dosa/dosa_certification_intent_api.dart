@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/auth_repository.dart';
 
 /// Preasociación empresa ↔ RNC antes de abrir el asistente DOSA.
@@ -291,9 +292,22 @@ final dosaCertificationIntentApiProvider = Provider<DosaCertificationIntentApi>(
 );
 
 /// Estado de la preparación. Se invalida para refrescar tras registrar.
+///
+/// Depende de la empresa y de la sesión: el intento pertenece a una empresa
+/// concreta, y al cambiar de empresa no se puede seguir mostrando el de la
+/// anterior mientras la pantalla siga montada.
 final dosaIntentStateProvider = FutureProvider.autoDispose<DosaIntentState>((
   ref,
 ) {
+  ref.watch(
+    authStateProvider.select(
+      (state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      ),
+    ),
+  );
   return ref.watch(dosaCertificationIntentApiProvider).state();
 });
 

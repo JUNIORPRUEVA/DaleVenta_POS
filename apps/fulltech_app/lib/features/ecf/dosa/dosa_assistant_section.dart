@@ -361,6 +361,14 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     required bool historicalReviewRequired,
     required bool historicalTransitionAvailable,
   }) {
+    // Un expediente histórico que esta instalación no puede autorizar no se
+    // anuncia: el aviso solo describía un interruptor del servidor y
+    // contradecía el bloqueo que la empresa sí tiene que resolver fuera de
+    // aquí. Lo que falte lo dice el estado real de la autorización.
+    if (historicalReviewRequired && !historicalTransitionAvailable) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -374,15 +382,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         // apagado o expediente que dejó de estar en el Intento 1 original), no
         // se ofrece el formulario: se explica el estado sin dejar un botón que
         // solo puede terminar en error.
-        if (historicalReviewRequired && !historicalTransitionAvailable)
-          const _DosaIntentGate(
-            icon: Icons.lock_outline,
-            message:
-                'Este expediente tiene una revisión histórica registrada. La '
-                'autorización no está disponible en este entorno, así que no '
-                'hay ninguna acción pendiente aquí.',
-          )
-        else if (historicalReviewRequired && canManage && intentId != null)
+        if (historicalReviewRequired && canManage && intentId != null)
           _DosaHistoricalReviewCard(
             intentId: intentId,
             onAuthorized: () {
