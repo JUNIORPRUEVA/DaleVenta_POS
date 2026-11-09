@@ -47,6 +47,26 @@ La operación **solo crea auditoría**. No actualiza la fila del intento.
   `session_url`, sin `provider_postulation_id`, sin eventos y sin cierre.
 - Debe existir una auditoría `INTENT_PROVIDER_RECONCILED` previa.
 
+## Qué muestra la pantalla
+
+`GET /ecf/dosa/certification-intent` publica dos campos, decididos en el
+servidor con la **misma** regla que aplica el POST:
+
+| Campo | Significado |
+| --- | --- |
+| `historicalTransitionEnabled` | El despliegue tiene `ECF_DOSA_HISTORICAL_TRANSITION_ENABLED=true`. |
+| `historicalTransitionAvailable` | `true` solo si la acción puede completarse ahora: interruptor encendido y expediente todavía autorizable (Intento 1, activo, sin referencias ni cierre). |
+
+`historicalReviewRequired` sigue significando «hay una revisión histórica
+pendiente», aunque la acción no sea posible. La pantalla **solo** dibuja el
+formulario cuando `historicalTransitionAvailable` es `true`; si la revisión
+existe pero la acción no está disponible (interruptor apagado en producción, o
+expediente que ya avanzó), explica el estado sin ofrecer un botón que el
+servidor rechazaría. Así la autorización deja de producir
+`DOSA_HISTORICAL_TRANSITION_DISABLED` / `..._STATE_UNSAFE` por pulsar una acción
+imposible. Un backend anterior que no envíe el campo se interpreta como **no
+disponible**.
+
 ## Secuencia de UAT (futura, autorizada)
 
 1. Verificar en la base aislada que el Intento 1 sigue intacto.
