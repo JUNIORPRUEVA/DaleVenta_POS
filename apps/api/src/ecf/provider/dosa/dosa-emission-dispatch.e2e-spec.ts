@@ -242,15 +242,10 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
         defaultTaxId: tax.body.id,
         defaultTaxRate: 0.18,
         pricesIncludeTax: true,
-        ncfEnabled: true,
       });
     expect(fiscal.status).toBe(200);
-
-    const sequence = await http()
-      .post("/ncf/sequences")
-      .set("Authorization", `Bearer ${tenant.token}`)
-      .send({ voucherType: "B01", prefix: "B01", startNumber: 1, endNumber: 20 });
-    expect(sequence.status).toBe(201);
+    // El motor NCF se retiró: la venta ya no pide talón B01; el e-CF se prepara
+    // después con su propia numeración autorizada.
   }
 
   async function sell(tenant: Tenant, buyerTaxId: string) {
@@ -297,7 +292,6 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
         originCashSessionId: session.id,
         paymentMethod: "cash",
         paymentCashAmount: 118,
-        fiscalVoucherType: "B01",
         customerId: client.body.id,
         expectedTotalSold: 118,
         items: [

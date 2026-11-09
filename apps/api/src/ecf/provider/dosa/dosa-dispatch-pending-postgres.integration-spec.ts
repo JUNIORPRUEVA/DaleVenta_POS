@@ -5,7 +5,7 @@ import type { TenantUser } from "../../../auth/tenant-context";
 import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { DosaEmissionService } from "./dosa-emission.service";
 import { DosaEmissionDispatchService } from "./dosa-emission-dispatch.service";
-import { validE32Simple } from "../../fiscal-core/ecf-fixtures";
+import { validE32Simple, validE34Partial } from "../../fiscal-core/ecf-fixtures";
 
 // Opt-in suite on the ephemeral test database. Lo que se prueba es la garantía
 // de NO DUPLICAR: recuperar un comprobante pendiente es seguro precisamente
@@ -58,19 +58,26 @@ uat("recuperación de despachos pendientes (sin duplicados) on PostgreSQL", () =
   /** Comprobante preparado con su resumen de emisión, sin ningún intento de envío. */
   async function preparedDocument(
     companyId: string,
-    options: { withAttempt?: boolean; status?: string } = {},
+    options: {
+      withAttempt?: boolean;
+      status?: string;
+      documentType?: "E31" | "E32" | "E34";
+    } = {},
   ) {
-    const encf = `E32${String(Math.floor(Math.random() * 1e10)).padStart(10, "0")}`;
+    const documentType = options.documentType ?? "E32";
+    const encf = `${documentType}${String(Math.floor(Math.random() * 1e10)).padStart(10, "0")}`;
     const document = await prisma.ecfElectronicDocument.create({
       data: {
         companyId,
-        documentType: "E32",
+        documentType,
         status: options.status ?? "LOCAL_VALIDATED",
         idempotencyKey: `synthetic-pending-${randomUUID()}`,
         payloadFingerprint: "e".repeat(64),
-        fiscalDocument: { ...validE32Simple } as never,
+        fiscalDocument: (documentType === "E34"
+          ? { ...validE34Partial }
+          : { ...validE32Simple }) as never,
         payloadSummary: {
-          type: "E32",
+          type: documentType,
           emission: { encf, senderTaxId: "101000001", fingerprint: "f".repeat(64), payload: {} },
         } as never,
       },
@@ -99,6 +106,38 @@ uat("recuperación de despachos pendientes (sin duplicados) on PostgreSQL", () =
     const pending = await service.pending(user);
 
     expect(pending.items.map((row) => row.id)).toEqual([document.id]);
+  });
+
+  it("el barrido de pendientes incluye la nota de crédito E34 y no la duplica", async () => {
+    const { companyId, user } = await tenant();
+    const note = await preparedDocument(companyId, { documentType: "E34" });
+
+    // La lectura de pendientes no filtra por tipo: una nota de crédito preparada
+    // entra igual que un E31/E32, con su tipo real.
+    const pending = await service.pending(user);
+    expect(pending.items.map((row) => row.id)).toEqual([note.id]);
+    expect(pending.items[0].documentType).toBe("E34");
+
+    // El barrido la INTENTA (no la ignora por ser E34). Sin autorización fiscal
+    // no se abre la red ni se registra intento: sigue pendiente y reintentable.
+    const first = await service.dispatchPending(user);
+    expect(first.attempted).toBe(1);
+    expect(first.items.map((item) => item.documentId)).toEqual([note.id]);
+    expect(first.dispatched).toBe(0);
+    expect(
+      await prisma.ecfElectronicDocumentAttempt.count({
+        where: {
+          companyId,
+          documentId: note.id,
+          operation: "SEND_TO_PROVIDER",
+        },
+      }),
+    ).toBe(0);
+
+    // No se pierde ni se marca como enviada: vuelve a aparecer como pendiente.
+    expect((await service.pending(user)).items.map((row) => row.id)).toEqual([
+      note.id,
+    ]);
   });
 
   it("NO lista un comprobante que ya tiene intento de envío", async () => {

@@ -14,7 +14,7 @@ const uat = process.env.ECF_POSTGRES_UAT === "true" ? describe : describe.skip;
 const inert = () =>
   new Proxy({}, { get: () => () => undefined }) as never;
 
-uat("devolución de venta con comprobante E31 aceptado (E34) on PostgreSQL", () => {
+uat("devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL", () => {
   let prisma: PrismaService;
   let sales: SalesService;
   let userId: string;
@@ -106,15 +106,17 @@ uat("devolución de venta con comprobante E31 aceptado (E34) on PostgreSQL", () 
   }
 
   /**
-   * Venta real con caja abierta y, opcionalmente, su comprobante E31 aceptado.
+   * Venta real con caja abierta y, opcionalmente, su comprobante aceptado
+   * (E31 por defecto, o E32 cuando la venta fue de consumo).
    * `withAcceptedDocument: false` reproduce una venta sin e-CF (empresa que no
    * usa el flujo fiscal electrónico).
    */
   async function seededSale(
-    options: { withAcceptedDocument?: boolean } = {},
+    options: { withAcceptedDocument?: boolean; documentType?: "E31" | "E32" } = {},
   ): Promise<Seeded> {
     const { companyId, user } = await tenant();
-    const encf = `E31${String(Math.floor(Math.random() * 1e10)).padStart(10, "0")}`;
+    const originalType = options.documentType ?? "E31";
+    const encf = `${originalType}${String(Math.floor(Math.random() * 1e10)).padStart(10, "0")}`;
 
     const cashSession = await prisma.cashSession.create({
       data: {
@@ -195,7 +197,7 @@ uat("devolución de venta con comprobante E31 aceptado (E34) on PostgreSQL", () 
       const original = await prisma.ecfElectronicDocument.create({
         data: {
           companyId,
-          documentType: "E31",
+          documentType: originalType,
           status: "DGII_ACCEPTED",
           sourceType: "SALE",
           sourceId: sale.id,
@@ -323,6 +325,43 @@ uat("devolución de venta con comprobante E31 aceptado (E34) on PostgreSQL", () 
     const reservation = await prisma.ecfCreditReservation.findFirstOrThrow({
       where: { companyId: seeded.companyId },
     });
+    // Total del comprobante original: 150.00 + 27.00 de ITBIS.
+    expect(reservation.amount.toFixed(2)).toBe("177.00");
+  });
+
+  it("una devolución de un comprobante E32 de consumo también prepara su E34", async () => {
+    // La venta por defecto del POS (cliente sin RNC) es E32: devolverla tiene que
+    // producir la misma nota de crédito que un comprobante de crédito fiscal E31.
+    const seeded = await seededSale({ documentType: "E32" });
+    const result = await sales.returnSale(
+      seeded.user,
+      seeded.saleId,
+      returnDto(seeded) as never,
+    );
+
+    const credit = (result as { ecfCreditNote?: { encf: string | null } })
+      .ecfCreditNote;
+    expect(credit).toBeTruthy();
+    expect(credit?.encf).toMatch(/^E34\d{10}$/);
+    expect(await e34Count(seeded.companyId)).toBe(1);
+
+    const note = await prisma.ecfElectronicDocument.findFirstOrThrow({
+      where: { companyId: seeded.companyId, documentType: "E34" },
+      select: { originalDocumentId: true, fiscalDocument: true },
+    });
+    // La nota referencia el comprobante de CONSUMO original, no un E31.
+    const reference = (
+      note.fiscalDocument as {
+        reference?: { originalType?: string; originalENcf?: string };
+      }
+    ).reference;
+    expect(reference?.originalType).toBe("E32");
+    expect(reference?.originalENcf).toBe(seeded.encf);
+
+    const reservation = await prisma.ecfCreditReservation.findFirstOrThrow({
+      where: { companyId: seeded.companyId },
+    });
+    expect(reservation.originalDocumentId).toBe(note.originalDocumentId);
     // Total del comprobante original: 150.00 + 27.00 de ITBIS.
     expect(reservation.amount.toFixed(2)).toBe("177.00");
   });
