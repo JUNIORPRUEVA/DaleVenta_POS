@@ -357,4 +357,74 @@ uat("devolución de venta con comprobante E31 aceptado (E34) on PostgreSQL", () 
     ).toBeNull();
     expect(await e34Count(seeded.companyId)).toBe(0);
   });
+
+  it("no permite devolver más cantidad de la facturada ni sobre-acreditar", async () => {
+    const seeded = await seededSale();
+    // La línea 1 tiene 2 unidades: devolverlas todas es el máximo legítimo.
+    await sales.returnSale(
+      seeded.user,
+      seeded.saleId,
+      returnDto(seeded, {
+        items: [{ saleItemId: seeded.itemIds[0], qty: "2" }],
+      }) as never,
+    );
+
+    await expect(
+      sales.returnSale(
+        seeded.user,
+        seeded.saleId,
+        returnDto(seeded, {
+          items: [{ saleItemId: seeded.itemIds[0], qty: "1" }],
+        }) as never,
+      ),
+    ).rejects.toThrow();
+
+    // Solo existe la nota de la devolución válida y su reserva es la facturada.
+    expect(await e34Count(seeded.companyId)).toBe(1);
+    const reservations = await prisma.ecfCreditReservation.findMany({
+      where: { companyId: seeded.companyId },
+    });
+    const reserved = reservations.reduce(
+      (sum, row) => sum + Number(row.amount),
+      0,
+    );
+    expect(reserved).toBeCloseTo(118, 2);
+  });
+
+  it("dos devoluciones simultáneas no duplican e-NCF ni sobrepasan el crédito", async () => {
+    const seeded = await seededSale();
+    // Misma línea (2 unidades facturadas) devuelta 1 + 1 EN PARALELO, más un
+    // tercer intento que debe perder la carrera por cantidad.
+    const attempt = () =>
+      sales.returnSale(
+        seeded.user,
+        seeded.saleId,
+        returnDto(seeded, {
+          items: [{ saleItemId: seeded.itemIds[0], qty: "1" }],
+        }) as never,
+      );
+    const results = await Promise.allSettled([attempt(), attempt(), attempt()]);
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+
+    // Nunca se acredita más de lo facturado en la línea: 2 × 59.00.
+    const reservations = await prisma.ecfCreditReservation.findMany({
+      where: { companyId: seeded.companyId },
+    });
+    const reserved = reservations.reduce(
+      (sum, row) => sum + Number(row.amount),
+      0,
+    );
+    expect(reserved).toBeLessThanOrEqual(118.01);
+    expect(reserved).toBeCloseTo(59 * succeeded, 2);
+    expect(succeeded).toBeLessThanOrEqual(2);
+
+    // Un e-NCF por nota: la numeración nunca se repite.
+    const notes = await prisma.ecfElectronicDocument.findMany({
+      where: { companyId: seeded.companyId, documentType: "E34" },
+      select: { externalDocumentNumber: true },
+    });
+    expect(notes).toHaveLength(await e34Count(seeded.companyId));
+    const numbers = notes.map((note) => note.externalDocumentNumber);
+    expect(new Set(numbers).size).toBe(numbers.length);
+  });
 });
