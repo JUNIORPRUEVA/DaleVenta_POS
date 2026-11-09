@@ -490,13 +490,45 @@ class _EcfSequenceRangeSectionState
     );
   }
 
-  InputDecoration _decoration(String? hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-    isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: const OutlineInputBorder(),
-  );
+  /// Campo compacto y cuadrado.
+  ///
+  /// El tema global usa radio 16 y 14 px de alto interno, que en un formulario
+  /// de cuatro campos seguidos se lee como cuatro pastillas grandes. Aquí se
+  /// declaran también los estados (`enabled`, `focused`, `error`) porque, si no,
+  /// los hereda del tema y el campo recupera el radio redondeado al enfocarlo.
+  static const _fieldRadius = BorderRadius.all(Radius.circular(6));
+
+  InputDecoration _decoration(String? hint) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+      isDense: true,
+      filled: true,
+      fillColor: const Color(0xFFFAFBFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      border: const OutlineInputBorder(
+        borderRadius: _fieldRadius,
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: const OutlineInputBorder(
+        borderRadius: _fieldRadius,
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: _fieldRadius,
+        borderSide: BorderSide(color: Color(0xFF1957E6), width: 1.4),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: _fieldRadius,
+        borderSide: BorderSide(color: errorColor),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: _fieldRadius,
+        borderSide: BorderSide(color: errorColor, width: 1.4),
+      ),
+    );
+  }
 
   Widget _numericField(
     String label,

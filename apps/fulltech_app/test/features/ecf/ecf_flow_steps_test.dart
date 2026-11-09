@@ -427,10 +427,12 @@ void main() {
       await _pump(tester, _harness());
       await _tapText(tester, 'Comenzar');
 
-      expect(find.text('133020232'), findsOneWidget);
-      expect(find.text('ECF Visual UAT Demo'), findsOneWidget);
-      expect(find.text('Correo fiscal'), findsOneWidget);
-      expect(find.text('facturacion@example.test'), findsOneWidget);
+      // Los datos completos NO se repiten: quedan en una sola línea con la
+      // opción de copiarlos, y el detalle vive en Configuración de empresa.
+      expect(find.textContaining('133020232'), findsOneWidget);
+      expect(find.textContaining('ECF Visual UAT Demo'), findsOneWidget);
+      expect(find.text('Completa lo que falta'), findsNothing);
+      expect(find.text('Correo fiscal'), findsNothing);
       // El certificado pertenece al asistente de DOSA: no se muestra como
       // dato cargado ni como paso pendiente en FullPOS.
       expect(find.text('Certificado digital'), findsNothing);
@@ -510,12 +512,11 @@ void main() {
       await _pump(tester, _harness(dosaEligible: true));
       await _tapText(tester, 'Comenzar');
 
-      // El asistente oficial los vuelve a pedir; se copian desde la ficha.
-      expect(find.byTooltip('Copiar RNC'), findsOneWidget);
-      expect(find.byTooltip('Copiar correo fiscal'), findsOneWidget);
-      // Sin duplicar el dato en pantalla.
-      expect(find.text('133020232'), findsOneWidget);
-      expect(find.text('facturacion@example.test'), findsOneWidget);
+      // El asistente oficial los vuelve a pedir; se copian en un solo toque.
+      expect(find.text('Copiar'), findsOneWidget);
+      // El dato no se duplica: una sola línea con empresa y RNC.
+      expect(find.textContaining('133020232'), findsOneWidget);
+      expect(find.text('facturacion@example.test'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

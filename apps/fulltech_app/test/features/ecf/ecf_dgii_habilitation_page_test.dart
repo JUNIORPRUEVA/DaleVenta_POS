@@ -546,7 +546,9 @@ void main() {
   ) async {
     await _pumpPage(tester, _harness(), step: 'Preparación', technical: false);
     expect(find.byType(EcfFiscalDataContent), findsNothing);
-    expect(find.text('Tu empresa'), findsOneWidget);
+    // Los datos completos no se repiten: no hay tarjeta de empresa.
+    expect(find.text('Tu empresa'), findsNothing);
+    expect(find.text('Completa lo que falta'), findsNothing);
     expect(find.text('Postulación inteligente'), findsNothing);
   });
 
@@ -647,7 +649,7 @@ void main() {
         technical: false,
       );
       // Un requisito pendiente no adelanta al cliente a la vista de seguimiento.
-      expect(find.text('Tu empresa'), findsOneWidget);
+      expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
       expect(find.text('Pruebas del SET'), findsNothing);
       // DOSA no pide el certificado en FullPOS.
       expect(find.text('Certificado digital'), findsNothing);
@@ -730,7 +732,7 @@ void main() {
       technical: false,
     );
     // El cliente permanece en Preparación; no ve la guía técnica antigua.
-    expect(find.text('Tu empresa'), findsOneWidget);
+    expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
     expect(find.text('Ver cómo presentar'), findsNothing);
     expect(find.text('Cómo presentar tu solicitud'), findsNothing);
   });
@@ -878,7 +880,7 @@ void main() {
       step: null,
       technical: false,
     );
-    expect(find.text('Tu empresa'), findsOneWidget);
+    expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
 
     // El motor legado desaparece cuando el modo de prueba no está disponible.
     final button = find.byKey(
@@ -902,7 +904,7 @@ void main() {
     );
     // Sin vigencia confirmada no se finge que el certificado está validado,
     // pero tampoco se bloquea el recorrido: el certificado lo pide DOSA.
-    expect(find.text('Tu empresa'), findsOneWidget);
+    expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
     expect(find.text('Certificado digital'), findsNothing);
     expect(find.text('Continuar con DOSA'), findsNothing);
   });
