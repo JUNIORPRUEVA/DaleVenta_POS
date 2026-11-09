@@ -278,6 +278,7 @@ todas las suites de escritura corrieron sobre la base efímera desechable.
 | `npx jest --runInBand --testPathPatterns "sales-return-ecf-credit-postgres\|ecf-e34"` | 4 suites / 67 pruebas PASS |
 | `npx jest --runInBand --testPathPatterns "dosa-emission-dispatch"` (e2e DOSA) | 2 suites / 25 pruebas PASS |
 | Barrido e2e completo (lotes A/B/C + compatibilidad POS + DOSA) | 19 archivos cubiertos, **202 pruebas PASS** |
+| Barrido de integración e-CF (`src/ecf/**/*integration-spec`) | 33 suites / **399 pruebas PASS** |
 | `npx jest --runInBand --testPathPatterns "legacy-pos-compatibility-http"` | 10/10 PASS |
 | `npx jest --runInBand --testPathPatterns "dosa-dispatch-pending-postgres"` | 6/6 PASS |
 | `flutter analyze` | No issues found |
