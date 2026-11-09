@@ -168,8 +168,21 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
 
   async function registerSequence(
     token: string,
-    documentType: "E31" | "E34",
+    documentType: "E31" | "E32" | "E34",
   ) {
+    // La numeración exige la autorización DGII declarada (fail-closed).
+    await http()
+      .post("/ecf/dgii/authorized-sequences")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        documentType,
+        authorizationNumber: `SYNTH-${documentType}-1-20`,
+        rangeFrom: 1,
+        rangeTo: 20,
+        approvedQuantity: 20,
+        declarationAccepted: true,
+      })
+      .expect(201);
     await http()
       .post("/ecf/sequences")
       .set("Authorization", `Bearer ${token}`)
@@ -382,19 +395,15 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // E32 — consumo: sin numeración y sin cupo de sandbox
+  // E32 — consumo: rango autorizado propio, sin cupo de sandbox
   // ---------------------------------------------------------------------------
-  it("E32: prepara consumo sin numeración, sin cupo y sin duplicar", async () => {
+  it("E32: prepara consumo con su rango autorizado, sin cupo y sin duplicar", async () => {
     const tenant = await registerTenant("e32");
     const token = await login(tenant.email);
     await enableEcf(token);
-    await registerSequence(token, "E31");
+    await registerSequence(token, "E32");
 
     const sale = await seedSale(tenant.companyId, tenant.userId);
-    const sequencesBefore = await prisma.ecfSequence.findMany({
-      where: { companyId: tenant.companyId },
-      select: { documentType: true, nextNumber: true },
-    });
 
     const prepared = await http()
       .post("/ecf/documents/prepare-consumo")
@@ -403,39 +412,49 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
       .expect(201);
     expect(prepared.body.ok).toBe(true);
     expect(prepared.body.value.documentType).toBe("E32");
-    expect(prepared.body.value.encf).toBeNull();
-    expect(prepared.body.value.numberingState).toBe("PENDING_SANDBOX_SLOT");
+    expect(prepared.body.value.encf).toMatch(/^E32\d{10}$/);
+    expect(prepared.body.value.numberingState).toBe(
+      "ALLOCATED_FROM_AUTHORIZED_RANGE",
+    );
     expect(prepared.body.value.status).toBe("LOCAL_VALIDATED");
 
-    // Ni rango de empresa ni cupo de sandbox.
-    const sequencesAfter = await prisma.ecfSequence.findMany({
-      where: { companyId: tenant.companyId },
-      select: { documentType: true, nextNumber: true },
+    // Consume SU rango autorizado de E32, no el de crédito fiscal, y no toca el
+    // cupo de sandbox (que es de un solo uso y sigue reservado).
+    const sequence = await prisma.ecfSequence.findFirstOrThrow({
+      where: { companyId: tenant.companyId, documentType: "E32" },
     });
-    expect(sequencesAfter).toEqual(sequencesBefore);
+    expect(sequence.nextNumber).toBe(2);
     expect(
       await prisma.ecfSandboxE32Trial.count({ where: { companyId: tenant.companyId } }),
     ).toBe(0);
 
-    // Idempotencia por venta.
+    // Idempotencia por venta: el reintento reutiliza el número ya consumido.
     const retry = await http()
       .post("/ecf/documents/prepare-consumo")
       .set("Authorization", `Bearer ${token}`)
       .send({ saleId: sale.id, documentType: "E32", paymentType: 1, incomeType: 1 })
       .expect(201);
     expect(retry.body.value.documentId).toBe(prepared.body.value.documentId);
+    expect(retry.body.value.encf).toBe(prepared.body.value.encf);
     expect(
       await prisma.ecfElectronicDocument.count({ where: { companyId: tenant.companyId } }),
     ).toBe(1);
+    expect(
+      (
+        await prisma.ecfSequence.findFirstOrThrow({
+          where: { companyId: tenant.companyId, documentType: "E32" },
+        })
+      ).nextNumber,
+    ).toBe(2);
 
-    // Consulta posterior por HTTP: sin e-NCF y sin presentarse como aceptado.
+    // Consulta posterior por HTTP: muestra el e-NCF reservado, nunca aceptado.
     const tray = await http()
       .get("/ecf/documents")
       .query({ documentType: "E32" })
       .set("Authorization", `Bearer ${token}`)
       .expect(200);
     expect(tray.body.total).toBe(1);
-    expect(tray.body.items[0].encf).toBeNull();
+    expect(tray.body.items[0].encf).toBe(prepared.body.value.encf);
     expect(tray.body.items[0].status).toBe("LOCAL_VALIDATED");
   });
 

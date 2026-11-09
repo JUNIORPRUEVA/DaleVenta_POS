@@ -258,6 +258,11 @@ todas las suites de escritura corrieron sobre la base efímera desechable.
 - **Retiro B01/B02 del POS completado:** no quedaba selector ni proveedor de secuencias; persistían un
   texto de ayuda («Opcional para B01») y comentarios que afirmaban que el talón seguía existiendo para
   empresas sin e-CF. Corregidos. `flutter analyze` limpio y 69 pruebas de POS en verde.
+- **Barrido e2e completo (19 archivos):** `ecf-documents-http.e2e-spec.ts` estaba en rojo por dos
+  contratos posteriores al retiro NCF: (1) registrar numeración exige **declarar antes** la autorización
+  DGII por tipo, y (2) la preparación de E32 ya toma su e-NCF de un rango autorizado
+  (`ALLOCATED_FROM_AUTHORIZED_RANGE`), no del cupo de sandbox. Ambas expectativas se actualizaron; el
+  resto del barrido ya estaba en verde.
 
 ### Comandos ejecutados
 
@@ -272,6 +277,7 @@ todas las suites de escritura corrieron sobre la base efímera desechable.
 | `npm run audit:unsafe-tenant-queries:warn` | exit 0; 401 avisos y 14 errores **preexistentes** (CI usa modo warn) |
 | `npx jest --runInBand --testPathPatterns "sales-return-ecf-credit-postgres\|ecf-e34"` | 4 suites / 67 pruebas PASS |
 | `npx jest --runInBand --testPathPatterns "dosa-emission-dispatch"` (e2e DOSA) | 2 suites / 25 pruebas PASS |
+| Barrido e2e completo (lotes A/B/C + compatibilidad POS + DOSA) | 19 archivos cubiertos, **202 pruebas PASS** |
 | `npx jest --runInBand --testPathPatterns "legacy-pos-compatibility-http"` | 10/10 PASS |
 | `npx jest --runInBand --testPathPatterns "dosa-dispatch-pending-postgres"` | 6/6 PASS |
 | `flutter analyze` | No issues found |
