@@ -3612,11 +3612,6 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       // registra la excepción). Un fallo aquí NO deshace la venta y no la
       // degrada a «sin comprobante»: se informa y se resuelve desde Mis Ventas.
       final ecfIssue = await _applyEcfFiscalMode(created, ecfMode);
-      debugPrint(
-        '[SALE PRINT] cashierSnapshot=${created.userName ?? 'none'} '
-        'ncf=${created.ncf ?? 'none'} '
-        'ncfExpiration=${created.ncfExpirationDate?.toIso8601String() ?? 'none'}',
-      );
       final printResult = await ref
           .read(unifiedTicketPrinterProvider)
           .printSaleTicket(sale: created, items: created.items);
