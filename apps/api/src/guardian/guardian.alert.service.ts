@@ -468,7 +468,7 @@ export class GuardianAlertService {
   }
 
   async attempt(alertId: string, channels?: GuardianAlertChannel[]) {
-    const alert = await this.prisma.guardianAlert.findUnique({ where: { id: alertId } });
+    const alert = await this.prisma.guardianAlert.findUnique({ where: { id: alertId } }); // tenant-global: worker de plataforma (Guardian), sin entrada por tenant
     if (!alert) return { ok: false as const, reason: 'NOT_FOUND' };
     // Ya aceptada por el proveedor: un reintento tras un reinicio no debe
     // reenviar el mensaje (evita duplicados en el cliente final).
@@ -712,7 +712,7 @@ export class GuardianAlertService {
       data.lastError = transition.lastError ? transition.lastError.slice(0, 600) : null;
     }
 
-    await this.prisma.guardianAlert.update({ where: { id: alert.id }, data });
+    await this.prisma.guardianAlert.update({ where: { id: alert.id }, data }); // tenant-global: worker de plataforma (Guardian), sin entrada por tenant
     return { updated: 1, state: String(transition.state ?? alert.state) };
   }
 

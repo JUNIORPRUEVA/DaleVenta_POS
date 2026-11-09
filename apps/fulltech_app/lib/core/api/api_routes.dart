@@ -19,8 +19,6 @@ class ApiRoutes {
   static const settingsCompanyName = '/settings/company-name';
   static const fiscalSettings = '/company/fiscal-settings';
   static const taxes = '/taxes';
-  static const ncfSequences = '/ncf/sequences';
-  static String ncfSequence(String id) => '/ncf/sequences/$id';
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
   static const license = '/license';
@@ -588,6 +586,13 @@ class ApiRoutes {
       '/ecf/documents/$id/dispatch-dosa';
   static const ecfSequences = '/ecf/sequences';
   static const ecfSequencesRenew = '/ecf/sequences/renew';
+
+  /// Numeración que la DGII autorizó a la empresa, por tipo de comprobante.
+  /// Es la fuente de verdad contra la que se valida lo que se declara.
+  static const ecfDgiiAuthorizedSequences = '/ecf/dgii/authorized-sequences';
+
+  /// Registro de ventas hechas SIN comprobante electrónico (excepciones).
+  static const ecfSalesWithoutDocument = '/ecf/sales-without-document';
 
   /// Proceso INTERNO de habilitación e-CF de la empresa (pasos y auditoría).
   static const ecfOnboarding = '/ecf/onboarding';

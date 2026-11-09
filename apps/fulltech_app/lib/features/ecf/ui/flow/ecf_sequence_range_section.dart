@@ -4,30 +4,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/ecf_repository.dart';
+import '../../ecf_authorized_sequence_models.dart';
 import '../../ecf_models.dart';
 import 'ecf_flow_kit.dart';
 
-/// Declaración del rango de numeración de comprobantes (e-NCF).
+/// Declaración de la numeración que la **DGII** autorizó a la empresa.
 ///
 /// Por qué existe
 /// -------------
-/// El backend no inventa la numeración: cada comprobante consume el siguiente
-/// número de un rango que la DGII asignó a la empresa. Si no hay rango activo,
-/// preparar un documento falla con `ECF_SEQUENCE_EXHAUSTED`, un mensaje que no
-/// explica nada porque en realidad nunca se declaró el rango. Hasta ahora no
-/// existía ninguna pantalla que permitiera declararlo, así que el cliente quedaba
-/// autorizado pero incapaz de facturar.
+/// Ningún sistema puede leer la autorización de la DGII: el cliente la ve en la
+/// Oficina Virtual y la transcribe. Este formulario convierte esa transcripción
+/// en un control real: el backend exige una declaración explícita, guarda quién
+/// la firmó y la versión del texto, y rechaza cualquier rango que se salga de lo
+/// autorizado.
 ///
 /// Decisiones de diseño
 /// --------------------
-/// * **Se oculta sola.** Si ya hay un rango activo con números disponibles, no
-///   muestra nada: no se pide dos veces el mismo dato.
-/// * **Solo dos números.** El prefijo lo deriva el backend del tipo de
-///   comprobante, así que no se le pide al cliente.
-/// * **Fail-closed en la interfaz.** No deja enviar «desde» mayor que «hasta» ni
-///   valores no numéricos; el servidor lo rechazaría igual, pero el mensaje local
-///   es más claro.
-/// * **Sin permiso no se muestra**, igual que en el resto del módulo.
+/// * **Un solo sitio.** La autorización y el rango se declaran juntos: el cliente
+///   no tiene que entrar en dos pantallas para el mismo dato.
+/// * **Nada se prellena** con lo que dijo el proveedor. El dato de la DGII manda.
+/// * **Fail-closed en la interfaz**: no se puede guardar sin marcar la
+///   declaración, y el rango se valida contra la cantidad aprobada antes de
+///   enviar. El servidor lo vuelve a validar igualmente.
+/// * **Se oculta sola** cuando ya hay numeración usable y declarada: no se pide
+///   dos veces el mismo dato, pero queda un resumen legible de lo declarado.
 class EcfSequenceRangeSection extends ConsumerStatefulWidget {
   const EcfSequenceRangeSection({super.key, required this.canManage});
 
@@ -41,14 +41,21 @@ class EcfSequenceRangeSection extends ConsumerStatefulWidget {
 
 class _EcfSequenceRangeSectionState
     extends ConsumerState<EcfSequenceRangeSection> {
+  final _authorization = TextEditingController();
   final _from = TextEditingController();
   final _to = TextEditingController();
+  final _approved = TextEditingController();
+  final _expires = TextEditingController();
 
+  EcfAuthorizedSequencesView _authorized = EcfAuthorizedSequencesView.empty;
   List<EcfSequenceInfo> _sequences = const [];
+  String? _selectedType;
+  bool _declarationAccepted = false;
+  bool _showAnotherType = false;
   bool _loading = true;
   bool _saving = false;
   String? _error;
-  bool _done = false;
+  String? _success;
 
   @override
   void initState() {
@@ -64,16 +71,24 @@ class _EcfSequenceRangeSectionState
 
   @override
   void dispose() {
+    _authorization.dispose();
     _from.dispose();
     _to.dispose();
+    _approved.dispose();
+    _expires.dispose();
     super.dispose();
   }
 
-  /// ¿Ya hay numeración utilizable para facturas (E31)?
-  bool get _hasUsableRange => _sequences.any(
+  /// Tipos soportados que todavía no tienen autorización declarada.
+  List<String> get _pendingTypes => _authorized.supportedTypes
+      .where((type) => _authorized.forType(type) == null)
+      .toList(growable: false);
+
+  /// ¿Ya hay un rango activo con números para el tipo seleccionado?
+  bool _hasUsableRange(String type) => _sequences.any(
     (sequence) =>
         sequence.active &&
-        sequence.documentType == 'E31' &&
+        sequence.documentType == type &&
         sequence.remaining > 0,
   );
 
@@ -83,143 +98,461 @@ class _EcfSequenceRangeSectionState
       _error = null;
     });
     try {
-      final rows = await ref.read(ecfRepositoryProvider).sequences();
+      final authorized = await ref
+          .read(ecfRepositoryProvider)
+          .authorizedSequences();
+      final sequences = await ref.read(ecfRepositoryProvider).sequences();
       if (!mounted) return;
-      setState(() => _sequences = rows);
+      setState(() {
+        _authorized = authorized;
+        _sequences = sequences;
+        final pending = _pendingTypes;
+        if (_selectedType == null ||
+            !_authorized.supportedTypes.contains(_selectedType)) {
+          _selectedType = pending.isNotEmpty
+              ? pending.first
+              : _authorized.supportedTypes.isEmpty
+              ? null
+              : _authorized.supportedTypes.first;
+        }
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'No se pudo consultar tu numeración.');
+      setState(() => _error = 'No se pudo consultar la numeración autorizada.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _save() async {
-    if (_saving) return;
+    if (_saving || _selectedType == null) return;
+
+    final authorizationNumber = _authorization.text.trim();
     final from = int.tryParse(_from.text.trim());
     final to = int.tryParse(_to.text.trim());
+    final approved = int.tryParse(_approved.text.trim());
+
+    if (authorizationNumber.length < 4) {
+      setState(() => _error = _authorizationError);
+      return;
+    }
     if (from == null || to == null || from < 1 || to < from) {
-      setState(() {
-        _error = 'Escribe el número inicial y el final (el final no puede ser '
-            'menor que el inicial).';
-      });
+      setState(() => _error = _rangeError);
+      return;
+    }
+    if (approved == null || approved < 1) {
+      setState(() => _error = _quantityError);
+      return;
+    }
+    if (to - from + 1 != approved) {
+      setState(
+        () => _error =
+            'La DGII aprobó $approved comprobantes y el rango declara '
+            '${to - from + 1}. Corrige los números o la cantidad aprobada.',
+      );
+      return;
+    }
+    if (!_declarationAccepted) {
+      setState(() => _error = 'Debes aceptar la declaración para guardar.');
       return;
     }
 
     setState(() {
       _saving = true;
       _error = null;
+      _success = null;
     });
     try {
-      await ref
-          .read(ecfRepositoryProvider)
-          .registerSequence(
-            documentType: 'E31',
-            startNumber: from,
-            endNumber: to,
-          );
+      final repository = ref.read(ecfRepositoryProvider);
+      // 1) La autorización primero: es la fuente de verdad del rango.
+      await repository.declareAuthorizedSequence(
+        documentType: _selectedType!,
+        authorizationNumber: authorizationNumber,
+        rangeFrom: from,
+        rangeTo: to,
+        approvedQuantity: approved,
+        expiresAt: _normalizeExpiry(_expires.text),
+        declarationAccepted: true,
+      );
+      // 2) El rango de numeración, que el backend valida contra lo declarado.
+      await repository.registerSequence(
+        documentType: _selectedType!,
+        startNumber: from,
+        endNumber: to,
+      );
       if (!mounted) return;
-      setState(() => _done = true);
+      _authorization.clear();
+      _from.clear();
+      _to.clear();
+      _approved.clear();
+      _expires.clear();
+      setState(() {
+        _declarationAccepted = false;
+        _showAnotherType = false;
+        _success = 'Numeración declarada. Ya puedes emitir comprobantes.';
+      });
       await _load();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = _describeSaveError(error));
+      setState(() => _error = _describeError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  /// Traduce los códigos del backend: son los que el cliente puede corregir.
-  String _describeSaveError(Object error) {
+  String get _authorizationError =>
+      'Escribe el número de autorización tal como aparece en la Oficina '
+      'Virtual de la DGII.';
+
+  String get _rangeError =>
+      'El número final no puede ser menor que el inicial.';
+
+  String get _quantityError => 'La cantidad aprobada debe ser mayor que cero.';
+
+  /// Acepta `31/12/2027` o una fecha ISO. Vacío = sin vencimiento (N/A).
+  ///
+  /// La fecha se envía como **fin del día** (23:59:59.999Z): la DGII autoriza
+  /// hasta el último día inclusive, y mandarla a medianoche bloquearía la
+  /// emisión precisamente ese día.
+  String? _normalizeExpiry(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    final parts = text.split(RegExp(r'[/\-.]'));
+    if (parts.length == 3 && parts[0].length <= 2) {
+      final day = parts[0].padLeft(2, '0');
+      final month = parts[1].padLeft(2, '0');
+      return '${parts[2]}-$month-${day}T23:59:59.999Z';
+    }
+    return text;
+  }
+
+  /// Traduce los códigos del backend a algo que el cliente pueda corregir.
+  String _describeError(Object error) {
     final text = error.toString();
+    final backendMessage = _messageAfterCode(text);
+    if (text.contains('ECF_DGII_SEQUENCE_QUANTITY_MISMATCH')) {
+      return backendMessage ?? _quantityError;
+    }
+    if (text.contains('ECF_SEQUENCE_EXCEEDS_AUTHORIZED')) {
+      return backendMessage ?? 'El rango se sale de lo autorizado por la DGII.';
+    }
+    if (text.contains('ECF_SEQUENCE_NOT_AUTHORIZED')) {
+      return 'Falta declarar la numeración autorizada por la DGII.';
+    }
+    if (text.contains('ECF_DGII_SEQUENCE_EXPIRED')) {
+      return backendMessage ?? 'La autorización de la DGII está vencida.';
+    }
     if (text.contains('ECF_SEQUENCE_ALREADY_EXISTS')) {
       return 'Ya tienes una numeración activa para ese tipo de comprobante.';
     }
     if (text.contains('ECF_SEQUENCE_REUSE_BLOCKED')) {
       return 'No puedes empezar por debajo de un número que ya usaste.';
     }
-    if (text.contains('ECF_SEQUENCE_RANGE_INVALID')) {
-      return 'El rango no es válido: revisa el número inicial y el final.';
+    if (text.contains('ECF_DGII_SEQUENCE_AUTHORIZATION_REQUIRED')) {
+      return _authorizationError;
     }
     return 'No se pudo guardar la numeración. Inténtalo de nuevo.';
   }
 
+  /// El backend envía `CODIGO: mensaje legible`; se muestra la parte legible.
+  String? _messageAfterCode(String text) {
+    final match = RegExp(r'ECF_[A-Z_]+:\s*(.+)').firstMatch(text);
+    return match?.group(1)?.trim();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!widget.canManage) return const SizedBox.shrink();
-    if (_loading) return const SizedBox.shrink();
-    // Con numeración disponible no hay nada que pedir.
-    if (_hasUsableRange) return const SizedBox.shrink();
+    if (!widget.canManage || _loading) return const SizedBox.shrink();
+    if (_authorized.supportedTypes.isEmpty) return const SizedBox.shrink();
 
-    if (_done && !_hasUsableRange) {
-      return const EcfInlineNote(
-        tone: EcfTone.warning,
-        text: 'La numeración se guardó, pero todavía no aparece disponible. '
-            'Pulsa actualizar para comprobarlo.',
+    final pending = _pendingTypes;
+    final declared = _authorized.items;
+
+    // Con algo ya declarado se muestra el resumen: no se le pide al cliente un
+    // tipo que quizá no use. Declarar otro tipo es una acción explícita.
+    if (declared.isNotEmpty && !_showAnotherType) {
+      return EcfSection(
+        title: 'Numeración autorizada por la DGII',
+        subtitle: 'Ya está declarada. Declara otro tipo si la DGII te autorizó '
+            'más de uno.',
+        icon: Icons.verified_outlined,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final item in declared) _declaredSummary(item),
+            if (_success != null) ...[
+              const SizedBox(height: 8),
+              EcfInlineNote(tone: EcfTone.done, text: _success!),
+            ],
+            if (pending.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('ecf_dgii_declare_another'),
+                  onPressed: () => setState(() {
+                    _showAnotherType = true;
+                    _selectedType = pending.first;
+                    _error = null;
+                    _success = null;
+                  }),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text('Declarar ${_typeLabel(pending.first)}'),
+                ),
+              ),
+            ],
+          ],
+        ),
       );
     }
 
     return EcfSection(
-      title: 'Numeración de facturas',
-      subtitle:
-          'Los números que te asignó la DGII. Hacen falta para poder emitir.',
-      icon: Icons.pin_outlined,
+      title: 'Numeración autorizada por la DGII',
+      subtitle: 'Transcribe los datos tal como aparecen en la Oficina Virtual '
+          'de la DGII. Sin esta información no se puede emitir.',
+      icon: Icons.verified_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('ecf_sequence_from'),
-                  controller: _from,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Desde',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('ecf_sequence_to'),
-                  controller: _to,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Hasta',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
+          if (_selectedType == null)
+            const SizedBox.shrink()
+          else ...[
+            if (_authorized.supportedTypes.length > 1) ...[
+              _typeSelector(),
+              const SizedBox(height: 10),
             ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Escribe solo los números. El prefijo lo agrega el sistema.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-          ),
-          if (_error != null) ...[
+            _label('N.º de autorización'),
+            TextField(
+              key: const ValueKey('ecf_dgii_authorization_number'),
+              controller: _authorization,
+              textCapitalization: TextCapitalization.characters,
+              decoration: _decoration('Como aparece en la DGII'),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _numericField('Desde', _from, 'ecf_dgii_from')),
+                const SizedBox(width: 10),
+                Expanded(child: _numericField('Hasta', _to, 'ecf_dgii_to')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _numericField(
+                    'Cantidad aprobada',
+                    _approved,
+                    'ecf_dgii_approved',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _textField(
+                    'Vence',
+                    _expires,
+                    '31/12/2027',
+                    'ecf_dgii_expires',
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: const TextStyle(fontSize: 12, color: AppColors.error),
+            const Text(
+              'Escribe solo los números: el prefijo lo agrega el sistema. Si la '
+              'DGII muestra «N/A», deja «Vence» vacío.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 14),
+            _declaration(),
+            if (_success != null) ...[
+              const SizedBox(height: 10),
+              EcfInlineNote(tone: EcfTone.done, text: _success!),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              EcfInlineNote(tone: EcfTone.warning, text: _error!),
+            ],
+            const SizedBox(height: 12),
+            EcfPrimaryAction(
+              label: 'Guardar declaración y numeración',
+              icon: Icons.save_outlined,
+              busy: _saving,
+              onPressed: _saving || !_declarationAccepted ? null : _save,
+              buttonKey: const ValueKey('ecf_dgii_declaration_save'),
             ),
           ],
-          const SizedBox(height: 12),
-          EcfPrimaryAction(
-            label: 'Guardar numeración',
-            icon: Icons.save_outlined,
-            busy: _saving,
-            onPressed: _saving ? null : _save,
-            buttonKey: const ValueKey('ecf_sequence_save'),
-          ),
         ],
       ),
     );
+  }
+
+  Widget _typeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('Tipo de comprobante'),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('ecf_dgii_type'),
+          initialValue: _selectedType,
+          isDense: true,
+          decoration: _decoration(null),
+          items: [
+            for (final type in _authorized.supportedTypes)
+              DropdownMenuItem(value: type, child: Text(_typeLabel(type))),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) => setState(() {
+                  _selectedType = value;
+                  _error = null;
+                  _success = null;
+                }),
+        ),
+      ],
+    );
+  }
+
+  /// La declaración es el acto del cliente: se presenta como un bloque propio
+  /// separado por una línea, **no** como una tarjeta dentro de la tarjeta. El
+  /// kit del módulo prohíbe anidar superficies: eso es exactamente el ruido que
+  /// el recorrido debe evitar.
+  Widget _declaration() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 1, color: AppColors.border),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              key: const ValueKey('ecf_dgii_declaration_check'),
+              value: _declarationAccepted,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                      _declarationAccepted = value ?? false;
+                      _error = null;
+                    }),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _authorized.declarationText.isEmpty
+                      ? 'Declaro que estos datos son los que la DGII autorizó a '
+                            'mi empresa y que no usaré números fuera de ese rango.'
+                      : _authorized.declarationText,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _declaredSummary(EcfAuthorizedSequence item) {
+    final range =
+        '${item.rangeFrom}–${item.rangeTo} · ${item.approvedQuantity} aprobados';
+    final expiry = item.expiresAt == null
+        ? 'Sin vencimiento'
+        : 'Vence ${_formatDate(item.expiresAt!)}';
+    return EcfSummaryRow(
+      label: _typeLabel(item.documentType),
+      value: '$range · $expiry · aut. ${item.authorizationNumber}',
+      tone: _hasUsableRange(item.documentType)
+          ? EcfTone.done
+          : EcfTone.pending,
+    );
+  }
+
+  Widget _label(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 11,
+          letterSpacing: 0.2,
+          color: AppColors.textMuted,
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _decoration(String? hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: const OutlineInputBorder(),
+  );
+
+  Widget _numericField(
+    String label,
+    TextEditingController controller,
+    String keyName,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(label),
+        TextField(
+          key: ValueKey(keyName),
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: _decoration(null),
+        ),
+      ],
+    );
+  }
+
+  Widget _textField(
+    String label,
+    TextEditingController controller,
+    String hint,
+    String keyName,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(label),
+        TextField(
+          key: ValueKey(keyName),
+          controller: controller,
+          decoration: _decoration(hint),
+        ),
+      ],
+    );
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'E31':
+        return 'Factura de Crédito Fiscal (E31)';
+      case 'E34':
+        return 'Nota de Crédito (E34)';
+      case 'E32':
+        return 'Factura de Consumo (E32)';
+      default:
+        return type;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
   }
 }

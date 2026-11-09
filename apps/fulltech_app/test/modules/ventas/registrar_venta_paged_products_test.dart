@@ -342,7 +342,6 @@ Future<void> _pumpPos(
         dioProvider.overrideWithValue(server.dio),
         warehousesProvider.overrideWith((ref) async => const []),
         warehouseTerminalsProvider.overrideWith((ref) async => const []),
-        posNcfSequencesProvider.overrideWith((ref) async => const []),
       ],
       child: const MaterialApp(home: RegistrarVentaScreen()),
     ),

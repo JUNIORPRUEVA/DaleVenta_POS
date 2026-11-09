@@ -23,7 +23,6 @@ class Routes {
   static const contabilidad = '/contabilidad';
   static const contabilidadCierresDiarios = '/contabilidad/cierres-diarios';
   static const contabilidadDepositos = '/contabilidad/depositos-bancarios';
-  static const contabilidadFacturaFiscal = '/contabilidad/factura-fiscal';
   static const contabilidadPagosPendientes = '/contabilidad/pagos-pendientes';
   static const clientes = '/clientes';
   static const ventasBase = '/ventas';

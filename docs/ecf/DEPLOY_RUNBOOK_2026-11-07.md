@@ -81,6 +81,67 @@ Si esa copia no tiene todas las variables, **las borra**.
 **HECHO**: con la emisión apagada, la validación de arranque no exige nada y la
 API arranca aunque falten `DOSA_BASE_URL` o las claves.
 
+### 3.4 Comprobación contra el servicio real (nombres, sin valores)
+
+**HECHO (2026-11-07)**: se listaron los **nombres** de las variables del
+servicio `daleventapos_backend` en producción y se compararon con las que lee
+el código de este release. Solo se extrajo la parte izquierda de cada
+`NOMBRE=valor`; **ningún valor se leyó ni se imprimió**.
+
+**Están presentes** todas las críticas de §3.1: `DOSA_CREDENTIALS_MASTER_KEY`,
+`DOSA_WEBHOOK_ENABLED`, `DOSA_WEBHOOK_SIGNATURE_STRATEGY`, `DOSA_WEBHOOK_SECRET`,
+`DOSA_WEBHOOK_SECRET_ENCODING`, `DOSA_WEBHOOK_TIMESTAMP_UNIT`,
+`DOSA_CERTIFICATION_SESSIONS_ENABLED`, `DOSA_SESSION_BASE_URL`,
+`DOSA_SESSION_URL_KEYS`, `DOSA_SESSION_URL_ACTIVE_KEY_VERSION`,
+`ECF_DOSA_HISTORICAL_TRANSITION_ENABLED`, `ECF_PORTAL_PILOT_COMPANY_IDS`,
+`DATABASE_URL`, `JWT_SECRET`, `FINANCIAL_LEGACY_COMPAT`,
+`FULLPOS_UPDATE_PILOT_CLIENT_KEYS`, `FULLPOS_UPDATE_PILOT_RELEASE_JSON`,
+`RUN_MIGRATIONS`, `MIGRATION_STRICT`.
+
+**Ausentes y con consecuencia real:**
+
+| Variable ausente | Valor efectivo al no estar | ¿Hay que hacer algo? |
+| --- | --- | --- |
+| `ECF_PORTAL_AUTO_ENROLL_ENABLED` | **`true`** (`?? "true"` en `ecf-portal-enrollment.service.ts`) | **Sí, es la decisión de §5.** Al desplegar, toda empresa que abra el asistente queda inscrita sola. Para estrenarlo de forma controlada hay que definirla en `false` **antes** de pulsar |
+| `DOSA_INCIDENT_MONITOR_ENABLED` | `false` | No es un fallo: la vigilancia de incidencias nueva **no arranca**. Si se quiere activa, definirla en `true` de forma explícita |
+
+**Ausentes y sin efecto hoy** (leen con valor por defecto seguro):
+`DOSA_EMISSION_TRANSPORT` (ausente = `FETCH`, nunca el transporte falso),
+`DOSA_EMISSION_ENVIRONMENT` (`TEST`), `DOSA_API_QUERIES_ENABLED`,
+`DOSA_BASE_URL`, `DOSA_TEST_API_KEY`, `DOSA_PRODUCTION_API_KEY`,
+`ECF_DOSA_INTENT_RECONCILIATION_ENABLED`,
+`ECF_DOSA_INTENT_RECONCILIATION_INTERNAL_ENABLED`, `DOSA_QUERY_TIMEOUT_MS`,
+`DOSA_SESSION_TIMEOUT_MS`, `DOSA_EMISSION_TIMEOUT_MS`, `ECF_EMISSION_ENABLED`,
+`ECF_DOCKER_SECRETS_DIR` (`/run/secrets`), `ECF_DGII_STORAGE_DIR`.
+
+**Anomalía menor detectada**: el spec del servicio tiene `PORT` **duplicado** y
+una entrada vacía. No rompe el arranque, pero conviene limpiarlo la próxima vez
+que se editen las variables del panel.
+
+### 3.5 Panel de EasyPanel — verificado el 2026-11-07
+
+**HECHO**: el propietario mostró la lista de variables del panel. Comparada con
+el spec del servicio en ejecución:
+
+| Variable | Panel | Servicio | Veredicto |
+| --- | --- | --- | --- |
+| `DOSA_SESSION_BASE_URL` | `https://dosasystem.com` | igual | Correcto (HTTPS, sin barra final) |
+| `DOSA_SESSION_URL_KEYS` | `1:…` (truncado en la captura) | contiene **versiones 1 y 2** | Correcto: la activa es `2` y existe |
+| `DOSA_SESSION_URL_ACTIVE_KEY_VERSION` | `2` | `2` | Correcto |
+| `DOSA_WEBHOOK_SIGNATURE_STRATEGY` | `HMAC_SHA2…` | `HMAC_SHA256_TIMESTAMPED` | Correcto, valor exacto |
+| `DOSA_CREDENTIALS_MASTER_KEY` | presente | 44 caracteres | Correcto |
+| `ECF_PORTAL_AUTO_ENROLL_ENABLED` | `true` | **ausente** | Normal: el panel va por delante; «Implementar» la aplicará (ver §5) |
+| `DOSA_SECRET_KEY` | `sk_SU_LLAVE_SECRETA` | 19 caracteres | **Marcador de ejemplo, no es una clave real** |
+| `DOSA_INCIDENT_MONITOR_ENABLED` | ausente | ausente | Vigilancia de incidencias apagada |
+
+**`DOSA_SECRET_KEY` es un marcador.** Solo lo usan `dosa-api.client.ts` (con
+`DOSA_API_QUERIES_ENABLED=true`) y `dosa-certification-session.client.ts` (con
+`DOSA_CERTIFICATION_SESSIONS_ENABLED=true`). Las dos banderas están apagadas o
+ausentes, así que **hoy no tiene efecto**. Ojo: la validación de arranque solo
+comprueba el prefijo `sk_`, que el marcador **sí** cumple, así que no falla
+rápido: al encender cualquiera de las dos banderas el rechazo llegará del
+proveedor. **Sustituirla por la clave real de DOSA antes de eso.**
+
 ---
 
 ## 4. Los dos riesgos reales
@@ -153,7 +214,11 @@ imprimir el valor en logs compartidos).
 
 ---
 
-## 5. Decisión de producto pendiente (antes de desplegar)
+## 5. Decisión de producto: `ECF_PORTAL_AUTO_ENROLL_ENABLED`
+
+**HECHO (2026-11-07)**: el panel ya la define en **`true`** y el servicio en
+ejecución todavía no la tiene, así que «Implementar» la aplicará. La decisión
+está tomada; queda escrito aquí qué significa.
 
 `ECF_PORTAL_AUTO_ENROLL_ENABLED` por defecto `true` significa que **cualquier
 empresa que abra el asistente queda autorizada sola** para el portal de
@@ -196,14 +261,13 @@ docker image tag <imagen-pwa-actual>     fullpos/daleventapos-pwa:pre-ecf-202611
 
 ### Paso 2 — Llevar el código a `production-main`
 
-Falta hacerlo: **la rama no está publicada** (`git ls-remote` no devuelve nada).
+**HECHO (2026-11-07)**: la rama **ya está publicada**.
+`origin/agent/dosa-credentials-split-20261107` apunta al mismo commit que el
+árbol local y el PR está abierto contra `production-main`. **No hay que volver
+a empujar nada**; el paso que queda es fusionar.
 
-```bash
-git push -u origin agent/dosa-credentials-split-20261107
-```
-
-Después, PR contra `production-main` y fusión (*fast-forward*, sin conflictos
-porque `aad1e7b9` es ancestro).
+La fusión es *fast-forward*, sin conflictos: `git merge-base --is-ancestor
+origin/production-main HEAD` devuelve 0, así que `aad1e7b9` es ancestro.
 
 ### Paso 3 — Revisar variables en el panel
 
@@ -279,3 +343,72 @@ abre su pantalla de estado o registra su autorización DGII.
 - No despliega, ni reinicia servicios, ni aplica migraciones.
 - No lee ni imprime secretos.
 - No modifica datos ni variables del panel.
+
+---
+
+## 9. Activación de la emisión TEST (sin emitir de verdad a la DGII)
+
+**HECHO (2026-11-07)**: estado real leído de producción y de la compuerta
+`assessDosaEmissionGate`. Para que una emisión TEST pase hoy faltan seis cosas;
+**cinco son datos o configuración, no variables de entorno**.
+
+| # | Requisito | Estado real hoy | Cómo se resuelve |
+| --- | --- | --- | --- |
+| 1 | `DOSA_BASE_URL` presente y HTTPS | **ausente** | Panel: `https://dosasystem.com`. **Obligatoria ANTES de encender la bandera**: sin ella el backend **no arranca** (`DOSA_STARTUP_BASE_URL_REQUIRED`) |
+| 2 | `DOSA_EMISSION_ENABLED=true` | `false` | Panel, **en el mismo guardado** que el punto 1 |
+| 3 | `DOSA_EMISSION_ENVIRONMENT=TEST` | ausente (el código ya asume `TEST`) | Panel, explícita por claridad |
+| 4 | `ecf_company_configurations.provider` = `DOSA` | **`ALANUBE`** | Endpoint de configuración e-CF, que ya solo acepta `DOSA` |
+| 5 | Fila de credencial `test` en `ACTIVE` | **no existe fila `test`**; el paquete completo está en la fila `production` con `PENDING_CONFIRMATION` | Reclasificar con el script + activación normal del producto |
+| 6 | Secuencia e-NCF disponible | sin verificar | Pantalla de rango de numeración |
+
+**No hay que tocar**: `DOSA_PRODUCTION_EMISSION_ENABLED=false` (queda apagado y
+es lo que impide emitir de verdad) y `DOSA_TEST_API_KEY` (la emisión **no la
+usa**: lee la credencial cifrada de la empresa desde la bóveda).
+
+### Por qué no existe la fila `test`
+
+El paquete del webhook se guardaba bajo el `ambiente` declarado por el evento
+(`Produccion`), con las tres claves juntas dentro. Este release lo corrige
+(`ca9dd3b0`) repartiendo por nombre de clave. Para el dato **ya guardado** existe
+una herramienta manual:
+
+**HECHO (2026-11-07)**: el reenvío de DOSA **sí funcionó**. El evento de
+`2026-11-07 13:54:38` trae `apiKeyTest` con valor (el del `2026-11-06 23:15:14`
+lo traía en `null`), firma `HMAC_SHA256_TIMESTAMPED`, `processing_state =
+COMPLETE`, `credentials_stored_at = 13:54:38.282` y una `dedupe_key` distinta de
+la del día anterior. La fila de credencial se actualizó 3 ms después. Es decir:
+la clave TEST **nueva de FULLTECH** está guardada; lo que falta es reclasificarla
+en su propia fila y activarla. (El `duplicate: true` que reportó el proveedor no
+impidió el guardado.)
+
+La clave TEST que aparece escrita en la conversación corresponde al RNC de
+pruebas `133306001` de DOSA y **no sirve para FULLTECH**.
+
+```bash
+# 1) Ver qué haría (no escribe nada)
+npm run dosa:credentials:reclassify -- --company-id 165e3fca-6225-479b-8805-d2205f10536c --rnc 133080206
+
+# 2) Aplicar (exige la confirmación en el entorno)
+DOSA_CREDENTIALS_RECLASSIFY=CONFIRM \
+  npm run dosa:credentials:reclassify -- --company-id 165e3fca-6225-479b-8805-d2205f10536c --rnc 133080206 --apply
+```
+
+- El script vive en la **imagen**: solo puede ejecutarse **después de desplegar**.
+- Dry-run por defecto; `--apply` exige `DOSA_CREDENTIALS_RECLASSIFY=CONFIRM`.
+- **No activa nada**: lo que escribe entra como `PENDING_CONFIRMATION`.
+- **No toca** la fila de origen; es idempotente por huella.
+
+Después, la credencial `test` se activa por la vía normal del producto (abrir la
+pantalla de estado e-CF o registrar la autorización DGII), que es la que produce
+la evidencia que la activación exige.
+
+### Orden seguro
+
+1. Fusionar el PR y desplegar backend (las variables 1–3 se pueden poner antes o
+   en el mismo guardado; **nunca** la 2 sin la 1).
+2. Cambiar `provider` a `DOSA` en la configuración e-CF de la empresa.
+3. Dry-run de la reclasificación → `--apply` → comprobar que aparece la fila `test`.
+4. Activar la credencial desde la pantalla de estado e-CF del cliente.
+5. Confirmar la secuencia e-NCF y recién entonces emitir **un** comprobante TEST.
+6. `DOSA_PRODUCTION_EMISSION_ENABLED` se queda en `false` hasta que el TEST esté
+   validado; emitir de verdad es un acto aparte, con su propia autorización.

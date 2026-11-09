@@ -9,10 +9,14 @@ import {
 import { ECF_ALLOWED_DOCUMENT_TYPES } from "../ecf.constants";
 import {
   ECF_GROUP_STATUSES,
+  type DeclareEcfAuthorizedSequenceDto,
   type EcfStatusGroup,
   type ListEcfDocumentsQueryDto,
   type RegisterEcfSequenceDto,
 } from "../dto/ecf-documents.dto";
+import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
+import { ECF_SEQUENCE_TYPES } from "./ecf-dgii-authorized-sequences.policy";
+import { ECF_WITHOUT_DOCUMENT_WARNING } from "./ecf-sales-without-document.policy";
 import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
 
@@ -84,6 +88,11 @@ export class EcfDocumentQueryService {
       simulatedDispatchPathAvailable: true,
       // Bandera del SERVIDOR, no de la empresa.
       providerEmissionEnabled,
+      // Venta sin comprobante electrónico: la empresa decide, y el texto del
+      // aviso viaja desde aquí para que la interfaz no tenga una copia propia
+      // que pueda suavizarse con el tiempo.
+      allowSalesWithoutEcf: config?.allowSalesWithoutEcf === true,
+      salesWithoutEcfWarning: ECF_WITHOUT_DOCUMENT_WARNING,
       documentTypes: ECF_ALLOWED_DOCUMENT_TYPES.map((documentType) => {
         const entry = ECF_ALANUBE_CONTRACT_REGISTRY.find(
           (item) => item.documentType === documentType,
@@ -93,9 +102,11 @@ export class EcfDocumentQueryService {
           contractStatus: entry?.status ?? "UNVERIFIED",
           contractAllowsEmission: contractAllowsEmission(documentType),
           allowedForCompany: allowed.includes(documentType),
-          // E32 keeps its own single-use sandbox slot and is never allocated
-          // from the company numbering range.
-          allocatable: documentType !== "E32",
+          // Se deriva del motor real de numeración, no de una lista aparte: si
+          // un tipo deja de ser asignable, la capacidad lo refleja sola. Hoy los
+          // tres tipos consumen rango autorizado, E32 incluido, porque el POS
+          // emite facturas de consumo reales con e-NCF propio.
+          allocatable: (ECF_SEQUENCE_TYPES as readonly string[]).includes(documentType),
         };
       }),
     };
@@ -303,6 +314,30 @@ export class EcfDocumentQueryService {
     });
     return { id: renewed.id, documentType: renewed.documentType, startNumber: renewed.startNumber,
       endNumber: renewed.endNumber, validUntil: renewed.validUntil, active: renewed.active };
+  }
+
+  /** Autorizaciones que la DGII otorgó a esta empresa, por tipo de comprobante. */
+  async listAuthorizedSequences(user: TenantUser) {
+    return new EcfDgiiAuthorizedSequencesService(this.prisma).list(user);
+  }
+
+  /**
+   * Registra la declaración del cliente sobre lo que la DGII le autorizó. La
+   * cardinalidad es una fila por tipo: volver a declarar actualiza el rango.
+   */
+  async declareAuthorizedSequence(
+    user: TenantUser,
+    dto: DeclareEcfAuthorizedSequenceDto,
+  ) {
+    return new EcfDgiiAuthorizedSequencesService(this.prisma).declare(user, {
+      documentType: dto.documentType,
+      authorizationNumber: dto.authorizationNumber,
+      rangeFrom: dto.rangeFrom,
+      rangeTo: dto.rangeTo,
+      approvedQuantity: dto.approvedQuantity,
+      expiresAt: dto.expiresAt ?? null,
+      declarationAccepted: dto.declarationAccepted === true,
+    });
   }
 
   private toListItem(row: {

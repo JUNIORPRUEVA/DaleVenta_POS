@@ -1050,7 +1050,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   void addAccountingGroup() {
     final items = <AppNavigationItem>[
       if (pick(Routes.contabilidadDepositos) case final item?) item,
-      if (pick(Routes.contabilidadFacturaFiscal) case final item?) item,
       if (pick(Routes.contabilidadPagosPendientes) case final item?) item,
       if (pick(Routes.nomina) case final item?) item,
     ];

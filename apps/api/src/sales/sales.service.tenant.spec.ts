@@ -29,11 +29,6 @@ describe("SalesService tenant isolation", () => {
         resolvePriceMode: jest.fn().mockReturnValue("NO_TAX"),
         calculatorService: { calculate: jest.fn() },
       } as never,
-      {
-        normalizeType: jest.fn(),
-        reserveNextNcf: jest.fn(),
-        markIssued: jest.fn(),
-      } as never,
     );
   }
 

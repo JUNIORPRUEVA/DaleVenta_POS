@@ -29,7 +29,12 @@ export class EcfEmissionService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertType(type: EcfDocumentType) {
-    if (!["E31", "E34"].includes(type)) throw new ConflictException("ECF_EMISSION_TYPE_UNSUPPORTED");
+    // E32 se prepara y numera como cualquier otro tipo: su e-NCF sale del rango
+    // autorizado de la empresa. Lo que se retiró es el cupo de sandbox de un
+    // solo uso, no el tipo.
+    if (!["E31", "E32", "E34"].includes(type)) {
+      throw new ConflictException("ECF_EMISSION_TYPE_UNSUPPORTED");
+    }
   }
 
   // Prepares and persists a local, contracted draft. No network. Idempotent.

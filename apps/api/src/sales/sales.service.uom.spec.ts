@@ -63,11 +63,6 @@ describe("SalesService UoM decimal foundation", () => {
         resolvePriceMode: jest.fn().mockReturnValue("NO_TAX"),
         calculatorService: taxCalculator(),
       } as never,
-      {
-        normalizeType: jest.fn(),
-        reserveNextNcf: jest.fn(),
-        markIssued: jest.fn(),
-      } as never,
       inventory as never,
     );
   }
@@ -84,6 +79,7 @@ describe("SalesService UoM decimal foundation", () => {
       return Promise.resolve({ count: 1 });
     });
     const prisma = {
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       product: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -267,6 +263,8 @@ describe("SalesService UoM decimal foundation", () => {
       inventoryTrackedSnapshot: true,
     };
     const prisma = {
+      // Venta sin comprobante electrónico: el arnés prueba el camino SIN nota E34.
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       sale: {
         findFirst: jest.fn().mockResolvedValue({
           id: "sale-1",

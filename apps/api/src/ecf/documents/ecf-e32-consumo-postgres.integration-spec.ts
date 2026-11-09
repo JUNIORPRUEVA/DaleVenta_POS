@@ -7,11 +7,12 @@ import { EcfPreparationService } from "./ecf-preparation.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
 
 // Opt-in suite on the ephemeral test database. La preparación de consumo (E32)
-// crea un borrador local: no hay red, no hay proveedor, no se declara ninguna
-// aceptación y NO se consume numeración.
+// crea un borrador local numerado: no hay red, no hay proveedor y no se declara
+// ninguna aceptación, pero SÍ se consume un e-NCF del rango autorizado por la
+// DGII para ese tipo, porque un comprobante de consumo sin número no es emitible.
 const uat = process.env.ECF_POSTGRES_UAT === "true" ? describe : describe.skip;
 
-uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () => {
+uat("E32 consumo (venta → borrador local numerado) on PostgreSQL", () => {
   let prisma: PrismaService;
   let preparation: EcfPreparationService;
   let query: EcfDocumentQueryService;
@@ -48,7 +49,7 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     await prisma?.$disconnect();
   });
 
-  /** Empresa habilitada con rango E31/E34 para comprobar que NO se toca. */
+  /** Empresa habilitada con numeración E31, E32 y E34 declarada y autorizada. */
   async function tenant(options: { enabled?: boolean; allowedTypes?: string[] } = {}) {
     const companyId = randomUUID();
     await prisma.company.create({
@@ -63,8 +64,24 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
       },
     });
     const user = { id: userId, role: "ADMIN", companyId } as TenantUser;
+    // La numeración exige autorización DGII declarada (fail-closed).
+    for (const documentType of ["E31", "E32", "E34"]) {
+      await prisma.ecfDgiiAuthorizedSequence.create({
+        data: {
+          companyId,
+          documentType,
+          authorizationNumber: `SYNTH-${documentType}`,
+          rangeFrom: 1,
+          rangeTo: 10_000,
+          approvedQuantity: 10_000,
+          declarationVersion: "v1",
+          declaredByUserId: userId,
+        },
+      });
+    }
     const sequences = new EcfSequenceService(prisma);
     await sequences.register(user, { documentType: "E31", startNumber: 1, endNumber: 10 });
+    await sequences.register(user, { documentType: "E32", startNumber: 1, endNumber: 10 });
     await sequences.register(user, { documentType: "E34", startNumber: 1, endNumber: 10 });
     return { companyId, user };
   }
@@ -137,7 +154,7 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     incomeType: 1 as const,
   });
 
-  it("prepares a local E32 draft from a consumo sale without allocating a number", async () => {
+  it("prepares a numbered E32 draft from a consumo sale", async () => {
     const { companyId, user } = await tenant();
     const sale = await createSale(companyId);
 
@@ -146,8 +163,8 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.documentType).toBe("E32");
-    expect(result.value.encf).toBeNull();
-    expect(result.value.numberingState).toBe("PENDING_SANDBOX_SLOT");
+    expect(result.value.encf).toMatch(/^E32\d{10}$/);
+    expect(result.value.numberingState).toBe("ALLOCATED_FROM_AUTHORIZED_RANGE");
     expect(result.value.status).toBe("LOCAL_VALIDATED");
     expect(result.value.saleId).toBe(sale.id);
 
@@ -157,12 +174,13 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     expect(stored.documentType).toBe("E32");
     expect(stored.sourceType).toBe("SALE");
     expect(stored.sourceId).toBe(sale.id);
-    // Sin número asignado no puede haber e-NCF persistido.
-    expect(stored.externalDocumentNumber).toBeNull();
+    // El e-NCF queda reservado en el resumen de emisión del borrador.
+    const summary = (stored.payloadSummary ?? {}) as Record<string, any>;
+    expect(summary.emission?.encf).toBe(result.value.encf);
     expect(stored.status).toBe("LOCAL_VALIDATED");
   });
 
-  it("never consumes the company numbering range and never opens an E32 range", async () => {
+  it("consumes exactly one E32 number and never touches the E31/E34 ranges", async () => {
     const { companyId, user } = await tenant();
     const sale = await createSale(companyId);
     const before = await prisma.ecfSequence.findMany({
@@ -180,12 +198,40 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
       select: { documentType: true, nextNumber: true },
       orderBy: { documentType: "asc" },
     });
-    expect(after).toEqual(before);
-    expect(after.some((row) => row.documentType === "E32")).toBe(false);
-    expect(await prisma.ecfSequenceAuditLog.count({ where: { companyId } })).toBe(auditsBefore);
+    // Solo avanza el rango de consumo.
+    expect(after).toEqual(
+      before.map((row) =>
+        row.documentType === "E32" ? { ...row, nextNumber: row.nextNumber + 1 } : row,
+      ),
+    );
+    expect(await prisma.ecfSequenceAuditLog.count({ where: { companyId } })).toBe(auditsBefore + 1);
+    expect(
+      await prisma.ecfSequenceAuditLog.count({
+        where: { companyId, action: "ALLOCATED", type: "E32" },
+      }),
+    ).toBe(1);
   });
 
-  it("is idempotent per sale: a retry returns the same document", async () => {
+  it("refuses consumo when E32 has no DGII authorization declared", async () => {
+    const { companyId, user } = await tenant();
+    const sale = await createSale(companyId);
+    // El rango sigue registrado, pero sin la autorización de la DGII no se
+    // entrega ningún número: la compuerta vive dentro de la transacción.
+    await prisma.ecfDgiiAuthorizedSequence.deleteMany({
+      where: { companyId, documentType: "E32" },
+    });
+
+    await expect(
+      preparation.prepareConsumoFromSale(user, consumoInput(sale.id)),
+    ).rejects.toThrow(/ECF_SEQUENCE_NOT_AUTHORIZED/);
+    expect(
+      await prisma.ecfElectronicDocument.count({
+        where: { companyId, sourceType: "SALE", sourceId: sale.id },
+      }),
+    ).toBe(0);
+  });
+
+  it("is idempotent per sale: a retry reuses the same document AND the same e-NCF", async () => {
     const { companyId, user } = await tenant();
     const sale = await createSale(companyId);
 
@@ -195,6 +241,13 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     expect(first.ok && second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
     expect(second.value.documentId).toBe(first.value.documentId);
+    expect(second.value.encf).toBe(first.value.encf);
+    // Un reintento no puede quemar un segundo número.
+    expect(
+      await prisma.ecfSequenceAuditLog.count({
+        where: { companyId, action: "ALLOCATED", type: "E32" },
+      }),
+    ).toBe(1);
     expect(
       await prisma.ecfElectronicDocument.count({
         where: { companyId, sourceType: "SALE", sourceId: sale.id },
@@ -315,7 +368,7 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     expect(await prisma.saleItem.count({ where: { saleId: sale.id } })).toBe(1);
   });
 
-  it("is not emitting: no provider id, no attempt, no emission summary", async () => {
+  it("is not emitting: the e-NCF is reserved but nothing was sent", async () => {
     const { companyId, user } = await tenant();
     const sale = await createSale(companyId);
     const result = await preparation.prepareConsumoFromSale(user, consumoInput(sale.id));
@@ -329,20 +382,24 @@ uat("E32 consumo (venta → borrador local sin numeración) on PostgreSQL", () =
     expect(stored.status).not.toBe("DGII_ACCEPTED");
     expect(stored.status).not.toBe("PROVIDER_ACCEPTED");
     const summary = (stored.payloadSummary ?? {}) as Record<string, unknown>;
-    expect(summary.emission).toBeUndefined();
+    // El resumen de emisión existe porque el número está reservado; lo que no
+    // existe es una aceptación ni un envío.
+    expect((summary.emission as { encf?: string } | undefined)?.encf).toBe(result.value.encf);
     expect(summary.type).toBe("E32");
   });
 
-  it("the draft shows up in the company tray without an e-NCF", async () => {
+  it("the draft shows up in the company tray WITH its e-NCF", async () => {
     const { companyId, user } = await tenant();
     const sale = await createSale(companyId);
-    await preparation.prepareConsumoFromSale(user, consumoInput(sale.id));
+    const prepared = await preparation.prepareConsumoFromSale(user, consumoInput(sale.id));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
 
     const list = await query.list(user, { documentType: "E32" });
 
     expect(list.total).toBe(1);
     expect(list.items[0].documentType).toBe("E32");
-    expect(list.items[0].encf).toBeNull();
+    expect(list.items[0].encf).toBe(prepared.value.encf);
     expect(list.items[0].status).toBe("LOCAL_VALIDATED");
     expect(list.items[0].statusGroup).toBe("PENDING");
     expect(list.items[0].total).toBe("59.00");

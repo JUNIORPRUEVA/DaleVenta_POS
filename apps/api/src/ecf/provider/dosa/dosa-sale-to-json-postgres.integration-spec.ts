@@ -226,15 +226,8 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
         defaultTaxId: tax.body.id,
         defaultTaxRate: 0.18,
         pricesIncludeTax: true,
-        ncfEnabled: true,
       });
     expect(fiscal.status).toBe(200);
-
-    const sequence = await http()
-      .post("/ncf/sequences")
-      .set("Authorization", `Bearer ${token}`)
-      .send({ voucherType: "B01", prefix: "B01", startNumber: 1, endNumber: 10 });
-    expect(sequence.status).toBe(201);
   }
 
   async function openSession(token: string, companyId: string, userId: string) {
@@ -354,7 +347,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 118,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 118,
       items: [
@@ -473,7 +465,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 236,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 236,
       items: [
@@ -546,7 +537,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 118,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 118,
       items: [
@@ -639,7 +629,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 118,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 118,
       items: [

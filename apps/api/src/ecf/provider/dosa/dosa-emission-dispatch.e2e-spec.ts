@@ -190,6 +190,19 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
   }
 
   async function registerSequence(tenant: Tenant) {
+    // La numeración exige la autorización DGII declarada (fail-closed).
+    const declared = await http()
+      .post("/ecf/dgii/authorized-sequences")
+      .set("Authorization", `Bearer ${tenant.token}`)
+      .send({
+        documentType: "E31",
+        authorizationNumber: "SYNTH-E31-1-50",
+        rangeFrom: 1,
+        rangeTo: 50,
+        approvedQuantity: 50,
+        declarationAccepted: true,
+      });
+    expect(declared.status).toBe(201);
     const res = await http()
       .post("/ecf/sequences")
       .set("Authorization", `Bearer ${tenant.token}`)
@@ -229,15 +242,10 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
         defaultTaxId: tax.body.id,
         defaultTaxRate: 0.18,
         pricesIncludeTax: true,
-        ncfEnabled: true,
       });
     expect(fiscal.status).toBe(200);
-
-    const sequence = await http()
-      .post("/ncf/sequences")
-      .set("Authorization", `Bearer ${tenant.token}`)
-      .send({ voucherType: "B01", prefix: "B01", startNumber: 1, endNumber: 20 });
-    expect(sequence.status).toBe(201);
+    // El motor NCF se retiró: la venta ya no pide talón B01; el e-CF se prepara
+    // después con su propia numeración autorizada.
   }
 
   async function sell(tenant: Tenant, buyerTaxId: string) {
@@ -284,7 +292,6 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
         originCashSessionId: session.id,
         paymentMethod: "cash",
         paymentCashAmount: 118,
-        fiscalVoucherType: "B01",
         customerId: client.body.id,
         expectedTotalSold: 118,
         items: [

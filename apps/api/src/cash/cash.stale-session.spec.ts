@@ -215,6 +215,15 @@ function makeDb(initial: Session[]) {
       if (target) Object.assign(target, args.data);
       return target ?? {};
     }),
+    updateMany: jest.fn(async (args: Record<string, any>) => {
+      cashboxUpdates.push(args);
+      const target = cashboxes.find(
+        (row) =>
+          row.id === args.where.id && row.companyId === args.where.companyId,
+      );
+      if (target) Object.assign(target, args.data);
+      return { count: target ? 1 : 0 };
+    }),
   };
 
   const tx = { cashSession, cashboxDaily, $queryRaw: jest.fn(async () => []) };

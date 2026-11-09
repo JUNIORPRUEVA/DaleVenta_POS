@@ -5,6 +5,7 @@ import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { fingerprint } from "../../documents/ecf-document-idempotency.service";
 import type { EcfDocumentType } from "../../fiscal-core/ecf-fiscal-document";
 import { mapEcfToDosaDraft } from "./dosa-ecf.mapper";
+import { DOSA_GATE_SUPPORTED_TYPES } from "./dosa-emission.gate";
 import { assessDosaProviderResponse } from "./dosa-provider-response";
 import { DosaEmissionService } from "./dosa-emission.service";
 import { DosaEmissionWire } from "./dosa-emission.wire";
@@ -83,7 +84,10 @@ export class DosaEmissionDispatchService {
     }
 
     const documentType = document.documentType as EcfDocumentType;
-    if (documentType !== "E31" && documentType !== "E34") {
+    // Los mismos tipos que la compuerta fiscal admite: E31 (crédito fiscal),
+    // E32 (consumo) y E34 (nota de crédito). La lista se reutiliza en vez de
+    // repetirse para que despacho y compuerta no puedan divergir.
+    if (!DOSA_GATE_SUPPORTED_TYPES.includes(documentType)) {
       return {
         ok: false as const,
         code: "ECF_DOSA_DISPATCH_TYPE_UNSUPPORTED",
@@ -211,5 +215,82 @@ export class DosaEmissionDispatchService {
       encf,
       ...outcome,
     };
+  }
+
+  /**
+   * Comprobantes preparados que todavía NO se enviaron al proveedor.
+   *
+   * Es una lectura, acotada a la empresa del contexto. Un documento con un
+   * intento `SEND_TO_PROVIDER` **no** aparece aunque su estado sea preparado:
+   * el intento es evidencia de que ya salió (o de que salió y no sabemos cómo
+   * terminó), y reintentarlo duplicaría el comprobante ante la DGII.
+   */
+  async pending(user: TenantUser, limit = 25) {
+    const companyId = requireTenant(user);
+    const take = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 50) : 25;
+    // Se pide de más y se filtra: el filtro «sin intento» no es una columna y
+    // hacerlo con una subconsulta encarecería la lectura en el servidor de
+    // producción, que va justo de CPU.
+    const candidates = await this.prisma.ecfElectronicDocument.findMany({
+      where: {
+        companyId,
+        status: { in: ["LOCAL_VALIDATED", "READY_TO_SEND"] },
+        externalProviderId: null,
+      },
+      orderBy: { createdAt: "asc" },
+      take: take * 3,
+      select: {
+        id: true,
+        documentType: true,
+        status: true,
+        createdAt: true,
+        sourceType: true,
+        sourceId: true,
+      },
+    });
+    if (candidates.length === 0) return { items: [] as typeof candidates };
+
+    const attempted = await this.prisma.ecfElectronicDocumentAttempt.findMany({
+      where: {
+        companyId,
+        documentId: { in: candidates.map((row) => row.id) },
+        operation: "SEND_TO_PROVIDER",
+      },
+      select: { documentId: true },
+    });
+    const alreadySent = new Set(attempted.map((row) => row.documentId));
+    return {
+      items: candidates.filter((row) => !alreadySent.has(row.id)).slice(0, take),
+    };
+  }
+
+  /**
+   * Recupera las operaciones pendientes de la empresa: reintenta el envío de
+   * cada comprobante preparado que nunca llegó al proveedor.
+   *
+   * No puede duplicar nada: `dispatchOnce` exige cero intentos previos, reclama
+   * el documento de forma atómica y registra el intento ANTES de la red. Si un
+   * despacho se corta a medias, el documento queda con su intento y sale de esta
+   * lista: la conciliación es un acto humano, no un reintento automático.
+   *
+   * Los bloqueos fiscales NO son excepciones: se devuelven por documento para
+   * que la interfaz pueda explicar qué falta en cada uno.
+   */
+  async dispatchPending(user: TenantUser, limit = 10) {
+    const pending = await this.pending(user, limit);
+    const items: Array<{ documentId: string } & Record<string, unknown>> = [];
+    for (const candidate of pending.items) {
+      try {
+        items.push({ documentId: candidate.id, ...(await this.dispatch(user, candidate.id)) });
+      } catch (error) {
+        items.push({
+          documentId: candidate.id,
+          ok: false,
+          code: error instanceof ConflictException ? error.message : "ECF_DOSA_DISPATCH_ERROR",
+        });
+      }
+    }
+    const dispatched = items.filter((item) => item.ok === true).length;
+    return { attempted: items.length, dispatched, items };
   }
 }

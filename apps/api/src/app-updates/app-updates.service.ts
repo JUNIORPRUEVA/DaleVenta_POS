@@ -159,14 +159,14 @@ export class AppUpdatesService {
   }
 
   async getRelease(id: string) {
-    const release = await this.prisma.appRelease.findUnique({ where: { id } });
+    const release = await this.prisma.appRelease.findUnique({ where: { id } }); // tenant-global: catálogo de plataforma (app_releases no tiene company_id)
     if (!release)
       throw new NotFoundException("Release de actualización no encontrado.");
     return this.toAdminDto(release);
   }
 
   async updateRelease(id: string, dto: UpdateAppReleaseDto) {
-    const current = await this.prisma.appRelease.findUnique({ where: { id } });
+    const current = await this.prisma.appRelease.findUnique({ where: { id } }); // tenant-global: catálogo de plataforma (app_releases no tiene company_id)
     if (!current)
       throw new NotFoundException("Release de actualización no encontrado.");
     if (current.status !== AppReleaseStatus.DRAFT) {
@@ -199,7 +199,7 @@ export class AppUpdatesService {
     options: { retentionDryRun?: boolean } = {},
   ) {
     const release = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.appRelease.findUnique({ where: { id } });
+      const current = await tx.appRelease.findUnique({ where: { id } }); // tenant-global: catálogo de plataforma (app_releases no tiene company_id)
       if (!current)
         throw new NotFoundException("Release de actualización no encontrado.");
       if (current.status === AppReleaseStatus.PUBLISHED) {
@@ -261,7 +261,7 @@ export class AppUpdatesService {
 
   async revokeRelease(id: string) {
     const release = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.appRelease.findUnique({ where: { id } });
+      const current = await tx.appRelease.findUnique({ where: { id } }); // tenant-global: catálogo de plataforma (app_releases no tiene company_id)
       if (!current)
         throw new NotFoundException("Release de actualización no encontrado.");
       if (current.status === AppReleaseStatus.DRAFT) {

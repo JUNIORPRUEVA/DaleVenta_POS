@@ -30,10 +30,22 @@ const findings: Finding[] = [];
 for (const file of walk(srcDir)) {
   const rel = path.relative(srcDir, file).replace(/\\/g, '/');
   if (allowlist.has(rel)) continue;
+  // Las pruebas no se despliegan: este audit mide código de producción.
+  if (/\.(spec|integration-spec|e2e-spec)\.ts$/.test(rel)) continue;
   const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
   lines.forEach((line, index) => {
     const text = line.trim();
     if (!text || text.startsWith('//')) return;
+    // Marcadores de revisión: una consulta global/de plataforma o ya acotada de
+    // forma verificable se anota con `tenant-global` o `tenant-safe:` en la
+    // propia línea o en la anterior. Sin marcador, el hallazgo se reporta.
+    const previous = (lines[index - 1] ?? '').trim();
+    if (
+      text.includes('tenant-global') ||
+      text.includes('tenant-safe:') ||
+      previous.includes('tenant-global') ||
+      previous.includes('tenant-safe:')
+    ) return;
     const prismaQuery = text.match(/\.([a-zA-Z0-9_]+)\.(findUnique|update|delete|findMany|count|aggregate)\s*\(/);
     if (!prismaQuery) return;
     const method = prismaQuery[2];

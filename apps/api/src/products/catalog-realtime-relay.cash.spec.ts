@@ -54,6 +54,7 @@ function buildCashHarness(relay: CatalogRealtimeRelayService) {
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   };
   const prisma = {
@@ -63,7 +64,12 @@ function buildCashHarness(relay: CatalogRealtimeRelayService) {
         .mockResolvedValue({ nombreCompleto: "Cajero", email: "c@x.com", blocked: false }),
     },
     cashSession: { findFirst: jest.fn() },
-    cashboxDaily: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    cashboxDaily: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     cashMovement: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
     sale: { findMany: jest.fn().mockResolvedValue([]) },
     saleCreditPayment: { findMany: jest.fn().mockResolvedValue([]) },
@@ -183,7 +189,7 @@ describe("realtime cash multi-cliente (Socket.IO real en memoria)", () => {
     (tx.cashSession.findFirst as jest.Mock)
       .mockResolvedValueOnce({ ...makeSession(SESSION_ID), status: "CLOSED" }) // closed
       .mockResolvedValueOnce(null); // otherOpen
-    (tx.cashboxDaily.update as jest.Mock).mockResolvedValue({ id: "cashbox-1" });
+    (tx.cashboxDaily.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
 
     await service.closeSession(USER, {
       sessionId: SESSION_ID,

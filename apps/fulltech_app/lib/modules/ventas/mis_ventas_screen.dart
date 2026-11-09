@@ -1055,17 +1055,20 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     if (ok != true) return;
 
     try {
-      await ref
+      final result = await ref
           .read(ventasControllerProvider.notifier)
           .returnSale(
             sale.id,
             originalSaleCashSessionId: sale.cashSessionId,
           );
       if (!context.mounted) return;
+      final encf = result?.creditNote?.encf ?? '';
       showCashToast(
         context,
         'Devolucion realizada',
-        detail: 'La devolucion se realizo correctamente.',
+        detail: encf.isEmpty
+            ? 'La devolucion se realizo correctamente.'
+            : 'Devolucion realizada. Nota de credito E34: $encf',
       );
     } catch (e, stackTrace) {
       if (!context.mounted) return;

@@ -187,13 +187,6 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Reportes',
             route: Routes.ventas,
           ),
-        if (canOrAuthorize(AppPermission.viewAccounting))
-          const AppNavigationItem(
-            icon: Icons.fact_check_outlined,
-            appIcon: AppIcons.receipt,
-            title: 'Factura fiscal',
-            route: Routes.contabilidadFacturaFiscal,
-          ),
       ],
     ),
     AppNavigationSection(

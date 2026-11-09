@@ -139,6 +139,7 @@ enum EcfAuditAction {
   DGII_HABILITATION_UPDATED
   DGII_AUTHORIZATION_RECORDED
   DGII_AUTHORIZATION_REVOKED
+  DGII_AUTHORIZED_SEQUENCES_DECLARED
   DGII_APPLICATION_DRAFT_SAVED
   DGII_APPLICATION_SUBMITTED
   DGII_CONSENT_ACCEPTED
@@ -1241,6 +1242,8 @@ model Company {
   ecfElectronicDocumentAttempts    EcfElectronicDocumentAttempt[]
   ecfElectronicDocumentStatusLogs  EcfElectronicDocumentStatusLog[]
   ecfSequences                     EcfSequence[]
+  ecfDgiiAuthorizedSequences       EcfDgiiAuthorizedSequence[]
+  ecfSalesWithoutDocument          EcfSaleWithoutDocument[]
   ecfSequenceAuditLogs             EcfSequenceAuditLog[]
   ecfLineClassifications           EcfLineClassification[]
 
@@ -1296,6 +1299,11 @@ model EcfCompanyConfiguration {
   certificateSecretRef String?                @map("certificate_secret_ref") @db.VarChar(256)
   webhookSecretRef     String?                @map("webhook_secret_ref") @db.VarChar(256)
   allowedTypes         Json?                  @map("allowed_types")
+  /// Habilita registrar ventas SIN comprobante electrónico desde el POS. Por
+  /// defecto está apagado: una venta sin e-CF es una excepción fiscal y solo se
+  /// permite cuando la empresa lo autoriza de forma explícita. Cada uso queda en
+  /// `ecf_sales_without_document` con su motivo, usuario y venta.
+  allowSalesWithoutEcf Boolean                @default(false) @map("allow_sales_without_ecf")
   notes                String?                @db.Text
   createdByUserId      String?                @map("created_by_user_id") @db.Uuid
   updatedByUserId      String?                @map("updated_by_user_id") @db.Uuid
@@ -4073,6 +4081,59 @@ model EcfSequence {
   // cannot express a partial index, so it is not declared here.
   @@index([companyId, documentType, active])
   @@map("ecf_sequences")
+}
+
+/// Autorización de numeración que la DGII otorgó a UNA empresa para UN tipo de
+/// comprobante. Es la fuente de verdad contra la que se valida cualquier rango
+/// declarado: sin esta fila no se puede declarar numeración (fail-closed).
+///
+/// El dato no lo entrega ninguna API: lo transcribe el cliente desde la Oficina
+/// Virtual y lo firma con una declaración explícita. Por eso se guarda quién lo
+/// declaró, cuándo y la versión del texto aceptado.
+model EcfDgiiAuthorizedSequence {
+  id                 String    @id @default(uuid()) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  documentType       String    @map("document_type")
+  authorizationNumber String   @map("authorization_number")
+  rangeFrom          Int       @map("range_from")
+  rangeTo            Int       @map("range_to")
+  approvedQuantity   Int       @map("approved_quantity")
+  expiresAt          DateTime? @map("expires_at")
+  evidenceId         String?   @map("evidence_id") @db.Uuid
+  declaredByUserId   String?   @map("declared_by_user_id") @db.Uuid
+  declaredAt         DateTime  @default(now()) @map("declared_at")
+  declarationVersion String    @map("declaration_version")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, documentType])
+  @@index([companyId])
+  @@map("ecf_dgii_authorized_sequences")
+}
+
+/// Registro de ventas registradas SIN comprobante electrónico.
+///
+/// No es un permiso: es la huella de que la excepción ocurrió. Solo se escribe
+/// cuando la empresa habilitó `allowSalesWithoutEcf`, y guarda quién lo hizo, por
+/// qué y con qué comprobante se esperaba cubrirla. Una fila por venta: registrar
+/// dos veces la misma venta es un error, no un dato nuevo.
+model EcfSaleWithoutDocument {
+  id                   String   @id @default(uuid()) @db.Uuid
+  companyId            String   @map("company_id") @db.Uuid
+  saleId               String   @map("sale_id") @db.Uuid
+  reason               String   @db.Text
+  /// Tipo de comprobante que correspondería emitir después (E31/E32), si se sabe.
+  expectedDocumentType String?  @map("expected_document_type")
+  registeredByUserId   String?  @map("registered_by_user_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, saleId])
+  @@index([companyId, createdAt])
+  @@map("ecf_sales_without_document")
 }
 
 model EcfSequenceAuditLog {

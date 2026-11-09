@@ -35,6 +35,49 @@ class SalesSummaryModel {
   }
 }
 
+/// Nota de crédito electrónica (E34) que respalda una devolución.
+///
+/// Solo existe cuando la venta original tenía un comprobante E31/E32 aceptado
+/// por la DGII; en cualquier otro caso la devolución no trae nota.
+class EcfReturnCreditNote {
+  const EcfReturnCreditNote({
+    required this.documentId,
+    required this.encf,
+    required this.status,
+  });
+
+  final String documentId;
+  final String encf;
+  final String status;
+
+  bool get hasEncf => encf.isNotEmpty;
+
+  /// Devuelve `null` si la respuesta no trae nota: nunca se inventa una.
+  static EcfReturnCreditNote? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final json = raw.cast<String, dynamic>();
+    final documentId = (json['documentId'] as String?)?.trim() ?? '';
+    final encf = (json['encf'] as String?)?.trim() ?? '';
+    if (documentId.isEmpty && encf.isEmpty) return null;
+    return EcfReturnCreditNote(
+      documentId: documentId,
+      encf: encf,
+      status: (json['status'] as String?)?.trim() ?? '',
+    );
+  }
+}
+
+/// Resultado de una devolución: la venta de reembolso y su nota de crédito
+/// electrónica cuando corresponde.
+class SaleReturnResult {
+  const SaleReturnResult({required this.sale, this.creditNote});
+
+  final SaleModel sale;
+  final EcfReturnCreditNote? creditNote;
+
+  bool get hasCreditNote => creditNote?.hasEncf == true;
+}
+
 class AdminSalesUserSummary {
   final String userId;
   final String userName;
@@ -43,7 +86,6 @@ class AdminSalesUserSummary {
   final double totalSold;
   final double totalProfit;
   final double totalCommission;
-
   const AdminSalesUserSummary({
     required this.userId,
     required this.userName,

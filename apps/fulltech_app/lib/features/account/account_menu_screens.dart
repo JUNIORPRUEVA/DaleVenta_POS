@@ -14,7 +14,6 @@ import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../ecf/data/ecf_repository.dart';
-import '../ecf/ui/ecf_onboarding_section.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_feedback.dart';
@@ -525,10 +524,11 @@ class AccountCompanySettingsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // Proceso INTERNO de habilitación. Se oculta solo si la empresa no
-          // tiene el módulo activado o el usuario no puede ver la configuración.
-          const EcfOnboardingSection(),
+          // El checklist interno de 15 pasos de la era ALANUBE ya no se pinta
+          // aquí: al encender la facturación electrónica inundaba la pantalla
+          // con un proceso que el cliente completa dentro del módulo. Vive en
+          // la vista administrativa de e-CF (`/ecf/administracion`), junto al
+          // diagnóstico.
         ],
       ),
     );

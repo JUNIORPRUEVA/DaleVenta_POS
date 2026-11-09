@@ -137,7 +137,6 @@ void main() {
         'Recuento',
         'Compras',
         'Reportes',
-        'Factura fiscal',
         'Depósitos',
         'Pagos',
         'Nómina',
@@ -167,7 +166,6 @@ void main() {
         'Almacenes',
         'Compras',
         'Reportes',
-        'Factura fiscal',
         'Depósitos',
         'Pagos',
         'Nómina',
@@ -232,7 +230,6 @@ void main() {
         'Productos',
         'Compras',
         'Reportes',
-        'Factura fiscal',
         'Depósitos',
         'Pagos',
         'Nómina',
@@ -243,3 +240,4 @@ void main() {
     });
   });
 }
+

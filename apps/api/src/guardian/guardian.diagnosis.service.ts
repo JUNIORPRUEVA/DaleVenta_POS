@@ -106,7 +106,7 @@ export class GuardianDiagnosisService {
    */
   async diagnose(incidentId: string) {
     const config = resolveGuardianConfig();
-    const incident = await this.prisma.guardianIncident.findUnique({ where: { id: incidentId } });
+    const incident = await this.prisma.guardianIncident.findUnique({ where: { id: incidentId } }); // tenant-global: worker de plataforma (Guardian), sin entrada por tenant
     if (!incident) return { ok: false as const, reason: 'NOT_FOUND' };
 
     // Fase 7 — la empresa debe tener Guardian activado. No se borra historial:

@@ -78,7 +78,7 @@ describe("CashService multi-device consistency", () => {
             _sum: { closingAmount: 0, initialAmount: 0 },
           }),
       },
-      cashboxDaily: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+      cashboxDaily: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
       cashMovement: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       sale: { findMany: jest.fn().mockResolvedValue([]) },
       saleCreditPayment: { findMany: jest.fn().mockResolvedValue([]) },

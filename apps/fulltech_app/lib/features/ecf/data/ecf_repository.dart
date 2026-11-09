@@ -7,6 +7,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
+import '../ecf_authorized_sequence_models.dart';
 import '../ecf_dosa_dispatch_models.dart';
 import '../ecf_dosa_activation_models.dart';
 import '../ecf_support_grant_models.dart';
@@ -195,6 +196,36 @@ class EcfRepository {
     });
   }
 
+  /// Numeración que la DGII autorizó a esta empresa, por tipo de comprobante.
+  Future<EcfAuthorizedSequencesView> authorizedSequences() async {
+    final res = await _dio.get(ApiRoutes.ecfDgiiAuthorizedSequences);
+    return EcfAuthorizedSequencesView.fromJson(_asMap(res.data));
+  }
+
+  /// Declara lo que la DGII autorizó. El backend guarda quién lo declaró, cuándo
+  /// y la versión del texto aceptado; sin esta fila no se puede declarar
+  /// numeración (`ECF_SEQUENCE_NOT_AUTHORIZED`).
+  Future<void> declareAuthorizedSequence({
+    required String documentType,
+    required String authorizationNumber,
+    required int rangeFrom,
+    required int rangeTo,
+    required int approvedQuantity,
+    String? expiresAt,
+    required bool declarationAccepted,
+  }) async {
+    await _dio.post(ApiRoutes.ecfDgiiAuthorizedSequences, data: {
+      'documentType': documentType,
+      'authorizationNumber': authorizationNumber.trim(),
+      'rangeFrom': rangeFrom,
+      'rangeTo': rangeTo,
+      'approvedQuantity': approvedQuantity,
+      if (expiresAt != null && expiresAt.trim().isNotEmpty)
+        'expiresAt': expiresAt.trim(),
+      'declarationAccepted': declarationAccepted,
+    });
+  }
+
   Future<List<EcfEligibleOriginal>> eligibleOriginals() async {
     final res = await _dio.get(ApiRoutes.ecfDocumentsEligibleOriginals);
     return _asList(res.data)
@@ -303,6 +334,38 @@ class EcfRepository {
   /// `manageEcfConfig` en el backend.
   Future<void> updateEnabled({required bool enabled}) async {
     await _dio.patch(ApiRoutes.ecfConfig, data: {'enabled': enabled});
+  }
+
+  /// Habilita o deshabilita registrar ventas SIN comprobante electrónico.
+  ///
+  /// Es una excepción fiscal: el backend la respalda con el registro de
+  /// excepciones, que guarda motivo y usuario de cada uso. Requiere el permiso
+  /// `manageEcfConfig`.
+  Future<void> updateAllowSalesWithoutEcf({required bool allow}) async {
+    await _dio.patch(
+      ApiRoutes.ecfConfig,
+      data: {'allowSalesWithoutEcf': allow},
+    );
+  }
+
+  /// Registra que una venta se cerró SIN comprobante electrónico.
+  ///
+  /// Falla si la empresa no habilitó la excepción o si la venta ya tiene
+  /// comprobante: el servidor manda, la interfaz no improvisa.
+  Future<void> registerSaleWithoutDocument({
+    required String saleId,
+    required String reason,
+    String? expectedDocumentType,
+  }) async {
+    await _dio.post(
+      ApiRoutes.ecfSalesWithoutDocument,
+      data: {
+        'saleId': saleId,
+        'reason': reason,
+        if (expectedDocumentType != null)
+          'expectedDocumentType': expectedDocumentType,
+      },
+    );
   }
 
   /// Proceso INTERNO de habilitación e-CF de la empresa.
@@ -415,9 +478,9 @@ class EcfRepository {
 
   /// Prepara un borrador local de CONSUMO (E32) desde una venta real.
   ///
-  /// Es un flujo independiente de E31: el backend NO consume numeración de la
-  /// empresa y NO toca el cupo único de sandbox, así que el borrador queda sin
-  /// e-NCF hasta que ese cupo lo entregue. No emite.
+  /// Numera igual que E31: el backend consume un e-NCF del rango que la DGII
+  /// autorizó para facturas de consumo, de forma idempotente por venta (un
+  /// reintento reutiliza el número ya asignado). No emite.
   Future<EcfPreparationOutcome> prepareConsumoFromSale({
     required String saleId,
     required int paymentType,

@@ -6,17 +6,20 @@ import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import {
   ConfirmEcfLineClassificationDto,
+  DeclareEcfAuthorizedSequenceDto,
   ListEcfDocumentsQueryDto,
   PrepareEcfConsumoDto,
   PrepareEcfCreditNoteDto,
   PrepareEcfDocumentDto,
   RegisterEcfSequenceDto,
+  RegisterEcfSaleWithoutDocumentDto,
   RenewEcfSequenceDto,
   SimulateEcfDispatchDto,
 } from "./dto/ecf-documents.dto";
 import { EcfDocumentQueryService } from "./documents/ecf-document-query.service";
 import { EcfLineClassificationService } from "./documents/ecf-line-classification.service";
 import { EcfPreparationService } from "./documents/ecf-preparation.service";
+import { EcfSalesWithoutDocumentService } from "./documents/ecf-sales-without-document.service";
 import { EcfSimulatedDispatchService } from "./documents/ecf-simulated-dispatch.service";
 import { DosaEmissionDispatchService } from "./provider/dosa/dosa-emission-dispatch.service";
 
@@ -36,6 +39,7 @@ export class EcfDocumentsController {
     private readonly simulatedDispatch: EcfSimulatedDispatchService,
     private readonly lineClassifications: EcfLineClassificationService,
     private readonly dosaDispatch: DosaEmissionDispatchService,
+    private readonly salesWithoutDocument: EcfSalesWithoutDocumentService,
   ) {}
 
   /**
@@ -190,6 +194,29 @@ export class EcfDocumentsController {
     return this.documents.eligibleOriginals(req.user as TenantUser);
   }
 
+  /**
+   * Comprobantes preparados que nunca llegaron al proveedor.
+   *
+   * Se declara ANTES de `documents/:id` porque Nest resuelve por orden de
+   * declaración y, si no, `pending-dispatch` se leería como un id.
+   */
+  @Get("documents/pending-dispatch")
+  @Permissions("viewEcfDocuments")
+  pendingDispatch(@Req() req: Request) {
+    return this.dosaDispatch.pending(req.user as TenantUser);
+  }
+
+  /**
+   * Recupera las operaciones pendientes: reintenta el envío de lo que quedó
+   * preparado sin salir. No puede duplicar comprobantes: cada envío exige cero
+   * intentos previos y se reclama antes de la red.
+   */
+  @Post("documents/dispatch-pending")
+  @Permissions("prepareEcfDocuments")
+  dispatchPending(@Req() req: Request) {
+    return this.dosaDispatch.dispatchPending(req.user as TenantUser);
+  }
+
   @Get("documents/:id")
   @Permissions("viewEcfDocuments")
   detail(@Req() req: Request, @Param("id") id: string) {
@@ -212,5 +239,51 @@ export class EcfDocumentsController {
   @Permissions("manageEcfSequences")
   renewSequence(@Req() req: Request, @Body() dto: RenewEcfSequenceDto) {
     return this.documents.renewSequence(req.user as TenantUser, dto);
+  }
+
+  /** Lo que la DGII autorizó a esta empresa, por tipo de comprobante. */
+  @Get("dgii/authorized-sequences")
+  @Permissions("viewEcfDocuments")
+  listAuthorizedSequences(@Req() req: Request) {
+    return this.documents.listAuthorizedSequences(req.user as TenantUser);
+  }
+
+  /**
+   * Declaración del cliente sobre la numeración autorizada por la DGII.
+   *
+   * Es la única puerta para habilitar la numeración: sin esta fila, registrar un
+   * rango falla con `ECF_SEQUENCE_NOT_AUTHORIZED`.
+   */
+  @Post("dgii/authorized-sequences")
+  @Permissions("manageEcfSequences")
+  declareAuthorizedSequence(
+    @Req() req: Request,
+    @Body() dto: DeclareEcfAuthorizedSequenceDto,
+  ) {
+    return this.documents.declareAuthorizedSequence(req.user as TenantUser, dto);
+  }
+
+  /** Excepciones registradas: ventas hechas sin comprobante electrónico. */
+  @Get("sales-without-document")
+  @Permissions("viewEcfDocuments")
+  listSalesWithoutDocument(@Req() req: Request) {
+    return this.salesWithoutDocument.list(req.user as TenantUser);
+  }
+
+  /**
+   * Registra que una venta se hizo SIN comprobante electrónico.
+   *
+   * Es la contraparte de la opción «Normal»: el servidor exige que la empresa
+   * haya habilitado la excepción y guarda el motivo con la venta y el usuario.
+   * Se pide permiso fiscal de preparación porque decide el destino fiscal de una
+   * venta ya cerrada; no es una acción genérica de ventas.
+   */
+  @Post("sales-without-document")
+  @Permissions("prepareEcfDocuments")
+  registerSaleWithoutDocument(
+    @Req() req: Request,
+    @Body() dto: RegisterEcfSaleWithoutDocumentDto,
+  ) {
+    return this.salesWithoutDocument.register(req.user as TenantUser, dto);
   }
 }

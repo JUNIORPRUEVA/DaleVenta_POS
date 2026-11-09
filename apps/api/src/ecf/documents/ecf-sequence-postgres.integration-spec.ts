@@ -29,6 +29,22 @@ uat("e-CF numbering ranges (E31/E34) on PostgreSQL", () => {
   async function tenant() {
     const companyId = randomUUID();
     await prisma.company.create({ data: { id: companyId, name: "Synthetic numbering", slug: `ecf-seq-${companyId}` } });
+    // La numeración exige autorización DGII declarada (fail-closed). La suite
+    // declara una amplia para poder probar la asignación en sí misma.
+    for (const documentType of ["E31", "E32", "E34"]) {
+      await prisma.ecfDgiiAuthorizedSequence.create({
+        data: {
+          companyId,
+          documentType,
+          authorizationNumber: `SYNTH-${documentType}`,
+          rangeFrom: 1,
+          rangeTo: 10_000,
+          approvedQuantity: 10_000,
+          declarationVersion: "v1",
+          declaredByUserId: actor,
+        },
+      });
+    }
     return { companyId, user: { id: actor, role: "ADMIN", companyId } as TenantUser };
   }
   const range = (user: TenantUser, documentType: string, startNumber: number, endNumber: number, validUntil?: Date) =>
@@ -103,9 +119,27 @@ uat("e-CF numbering ranges (E31/E34) on PostgreSQL", () => {
     expect(await prisma.ecfSequenceAuditLog.count({ where: { companyId, action: "ALLOCATED" } })).toBe(1);
   });
 
-  it("refuses to allocate for E32, which keeps its own single-use slot", async () => {
+  it("numera E32 con su propio rango autorizado, sin tocar el de E31", async () => {
+    const { companyId, user } = await tenant();
+    const credit = await range(user, "E31", 1, 10);
+    const consumo = await range(user, "E32", 1, 10);
+
+    const e32 = await sequences.allocate(user, "E32");
+    expect(e32.encf).toBe("E320000000001");
+    expect(e32.type).toBe("E32");
+
+    // El rango de crédito fiscal queda intacto: cada tipo consume el suyo.
+    expect((await prisma.ecfSequence.findUniqueOrThrow({ where: { id: consumo.id } })).nextNumber).toBe(2);
+    expect((await prisma.ecfSequence.findUniqueOrThrow({ where: { id: credit.id } })).nextNumber).toBe(1);
+    expect((await sequences.allocate(user, "E31")).encf).toBe("E310000000001");
+    expect(await prisma.ecfSequenceAuditLog.count({
+      where: { companyId, action: "ALLOCATED" },
+    })).toBe(2);
+  });
+
+  it("rechaza un tipo que el motor no puede numerar", async () => {
     const { user } = await tenant();
-    await expect(sequences.allocate(user, "E32")).rejects.toThrow("ECF_SEQUENCE_TYPE_UNSUPPORTED");
+    await expect(sequences.allocate(user, "E43")).rejects.toThrow("ECF_SEQUENCE_TYPE_UNSUPPORTED");
   });
 
   it("refuses a renewal below the consumed frontier", async () => {
