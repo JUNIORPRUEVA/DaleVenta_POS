@@ -712,7 +712,11 @@ class _EcfDgiiHabilitationPageState
                                   )
                                 : null,
                             advanced: widget.adminView && canManage
-                                ? _adminAdvanced(view, stage: stage)
+                                ? _adminAdvanced(
+                                    view,
+                                    stage: stage,
+                                    dosaPosted: intentIsDosa,
+                                  )
                                 : null,
                             // Qué falta para poder facturar. Vive en el mismo
                             // recorrido: sin esto, el cliente que vuelve días
@@ -784,7 +788,11 @@ class _EcfDgiiHabilitationPageState
                                         )
                                       : null,
                                   advanced: widget.adminView && canManage
-                                      ? _adminAdvanced(view, stage: stage)
+                                      ? _adminAdvanced(
+                                          view,
+                                          stage: stage,
+                                          dosaPosted: intentIsDosa,
+                                        )
                                       : null,
                                 )
                               : _trackingStep(
@@ -797,6 +805,7 @@ class _EcfDgiiHabilitationPageState
                                   canRegisterEvidence: canRegisterEvidence,
                                   canReviewEvidence: canReviewEvidence,
                                   activation: activation.valueOrNull,
+                                  dosaPosted: intentIsDosa,
                                   testBadge:
                                       preparation
                                               .valueOrNull
@@ -1017,6 +1026,7 @@ class _EcfDgiiHabilitationPageState
     required bool canReviewEvidence,
     required EcfActivationProgress? activation,
     required String? testBadge,
+    required bool dosaPosted,
   }) {
     final next = _nextAction(
       view,
@@ -1091,7 +1101,11 @@ class _EcfDgiiHabilitationPageState
       // Los controles internos no viajan en el recorrido del cliente: solo se
       // pintan en la interfaz administrativa separada (/ecf/administracion).
       detailsBar: widget.adminView && canManage
-          ? _adminAdvanced(view, stage: stage)
+          ? _adminAdvanced(
+              view,
+              stage: stage,
+              dosaPosted: dosaPosted,
+            )
           : null,
     );
   }
@@ -1109,6 +1123,7 @@ class _EcfDgiiHabilitationPageState
   Widget _adminAdvanced(
     EcfDgiiHabilitationView view, {
     required _EcfStage stage,
+    required bool dosaPosted,
   }) {
     final companyId = ref.read(authStateProvider).user?.companyId ?? '';
     final user = ref.watch(authStateProvider).user;
@@ -1125,6 +1140,15 @@ class _EcfDgiiHabilitationPageState
     );
     final staff = ref.watch(ecfPlatformStaffProvider).valueOrNull == true;
     final hasDgiiActions = canRegisterEvidence || canRecordAuthorization;
+
+    // La autorización se ofrece cuando REALMENTE falta. Antes dependía del
+    // escalón interno (`stage == activation`), y una empresa que ya terminó su
+    // postulación en DOSA pero conserva el expediente interno en `NOT_STARTED`
+    // se quedaba sin la acción: su bloqueo era justo «la DGII no ha aprobado».
+    final showAuthorization =
+        canRecordAuthorization &&
+        !view.officialAuthorization &&
+        (stage == _EcfStage.activation || dosaPosted);
 
     // Sin acciones propias ni herramientas de soporte no hay nada que mostrar.
     if (!hasDgiiActions && !staff) return const SizedBox.shrink();
@@ -1150,7 +1174,7 @@ class _EcfDgiiHabilitationPageState
                     onRegister: () => _registerEvidence(),
                     onReview: _reviewEvidence,
                   ),
-                if (canRecordAuthorization && stage == _EcfStage.activation)
+                if (showAuthorization)
                   _OfficialAuthorizationCard(
                     view: view,
                     busy: _busy,

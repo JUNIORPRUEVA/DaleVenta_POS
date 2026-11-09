@@ -1186,6 +1186,47 @@ void main() {
     },
   );
 
+  testWidgets(
+    'administración: una empresa ya postulada puede registrar la autorización',
+    (tester) async {
+      // Caso real: la empresa terminó su postulación en el portal de la DGII,
+      // pero el expediente interno sigue en `NOT_STARTED`. Antes la acción se
+      // ofrecía solo en el escalón de activación, así que su único bloqueo
+      // («la DGII no ha aprobado todavía») no tenía dónde resolverse.
+      await _pumpAdmin(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(state: 'NOT_STARTED'),
+          intentHasSession: true,
+        ),
+      );
+
+      expect(find.text('Evidencias y autorización de la DGII'), findsOneWidget);
+      // El título se repite (tarjeta y resumen), por eso no se cuenta.
+      expect(find.text('Autorización oficial'), findsWidgets);
+      expect(find.text('Registrar autorización recibida'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'administración: sin postulación previa no se registra autorización',
+    (tester) async {
+      // Si la empresa nunca se postuló, la autorización todavía no existe:
+      // ofrecerla sería un atajo que falsearía el expediente.
+      await _pumpAdmin(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(state: 'NOT_STARTED'),
+          intentHasSession: false,
+        ),
+      );
+
+      expect(find.text('Registrar autorización recibida'), findsNothing);
+    },
+  );
+
   testWidgets('el cliente no ve referencias de constancia DGII', (
     tester,
   ) async {
