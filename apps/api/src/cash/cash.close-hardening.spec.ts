@@ -132,6 +132,10 @@ function makeDb(initial: Session[]) {
         cashboxUpdates.push(args);
         return {};
       }),
+      updateMany: jest.fn(async (args: Record<string, unknown>) => {
+        cashboxUpdates.push(args);
+        return { count: 1 };
+      }),
     },
   };
 
@@ -220,7 +224,9 @@ describe("CashService.closeSession — identidad obligatoria del turno", () => {
     // cashbox_daily se cierra porque ya no quedan turnos abiertos en esa caja.
     expect(db.cashboxUpdates).toHaveLength(1);
     expect(db.cashboxUpdates[0]).toEqual(
-      expect.objectContaining({ where: { id: CASHBOX_A } }),
+      expect.objectContaining({
+        where: { id: CASHBOX_A, companyId: COMPANY },
+      }),
     );
   });
 

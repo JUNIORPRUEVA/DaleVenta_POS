@@ -217,7 +217,11 @@ export class EcfSequenceService {
     );
     // Consumed permanently: the increment is the only mutation, and it is inside
     // the locked transaction, so two concurrent allocations can never collide.
-    await tx.ecfSequence.update({ where: { id: sequence.id }, data: { nextNumber: { increment: 1 } } });
+    const claimed = await tx.ecfSequence.updateMany({
+      where: { id: sequence.id, companyId: params.companyId },
+      data: { nextNumber: { increment: 1 } },
+    });
+    if (claimed.count !== 1) throw new ConflictException("ECF_SEQUENCE_NOT_FOUND");
     await tx.ecfSequenceAuditLog.create({ data: { companyId: params.companyId, sequenceId: sequence.id,
       documentId: params.documentId ?? null, userId: params.userId, operationKey: params.operationKey ?? null,
       encf, type, action: "ALLOCATED" } });
