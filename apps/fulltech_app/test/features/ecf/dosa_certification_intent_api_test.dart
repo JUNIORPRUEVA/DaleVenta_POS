@@ -97,6 +97,29 @@ void main() {
       expect(state.fiscalAuthorizationGranted, isFalse);
     });
 
+    test('no deduce la disponibilidad de la autorización histórica', () {
+      // El backend decide si la acción puede completarse; el cliente no la
+      // infiere de la sola existencia de la revisión.
+      final available = DosaIntentState.fromJson(const {
+        'historicalReviewRequired': true,
+        'historicalTransitionAvailable': true,
+      });
+      expect(available.historicalTransitionAvailable, isTrue);
+
+      final blocked = DosaIntentState.fromJson(const {
+        'historicalReviewRequired': true,
+        'historicalTransitionAvailable': false,
+      });
+      expect(blocked.historicalTransitionAvailable, isFalse);
+
+      // Un backend anterior no envía el campo: se asume NO disponible, de modo
+      // que nunca se ofrece un formulario que podría rechazarse.
+      final legacy = DosaIntentState.fromJson(const {
+        'historicalReviewRequired': true,
+      });
+      expect(legacy.historicalTransitionAvailable, isFalse);
+    });
+
     test('propaga los motivos de bloqueo', () {
       final state = DosaIntentState.fromJson(const {
         'canRegister': false,

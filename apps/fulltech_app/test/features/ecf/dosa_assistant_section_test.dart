@@ -386,6 +386,30 @@ void main() {
   );
 
   testWidgets(
+    'si la autorización no está disponible no se ofrece el formulario',
+    (tester) async {
+      // El backend ya sabe que la acción no puede completarse: interruptor
+      // apagado o expediente que dejó de estar en el Intento 1 original. Un
+      // formulario aquí solo produciría un error al pulsar «Autorizar».
+      final api = _IntentApi(
+        hasSession: true,
+        historicalReviewRequired: true,
+        historicalTransitionAvailable: false,
+      );
+
+      await pumpSection(tester, api: api);
+
+      expect(find.text('Autorización administrativa requerida'), findsNothing);
+      expect(find.text('Continuar certificación'), findsNothing);
+      expect(
+        find.textContaining('no hay ninguna acción pendiente'),
+        findsOneWidget,
+      );
+      expect(api.authorizeCalls, isEmpty);
+    },
+  );
+
+  testWidgets(
     'con sesión vigente se reanuda aunque la autorización histórica haya expirado',
     (tester) async {
       final api = _IntentApi(
@@ -691,6 +715,7 @@ class _IntentApi implements DosaCertificationIntentApi {
     this.hasSession = false,
     this.provider = 'DOSA',
     this.historicalReviewRequired = false,
+    this.historicalTransitionAvailable,
     this.sessionReusable = false,
     this.certificationMode = DosaCertificationMode.privateSession,
   });
@@ -701,6 +726,11 @@ class _IntentApi implements DosaCertificationIntentApi {
   final bool hasSession;
   final String provider;
   bool historicalReviewRequired;
+
+  /// `null` = el doble declara disponible siempre que haya revisión, que es el
+  /// caso normal. Un test puede forzar `false` para simular un despliegue con
+  /// el interruptor apagado o un expediente ya iniciado.
+  final bool? historicalTransitionAvailable;
   final bool sessionReusable;
 
   /// Modo que declara el backend: decide la ruta sin interpretar errores.
@@ -720,6 +750,8 @@ class _IntentApi implements DosaCertificationIntentApi {
       'canRegister': blockingReasons.isEmpty,
       'blockingReasons': blockingReasons,
       'historicalReviewRequired': historicalReviewRequired,
+      'historicalTransitionAvailable':
+          historicalTransitionAvailable ?? historicalReviewRequired,
       'certificationMode': switch (certificationMode) {
         DosaCertificationMode.privateSession => 'PRIVATE_SESSION',
         DosaCertificationMode.publicPortal => 'PUBLIC_PORTAL',

@@ -268,6 +268,8 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
                 // una nueva autorización solo para volver a abrirla.
                 historicalReviewRequired:
                     value.historicalReviewRequired && !value.sessionReusable,
+                historicalTransitionAvailable:
+                    value.historicalTransitionAvailable,
               );
             }
 
@@ -341,6 +343,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
                       canManage: true,
                       intentId: registered.sessionId,
                       historicalReviewRequired: false,
+                      historicalTransitionAvailable: false,
                     );
                   },
                 );
@@ -356,6 +359,7 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
     required bool canManage,
     required String? intentId,
     required bool historicalReviewRequired,
+    required bool historicalTransitionAvailable,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -365,7 +369,20 @@ class _DosaAssistantSectionState extends ConsumerState<DosaAssistantSection> {
         // dentro de un desplegable «Avanzado», indistinguible del otro panel
         // administrativo de la pantalla, y el administrador no encontraba cómo
         // avanzar.
-        if (historicalReviewRequired && canManage && intentId != null)
+        //
+        // Si el backend ya sabe que la acción no puede completarse (interruptor
+        // apagado o expediente que dejó de estar en el Intento 1 original), no
+        // se ofrece el formulario: se explica el estado sin dejar un botón que
+        // solo puede terminar en error.
+        if (historicalReviewRequired && !historicalTransitionAvailable)
+          const _DosaIntentGate(
+            icon: Icons.lock_outline,
+            message:
+                'Este expediente tiene una revisión histórica registrada. La '
+                'autorización no está disponible en este entorno, así que no '
+                'hay ninguna acción pendiente aquí.',
+          )
+        else if (historicalReviewRequired && canManage && intentId != null)
           _DosaHistoricalReviewCard(
             intentId: intentId,
             onAuthorized: () {

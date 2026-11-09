@@ -92,6 +92,7 @@ class DosaIntentState {
     required this.sessionReusable,
     required this.credentialStatus,
     required this.historicalReviewRequired,
+    this.historicalTransitionAvailable = false,
     this.certificationMode = DosaCertificationMode.unknown,
   });
 
@@ -113,6 +114,12 @@ class DosaIntentState {
   /// El backend marca esto solo cuando una reconciliación histórica sigue
   /// necesitando la acción administrativa explícita. No autoriza nada.
   final bool historicalReviewRequired;
+
+  /// El backend afirma que la autorización puede completarse AHORA: está
+  /// habilitada en este despliegue y el expediente sigue en el único estado
+  /// autorizable. Con `false` la pantalla no ofrece el formulario, porque el
+  /// servidor lo rechazaría (interruptor apagado o expediente ya iniciado).
+  final bool historicalTransitionAvailable;
 
   /// Modo que el backend declara para esta empresa. Decide la ruta: sesión
   /// privada o portal público con boleto.
@@ -144,6 +151,8 @@ class DosaIntentState {
       sessionReusable: sessionMap?['reusable'] == true,
       credentialStatus: credentialMap?['status'] as String?,
       historicalReviewRequired: json['historicalReviewRequired'] == true,
+      historicalTransitionAvailable:
+          json['historicalTransitionAvailable'] == true,
       certificationMode: DosaCertificationMode.parse(json['certificationMode']),
     );
   }

@@ -298,6 +298,9 @@ Widget _harness({
           'canRegister': true,
           'blockingReasons': const <String>[],
           'historicalReviewRequired': intentHistoricalReview,
+          // La pantalla solo ofrece el formulario cuando el backend afirma que
+          // la acción puede completarse; aquí se declara disponible.
+          'historicalTransitionAvailable': intentHistoricalReview,
           if (intentHasSession)
             'session': const <String, dynamic>{
               'id': 'intent-1',
