@@ -35,6 +35,9 @@ integración sobre PostgreSQL real, incluidas condiciones de carrera.
 | Suite | Alcance |
 | --- | --- |
 | `ecf-e34-postgres.integration-spec.ts` | 28 casos, incluidas carreras reales e inserciones concurrentes directas |
+| `ecf-e34-emission-postgres.integration-spec.ts` | Emisión simulada y guarda de reserva |
+| `sales-return-ecf-credit-postgres.integration-spec.ts` | Nota preparada desde la devolución, idempotencia y total/parcial |
+| `dosa-dispatch-pending-postgres.integration-spec.ts` | El barrido `dispatch-pending` incluye la E34 y no la duplica |
 | `ecf-documents-http.e2e-spec.ts` | Preparación de la nota por HTTP |
 | Interfaz Flutter (`ecf_credit_note_action.dart`) | Selección del original, nota parcial, motivo obligatorio, bloqueo de exceso |
 

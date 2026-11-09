@@ -211,3 +211,75 @@ reserva `177.00`, reintento sin duplicar y venta sin comprobante electrónico si
 En el cliente, `returnSale` devuelve la venta **y** su nota (`SaleReturnResult`), y las pantallas
 de devolución (Mis Ventas y TPV) muestran el e-NCF en el aviso de éxito. E34 nunca aparece como
 comprobante de una venta nueva.
+
+## 12. Validación del histórico NCF y del barrido E34 (2026-11-08)
+
+Rama `agent/ecf-pos-unified-invoicing`. Sin push, sin despliegue y sin escritura en producción:
+todas las suites de escritura corrieron sobre la base efímera desechable.
+
+### Histórico NCF (HECHO, verificado)
+
+- El comprobante retirado sigue siendo **legible**: `Sale.fiscalVoucherType`, `Sale.ncf` y
+  `Sale.ncfExpirationDate` se conservan, `GET /sales` los devuelve y el cliente los muestra en el
+  histórico del TPV y en los tickets/PDF (ESC/POS, HTML y PDF).
+- Una venta **nueva** que pida `fiscalVoucherType` (B01/B02) se rechaza con
+  `ECF_LEGACY_NCF_RETIRED`: no se crea la venta sin el comprobante que el usuario esperaba y no se
+  escribe ninguna fila `ecf_*`.
+- **Defecto corregido:** `legacy-pos-compatibility-http.e2e-spec.ts` seguía creando una serie con
+  `POST /ncf/sequences` (endpoint retirado, hoy 404) y esperaba 201. La suite estaba en rojo. Ahora
+  siembra el histórico directamente en base y fija el contrato real: histórico legible por la API y
+  venta nueva rechazada. Evidencia: **10/10 PASS**.
+
+### Barrido de pendientes E34 (HECHO, verificado)
+
+- `pending()` no filtraba por tipo, pero **ninguna prueba lo demostraba para E34**. Nuevo caso en
+  `dosa-dispatch-pending-postgres.integration-spec.ts`: la nota preparada aparece como pendiente con
+  su tipo real, el barrido la intenta y, sin autorización fiscal, no abre la red ni deja intento
+  `SEND_TO_PROVIDER` (sigue pendiente y reintentable). Evidencia: **6/6 PASS**.
+- **E34 desde un original E32:** la venta por defecto del POS (cliente sin RNC) es E32, pero la
+  suite de devoluciones solo cubría originales E31. Caso nuevo en
+  `sales-return-ecf-credit-postgres.integration-spec.ts`: la nota referencia `originalType: E32`
+  con el e-NCF del original y reserva el total. Evidencia: **8/8 PASS**.
+
+### Limpieza (HECHO, verificado)
+
+- `registrar_venta_screen.dart` escribía `[SALE PRINT] … ncf=…` en cada venta
+  (introducido en `4dce5daf`). Retirado: era un log de depuración en código de producción.
+  `flutter analyze` limpio y 69 pruebas de POS en verde.
+- `ecf-local-target.spec.ts` seguía exigiendo **3** destinos locales; el puerto alternativo 55500
+  añadido en `334b8ea6` hacía fallar la suite completa del backend. Actualizado a 4 destinos y a la
+  regla exacta (el 55500 con otro nombre se rechaza).
+- `dosa-emission-dispatch.e2e-spec.ts` y `dosa-emission-dispatch-http.e2e-spec.ts` todavía creaban una
+  serie con `POST /ncf/sequences` y pedían `fiscalVoucherType: "B01"`; ambos flujos ya no existen.
+  Alineados con el contrato e-CF: venta sin talón y preparación con numeración autorizada.
+
+### Comandos ejecutados
+
+| Comando | Resultado |
+| --- | --- |
+| `npx prisma validate` | schema válido |
+| `npx tsc -p tsconfig.build.json --noEmit` | 0 errores |
+| `npx jest --runInBand --testPathPatterns "src/sales/.*\.spec\.ts$"` | 10 suites / 124 pruebas PASS |
+| `npm --workspace apps/api test` (suite completa del backend) | 224 suites / 2721 pruebas PASS, 508 omitidas (opt-in PostgreSQL) |
+| `npm --workspace apps/api run build` (prisma generate + tsc) | PASS |
+| `npm run audit:tenant-inventory` / `audit:endpoints` | 166 modelos / 412 endpoints, PASS |
+| `npm run audit:unsafe-tenant-queries:warn` | exit 0; 401 avisos y 14 errores **preexistentes** (CI usa modo warn) |
+| `npx jest --runInBand --testPathPatterns "sales-return-ecf-credit-postgres\|ecf-e34"` | 4 suites / 67 pruebas PASS |
+| `npx jest --runInBand --testPathPatterns "dosa-emission-dispatch"` (e2e DOSA) | 2 suites / 25 pruebas PASS |
+| `npx jest --runInBand --testPathPatterns "legacy-pos-compatibility-http"` | 10/10 PASS |
+| `npx jest --runInBand --testPathPatterns "dosa-dispatch-pending-postgres"` | 6/6 PASS |
+| `flutter analyze` | No issues found |
+| `flutter test` (suite completa del cliente) | 1994 PASS, 9 omitidas, 0 fallos |
+| `flutter test` (etiquetas fiscales, E31/E34 UI, tickets y PDF con NCF) | 62 + 106 pruebas PASS |
+| `flutter test` (POS, selector fiscal y acciones de venta) | 69 pruebas PASS |
+
+### Sigue pendiente (sin autorización)
+
+- Emisión real E31/E34 al proveedor y certificación DGII: requieren banderas de certificación y
+  ejecución humana; no se ejecutaron.
+- Un POS de escritorio antiguo con NCF activo recibirá `ECF_LEGACY_NCF_RETIRED`. Según la evidencia de
+  producción de §7 (1 empresa con `ncf_enabled`, 0 rangos, 0 ventas con comprobante) ninguna operación
+  real depende de ese camino.
+- `audit:unsafe-tenant-queries` deja 14 hallazgos `id-only` **preexistentes** (app-updates, cash,
+  guardian, un spec e-CF y `ecf-sequence.service.ts:220`, que actualiza dentro de una transacción con la
+  fila ya bloqueada y acotada por empresa). CI los trata como aviso (`:warn`); no se modificaron.
