@@ -117,7 +117,9 @@ numeración necesita la autorización DGII declarada de la rama anterior.
 - **Emission real**: la cadena ya está completa (preparar → despachar → registrar
   resultado → recuperar pendientes), pero que salga un comprobante real depende de las
   banderas de certificación de cada empresa. En producción esas banderas siguen apagadas.
-- **Retiro físico del resto del módulo B01/B02**: ver §7.
+- **Retiro físico del resto del módulo B01/B02**: **hecho**. El selector, las
+  secuencias NCF y el proveedor se retiraron en `f6bfbaca`/`bf870d59`; el
+  2026-11-08 se limpiaron el último texto de ayuda y los comentarios obsoletos (ver §7).
 
 ## 7. Evidencia de producción sobre B01/B02 (HECHO, solo lectura, 2026-11-08)
 
@@ -140,12 +142,13 @@ encendido nunca registró un talonario ni emitió. Los 3 comprobantes histórico
 selector desaparezca.
 
 Lo que **sí** se retiró: el POS de las empresas con e-CF ya no ofrece B01/B02 (Fase 3).
-Lo que **falta** retirar es el resto de la rama legada dentro de la pantalla de venta
-(selector B01/B02, selector de secuencias NCF, aviso de cliente B01 y su proveedor
-`posNcfSequencesProvider`): ~20 puntos en un archivo de 4.000 líneas. Es un borrado
-mecánico pero de alto riesgo que merece su propio commit y su propia corrida de
-regresión completa; hacerlo junto con el resto de cambios de esta tanda habría mezclado
-una sustitución de comportamiento con una limpieza estructural.
+El resto de la rama legada dentro de la pantalla de venta (selector B01/B02, selector de
+secuencias NCF, aviso de cliente B01 y su proveedor `posNcfSequencesProvider`) se retiró
+en `f6bfbaca` y `bf870d59`. Revisión posterior (2026-11-08): no queda ninguna superficie
+B01/B02 en el POS; solo persistían un texto de ayuda («Opcional para B01») y comentarios
+que afirmaban que el talón seguía existiendo para empresas sin e-CF, ya corregidos. Las
+únicas referencias restantes son las etiquetas del **histórico** (`fiscal_voucher_options.dart`),
+la impresión/PDF de ventas antiguas y los enlaces de compatibilidad de §2.
 
 ## 8. Emisión automática y recuperación (HECHO)
 
@@ -252,6 +255,9 @@ todas las suites de escritura corrieron sobre la base efímera desechable.
 - `dosa-emission-dispatch.e2e-spec.ts` y `dosa-emission-dispatch-http.e2e-spec.ts` todavía creaban una
   serie con `POST /ncf/sequences` y pedían `fiscalVoucherType: "B01"`; ambos flujos ya no existen.
   Alineados con el contrato e-CF: venta sin talón y preparación con numeración autorizada.
+- **Retiro B01/B02 del POS completado:** no quedaba selector ni proveedor de secuencias; persistían un
+  texto de ayuda («Opcional para B01») y comentarios que afirmaban que el talón seguía existiendo para
+  empresas sin e-CF. Corregidos. `flutter analyze` limpio y 69 pruebas de POS en verde.
 
 ### Comandos ejecutados
 

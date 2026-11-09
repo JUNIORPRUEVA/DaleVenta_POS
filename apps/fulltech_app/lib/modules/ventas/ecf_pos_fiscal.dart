@@ -1,13 +1,12 @@
 import '../../features/ecf/ecf_models.dart';
 import 'fiscal_voucher_options.dart' show normalizeTaxId;
 
-/// Modo fiscal con el que se cierra una venta en el POS de una empresa que
-/// factura electrónicamente.
+/// Modo fiscal con el que se cierra una venta en el POS.
 ///
-/// Sustituye al selector legado B01/B02 **solo para empresas con e-CF activa**:
-/// esas empresas ya no eligen un talonario, eligen qué comprobante electrónico
-/// corresponde. B01/B02 siguen existiendo para las empresas que no usan e-CF,
-/// porque quitárselos les rompería la facturación.
+/// El motor NCF tradicional se retiró: no hay selector de talonarios B01/B02 en
+/// ninguna empresa. Con e-CF activo se elige el comprobante (E31/E32 y, si la
+/// empresa habilitó la excepción, «Normal»); sin e-CF la venta se registra sin
+/// comprobante y el histórico conserva el NCF que ya tuviera.
 ///
 /// Este archivo es **puro**: no lee estado, no hace red y no dibuja. Toda la
 /// decisión de qué se ofrece y qué se preselecciona se toma con lo que recibe,

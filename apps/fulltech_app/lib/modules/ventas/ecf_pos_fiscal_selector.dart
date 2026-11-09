@@ -4,10 +4,11 @@ import 'ecf_pos_fiscal.dart';
 
 /// Selector fiscal del POS para empresas que facturan electrónicamente.
 ///
-/// Reemplaza visualmente al selector B01/B02: mismos gestos (chip que abre una
-/// hoja inferior), pero las opciones son E31/E32 y, solo si la empresa habilitó
-/// la excepción, «Normal». El aviso rojo de la excepción se muestra en el propio
-/// selector para que nadie cierre una venta sin comprobante sin haberlo leído.
+/// Sustituye al antiguo selector de talonarios B01/B02 (ya retirado): mismos
+/// gestos (chip que abre una hoja inferior), pero las opciones son E31/E32 y,
+/// solo si la empresa habilitó la excepción, «Normal». El aviso rojo de la
+/// excepción se muestra en el propio selector para que nadie cierre una venta
+/// sin comprobante sin haberlo leído.
 class EcfPosFiscalSelector extends StatelessWidget {
   const EcfPosFiscalSelector({
     super.key,

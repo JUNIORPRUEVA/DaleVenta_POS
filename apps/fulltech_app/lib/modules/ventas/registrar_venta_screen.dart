@@ -1125,15 +1125,15 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           )
         : null;
     final cartTaxSummary = _cartTaxSummary(taxConfig);
-    // Sustitución del selector fiscal antiguo: si la empresa factura
-    // electrónicamente, el POS deja de ofrecer B01/B02 y ofrece el comprobante
-    // electrónico que corresponde. B01/B02 siguen existiendo para las empresas
-    // que NO usan e-CF, porque quitarles el talón les rompería la facturación.
+    // El motor NCF tradicional se retiró: el POS no ofrece talonarios B01/B02 en
+    // ninguna empresa. Si la empresa factura electrónicamente se elige el
+    // comprobante (E31/E32); si no, la venta se registra sin comprobante y su
+    // histórico conserva el NCF que ya tuviera.
     final ecfCapabilities = ref.watch(ecfCapabilitiesProvider).valueOrNull;
     // Quién factura electrónicamente lo dice la CONFIGURACIÓN DE EMPRESA, que ya
     // viaja en los ajustes que esta pantalla carga. No se deduce del endpoint de
-    // capacidades porque ese exige permiso de administración: un cajero sin él
-    // provocaría una caída silenciosa al talón B01/B02.
+    // capacidades porque ese exige permiso de administración: si el cajero no
+    // puede cargarlas, el cobro se bloquea en vez de degradar en silencio.
     final ecfActive = companySettings?.ecfEnabled == true;
     final ecfModes = ecfPosFiscalModesFromCapabilities(ecfCapabilities);
     if (ecfActive) {
@@ -3459,7 +3459,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'RNC / cédula fiscal',
-                hintText: 'Opcional para B01',
+                hintText: 'Opcional',
               ),
             ),
           ],
