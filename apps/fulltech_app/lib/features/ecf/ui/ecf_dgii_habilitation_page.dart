@@ -26,7 +26,6 @@ import 'ecf_activation_page.dart';
 import 'ecf_certificate_card.dart';
 import 'ecf_dgii_application_wizard.dart';
 import 'ecf_fiscal_data_page.dart';
-import 'ecf_onboarding_section.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
 import 'debug/ecf_debug_screen_selector.dart';
@@ -350,28 +349,6 @@ class _EcfDgiiHabilitationPageState
             evidenceId: evidence.id,
             decision: input.decision,
             note: input.note,
-          ),
-    );
-  }
-
-  /// Seguimiento interno de UN requisito: quién lo lleva y para cuándo.
-  Future<void> _editRequirementTracking(
-    EcfDgiiRequirementProgress requirement,
-  ) async {
-    final input = await showDialog<_RequirementTrackingInput>(
-      context: context,
-      builder: (context) =>
-          _RequirementTrackingDialog(requirement: requirement),
-    );
-    if (input == null) return;
-    await _run(
-      () => ref
-          .read(ecfRepositoryProvider)
-          .updateDgiiRequirement(
-            key: requirement.key,
-            status: input.status,
-            note: input.note,
-            dueDate: input.dueDate,
           ),
     );
   }
@@ -1134,21 +1111,20 @@ class _EcfDgiiHabilitationPageState
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
           ),
           subtitle: const Text(
-            'Diagnóstico y controles exclusivos de administradores.',
+            'Controles internos. Nada de esto es necesario para facturar.',
             style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Primero lo que desbloquea el trámite: evidencias, autorización
+            // oficial y requisitos. Antes iba al final, después del diagnóstico
+            // y del checklist heredado, así que la acción quedaba enterrada.
+            _technicalDetails(view, stage: stage),
+            const SizedBox(height: 10),
             DosaCertificationDiagnosticSection(
               key: ValueKey('dosa-diagnostic-$companyId'),
             ),
-            const SizedBox(height: 10),
-            _technicalDetails(view, stage: stage),
-            // Checklist interno heredado: solo administrativo, nunca en el
-            // recorrido del cliente ni en Ajustes de empresa.
-            const SizedBox(height: 10),
-            const EcfOnboardingSection(),
           ],
         ),
       ),
@@ -1182,7 +1158,7 @@ class _EcfDgiiHabilitationPageState
             style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
           ),
           subtitle: const Text(
-            'Requisitos, emisión, evidencias e historial.',
+            'Evidencias, autorización oficial y estado del expediente.',
             style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -1211,7 +1187,6 @@ class _EcfDgiiHabilitationPageState
               history: ref.watch(ecfDgiiHistoryProvider),
               canManage: true,
               busy: _busy,
-              onTrack: _editRequirementTracking,
               onAdvance: () => _advance(view),
               onEditObservations: () => _editObservations(view),
               showPlatform:
@@ -1435,115 +1410,27 @@ class _EmissionCard extends StatelessWidget {
 }
 
 class _ProgressCard extends StatelessWidget {
-  const _ProgressCard({
-    required this.progress,
-    required this.state,
-    required this.canTrack,
-    required this.busy,
-    required this.onTrack,
-    required this.onOpenWizard,
-    required this.onOpenActivation,
-  });
+  const _ProgressCard({required this.progress});
 
   final EcfDgiiProgress progress;
-  final String state;
-  final bool canTrack;
-  final bool busy;
-  final ValueChanged<EcfDgiiRequirementProgress> onTrack;
-  final VoidCallback onOpenWizard;
-  final VoidCallback onOpenActivation;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // El primer paso obligatorio sin resolver es lo único que el usuario
-    // necesita decidir ahora. Todo lo demás sigue abajo, en la lista.
-    final pending = progress.requirements
-        .where((requirement) => !requirement.resolved && requirement.mandatory)
-        .toList(growable: false);
-    final next = pending.isEmpty ? null : pending.first;
-    final nextIndex = next == null
-        ? 0
-        : progress.requirements.indexOf(next) + 1;
-    // Acción que de VERDAD mueve el proceso, según el estado del expediente.
+    // Resumen, NO una lista de pasos.
     //
-    // Anotar un requisito solo deja una nota interna: el porcentaje lo calcula
-    // el backend con las etapas reales. Antes el botón principal era esa nota,
-    // así que el usuario marcaba pasos y el avance no cambiaba nunca.
-    final preparing =
-        state == 'NOT_STARTED' || state == 'PREPARING_REQUIREMENTS';
-
+    // El recorrido del trámite se hace en el asistente (que va indicando cada
+    // paso) y en la Oficina Virtual de la DGII. Repetirlo aquí añadía quince
+    // filas que el cliente no puede resolver desde esta pantalla y que además
+    // se confundían con acciones reales.
     return _Section(
-      title: 'Pasos del proceso',
+      title: 'Avance del expediente',
       subtitle:
-          'El avance lo calcula el sistema con las etapas reales del trámite. '
-          'Anotar un paso guarda una nota tuya; no cambia el porcentaje.',
+          'Dato informativo: el avance lo calcula el sistema con las etapas '
+          'reales del trámite.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F6FF),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  next == null
-                      ? 'No queda ningún paso obligatorio pendiente.'
-                      : 'Paso $nextIndex de ${progress.requirements.length}: '
-                            '${next.label}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F2A37),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  next == null
-                      ? 'Ya no queda ningún paso obligatorio pendiente.'
-                      : preparing
-                      ? 'Prepara y presenta el expediente de postulación. Ahí '
-                            'marcas lo que ya tienes y adjuntas los documentos.'
-                      : 'El expediente ya está presentado. Ejecuta la activación '
-                            'para que el sistema compruebe cada etapa.',
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                if (canTrack) ...[
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: busy
-                        ? null
-                        : preparing
-                        ? onOpenWizard
-                        : onOpenActivation,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1957E6),
-                      minimumSize: const Size(0, 36),
-                    ),
-                    icon: Icon(
-                      preparing
-                          ? Icons.assignment_outlined
-                          : Icons.play_circle_outline,
-                      size: 18,
-                    ),
-                    label: Text(
-                      preparing
-                          ? 'Preparar el expediente'
-                          : 'Ejecutar la activación',
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -1564,135 +1451,8 @@ class _ProgressCard extends StatelessWidget {
               color: const Color(0xFF64748B),
             ),
           ),
-          if (progress.requirements.isEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'El backend todavía no ha creado los requisitos de esta empresa.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-          const SizedBox(height: 8),
-          for (final requirement in progress.requirements)
-            _RequirementRow(
-              requirement: requirement,
-              canTrack: canTrack,
-              busy: busy,
-              onTrack: () => onTrack(requirement),
-            ),
         ],
       ),
-    );
-  }
-}
-
-class _RequirementRow extends StatelessWidget {
-  const _RequirementRow({
-    required this.requirement,
-    required this.canTrack,
-    required this.busy,
-    required this.onTrack,
-  });
-
-  final EcfDgiiRequirementProgress requirement;
-  final bool canTrack;
-  final bool busy;
-  final VoidCallback onTrack;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final resolved = requirement.resolved;
-    final tracking = requirement.tracking;
-    final dueDate = tracking?.dueDate;
-    final dueSuffix = dueDate == null ? '' : ' · vence $dueDate';
-    final status = resolved
-        ? 'Hecho'
-        : tracking != null
-        ? null
-        // Distingue los requisitos que resuelve el producto con los datos de la
-        // empresa de los que dependen de un trámite externo: antes ambos decían
-        // «Pendiente» y parecía que la empresa tenía que hacer algo con los
-        // datos fiscales que ya había cargado.
-        : requirement.automatable
-        ? 'Automático'
-        : 'Pendiente';
-
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                resolved ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 16,
-                color: resolved
-                    ? const Color(0xFF1B7F3B)
-                    : theme.colorScheme.outline,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  requirement.label,
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-              if (status != null)
-                Text(
-                  status,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: resolved
-                        ? const Color(0xFF1B7F3B)
-                        : const Color(0xFF64748B),
-                  ),
-                ),
-              if (canTrack && !requirement.automatable && !resolved) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: theme.colorScheme.outline,
-                ),
-              ],
-            ],
-          ),
-          // La libreta interna NO es progreso: se muestra como nota y el
-          // requisito sigue contando como pendiente.
-          if (tracking != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 24, bottom: 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Seguimiento interno: ${tracking.statusLabel}$dueSuffix',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
-                  if (tracking.note != null)
-                    Text(
-                      tracking.note!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-
-    // Toda la fila es la acción, pero SOLO en los pasos que dependen de un
-    // trámite externo: los que resuelve el producto no se marcan a mano, y un
-    // paso ya resuelto no necesita nada.
-    if (!canTrack || requirement.automatable || resolved) return row;
-    return Tooltip(
-      message: 'Registrar seguimiento interno',
-      child: InkWell(onTap: busy ? null : onTrack, child: row),
     );
   }
 }
@@ -2463,140 +2223,6 @@ class _ReviewDialogState extends State<_ReviewDialog> {
   }
 }
 
-class _RequirementTrackingInput {
-  const _RequirementTrackingInput({
-    required this.status,
-    this.note,
-    this.dueDate,
-  });
-
-  final String status;
-  final String? note;
-  final String? dueDate;
-}
-
-/// Seguimiento interno de un requisito: estado de gestión, fecha y nota.
-class _RequirementTrackingDialog extends StatefulWidget {
-  const _RequirementTrackingDialog({required this.requirement});
-
-  final EcfDgiiRequirementProgress requirement;
-
-  @override
-  State<_RequirementTrackingDialog> createState() =>
-      _RequirementTrackingDialogState();
-}
-
-class _RequirementTrackingDialogState
-    extends State<_RequirementTrackingDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _note;
-  late final TextEditingController _dueDate;
-  late String _status;
-
-  @override
-  void initState() {
-    super.initState();
-    final tracking = widget.requirement.tracking;
-    _status = tracking?.status ?? 'IN_PROGRESS';
-    _note = TextEditingController(text: tracking?.note ?? '');
-    _dueDate = TextEditingController(text: tracking?.dueDate ?? '');
-  }
-
-  @override
-  void dispose() {
-    _note.dispose();
-    _dueDate.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final requirement = widget.requirement;
-    return AlertDialog(
-      title: const Text('Seguimiento del requisito'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                requirement.label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Es una libreta de trabajo interna: no cambia el progreso real '
-                'de la empresa ni acredita nada ante la DGII.',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(labelText: 'Estado interno'),
-                items: [
-                  for (final status in EcfDgiiRequirementTracking.statuses)
-                    DropdownMenuItem(
-                      value: status,
-                      child: Text(
-                        EcfDgiiRequirementTracking.labelForStatus(status),
-                      ),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _status = value ?? _status),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _dueDate,
-                decoration: const InputDecoration(
-                  labelText: 'Fecha objetivo',
-                  hintText: 'AAAA-MM-DD',
-                ),
-                validator: (value) {
-                  final raw = value?.trim() ?? '';
-                  if (raw.isEmpty) return null;
-                  final ok = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw);
-                  return ok ? null : 'Usa el formato AAAA-MM-DD';
-                },
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _note,
-                maxLines: 3,
-                maxLength: 500,
-                decoration: const InputDecoration(labelText: 'Nota'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (_formKey.currentState?.validate() != true) return;
-            Navigator.of(context).pop(
-              _RequirementTrackingInput(
-                status: _status,
-                note: _note.text.trim().isEmpty ? null : _note.text.trim(),
-                dueDate: _dueDate.text.trim().isEmpty
-                    ? null
-                    : _dueDate.text.trim(),
-              ),
-            );
-          },
-          child: const Text('Guardar'),
-        ),
-      ],
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Piezas comunes
 // ---------------------------------------------------------------------------
@@ -2935,7 +2561,6 @@ class _AdvancedSection extends StatelessWidget {
     required this.history,
     required this.canManage,
     required this.busy,
-    required this.onTrack,
     required this.onAdvance,
     required this.onEditObservations,
     required this.showPlatform,
@@ -2950,7 +2575,6 @@ class _AdvancedSection extends StatelessWidget {
   final AsyncValue<List<EcfDgiiHistoryEntry>> history;
   final bool canManage;
   final bool busy;
-  final ValueChanged<EcfDgiiRequirementProgress> onTrack;
   final VoidCallback onAdvance;
   final VoidCallback onEditObservations;
   final bool showPlatform;
@@ -2962,23 +2586,14 @@ class _AdvancedSection extends StatelessWidget {
   Widget build(BuildContext context) {
     // Vive dentro del panel de soporte, así que no es un acordeón: es la vista
     // secundaria de administrador con los registros técnicos.
+    //
+    // No repite el título «Detalle técnico»: el acordeón que lo contiene ya lo
+    // dice. Dos encabezados iguales, uno dentro del otro, se leían como dos
+    // bloques distintos con el mismo contenido.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Detalle técnico',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        _ProgressCard(
-          progress: progress,
-          state: view.state,
-          canTrack: canManage,
-          busy: busy,
-          onTrack: onTrack,
-          onOpenWizard: onOpenWizard,
-          onOpenActivation: onOpenActivation,
-        ),
+        _ProgressCard(progress: progress),
         const SizedBox(height: 12),
         _EmissionCard(view: view),
         const SizedBox(height: 12),

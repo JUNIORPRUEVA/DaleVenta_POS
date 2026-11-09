@@ -209,7 +209,7 @@ void main() {
     );
 
     expect(find.textContaining('DOSA aún no ha confirmado'), findsOneWidget);
-    expect(find.textContaining('Y 1 paso(s) más por completar'), findsOneWidget);
+      expect(find.textContaining('Y 1 paso más por completar'), findsOneWidget);
     expect(find.text('Actualizar estado'), findsOneWidget);
     // En compacto no se abre una sección completa.
     expect(find.text('Autorización para facturar'), findsNothing);

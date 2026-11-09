@@ -154,7 +154,11 @@ class _EcfDosaActivationStatusState
             Padding(
               padding: const EdgeInsets.only(top: 6, left: 4),
               child: Text(
-                'Y ${pending.length - 1} paso(s) más por completar.',
+                // Plural real: «Y 1 paso(s) más» se leía como un texto sin
+                // terminar. Con un único paso restante ni siquiera es plural.
+                pending.length == 2
+                    ? 'Y 1 paso más por completar.'
+                    : 'Y ${pending.length - 1} pasos más por completar.',
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textMuted,
