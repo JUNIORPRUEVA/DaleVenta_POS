@@ -1134,22 +1134,50 @@ class _EcfDgiiHabilitationPageState
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
           ),
           subtitle: const Text(
-            'Diagnóstico y controles exclusivos de administradores.',
+            'Controles internos. Nada de esto es necesario para facturar.',
             style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Primero lo que desbloquea el trámite: evidencias, autorización
+            // oficial y requisitos. Antes iba al final, después del diagnóstico
+            // y del checklist heredado, así que la acción quedaba enterrada.
+            _technicalDetails(view, stage: stage),
+            const SizedBox(height: 10),
             DosaCertificationDiagnosticSection(
               key: ValueKey('dosa-diagnostic-$companyId'),
             ),
             const SizedBox(height: 10),
-            _technicalDetails(view, stage: stage),
-            // Checklist interno heredado: solo administrativo, nunca en el
-            // recorrido del cliente ni en Ajustes de empresa.
-            const SizedBox(height: 10),
-            const EcfOnboardingSection(),
+            _internalTracking(),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Checklist heredado del equipo (15 pasos con «Marcar…»).
+  ///
+  /// Duplica en lo esencial a «Pasos del proceso», así que no compite con el
+  /// detalle técnico: vive en su propio desplegable, cerrado, y dice con
+  /// claridad que marcar un paso no acredita nada ante la DGII.
+  Widget _internalTracking() {
+    return EcfSurface(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: const Text(
+            'Seguimiento interno',
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          ),
+          subtitle: const Text(
+            'Checklist del equipo. Marcarlo no acredita nada ante la DGII.',
+            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: const [EcfOnboardingSection()],
         ),
       ),
     );
@@ -2962,14 +2990,13 @@ class _AdvancedSection extends StatelessWidget {
   Widget build(BuildContext context) {
     // Vive dentro del panel de soporte, así que no es un acordeón: es la vista
     // secundaria de administrador con los registros técnicos.
+    //
+    // No repite el título «Detalle técnico»: el acordeón que lo contiene ya lo
+    // dice. Dos encabezados iguales, uno dentro del otro, se leían como dos
+    // bloques distintos con el mismo contenido.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Detalle técnico',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
         _ProgressCard(
           progress: progress,
           state: view.state,
