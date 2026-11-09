@@ -1091,51 +1091,26 @@ class _EcfDgiiHabilitationPageState
       // Los controles internos no viajan en el recorrido del cliente: solo se
       // pintan en la interfaz administrativa separada (/ecf/administracion).
       detailsBar: widget.adminView && canManage
-          ? _technicalDetails(view, stage: stage)
+          ? _adminAdvanced(view, stage: stage)
           : null,
     );
   }
 
+  /// Controles administrativos de la vista `/ecf/administracion`.
+  ///
+  /// Se separan DOS cosas que antes vivían juntas bajo «Avanzado»:
+  ///
+  ///  * **Acciones del cliente**: subir la constancia de la DGII y registrarla.
+  ///    Es el único camino para que la aprobación oficial conste, así que se
+  ///    muestra siempre que el usuario tenga el permiso.
+  ///  * **Herramientas de soporte**: diagnóstico del intento, avance, emisión,
+  ///    datos fiscales y estado interno. No son necesarias para facturar y solo
+  ///    se muestran al personal de plataforma.
   Widget _adminAdvanced(
     EcfDgiiHabilitationView view, {
     required _EcfStage stage,
   }) {
     final companyId = ref.read(authStateProvider).user?.companyId ?? '';
-    return EcfSurface(
-      padding: EdgeInsets.zero,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          title: const Text(
-            'Avanzado',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-          ),
-          subtitle: const Text(
-            'Controles internos. Nada de esto es necesario para facturar.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Primero lo que desbloquea el trámite: evidencias, autorización
-            // oficial y requisitos. Antes iba al final, después del diagnóstico
-            // y del checklist heredado, así que la acción quedaba enterrada.
-            _technicalDetails(view, stage: stage),
-            const SizedBox(height: 10),
-            DosaCertificationDiagnosticSection(
-              key: ValueKey('dosa-diagnostic-$companyId'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Registros técnicos: plegados y solo para administradores.
-  Widget _technicalDetails(
-    EcfDgiiHabilitationView view, {
-    required _EcfStage stage,
-  }) {
     final user = ref.watch(authStateProvider).user;
     final canRegisterEvidence =
         hasUserPermission(user, AppPermission.manageEcfOnboarding) ||
@@ -1148,64 +1123,124 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.recordEcfDgiiOfficialVerification,
     );
+    final staff = ref.watch(ecfPlatformStaffProvider).valueOrNull == true;
+    final hasDgiiActions = canRegisterEvidence || canRecordAuthorization;
+
+    // Sin acciones propias ni herramientas de soporte no hay nada que mostrar.
+    if (!hasDgiiActions && !staff) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasDgiiActions)
+          _adminGroup(
+            title: 'Evidencias y autorización de la DGII',
+            subtitle:
+                'Sube la constancia oficial y regístrala: es lo que acredita la '
+                'aprobación ante la DGII.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (view.evidence.isNotEmpty || canRegisterEvidence)
+                  _EvidenceCard(
+                    view: view,
+                    canRegisterEvidence: canRegisterEvidence,
+                    canReviewEvidence: canReviewEvidence,
+                    busy: _busy,
+                    onRegister: () => _registerEvidence(),
+                    onReview: _reviewEvidence,
+                  ),
+                if (canRecordAuthorization && stage == _EcfStage.activation)
+                  _OfficialAuthorizationCard(
+                    view: view,
+                    busy: _busy,
+                    onRecordAuthorization: _recordAuthorization,
+                    onRevoke: _revokeAuthorization,
+                  ),
+              ],
+            ),
+          ),
+        if (staff) ...[
+          if (hasDgiiActions) const SizedBox(height: 10),
+          _adminGroup(
+            title: 'Diagnóstico e-CF',
+            subtitle: 'Información de soporte. No es necesaria para facturar.',
+            child: DosaCertificationDiagnosticSection(
+              key: ValueKey('dosa-diagnostic-$companyId'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _adminGroup(
+            title: 'Información técnica',
+            subtitle: 'Avance, emisión, datos fiscales y estado interno.',
+            child: _technicalDetailsBody(view, stage: stage),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Acordeón de administración con la superficie del sistema.
+  Widget _adminGroup({
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
     return EcfSurface(
       padding: EdgeInsets.zero,
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          title: const Text(
-            'Detalle técnico',
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          title: Text(
+            title,
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
           ),
-          subtitle: const Text(
-            'Evidencias, autorización oficial y estado del expediente.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textMuted,
+            ),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (view.evidence.isNotEmpty || canRegisterEvidence)
-              _EvidenceCard(
-                view: view,
-                canRegisterEvidence: canRegisterEvidence,
-                canReviewEvidence: canReviewEvidence,
-                busy: _busy,
-                onRegister: () => _registerEvidence(),
-                onReview: _reviewEvidence,
-              ),
-            if (canRecordAuthorization && stage == _EcfStage.activation)
-              _OfficialAuthorizationCard(
-                view: view,
-                busy: _busy,
-                onRecordAuthorization: _recordAuthorization,
-                onRevoke: _revokeAuthorization,
-              ),
-            _AdvancedSection(
-              view: view,
-              progress: view.progress,
-              settings: ref.read(companySettingsProvider).valueOrNull,
-              history: ref.watch(ecfDgiiHistoryProvider),
-              canManage: true,
-              busy: _busy,
-              onAdvance: () => _advance(view),
-              onEditObservations: () => _editObservations(view),
-              showPlatform:
-                  ref.watch(ecfPlatformStaffProvider).valueOrNull == true,
-              onOpenPlatform: () => context.go(Routes.ecfPlatformReview),
-              onOpenWizard: () => setState(() => _applicationOpen = true),
-              onOpenActivation: () => setState(() => _activationOpen = true),
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => context.go(Routes.ecfCertificationRecovery),
-                icon: const Icon(Icons.fact_check_outlined, size: 18),
-                label: const Text('Reconciliación de intentos'),
-              ),
-            ),
-          ],
+          children: [child],
         ),
       ),
+    );
+  }
+
+  /// Registros técnicos internos: solo soporte.
+  Widget _technicalDetailsBody(
+    EcfDgiiHabilitationView view, {
+    required _EcfStage stage,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _AdvancedSection(
+          view: view,
+          progress: view.progress,
+          settings: ref.read(companySettingsProvider).valueOrNull,
+          history: ref.watch(ecfDgiiHistoryProvider),
+          canManage: true,
+          busy: _busy,
+          onAdvance: () => _advance(view),
+          onEditObservations: () => _editObservations(view),
+          showPlatform: ref.watch(ecfPlatformStaffProvider).valueOrNull == true,
+          onOpenPlatform: () => context.go(Routes.ecfPlatformReview),
+          onOpenWizard: () => setState(() => _applicationOpen = true),
+          onOpenActivation: () => setState(() => _activationOpen = true),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => context.go(Routes.ecfCertificationRecovery),
+            icon: const Icon(Icons.fact_check_outlined, size: 18),
+            label: const Text('Reconciliación de intentos'),
+          ),
+        ),
+      ],
     );
   }
 }

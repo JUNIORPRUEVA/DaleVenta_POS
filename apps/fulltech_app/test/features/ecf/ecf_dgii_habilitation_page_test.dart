@@ -265,6 +265,7 @@ Widget _harness({
   bool dosaEligible = false,
   bool intentHasSession = false,
   bool intentHistoricalReview = false,
+  bool platformStaff = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -289,8 +290,9 @@ Widget _harness({
       ),
       // La pantalla pregunta al backend si la sesión es personal de plataforma.
       // La prueba fija la respuesta: sin esto quedaría una petición de red real
-      // con su temporizador pendiente al desmontar el árbol.
-      ecfPlatformStaffProvider.overrideWith((ref) async => false),
+      // con su temporizador pendiente al desmontar el árbol. El diagnóstico y la
+      // información técnica solo se muestran a ese personal.
+      ecfPlatformStaffProvider.overrideWith((ref) async => platformStaff),
       dosaPortalEligibilityProvider.overrideWith((ref) async => dosaEligible),
       dosaIntentStateProvider.overrideWith(
         (ref) async => DosaIntentState.fromJson(<String, dynamic>{
@@ -411,21 +413,20 @@ Future<void> _pumpPage(
       await tester.pumpAndSettle();
     }
   }
-  // El detalle técnico (requisitos, emisión, seguimiento interno) no forma
-  // parte de la navegación del cliente: vive en la administración separada.
+  // Los controles de administración no forman parte de la navegación del
+  // cliente. Ahora están separados: el cliente ve sus acciones y el personal de
+  // plataforma ve además diagnóstico e información técnica.
   if (!technical) return;
-  final advanced = find.text('Avanzado');
-  if (advanced.evaluate().isNotEmpty) {
-    await tester.ensureVisible(advanced.first);
+  for (final title in const [
+    'Evidencias y autorización de la DGII',
+    'Diagnóstico e-CF',
+    'Información técnica',
+  ]) {
+    final target = find.text(title);
+    if (target.evaluate().isEmpty) continue;
+    await tester.ensureVisible(target.first);
     await tester.pumpAndSettle();
-    await tester.tap(advanced.first);
-    await tester.pumpAndSettle();
-  }
-  final block = find.text('Detalle técnico');
-  if (block.evaluate().isNotEmpty) {
-    await tester.ensureVisible(block.first);
-    await tester.pumpAndSettle();
-    await tester.tap(block.first);
+    await tester.tap(target.first);
     await tester.pumpAndSettle();
   }
 }
@@ -600,6 +601,7 @@ void main() {
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'TESTS_PENDING',
           progress: _certificateResolvedProgress(),
@@ -659,6 +661,7 @@ void main() {
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'IN_PROGRESS',
           observations: 'Pendiente el set de pruebas',
@@ -956,6 +959,7 @@ void main() {
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'APPLICATION_PENDING',
           blockers: const [
@@ -1051,6 +1055,7 @@ void main() {
         tester,
         _harness(
           user: _adminUser(companyId: 'company-b'),
+          platformStaff: true,
           view: _view(
             companyId: 'company-b',
             observations: 'Solo de la empresa B',
@@ -1107,6 +1112,7 @@ void main() {
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'IN_CERTIFICATION',
           authorizationSource: 'MANUAL_OPERATOR_DECLARATION',
@@ -1143,7 +1149,10 @@ void main() {
   testWidgets('emisión real bloqueada: se declara que no está implementada', (
     tester,
   ) async {
-    await _pumpAdmin(tester, _harness(user: _adminUser()));
+    await _pumpAdmin(
+      tester,
+      _harness(user: _adminUser(), platformStaff: true),
+    );
 
     expect(find.text('Autorización para emitir'), findsOneWidget);
     expect(find.text('Emisión real'), findsOneWidget);
@@ -1151,6 +1160,29 @@ void main() {
     expect(find.text('Emisión real implementada'), findsOneWidget);
     expect(find.textContaining('no está implementada'), findsOneWidget);
   });
+
+  testWidgets(
+    'administración: el cliente ve sus acciones, no la información de soporte',
+    (tester) async {
+      await _pumpAdmin(
+        tester,
+        _harness(user: _adminUser(), view: _view(state: 'IN_CERTIFICATION')),
+      );
+
+      // Subir la constancia y registrarla es el camino para acreditar la
+      // aprobación de la DGII: eso sí debe estar.
+      expect(
+        find.text('Evidencias y autorización de la DGII'),
+        findsOneWidget,
+      );
+      // El diagnóstico y los registros técnicos son herramientas de soporte y
+      // no se muestran a la empresa.
+      expect(find.text('Diagnóstico e-CF'), findsNothing);
+      expect(find.text('Información técnica'), findsNothing);
+      expect(find.text('Detalle técnico'), findsNothing);
+      expect(find.text('Autorización para emitir'), findsNothing);
+    },
+  );
 
   testWidgets('el cliente no ve referencias de constancia DGII', (
     tester,
