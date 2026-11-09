@@ -418,13 +418,23 @@ uat("devolución de venta con comprobante E31 aceptado (E34) on PostgreSQL", () 
     expect(reserved).toBeCloseTo(59 * succeeded, 2);
     expect(succeeded).toBeLessThanOrEqual(2);
 
-    // Un e-NCF por nota: la numeración nunca se repite.
+    // Un e-NCF por nota: la numeración nunca se repite. El número autorizado
+    // vive en el payload preparado (`payloadSummary.emission.encf`) hasta que la
+    // DGII acepta; `externalDocumentNumber` solo se llena después, así que
+    // comparar esa columna aquí mediría nulos, no numeración.
     const notes = await prisma.ecfElectronicDocument.findMany({
       where: { companyId: seeded.companyId, documentType: "E34" },
-      select: { externalDocumentNumber: true },
+      select: { payloadSummary: true },
     });
-    expect(notes).toHaveLength(await e34Count(seeded.companyId));
-    const numbers = notes.map((note) => note.externalDocumentNumber);
+    const numbers = notes
+      .map((note) => {
+        const emission = (note.payloadSummary as { emission?: { encf?: unknown } } | null)
+          ?.emission;
+        return typeof emission?.encf === "string" ? emission.encf : "";
+      })
+      .filter((encf) => encf.length > 0);
+    expect(numbers).toHaveLength(notes.length);
+    expect(numbers.every((encf) => /^E34\d{10}$/.test(encf))).toBe(true);
     expect(new Set(numbers).size).toBe(numbers.length);
   });
 });
