@@ -5,6 +5,11 @@ on:
   push:
     branches:
       - main
+      # `production-main` es la rama que se DESPLIEGA. Sin este trigger, un
+      # merge a producción no ejecutaba ningún gate: el cambio entraba sin
+      # validación automática y el hueco se descubría al desplegar. Los mismos
+      # jobs que protegen `main` protegen ahora lo que se publica.
+      - production-main
 
 jobs:
   api-security:
