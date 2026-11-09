@@ -21,7 +21,13 @@ import '../ecf_models.dart';
 ///  * Solo aparece cuando la empresa tiene la facturación electrónica activada y
 ///    el usuario puede ver la configuración e-CF.
 class EcfOnboardingSection extends ConsumerStatefulWidget {
-  const EcfOnboardingSection({super.key});
+  const EcfOnboardingSection({super.key, this.embedded = false});
+
+  /// Cuando el widget va dentro de un acordeón propio, el contenedor YA es la
+  /// superficie y el encabezado YA dice el nombre. En ese caso se omite la
+  /// tarjeta (el sistema de diseño prohíbe anidar superficies) y el título
+  /// duplicado; el contenido y sus advertencias se conservan íntegros.
+  final bool embedded;
 
   @override
   ConsumerState<EcfOnboardingSection> createState() =>
@@ -78,11 +84,7 @@ class _EcfOnboardingSectionState extends ConsumerState<EcfOnboardingSection> {
     );
     final onboarding = ref.watch(ecfOnboardingProvider);
 
-    return Card(
-      margin: const EdgeInsets.only(top: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: onboarding.when(
+    final content = onboarding.when(
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Center(child: CircularProgressIndicator()),
@@ -101,7 +103,8 @@ class _EcfOnboardingSectionState extends ConsumerState<EcfOnboardingSection> {
           data: (view) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Habilitación e-CF', style: theme.textTheme.titleMedium),
+              if (!widget.embedded)
+                Text('Habilitación e-CF', style: theme.textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(
                 'Proceso INTERNO de preparación. Completar estos pasos no '
@@ -137,7 +140,14 @@ class _EcfOnboardingSectionState extends ConsumerState<EcfOnboardingSection> {
                   'El backend todavía no ha creado los pasos de esta empresa.',
                   style: theme.textTheme.bodySmall,
                 ),
-              for (final step in view.steps) _StepRow(step: step),
+              for (final step in view.steps)
+                _StepRow(
+                  step: step,
+                  busy: _busy,
+                  onComplete: canManage && step.canComplete
+                      ? () => _markStep(step, 'COMPLETED')
+                      : null,
+                ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -151,27 +161,14 @@ class _EcfOnboardingSectionState extends ConsumerState<EcfOnboardingSection> {
                 const SizedBox(height: 8),
                 const LinearProgressIndicator(minHeight: 3),
               ],
-              if (canManage && view.steps.any((s) => s.canComplete)) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final step in view.steps)
-                      if (step.canComplete)
-                        OutlinedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _markStep(step, 'COMPLETED'),
-                          child: Text('Marcar ${step.label}'),
-                        ),
-                  ],
-                ),
-              ],
             ],
           ),
-        ),
-      ),
+        );
+
+    if (widget.embedded) return content;
+    return Card(
+      margin: const EdgeInsets.only(top: 16),
+      child: Padding(padding: const EdgeInsets.all(14), child: content),
     );
   }
 }
@@ -190,9 +187,15 @@ Color _stepColor(EcfOnboardingStepView step, ColorScheme scheme) =>
     : scheme.outline;
 
 class _StepRow extends StatelessWidget {
-  const _StepRow({required this.step});
+  const _StepRow({required this.step, this.onComplete, this.busy = false});
 
   final EcfOnboardingStepView step;
+
+  /// Acción del paso, si el usuario puede marcarlo. Vive en SU fila: antes
+  /// había un bloque de hasta 15 botones «Marcar …» al final de la lista, con
+  /// el mismo peso visual que las acciones reales de la pantalla.
+  final VoidCallback? onComplete;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +233,15 @@ class _StepRow extends StatelessWidget {
               ],
             ),
           ),
+          if (onComplete != null)
+            IconButton(
+              onPressed: busy ? null : onComplete,
+              icon: const Icon(Icons.check_circle_outline, size: 18),
+              tooltip: 'Marcar «${step.label}» como completado',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            ),
         ],
       ),
     );

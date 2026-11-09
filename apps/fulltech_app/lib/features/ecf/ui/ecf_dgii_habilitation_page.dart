@@ -1177,7 +1177,7 @@ class _EcfDgiiHabilitationPageState
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: const [EcfOnboardingSection()],
+          children: const [EcfOnboardingSection(embedded: true)],
         ),
       ),
     );
