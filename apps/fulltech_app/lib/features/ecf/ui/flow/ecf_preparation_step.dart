@@ -139,7 +139,12 @@ class EcfPreparationStep extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-              ] else if (rnc.isNotEmpty || email.isNotEmpty)
+              ] else if (!dosaOwnsCertificate &&
+                  (rnc.isNotEmpty || email.isNotEmpty))
+                // Solo antes de postularse: el asistente oficial vuelve a pedir
+                // el RNC y el correo y no admite prellenado, así que se copian
+                // en un solo toque. Una empresa que ya se postuló no necesita
+                // volver a verlos.
                 Padding(
                   padding: const EdgeInsets.only(left: 2, right: 2),
                   child: Row(

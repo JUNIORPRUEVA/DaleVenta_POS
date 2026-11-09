@@ -427,10 +427,12 @@ void main() {
       await _pump(tester, _harness());
       await _tapText(tester, 'Comenzar');
 
-      // Los datos completos NO se repiten: quedan en una sola línea con la
-      // opción de copiarlos, y el detalle vive en Configuración de empresa.
-      expect(find.textContaining('133020232'), findsOneWidget);
-      expect(find.textContaining('ECF Visual UAT Demo'), findsOneWidget);
+      // Empresa ya postulada: ni el RNC ni el nombre se repiten. Sus datos
+      // viven en Configuración de empresa y no se copian aquí, porque el
+      // asistente oficial ya los tiene.
+      expect(find.textContaining('133020232'), findsNothing);
+      expect(find.textContaining('ECF Visual UAT Demo'), findsNothing);
+      expect(find.text('Copiar'), findsNothing);
       expect(find.text('Completa lo que falta'), findsNothing);
       expect(find.text('Correo fiscal'), findsNothing);
       // El certificado pertenece al asistente de DOSA: no se muestra como
@@ -509,7 +511,15 @@ void main() {
   testWidgets(
     'preparación DOSA: RNC y correo se pueden copiar sin duplicarlos',
     (tester) async {
-      await _pump(tester, _harness(dosaEligible: true));
+      // Empresa que todavía NO se ha postulado: es el único momento en el que
+      // el copiado aporta algo, porque el asistente oficial los vuelve a pedir.
+      await _pump(
+        tester,
+        _harness(
+          view: _habilitation(provider: null),
+          dosaEligible: true,
+        ),
+      );
       await _tapText(tester, 'Comenzar');
 
       // El asistente oficial los vuelve a pedir; se copian en un solo toque.
