@@ -694,8 +694,10 @@ void main() {
     expect(find.text('36%'), findsOneWidget);
     expect(find.textContaining('5 de 14 requisitos'), findsOneWidget);
     expect(find.textContaining('obligatorios 5/13'), findsOneWidget);
-    expect(find.text('Datos fiscales de la empresa'), findsOneWidget);
-    expect(find.text('Pruebas del SET'), findsOneWidget);
+    // Los pasos del trámite NO se listan: se recorren en el asistente y en la
+    // Oficina Virtual de la DGII. Aquí solo queda el resumen del avance.
+    expect(find.text('Pruebas del SET'), findsNothing);
+    expect(find.textContaining('Paso '), findsNothing);
     expect(find.text('Pendiente el set de pruebas'), findsWidgets);
   });
 
@@ -945,38 +947,6 @@ void main() {
 
     expect(find.text('Iniciar postulación'), findsOneWidget);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('los pasos de presentación DGII no se completan por proveedor', (
-    tester,
-  ) async {
-    // El motor no es dueño de estas presentaciones: sin integración autorizada,
-    // el paso queda esperando al cliente y nunca como completado.
-    await _pumpAdmin(
-      tester,
-      _harness(
-        user: _adminUser(),
-        view: _view(
-          state: 'IN_PROGRESS',
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'DGII_POSTULATION',
-                label: 'Postulación DGII',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    // Se declara como acción del cliente, no como algo automático.
-    expect(find.text('Postulación DGII'), findsOneWidget);
-    expect(find.text('Pendiente'), findsWidgets);
-    expect(find.text('Automático'), findsNothing);
   });
 
   testWidgets('requisitos pendientes: aparecen como bloqueo explícito', (
@@ -1356,151 +1326,17 @@ void main() {
     );
   });
 
-  testWidgets('el seguimiento interno se muestra pero no finge progreso', (
-    tester,
-  ) async {
-    await _pumpAdmin(
-      tester,
-      _harness(
-        user: _adminUser(),
-        view: _view(
-          state: 'TESTS_PENDING',
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'SET_TESTS',
-                label: 'Pruebas del SET',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-                tracking: EcfDgiiRequirementTracking(
-                  status: 'COMPLETED',
-                  note: 'Enviadas el 15',
-                  dueDate: '2026-11-30',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.text('Seguimiento interno: Completado · vence 2026-11-30'),
-      findsOneWidget,
-    );
-    expect(find.text('Enviadas el 15'), findsOneWidget);
-    // El requisito sigue SIN resolver: la libreta no es el progreso.
-    expect(find.byIcon(Icons.check_circle), findsNothing);
-  });
-
-  testWidgets('el botón de seguimiento requiere permiso de gestión', (
-    tester,
-  ) async {
-    final progress = _progress(
-      requirements: const [
-        EcfDgiiRequirementProgress(
-          key: 'SET_TESTS',
-          label: 'Pruebas del SET',
-          mandatory: true,
-          automatable: false,
-          status: 'PENDING',
-          resolved: false,
-        ),
-      ],
-    );
-
-    await _pumpAdmin(
-      tester,
-      _harness(
-        user: _userWith(const {'viewEcfDgiiHabilitation': true}),
-        view: _view(state: 'TESTS_PENDING', progress: progress),
-      ),
-    );
-    expect(find.text('Avanzado'), findsNothing);
-    expect(find.byTooltip('Registrar seguimiento interno'), findsNothing);
-    // Sin permiso de gestión no hay bloque técnico: no se ofrece una interfaz
-    // que el servidor rechazaría.
-    expect(find.text('Detalle técnico'), findsNothing);
-
-    await _pumpPage(
-      tester,
-      _harness(
-        user: _userWith(const {'manageEcfOnboarding': true}),
-        view: _view(state: 'TESTS_PENDING', progress: progress),
-      ),
-    );
-    expect(find.text('Pruebas del SET'), findsOneWidget);
-    expect(find.byTooltip('Registrar seguimiento interno'), findsOneWidget);
-  });
-
-  testWidgets('el diálogo de seguimiento valida el formato de la fecha', (
-    tester,
-  ) async {
-    await _pumpAdmin(
-      tester,
-      _harness(
-        user: _adminUser(),
-        view: _view(
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'SET_TESTS',
-                label: 'Pruebas del SET',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byTooltip('Registrar seguimiento interno'));
-    await tester.pumpAndSettle();
-    expect(find.text('Seguimiento del requisito'), findsOneWidget);
-    expect(
-      find.textContaining('ni acredita nada ante la DGII'),
-      findsOneWidget,
-    );
-
-    await tester.enterText(find.byType(TextFormField).first, '30/11/2026');
-    await tester.tap(find.text('Guardar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Usa el formato AAAA-MM-DD'), findsOneWidget);
-  });
-
   testWidgets('disposición estrecha: los elementos nuevos no desbordan', (
     tester,
   ) async {
-    // Se recorren de verdad las tarjetas con botón de revisión, con seguimiento
-    // interno y con las tres acciones de evidencia, en el ancho de un móvil.
+    // Se recorren de verdad las tarjetas con botón de revisión y con las tres
+    // acciones de evidencia, en el ancho de un móvil.
     await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
         view: _view(
           state: 'IN_CERTIFICATION',
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'SET_TESTS',
-                label: 'Pruebas del SET',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-                tracking: EcfDgiiRequirementTracking(
-                  status: 'BLOCKED',
-                  note: 'Esperando respuesta del proveedor',
-                  dueDate: '2026-11-30',
-                ),
-              ),
-            ],
-          ),
           evidence: const [
             EcfDgiiEvidenceView(
               id: 'e1',
@@ -1516,9 +1352,6 @@ void main() {
       size: const Size(360, 3200),
     );
 
-    expect(find.text('Pruebas del SET'), findsOneWidget);
-    expect(find.text('Esperando respuesta del proveedor'), findsOneWidget);
-    expect(find.byTooltip('Registrar seguimiento interno'), findsOneWidget);
     expect(find.byTooltip('Revisar evidencia'), findsOneWidget);
     // Un desbordamiento de layout se reporta como excepción en las pruebas.
     expect(tester.takeException(), isNull);
