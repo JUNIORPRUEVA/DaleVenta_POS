@@ -215,6 +215,7 @@ EcfDgiiHabilitationView _view({
   EcfDgiiEmissionState emission = _noAuthorization,
   List<EcfDgiiBlocker> blockers = const [],
   String? provider = 'DOSA',
+  String certificationStatus = 'NOT_STARTED',
 }) {
   return EcfDgiiHabilitationView(
     companyId: companyId,
@@ -226,7 +227,7 @@ EcfDgiiHabilitationView _view({
     authorizationSource: authorizationSource,
     authorizedAt: authorizedAt,
     moduleEnabled: true,
-    certificationStatus: 'NOT_STARTED',
+    certificationStatus: certificationStatus,
     providerIntegrationConfigured: false,
     certificateValidation: certificateValidation,
     progress: progress ?? EcfDgiiProgress.empty,
@@ -808,6 +809,41 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('trámite terminado: felicitaciones y salto a ventas', (
+    tester,
+  ) async {
+    // La empresa ya emite: el módulo no vuelve a mostrar el recorrido, porque
+    // repetir los pasos haría creer que todavía falta algo.
+    await _pumpPage(
+      tester,
+      _harness(
+        user: _adminUser(),
+        view: _view(
+          state: 'APPROVED',
+          certificationStatus: 'AUTHORIZED_SANDBOX',
+          authorizationSource: 'MANUAL_OPERATOR_DECLARATION',
+          progress: _certificateResolvedProgress(),
+        ),
+      ),
+      step: null,
+      technical: false,
+    );
+
+    expect(find.text('¡Felicidades!'), findsOneWidget);
+    expect(
+      find.textContaining('ya puede facturar electrónicamente'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('ecf_completed_go_sales')),
+      findsOneWidget,
+    );
+    // Ni rail ni pasos del proceso.
+    expect(find.text('Bienvenida'), findsNothing);
+    expect(find.byType(EcfPreparationStep), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('empresa Alanube conserva la carga local del certificado', (
     tester,

@@ -31,6 +31,7 @@ import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
 import 'debug/ecf_debug_screen_selector.dart';
 import 'flow/ecf_authorization_step.dart';
+import 'flow/ecf_completed_view.dart';
 import 'flow/ecf_dosa_activation_status.dart';
 import 'flow/ecf_sequence_range_section.dart';
 import 'flow/ecf_dosa_tracking_step.dart';
@@ -97,6 +98,16 @@ class _EcfDgiiHabilitationPageState
 
   void _goToStep(EcfFlowStep step) {
     setState(() => _step = step);
+  }
+
+  /// El cierre del trámite desemboca en el punto de venta.
+  ///
+  /// Las capacidades se releen al entrar: acaban de cambiar —la empresa pasó a
+  /// estar autorizada— y el vendedor necesita los comprobantes disponibles al
+  /// cobrar, no la foto anterior.
+  void _goToSales() {
+    ref.invalidate(ecfCapabilitiesProvider);
+    context.go(Routes.registrarVenta);
   }
 
   void _navigateBack() {
@@ -615,6 +626,16 @@ class _EcfDgiiHabilitationPageState
                               isPlatformStaff,
                         );
                       }
+                      // Proceso terminado: la empresa ya está autorizada a emitir.
+                      // Volver a los pasos haría creer que falta algo, así que el
+                      // módulo abre en el cierre y desde ahí se va a facturar.
+                      if (_invoicingReady(view)) {
+                        return EcfCompletedView(
+                          onGoToSales: _goToSales,
+                          onViewDocuments: () =>
+                              context.go(Routes.ecfDocuments),
+                        );
+                      }
                       // El paso se deduce del expediente real mientras la persona no
                       // navegue: al volver a la pantalla se entra en la etapa actual
                       // y nunca se reinicia la postulación.
@@ -997,6 +1018,19 @@ class _EcfDgiiHabilitationPageState
   /// Solo el estado persistido y vigente que devuelve el servidor permite avanzar.
   bool _certificateReady(EcfDgiiHabilitationView view) =>
       !_certificateRestarted && view.certificateValidation?.ready == true;
+
+  /// Estados de certificación con los que la empresa ya puede emitir.
+  ///
+  /// Es la misma lista que aplica el backend antes de autorizar un despacho:
+  /// si aquí se dijera «terminado» con otro estado, la pantalla prometería algo
+  /// que la compuerta fiscal rechaza.
+  static const _invoicingStatuses = {
+    'AUTHORIZED_SANDBOX',
+    'PRODUCTION_READY',
+  };
+
+  bool _invoicingReady(EcfDgiiHabilitationView view) =>
+      _invoicingStatuses.contains(view.certificationStatus);
 
   /// Arranca el motor de postulación con las condiciones del servidor.
   Future<void> _startIntelligentCertification() async {

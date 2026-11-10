@@ -287,6 +287,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               label: 'Comprobantes',
               onPressed: () => context.go(Routes.ecfDocuments),
             ),
+            // Cuando la postulación termina, el módulo deja de mostrar el
+            // recorrido. Lo que queda —facturar, revisar comprobantes, ajustar
+            // la configuración— vive aquí, en la barra, en un solo sitio.
+            DesktopShellActionItem(
+              icon: Icons.verified_outlined,
+              tooltip: 'Postulación',
+              label: 'Postulación',
+              onPressed: () => _openEcfPostulationMenu(context),
+            ),
           ]
         : const <DesktopShellActionItem>[];
     final customFooter = _footerContent;
@@ -358,6 +367,64 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     _routeActionsSubscription?.close();
     _footerContentSubscription?.close();
     super.dispose();
+  }
+
+  /// Opciones de la postulación electrónica ya cerrada.
+  ///
+  /// El módulo deja de mostrar los pasos cuando la empresa queda autorizada:
+  /// repetirlos haría creer que falta algo. Lo que sí se sigue necesitando
+  /// —facturar, revisar lo emitido y ajustar la configuración— se agrupa aquí,
+  /// en un solo sitio de la barra.
+  ///
+  /// No incluye «eliminar postulación»: el backend no expone esa operación. Lo
+  /// que sí existe es revocar la autorización de emisión, que es una decisión
+  /// aparte y no se ofrece desde un menú de navegación.
+  void _openEcfPostulationMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        void go(String route) {
+          Navigator.of(sheetContext).pop();
+          context.go(route);
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Postulación electrónica',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.point_of_sale_outlined),
+                title: const Text('Ir a ventas'),
+                subtitle: const Text('Emitir con la numeración autorizada'),
+                onTap: () => go(Routes.registrarVenta),
+              ),
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('Comprobantes electrónicos'),
+                subtitle: const Text('Ver lo emitido y lo pendiente de envío'),
+                onTap: () => go(Routes.ecfDocuments),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_outlined),
+                title: const Text('Configuración de facturación'),
+                onTap: () => go(Routes.ecfConfig),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
