@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/routing/routes.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import '../ecf_status_presentation.dart';
@@ -120,6 +122,15 @@ class _EcfDocumentsPageState extends ConsumerState<EcfDocumentsPage> {
     }
   }
 
+  /// Sin comprobantes, la única acción que produce el primero es cobrar una
+  /// venta. El estado vacío la ofrece en vez de dejar al usuario sin salida:
+  /// antes la pantalla solo informaba de que no había nada y parecía que la
+  /// navegación había fallado.
+  void _goToSales() {
+    ref.invalidate(ecfCapabilitiesProvider);
+    context.go(Routes.registrarVenta);
+  }
+
   @override
   Widget build(BuildContext context) {
     final capabilities = ref.watch(ecfCapabilitiesProvider);
@@ -202,6 +213,7 @@ class _EcfDocumentsPageState extends ConsumerState<EcfDocumentsPage> {
                       loadingMore: _loadingMore,
                       moreError: _moreError,
                       onLoadMore: () => _loadMore(items.length),
+                      onGoToSales: _goToSales,
                       filtered: _filter != EcfDocumentFilter.all,
                       onClearFilters: () {
                         _searchController.clear();
@@ -466,6 +478,7 @@ class _DocumentList extends StatelessWidget {
     required this.loadingMore,
     required this.moreError,
     required this.onLoadMore,
+    required this.onGoToSales,
     required this.filtered,
     required this.onClearFilters,
   });
@@ -476,6 +489,9 @@ class _DocumentList extends StatelessWidget {
   final bool loadingMore;
   final String? moreError;
   final VoidCallback onLoadMore;
+
+  /// Salida cuando todavía no existe ningún comprobante.
+  final VoidCallback onGoToSales;
   final bool filtered;
   final VoidCallback onClearFilters;
 
@@ -500,6 +516,28 @@ class _DocumentList extends StatelessWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium,
             ),
+            if (!filtered) ...[
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Text(
+                  'Al cobrar una venta eliges el comprobante (E31 o E32). El '
+                  'sistema toma el siguiente número de tu secuencia y lo envía '
+                  'al proveedor; aquí verás el estado de cada uno.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                key: const ValueKey('ecf_documents_empty_go_sales'),
+                onPressed: onGoToSales,
+                icon: const Icon(Icons.point_of_sale_outlined, size: 18),
+                label: const Text('Ir a ventas'),
+              ),
+            ],
             if (filtered) ...[
               const SizedBox(height: 8),
               TextButton(
