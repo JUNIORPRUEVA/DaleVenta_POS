@@ -401,10 +401,14 @@ void main() {
 
       expect(find.text('Autorización administrativa requerida'), findsNothing);
       expect(find.text('Continuar certificación'), findsNothing);
+      // El aviso hablaba de un interruptor del servidor y contradecía el
+      // bloqueo real de la empresa, así que ya no se pinta: la sección no
+      // anuncia una gestión interna que el cliente no puede resolver aquí.
       expect(
         find.textContaining('no hay ninguna acción pendiente'),
-        findsOneWidget,
+        findsNothing,
       );
+      expect(find.textContaining('revisión histórica'), findsNothing);
       expect(api.authorizeCalls, isEmpty);
     },
   );

@@ -149,6 +149,16 @@ class _EcfDgiiHabilitationPageState
       )),
       (previous, next) {
         if (previous == next || !mounted) return;
+        // Todo lo que muestra esta pantalla pertenece a la empresa y a la
+        // sesión: al cambiar de empresa se descarta para no enseñar el
+        // expediente, la preparación ni el intento de la empresa anterior.
+        ref.invalidate(ecfDgiiHabilitationProvider);
+        ref.invalidate(ecfDgiiHistoryProvider);
+        ref.invalidate(ecfPreparationProvider);
+        ref.invalidate(ecfActivationProgressProvider);
+        ref.invalidate(ecfSupportGrantsProvider);
+        ref.invalidate(companySettingsProvider);
+        ref.invalidate(dosaIntentStateProvider);
         setState(() {
           _step = null;
           _debugScreen = null;
