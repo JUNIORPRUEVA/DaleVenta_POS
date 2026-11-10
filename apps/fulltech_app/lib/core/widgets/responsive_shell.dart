@@ -407,7 +407,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 leading: const Icon(Icons.point_of_sale_outlined),
                 title: const Text('Ir a ventas'),
                 subtitle: const Text('Emitir con la numeración autorizada'),
-                onTap: () => go(Routes.registrarVenta),
+                onTap: () => go(Routes.cotizaciones),
               ),
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),

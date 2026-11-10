@@ -62,6 +62,8 @@ import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/catalogo/data/product_pages_loader.dart';
+import '../../features/ecf/data/ecf_repository.dart';
+import '../../features/ecf/ecf_models.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/price_lists/data/price_lists_repository.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
@@ -71,6 +73,8 @@ import '../cash/cash_turn_menu_button.dart';
 import '../clientes/data/clientes_repository.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/cliente_form_screen.dart';
+import '../ventas/ecf_pos_fiscal.dart';
+import '../ventas/ecf_pos_fiscal_selector.dart';
 import '../ventas/data/ventas_repository.dart';
 import '../ventas/application/ventas_controller.dart';
 import '../ventas/sales_credit_screen.dart';
@@ -199,6 +203,7 @@ class _CheckoutResult {
     required this.creditAmount,
     this.cashReceived = 0,
     this.changeAmount = 0,
+    this.ecfMode,
   });
 
   final _CheckoutPaymentMethod method;
@@ -213,6 +218,10 @@ class _CheckoutResult {
 
   /// Devuelta entregada al cliente, p.ej. 150 en un total de 850 con 1000 recibidos.
   final double changeAmount;
+
+  /// Comprobante electrónico elegido en el cobro. `null` cuando la empresa no
+  /// factura electrónicamente.
+  final EcfPosFiscalMode? ecfMode;
 }
 
 class _ManualItemMetric extends StatelessWidget {
@@ -540,6 +549,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   String _fiscalCustomerName = '';
   String _fiscalVoucherType = '';
   double _generalDiscountAmount = 0;
+
+  // ── Comprobante electrónico (e-CF) elegido al cobrar ──────────────────────
+  // El e-NCF no se elige al cotizar: se decide en el momento del cobro, que es
+  // cuando existe la venta. `_ecfModeChosenByUser` protege la decisión manual
+  // del vendedor frente a la preselección automática por cliente.
+  EcfPosFiscalMode? _selectedEcfMode;
+  bool _ecfModeChosenByUser = false;
+  String? _ecfSequenceDueDate;
+  String? _ecfWithoutDocumentReason;
 
   String? _editingId;
   DateTime? _editingCreatedAt;
@@ -2209,6 +2227,49 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   bool get _quoteTaxEnabled => _quoteTaxSummary.taxEnabled;
 
+  // ── Comprobante electrónico en el cobro ───────────────────────────────────
+
+  /// La empresa factura electrónicamente. Se lee de la configuración de
+  /// empresa que esta pantalla ya carga, no de las capacidades: así un cajero
+  /// sin permiso de administración no cae en un cobro sin comprobante.
+  bool get _ecfActive =>
+      ref.read(companySettingsProvider).valueOrNull?.ecfEnabled == true;
+
+  EcfCapabilities? get _ecfCaps =>
+      ref.read(ecfCapabilitiesProvider).valueOrNull;
+
+  /// Tipos que se pueden ofrecer con la numeración autorizada de hoy.
+  List<EcfPosFiscalMode> get _ecfModes =>
+      ecfPosFiscalModesFromCapabilities(_ecfCaps);
+
+  /// El receptor solo cuenta si hay un cliente seleccionado: el nombre fiscal
+  /// puede haber quedado de un cliente anterior.
+  String? get _ecfBuyerTaxId => (_selectedClientId ?? '').trim().isEmpty
+      ? null
+      : _fiscalCustomerTaxId;
+
+  String? get _ecfBuyerName => (_selectedClientId ?? '').trim().isEmpty
+      ? null
+      : _fiscalCustomerName;
+
+  /// Comprobante propuesto para este cobro.
+  ///
+  /// Respeta lo que el vendedor ya eligió y, si no eligió nada, deduce E31
+  /// cuando el cliente tiene RNC/Cédula y nombre, o E32 en su defecto. Si no
+  /// hay ninguno disponible devuelve `null` y el cobro se detiene: antes que
+  /// inventar un comprobante, no se cobra.
+  EcfPosFiscalMode? _ecfModeForCheckout() {
+    final modes = _ecfModes;
+    if (modes.isEmpty) return null;
+    return ecfResolvePreselection(
+      current: _selectedEcfMode,
+      chosenByUser: _ecfModeChosenByUser,
+      available: modes,
+      clientTaxId: _ecfBuyerTaxId,
+      clientLegalName: _ecfBuyerName,
+    );
+  }
+
   /// El comprobante fiscal electrónico (E31/E32) se decide al FACTURAR la
   /// venta, no al cotizar. El motor NCF tradicional se retiró, así que una
   /// cotización ya no selecciona talonario y este flujo queda apagado.
@@ -2458,6 +2519,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _fiscalCustomerName = '';
     _fiscalVoucherType = '';
     _generalDiscountAmount = 0;
+    // El comprobante electrónico pertenece al ticket, no a la sesión: al cerrar
+    // o cancelar la venta se vuelve a proponer según el cliente del próximo.
+    _selectedEcfMode = null;
+    _ecfModeChosenByUser = false;
+    _ecfSequenceDueDate = null;
+    _ecfWithoutDocumentReason = null;
     _editingId = null;
     _editingCreatedAt = null;
     _rememberWholesalePricingContext();
@@ -6989,9 +7056,225 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ? 'Guardada en este equipo. Pendiente de sincronizar.'
       : 'La venta fue guardada y el stock quedó actualizado.';
 
+  // ── Cobro con comprobante electrónico ─────────────────────────────────────
+
+  /// ¿Se puede cobrar con e-CF? Se comprueba ANTES de abrir el cobro.
+  ///
+  /// Sin tipos disponibles no tiene sentido abrir el diálogo: el cobro
+  /// terminaría en un error del backend. Antes que inventar un comprobante, se
+  /// avisa y no se cobra.
+  Future<bool> _ensureEcfReadyBeforeCheckout() async {
+    if (!_ecfActive) return true;
+    if (_ecfModes.isNotEmpty) return true;
+    _showSalesNotice(
+      title: 'Comprobante no disponible',
+      message:
+          'Esta empresa factura electrónicamente y el punto de venta no pudo '
+          'determinar qué comprobante corresponde. Revisa la configuración '
+          'e-CF y la numeración autorizada por la DGII antes de cobrar.',
+      icon: Icons.receipt_long_outlined,
+      accent: const Color(0xFFF59E0B),
+    );
+    return false;
+  }
+
+  /// Confirma el comprobante elegido en el cobro, ya con la venta por cerrar.
+  ///
+  /// El vencimiento de la secuencia (E31) y el motivo de la excepción (Normal)
+  /// se piden aquí, antes de crear la venta: si se cancelan, no se cobra.
+  Future<bool> _confirmEcfModeForSale(EcfPosFiscalMode mode) async {
+    if (mode.requiresBuyer &&
+        !ecfBuyerIdentityComplete(_ecfBuyerTaxId, _ecfBuyerName)) {
+      _showSalesNotice(
+        title: 'E31 exige cliente identificado',
+        message:
+            'La factura de crédito fiscal exige un cliente con RNC/Cédula y '
+            'nombre. Selecciona el cliente o cobra como E32 de consumo.',
+        icon: Icons.person_off_outlined,
+        accent: const Color(0xFFF59E0B),
+      );
+      return false;
+    }
+    if (mode == EcfPosFiscalMode.e31 &&
+        (_ecfSequenceDueDate ?? '').trim().isEmpty) {
+      final dueDate = await _askEcfSequenceDueDate();
+      if (dueDate == null || !mounted) return false;
+      setState(() => _ecfSequenceDueDate = dueDate);
+    }
+    if (mode == EcfPosFiscalMode.normal) {
+      final reason = await _askEcfWithoutDocumentReason();
+      if (reason == null || !mounted) return false;
+      setState(() => _ecfWithoutDocumentReason = reason);
+    }
+    return true;
+  }
+
+  /// Pide el vencimiento de la secuencia del E31 (exigido por el contrato).
+  Future<String?> _askEcfSequenceDueDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: DateTime(now.year + 2, 12, 31),
+      helpText: 'Vencimiento de la secuencia (E31)',
+    );
+    if (picked == null) return null;
+    final month = picked.month.toString().padLeft(2, '0');
+    final day = picked.day.toString().padLeft(2, '0');
+    return '${picked.year}-$month-$day';
+  }
+
+  /// Motivo obligatorio cuando la venta se registra sin comprobante.
+  Future<String?> _askEcfWithoutDocumentReason() async {
+    final warning =
+        ref.read(ecfCapabilitiesProvider).valueOrNull?.salesWithoutEcfWarning ??
+        '';
+    final controller = TextEditingController(
+      text: _ecfWithoutDocumentReason ?? '',
+    );
+    String? errorText;
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Venta sin comprobante electrónico'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (warning.isNotEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.errorBorder),
+                    ),
+                    child: Text(
+                      warning,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.4,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 3,
+                  maxLength: 500,
+                  decoration: InputDecoration(
+                    labelText: 'Motivo (obligatorio)',
+                    hintText: 'Por qué esta venta no lleva comprobante',
+                    errorText: errorText,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (!isEcfWithoutDocumentReasonValid(value)) {
+                  setDialogState(() {
+                    errorText =
+                        'Escribe el motivo (al menos '
+                        '$ecfWithoutDocumentReasonMinLength caracteres).';
+                  });
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result;
+  }
+
+  /// Asigna el comprobante electrónico DESPUÉS de guardar la venta.
+  ///
+  /// La venta ya existe y no se deshace: si la preparación falla se informa con
+  /// claridad y el comprobante se puede preparar desde Mis Ventas. Nunca se
+  /// degrada la venta a «sin comprobante» por un error.
+  Future<String?> _applyEcfFiscalMode(
+    SaleModel sale,
+    EcfPosFiscalMode? mode,
+  ) async {
+    if (mode == null) return null;
+    // Una venta local (sin conexión) todavía no tiene identidad en el servidor:
+    // su comprobante se prepara al sincronizar.
+    if (_isLocalSale(sale)) return null;
+    final repository = ref.read(ecfRepositoryProvider);
+    try {
+      if (mode == EcfPosFiscalMode.normal) {
+        final reason = (_ecfWithoutDocumentReason ?? '').trim();
+        if (!isEcfWithoutDocumentReasonValid(reason)) {
+          return 'La venta se guardó, pero no se registró el motivo de la '
+              'excepción.';
+        }
+        await repository.registerSaleWithoutDocument(
+          saleId: sale.id,
+          reason: reason,
+          expectedDocumentType: 'E32',
+        );
+        return null;
+      }
+      // El POS cobra el total: no hay crédito, así que la forma de pago del
+      // contrato es 1 (contado) y el ingreso 1 (operaciones de venta).
+      final outcome = mode == EcfPosFiscalMode.e31
+          ? await repository.prepareFromSale(
+              saleId: sale.id,
+              paymentType: 1,
+              incomeType: 1,
+              sequenceDueDate: _ecfSequenceDueDate ?? '',
+            )
+          : await repository.prepareConsumoFromSale(
+              saleId: sale.id,
+              paymentType: 1,
+              incomeType: 1,
+            );
+      if (!outcome.ok) {
+        return 'La venta se guardó, pero el comprobante ${mode.code} no se '
+            'pudo preparar: ${outcome.message}';
+      }
+      // Emisión automática: si la empresa está autorizada a emitir, el
+      // comprobante no se queda preparado. La compuerta fiscal la decide el
+      // backend; si bloquea, el documento queda pendiente y recuperable sin
+      // duplicados.
+      if (_ecfCaps?.emissionPathAvailable == true) {
+        final dispatch = await repository.dispatchDosa(outcome.documentId);
+        if (!dispatch.ok) {
+          return 'El comprobante ${mode.code} quedó preparado pero no se pudo '
+              'enviar al proveedor: ${dispatch.message}';
+        }
+      }
+      return null;
+    } catch (error) {
+      return 'La venta se guardó, pero el comprobante ${mode.code} no se pudo '
+          'preparar. Prepáralo desde Mis Ventas.';
+    }
+  }
+
   Future<void> _openCheckoutDialog() async {
     if (_finalizingCheckout) return;
     if (!_validateCheckoutReady()) return;
+    if (!await _ensureEcfReadyBeforeCheckout()) return;
 
     final cashState = await _cashStateWithAuthorizationFallback();
     if (cashState == null) return;
@@ -7018,10 +7301,44 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         hasCreditCustomer:
             (_selectedClientId ?? '').trim().isNotEmpty &&
             _selectedClientName.trim() != 'Sin cliente',
+        ecfModes: _ecfActive ? _ecfModes : const [],
+        initialEcfMode: _ecfActive ? _ecfModeForCheckout() : null,
+        ecfBuyerComplete: ecfBuyerIdentityComplete(
+          _ecfBuyerTaxId,
+          _ecfBuyerName,
+        ),
+        ecfWarning: _ecfCaps?.salesWithoutEcfWarning ?? '',
         onConfirm: (method) => Navigator.of(context).pop(method),
       ),
     );
     if (result == null) return;
+    if (!mounted) return;
+
+    // El comprobante se confirma aquí, con la venta todavía sin crear: el
+    // vencimiento de la secuencia y el motivo de la excepción se piden antes y,
+    // si se cancelan, no se cobra.
+    if (_ecfActive) {
+      final chosen = result.ecfMode ?? _ecfModeForCheckout();
+      if (chosen == null) {
+        _showSalesNotice(
+          title: 'Comprobante requerido',
+          message:
+              'Elige el comprobante electrónico con el que se facturará esta '
+              'venta antes de cobrar.',
+          icon: Icons.receipt_long_outlined,
+          accent: const Color(0xFFF59E0B),
+        );
+        return;
+      }
+      if (!await _confirmEcfModeForSale(chosen)) return;
+      if (!mounted) return;
+      setState(() {
+        _selectedEcfMode = chosen;
+        // La elección fue explícita: las próximas ventas del mismo ticket no la
+        // pisan al cambiar de cliente.
+        _ecfModeChosenByUser = true;
+      });
+    }
 
     if (!mounted) return;
     setState(() => _finalizingCheckout = true);
@@ -7114,6 +7431,27 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         accent: const Color(0xFF1957E6),
       );
       trace?.step('ui_updated');
+
+      // El comprobante electrónico se asigna DESPUÉS de confirmar la venta: es
+      // una llamada al proveedor y puede tardar segundos, así que no puede
+      // retrasar el aviso al usuario. Un fallo aquí no deshace la venta ni la
+      // degrada a «sin comprobante»: se informa y se prepara desde Mis Ventas.
+      final ecfIssue = await _applyEcfFiscalMode(
+        createdSale,
+        _ecfActive ? _selectedEcfMode : null,
+      );
+      if (!mounted) {
+        trace?.finish(outcome: 'unmounted_after_ecf');
+        return;
+      }
+      if (ecfIssue != null) {
+        _showSalesNotice(
+          title: 'Venta guardada · comprobante pendiente',
+          message: ecfIssue,
+          icon: Icons.receipt_long_outlined,
+          accent: const Color(0xFFF59E0B),
+        );
+      }
 
       // ============================================================
       // 2) Secundario DESPUÉS de la UI. La impresión puede tardar segundos
@@ -11846,12 +12184,27 @@ class _CheckoutPaymentDialog extends StatefulWidget {
     required this.money,
     required this.hasCreditCustomer,
     required this.onConfirm,
+    this.ecfModes = const [],
+    this.initialEcfMode,
+    this.ecfBuyerComplete = true,
+    this.ecfWarning = '',
   });
 
   final double total;
   final String Function(double value) money;
   final bool hasCreditCustomer;
   final ValueChanged<_CheckoutResult> onConfirm;
+
+  /// Tipos de comprobante disponibles con la numeración autorizada. Vacío
+  /// cuando la empresa no factura electrónicamente.
+  final List<EcfPosFiscalMode> ecfModes;
+  final EcfPosFiscalMode? initialEcfMode;
+
+  /// El cliente actual ya identifica al receptor (RNC/Cédula + nombre).
+  final bool ecfBuyerComplete;
+
+  /// Aviso fiscal del servidor; se muestra íntegro.
+  final String ecfWarning;
 
   @override
   State<_CheckoutPaymentDialog> createState() => _CheckoutPaymentDialogState();
@@ -11862,10 +12215,12 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
   late final TextEditingController _cashController;
   late final TextEditingController _transferController;
   bool _confirming = false;
+  EcfPosFiscalMode? _ecfMode;
 
   @override
   void initState() {
     super.initState();
+    _ecfMode = widget.initialEcfMode;
     _cashController = TextEditingController(
       text: _formatAccountingInput(widget.total),
     );
@@ -11911,6 +12266,13 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
   }
 
   bool get _canConfirm {
+    // El E31 exige receptor identificado: no se puede confirmar el cobro si el
+    // cliente actual no lo está. El selector ya lo advierte en el propio campo.
+    if (widget.ecfModes.isNotEmpty &&
+        _ecfMode == EcfPosFiscalMode.e31 &&
+        !widget.ecfBuyerComplete) {
+      return false;
+    }
     if (_method == _CheckoutPaymentMethod.credit) {
       if (!widget.hasCreditCustomer) return false;
       return _coveredAmount >= 0 && _coveredAmount <= widget.total + 0.0001;
@@ -12026,6 +12388,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
           : 0,
       cashReceived: cashReceived,
       changeAmount: changeAmount,
+      ecfMode: _ecfMode,
     );
   }
 
@@ -12179,6 +12542,21 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // El comprobante se elige al cobrar, no al cotizar.
+                        if (widget.ecfModes.isNotEmpty) ...[
+                          EcfPosFiscalSelector(
+                            modes: widget.ecfModes,
+                            selected: _ecfMode,
+                            warning: widget.ecfWarning,
+                            missingBuyer:
+                                _ecfMode == EcfPosFiscalMode.e31 &&
+                                !widget.ecfBuyerComplete,
+                            compact: isMobile,
+                            onSelected: (mode) =>
+                                setState(() => _ecfMode = mode),
+                          ),
+                          SizedBox(height: isMobile ? 8 : 12),
+                        ],
                         Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: isMobile ? 12 : 16,

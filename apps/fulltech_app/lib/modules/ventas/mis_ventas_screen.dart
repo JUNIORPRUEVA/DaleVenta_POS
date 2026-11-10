@@ -192,7 +192,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
                   dimension: 44,
                   child: IconButton(
                     tooltip: 'Volver a facturación',
-                    onPressed: () => context.go(Routes.registrarVenta),
+                    onPressed: () => context.go(Routes.cotizaciones),
                     icon: const Icon(Icons.arrow_back_rounded),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.14),
@@ -271,10 +271,9 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
   }
 
   Future<void> _openRegisterSale() async {
-    final created = await context.push<bool>(Routes.registrarVenta);
-    if (created == true) {
-      await ref.read(ventasControllerProvider.notifier).refresh();
-    }
+    // La venta se registra en el punto de venta principal. Ese flujo invalida
+    // `ventasControllerProvider` al cobrar, así que la lista se refresca sola.
+    context.go(Routes.cotizaciones);
   }
 
   List<_SalesDayPoint> _salesDayPoints(VentasState state) {
