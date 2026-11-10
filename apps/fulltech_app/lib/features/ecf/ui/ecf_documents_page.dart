@@ -128,7 +128,7 @@ class _EcfDocumentsPageState extends ConsumerState<EcfDocumentsPage> {
   /// navegación había fallado.
   void _goToSales() {
     ref.invalidate(ecfCapabilitiesProvider);
-    context.go(Routes.registrarVenta);
+    context.go(Routes.cotizaciones);
   }
 
   @override

@@ -107,7 +107,7 @@ class _EcfDgiiHabilitationPageState
   /// cobrar, no la foto anterior.
   void _goToSales() {
     ref.invalidate(ecfCapabilitiesProvider);
-    context.go(Routes.registrarVenta);
+    context.go(Routes.cotizaciones);
   }
 
   void _navigateBack() {

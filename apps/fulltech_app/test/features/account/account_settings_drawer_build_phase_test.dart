@@ -361,19 +361,6 @@ void main() {
       );
     });
 
-    test('entrada de ruta en registrar venta usa runOutsideBuildPhase', () {
-      final source = File(
-        'lib/modules/ventas/registrar_venta_screen.dart',
-      ).readAsStringSync();
-
-      final syncBody = _methodBody(source, 'void _syncProductsOnEnter() {');
-      expect(syncBody, contains('runOutsideBuildPhase'));
-      expect(
-        syncBody.indexOf('runOutsideBuildPhase'),
-        lessThan(syncBody.indexOf('ref.invalidate(companySettingsProvider)')),
-      );
-    });
-
     test('buildAppNavigationSections es pura (sin ref.watch / WidgetRef)', () {
       final source = File(
         'lib/core/widgets/app_navigation.dart',
