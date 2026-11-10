@@ -67,7 +67,6 @@ void main() {
       for (final path in const [
         'lib/features/account/account_menu_screens.dart',
         'lib/modules/cotizaciones/cotizaciones_screen.dart',
-        'lib/modules/ventas/registrar_venta_screen.dart',
       ]) {
         final source = read(path);
         expect(

@@ -119,7 +119,6 @@ void main() {
     final screens = <String, String>{
       'tpv_sales_history_screen.dart':
           'lib/modules/ventas/tpv_sales_history_screen.dart',
-      'mis_ventas_screen.dart': 'lib/modules/ventas/mis_ventas_screen.dart',
     };
 
     final forbidden = <String>[
@@ -159,19 +158,14 @@ void main() {
       final tpv = File(
         'lib/modules/ventas/tpv_sales_history_screen.dart',
       ).readAsStringSync();
-      final misVentas = File(
-        'lib/modules/ventas/mis_ventas_screen.dart',
-      ).readAsStringSync();
 
-      for (final source in [tpv, misVentas]) {
-        expect(
-          source.contains(
-            'revertirá automáticamente los movimientos correspondientes',
-          ),
-          isTrue,
-        );
-        expect(source.contains('restaurará el stock'), isFalse);
-      }
+      expect(
+        tpv.contains(
+          'revertirá automáticamente los movimientos correspondientes',
+        ),
+        isTrue,
+      );
+      expect(tpv.contains('restaurará el stock'), isFalse);
       expect(tpv.contains('Devolver venta'), isTrue);
     });
 

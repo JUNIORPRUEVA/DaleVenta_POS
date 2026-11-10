@@ -7210,7 +7210,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   /// Asigna el comprobante electrónico DESPUÉS de guardar la venta.
   ///
   /// La venta ya existe y no se deshace: si la preparación falla se informa con
-  /// claridad y el comprobante se puede preparar desde Mis Ventas. Nunca se
+  /// claridad y el comprobante se puede resolver desde Comprobantes
+  /// electrónicos. Nunca se
   /// degrada la venta a «sin comprobante» por un error.
   Future<String?> _applyEcfFiscalMode(
     SaleModel sale,
@@ -7267,7 +7268,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       return null;
     } catch (error) {
       return 'La venta se guardó, pero el comprobante ${mode.code} no se pudo '
-          'preparar. Prepáralo desde Mis Ventas.';
+          'preparar. Revisa su estado en Comprobantes electrónicos.';
     }
   }
 
@@ -7435,7 +7436,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       // El comprobante electrónico se asigna DESPUÉS de confirmar la venta: es
       // una llamada al proveedor y puede tardar segundos, así que no puede
       // retrasar el aviso al usuario. Un fallo aquí no deshace la venta ni la
-      // degrada a «sin comprobante»: se informa y se prepara desde Mis Ventas.
+      // degrada a «sin comprobante»: se informa y se resuelve desde
+      // Comprobantes electrónicos.
       final ecfIssue = await _applyEcfFiscalMode(
         createdSale,
         _ecfActive ? _selectedEcfMode : null,
