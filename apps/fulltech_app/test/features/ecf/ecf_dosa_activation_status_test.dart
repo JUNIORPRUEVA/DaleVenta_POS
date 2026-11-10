@@ -209,9 +209,10 @@ void main() {
     );
 
     expect(find.textContaining('DOSA aún no ha confirmado'), findsOneWidget);
-      expect(find.textContaining('Y 1 paso más por completar'), findsOneWidget);
+    expect(find.textContaining('Y 1 paso más por completar'), findsOneWidget);
     expect(find.text('Actualizar estado'), findsOneWidget);
-    // En compacto no se abre una sección completa.
-    expect(find.text('Autorización para facturar'), findsNothing);
+    // El aviso vive dentro de una tarjeta con su propio título: fuera de ella
+    // parecía un texto suelto sobre el fondo.
+    expect(find.text('Qué falta para facturar'), findsOneWidget);
   });
 }

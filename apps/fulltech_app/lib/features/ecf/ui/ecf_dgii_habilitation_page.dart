@@ -526,6 +526,9 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.manageEcfSequences,
     );
+    // El diagnóstico y los registros técnicos son herramientas de soporte.
+    final isPlatformStaff =
+        ref.watch(ecfPlatformStaffProvider).valueOrNull == true;
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
     // El certificado lo gestiona DOSA cuando DOSA gobierna la certificación de
     // la empresa. Dos fuentes, ambas del backend, y basta con una:
@@ -588,6 +591,22 @@ class _EcfDgiiHabilitationPageState
                         view.state,
                         fiscalReady: fiscalReady,
                       );
+                      // La administración es un destino propio, no una capa
+                      // encima del recorrido: al entrar por «Administrar» se
+                      // abre aquí, sin reiniciar la bienvenida ni repetir
+                      // Preparación y Postulación.
+                      if (widget.adminView) {
+                        return _adminScreen(
+                          view,
+                          stage: stage,
+                          dosaPosted: intentIsDosa,
+                          settings: settings,
+                          hasContent:
+                              canRegisterEvidence ||
+                              canRecordAuthorization ||
+                              isPlatformStaff,
+                        );
+                      }
                       // El paso se deduce del expediente real mientras la persona no
                       // navegue: al volver a la pantalla se entra en la etapa actual
                       // y nunca se reinicia la postulación.
@@ -721,13 +740,6 @@ class _EcfDgiiHabilitationPageState
                                     }),
                                   )
                                 : null,
-                            advanced: widget.adminView && canManage
-                                ? _adminAdvanced(
-                                    view,
-                                    stage: stage,
-                                    dosaPosted: intentIsDosa,
-                                  )
-                                : null,
                             // Qué falta para poder facturar. Vive en el mismo
                             // recorrido: sin esto, el cliente que vuelve días
                             // después no sabe en qué quedó su trámite.
@@ -797,13 +809,6 @@ class _EcfDgiiHabilitationPageState
                                               view.externalId,
                                         )
                                       : null,
-                                  advanced: widget.adminView && canManage
-                                      ? _adminAdvanced(
-                                          view,
-                                          stage: stage,
-                                          dosaPosted: intentIsDosa,
-                                        )
-                                      : null,
                                 )
                               : _trackingStep(
                                   view: view,
@@ -815,7 +820,6 @@ class _EcfDgiiHabilitationPageState
                                   canRegisterEvidence: canRegisterEvidence,
                                   canReviewEvidence: canReviewEvidence,
                                   activation: activation.valueOrNull,
-                                  dosaPosted: intentIsDosa,
                                   testBadge:
                                       preparation
                                               .valueOrNull
@@ -1036,7 +1040,6 @@ class _EcfDgiiHabilitationPageState
     required bool canReviewEvidence,
     required EcfActivationProgress? activation,
     required String? testBadge,
-    required bool dosaPosted,
   }) {
     final next = _nextAction(
       view,
@@ -1108,15 +1111,64 @@ class _EcfDgiiHabilitationPageState
             onReview: _reviewEvidence,
           ),
       ],
-      // Los controles internos no viajan en el recorrido del cliente: solo se
-      // pintan en la interfaz administrativa separada (/ecf/administracion).
-      detailsBar: widget.adminView && canManage
-          ? _adminAdvanced(
-              view,
-              stage: stage,
-              dosaPosted: dosaPosted,
-            )
-          : null,
+    );
+  }
+
+  /// Pantalla propia de la administración (`/ecf/administracion`).
+  ///
+  /// No reutiliza el recorrido del cliente a propósito: entrar por «Administrar»
+  /// no debe devolver a la bienvenida ni obligar a pasar otra vez por
+  /// Preparación y Postulación. Aquí solo vive lo que acredita la aprobación de
+  /// la DGII y, para soporte, el diagnóstico del expediente.
+  Widget _adminScreen(
+    EcfDgiiHabilitationView view, {
+    required _EcfStage stage,
+    required bool dosaPosted,
+    required CompanySettings settings,
+    required bool hasContent,
+  }) {
+    final name = settings.companyName.trim();
+    final rnc = settings.rnc.trim();
+    final identity = [
+      name,
+      rnc,
+    ].where((value) => value.isNotEmpty).join(' · ');
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const EcfStepTitle(
+                title: 'Administración e-CF',
+                subtitle: 'Evidencias y autorización oficial de la DGII.',
+              ),
+              const SizedBox(height: 14),
+              if (identity.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: EcfSummaryRow(
+                    label: 'Empresa',
+                    value: identity,
+                    tone: EcfTone.current,
+                  ),
+                ),
+              if (hasContent)
+                _adminAdvanced(view, stage: stage, dosaPosted: dosaPosted)
+              else
+                const EcfInlineNote(
+                  tone: EcfTone.pending,
+                  text:
+                      'No hay acciones administrativas pendientes para esta '
+                      'empresa.',
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

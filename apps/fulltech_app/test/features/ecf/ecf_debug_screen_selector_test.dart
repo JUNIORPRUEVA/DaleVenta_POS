@@ -55,7 +55,9 @@ void main() {
   ) async {
     await pumpPreview(tester, EcfDebugScreen.preparation);
 
-    expect(find.text('Preparación'), findsOneWidget);
+    // Con los datos completos el encabezado de la etapa no se repite: el rail
+    // ya sitúa al usuario y «Solo te pediremos lo que falte» no aplica.
+    expect(find.text('Solo te pediremos lo que falte.'), findsNothing);
     expect(find.text('Preparación completa'), findsNothing);
     expect(find.text('Iniciar postulación'), findsOneWidget);
     expect(find.text('Certificado digital'), findsNothing);

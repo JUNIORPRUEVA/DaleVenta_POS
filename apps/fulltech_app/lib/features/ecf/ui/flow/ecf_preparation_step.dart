@@ -106,11 +106,17 @@ class EcfPreparationStep extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const EcfStepTitle(
-                title: 'Preparación',
-                subtitle: 'Solo te pediremos lo que falte.',
-              ),
-              const SizedBox(height: 14),
+              // Una empresa ya postulada con los datos completos no necesita
+              // que se le anuncie esta etapa: «Solo te pediremos lo que falte»
+              // prometía pedir algo cuando ya no falta nada. El rail de pasos
+              // ya la sitúa, así que el encabezado solo sobraba.
+              if (!(_dataReady && dosaOwnsCertificate)) ...[
+                const EcfStepTitle(
+                  title: 'Preparación',
+                  subtitle: 'Solo te pediremos lo que falte.',
+                ),
+                const SizedBox(height: 14),
+              ],
               // Solo lo PENDIENTE. Si los datos de la empresa ya están completos no
               // se repiten aquí: quedan a la vista en Configuración y esta pantalla
               // se dedica a lo que de verdad falta para poder facturar.
