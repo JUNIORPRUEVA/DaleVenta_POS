@@ -2252,6 +2252,56 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ? null
       : _fiscalCustomerName;
 
+  /// Selector del comprobante dentro del carrito.
+  ///
+  /// Si la empresa factura electrónicamente pero el servidor no devuelve tipos
+  /// con numeración asignable, se dice en el propio carrito en lugar de dejar
+  /// un hueco vacío: un espacio en blanco no explica nada y el cobro se bloquea
+  /// igualmente.
+  Widget _buildCartEcfSelector() {
+    final modes = _ecfModes;
+    if (modes.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E8),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFFFDFA8)),
+        ),
+        child: const Text(
+          'Comprobante electrónico no disponible: revisa la numeración '
+          'autorizada por la DGII antes de cobrar.',
+          style: TextStyle(
+            fontSize: 11.5,
+            height: 1.35,
+            color: Color(0xFF8A5A00),
+          ),
+        ),
+      );
+    }
+    return EcfPosFiscalSelector(
+      modes: modes,
+      selected: _ecfModeForCheckout(),
+      warning: _ecfCaps?.salesWithoutEcfWarning ?? '',
+      missingBuyer:
+          _ecfModeForCheckout() == EcfPosFiscalMode.e31 &&
+          !ecfBuyerIdentityComplete(_ecfBuyerTaxId, _ecfBuyerName),
+      compact: true,
+      onSelected: _selectEcfModeInCart,
+    );
+  }
+
+  void _selectEcfModeInCart(EcfPosFiscalMode mode) {
+    setState(() {
+      _ecfModeChosenByUser = true;
+      _selectedEcfMode = mode;
+      if (mode != EcfPosFiscalMode.normal) {
+        _ecfWithoutDocumentReason = null;
+      }
+    });
+  }
+
   /// Comprobante propuesto para este cobro.
   ///
   /// Respeta lo que el vendedor ya eligió y, si no eligió nada, deduce E31
@@ -9046,6 +9096,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               money: _money,
                               priceListSelector:
                                   _buildWholesalePriceListSelector(),
+                              ecfSelector: _ecfActive
+                                  ? _buildCartEcfSelector()
+                                  : null,
                               onPickClient: _openClientDialog,
                               onClearClient: () {
                                 _commitEditorChange(() {
@@ -16010,6 +16063,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.utilityAmount,
     required this.money,
     required this.priceListSelector,
+    this.ecfSelector,
     required this.onPickClient,
     required this.onClearClient,
     required this.onOpenHistory,
@@ -16048,6 +16102,10 @@ class _DesktopQuotePanel extends StatelessWidget {
   final double utilityAmount;
   final String Function(double) money;
   final Widget priceListSelector;
+
+  /// Selector del comprobante electrónico. Se dibuja encima del botón Cobrar
+  /// para que el vendedor lo vea sin abrir el diálogo de pago.
+  final Widget? ecfSelector;
   final VoidCallback onPickClient;
   final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
@@ -16209,6 +16267,13 @@ class _DesktopQuotePanel extends StatelessWidget {
                         ),
                     ],
                   ),
+                ),
+              ],
+              if (ecfSelector != null) ...[
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: ecfSelector,
                 ),
               ],
               const SizedBox(height: 4),
