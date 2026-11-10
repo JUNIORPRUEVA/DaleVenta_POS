@@ -251,7 +251,16 @@ class _EcfSequenceRangeSectionState
     if (text.contains('ECF_DGII_SEQUENCE_AUTHORIZATION_REQUIRED')) {
       return _authorizationError;
     }
-    return 'No se pudo guardar la numeración. Inténtalo de nuevo.';
+    // El repositorio ya entrega el motivo del servidor sin envoltorio técnico;
+    // mostrarlo evita el «Inténtalo de nuevo» que no dice nada.
+    final trimmed = text.trim();
+    final isTechnical = trimmed.isEmpty ||
+        trimmed.startsWith('DioException') ||
+        trimmed.startsWith('Exception') ||
+        trimmed.startsWith('SocketException');
+    return isTechnical
+        ? 'No se pudo guardar la numeración. Inténtalo de nuevo.'
+        : trimmed;
   }
 
   /// El backend envía `CODIGO: mensaje legible`; se muestra la parte legible.
