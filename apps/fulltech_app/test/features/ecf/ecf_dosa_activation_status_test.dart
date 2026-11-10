@@ -131,7 +131,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('Falta registrar aquí tu autorización'),
+      find.textContaining('Falta registrar tu autorización'),
       findsOneWidget,
     );
     expect(find.text('Actualizar estado'), findsOneWidget);
@@ -209,7 +209,7 @@ void main() {
     );
 
     expect(find.textContaining('DOSA aún no ha confirmado'), findsOneWidget);
-    expect(find.textContaining('Y 1 paso más por completar'), findsOneWidget);
+    expect(find.textContaining('1 paso más por completar'), findsOneWidget);
     expect(find.text('Actualizar estado'), findsOneWidget);
     // El aviso vive dentro de una tarjeta con su propio título: fuera de ella
     // parecía un texto suelto sobre el fondo.

@@ -47,6 +47,9 @@ class EcfDosaActivationStatus extends ConsumerStatefulWidget {
 
 class _EcfDosaActivationStatusState
     extends ConsumerState<EcfDosaActivationStatus> {
+  /// Gris del resumen del diseño (entre el secundario y el atenuado).
+  static const _summaryColor = Color(0xFF637085);
+
   EcfDosaActivationOutcome? _outcome;
   bool _running = false;
   bool _failed = false;
@@ -142,13 +145,69 @@ class _EcfDosaActivationStatusState
 
     final pending = outcome.pendingMessages;
 
-    // La tarjeta es la misma en Preparación y en Postulación: fuera de ella el
-    // aviso parecía un texto suelto sobre el fondo y no se leía como un estado
-    // del expediente. Cambia el título, no la estructura.
+    // Preparación: tarjeta sobria —título, motivos y una sola acción a la
+    // derecha— tal como quedó definida en el diseño. Sin subtítulo, sin icono,
+    // sin nota al pie: sobraban y competían con el propio aviso.
+    if (widget.compact) {
+      return EcfSection(
+        title: 'Qué falta para facturar',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final message in pending)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2, right: 8),
+                      child: Icon(
+                        Icons.radio_button_unchecked,
+                        size: 14,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: pending.length > 1
+                      ? Text(
+                          pending.length == 2
+                              ? '1 paso más por completar'
+                              : '${pending.length - 1} pasos más por completar',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _summaryColor,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(width: 12),
+                _compactRefreshAction(),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return EcfSection(
-      title: widget.compact
-          ? 'Qué falta para facturar'
-          : 'Autorización para facturar',
+      title: 'Autorización para facturar',
       subtitle: 'Esto es lo que falta para poder emitir comprobantes.',
       icon: Icons.fact_check_outlined,
       trailing: _running
@@ -188,53 +247,54 @@ class _EcfDosaActivationStatusState
                 ],
               ),
             ),
-          if (widget.compact && pending.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 2, left: 4),
-              child: Text(
-                // Plural real: «Y 1 paso(s) más» se leía como un texto sin
-                // terminar. Con un único paso restante ni siquiera es plural.
-                pending.length == 2
-                    ? 'Y 1 paso más por completar.'
-                    : 'Y ${pending.length - 1} pasos más por completar.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textMuted,
-                ),
-              ),
-            ),
           const SizedBox(height: 6),
-          _refreshAction(full: true),
+          _refreshAction(),
         ],
       ),
     );
   }
 
-  Widget _refreshAction({bool full = false}) {
-    if (full) {
-      return EcfPrimaryAction(
-        label: 'Actualizar estado',
-        icon: Icons.refresh_rounded,
-        busy: _running,
+  /// Botón del diseño de Preparación: compacto y alineado a la derecha.
+  Widget _compactRefreshAction() {
+    return SizedBox(
+      height: 30,
+      child: FilledButton(
         onPressed: _running ? null : _run,
-        helper: 'Es seguro repetirlo: el sistema no activa dos veces.',
-        buttonKey: const ValueKey('ecf_dosa_activation_refresh'),
-      );
-    }
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: _running ? null : _run,
-        style: TextButton.styleFrom(
-          minimumSize: const Size(0, 34),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          minimumSize: const Size(132, 30),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        icon: const Icon(Icons.refresh_rounded, size: 16),
-        label: const Text(
-          'Actualizar estado',
-          style: TextStyle(fontSize: 12.5),
-        ),
+        child: _running
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text('Actualizar estado'),
       ),
+    );
+  }
+
+  Widget _refreshAction() {
+    return EcfPrimaryAction(
+      label: 'Actualizar estado',
+      icon: Icons.refresh_rounded,
+      busy: _running,
+      onPressed: _running ? null : _run,
+      helper: 'Es seguro repetirlo: el sistema no activa dos veces.',
+      buttonKey: const ValueKey('ecf_dosa_activation_refresh'),
     );
   }
 }
