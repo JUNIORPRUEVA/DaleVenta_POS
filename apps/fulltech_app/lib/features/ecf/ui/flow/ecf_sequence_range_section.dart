@@ -84,13 +84,101 @@ class _EcfSequenceRangeSectionState
       .where((type) => _authorized.forType(type) == null)
       .toList(growable: false);
 
-  /// ¿Ya hay un rango activo con números para el tipo seleccionado?
-  bool _hasUsableRange(String type) => _sequences.any(
-    (sequence) =>
-        sequence.active &&
-        sequence.documentType == type &&
-        sequence.remaining > 0,
-  );
+  /// ¿Ya hay un rango activo y usable para el tipo? Debe tener números libres y
+  /// no estar vencido: un rango agotado o vencido no permite emitir.
+  bool _hasUsableRange(String type) {
+    final now = DateTime.now();
+    return _sequences.any(
+      (sequence) =>
+          sequence.active &&
+          sequence.documentType == type &&
+          sequence.remaining > 0 &&
+          (sequence.validUntil == null || sequence.validUntil!.isAfter(now)),
+    );
+  }
+
+  /// Rango activo del tipo, aunque esté agotado o vencido. Sirve para renovar
+  /// desde el número ya consumido y no reutilizar uno entregado.
+  EcfSequenceInfo? _activeSequenceFor(String type) {
+    EcfSequenceInfo? found;
+    for (final sequence in _sequences) {
+      if (!sequence.active || sequence.documentType != type) continue;
+      if (found == null || sequence.endNumber > found.endNumber) {
+        found = sequence;
+      }
+    }
+    return found;
+  }
+
+  /// Tipos declarados a los que les falta la numeración (sin rango, agotada o
+  /// vencida). Sin esto la empresa no puede emitir ese tipo de comprobante y la
+  /// pantalla antes solo lo mostraba en gris, sin ninguna forma de arreglarlo.
+  List<String> get _typesMissingSequence {
+    final missing = <String>[];
+    for (final item in _authorized.items) {
+      if (!_hasUsableRange(item.documentType)) {
+        missing.add(item.documentType);
+      }
+    }
+    return missing;
+  }
+
+  /// Registra o renueva el rango del tipo con los números que la DGII autorizó.
+  Future<void> _syncRange(String type) async {
+    if (_saving) return;
+    final authorization = _authorized.forType(type);
+    if (authorization == null) return;
+    final current = _activeSequenceFor(type);
+    final renew = current != null;
+    final start = current == null || current.nextNumber <= authorization.rangeFrom
+        ? authorization.rangeFrom
+        : current.nextNumber;
+    if (start > authorization.rangeTo) {
+      setState(() {
+        _error =
+            'La autorización de la DGII para ${_typeLabel(type)} ya está '
+            'agotada. Registra la nueva autorización que te dio la DGII.';
+        _success = null;
+        _showAnotherType = true;
+        _selectedType = type;
+      });
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+      _success = null;
+    });
+    try {
+      final repository = ref.read(ecfRepositoryProvider);
+      if (renew) {
+        await repository.renewSequence(
+          documentType: type,
+          startNumber: start,
+          endNumber: authorization.rangeTo,
+        );
+      } else {
+        await repository.registerSequence(
+          documentType: type,
+          startNumber: start,
+          endNumber: authorization.rangeTo,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _success = renew
+            ? 'Numeración renovada para ${_typeLabel(type)}.'
+            : 'Numeración registrada para ${_typeLabel(type)}.';
+      });
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = _describeError(error));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   Future<void> _load() async {
     setState(() {
@@ -175,11 +263,22 @@ class _EcfSequenceRangeSectionState
         declarationAccepted: true,
       );
       // 2) El rango de numeración, que el backend valida contra lo declarado.
-      await repository.registerSequence(
-        documentType: _selectedType!,
-        startNumber: from,
-        endNumber: to,
-      );
+      // Si el tipo ya tenía rango activo, este es un cambio de autorización
+      // (la DGII dio otro cupo): se renueva en lugar de registrar, porque
+      // `register` rechazaría el tipo con `ECF_SEQUENCE_ALREADY_EXISTS`.
+      if (_activeSequenceFor(_selectedType!) != null) {
+        await repository.renewSequence(
+          documentType: _selectedType!,
+          startNumber: from,
+          endNumber: to,
+        );
+      } else {
+        await repository.registerSequence(
+          documentType: _selectedType!,
+          startNumber: from,
+          endNumber: to,
+        );
+      }
       if (!mounted) return;
       _authorization.clear();
       _from.clear();
@@ -189,7 +288,7 @@ class _EcfSequenceRangeSectionState
       setState(() {
         _declarationAccepted = false;
         _showAnotherType = false;
-        _success = 'Numeración declarada. Ya puedes emitir comprobantes.';
+        _success = 'Numeración declarada.';
       });
       await _load();
     } catch (error) {
@@ -289,9 +388,14 @@ class _EcfSequenceRangeSectionState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final item in declared) _declaredSummary(item),
+            for (final type in _typesMissingSequence) _missingSequenceRow(type),
             if (_success != null) ...[
               const SizedBox(height: 8),
               EcfInlineNote(tone: EcfTone.done, text: _success!),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              EcfInlineNote(tone: EcfTone.warning, text: _error!),
             ],
             if (pending.isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -482,6 +586,62 @@ class _EcfSequenceRangeSectionState
       tone: _hasUsableRange(item.documentType)
           ? EcfTone.done
           : EcfTone.pending,
+    );
+  }
+
+  /// Acción para un tipo que ya está declarado pero sin numeración usable.
+  ///
+  /// Muestra el motivo real según el estado del rango (nunca registrado, agotado
+  /// o vencido) para que el cliente sepa qué está arreglando.
+  Widget _missingSequenceRow(String type) {
+    final current = _activeSequenceFor(type);
+    final now = DateTime.now();
+    final expired =
+        current?.validUntil != null && !current!.validUntil!.isAfter(now);
+    final reason = current == null
+        ? 'Falta registrar la numeración de la DGII.'
+        : expired
+        ? 'La numeración de la DGII está vencida: hay que renovarla.'
+        : 'Se agotaron los números autorizados: hay que renovar el rango.';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Icon(
+              Icons.error_outline,
+              size: 15,
+              color: AppColors.textMuted,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              reason,
+              style: const TextStyle(
+                fontSize: 11.5,
+                height: 1.35,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            key: ValueKey(
+              current == null
+                  ? 'ecf_sequence_register_$type'
+                  : 'ecf_sequence_renew_$type',
+            ),
+            onPressed: _saving ? null : () => _syncRange(type),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            child: Text(current == null ? 'Registrar' : 'Renovar'),
+          ),
+        ],
+      ),
     );
   }
 

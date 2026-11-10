@@ -131,7 +131,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('Falta registrar tu autorización'),
+      find.textContaining('autorización de emisión que registra el equipo'),
       findsOneWidget,
     );
     expect(find.text('Actualizar estado'), findsOneWidget);
@@ -209,10 +209,11 @@ void main() {
     );
 
     expect(find.textContaining('DOSA aún no ha confirmado'), findsOneWidget);
-    expect(find.textContaining('1 paso más por completar'), findsOneWidget);
+    expect(find.textContaining('2 pasos por completar'), findsOneWidget);
     expect(find.text('Actualizar estado'), findsOneWidget);
     // El aviso vive dentro de una tarjeta con su propio título: fuera de ella
-    // parecía un texto suelto sobre el fondo.
-    expect(find.text('Qué falta para facturar'), findsOneWidget);
+    // parecía un texto suelto sobre el fondo. El título nombra el trámite de
+    // certificación para no confundirlo con la numeración de la DGII.
+    expect(find.text('Certificación DGII'), findsOneWidget);
   });
 }
