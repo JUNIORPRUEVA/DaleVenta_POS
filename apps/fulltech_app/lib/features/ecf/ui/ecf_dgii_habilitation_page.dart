@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,6 +30,7 @@ import 'ecf_fiscal_data_page.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
 import 'debug/ecf_debug_screen_selector.dart';
+import 'flow/ecf_authorization_step.dart';
 import 'flow/ecf_dosa_activation_status.dart';
 import 'flow/ecf_sequence_range_section.dart';
 import 'flow/ecf_dosa_tracking_step.dart';
@@ -740,18 +742,10 @@ class _EcfDgiiHabilitationPageState
                                     }),
                                   )
                                 : null,
-                            // Qué falta para poder facturar. Vive en el mismo
-                            // recorrido: sin esto, el cliente que vuelve días
-                            // después no sabe en qué quedó su trámite.
-                            activation: dosaOwnsCertificate && canOnboard
-                                ? EcfDosaActivationStatus(
-                                    key: ValueKey(
-                                      'dosa-activation-preparation-${user?.companyId}',
-                                    ),
-                                    canManage: canOnboard,
-                                    compact: true,
-                                  )
-                                : null,
+                            // El estado de la certificación y la firma viven en
+                            // su propio paso (Autorización). Repetirlos aquí
+                            // duplicaba el mismo aviso en dos pantallas.
+                            activation: null,
                             sequence: dosaOwnsCertificate && canManageSequences
                                 ? EcfSequenceRangeSection(
                                     key: ValueKey(
@@ -828,6 +822,24 @@ class _EcfDgiiHabilitationPageState
                                       ? preparation.valueOrNull?.simulationBadge
                                       : null,
                                 ),
+                          // Último paso del recorrido: el cliente autoriza a
+                          // emitir. Antes vivía detrás del botón «Administrar»
+                          // del encabezado, fuera del flujo.
+                          EcfFlowStep.authorization => Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: EcfAuthorizationStep(
+                              key: ValueKey(
+                                'ecf-authorization-${user?.companyId}',
+                              ),
+                              canAuthorize: canRecordAuthorization,
+                              alreadySigned:
+                                  view.authorizationSource != 'NONE',
+                              onSigned: () {
+                                ref.invalidate(ecfDgiiHabilitationProvider);
+                                ref.invalidate(ecfActivationProgressProvider);
+                              },
+                            ),
+                          ),
                         };
                       }
 
@@ -1889,6 +1901,16 @@ class _EvidenceRow extends StatelessWidget {
                       : 'Volver a revisar',
                   icon: const Icon(Icons.rule, size: 18),
                 ),
+              // El registro de la autorización oficial pide el identificador de
+              // la evidencia y la tarjeta no lo mostraba: sin esto el paso era
+              // imposible de completar desde la app.
+              IconButton(
+                onPressed: () => Clipboard.setData(
+                  ClipboardData(text: evidence.id),
+                ),
+                tooltip: 'Copiar ID de la evidencia',
+                icon: const Icon(Icons.copy_all_outlined, size: 18),
+              ),
             ],
           ),
         ],
@@ -2184,7 +2206,7 @@ class _AuthorizationDialogState extends State<_AuthorizationDialog> {
                 controller: _evidenceId,
                 decoration: const InputDecoration(
                   labelText: 'Identificador de la evidencia',
-                  hintText: 'UUID de una evidencia ya registrada',
+                  hintText: 'Pega el ID (botón copiar de la tarjeta)',
                 ),
                 validator: (value) {
                   if (!_requiresEvidence) return null;

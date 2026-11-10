@@ -9,7 +9,6 @@ import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
 import '../auth/admin_authorization.dart';
 import '../auth/admin_authorization_session.dart';
-import '../auth/app_permissions.dart';
 import '../app_update/app_update_mini_control.dart';
 import '../auth/app_role.dart';
 import '../auth/auth_provider.dart';
@@ -276,13 +275,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               location == Routes.ecfAdmin
         ? () => context.go(Routes.ecf)
         : null;
-    // La vista administrativa existe desde el principio, pero no tenía ninguna
-    // entrada visible: solo se alcanzaba escribiendo la URL. Se ofrece aquí, al
-    // lado de «Comprobantes», y solo a quien puede gestionar el módulo.
-    final canManageEcf =
-        hasUserPermission(user, AppPermission.manageEcfConfig) ||
-        hasUserPermission(user, AppPermission.manageEcfOnboarding) ||
-        hasUserPermission(user, AppPermission.manageEcfDgiiRequirements);
+    // La autorización y la configuración del módulo viven ahora dentro del
+    // recorrido de e-CF (paso «Autorización»), no en un botón aparte: el
+    // cliente no tiene que descubrir un destino oculto para terminar su
+    // trámite.
     final ecfActions = isEcfHome
         ? <DesktopShellActionItem>[
             DesktopShellActionItem(
@@ -291,13 +287,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               label: 'Comprobantes',
               onPressed: () => context.go(Routes.ecfDocuments),
             ),
-            if (canManageEcf)
-              DesktopShellActionItem(
-                icon: Icons.tune,
-                tooltip: 'Administración e-CF',
-                label: 'Administrar',
-                onPressed: () => context.go(Routes.ecfAdmin),
-              ),
           ]
         : const <DesktopShellActionItem>[];
     final customFooter = _footerContent;

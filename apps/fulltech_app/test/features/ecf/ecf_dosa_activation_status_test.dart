@@ -131,7 +131,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('autorización de emisión que registra el equipo'),
+      find.textContaining('Falta tu autorización para que FullPOS Cloud'),
       findsOneWidget,
     );
     expect(find.text('Actualizar estado'), findsOneWidget);

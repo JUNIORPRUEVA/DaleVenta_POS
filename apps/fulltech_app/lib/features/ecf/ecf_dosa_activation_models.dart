@@ -144,11 +144,10 @@ String describeActivationReason(String code) {
       return 'La aprobación de la DGII que consta es de un intento anterior: '
           'hay que registrarla de nuevo para esta postulación.';
     case 'ECF_DOSA_ACTIVATION_ADMIN_NOT_AUTHORIZED':
-      return 'Falta la autorización de emisión que registra el equipo de '
-          'soporte (no es la numeración de la DGII).';
+      return 'Falta tu autorización para que FullPOS Cloud emita en tu nombre.';
     case 'ECF_DOSA_ACTIVATION_ADMIN_AUTHORIZATION_STALE':
-      return 'La autorización de emisión registrada es anterior a esta '
-          'postulación: hay que registrarla otra vez.';
+      return 'Tu autorización de emisión es anterior a esta postulación: hay '
+          'que firmarla otra vez.';
     case 'ECF_DOSA_ACTIVATION_ADMIN_DECISION_REVOKED':
       return 'La autorización de emisión de tu empresa está revocada. Contacta a '
           'soporte.';
