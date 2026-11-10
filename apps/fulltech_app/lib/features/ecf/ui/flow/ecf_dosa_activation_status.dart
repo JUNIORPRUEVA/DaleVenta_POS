@@ -212,13 +212,10 @@ class _EcfDosaActivationStatusState
       title: 'Autorización para facturar',
       subtitle: 'Esto es lo que falta para poder emitir comprobantes.',
       icon: Icons.fact_check_outlined,
-      trailing: _running
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : null,
+      // Actualizar es secundario: un icono en la cabecera. Ocupaba una fila
+      // completa y se leía como «el paso a seguir», cuando solo vuelve a
+      // consultar el estado.
+      trailing: _refreshIcon(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -249,8 +246,6 @@ class _EcfDosaActivationStatusState
                 ],
               ),
             ),
-          const SizedBox(height: 6),
-          _refreshAction(),
         ],
       ),
     );
@@ -289,14 +284,22 @@ class _EcfDosaActivationStatusState
     );
   }
 
-  Widget _refreshAction() {
-    return EcfPrimaryAction(
-      label: 'Actualizar estado',
-      icon: Icons.refresh_rounded,
-      busy: _running,
+  Widget _refreshIcon() {
+    return IconButton(
+      key: const ValueKey('ecf_dosa_activation_refresh'),
       onPressed: _running ? null : _run,
-      helper: 'Es seguro repetirlo: el sistema no activa dos veces.',
-      buttonKey: const ValueKey('ecf_dosa_activation_refresh'),
+      tooltip: 'Actualizar estado',
+      iconSize: 18,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      padding: EdgeInsets.zero,
+      icon: _running
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.refresh_rounded),
     );
   }
 }
