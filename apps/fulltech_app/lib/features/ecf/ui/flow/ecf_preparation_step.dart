@@ -24,6 +24,8 @@ class EcfPreparationStep extends StatelessWidget {
     required this.onStart,
     required this.onGoCompany,
     required this.onGoCertificate,
+    required this.onContinue,
+    this.postulationStarted = false,
     this.dosaEntry,
     this.activation,
     this.sequence,
@@ -54,6 +56,13 @@ class EcfPreparationStep extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onGoCompany;
   final VoidCallback onGoCertificate;
+
+  /// Avanza al siguiente paso cuando aquí ya no queda nada que hacer.
+  final VoidCallback onContinue;
+
+  /// La postulación ya está abierta: iniciarla otra vez no tiene sentido, así
+  /// que la única acción de esta etapa es continuar al seguimiento.
+  final bool postulationStarted;
 
   /// Acción oficial de DOSA. Si existe, es la única acción principal.
   final Widget? dosaEntry;
@@ -203,6 +212,18 @@ class EcfPreparationStep extends StatelessWidget {
                   helper:
                       'Solo completarás la información que falta. El resto ya está guardado.',
                   buttonKey: const ValueKey('ecf_preparation_complete_data'),
+                )
+              // Con la postulación ya registrada esta etapa no tiene nada que
+              // iniciar. Sin esta acción la pantalla quedaba sin botón y el
+              // recorrido no tenía salida hacia delante.
+              else if (postulationStarted)
+                EcfPrimaryAction(
+                  label: 'Continuar',
+                  icon: Icons.arrow_forward_rounded,
+                  onPressed: onContinue,
+                  helper:
+                      'Tu postulación ya está registrada. Continúa para ver su estado y lo que falta para facturar.',
+                  buttonKey: const ValueKey('ecf_preparation_continue'),
                 )
               else if (dosaEntry != null)
                 dosaEntry!

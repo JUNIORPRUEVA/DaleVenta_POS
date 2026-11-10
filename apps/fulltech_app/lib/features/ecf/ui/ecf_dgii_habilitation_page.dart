@@ -552,6 +552,12 @@ class _EcfDgiiHabilitationPageState
     final dosaOwnsCertificate =
         canOnboard &&
         (habilitation.valueOrNull?.provider == 'DOSA' || intentIsDosa);
+    // El intento de certificación ya existe: la postulación está abierta y en
+    // Preparación no queda nada que iniciar. Es la señal de postulación que
+    // publica el backend; el `externalId` del expediente es la autorización de
+    // la DGII, no la postulación.
+    final postulationStarted =
+        (intentState?.sessionId ?? '').trim().isNotEmpty;
     final settingsState = ref.watch(companySettingsProvider);
     final settings = settingsState.valueOrNull;
 
@@ -625,6 +631,7 @@ class _EcfDgiiHabilitationPageState
                             fiscalReady: fiscalReady,
                             certificateValidated: _certificateReady(view),
                             dosaOwnsCertificate: dosaOwnsCertificate,
+                            postulationStarted: postulationStarted,
                             testsOrLater:
                                 stage == _EcfStage.tests ||
                                 stage == _EcfStage.activation,
@@ -726,6 +733,11 @@ class _EcfDgiiHabilitationPageState
                             contactEmailReady: contactEmailReady,
                             certificateReady: _certificateReady(view),
                             dosaOwnsCertificate: dosaOwnsCertificate,
+                            // Si la postulación ya está abierta, esta etapa
+                            // no la vuelve a ofrecer: deja continuar.
+                            postulationStarted: postulationStarted,
+                            onContinue: () =>
+                                _goToStep(EcfFlowStep.tracking),
                             dosaEntry:
                                 dosaOwnsCertificate &&
                                     fiscalReady &&
@@ -906,6 +918,9 @@ class _EcfDgiiHabilitationPageState
                             EcfStepRail(
                               current: step,
                               horizontal: true,
+                              furthest: postulationStarted
+                                  ? EcfFlowStep.tracking
+                                  : step,
                               onSelect: _goToStep,
                             ),
                             const Divider(height: 1),
@@ -925,6 +940,9 @@ class _EcfDgiiHabilitationPageState
                               child: SingleChildScrollView(
                                 child: EcfStepRail(
                                   current: step,
+                                  furthest: postulationStarted
+                                      ? EcfFlowStep.tracking
+                                      : step,
                                   onSelect: _goToStep,
                                 ),
                               ),
