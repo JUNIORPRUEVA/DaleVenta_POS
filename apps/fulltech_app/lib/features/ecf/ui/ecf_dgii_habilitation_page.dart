@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -1889,6 +1890,16 @@ class _EvidenceRow extends StatelessWidget {
                       : 'Volver a revisar',
                   icon: const Icon(Icons.rule, size: 18),
                 ),
+              // El registro de la autorización oficial pide el identificador de
+              // la evidencia y la tarjeta no lo mostraba: sin esto el paso era
+              // imposible de completar desde la app.
+              IconButton(
+                onPressed: () => Clipboard.setData(
+                  ClipboardData(text: evidence.id),
+                ),
+                tooltip: 'Copiar ID de la evidencia',
+                icon: const Icon(Icons.copy_all_outlined, size: 18),
+              ),
             ],
           ),
         ],
@@ -2184,7 +2195,7 @@ class _AuthorizationDialogState extends State<_AuthorizationDialog> {
                 controller: _evidenceId,
                 decoration: const InputDecoration(
                   labelText: 'Identificador de la evidencia',
-                  hintText: 'UUID de una evidencia ya registrada',
+                  hintText: 'Pega el ID (botón copiar de la tarjeta)',
                 ),
                 validator: (value) {
                   if (!_requiresEvidence) return null;
