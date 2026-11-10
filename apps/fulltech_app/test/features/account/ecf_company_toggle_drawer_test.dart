@@ -46,6 +46,9 @@ const _ecfSectionTitle = 'Impuestos y e-CF';
 const _ecfPrepareLabel = 'Preparar habilitación e-CF';
 const _ecfErrorText =
     'No se pudo guardar. Se mantiene el último estado confirmado por el servidor.';
+const _allowWarning =
+    'Advertencia fiscal: esta opción permite registrar ventas sin emitir un '
+    'comprobante fiscal electrónico.';
 
 class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
@@ -77,12 +80,22 @@ UserModel _user({String? companyId = 'company-a', String? role = 'ADMIN'}) =>
 
 /// Backend simulado. Es la ÚNICA fuente del interruptor.
 class _EcfBackendState {
-  _EcfBackendState({required this.enabledByCompany});
+  _EcfBackendState({
+    required this.enabledByCompany,
+    Map<String, bool>? allowByCompany,
+  }) : allowByCompany = allowByCompany ?? <String, bool>{};
 
   final Map<String, bool> enabledByCompany;
+
+  /// Excepción «vender sin comprobante», por empresa.
+  final Map<String, bool> allowByCompany;
   final List<bool> patchCalls = <bool>[];
   final List<String?> patchCompanies = <String?>[];
+  final List<bool> allowPatchCalls = <bool>[];
   bool failNextPatch = false;
+
+  bool allowFor(String? companyId) =>
+      allowByCompany[companyId ?? 'sin-empresa'] ?? false;
 
   CompanySettings settingsFor(String? companyId) {
     return CompanySettings.empty().copyWith(
@@ -103,18 +116,30 @@ class _FakeEcfRepository extends EcfRepository {
   final _EcfBackendState _backend;
   final String? Function() _currentCompanyId;
 
-  static const EcfCapabilities _capabilities = EcfCapabilities(
-    enabled: false,
-    environment: 'SANDBOX',
-    certificationStatus: 'NOT_STARTED',
-    productionEnabled: false,
-    allowedTypes: <String>[],
-    emissionPathAvailable: false,
-    documentTypes: <EcfDocumentTypeCapability>[],
-  );
+  /// Las capacidades salen del backend simulado y son POR EMPRESA: igual que el
+  /// endpoint real, incluyen si la excepción de venta sin e-CF está habilitada.
+  @override
+  Future<EcfCapabilities> capabilities() async {
+    final companyId = _currentCompanyId();
+    final moduleEnabled = _backend.enabledByCompany[companyId] ?? false;
+    return EcfCapabilities(
+      enabled: moduleEnabled,
+      environment: 'SANDBOX',
+      certificationStatus: 'NOT_STARTED',
+      productionEnabled: false,
+      allowedTypes: const <String>['E31', 'E32'],
+      emissionPathAvailable: false,
+      documentTypes: const <EcfDocumentTypeCapability>[],
+      allowSalesWithoutEcf: _backend.allowFor(companyId),
+      salesWithoutEcfWarning: _allowWarning,
+    );
+  }
 
   @override
-  Future<EcfCapabilities> capabilities() async => _capabilities;
+  Future<void> updateAllowSalesWithoutEcf({required bool allow}) async {
+    _backend.allowPatchCalls.add(allow);
+    _backend.allowByCompany[_currentCompanyId() ?? 'sin-empresa'] = allow;
+  }
 
   @override
   Future<void> updateEnabled({required bool enabled}) async {
@@ -444,6 +469,13 @@ _EcfBackendState _backendWith({bool companyA = false}) =>
       'company-b': false,
     });
 
+/// Interruptor de la excepción fiscal, distinto del general.
+Finder _allowSwitch() {
+  final label = find.text('Ventas sin comprobante electrónico');
+  final row = find.ancestor(of: label, matching: find.byType(Row));
+  return find.descendant(of: row.first, matching: find.byType(Switch));
+}
+
 void main() {
   group('interruptor e-CF de la empresa — regresión del modelo', () {
     test('copyWith propaga ecfEnabled (no lo pierde)', () {
@@ -718,6 +750,82 @@ void main() {
       // Ni el menú ni la navegación pueden consultar el módulo por su cuenta.
       expect(source, isNot(contains('ecfCapabilitiesProvider')));
       expect(source, isNot(contains('ecfRepositoryProvider')));
+    });
+  });
+
+  group('ventas sin comprobante electrónico — dentro de Empresa', () {
+    testWidgets('con el módulo apagado la excepción no se ofrece', (
+      tester,
+    ) async {
+      await _pumpSettings(tester, backend: _backendWith(companyA: false));
+
+      // Sin e-CF no hay nada que exceptuar: el control ni siquiera se pinta.
+      expect(find.text('Ventas sin comprobante electrónico'), findsNothing);
+    });
+
+    testWidgets(
+      'con el módulo encendido aparece y no se confunde con el interruptor '
+      'general',
+      (tester) async {
+        await _pumpSettings(tester, backend: _backendWith(companyA: true));
+
+        // Los dos controles conviven, con etiquetas distintas.
+        expect(find.text('Utilizar factura electrónica'), findsOneWidget);
+        expect(find.text('Ventas sin comprobante electrónico'), findsOneWidget);
+        // El valor mostrado es el del servidor: apagado por defecto.
+        expect(tester.widget<Switch>(_allowSwitch()).value, isFalse);
+      },
+    );
+
+    testWidgets(
+      'activar exige confirmación, guarda en el mismo endpoint y relee el '
+      'valor confirmado',
+      (tester) async {
+        final harness = await _pumpSettings(
+          tester,
+          backend: _backendWith(companyA: true),
+        );
+
+        await tester.ensureVisible(
+          find.text('Ventas sin comprobante electrónico'),
+        );
+        await tester.tap(_allowSwitch());
+        await tester.pumpAndSettle();
+
+        // El aviso fiscal completo se muestra antes de habilitar.
+        expect(find.text(_allowWarning), findsWidgets);
+
+        await tester.tap(find.text('Entiendo y habilito'));
+        await tester.pumpAndSettle();
+
+        expect(harness.backend.allowPatchCalls, [true]);
+        expect(tester.widget<Switch>(_allowSwitch()).value, isTrue);
+        // Nada de peticiones fuera del repositorio e-CF configurado.
+        expect(harness.httpCalls, isEmpty);
+      },
+    );
+
+    testWidgets('cambiar de empresa no conserva el valor anterior', (
+      tester,
+    ) async {
+      final backend = _backendWith(companyA: true);
+      // La empresa A tiene la excepción; la B también factura electrónico pero
+      // NO la tiene habilitada.
+      backend.enabledByCompany['company-b'] = true;
+      backend.allowByCompany['company-a'] = true;
+      backend.allowByCompany['company-b'] = false;
+
+      final harness = await _pumpSettings(tester, backend: backend);
+      expect(tester.widget<Switch>(_allowSwitch()).value, isTrue);
+
+      harness.auth.switchCompany('company-b');
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // El control se relee para la empresa nueva: no hereda el «sí» anterior.
+      expect(tester.widget<Switch>(_allowSwitch()).value, isFalse);
+      expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
+      expect(backend.allowByCompany['company-a'], isTrue);
     });
   });
 }

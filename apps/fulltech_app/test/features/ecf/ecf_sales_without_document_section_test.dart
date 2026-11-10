@@ -54,6 +54,7 @@ Future<_FakeRepository> _pump(
   bool canManage = true,
   Object? failure,
   double width = 800,
+  bool embedded = false,
 }) async {
   final repository = _FakeRepository()..failure = failure;
   await tester.pumpWidget(
@@ -69,6 +70,7 @@ Future<_FakeRepository> _pump(
                 child: EcfSalesWithoutDocumentSection(
                   capabilities: _capabilities(allow: allow),
                   canManage: canManage,
+                  embedded: embedded,
                 ),
               ),
             ),
@@ -82,6 +84,30 @@ Future<_FakeRepository> _pump(
 }
 
 void main() {
+  testWidgets(
+    'embebida no crea una superficie propia: no anida tarjetas en Empresa',
+    (tester) async {
+      await _pump(tester, embedded: true);
+
+      // El panel propio es el contenedor blanco con borde. Embebida no debe
+      // existir, porque el panel fiscal de Empresa ya es la superficie.
+      expect(
+        find.descendant(
+          of: find.byType(EcfSalesWithoutDocumentSection),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Container &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration! as BoxDecoration).color == Colors.white,
+          ),
+        ),
+        findsNothing,
+      );
+      // El contenido sigue completo: título, explicación y switch.
+      expect(find.text('Ventas sin comprobante electrónico'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+    },
+  );
   testWidgets('apagado: explica qué hace y no muestra el aviso rojo', (
     tester,
   ) async {

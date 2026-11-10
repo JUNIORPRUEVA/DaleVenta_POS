@@ -369,12 +369,18 @@ class EcfSalesWithoutDocumentSection extends ConsumerStatefulWidget {
     super.key,
     required this.capabilities,
     required this.canManage,
+    this.embedded = false,
   });
 
   final EcfCapabilities capabilities;
 
   /// Mismo permiso que exige el backend (`manageEcfConfig`).
   final bool canManage;
+
+  /// Embebida en el panel fiscal de Empresa: no dibuja contenedor propio para
+  /// no dejar una tarjeta dentro de otra. El contenido y el guardado son los
+  /// mismos que en la pantalla de estado del módulo.
+  final bool embedded;
 
   @override
   ConsumerState<EcfSalesWithoutDocumentSection> createState() =>
@@ -475,8 +481,7 @@ class _EcfSalesWithoutDocumentSectionState
     final warning = widget.capabilities.salesWithoutEcfWarning;
     final canManage = widget.canManage;
 
-    return _Panel(
-      child: Column(
+    final content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -557,7 +562,8 @@ class _EcfSalesWithoutDocumentSectionState
             ),
           ],
         ],
-      ),
-    );
+      );
+
+    return widget.embedded ? content : _Panel(child: content);
   }
 }

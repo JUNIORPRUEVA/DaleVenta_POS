@@ -40,6 +40,18 @@ final ecfRepositoryProvider = Provider<EcfRepository>((ref) {
 final ecfCapabilitiesProvider = FutureProvider.autoDispose<EcfCapabilities>((
   ref,
 ) {
+  // Las capacidades son POR EMPRESA: incluyen la excepción de vender sin e-CF
+  // y los tipos habilitados. Al cambiar de empresa o de sesión se releen, en
+  // lugar de dejar a la vista la configuración de la anterior.
+  ref.watch(
+    authStateProvider.select(
+      (state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      ),
+    ),
+  );
   return ref.watch(ecfRepositoryProvider).capabilities();
 });
 
