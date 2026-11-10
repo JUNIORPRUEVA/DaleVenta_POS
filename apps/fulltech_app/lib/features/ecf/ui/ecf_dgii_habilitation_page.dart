@@ -812,6 +812,24 @@ class _EcfDgiiHabilitationPageState
                                           canManage: canOnboard,
                                         )
                                       : null,
+                                  // La firma es el único paso que queda del lado
+                                  // del cliente: se ofrece explícita. Vivia solo
+                                  // en el rail lateral y el cliente no descubría
+                                  // que tenía que pulsarlo para terminar.
+                                  next: view.authorizationSource == 'NONE'
+                                      ? EcfPrimaryAction(
+                                          label: 'Continuar a autorización',
+                                          icon: Icons.arrow_forward_rounded,
+                                          onPressed: () => _goToStep(
+                                            EcfFlowStep.authorization,
+                                          ),
+                                          helper:
+                                              'Falta tu firma para que FullPOS Cloud pueda emitir en tu nombre.',
+                                          buttonKey: const ValueKey(
+                                            'ecf_tracking_continue_authorization',
+                                          ),
+                                        )
+                                      : null,
                                   sequence: canManageSequences
                                       ? EcfSequenceRangeSection(
                                           key: ValueKey(

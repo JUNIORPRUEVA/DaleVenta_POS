@@ -14,6 +14,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// prueba lo que puede salir mal: que oculte permisos, que muestre códigos en
 /// crudo, que dispare dos peticiones con doble toque y que confunda un fallo de
 /// red con «falta evidencia».
+
+/// Actualizar es un icono de la cabecera, no una acción principal.
+const _refreshKey = ValueKey('ecf_dosa_activation_refresh');
+
 class _FakeRepository extends EcfRepository {
   _FakeRepository() : super(Dio());
 
@@ -90,7 +94,7 @@ void main() {
     final repository = await _pump(tester, canManage: false);
 
     expect(repository.calls, 0);
-    expect(find.text('Actualizar estado'), findsNothing);
+    expect(find.byKey(_refreshKey), findsNothing);
     expect(find.textContaining('Comprobando'), findsNothing);
   });
 
@@ -112,7 +116,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('en producción'), findsNothing);
-    expect(find.text('Actualizar estado'), findsNothing);
+    expect(find.byKey(_refreshKey), findsNothing);
   });
 
   testWidgets('pendiente: traduce los motivos y ofrece actualizar', (
@@ -137,7 +141,9 @@ void main() {
       find.textContaining('Falta tu autorización para que FullPOS Cloud'),
       findsOneWidget,
     );
-    expect(find.text('Actualizar estado'), findsOneWidget);
+    // Actualizar vive como icono en la cabecera: no compite con la acción real.
+    expect(find.byKey(_refreshKey), findsOneWidget);
+    expect(find.text('Actualizar estado'), findsNothing);
   });
 
   testWidgets('un motivo desconocido se muestra en crudo, no se esconde', (
@@ -187,16 +193,16 @@ void main() {
 
     // La segunda llamada queda en vuelo: el botón debe quedar bloqueado.
     repository.gate = Completer<void>();
-    await tester.tap(find.text('Actualizar estado'));
+    await tester.tap(find.byKey(_refreshKey));
     await tester.pump();
-    await tester.tap(find.text('Actualizar estado'), warnIfMissed: false);
+    await tester.tap(find.byKey(_refreshKey), warnIfMissed: false);
     await tester.pump();
 
     expect(repository.calls, 2);
 
     repository.gate!.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Actualizar estado'), findsOneWidget);
+    expect(find.byKey(_refreshKey), findsOneWidget);
   });
 
   testWidgets('compacto en preparación: un motivo y acción', (tester) async {

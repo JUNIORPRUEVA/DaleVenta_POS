@@ -795,7 +795,14 @@ void main() {
       expect(find.text('Sin iniciar'), findsNothing);
       expect(find.textContaining('no has iniciado'), findsNothing);
 
-      await tester.tap(find.text('Autorización').first);
+      // El siguiente paso se ofrece explícito: no hay que descubrir el rail.
+      final continueToAuthorization = find.byKey(
+        const ValueKey('ecf_tracking_continue_authorization'),
+      );
+      expect(continueToAuthorization, findsOneWidget);
+      await tester.ensureVisible(continueToAuthorization);
+      await tester.pumpAndSettle();
+      await tester.tap(continueToAuthorization);
       await tester.pumpAndSettle();
       expect(find.text('Autorización para emitir'), findsOneWidget);
       expect(tester.takeException(), isNull);
