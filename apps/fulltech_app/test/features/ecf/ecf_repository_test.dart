@@ -696,6 +696,79 @@ void main() {
       });
     },
   );
+
+  test('registerSequence envía el tipo E32 del rango de consumo', () async {
+    RequestOptions? captured;
+    final repo = repositoryWith((options) async {
+      captured = options;
+      return json({'ok': true});
+    });
+
+    await repo.registerSequence(
+      documentType: 'E32',
+      startNumber: 1,
+      endNumber: 1000,
+    );
+
+    expect(captured?.data, {
+      'documentType': 'E32',
+      'startNumber': 1,
+      'endNumber': 1000,
+    });
+  });
+
+  test('registerSequence no pierde el motivo del servidor', () async {
+    // Dio no expone el cuerpo en `toString()`: sin esto la pantalla solo podía
+    // decir «Inténtalo de nuevo» y el motivo real se perdía.
+    final repo = repositoryWith(
+      (_) async => json({
+        'statusCode': 400,
+        'message': [
+          'documentType must be one of the following values: E31, E32, E34',
+        ],
+        'error': 'Bad Request',
+      }, 400),
+    );
+
+    await expectLater(
+      repo.registerSequence(
+        documentType: 'E32',
+        startNumber: 1,
+        endNumber: 1000,
+      ),
+      throwsA(
+        isA<EcfSequenceException>().having(
+          (error) => error.message,
+          'message',
+          contains('todavía no admite'),
+        ),
+      ),
+    );
+  });
+
+  test('registerSequence conserva el código del backend para traducirlo', () async {
+    final repo = repositoryWith(
+      (_) async => json({
+        'statusCode': 409,
+        'message': 'ECF_SEQUENCE_ALREADY_EXISTS: Ya hay un rango activo.',
+      }, 409),
+    );
+
+    await expectLater(
+      repo.registerSequence(
+        documentType: 'E32',
+        startNumber: 1,
+        endNumber: 10,
+      ),
+      throwsA(
+        isA<EcfSequenceException>().having(
+          (error) => error.message,
+          'message',
+          startsWith('ECF_SEQUENCE_ALREADY_EXISTS'),
+        ),
+      ),
+    );
+  });
 }
 
 class _FakeHttpClientAdapter implements HttpClientAdapter {

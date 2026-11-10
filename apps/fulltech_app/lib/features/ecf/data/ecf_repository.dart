@@ -12,6 +12,20 @@ import '../ecf_dosa_dispatch_models.dart';
 import '../ecf_dosa_activation_models.dart';
 import '../ecf_support_grant_models.dart';
 
+/// Error de numeración con el motivo que dio el servidor.
+///
+/// Dio no incluye el cuerpo de la respuesta en `toString()`, así que sin esto la
+/// pantalla solo podía decir «Inténtalo de nuevo» y el cliente no sabía qué
+/// corregir.
+class EcfSequenceException implements Exception {
+  EcfSequenceException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 Map<String, dynamic> _asMap(dynamic data) {
   if (data is Map) return data.cast<String, dynamic>();
   return const <String, dynamic>{};
@@ -199,13 +213,17 @@ class EcfRepository {
     required int endNumber,
     String? validUntil,
   }) async {
-    await _dio.post(ApiRoutes.ecfSequences, data: {
-      'documentType': documentType,
-      'startNumber': startNumber,
-      'endNumber': endNumber,
-      if (validUntil != null && validUntil.trim().isNotEmpty)
-        'validUntil': validUntil.trim(),
-    });
+    try {
+      await _dio.post(ApiRoutes.ecfSequences, data: {
+        'documentType': documentType,
+        'startNumber': startNumber,
+        'endNumber': endNumber,
+        if (validUntil != null && validUntil.trim().isNotEmpty)
+          'validUntil': validUntil.trim(),
+      });
+    } on DioException catch (error) {
+      throw EcfSequenceException(_sequenceServerMessage(error));
+    }
   }
 
   /// Numeración que la DGII autorizó a esta empresa, por tipo de comprobante.
@@ -226,16 +244,45 @@ class EcfRepository {
     String? expiresAt,
     required bool declarationAccepted,
   }) async {
-    await _dio.post(ApiRoutes.ecfDgiiAuthorizedSequences, data: {
-      'documentType': documentType,
-      'authorizationNumber': authorizationNumber.trim(),
-      'rangeFrom': rangeFrom,
-      'rangeTo': rangeTo,
-      'approvedQuantity': approvedQuantity,
-      if (expiresAt != null && expiresAt.trim().isNotEmpty)
-        'expiresAt': expiresAt.trim(),
-      'declarationAccepted': declarationAccepted,
-    });
+    try {
+      await _dio.post(ApiRoutes.ecfDgiiAuthorizedSequences, data: {
+        'documentType': documentType,
+        'authorizationNumber': authorizationNumber.trim(),
+        'rangeFrom': rangeFrom,
+        'rangeTo': rangeTo,
+        'approvedQuantity': approvedQuantity,
+        if (expiresAt != null && expiresAt.trim().isNotEmpty)
+          'expiresAt': expiresAt.trim(),
+        'declarationAccepted': declarationAccepted,
+      });
+    } on DioException catch (error) {
+      throw EcfSequenceException(_sequenceServerMessage(error));
+    }
+  }
+
+  /// Motivo legible de un error de numeración.
+  ///
+  /// Los DTO de Nest responden en inglés con el nombre del campo. Se traduce el
+  /// caso que el cliente puede provocar solo y el resto se conserva tal cual,
+  /// que siempre es mejor que un «Inténtalo de nuevo» sin motivo.
+  String _sequenceServerMessage(DioException error) {
+    final data = error.response?.data;
+    String? message;
+    if (data is Map) {
+      final raw = data['message'];
+      if (raw is String && raw.trim().isNotEmpty) {
+        message = raw.trim();
+      } else if (raw is List && raw.isNotEmpty) {
+        message = raw.first.toString().trim();
+      }
+    }
+    if (message == null || message.isEmpty) {
+      return 'No se pudo guardar la numeración. Inténtalo de nuevo.';
+    }
+    if (message.contains('documentType must be one of the following values')) {
+      return 'La DGII todavía no admite ese tipo de comprobante para numeración.';
+    }
+    return message;
   }
 
   Future<List<EcfEligibleOriginal>> eligibleOriginals() async {

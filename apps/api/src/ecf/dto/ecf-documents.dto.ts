@@ -100,8 +100,12 @@ export class ListEcfDocumentsQueryDto {
 }
 
 export class RegisterEcfSequenceDto {
-  @IsIn(["E31", "E34"])
-  documentType!: "E31" | "E34";
+  // Los tres tipos consumen el rango e-CF de la empresa (ver
+  // `ECF_SEQUENCE_TYPES` y `ALLOCATABLE` en el servicio). E32 (consumo) se
+  // declaraba y se autorizaba, pero este DTO lo rechazaba: el rango de consumo
+  // no se podía registrar y la emisión quedaba bloqueada.
+  @IsIn(["E31", "E32", "E34"])
+  documentType!: "E31" | "E32" | "E34";
 
   @Type(() => Number)
   @IsInt()
