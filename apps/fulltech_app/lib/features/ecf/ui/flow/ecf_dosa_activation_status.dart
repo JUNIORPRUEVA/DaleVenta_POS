@@ -142,37 +142,13 @@ class _EcfDosaActivationStatusState
 
     final pending = outcome.pendingMessages;
 
-    if (widget.compact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          EcfInlineNote(
-            tone: EcfTone.pending,
-            text: pending.first,
-          ),
-          if (pending.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 4),
-              child: Text(
-                // Plural real: «Y 1 paso(s) más» se leía como un texto sin
-                // terminar. Con un único paso restante ni siquiera es plural.
-                pending.length == 2
-                    ? 'Y 1 paso más por completar.'
-                    : 'Y ${pending.length - 1} pasos más por completar.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textMuted,
-                ),
-              ),
-            ),
-          const SizedBox(height: 10),
-          _refreshAction(),
-        ],
-      );
-    }
-
+    // La tarjeta es la misma en Preparación y en Postulación: fuera de ella el
+    // aviso parecía un texto suelto sobre el fondo y no se leía como un estado
+    // del expediente. Cambia el título, no la estructura.
     return EcfSection(
-      title: 'Autorización para facturar',
+      title: widget.compact
+          ? 'Qué falta para facturar'
+          : 'Autorización para facturar',
       subtitle: 'Esto es lo que falta para poder emitir comprobantes.',
       icon: Icons.fact_check_outlined,
       trailing: _running
@@ -210,6 +186,21 @@ class _EcfDosaActivationStatusState
                     ),
                   ),
                 ],
+              ),
+            ),
+          if (widget.compact && pending.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, left: 4),
+              child: Text(
+                // Plural real: «Y 1 paso(s) más» se leía como un texto sin
+                // terminar. Con un único paso restante ni siquiera es plural.
+                pending.length == 2
+                    ? 'Y 1 paso más por completar.'
+                    : 'Y ${pending.length - 1} pasos más por completar.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
               ),
             ),
           const SizedBox(height: 6),

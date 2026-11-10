@@ -18,6 +18,7 @@ import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_application_wizard.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_fiscal_data_page.dart';
+import 'package:daleventa_pos/features/ecf/ui/flow/ecf_preparation_step.dart';
 import 'package:daleventa_pos/core/widgets/responsive_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -611,16 +612,18 @@ void main() {
       ),
     );
 
-    expect(find.text('En pruebas'), findsOneWidget);
+    // La administración tiene su propia pantalla: no repite el recorrido del
+    // cliente ni reinicia la bienvenida.
+    expect(find.text('Administración e-CF'), findsOneWidget);
+    expect(find.text('Comenzar'), findsNothing);
+    expect(find.text('Tu postulación'), findsNothing);
     // Nunca se declara una autorización oficial que no existe.
     expect(find.text('Autorización oficial registrada'), findsNothing);
-    expect(find.text('Solicitud'), findsOneWidget);
+    expect(find.text('Evidencias y autorización de la DGII'), findsOneWidget);
     expect(
       find.textContaining('Adjunta la evidencia disponible'),
       findsNothing,
     );
-    // Nunca se insinúa que la emisión esté permitida.
-    expect(find.text('Bloqueada'), findsOneWidget);
   });
 
   testWidgets(
@@ -649,7 +652,7 @@ void main() {
         technical: false,
       );
       // Un requisito pendiente no adelanta al cliente a la vista de seguimiento.
-      expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
+      expect(find.byType(EcfPreparationStep), findsOneWidget);
       expect(find.text('Pruebas del SET'), findsNothing);
       // DOSA no pide el certificado en FullPOS.
       expect(find.text('Certificado digital'), findsNothing);
@@ -691,9 +694,9 @@ void main() {
       ),
     );
 
-    // El cliente ve una etiqueta comprensible; el nombre técnico queda en
-    // «Detalle técnico» para administradores.
-    expect(find.text('En revisión interna'), findsOneWidget);
+    // La pantalla de administración no repite el recorrido del cliente, así que
+    // el estado se verifica en el detalle técnico, que es donde vive.
+    expect(find.text('Administración e-CF'), findsOneWidget);
     expect(find.text('Estado interno'), findsOneWidget);
     expect(find.text('En proceso'), findsOneWidget);
     expect(find.text('36%'), findsOneWidget);
@@ -732,7 +735,7 @@ void main() {
       technical: false,
     );
     // El cliente permanece en Preparación; no ve la guía técnica antigua.
-    expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
+    expect(find.byType(EcfPreparationStep), findsOneWidget);
     expect(find.text('Ver cómo presentar'), findsNothing);
     expect(find.text('Cómo presentar tu solicitud'), findsNothing);
   });
@@ -880,7 +883,7 @@ void main() {
       step: null,
       technical: false,
     );
-    expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
+    expect(find.byType(EcfPreparationStep), findsOneWidget);
 
     // El motor legado desaparece cuando el modo de prueba no está disponible.
     final button = find.byKey(
@@ -904,7 +907,7 @@ void main() {
     );
     // Sin vigencia confirmada no se finge que el certificado está validado,
     // pero tampoco se bloquea el recorrido: el certificado lo pide DOSA.
-    expect(find.text('Solo te pediremos lo que falte.'), findsOneWidget);
+    expect(find.byType(EcfPreparationStep), findsOneWidget);
     expect(find.text('Certificado digital'), findsNothing);
     expect(find.text('Continuar con DOSA'), findsNothing);
   });
@@ -1227,6 +1230,25 @@ void main() {
     },
   );
 
+  testWidgets(
+    'preparación: sin nada que pedir no repite el encabezado de la etapa',
+    (tester) async {
+      // Empresa ya postulada con los datos completos: «Solo te pediremos lo que
+      // falte» prometía pedir algo que ya no falta, y el rail ya sitúa al
+      // usuario en la etapa.
+      await _pumpPage(
+        tester,
+        _harness(user: _adminUser(), view: _view(state: 'IN_PROGRESS')),
+        step: 'Preparación',
+        technical: false,
+      );
+
+      expect(find.byType(EcfPreparationStep), findsOneWidget);
+      expect(find.text('Solo te pediremos lo que falte.'), findsNothing);
+      expect(find.text('Preparación'), findsOneWidget);
+    },
+  );
+
   testWidgets('el cliente no ve referencias de constancia DGII', (
     tester,
   ) async {
@@ -1256,10 +1278,8 @@ void main() {
       size: const Size(390, 844),
     );
 
-    expect(find.text('En revisión interna'), findsOneWidget);
-    expect(find.text('Solicitud'), findsOneWidget);
-    expect(find.text('Pruebas'), findsOneWidget);
-    expect(find.text('Certificación'), findsOneWidget);
+    expect(find.text('Administración e-CF'), findsOneWidget);
+    expect(find.text('Evidencias y autorización de la DGII'), findsOneWidget);
     // Un desbordamiento de layout se reporta como excepción en las pruebas.
     expect(tester.takeException(), isNull);
   });
