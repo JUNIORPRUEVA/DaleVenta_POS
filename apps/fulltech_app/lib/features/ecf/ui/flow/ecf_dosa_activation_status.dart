@@ -146,11 +146,12 @@ class _EcfDosaActivationStatusState
     final pending = outcome.pendingMessages;
 
     // Preparación: tarjeta sobria —título, motivos y una sola acción a la
-    // derecha— tal como quedó definida en el diseño. Sin subtítulo, sin icono,
-    // sin nota al pie: sobraban y competían con el propio aviso.
+    // derecha— tal como quedó definida en el diseño. El título nombra el
+    // trámite de certificación para no confundirse con la numeración de la
+    // DGII, que es otro paso y se muestra justo debajo.
     if (widget.compact) {
       return EcfSection(
-        title: 'Qué falta para facturar',
+        title: 'Certificación DGII',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -185,17 +186,15 @@ class _EcfDosaActivationStatusState
             Row(
               children: [
                 Expanded(
-                  child: pending.length > 1
-                      ? Text(
-                          pending.length == 2
-                              ? '1 paso más por completar'
-                              : '${pending.length - 1} pasos más por completar',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _summaryColor,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                  child: Text(
+                    pending.length == 1
+                        ? '1 paso por completar'
+                        : '${pending.length} pasos por completar',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _summaryColor,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 _compactRefreshAction(),

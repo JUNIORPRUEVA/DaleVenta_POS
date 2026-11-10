@@ -226,6 +226,31 @@ class EcfRepository {
     }
   }
 
+  /// Renueva el rango activo cuando se agotó o venció.
+  ///
+  /// El backend exige que el nuevo rango empiece en el número ya consumido o
+  /// después (`ECF_SEQUENCE_REUSE_BLOCKED`) y que quepa en la autorización
+  /// vigente de la DGII (`ECF_SEQUENCE_EXCEEDS_AUTHORIZED`). El rango anterior
+  /// se desactiva: no se borra, queda como historial.
+  Future<void> renewSequence({
+    required String documentType,
+    required int startNumber,
+    required int endNumber,
+    String? validUntil,
+  }) async {
+    try {
+      await _dio.post(ApiRoutes.ecfSequencesRenew, data: {
+        'documentType': documentType,
+        'startNumber': startNumber,
+        'endNumber': endNumber,
+        if (validUntil != null && validUntil.trim().isNotEmpty)
+          'validUntil': validUntil.trim(),
+      });
+    } on DioException catch (error) {
+      throw EcfSequenceException(_sequenceServerMessage(error));
+    }
+  }
+
   /// Numeración que la DGII autorizó a esta empresa, por tipo de comprobante.
   Future<EcfAuthorizedSequencesView> authorizedSequences() async {
     final res = await _dio.get(ApiRoutes.ecfDgiiAuthorizedSequences);

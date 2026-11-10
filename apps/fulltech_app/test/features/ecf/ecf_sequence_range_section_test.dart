@@ -22,6 +22,7 @@ class _FakeRepository extends EcfRepository {
   Object? sequenceFailure;
   int declarations = 0;
   int saves = 0;
+  int renews = 0;
   String? lastDocumentType;
   int? lastFrom;
   int? lastTo;
@@ -83,6 +84,33 @@ class _FakeRepository extends EcfRepository {
     existing = [
       EcfSequenceInfo(
         id: 'seq-1',
+        documentType: documentType,
+        prefix: documentType,
+        startNumber: startNumber,
+        nextNumber: startNumber,
+        endNumber: endNumber,
+        active: true,
+        consumed: 0,
+        remaining: endNumber - startNumber + 1,
+      ),
+    ];
+  }
+
+  @override
+  Future<void> renewSequence({
+    required String documentType,
+    required int startNumber,
+    required int endNumber,
+    String? validUntil,
+  }) async {
+    renews++;
+    lastDocumentType = documentType;
+    lastFrom = startNumber;
+    lastTo = endNumber;
+    if (sequenceFailure != null) throw sequenceFailure!;
+    existing = [
+      EcfSequenceInfo(
+        id: 'seq-renewed',
         documentType: documentType,
         prefix: documentType,
         startNumber: startNumber,
@@ -329,5 +357,101 @@ void main() {
     await _pump(tester, canManage: false);
 
     expect(find.text('Numeración autorizada por la DGII'), findsNothing);
+  });
+
+  testWidgets('declarado sin rango ofrece registrarlo con lo autorizado', (
+    tester,
+  ) async {
+    final repository = await _pump(
+      tester,
+      declared: [_declared(documentType: 'E32')],
+    );
+
+    expect(
+      find.byKey(const ValueKey('ecf_sequence_register_E32')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Falta registrar la numeración'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('ecf_sequence_register_E32')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.saves, 1);
+    expect(repository.declarations, 0);
+    expect(repository.lastDocumentType, 'E32');
+    expect(repository.lastFrom, 1);
+    expect(repository.lastTo, 150);
+  });
+
+  testWidgets('rango agotado ofrece renovar desde el número consumido', (
+    tester,
+  ) async {
+    final repository = await _pump(
+      tester,
+      declared: [_declared()],
+      existing: [_range(remaining: 0)],
+    );
+
+    expect(
+      find.byKey(const ValueKey('ecf_sequence_renew_E31')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Se agotaron los números'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('ecf_sequence_renew_E31')));
+    await tester.pumpAndSettle();
+
+    expect(repository.renews, 1);
+    expect(repository.saves, 0);
+    expect(repository.lastDocumentType, 'E31');
+    // El rango de prueba empieza en 1 con nextNumber=2: se renueva desde 2.
+    expect(repository.lastFrom, 2);
+    expect(repository.lastTo, 150);
+  });
+
+  testWidgets('un rango usable no ofrece registrar ni renovar', (tester) async {
+    await _pump(tester, declared: [_declared()], existing: [_range()]);
+
+    expect(
+      find.byKey(const ValueKey('ecf_sequence_register_E31')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('ecf_sequence_renew_E31')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('re-declarar con rango activo renueva en vez de registrar', (
+    tester,
+  ) async {
+    // La DGII autorizó otro cupo para un tipo que ya tiene numeración: al
+    // volver a declarar, el rango debe renovarse; `register` lo rechazaría con
+    // ECF_SEQUENCE_ALREADY_EXISTS.
+    final repository = await _pump(
+      tester,
+      declared: [_declared()],
+      existing: [_range()],
+    );
+
+    await tester.tap(find.byKey(const ValueKey('ecf_dgii_declare_another')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ecf_dgii_type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Factura de Crédito Fiscal (E31)').last);
+    await tester.pumpAndSettle();
+    await _fill(tester);
+
+    await tester.tap(find.byKey(const ValueKey('ecf_dgii_declaration_save')));
+    await tester.pumpAndSettle();
+
+    expect(repository.declarations, 1);
+    expect(repository.renews, 1);
+    expect(repository.saves, 0);
+    expect(repository.lastDocumentType, 'E31');
+    expect(repository.lastFrom, 1);
+    expect(repository.lastTo, 150);
   });
 }
