@@ -105,10 +105,13 @@ void main() {
   testWidgets('autorizado: lo dice y no deja nada por hacer', (tester) async {
     await _pump(tester, result: _outcome(authorized: true, status: 'PRODUCTION_READY'));
 
+    // No se afirma el ambiente: el estado derivado habla de credenciales y la
+    // empresa puede seguir facturando en sandbox.
     expect(
-      find.text('Autorizado para facturar electrónicamente en producción.'),
+      find.text('Autorizado para facturar electrónicamente.'),
       findsOneWidget,
     );
+    expect(find.textContaining('en producción'), findsNothing);
     expect(find.text('Actualizar estado'), findsNothing);
   });
 

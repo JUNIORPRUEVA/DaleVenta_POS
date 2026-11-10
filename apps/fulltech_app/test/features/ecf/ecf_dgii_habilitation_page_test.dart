@@ -789,6 +789,11 @@ void main() {
       );
 
       expect(find.byType(EcfPreparationStep), findsNothing);
+      // El estado del expediente interno sigue en `NOT_STARTED`: la pantalla no
+      // puede decir «Sin iniciar» sobre una postulación ya registrada.
+      expect(find.text('Postulación registrada'), findsOneWidget);
+      expect(find.text('Sin iniciar'), findsNothing);
+      expect(find.textContaining('no has iniciado'), findsNothing);
 
       await tester.tap(find.text('Autorización').first);
       await tester.pumpAndSettle();

@@ -785,9 +785,24 @@ class _EcfDgiiHabilitationPageState
                           ),
                           EcfFlowStep.tracking => dosaOwnsCertificate
                               ? EcfDosaTrackingStep(
-                                  milestone: _milestoneOf(stage).index,
-                                  statusLabel: _clientStateLabel(view),
-                                  statusMessage: _clientStatusMessage(view),
+                                  // Con la postulación registrada, el estado del
+                                  // expediente interno —que sigue en
+                                  // `NOT_STARTED`— no describe nada: diría «Sin
+                                  // iniciar» sobre un trámite ya presentado,
+                                  // encima del aviso de lo que falta para
+                                  // facturar. Se informa lo que consta y el
+                                  // detalle lo da la tarjeta de abajo.
+                                  milestone: postulationStarted
+                                      ? 1
+                                      : _milestoneOf(stage).index,
+                                  statusLabel: postulationStarted
+                                      ? 'Postulación registrada'
+                                      : _clientStateLabel(view),
+                                  statusMessage: postulationStarted
+                                      ? 'Tu postulación está registrada con DOSA. '
+                                            'Abajo tienes lo que falta para poder '
+                                            'facturar electrónicamente.'
+                                      : _clientStatusMessage(view),
                                   official: view.officialAuthorization,
                                   activation: canOnboard
                                       ? EcfDosaActivationStatus(
