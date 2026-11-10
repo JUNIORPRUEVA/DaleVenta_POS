@@ -57,6 +57,19 @@ void main() {
       expect(modes.map((m) => m.code), isNot(contains('E34')));
     });
 
+    test('con la excepción habilitada sigue ofreciendo E31 y E32', () {
+      // El interruptor de Empresa añade «Normal» a la lista; no retira los
+      // comprobantes electrónicos: el vendedor tiene que poder elegirlos.
+      final modes = ecfPosFiscalModesFromCapabilities(
+        _Builder(allowNormal: true).build(),
+      );
+      expect(modes, [
+        EcfPosFiscalMode.e31,
+        EcfPosFiscalMode.e32,
+        EcfPosFiscalMode.normal,
+      ]);
+    });
+
     test('Normal solo aparece si la empresa habilitó la excepción', () {
       expect(
         ecfPosFiscalModesFromCapabilities(_Builder().build()),
