@@ -102,7 +102,8 @@ class EcfPreparationStep extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
+          // Ancho del diseño aprobado: las dos tarjetas miden 700 px.
+          constraints: const BoxConstraints(maxWidth: 700),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

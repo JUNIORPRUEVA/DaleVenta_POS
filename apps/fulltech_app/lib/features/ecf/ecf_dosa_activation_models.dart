@@ -139,12 +139,12 @@ String describeActivationReason(String code) {
       return 'DOSA aún no ha confirmado que terminó tu certificación. Revisa tu '
           'correo por si te pidieron algo más.';
     case 'ECF_DOSA_ACTIVATION_DGII_NOT_APPROVED':
-      return 'La DGII no ha aprobado todavía tu facturación electrónica.';
+      return 'La DGII aún no ha aprobado tu facturación electrónica.';
     case 'ECF_DOSA_ACTIVATION_DGII_APPROVAL_STALE':
       return 'La aprobación de la DGII que consta es de un intento anterior: '
           'hay que registrarla de nuevo para esta postulación.';
     case 'ECF_DOSA_ACTIVATION_ADMIN_NOT_AUTHORIZED':
-      return 'Falta registrar aquí tu autorización de la DGII.';
+      return 'Falta registrar tu autorización de la DGII.';
     case 'ECF_DOSA_ACTIVATION_ADMIN_AUTHORIZATION_STALE':
       return 'Tu autorización registrada es anterior a esta postulación: hay que '
           'registrarla otra vez.';
