@@ -259,15 +259,16 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // módulo. «Configuración e-CF» solo era un paso intermedio hacia este mismo
     // lugar y, para una empresa en habilitación, mostraba secciones vacías.
     final isEcfHome = location == Routes.ecf;
-    // Destino del botón «volver» de la barra. Los niveles del módulo e-CF
-    // vuelven a la puesta en marcha; antes se enviaba a Configuración, que en
-    // escritorio redirige a otra pantalla y el usuario aterrizaba fuera del
-    // módulo.
+    // Destino del botón «volver» de la barra. La PRIMERA pantalla de un módulo
+    // vuelve a la pantalla principal —el mismo destino que el router resuelve
+    // al iniciar sesión, según el rol—; los niveles internos vuelven al nivel
+    // anterior. Antes, el módulo e-CF y Configuración enviaban a
+    // `/configuracion`, que en escritorio redirige a otra pantalla.
     final VoidCallback? shellBack = routeActions?.route == location &&
             routeActions?.onBack != null
         ? routeActions!.onBack
-        : location == Routes.ecf
-        ? () => context.go(Routes.configuracion)
+        : location == Routes.ecf || location == Routes.configuracion
+        ? () => context.go(Routes.home)
         : location == Routes.ecfDocuments ||
               location == Routes.ecfFiscalData ||
               location == Routes.ecfConfig ||

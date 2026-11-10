@@ -136,7 +136,11 @@ class _EcfDgiiHabilitationPageState
       setState(() => _step = EcfFlowStep.values[step.index - 1]);
       return;
     }
-    context.go(Routes.configuracion);
+    // En la primera pantalla no hay paso anterior: se vuelve a la pantalla
+    // principal, que el router resuelve según el rol. Antes se enviaba a
+    // Configuración, que en escritorio redirige a otra pantalla y dejaba al
+    // usuario fuera del módulo.
+    context.go(Routes.home);
   }
 
   bool get _canGoBack =>

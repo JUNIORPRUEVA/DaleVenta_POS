@@ -249,6 +249,24 @@ void main() {
     );
   });
 
+  testWidgets('an empty tray offers the action that produces the first '
+      'document', (tester) async {
+    await pumpTray(
+      tester,
+      harness(tray((_) => {'total': 0, 'items': <Object>[]})),
+    );
+
+    // Sin salida, la pantalla parecía no navegar: el estado vacío explica qué
+    // hacer y lleva al punto de venta.
+    expect(
+      find.byKey(const ValueKey('ecf_documents_empty_go_sales')),
+      findsOneWidget,
+    );
+    expect(find.text('Ir a ventas'), findsOneWidget);
+    // Con la bandeja vacía de verdad no hay filtros que quitar.
+    expect(find.text('Quitar filtros'), findsNothing);
+  });
+
   testWidgets('a filter with no matches offers to clear the filters', (
     tester,
   ) async {
