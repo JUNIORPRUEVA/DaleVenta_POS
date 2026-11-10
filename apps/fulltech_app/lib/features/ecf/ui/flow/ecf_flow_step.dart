@@ -8,7 +8,7 @@ import 'ecf_flow_kit.dart';
 /// Es una agrupación de PRESENTACIÓN: no crea estados nuevos ni sustituye al
 /// backend. El paso que se muestra al abrir la pantalla se deduce del expediente
 /// real (ver `initialEcfFlowStep`).
-enum EcfFlowStep { welcome, preparation, tracking }
+enum EcfFlowStep { welcome, preparation, tracking, authorization }
 
 extension EcfFlowStepLabels on EcfFlowStep {
   /// Etiqueta corta para la guía de pasos.
@@ -16,6 +16,7 @@ extension EcfFlowStepLabels on EcfFlowStep {
     EcfFlowStep.welcome => 'Bienvenida',
     EcfFlowStep.preparation => 'Preparación',
     EcfFlowStep.tracking => 'Tu postulación',
+    EcfFlowStep.authorization => 'Autorización',
   };
 }
 
@@ -36,7 +37,12 @@ EcfFlowStep initialEcfFlowStep({
   required bool testsOrLater,
   bool dosaOwnsCertificate = false,
 }) {
-  if (officialAuthorization || testsOrLater) return EcfFlowStep.tracking;
+  // Con la autorización ya registrada el recorrido termina en ese paso: es el
+  // último y el único que queda del lado del cliente.
+  if (officialAuthorization) return EcfFlowStep.authorization;
+  // Un expediente que ya pasó las pruebas sigue en seguimiento: el trámite con
+  // la DGII no ha terminado todavía.
+  if (testsOrLater) return EcfFlowStep.tracking;
   final started =
       state != 'NOT_STARTED' || hasResolvedRequirement || certificateValidated;
   if (!started) return EcfFlowStep.welcome;
@@ -59,7 +65,13 @@ class EcfStepRail extends StatelessWidget {
 
   final bool horizontal;
 
-  bool _reachable(int index) => index < current.index;
+  /// Se puede volver a un paso anterior y, desde el seguimiento, abrir el paso
+  /// de autorización: es la acción que cierra el trámite y el cliente no debe
+  /// tener que adivinar cómo llegar a ella.
+  bool _reachable(int index) =>
+      index < current.index ||
+      (EcfFlowStep.values[index] == EcfFlowStep.authorization &&
+          current.index >= EcfFlowStep.tracking.index);
 
   @override
   Widget build(BuildContext context) {
