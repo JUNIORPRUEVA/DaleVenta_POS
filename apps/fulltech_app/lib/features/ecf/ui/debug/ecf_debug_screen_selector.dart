@@ -68,6 +68,7 @@ class EcfDebugPreview extends StatelessWidget {
         onStart: () {},
         onGoCompany: () {},
         onGoCertificate: () {},
+        onContinue: () {},
         dosaEntry: const _DebugActionCard(
           title: 'Postulación electrónica',
           message:

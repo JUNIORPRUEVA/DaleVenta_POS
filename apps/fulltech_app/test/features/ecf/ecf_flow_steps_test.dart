@@ -392,6 +392,72 @@ void main() {
         EcfFlowStep.tracking,
       );
     });
+
+    test('con la postulación abierta el recorrido sigue en seguimiento', () {
+      // El caso real: postulación cerrada con DOSA y firma pendiente. El
+      // expediente no ha avanzado de estado, así que sin esta señal el cliente
+      // volvía a Preparación, donde ya no queda nada que iniciar.
+      expect(
+        initialEcfFlowStep(
+          state: 'NOT_STARTED',
+          hasResolvedRequirement: false,
+          officialAuthorization: false,
+          fiscalReady: true,
+          certificateValidated: false,
+          testsOrLater: false,
+          postulationStarted: true,
+        ),
+        EcfFlowStep.tracking,
+      );
+      // La firma sigue siendo el paso final cuando ya está registrada.
+      expect(
+        initialEcfFlowStep(
+          state: 'NOT_STARTED',
+          hasResolvedRequirement: true,
+          officialAuthorization: true,
+          fiscalReady: true,
+          certificateValidated: false,
+          testsOrLater: false,
+          postulationStarted: true,
+        ),
+        EcfFlowStep.authorization,
+      );
+    });
+  });
+
+  testWidgets('rail: se puede volver a un paso ya alcanzado', (tester) async {
+    EcfFlowStep? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EcfStepRail(
+            current: EcfFlowStep.preparation,
+            furthest: EcfFlowStep.tracking,
+            onSelect: (step) => selected = step,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Tu postulación'));
+    await tester.pumpAndSettle();
+    expect(selected, EcfFlowStep.tracking);
+  });
+
+  testWidgets('rail: sin avance justificado no se salta de paso', (tester) async {
+    EcfFlowStep? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EcfStepRail(
+            current: EcfFlowStep.preparation,
+            onSelect: (step) => selected = step,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Tu postulación'));
+    await tester.pumpAndSettle();
+    expect(selected, isNull);
   });
 
   testWidgets('bienvenida: vídeo, portal DGII y una sola acción', (

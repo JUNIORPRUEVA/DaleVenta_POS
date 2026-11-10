@@ -36,10 +36,16 @@ EcfFlowStep initialEcfFlowStep({
   required bool certificateValidated,
   required bool testsOrLater,
   bool dosaOwnsCertificate = false,
+  bool postulationStarted = false,
 }) {
   // Con la autorización ya registrada el recorrido termina en ese paso: es el
   // último y el único que queda del lado del cliente.
   if (officialAuthorization) return EcfFlowStep.authorization;
+  // Con la postulación ya abierta el recorrido continúa en Seguimiento: es la
+  // etapa real del trámite y desde ahí se llega a la autorización. Sin esto una
+  // empresa con la postulación cerrada volvía a Preparación, donde ya no queda
+  // nada que iniciar y no existía ninguna forma de avanzar.
+  if (postulationStarted) return EcfFlowStep.tracking;
   // Un expediente que ya pasó las pruebas sigue en seguimiento: el trámite con
   // la DGII no ha terminado todavía.
   if (testsOrLater) return EcfFlowStep.tracking;
@@ -56,20 +62,28 @@ class EcfStepRail extends StatelessWidget {
     required this.current,
     required this.onSelect,
     this.horizontal = false,
+    this.furthest,
   });
 
   final EcfFlowStep current;
 
-  /// Solo se permite volver a un paso anterior; hacia delante manda el flujo.
+  /// Solo se permite moverse por lo que el estado ya justifica.
   final ValueChanged<EcfFlowStep> onSelect;
 
   final bool horizontal;
 
-  /// Se puede volver a un paso anterior y, desde el seguimiento, abrir el paso
-  /// de autorización: es la acción que cierra el trámite y el cliente no debe
-  /// tener que adivinar cómo llegar a ella.
+  /// Último paso que la empresa ya alcanzó según su expediente real.
+  ///
+  /// Antes el rail solo permitía retroceder: un paso que se quedaba sin
+  /// acciones dejaba al cliente sin ninguna salida. Ahora se puede volver a
+  /// cualquier paso ya alcanzado, y el avance lo sigue decidiendo el estado.
+  final EcfFlowStep? furthest;
+
+  /// Se puede volver a un paso ya alcanzado y, desde el seguimiento, abrir el
+  /// paso de autorización: es la acción que cierra el trámite y el cliente no
+  /// debe tener que adivinar cómo llegar a ella.
   bool _reachable(int index) =>
-      index < current.index ||
+      index <= (furthest ?? current).index ||
       (EcfFlowStep.values[index] == EcfFlowStep.authorization &&
           current.index >= EcfFlowStep.tracking.index);
 

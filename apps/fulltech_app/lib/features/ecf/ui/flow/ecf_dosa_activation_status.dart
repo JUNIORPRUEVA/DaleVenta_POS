@@ -133,11 +133,14 @@ class _EcfDosaActivationStatusState
     }
 
     if (outcome.authorized) {
+      // El estado derivado habla de credenciales, no del ambiente en el que la
+      // empresa va a facturar: con la empresa en sandbox, afirmar «en
+      // producción» era una promesa falsa. Se afirma solo lo que consta.
       return EcfInlineNote(
         tone: EcfTone.done,
         icon: Icons.verified_rounded,
         text: outcome.certificationStatus == 'PRODUCTION_READY'
-            ? 'Autorizado para facturar electrónicamente en producción.'
+            ? 'Autorizado para facturar electrónicamente.'
             : 'Autorizado para facturar electrónicamente en ambiente de '
                   'certificación.',
       );

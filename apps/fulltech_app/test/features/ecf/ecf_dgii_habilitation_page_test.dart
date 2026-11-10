@@ -770,6 +770,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'con la postulación abierta el recorrido sigue en seguimiento y llega a la firma',
+    (tester) async {
+      // Caso real reportado: con la postulación ya abierta el cliente caía en
+      // Preparación, donde no quedaba nada que iniciar y no había ninguna forma
+      // de avanzar. El recorrido debe continuar en Seguimiento y desde ahí
+      // ofrecer el último paso, que es la firma.
+      await _pumpPage(
+        tester,
+        _harness(
+          user: _adminUser(),
+          intentHasSession: true,
+          view: _view(state: 'NOT_STARTED'),
+        ),
+        step: null,
+        technical: false,
+      );
+
+      expect(find.byType(EcfPreparationStep), findsNothing);
+      // El estado del expediente interno sigue en `NOT_STARTED`: la pantalla no
+      // puede decir «Sin iniciar» sobre una postulación ya registrada.
+      expect(find.text('Postulación registrada'), findsOneWidget);
+      expect(find.text('Sin iniciar'), findsNothing);
+      expect(find.textContaining('no has iniciado'), findsNothing);
+
+      await tester.tap(find.text('Autorización').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Autorización para emitir'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('empresa Alanube conserva la carga local del certificado', (
     tester,
   ) async {
@@ -800,6 +832,9 @@ void main() {
       // tras la reconciliación auditada. El certificado se gestiona dentro del
       // asistente oficial, así que no se pide validarlo aquí y la acción
       // ofrecida abre el asistente.
+      //
+      // Con el intento ya creado el recorrido abre en Seguimiento: es la etapa
+      // real del trámite y donde vive esa acción.
       await _pumpPage(
         tester,
         _harness(
@@ -811,8 +846,6 @@ void main() {
         step: null,
         technical: false,
       );
-      await tester.tap(find.text('Comenzar').first);
-      await tester.pumpAndSettle();
 
       expect(find.text('Validar certificado'), findsNothing);
       expect(find.text('Certificado digital'), findsNothing);
@@ -831,7 +864,9 @@ void main() {
     'expediente histórico: la autorización se muestra sin desplegar nada',
     (tester) async {
       // Estado real de FULLTECH antes de autorizar: configuración ALANUBE,
-      // intento DOSA reconciliado y revisión histórica pendiente.
+      // intento DOSA reconciliado y revisión histórica pendiente. Con el intento
+      // ya creado el recorrido abre en Seguimiento, y ahí debe verse el paso
+      // obligatorio sin desplegar nada.
       await _pumpPage(
         tester,
         _harness(
@@ -844,8 +879,6 @@ void main() {
         step: null,
         technical: false,
       );
-      await tester.tap(find.text('Comenzar').first);
-      await tester.pumpAndSettle();
 
       expect(find.text('Validar certificado'), findsNothing);
       expect(find.text('Continuar con el asistente'), findsNothing);
