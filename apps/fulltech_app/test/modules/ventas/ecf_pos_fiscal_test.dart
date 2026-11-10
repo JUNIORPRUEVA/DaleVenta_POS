@@ -264,4 +264,81 @@ void main() {
       );
     });
   });
+
+  group('preselección al cambiar de cliente', () {
+    const all = [
+      EcfPosFiscalMode.e31,
+      EcfPosFiscalMode.e32,
+      EcfPosFiscalMode.normal,
+    ];
+    const electronic = [EcfPosFiscalMode.e31, EcfPosFiscalMode.e32];
+
+    test('la elección manual del vendedor no se pisa', () {
+      // El vendedor eligió E31 y luego cambia el cliente: se respeta.
+      expect(
+        ecfResolvePreselection(
+          current: EcfPosFiscalMode.e31,
+          chosenByUser: true,
+          available: all,
+          clientTaxId: null,
+          clientLegalName: null,
+        ),
+        EcfPosFiscalMode.e31,
+      );
+    });
+
+    test(
+      'con la excepción activa, el vendedor puede quedarse en Normal aunque '
+      'el cliente tenga RNC',
+      () {
+        expect(
+          ecfResolvePreselection(
+            current: EcfPosFiscalMode.normal,
+            chosenByUser: true,
+            available: all,
+            clientTaxId: '133020253',
+            clientLegalName: 'Cliente SA',
+          ),
+          EcfPosFiscalMode.normal,
+        );
+      },
+    );
+
+    test('sin elección previa se propone según el receptor', () {
+      expect(
+        ecfResolvePreselection(
+          current: null,
+          chosenByUser: false,
+          available: electronic,
+          clientTaxId: '133020253',
+          clientLegalName: 'Cliente SA',
+        ),
+        EcfPosFiscalMode.e31,
+      );
+      expect(
+        ecfResolvePreselection(
+          current: null,
+          chosenByUser: false,
+          available: electronic,
+          clientTaxId: '133020253',
+          clientLegalName: null,
+        ),
+        EcfPosFiscalMode.e32,
+      );
+    });
+
+    test('si lo elegido dejó de estar disponible, se vuelve a proponer', () {
+      // «Normal» ya no se ofrece (se desactivó la excepción): no se conserva.
+      expect(
+        ecfResolvePreselection(
+          current: EcfPosFiscalMode.normal,
+          chosenByUser: true,
+          available: electronic,
+          clientTaxId: null,
+          clientLegalName: null,
+        ),
+        EcfPosFiscalMode.e32,
+      );
+    });
+  });
 }

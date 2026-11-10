@@ -141,9 +141,30 @@ EcfPosFiscalMode? defaultEcfPosFiscalMode({
   return null;
 }
 
+/// Preselección para el POS, respetando lo que el vendedor ya decidió.
+///
+/// Recalcular al cambiar de cliente no puede pisar una elección manual: el
+/// vendedor manda. Solo se propone cuando aún no eligió, o cuando lo que había
+/// elegido dejó de estar disponible (por ejemplo, se perdió la numeración).
+EcfPosFiscalMode? ecfResolvePreselection({
+  required EcfPosFiscalMode? current,
+  required bool chosenByUser,
+  required List<EcfPosFiscalMode> available,
+  required String? clientTaxId,
+  required String? clientLegalName,
+}) {
+  if (chosenByUser && current != null && available.contains(current)) {
+    return current;
+  }
+  return defaultEcfPosFiscalMode(
+    available: available,
+    clientTaxId: clientTaxId,
+    clientLegalName: clientLegalName,
+  );
+}
+
 /// Motivo de la excepción: se exige con contenido real, igual que el servidor.
 const int ecfWithoutDocumentReasonMinLength = 10;
-
 bool isEcfWithoutDocumentReasonValid(String? reason) {
   return (reason ?? '').trim().length >= ecfWithoutDocumentReasonMinLength;
 }

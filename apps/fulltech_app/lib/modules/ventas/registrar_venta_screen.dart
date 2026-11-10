@@ -1149,15 +1149,16 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
           if (!mounted) return;
           setState(() {
             _ecfAutoSelectionKey = key;
-            if (!_ecfModeChosenByUser) {
-              _selectedEcfMode = defaultEcfPosFiscalMode(
-                available: ecfModes,
-                clientTaxId: _selectedClientTaxId,
-                clientLegalName: _selectedClientFiscalName,
-              );
-              if (_selectedEcfMode != EcfPosFiscalMode.normal) {
-                _ecfWithoutDocumentReason = null;
-              }
+            // La elección manual del vendedor no se pisa al cambiar de cliente.
+            _selectedEcfMode = ecfResolvePreselection(
+              current: _selectedEcfMode,
+              chosenByUser: _ecfModeChosenByUser,
+              available: ecfModes,
+              clientTaxId: _selectedClientTaxId,
+              clientLegalName: _selectedClientFiscalName,
+            );
+            if (_selectedEcfMode != EcfPosFiscalMode.normal) {
+              _ecfWithoutDocumentReason = null;
             }
           });
         });

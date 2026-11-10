@@ -753,8 +753,11 @@ class _EcfSalesWithoutDocumentControl extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final moduleEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled == true;
+    // Con el módulo apagado no se consulta nada: ni se pinta el control ni se
+    // pide la configuración al servidor.
+    if (!moduleEnabled) return const SizedBox.shrink();
     final capabilities = ref.watch(ecfCapabilitiesProvider).valueOrNull;
-    if (!moduleEnabled || capabilities == null || !capabilities.enabled) {
+    if (capabilities == null || !capabilities.enabled) {
       return const SizedBox.shrink();
     }
     return EcfSalesWithoutDocumentSection(
