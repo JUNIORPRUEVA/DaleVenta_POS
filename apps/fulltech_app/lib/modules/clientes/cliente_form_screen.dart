@@ -242,7 +242,6 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(clientesControllerProvider);
     final user = ref.watch(authStateProvider).user;
-    final formContent = _buildFormContent(context, state: state);
 
     if (widget.compactDialog) {
       final theme = Theme.of(context);
@@ -266,14 +265,15 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 14, 12, 14),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(0),
+                padding: const EdgeInsets.fromLTRB(20, 16, 10, 12),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: Color(0xFFEDF1F6)),
                   ),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Column(
@@ -281,33 +281,33 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                         children: [
                           Text(
                             _isEdit ? 'Editar cliente' : 'Nuevo cliente',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: theme.colorScheme.onPrimary,
+                            style: const TextStyle(
+                              fontSize: 16.5,
                               fontWeight: FontWeight.w800,
+                              letterSpacing: -0.25,
+                              color: Color(0xFF0F172A),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Crea el cliente sin salir del formulario de operaciones.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onPrimary.withValues(
-                                alpha: 0.84,
-                              ),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Se guarda al instante y vuelve a la factura.',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              height: 1.3,
+                              color: Color(0xFF64748B),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    IconButton.filledTonal(
+                    IconButton(
                       tooltip: 'Cerrar',
+                      visualDensity: VisualDensity.compact,
+                      color: const Color(0xFF94A3B8),
                       onPressed: state.saving
                           ? null
                           : () => Navigator.of(context).pop(),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.18),
-                        foregroundColor: theme.colorScheme.onPrimary,
-                      ),
-                      icon: const Icon(Icons.close_rounded),
+                      icon: const Icon(Icons.close_rounded, size: 20),
                     ),
                   ],
                 ),
@@ -316,9 +316,26 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                 child: SafeArea(
                   top: false,
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
-                    child: formContent,
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    child: _buildFormContent(
+                      context,
+                      state: state,
+                      withActions: false,
+                    ),
                   ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    top: BorderSide(color: Color(0xFFEDF1F6)),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: _buildFormActions(context, state),
                 ),
               ),
             ],
@@ -340,7 +357,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: formContent,
+              child: _buildFormContent(context, state: state),
             ),
           ),
           if (_loadingInitial)
@@ -360,34 +377,39 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
       labelText: label,
       hintText: hint,
       filled: true,
-      fillColor: const Color(0xFFFFFFFF),
+      fillColor: const Color(0xFFF8FAFC),
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
       labelStyle: const TextStyle(
         fontSize: 12.5,
         fontWeight: FontWeight.w600,
         color: Color(0xFF5B6B7A),
       ),
+      floatingLabelStyle: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF1957E6),
+      ),
       hintStyle: const TextStyle(
-        fontSize: 14,
+        fontSize: 13.5,
         fontWeight: FontWeight.w500,
         color: Color(0xFF9AA7B2),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFD3D9DF), width: 1),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.4),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
       ),
     );
   }
@@ -395,6 +417,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   Widget _buildFormContent(
     BuildContext context, {
     required ClientesState state,
+    bool withActions = true,
   }) {
     final wholesaleEnabled =
         ref
@@ -527,61 +550,10 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
               },
             ),
           ],
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: state.saving ? null : () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1957E6),
-                    backgroundColor: Colors.white,
-                    side: const BorderSide(
-                      color: Color(0xFF1957E6),
-                      width: 1.2,
-                    ),
-                    minimumSize: const Size.fromHeight(46),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  child: const Text('Cancelar'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: state.saving ? null : _save,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF1957E6),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(46),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  child: state.saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Guardar'),
-                ),
-              ),
-            ],
-          ),
+          if (withActions) ...[
+            const SizedBox(height: 18),
+            _buildFormActions(context, state),
+          ],
         ],
       ),
     );
@@ -591,6 +563,62 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         const SingleActivator(LogicalKeyboardKey.numpadEnter): _save,
       },
       child: Focus(autofocus: true, child: form),
+    );
+  }
+
+  /// Cancelar / Guardar. Se comparte entre la página completa y el pie del
+  /// panel lateral para que ambas variantes se comporten y se vean igual.
+  Widget _buildFormActions(BuildContext context, ClientesState state) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: state.saving ? null : () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF334155),
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
+              minimumSize: const Size.fromHeight(46),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: const Text('Cancelar'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: FilledButton(
+            onPressed: state.saving ? null : _save,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF1957E6),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(46),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: state.saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Guardar'),
+          ),
+        ),
+      ],
     );
   }
 }

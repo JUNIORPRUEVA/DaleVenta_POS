@@ -56,10 +56,6 @@ enum EcfPosFiscalMode {
 
   /// `true` cuando el comprobante exige identificar al receptor.
   bool get requiresBuyer => this == EcfPosFiscalMode.e31;
-
-  /// `true` cuando la venta no produce comprobante y debe quedar registrada
-  /// como excepción con su motivo.
-  bool get requiresReason => this == EcfPosFiscalMode.normal;
 }
 
 EcfPosFiscalMode? ecfPosFiscalModeFromCode(String? code) {
@@ -161,10 +157,4 @@ EcfPosFiscalMode? ecfResolvePreselection({
     clientTaxId: clientTaxId,
     clientLegalName: clientLegalName,
   );
-}
-
-/// Motivo de la excepción: se exige con contenido real, igual que el servidor.
-const int ecfWithoutDocumentReasonMinLength = 10;
-bool isEcfWithoutDocumentReasonValid(String? reason) {
-  return (reason ?? '').trim().length >= ecfWithoutDocumentReasonMinLength;
 }

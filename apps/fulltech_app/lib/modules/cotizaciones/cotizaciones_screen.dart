@@ -500,6 +500,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _inventoryEnabledCache = false;
   ProviderSubscription<AsyncValue<CompanySettings>>?
   _companySettingsSubscription;
+  ProviderSubscription<AsyncValue<EcfCapabilities>>? _ecfCapabilitiesSubscription;
+  EcfCapabilities? _ecfCapabilitiesCache;
   ProviderSubscription<AuthState>? _authStateSubscription;
   ProviderSubscription<CatalogState>? _catalogSubscription;
 
@@ -557,7 +559,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   EcfPosFiscalMode? _selectedEcfMode;
   bool _ecfModeChosenByUser = false;
   String? _ecfSequenceDueDate;
-  String? _ecfWithoutDocumentReason;
 
   String? _editingId;
   DateTime? _editingCreatedAt;
@@ -619,6 +620,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         .listenManual<AsyncValue<CompanySettings>>(
           companySettingsProvider,
           (previous, next) => _applyCompanySettingsFromProvider(next),
+        );
+    // Las capacidades e-CF son un `autoDispose`: sin esta suscripción se
+    // destruyen antes de resolver y el carrito se queda sin comprobantes,
+    // bloqueando el cobro aunque la empresa facture electrónicamente.
+    _ecfCapabilitiesCache = ref.read(ecfCapabilitiesProvider).valueOrNull;
+    _ecfCapabilitiesSubscription = ref
+        .listenManual<AsyncValue<EcfCapabilities>>(
+          ecfCapabilitiesProvider,
+          (previous, next) => _applyEcfCapabilitiesFromProvider(next),
         );
     _openTicketsRepository = ref.read(openSalesTicketsRepositoryProvider);
     final user = ref.read(authStateProvider).user;
@@ -747,6 +757,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     apply();
   }
 
+  /// Refresca los tipos de comprobante en cuanto el servidor los devuelve.
+  void _applyEcfCapabilitiesFromProvider(AsyncValue<EcfCapabilities> next) {
+    final capabilities = next.valueOrNull;
+    if (capabilities == null) return;
+    if (identical(capabilities, _ecfCapabilitiesCache)) return;
+
+    void apply() {
+      if (!mounted) return;
+      if (identical(capabilities, _ecfCapabilitiesCache)) return;
+      setState(() => _ecfCapabilitiesCache = capabilities);
+    }
+
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+      return;
+    }
+    apply();
+  }
+
   String _taxConfigSignature(ProductTaxUiConfig config) {
     final settings = config.settings;
     final buffer = StringBuffer()
@@ -831,6 +861,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _taxConfigCache = null;
     _taxConfigCacheSignature = null;
     _companySettingsCache = null;
+    _ecfCapabilitiesCache = null;
     _inventoryEnabledCache = false;
     _lastPublishedDesktopFooterSignature = null;
     _remoteRefreshInFlight = false;
@@ -1388,6 +1419,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _taxConfigSubscription = null;
     _companySettingsSubscription?.close();
     _companySettingsSubscription = null;
+    _ecfCapabilitiesSubscription?.close();
+    _ecfCapabilitiesSubscription = null;
     _authStateSubscription?.close();
     _authStateSubscription = null;
     _catalogSubscription?.close();
@@ -2236,6 +2269,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ref.read(companySettingsProvider).valueOrNull?.ecfEnabled == true;
 
   EcfCapabilities? get _ecfCaps =>
+      _ecfCapabilitiesCache ??
       ref.read(ecfCapabilitiesProvider).valueOrNull;
 
   /// Tipos que se pueden ofrecer con la numeración autorizada de hoy.
@@ -2283,7 +2317,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return EcfPosFiscalSelector(
       modes: modes,
       selected: _ecfModeForCheckout(),
-      warning: _ecfCaps?.salesWithoutEcfWarning ?? '',
       missingBuyer:
           _ecfModeForCheckout() == EcfPosFiscalMode.e31 &&
           !ecfBuyerIdentityComplete(_ecfBuyerTaxId, _ecfBuyerName),
@@ -2296,9 +2329,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     setState(() {
       _ecfModeChosenByUser = true;
       _selectedEcfMode = mode;
-      if (mode != EcfPosFiscalMode.normal) {
-        _ecfWithoutDocumentReason = null;
-      }
     });
   }
 
@@ -2574,7 +2604,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _selectedEcfMode = null;
     _ecfModeChosenByUser = false;
     _ecfSequenceDueDate = null;
-    _ecfWithoutDocumentReason = null;
     _editingId = null;
     _editingCreatedAt = null;
     _rememberWholesalePricingContext();
@@ -5444,7 +5473,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 );
               }
 
-              final filteredClients = clients;
+              // Orden alfabético legible: se ignoran acentos y mayúsculas para
+              // que «Ámbar» quede junto a «ambar» y no al final de la lista.
+              final filteredClients = List<ClienteModel>.of(clients)
+                ..sort(
+                  (a, b) => _clientSortKey(a.nombre).compareTo(
+                    _clientSortKey(b.nombre),
+                  ),
+                );
 
               final selectedDetailClient = detailClient;
               final content = selectedDetailClient != null
@@ -5467,61 +5503,53 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   : Column(
                       mainAxisSize: MainAxisSize.max,
                       children: [
-                        SizedBox(
-                          height: isDesktop ? 48 : 46,
+                        // Buscador a sangre: ocupa todo el ancho del panel y
+                        // queda pegado al título, sin aire lateral.
+                        Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            border: Border(
+                              bottom: BorderSide(color: Color(0xFFE8EEF5)),
+                            ),
+                          ),
+                          padding: EdgeInsets.fromLTRB(
+                            isDesktop ? 16 : 12,
+                            8,
+                            8,
+                            8,
+                          ),
                           child: Row(
                             children: [
+                              const Icon(
+                                Icons.search_rounded,
+                                size: 20,
+                                color: Color(0xFF94A3B8),
+                              ),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: TextField(
                                   controller: searchCtrl,
                                   textInputAction: TextInputAction.search,
-                                  decoration: InputDecoration(
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                  cursorColor: const Color(0xFF1957E6),
+                                  cursorHeight: 18,
+                                  decoration: const InputDecoration(
                                     hintText: 'Buscar cliente',
-                                    prefixIcon: const Icon(
-                                      Icons.search_rounded,
-                                      size: 19,
+                                    hintStyle: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF94A3B8),
                                     ),
-                                    prefixIconConstraints: const BoxConstraints(
-                                      minWidth: 40,
-                                      minHeight: 40,
-                                    ),
-                                    suffixIcon:
-                                        searchCtrl.text.trim().isNotEmpty
-                                        ? IconButton(
-                                            onPressed: () {
-                                              searchCtrl.clear();
-                                              detailClient = null;
-                                              scheduleLoadClients();
-                                              setStateDialog(() {});
-                                            },
-                                            icon: const Icon(Icons.close),
-                                          )
-                                        : null,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
                                     isDense: true,
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFD7E2EE),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFD7E2EE),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF2563EB),
-                                        width: 1.35,
-                                      ),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 11,
                                     ),
                                   ),
                                   onChanged: (_) {
@@ -5534,29 +5562,59 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   },
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              IconButton.filledTonal(
-                                onPressed: () async {
-                                  final created = await openClientFormDrawer();
-                                  if (!mounted ||
-                                      !dialogOpen ||
-                                      !context.mounted ||
-                                      created == null) {
-                                    return;
-                                  }
-                                  _commitEditorChange(() {
-                                    _selectedClientId = created.id;
-                                    _selectedClientName = created.nombre;
-                                    _selectedClientPhone = created.telefono;
-                                    _applyClientFiscalPrefill(created);
-                                  });
-                                  unawaited(_repriceCartForWholesale());
-                                  unawaited(_rememberBillingClient(created));
-                                  Navigator.pop(context);
-                                },
-                                tooltip: 'Agregar cliente',
-                                icon: const Icon(
-                                  Icons.person_add_alt_1_outlined,
+                              if (searchCtrl.text.trim().isNotEmpty)
+                                IconButton(
+                                  tooltip: 'Limpiar búsqueda',
+                                  visualDensity: VisualDensity.compact,
+                                  iconSize: 18,
+                                  color: const Color(0xFF94A3B8),
+                                  onPressed: () {
+                                    searchCtrl.clear();
+                                    detailClient = null;
+                                    scheduleLoadClients();
+                                    setStateDialog(() {});
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                              // Crear cliente desde dentro del propio buscador.
+                              Tooltip(
+                                message: 'Crear cliente',
+                                child: Material(
+                                  color: const Color(0xFF1957E6),
+                                  borderRadius: BorderRadius.circular(9),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(9),
+                                    onTap: () async {
+                                      final created = await openClientFormDrawer();
+                                      if (!mounted ||
+                                          !dialogOpen ||
+                                          !context.mounted ||
+                                          created == null) {
+                                        return;
+                                      }
+                                      _commitEditorChange(() {
+                                        _selectedClientId = created.id;
+                                        _selectedClientName = created.nombre;
+                                        _selectedClientPhone =
+                                            created.telefono;
+                                        _applyClientFiscalPrefill(created);
+                                      });
+                                      unawaited(_repriceCartForWholesale());
+                                      unawaited(
+                                        _rememberBillingClient(created),
+                                      );
+                                      Navigator.pop(context);
+                                    },
+                                    child: const SizedBox(
+                                      width: 34,
+                                      height: 34,
+                                      child: Icon(
+                                        Icons.add_rounded,
+                                        size: 20,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -5582,6 +5640,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               },
                               child: Container(
                                 width: double.infinity,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 9,
@@ -5624,26 +5685,34 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         if (loading)
                           const LinearProgressIndicator()
                         else if (error != null)
-                          Text(
-                            error!,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: Text(
+                              error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           )
                         else if (isDesktop)
                           Expanded(
                             child: filteredClients.isEmpty
-                                ? Center(
-                                    child: Text(
-                                      clients.isEmpty
-                                          ? 'No hay clientes, crea uno nuevo'
-                                          : 'No hay clientes con este filtro',
-                                    ),
-                                  )
+                                ? _emptyClientsState(clients.isNotEmpty)
                                 : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      8,
+                                      6,
+                                      8,
+                                      8,
+                                    ),
                                     itemCount: filteredClients.length,
                                     separatorBuilder: (context, index) =>
-                                        const Divider(height: 1),
+                                        const Divider(
+                                          height: 1,
+                                          color: Color(0xFFEEF2F7),
+                                        ),
                                     itemBuilder: (context, index) {
                                       final client = filteredClients[index];
                                       final createdAt = client.createdAt
@@ -5655,7 +5724,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                             ).format(createdAt);
                                       return ListTile(
                                         dense: true,
-                                        title: Text(client.nombre),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                            ),
+                                        leading: _clientInitialsAvatar(
+                                          client.nombre,
+                                        ),
+                                        title: Text(
+                                          client.nombre,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
                                         subtitle: Text(
                                           [
                                             client.telefono,
@@ -5664,6 +5754,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           ].join(' · '),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11.5,
+                                            color: Color(0xFF64748B),
+                                          ),
                                         ),
                                         onTap: () {
                                           _commitEditorChange(() {
@@ -5729,17 +5823,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         else
                           Expanded(
                             child: filteredClients.isEmpty
-                                ? Center(
-                                    child: Text(
-                                      clients.isEmpty
-                                          ? 'No hay clientes, crea uno nuevo'
-                                          : 'No hay clientes con este filtro',
-                                    ),
-                                  )
+                                ? _emptyClientsState(clients.isNotEmpty)
                                 : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      4,
+                                      6,
+                                      4,
+                                      8,
+                                    ),
                                     itemCount: filteredClients.length,
                                     separatorBuilder: (context, index) =>
-                                        const Divider(height: 1),
+                                        const Divider(
+                                          height: 1,
+                                          color: Color(0xFFEEF2F7),
+                                        ),
                                     itemBuilder: (context, index) {
                                       final client = filteredClients[index];
                                       final createdAt = client.createdAt
@@ -5753,11 +5850,28 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                         dense: true,
                                         visualDensity: VisualDensity.compact,
                                         minVerticalPadding: 5,
-                                        contentPadding: const EdgeInsets.only(
-                                          left: 0,
-                                          right: 2,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
-                                        title: Text(client.nombre),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                            ),
+                                        leading: _clientInitialsAvatar(
+                                          client.nombre,
+                                        ),
+                                        title: Text(
+                                          client.nombre,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
                                         subtitle: Text(
                                           [
                                             client.telefono,
@@ -5766,6 +5880,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                           ].join(' · '),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11.5,
+                                            color: Color(0xFF64748B),
+                                          ),
                                         ),
                                         onTap: () {
                                           _commitEditorChange(() {
@@ -5815,12 +5933,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     );
 
               final actions = [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cerrar'),
-                ),
                 if ((_selectedClientId ?? '').trim().isNotEmpty)
-                  OutlinedButton.icon(
+                  TextButton.icon(
                     onPressed: () async {
                       final clientId = (_selectedClientId ?? '').trim();
                       if (clientId.isEmpty) return;
@@ -5843,7 +5957,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       unawaited(_rememberBillingClient(updated));
                       Navigator.pop(context);
                     },
-                    icon: const Icon(Icons.edit_outlined),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF475569),
+                      textStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      minimumSize: const Size(0, 40),
+                    ),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
                     label: const Text('Editar actual'),
                   ),
               ];
@@ -5874,72 +5996,59 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ),
                   child: SafeArea(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
-                          child: Row(
+                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEAF1FF),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.person_search_outlined,
-                                  color: Color(0xFF1957E6),
+                              const Text(
+                                'Cliente',
+                                style: TextStyle(
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                  color: Color(0xFF0F172A),
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Cliente',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                    ),
-                                    Text(
-                                      'Busca, selecciona o crea un cliente',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: const Color(0xFF617383),
-                                          ),
-                                    ),
-                                  ],
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Selecciona o crea un cliente',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF64748B),
                                 ),
-                              ),
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.close_rounded),
                               ),
                             ],
                           ),
                         ),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(18),
-                            child: content,
-                          ),
-                        ),
-                        const Divider(height: 1),
+                        Expanded(child: content),
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Expanded(child: actions.first),
-                              if (actions.length > 1) ...[
-                                const SizedBox(width: 10),
-                                Expanded(child: actions.last),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF1957E6),
+                                  textStyle: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  minimumSize: const Size(0, 40),
+                                ),
+                                child: const Text('Cerrar'),
+                              ),
+                              if (actions.isNotEmpty) ...[
+                                Container(
+                                  width: 1,
+                                  height: 14,
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                                actions.last,
                               ],
                             ],
                           ),
@@ -6035,6 +6144,105 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       totalSnapshot: _total,
       globalDiscountAmount: _effectiveGeneralDiscountAmount,
       items: [..._items],
+    );
+  }
+
+  /// Clave de orden del nombre: minúsculas y sin acentos, para que la lista de
+  /// clientes quede alfabética de verdad («Ángel» antes que «Beatriz»).
+  static String _clientSortKey(String value) {
+    const from = 'áàäâãéèëêíìïîóòöôõúùüûñç';
+    const to = 'aaaaaeeeeiiiiooooouuuunc';
+    final buffer = StringBuffer();
+    for (final rune in value.toLowerCase().runes) {
+      final char = String.fromCharCode(rune);
+      final index = from.indexOf(char);
+      buffer.write(index >= 0 ? to[index] : char);
+    }
+    return buffer.toString().trim();
+  }
+
+  /// Iniciales del cliente en un círculo neutro: da jerarquía a la fila sin
+  /// repetir el mismo icono genérico en todas.
+  static Widget _clientInitialsAvatar(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    final String initials;
+    if (parts.isEmpty) {
+      initials = '?';
+    } else if (parts.length == 1) {
+      initials = parts.first.characters.take(2).toString();
+    } else {
+      initials =
+          parts.first.characters.first + parts[1].characters.first;
+    }
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: Color(0xFFEEF2F7),
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        initials.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF475569),
+        ),
+      ),
+    );
+  }
+
+  /// Estado vacío del panel de clientes, con salida clara hacia la creación.
+  Widget _emptyClientsState(bool hasClients) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_search_outlined,
+                size: 22,
+                color: Color(0xFF94A3B8),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              hasClients ? 'Sin coincidencias' : 'Aún no hay clientes',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              hasClients
+                  ? 'Prueba con otro nombre o teléfono.'
+                  : 'Crea el primero con el botón + del buscador.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11.5,
+                height: 1.35,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -7151,11 +7359,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (dueDate == null || !mounted) return false;
       setState(() => _ecfSequenceDueDate = dueDate);
     }
-    if (mode == EcfPosFiscalMode.normal) {
-      final reason = await _askEcfWithoutDocumentReason();
-      if (reason == null || !mounted) return false;
-      setState(() => _ecfWithoutDocumentReason = reason);
-    }
     return true;
   }
 
@@ -7175,88 +7378,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return '${picked.year}-$month-$day';
   }
 
-  /// Motivo obligatorio cuando la venta se registra sin comprobante.
-  Future<String?> _askEcfWithoutDocumentReason() async {
-    final warning =
-        ref.read(ecfCapabilitiesProvider).valueOrNull?.salesWithoutEcfWarning ??
-        '';
-    final controller = TextEditingController(
-      text: _ecfWithoutDocumentReason ?? '',
-    );
-    String? errorText;
-    final result = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Venta sin comprobante electrónico'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (warning.isNotEmpty) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.errorSoft,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.errorBorder),
-                    ),
-                    child: Text(
-                      warning,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        height: 1.4,
-                        color: AppColors.error,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  maxLines: 3,
-                  maxLength: 500,
-                  decoration: InputDecoration(
-                    labelText: 'Motivo (obligatorio)',
-                    hintText: 'Por qué esta venta no lleva comprobante',
-                    errorText: errorText,
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                if (!isEcfWithoutDocumentReasonValid(value)) {
-                  setDialogState(() {
-                    errorText =
-                        'Escribe el motivo (al menos '
-                        '$ecfWithoutDocumentReasonMinLength caracteres).';
-                  });
-                  return;
-                }
-                Navigator.of(context).pop(value);
-              },
-              child: const Text('Continuar'),
-            ),
-          ],
-        ),
-      ),
-    );
-    return result;
-  }
-
   /// Asigna el comprobante electrónico DESPUÉS de guardar la venta.
   ///
   /// La venta ya existe y no se deshace: si la preparación falla se informa con
@@ -7273,19 +7394,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (_isLocalSale(sale)) return null;
     final repository = ref.read(ecfRepositoryProvider);
     try {
-      if (mode == EcfPosFiscalMode.normal) {
-        final reason = (_ecfWithoutDocumentReason ?? '').trim();
-        if (!isEcfWithoutDocumentReasonValid(reason)) {
-          return 'La venta se guardó, pero no se registró el motivo de la '
-              'excepción.';
-        }
-        await repository.registerSaleWithoutDocument(
-          saleId: sale.id,
-          reason: reason,
-          expectedDocumentType: 'E32',
-        );
-        return null;
-      }
+      // Venta «Normal»: es una venta interna. No produce comprobante, no se
+      // declara ante la DGII y no requiere motivo ni aviso.
+      if (mode == EcfPosFiscalMode.normal) return null;
       // El POS cobra el total: no hay crédito, así que la forma de pago del
       // contrato es 1 (contado) y el ingreso 1 (operaciones de venta).
       final outcome = mode == EcfPosFiscalMode.e31
@@ -7358,7 +7469,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           _ecfBuyerTaxId,
           _ecfBuyerName,
         ),
-        ecfWarning: _ecfCaps?.salesWithoutEcfWarning ?? '',
         onConfirm: (method) => Navigator.of(context).pop(method),
       ),
     );
@@ -12242,7 +12352,6 @@ class _CheckoutPaymentDialog extends StatefulWidget {
     this.ecfModes = const [],
     this.initialEcfMode,
     this.ecfBuyerComplete = true,
-    this.ecfWarning = '',
   });
 
   final double total;
@@ -12257,9 +12366,6 @@ class _CheckoutPaymentDialog extends StatefulWidget {
 
   /// El cliente actual ya identifica al receptor (RNC/Cédula + nombre).
   final bool ecfBuyerComplete;
-
-  /// Aviso fiscal del servidor; se muestra íntegro.
-  final String ecfWarning;
 
   @override
   State<_CheckoutPaymentDialog> createState() => _CheckoutPaymentDialogState();
@@ -12602,7 +12708,6 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                           EcfPosFiscalSelector(
                             modes: widget.ecfModes,
                             selected: _ecfMode,
-                            warning: widget.ecfWarning,
                             missingBuyer:
                                 _ecfMode == EcfPosFiscalMode.e31 &&
                                 !widget.ecfBuyerComplete,
@@ -16168,6 +16273,14 @@ class _DesktopQuotePanel extends StatelessWidget {
               onOpenNote: onOpenNote,
               onPdf: onPdf,
             ),
+            // El comprobante vive arriba, junto al cliente: es un dato de la
+            // venta, no del importe. Se muestra siempre que la empresa facture
+            // electrónicamente para que se vea desde el primer momento.
+            if (ecfSelector != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                child: ecfSelector,
+              ),
             if (priceListSelector is! SizedBox)
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
@@ -16267,13 +16380,6 @@ class _DesktopQuotePanel extends StatelessWidget {
                         ),
                     ],
                   ),
-                ),
-              ],
-              if (ecfSelector != null) ...[
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: ecfSelector,
                 ),
               ],
               const SizedBox(height: 4),

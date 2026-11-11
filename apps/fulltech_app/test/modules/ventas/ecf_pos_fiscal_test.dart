@@ -238,12 +238,10 @@ void main() {
       expect(ecfBuyerIdentityComplete('133020253', '  '), isFalse);
     });
 
-    test('solo E31 exige receptor y solo Normal exige motivo', () {
+    test('solo E31 exige receptor', () {
       expect(EcfPosFiscalMode.e31.requiresBuyer, isTrue);
       expect(EcfPosFiscalMode.e32.requiresBuyer, isFalse);
       expect(EcfPosFiscalMode.normal.requiresBuyer, isFalse);
-      expect(EcfPosFiscalMode.normal.requiresReason, isTrue);
-      expect(EcfPosFiscalMode.e31.requiresReason, isFalse);
     });
 
     test('el código viaja estable al backend', () {
@@ -252,16 +250,6 @@ void main() {
       expect(ecfPosFiscalModeFromCode('NORMAL')?.code, 'NORMAL');
       expect(ecfPosFiscalModeFromCode('B01'), isNull);
       expect(ecfPosFiscalModeFromCode(null), isNull);
-    });
-
-    test('el motivo exige contenido real, igual que el servidor', () {
-      expect(isEcfWithoutDocumentReasonValid('corto'), isFalse);
-      expect(isEcfWithoutDocumentReasonValid(null), isFalse);
-      expect(isEcfWithoutDocumentReasonValid('   '), isFalse);
-      expect(
-        isEcfWithoutDocumentReasonValid('Venta interna de prueba sin factura'),
-        isTrue,
-      );
     });
   });
 
