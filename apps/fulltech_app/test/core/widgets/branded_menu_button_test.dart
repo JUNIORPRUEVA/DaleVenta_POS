@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/ai_assistant/presentation/widgets/ai_assistant_dock_button.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/core/widgets/branded_menu_button.dart';
@@ -62,7 +64,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(
         find.byType(Scaffold),
-        matchesGoldenFile('goldens/branded_menu_${size.width.toInt()}.png'),
+        matchesGoldenFile(
+          platformGolden('goldens/branded_menu_${size.width.toInt()}.png'),
+        ),
       );
       await tester.tap(find.byIcon(Icons.menu_rounded));
       await tester.pumpAndSettle();

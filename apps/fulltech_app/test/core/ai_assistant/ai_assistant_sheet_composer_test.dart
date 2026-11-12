@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/ai_assistant/application/ai_assistant_controller.dart';
 import 'package:daleventa_pos/core/ai_assistant/data/datasources/ai_assistant_datasource.dart';
 import 'package:daleventa_pos/core/ai_assistant/data/voice_note_recorder.dart';
@@ -104,7 +106,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(
         find.byType(GlobalAiChatSheet),
-        matchesGoldenFile('goldens/assistant_${size.width.toInt()}.png'),
+        matchesGoldenFile(
+          platformGolden('goldens/assistant_${size.width.toInt()}.png'),
+        ),
       );
     });
   }
@@ -155,7 +159,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(AiAssistantDockButton),
-      matchesGoldenFile('goldens/assistant_button.png'),
+      matchesGoldenFile(platformGolden('goldens/assistant_button.png')),
     );
     await tester.tap(find.byType(AiAssistantDockButton));
     await tester.pumpAndSettle();
@@ -166,7 +170,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await expectLater(
       find.byType(Overlay).first,
-      matchesGoldenFile('goldens/assistant_dock.png'),
+      matchesGoldenFile(platformGolden('goldens/assistant_dock.png')),
     );
 
     await tester.tapAt(const Offset(100, 100));
