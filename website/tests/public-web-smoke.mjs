@@ -116,7 +116,8 @@ for (const path of ['/home?handoff=' + marker, '/reset-password?token=' + marker
 }
 if (process.env.PUBLIC_WEB_TEST_CONTAINER) {
   const name = process.env.PUBLIC_WEB_TEST_CONTAINER;
-  assert.equal(name, 'fullpos-astro-qa-web', 'Log inspection is limited to the disposable QA container');
+  assert.ok(['fullpos-astro-qa-web', 'fullpos-appbar-qa-web'].includes(name),
+    'Log inspection is limited to explicitly named disposable QA containers');
   const logs = spawnSync('docker', ['logs', name], { encoding: 'utf8' });
   assert.equal(logs.status, 0);
   assert.ok(!(logs.stdout + logs.stderr).includes(marker), 'Access/recovery ticket URLs must not enter logs');

@@ -17,6 +17,7 @@ import '../theme/app_colors.dart';
 import '../routing/app_navigator.dart';
 import 'user_avatar.dart';
 import 'branded_menu_button.dart';
+import 'web_session_actions.dart';
 
 class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
@@ -99,6 +100,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     );
 
     final resolvedActions = <Widget>[
+      const WebSessionActions(),
       ...?actions,
       if (primaryPendingAction != null) primaryPendingAction,
       if (trailing != null)

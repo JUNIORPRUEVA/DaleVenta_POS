@@ -3,6 +3,9 @@ import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
+import 'package:daleventa_pos/features/onboarding/application/activation_controller.dart';
+import 'package:daleventa_pos/features/onboarding/data/activation_models.dart';
+import 'package:daleventa_pos/core/app_access/session_notices.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizaciones_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +26,27 @@ class _MenuAuthController extends AuthController {
         companyId: 'company-menu',
       ),
     );
+  }
+}
+
+class _MenuActivation extends ActivationController {
+  int reopened = 0;
+  @override
+  Future<ActivationState?> build() async => ActivationState.fromJson({
+    'companyId': 'company-menu',
+    'welcomeSeen': true,
+    'tasks': [
+      {
+        'key': 'products',
+        'title': 'Productos',
+        'state': 'PENDING',
+        'destination': 'catalog',
+      },
+    ],
+  });
+  @override
+  Future<void> reopen() async {
+    reopened++;
   }
 }
 
@@ -51,6 +75,7 @@ Future<GoRouter> _pumpCompanyMenu(WidgetTester tester) async {
     ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_MenuAuthController.new),
+        activationControllerProvider.overrideWith(_MenuActivation.new),
         companySettingsProvider.overrideWith(
           (_) async =>
               CompanySettings.empty().copyWith(companyName: 'FullPOS Test'),
@@ -73,6 +98,31 @@ Finder _companyMenuItem(String label) {
 }
 
 void main() {
+  testWidgets(
+    'Configuracion retoma onboarding después de ocultar el aviso temporal',
+    (tester) async {
+      await _pumpCompanyMenu(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byTooltip('Cuenta y empresa')),
+      );
+      container.read(sessionNoticesProvider.notifier).dismiss('activation');
+      await tester.tap(find.byTooltip('Cuenta y empresa'));
+      await tester.pumpAndSettle();
+      await tester.tap(_companyMenuItem('Configuracion'));
+      await tester.pumpAndSettle();
+      expect(find.text('Apps de la empresa'), findsOneWidget);
+      await tester.tap(find.text('Termina de preparar FullPOS'));
+      await tester.pumpAndSettle();
+      expect(container.read(activationPanelOpenProvider), isTrue);
+      expect(
+        (container.read(activationControllerProvider.notifier)
+                as _MenuActivation)
+            .reopened,
+        1,
+      );
+      expect(container.read(sessionNoticesProvider), contains('activation'));
+    },
+  );
   testWidgets(
     'Cuenta y empresa > Empresa navega sin usar ref tras cerrar menu',
     (tester) async {

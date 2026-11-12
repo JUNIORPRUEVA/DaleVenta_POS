@@ -274,7 +274,7 @@ class AccountSettingsScreen extends ConsumerWidget {
         ),
         _SettingsActionCard(
           icon: Icons.devices_other_rounded,
-          title: 'Aplicaciones y descargas',
+          title: 'Apps de la empresa',
           description: 'Windows, Android, iPhone y Web/PWA.',
           accent: const Color(0xFF4F46E5),
           onTap: () => context.go(Routes.apps),

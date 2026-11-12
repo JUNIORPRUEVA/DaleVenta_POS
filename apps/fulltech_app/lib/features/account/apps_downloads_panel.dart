@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/app_access/app_access_links.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/safe_url_launcher.dart';
+import '../auth/presentation/pwa_install_prompt.dart';
 
 /// Panel lateral de «Aplicaciones y descargas».
 ///
@@ -177,16 +178,22 @@ class _AppsDownloadsList extends StatelessWidget {
       padding: padding,
       itemCount: channels.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => AppsDownloadCard(channel: channels[index]),
+      itemBuilder: (context, index) =>
+          AppsDownloadCard(channel: channels[index]),
     );
   }
 }
 
 /// Tarjeta compacta de una plataforma oficial de FullPOS Cloud.
 class AppsDownloadCard extends StatelessWidget {
-  const AppsDownloadCard({super.key, required this.channel});
+  const AppsDownloadCard({
+    super.key,
+    required this.channel,
+    this.concise = false,
+  });
 
   final AppAccessChannel channel;
+  final bool concise;
 
   @override
   Widget build(BuildContext context) {
@@ -218,11 +225,7 @@ class AppsDownloadCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(7),
                   border: Border.all(color: const Color(0xFFDDEAFF)),
                 ),
-                child: Icon(
-                  channel.icon,
-                  size: 18,
-                  color: AppColors.secondary,
-                ),
+                child: Icon(channel.icon, size: 18, color: AppColors.secondary),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -267,17 +270,18 @@ class AppsDownloadCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      channel.description,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11.5,
-                        height: 1.25,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0,
+                    if (!concise) const SizedBox(height: 3),
+                    if (!concise)
+                      Text(
+                        channel.description,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11.5,
+                          height: 1.25,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -317,17 +321,19 @@ class _CardActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 4,
       children: [
         OutlinedButton.icon(
-          onPressed: () => safeOpenUrl(
-            context,
-            channel.uri,
-            copiedMessage: 'No se pudo abrir. Enlace de ${channel.title} copiado',
-          ),
+          onPressed: () => openAppAccessChannel(context, channel),
           icon: Icon(channel.actionIcon, size: 15),
-          label: Text(channel.actionLabel),
+          label: Text(
+            channel.kind == AppAccessKind.pwa
+                ? 'Instalar'
+                : channel.actionLabel,
+          ),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.secondary,
             side: const BorderSide(color: Color(0xFF9DB9F8)),
@@ -361,6 +367,44 @@ class _CardActions extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Same official links and installation mechanism in Settings and the AppBar.
+Future<void> openAppAccessChannel(
+  BuildContext context,
+  AppAccessChannel channel,
+) async {
+  if (channel.kind != AppAccessKind.pwa) {
+    await safeOpenUrl(
+      context,
+      channel.uri,
+      copiedMessage: 'No se pudo abrir. Enlace de ${channel.title} copiado',
+    );
+    return;
+  }
+  if (requestPwaInstallPrompt()) return;
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Instalar la aplicación web'),
+      content: const SingleChildScrollView(
+        child: Text(
+          'Si ya la instalaste, abre FullPOS desde su icono.\n\n'
+          'iPhone o iPad: en Safari, toca Compartir → Añadir a pantalla de inicio.\n\n'
+          'Android: en el menú de Chrome, busca Instalar aplicación o Añadir a pantalla de inicio.\n\n'
+          'Computadora: en Chrome o Edge, busca Instalar en la barra de direcciones o en el menú del navegador.\n\n'
+          'Si tu navegador no ofrece instalación, puedes seguir usando FullPOS en la web.',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Entendido'),
+        ),
+      ],
+    ),
+  );
 }
 
 Future<void> _copyLink(BuildContext context, AppAccessChannel channel) async {

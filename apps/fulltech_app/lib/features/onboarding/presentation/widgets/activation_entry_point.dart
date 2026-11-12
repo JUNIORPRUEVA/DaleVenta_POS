@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/auth/auth_provider.dart';
+import '../../../../core/auth/app_bootstrap_status.dart';
 import '../../../../core/routing/app_router.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/app_access/session_notices.dart';
 import '../../application/activation_controller.dart';
 import '../../data/activation_models.dart';
 import 'activation_guide_column.dart';
 import 'activation_panel.dart';
-import 'activation_segmented_progress.dart';
 import 'activation_steps.dart';
 import 'activation_welcome_card.dart';
 
@@ -32,6 +32,7 @@ class ActivationEntryPoint extends ConsumerStatefulWidget {
 class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
   bool _welcomeDismissedThisSession = false;
   bool _autoOpenEvaluated = false;
+  String? _identity;
 
   /// Se escucha al router para saber cuándo cambia la ruta: sin esto, el panel
   /// no podría reabrirse al volver de otra pantalla.
@@ -64,14 +65,27 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authStateProvider);
+    final identity = '${auth.user?.companyId}:${auth.user?.id}';
+    if (_identity != identity) {
+      _identity = identity;
+      _welcomeDismissedThisSession = false;
+      _autoOpenEvaluated = false;
+    }
+    final bootstrap = ref.watch(appBootstrapStatusProvider);
     final async = ref.watch(activationControllerProvider);
     final state = async.value;
+    final hidden = ref.watch(sessionNoticesProvider).contains('activation');
     final panelOpen = ref.watch(activationPanelOpenProvider);
     final tourKey = ref.watch(activationTourProvider);
     final returnRoute = ref.watch(activationReturnRouteProvider);
     final returnArmed = ref.watch(activationReturnArmedProvider);
 
-    if (!auth.isAuthenticated || state == null) return widget.child;
+    if (!auth.isAuthenticated ||
+        bootstrap != AppBootstrapStatus.ready ||
+        state == null ||
+        state.companyId != auth.user?.companyId) {
+      return widget.child;
+    }
 
     // El usuario abrió una pantalla desde el asistente. Primero se confirma que
     // ya está en el destino (se «arma» el retorno) y solo después, al volver a
@@ -99,7 +113,8 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
     // Auto-apertura única: el backend recuerda que el usuario ya cerró el panel.
     if (!_autoOpenEvaluated) {
       _autoOpenEvaluated = true;
-      final shouldOpen = state.shouldAutoOpen && !state.shouldWelcome;
+      final shouldOpen =
+          state.shouldAutoOpen && !state.shouldWelcome && !hidden;
       if (shouldOpen) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -117,43 +132,15 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
 
     final showWelcome =
         state.shouldWelcome &&
+        !hidden &&
         pendingSteps > 0 &&
         !_welcomeDismissedThisSession &&
         !panelOpen &&
         tourKey == null;
 
-    final size = MediaQuery.sizeOf(context);
-    final isMobile = size.width < 900;
-    // En ventanas bajas (p. ej. 1264x681 con escalado al 200 % → 340 px
-    // lógicos) el carrito ocupa el pie de la pantalla y la píldora tapaba una
-    // fila de productos. Se reduce a un anillo de 36 px anclado al borde
-    // izquierdo, centrado en vertical: zona de margen del grid, nunca sobre el
-    // carrito, el cobro ni la barra de tickets. Las posiciones se derivan del
-    // tamaño disponible, no de coordenadas fijas.
-    final compactTrigger = size.height < 480;
-
     return Stack(
       children: [
         widget.child,
-        if (!panelOpen && !showWelcome && pendingSteps > 0 && tourKey == null)
-          Positioned(
-            left: compactTrigger ? 8 : null,
-            right: compactTrigger ? null : (isMobile ? 12 : 16),
-            top: compactTrigger
-                ? (size.height * 0.5 - 18).clamp(8.0, double.infinity)
-                : null,
-            bottom: compactTrigger ? null : (isMobile ? 84 : 16),
-            child: _ActivationTrigger(
-              state: state,
-              compact: compactTrigger,
-              onTap: () {
-                ref.read(activationPanelOpenProvider.notifier).state = true;
-                unawaited(
-                  ref.read(activationControllerProvider.notifier).reopen(),
-                );
-              },
-            ),
-          ),
         if (panelOpen)
           Positioned.fill(
             child: ActivationPanel(
@@ -258,138 +245,6 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Acceso visible y permanente mientras queden pasos.
-class _ActivationTrigger extends StatelessWidget {
-  const _ActivationTrigger({
-    required this.state,
-    required this.onTap,
-    this.compact = false,
-  });
-
-  final ActivationState state;
-  final VoidCallback onTap;
-
-  /// Versión reducida para ventanas con poco espacio vertical: solo el anillo
-  /// de progreso en un círculo de 36 px.
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final pendingSteps = activationPendingSteps(state);
-    final groups = activationStepGroups(state);
-    final doneSteps = groups.where((group) => group.isDone).length;
-    final totalSteps = groups.length;
-    if (compact) {
-      return Semantics(
-        button: true,
-        label:
-            'Activa tu FullPOS, $pendingSteps pasos pendientes. Abrir el asistente.',
-        // Sin `onTap` el nodo se anuncia como botón pero deja de ser accionable
-        // (ni lector de pantalla ni automatización podían abrir el panel).
-        onTap: onTap,
-        child: Material(
-          color: AppColors.surface,
-          shape: const CircleBorder(),
-          elevation: 3,
-          shadowColor: AppColors.shadow,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.border),
-              ),
-              alignment: Alignment.center,
-              // El indicador aporta su propio nodo `progressbar`; se excluye
-              // para que el accesible sea el botón contenedor con su etiqueta.
-              child: ExcludeSemantics(
-                child: ActivationProgressRing(
-                  done: doneSteps,
-                  total: totalSteps,
-                  size: 18,
-                  strokeWidth: 2.2,
-                  animated: true,
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Semantics(
-      button: true,
-      label:
-          'Activa tu FullPOS, $pendingSteps pasos pendientes. Abrir el asistente.',
-      // Ver nota de la variante compacta: sin `onTap` el botón no responde.
-      onTap: onTap,
-      child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(999),
-        elevation: 3,
-        shadowColor: AppColors.shadow,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: onTap,
-          child: Container(
-            height: 34,
-            padding: const EdgeInsets.fromLTRB(9, 0, 13, 0),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ExcludeSemantics(
-                  child: ActivationProgressRing(
-                    done: doneSteps,
-                    total: totalSteps,
-                    size: 15,
-                    strokeWidth: 2,
-                    animated: true,
-                  ),
-                ),
-                const SizedBox(width: 7),
-                const Text(
-                  'Activa tu FullPOS',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primarySoft,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '$pendingSteps',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -1207,7 +1207,7 @@ class _Footer extends StatelessWidget {
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
       child: Text(
-        'Puedes retomar estos pasos cuando quieras desde el botón de activación. '
+        'Puedes retomar estos pasos en Configuración → Termina de preparar FullPOS. '
         'Tu avance se guarda automáticamente y se sincroniza con tu empresa.',
         textAlign: TextAlign.center,
         style: TextStyle(

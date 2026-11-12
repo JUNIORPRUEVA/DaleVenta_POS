@@ -149,8 +149,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
     const form = root.querySelector<HTMLFormElement>('[data-business-form]')!;
     const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
 
-    const statusEl = document.querySelector<HTMLElement>('[data-app-handoff-status]')!;
-    const handoff = document.querySelector<HTMLElement>('[data-app-handoff]')!;
+    const submitButton = form.querySelector<HTMLButtonElement>('[data-submit]')!;
 
     const exitModal = document.querySelector<HTMLElement>('[data-exit-modal]');
     const exitPhone = exitModal?.querySelector<HTMLInputElement>('#exitPhone') ?? null;
@@ -343,9 +342,9 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
         };
 
         submitting = true;
-        handoff.hidden = false;
-        form.hidden = true;
-        statusEl.textContent = 'Creando tu cuenta…';
+        submitButton.disabled = true;
+        submitButton.textContent = 'Creando tu cuenta…';
+        form.setAttribute('aria-busy', 'true');
 
         try {
           const response = await fetch(`${apiBase}/auth/register-business`, {
@@ -355,8 +354,9 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
           });
 
           if (!response.ok) {
-            handoff.hidden = true;
-            form.hidden = false;
+            submitButton.disabled = false;
+            submitButton.textContent = 'Finalizar';
+            form.removeAttribute('aria-busy');
             submitting = false;
 
             if (response.status === 409) {
@@ -378,13 +378,14 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
           sessionStorage.removeItem('fullpos_registro_paso1');
           saveSessionFromAuth(result, email);
 
-          statusEl.textContent = 'Cuenta creada. Abriendo tu sistema…';
+          submitButton.textContent = 'Entrando a FullPOS…';
           const target = await getAppHandoffUrl(apiBase, root.dataset.appUrl ?? '/home');
           submitting = false;
           window.location.replace(target);
         } catch (error) {
-          handoff.hidden = true;
-          form.hidden = false;
+          submitButton.disabled = false;
+          submitButton.textContent = 'Finalizar';
+          form.removeAttribute('aria-busy');
           submitting = false;
           if (accountCreated) {
             showAlert(

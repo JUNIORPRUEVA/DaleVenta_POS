@@ -44,8 +44,9 @@ class ActivationController extends AsyncNotifier<ActivationState?> {
   Future<void> restoreTask(String key) =>
       _mutate(() => ref.read(activationRepositoryProvider).restoreTask(key));
 
-  Future<void> setTourStep(String key, int step) =>
-      _mutate(() => ref.read(activationRepositoryProvider).setTourStep(key, step));
+  Future<void> setTourStep(String key, int step) => _mutate(
+    () => ref.read(activationRepositoryProvider).setTourStep(key, step),
+  );
 
   /// Ejecuta una mutación y adopta el estado devuelto por el servidor.
   /// Los errores no rompen la pantalla: se conserva el estado anterior.
@@ -69,19 +70,39 @@ final activationControllerProvider =
 
 /// Panel abierto/cerrado. Vive en memoria: el estado persistido solo decide si
 /// se abre solo una vez tras el primer inicio de sesión.
-final activationPanelOpenProvider = StateProvider<bool>((ref) => false);
+final _activationIdentityProvider = Provider<String>((ref) {
+  return ref.watch(
+    authStateProvider.select(
+      (auth) => '${auth.user?.companyId}:${auth.user?.id}',
+    ),
+  );
+});
+
+final activationPanelOpenProvider = StateProvider<bool>((ref) {
+  ref.watch(_activationIdentityProvider);
+  return false;
+});
 
 /// Recorrido guiado activo (clave de tarea) o `null` si no hay ninguno.
-final activationTourProvider = StateProvider<String?>((ref) => null);
+final activationTourProvider = StateProvider<String?>((ref) {
+  ref.watch(_activationIdentityProvider);
+  return null;
+});
 
 /// Ruta desde la que el usuario abrió una pantalla usando el asistente.
 ///
 /// El asistente se cierra para dejar trabajar y se reabre **solo** cuando el
 /// usuario vuelve a esa misma ruta (p. ej. con «Regresar»), sin perder avance.
-final activationReturnRouteProvider = StateProvider<String?>((ref) => null);
+final activationReturnRouteProvider = StateProvider<String?>((ref) {
+  ref.watch(_activationIdentityProvider);
+  return null;
+});
 
 /// `true` cuando la navegación desde el asistente ya se completó.
 ///
 /// Evita que el panel se reabra en el mismo instante en que se cierra: hasta
 /// que la ruta de destino no esté activa, el retorno no se considera.
-final activationReturnArmedProvider = StateProvider<bool>((ref) => false);
+final activationReturnArmedProvider = StateProvider<bool>((ref) {
+  ref.watch(_activationIdentityProvider);
+  return false;
+});

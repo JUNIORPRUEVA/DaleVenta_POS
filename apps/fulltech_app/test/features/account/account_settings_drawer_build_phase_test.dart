@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import '../../support/inactive_activation_controller.dart';
+import 'package:daleventa_pos/features/onboarding/application/activation_controller.dart';
+
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
@@ -255,6 +258,9 @@ Future<_Harness> _pumpHub(
   final holder = _SettingsHolder(settings);
   final container = ProviderContainer(
     overrides: [
+      activationControllerProvider.overrideWith(
+        InactiveActivationController.new,
+      ),
       authStateProvider.overrideWith(
         (ref) => _FixedAuthController(
           ref,

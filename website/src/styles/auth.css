@@ -180,6 +180,7 @@ body.reg-modal-open .auth-back-top:hover {
 }
 
 .auth-brand-copy h2 {
+  color: #fff;
   margin: 0 0 18px;
   max-width: none;
   font-size: clamp(1.9rem, 1.2rem + 1.65vw, 2.75rem);
@@ -337,7 +338,8 @@ body.reg-modal-open .auth-back-top:hover {
 
 .auth-panel .field input {
   width: 100%;
-  height: 50px;
+  height: 44px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
@@ -472,7 +474,7 @@ body.reg-modal-open .auth-back-top:hover {
 
 /* ---------- Boton principal ---------- */
 .auth-panel .btn.btn-block {
-  min-height: 52px;
+  min-height: 44px;
   margin-top: 4px;
   border-radius: 10px;
   font-size: 0.95rem;
@@ -578,7 +580,7 @@ body.reg-modal-open .auth-back-top:hover {
   }
 
   .auth-panel .field input {
-    height: 50px;
+    height: 44px;
   }
 }
 
