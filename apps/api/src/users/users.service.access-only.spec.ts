@@ -56,7 +56,7 @@ describe("UsersService — alta y edición de solo acceso", () => {
 
     await service.create(requestUser as any, {
       email: "Nuevo.Usuario@Empresa.test",
-      password: "ClaveSegura123",
+      password: "contrasena-de-prueba-spec",
       nombreCompleto: "Usuario Nuevo",
       edad: 0,
       role: Role.CAJERO,
