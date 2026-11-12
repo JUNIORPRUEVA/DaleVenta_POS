@@ -1454,6 +1454,7 @@ class _SidebarToggleButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(999),
         onTap: onPressed,
         child: Container(
@@ -1494,6 +1495,7 @@ class _PriorityMapButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             borderRadius: BorderRadius.circular(999),
             onTap: onPressed,
             child: Ink(
@@ -2004,6 +2006,7 @@ class _ChoiceFilterTile extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isCompact = compact;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(isCompact ? 999 : 18),
       onTap: onTap,
       child: AnimatedContainer(
@@ -2077,6 +2080,7 @@ class _SummarySelectorTile extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Container(
@@ -2265,6 +2269,7 @@ class _IdentityFilterChip extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: AnimatedContainer(
@@ -2355,6 +2360,7 @@ class _CustomDateRangeBanner extends StatelessWidget {
         : '${DateFormat('dd/MM/yyyy').format(range!.start)} - ${DateFormat('dd/MM/yyyy').format(range!.end)}';
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Container(
@@ -2616,6 +2622,7 @@ class _CollapsedOperationsPanelToggle extends StatelessWidget {
             Material(
               color: Colors.transparent,
               child: InkWell(
+                mouseCursor: SystemMouseCursors.click,
                 borderRadius: BorderRadius.circular(999),
                 onTap: onTap,
                 child: Container(
@@ -3286,6 +3293,7 @@ class _SidebarIdentityOption extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: AnimatedContainer(
@@ -3700,6 +3708,7 @@ class _CompactFilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final baseColor = accent ?? Colors.white;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
       child: AnimatedContainer(
@@ -3770,6 +3779,7 @@ class _CreateOrderFab extends StatelessWidget {
           color: Colors.transparent,
           shape: const CircleBorder(),
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             onTap: onPressed,
             customBorder: const CircleBorder(),
             child: SizedBox(
@@ -4036,6 +4046,7 @@ class _ServiceOrderListCard extends StatelessWidget {
         Material(
           color: Colors.transparent,
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             borderRadius: BorderRadius.circular(14),
             onTap: onTap,
             child: Ink(
@@ -4357,6 +4368,7 @@ class _DesktopServiceOrderLine extends ConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         hoverColor: priorityStyle.backgroundTint.withValues(alpha: 0.26),
         child: Ink(
@@ -5330,6 +5342,7 @@ class _ContactIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
         child: Container(
@@ -5410,6 +5423,7 @@ class _InlineStatusButton extends StatelessWidget {
         !isTechnician && defaultTargetPlatform == TargetPlatform.windows;
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       key: buttonKey,
       borderRadius: BorderRadius.circular(999),
       onTap: busy
@@ -5603,6 +5617,7 @@ class _InlineStatusSheetOption extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Ink(

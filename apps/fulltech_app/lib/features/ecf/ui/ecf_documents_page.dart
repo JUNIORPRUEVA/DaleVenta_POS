@@ -587,6 +587,7 @@ class _DocumentTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(12),
         onTap: () => showEcfDocumentDetailSheet(context, document.id),
         child: Padding(

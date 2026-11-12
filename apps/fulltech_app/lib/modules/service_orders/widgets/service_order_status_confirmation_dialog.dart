@@ -160,6 +160,7 @@ Future<bool> showServiceOrderStatusConfirmationDialog({
                       if (requiresScheduledAt) ...[
                         const SizedBox(height: 16),
                         InkWell(
+                          mouseCursor: SystemMouseCursors.click,
                           onTap: isSubmitting ? null : pickScheduledAt,
                           borderRadius: BorderRadius.circular(12),
                           child: InputDecorator(

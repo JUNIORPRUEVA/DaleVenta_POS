@@ -18,6 +18,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/pdf_document_file_name.dart';
+import '../../core/utils/pdf_file_actions.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/app_navigation.dart';
@@ -25,6 +27,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/desktop_sales_style.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
+import '../../core/widgets/pdf_preview_panel.dart';
 import '../../core/widgets/sync_status_banner.dart';
 import '../cash/cash_dialogs.dart';
 import '../cash/cash_turn_menu_button.dart';
@@ -1039,87 +1042,80 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Future<void> _openCreditPdfPreview(SaleModel sale) async {
-    final bytes = await _buildCreditPdf(sale);
     final filename = 'credito_${_shortId(sale)}.pdf';
+    final downloadFileName = buildPdfDocumentFileName(
+      documentKind: 'Crédito',
+      customerName: sale.customerName,
+      fallbackCode: _shortId(sale),
+    );
+    // La construcción del PDF arranca antes de abrir el panel: la columna
+    // aparece al instante y el documento se muestra en cuanto está listo.
+    final pdfBytesFuture = _buildCreditPdf(sale);
     if (!mounted) return;
-    await showDialog<void>(
+    await showPdfPreviewPanel<void>(
       context: context,
-      barrierDismissible: true,
-      barrierColor: const Color(0x990B1720),
+      barrierLabel: 'Vista previa del crédito',
       builder: (dialogContext) {
-        final size = MediaQuery.sizeOf(dialogContext);
-        final compact = size.width < 720;
-        return Dialog(
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: compact ? 10 : 28,
-            vertical: compact ? 10 : 24,
-          ),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(compact ? 8 : 12),
-          ),
-          child: SizedBox(
-            width: compact ? size.width - 20 : 980,
-            height: compact ? size.height - 20 : size.height * 0.88,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.picture_as_pdf_outlined,
-                        color: Color(0xFF0F7C92),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'PDF crédito · ${sale.customerName ?? 'Cliente'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                      ),
-                      PdfActionMenu(
-                        bytes: bytes,
-                        fileName: filename,
-                        compact: compact,
-                        onShareWithClient: (menuContext) =>
-                            _shareCreditPdfWithClient(
-                              launchContext: menuContext,
-                              sale: sale,
-                              bytes: bytes,
-                              filename: filename,
-                            ),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        tooltip: 'Cerrar',
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: PdfPreview(
-                    canChangePageFormat: false,
-                    canChangeOrientation: false,
-                    canDebug: false,
-                    allowPrinting: true,
-                    allowSharing: false,
-                    maxPageWidth: compact ? 640 : 900,
-                    pdfFileName: filename,
-                    build: (_) async => bytes,
-                  ),
-                ),
-              ],
+        return Column(
+          children: [
+            PdfPreviewPanelHeader(
+              title: 'PDF crédito · ${sale.customerName ?? 'Cliente'}',
+              onClose: () => Navigator.of(dialogContext).pop(),
             ),
-          ),
+            Expanded(
+              child: FutureBuilder(
+                future: pdfBytesFuture,
+                builder: (context, snapshot) {
+                  final bytes = snapshot.data;
+                  return PdfPreviewStage(
+                    bytes: bytes,
+                    errorMessage: snapshot.hasError
+                        ? userSafeErrorMessage(
+                            snapshot.error!,
+                            fallback:
+                                'No se pudo preparar el crédito. Inténtalo nuevamente.',
+                          )
+                        : null,
+                    actions: [
+                      if (bytes != null)
+                        PdfActionMenu(
+                          bytes: bytes,
+                          fileName: filename,
+                          circular: true,
+                          iconAsset: PdfPanelIcons.share,
+                          onShareWithClient: (menuContext) =>
+                              _shareCreditPdfWithClient(
+                                launchContext: menuContext,
+                                sale: sale,
+                                bytes: bytes,
+                                filename: filename,
+                              ),
+                        ),
+                      if (bytes != null)
+                        PdfPanelActionButton(
+                          iconAsset: PdfPanelIcons.download,
+                          label: 'Descargar el crédito',
+                          onPressed: () async {
+                            final saved = await savePdfBytes(
+                              bytes: bytes,
+                              fileName: downloadFileName,
+                            );
+                            if (!dialogContext.mounted) return;
+                            showCashToast(
+                              dialogContext,
+                              saved
+                                  ? 'Crédito guardado en Descargas como «$downloadFileName».'
+                                  : 'No se pudo guardar el crédito en Descargas.',
+                              isError: !saved,
+                            );
+                          },
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -1657,6 +1653,7 @@ class _CreditCard extends StatelessWidget {
             ? colorScheme.primary.withValues(alpha: 0.08)
             : Colors.transparent,
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: onTap,
           hoverColor: colorScheme.primary.withValues(alpha: 0.05),
           child: Container(
@@ -1724,6 +1721,7 @@ class _CreditCard extends StatelessWidget {
       color: colorScheme.surface,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(

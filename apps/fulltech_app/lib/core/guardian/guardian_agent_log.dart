@@ -17,6 +17,7 @@ class GuardianAgentLog {
   static const int _maxBytes = 32 * 1024;
   static const String _fileName = 'guardian_agent.log';
   static File? _file;
+
   /// Cola de escritura: evita líneas intercaladas por llamadas concurrentes.
   static Future<void> _queue = Future<void>.value();
 
@@ -33,7 +34,8 @@ class GuardianAgentLog {
     if (kIsWeb) return;
     try {
       final file = await _resolve();
-      final line = '${DateTime.now().toUtc().toIso8601String()} [$level] $message\n';
+      final line =
+          '${DateTime.now().toUtc().toIso8601String()} [$level] $message\n';
       final length = await file.exists() ? await file.length() : 0;
       if (length > _maxBytes) {
         await file.writeAsString(line, mode: FileMode.write);

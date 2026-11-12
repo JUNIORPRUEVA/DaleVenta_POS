@@ -1861,6 +1861,7 @@ class ExpandableSectionCard extends StatelessWidget {
         child: Column(
           children: [
             InkWell(
+              mouseCursor: SystemMouseCursors.click,
               borderRadius: BorderRadius.circular(12),
               onTap: onToggle,
               child: Padding(
@@ -3452,6 +3453,7 @@ class _ReportTypeAction extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Ink(

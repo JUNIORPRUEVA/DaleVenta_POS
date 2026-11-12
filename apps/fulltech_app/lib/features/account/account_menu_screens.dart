@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 
-import '../../core/app_access/app_access_links.dart';
 import '../../core/app_update/app_update_controller.dart';
 import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/admin_authorization.dart';
@@ -29,12 +28,12 @@ import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/utils/date_time_formatters.dart';
 import '../../core/utils/local_file_bytes.dart';
-import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/guardian/guardian_monitoring_panel.dart';
 import '../../modules/cash/cash_turn_menu_button.dart';
+import 'apps_downloads_panel.dart';
 import 'delete_account_dialog.dart';
 import '../settings/ui/printer_settings_page.dart';
 
@@ -44,22 +43,10 @@ class AccountAppsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _AccountSidePanelScaffold(
-      icon: Icons.apps_rounded,
-      title: 'Apps',
-      subtitle:
-          'Descarga las apps oficiales de FullPOS Cloud para tus dispositivos.',
-      children: [
-        for (final channel in AppAccessLinks.visibleChannels())
-          _AccessChannelTile(
-            icon: channel.icon,
-            title: channel.title,
-            status: channel.status,
-            description: channel.description,
-            actionLabel: channel.actionLabel,
-            actionIcon: channel.actionIcon,
-            onPressed: () => safeOpenUrl(context, channel.uri),
-          ),
-      ],
+      icon: Icons.devices_other_rounded,
+      title: 'Aplicaciones y descargas',
+      subtitle: 'Instala FullPOS Cloud en todos tus dispositivos.',
+      children: const [AppsDownloadCards()],
     );
   }
 }
@@ -278,6 +265,13 @@ class AccountSettingsScreen extends ConsumerWidget {
           description: 'Versión instalada y actualizaciones de Windows.',
           accent: const Color(0xFF1957E6),
           onTap: () => context.go(Routes.actualizaciones),
+        ),
+        _SettingsActionCard(
+          icon: Icons.devices_other_rounded,
+          title: 'Aplicaciones y descargas',
+          description: 'Windows, Android, iPhone y Web/PWA.',
+          accent: const Color(0xFF4F46E5),
+          onTap: () => context.go(Routes.apps),
         ),
 
         _SettingsActionCard(
@@ -1849,63 +1843,6 @@ class _PanelHeader extends StatelessWidget {
             tooltip: 'Volver',
             onPressed: () => AppNavigator.goBack(context),
             icon: const Icon(Icons.close_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccessChannelTile extends StatelessWidget {
-  const _AccessChannelTile({
-    required this.icon,
-    required this.title,
-    required this.status,
-    required this.description,
-    this.actionLabel,
-    this.actionIcon,
-    this.onPressed,
-  });
-
-  final IconData icon;
-  final String title;
-  final String status;
-  final String description;
-  final String? actionLabel;
-  final IconData? actionIcon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SurfacePanel(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TileIcon(icon: icon),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: _titleStyle(15)),
-                const SizedBox(height: 3),
-                Text(status, style: _strongBodyStyle()),
-                const SizedBox(height: 8),
-                Text(description, style: _bodyStyle()),
-                if (actionLabel != null && onPressed != null) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: onPressed,
-                    icon: Icon(
-                      actionIcon ?? Icons.open_in_new_rounded,
-                      size: 17,
-                    ),
-                    label: Text(actionLabel!),
-                    style: _outlinedButtonStyle(),
-                  ),
-                ],
-              ],
-            ),
           ),
         ],
       ),

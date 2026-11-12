@@ -158,8 +158,7 @@ class EcfCertificateDiagnostics {
     final matches = privateKey is Map ? privateKey['matchesCertificate'] : null;
     return EcfCertificateDiagnostics(
       matchedAs: map['identityMatchedAs']?.toString(),
-      hasCompanyTaxId:
-          canonical is Map && canonical['hasCompanyTaxId'] == true,
+      hasCompanyTaxId: canonical is Map && canonical['hasCompanyTaxId'] == true,
       hasRepresentativeId:
           canonical is Map && canonical['hasRepresentativeId'] == true,
       missingCanonicalFields: missing is List

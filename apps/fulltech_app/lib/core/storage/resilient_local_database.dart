@@ -107,11 +107,13 @@ class _ResilientLocalDatabase {
         version: version,
         onCreate: onCreate,
         onUpgrade: onUpgrade,
-        onDowngrade: onDowngrade ?? (database, oldVersion, newVersion) async {
-          throw StateError(
-            'La base local pertenece a una versión posterior. No se modificó; utiliza una versión compatible antes de continuar.',
-          );
-        },
+        onDowngrade:
+            onDowngrade ??
+            (database, oldVersion, newVersion) async {
+              throw StateError(
+                'La base local pertenece a una versión posterior. No se modificó; utiliza una versión compatible antes de continuar.',
+              );
+            },
         onConfigure: onConfigure,
         onOpen: onOpen,
       );
@@ -133,7 +135,8 @@ class _ResilientLocalDatabase {
           title: 'Almacenamiento local no disponible',
           userMessage:
               'No se pudo abrir la base local ni confirmar un nuevo guardado. Conserva los archivos y revisa las operaciones pendientes antes de continuar.',
-          technicalDetails: 'file=$fileName; original database preserved; no reset or fallback',
+          technicalDetails:
+              'file=$fileName; original database preserved; no reset or fallback',
           dedupeKey: 'local-db-preserved-$fileName',
         );
         rethrow;

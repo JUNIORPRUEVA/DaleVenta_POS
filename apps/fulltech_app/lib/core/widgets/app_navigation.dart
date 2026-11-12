@@ -55,6 +55,7 @@ List<AppNavigationSection> buildAppNavigationSections(
   // módulo: apagado significa que la empresa no ha solicitado facturación
   // electrónica y el menú queda exactamente como un POS tradicional.
   bool ecfEnabled = false,
+
   /// Piloto de certificación: el backend confirmó que ESTA empresa puede
   /// preparar su certificación aunque la emisión siga desactivada. Ya incluye
   /// la comprobación de permiso, así que aquí no se vuelve a evaluar.
@@ -92,27 +93,6 @@ List<AppNavigationSection> buildAppNavigationSections(
             appIcon: AppIcons.receipt,
             title: 'Lista de ventas',
             route: Routes.ventasLista,
-          ),
-        if (canOrAuthorize(AppPermission.viewSales))
-          const AppNavigationItem(
-            icon: Icons.add_circle_outline_rounded,
-            appIcon: AppIcons.income,
-            title: 'Registrar entrada',
-            route: Routes.cajaRegistrarIngreso,
-          ),
-        if (canOrAuthorize(AppPermission.viewSales))
-          const AppNavigationItem(
-            icon: Icons.remove_circle_outline_rounded,
-            appIcon: AppIcons.expense,
-            title: 'Registrar salida',
-            route: Routes.cajaRegistrarSalida,
-          ),
-        if (canOrAuthorize(AppPermission.viewSales))
-          const AppNavigationItem(
-            icon: Icons.history_rounded,
-            appIcon: AppIcons.shift,
-            title: 'Historial',
-            route: Routes.cajaMovimientos,
           ),
         if (canOrAuthorize(AppPermission.viewSales))
           const AppNavigationItem(
@@ -187,39 +167,23 @@ List<AppNavigationSection> buildAppNavigationSections(
             title: 'Reportes',
             route: Routes.ventas,
           ),
-        if (canOrAuthorize(AppPermission.viewAccounting))
-          const AppNavigationItem(
-            icon: Icons.fact_check_outlined,
-            appIcon: AppIcons.receipt,
-            title: 'Factura fiscal',
-            route: Routes.contabilidadFacturaFiscal,
-          ),
-      ],
-    ),
-    AppNavigationSection(
-      title: 'Contabilidad',
-      items: [
-        if (canOrAuthorize(AppPermission.viewAccounting))
-          const AppNavigationItem(
-            icon: Icons.account_balance_outlined,
-            appIcon: AppIcons.company,
-            title: 'Depósitos',
-            route: Routes.contabilidadDepositos,
-          ),
-        if (canOrAuthorize(AppPermission.viewAccounting))
-          const AppNavigationItem(
-            icon: Icons.account_balance_wallet_outlined,
-            appIcon: AppIcons.payment,
-            title: 'Pagos',
-            route: Routes.contabilidadPagosPendientes,
-          ),
-        if (canOrAuthorize(AppPermission.managePayroll))
-          const AppNavigationItem(
-            icon: Icons.payments_outlined,
-            appIcon: AppIcons.payment,
-            title: 'Nómina',
-            route: Routes.nomina,
-          ),
+        // MÓDULO CONTABILIDAD OCULTO DE LA NAVEGACIÓN.
+        //
+        // Decisión de producto (simplificación del menú): el grupo
+        // «Contabilidad» y sus cuatro accesos (Depósitos, Factura fiscal,
+        // Pagos y Nómina) ya no se dibujan en ninguna plataforma.
+        //
+        // Lo que NO cambia:
+        // - Las rutas siguen registradas en `app_router.dart` y protegidas por
+        //   `route_access.dart` con los mismos permisos.
+        // - Las pantallas, repositorios, providers y endpoints siguen igual.
+        // - NCF tradicional (`NcfService`, `reserveNextNcf`, `/ncf/sequences`,
+        //   `ncf_sequences`, `ncf_audit_logs`, `Sale.ncf`) y facturación
+        //   electrónica e-CF no se tocan en absoluto.
+        //
+        // Como estos ítems ya no entran en `sections`, tampoco pueden reaparecer
+        // en los grupos comodín («Otros» del sidebar, «Más módulos» del drawer),
+        // que se alimentan de lo que queda sin asignar.
       ],
     ),
     AppNavigationSection(
@@ -306,6 +270,17 @@ String resolveNavigationTitle(
   if (path == Routes.ecfDocuments) return 'Comprobantes electrónicos';
   if (path == Routes.ecfConfig) return 'Estado del módulo e-CF';
   if (path == Routes.ecfDgii) return 'Habilitación DGII';
+
+  // Las pantallas del módulo Contabilidad ya no forman parte de `sections`
+  // (grupo oculto de la navegación), pero siguen siendo accesibles por ruta.
+  // Sin estas líneas el título del shell degradaría al último segmento de la
+  // URL («depositos-bancarios», «pagos-pendientes»…).
+  if (path == Routes.contabilidad) return 'Contabilidad';
+  if (path == Routes.contabilidadCierresDiarios) return 'Cierres diarios';
+  if (path == Routes.contabilidadDepositos) return 'Depósitos';
+  if (path == Routes.contabilidadFacturaFiscal) return 'Factura fiscal';
+  if (path == Routes.contabilidadPagosPendientes) return 'Pagos';
+  if (path == Routes.nomina) return 'Nómina';
 
   for (final section in sections) {
     for (final item in section.items) {

@@ -360,6 +360,7 @@ class _SummaryCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(compact ? 16 : 20),
         child: Container(
@@ -442,6 +443,7 @@ class _CommissionOrderCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(20),
         onTap: () => context.go(Routes.serviceOrderById(item.id)),
         child: LayoutBuilder(

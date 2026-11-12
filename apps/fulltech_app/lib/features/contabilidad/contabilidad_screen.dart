@@ -302,6 +302,7 @@ class _AccountingWorkflowStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       borderRadius: BorderRadius.circular(8),
       onTap: () => context.go(item.route),
       child: Padding(
@@ -438,6 +439,7 @@ class _AccountingDesktopTile extends StatelessWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(8),
         onTap: () => context.go(route),
         child: Padding(

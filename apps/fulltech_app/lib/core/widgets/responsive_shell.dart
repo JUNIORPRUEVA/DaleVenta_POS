@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,7 +62,11 @@ class DesktopShellActionItem {
 }
 
 class DesktopShellRouteActions {
-  const DesktopShellRouteActions({required this.route, required this.actions, this.onBack});
+  const DesktopShellRouteActions({
+    required this.route,
+    required this.actions,
+    this.onBack,
+  });
 
   final String route;
   final List<DesktopShellActionItem> actions;
@@ -234,10 +239,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // Piloto: elegibilidad confirmada por el backend y servida con la misma
     // configuración que el shell ya observa, sin peticiones adicionales.
     final ecfPilotEligible =
-        ref
-            .watch(companySettingsProvider)
-            .valueOrNull
-            ?.ecfPilotEligible ??
+        ref.watch(companySettingsProvider).valueOrNull?.ecfPilotEligible ??
         false;
     final sections = buildAppNavigationSections(
       user,
@@ -263,8 +265,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // vuelven a la puesta en marcha; antes se enviaba a Configuración, que en
     // escritorio redirige a otra pantalla y el usuario aterrizaba fuera del
     // módulo.
-    final VoidCallback? shellBack = routeActions?.route == location &&
-            routeActions?.onBack != null
+    final VoidCallback? shellBack =
+        routeActions?.route == location && routeActions?.onBack != null
         ? routeActions!.onBack
         : location == Routes.ecf
         ? () => context.go(Routes.configuracion)
@@ -273,7 +275,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               location == Routes.ecfConfig ||
               location == Routes.ecfDgii
         ? () => context.go(Routes.ecf)
-        : null;
+        : _shellGenericBack(context, location);
     final ecfActions = isEcfHome
         ? <DesktopShellActionItem>[
             DesktopShellActionItem(
@@ -622,6 +624,17 @@ class DesktopShellAppBar extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Botón «atrás» genérico de la barra del shell.
+///
+/// En una pantalla interna devuelve la raíz de su módulo; en la raíz de un
+/// módulo devuelve Facturación (inicio). Devuelve `null` solo en el inicio,
+/// donde no existe un destino anterior y debe verse el botón de menú.
+VoidCallback? _shellGenericBack(BuildContext context, String location) {
+  final destination = AppNavigator.backDestinationFor(location);
+  if (destination == null) return null;
+  return () => AppNavigator.goBack(context, fallbackRoute: destination);
 }
 
 class _DesktopShellActionGroup extends StatelessWidget {

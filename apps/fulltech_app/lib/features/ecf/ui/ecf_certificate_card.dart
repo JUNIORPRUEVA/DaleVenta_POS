@@ -173,8 +173,10 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
         await widget.onRestart?.call();
       } catch (_) {
         if (!mounted) return;
-        setState(() => _error =
-            'No se pudo reiniciar la validación. Inténtalo de nuevo.');
+        setState(
+          () => _error =
+              'No se pudo reiniciar la validación. Inténtalo de nuevo.',
+        );
         return;
       }
       if (!mounted) return;
@@ -229,7 +231,8 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
         AppFeedback.showToast(
           context,
           title: 'Certificado válido',
-          body: 'El archivo y la clave privada son correctos, está vigente y el '
+          body:
+              'El archivo y la clave privada son correctos, está vigente y el '
               'titular coincide con el expediente.',
           kind: AppFeedbackKind.success,
           dedupeKey: 'ecf_certificate_valid',
@@ -250,11 +253,13 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final verified = _persistedReady ||
+    final verified =
+        _persistedReady ||
         (_report?.canProceed == true && widget.persistedValidation == null);
     if (verified) {
       final persistedExpiry = widget.persistedValidation?.notAfter;
-      final expiry = _report?.certificate?.notAfterLabel ??
+      final expiry =
+          _report?.certificate?.notAfterLabel ??
           (persistedExpiry == null
               ? null
               : DateFormat('yyyy-MM-dd').format(persistedExpiry.toLocal()));
@@ -326,14 +331,14 @@ class _EcfCertificateCardState extends ConsumerState<EcfCertificateCard> {
             if (_report != null) ...[
               const SizedBox(height: 10),
               TextField(
-              key: const ValueKey('ecf_certificate_password'),
-              controller: _password,
-              obscureText: _obscure,
-              onChanged: (_) => _invalidateResult(),
-              decoration: const InputDecoration(
-                labelText: 'Contraseña del certificado',
-                isDense: true,
-              ),
+                key: const ValueKey('ecf_certificate_password'),
+                controller: _password,
+                obscureText: _obscure,
+                onChanged: (_) => _invalidateResult(),
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña del certificado',
+                  isDense: true,
+                ),
               ),
             ],
           ],

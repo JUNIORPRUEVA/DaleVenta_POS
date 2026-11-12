@@ -10,27 +10,17 @@
 
 namespace {
 
+constexpr wchar_t kWindowTitle[] = L"FullPOS";
+
 #ifdef FULLPOS_WINDOWS_UAT_MAYOREO
-constexpr wchar_t kWindowTitle[] = L"FullPOS Cloud UAT - Mayoreo";
 constexpr wchar_t kWindowClassName[] = L"FULLPOS_UAT_MAYOREO_WIN32_WINDOW";
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\DaleVentasPOSUATMayoreoSingleInstance";
 #else
-constexpr wchar_t kWindowTitle[] = L"FullPOS Cloud - Sistema de facturacion";
 constexpr wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\DaleVentasPOSSingleInstance";
 #endif
-constexpr wchar_t kUatWindowTitle[] =
-    L"FullPOS Cloud - Sistema de facturacion [UAT]";
-constexpr wchar_t kUatSingleInstanceMutexName[] =
-    L"Local\\DaleVentasPOSSingleInstance-UAT";
-
-bool IsUatMode() {
-  wchar_t value[64];
-  DWORD length = ::GetEnvironmentVariable(L"FULLPOS_UAT_MODE", value, 64);
-  return length > 0;
-}
 
 // El artefacto UAT convive con la instalación COMERCIAL en el mismo equipo, y
 // ambas comparten nombre de producto. Con un mutex común, arrancar la UAT
@@ -63,8 +53,45 @@ std::wstring SingleInstanceMutexName() {
   return name;
 }
 
+struct InstanceWindowSearch {
+  std::wstring executable;
+  HWND window = nullptr;
+};
+
+BOOL CALLBACK FindInstanceWindow(HWND window, LPARAM parameter) {
+  auto* search = reinterpret_cast<InstanceWindowSearch*>(parameter);
+  wchar_t class_name[256];
+  if (::GetClassNameW(window, class_name, 256) == 0 ||
+      std::wstring(class_name) != kWindowClassName) {
+    return TRUE;
+  }
+  DWORD process_id = 0;
+  ::GetWindowThreadProcessId(window, &process_id);
+  HANDLE process = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                  process_id);
+  if (!process) return TRUE;
+  wchar_t executable[32768];
+  DWORD length = 32768;
+  if (::QueryFullProcessImageNameW(process, 0, executable, &length) &&
+      ::CompareStringOrdinal(executable, static_cast<int>(length),
+                             search->executable.c_str(),
+                             static_cast<int>(search->executable.size()),
+                             TRUE) == CSTR_EQUAL) {
+    search->window = window;
+  }
+  ::CloseHandle(process);
+  return search->window == nullptr;
+}
+
 bool FocusExistingWindow() {
-  HWND existing_window = ::FindWindow(kWindowClassName, kWindowTitle);
+  // The display title is shared. Match the executable instead so UAT cannot
+  // focus a commercial installation with the same title and window class.
+  wchar_t executable[32768];
+  const DWORD length = ::GetModuleFileNameW(nullptr, executable, 32768);
+  if (length == 0 || length >= 32768) return false;
+  InstanceWindowSearch search{std::wstring(executable, length)};
+  ::EnumWindows(FindInstanceWindow, reinterpret_cast<LPARAM>(&search));
+  HWND existing_window = search.window;
   if (!existing_window) {
     return false;
   }
@@ -81,8 +108,6 @@ bool FocusExistingWindow() {
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  const bool uat_mode = IsUatMode();
-  const wchar_t* window_title = uat_mode ? kUatWindowTitle : kWindowTitle;
   const std::wstring instance_mutex_name = SingleInstanceMutexName();
   HANDLE single_instance_mutex =
       ::CreateMutex(nullptr, TRUE, instance_mutex_name.c_str());
@@ -114,7 +139,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(window_title, origin, size)) {
+  if (!window.Create(kWindowTitle, origin, size)) {
     if (single_instance_mutex) {
       ::CloseHandle(single_instance_mutex);
     }

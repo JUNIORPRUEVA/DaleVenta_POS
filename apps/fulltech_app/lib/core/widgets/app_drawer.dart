@@ -15,7 +15,6 @@ import '../company/company_settings_repository.dart';
 import '../models/user_model.dart';
 
 import '../design_system/icons/app_icon.dart';
-import '../design_system/icons/app_icon_sizes.dart';
 import '../design_system/icons/app_icons.dart';
 import '../routing/app_navigator.dart';
 import '../routing/routes.dart';
@@ -37,6 +36,77 @@ class AppDrawer extends ConsumerStatefulWidget {
   ConsumerState<AppDrawer> createState() => _AppDrawerState();
 }
 
+/// Recordatorio de atajos en el pie del drawer.
+///
+/// Es informativo y está separado de las opciones de navegación: mantiene la
+/// columna equilibrada sin aádir acciones nuevas.
+class _DrawerShortcutHint extends StatelessWidget {
+  const _DrawerShortcutHint({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget keyCap(String value) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: const Color(0xFFD5E3F5)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0B2A3A).withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Text(
+        value,
+        style: AppTextStyles.body.copyWith(
+          fontSize: compact ? 9.5 : 10,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+
+    return Row(
+      children: [
+        Container(
+          width: compact ? 26 : 28,
+          height: compact ? 26 : 28,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(
+            Icons.keyboard_outlined,
+            size: 15,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            'Atajos de teclado',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+              fontSize: compact ? 11.6 : 12.2,
+            ),
+          ),
+        ),
+        keyCap('Ctrl'),
+        const SizedBox(width: 4),
+        keyCap('K'),
+      ],
+    );
+  }
+}
+
 class _DrawerCloudFooter extends StatelessWidget {
   const _DrawerCloudFooter({required this.compact});
 
@@ -51,9 +121,13 @@ class _DrawerCloudFooter extends StatelessWidget {
         vertical: compact ? 10 : 12,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F7FB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDDE7EE)),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFFFF), Color(0xFFF1F6FD)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDCE7F5)),
       ),
       child: Row(
         children: [
@@ -61,12 +135,20 @@ class _DrawerCloudFooter extends StatelessWidget {
             width: compact ? 34 : 38,
             height: compact ? 34 : 38,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: const Color(0xFFD5E3F5)),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-            child: const Icon(
-              Icons.cloud_done_rounded,
-              size: 20,
+            child: const AppIcon(
+              AppIcons.cloud,
+              size: 19,
               color: AppColors.primary,
             ),
           ),
@@ -83,19 +165,40 @@ class _DrawerCloudFooter extends StatelessWidget {
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w800,
-                    fontSize: compact ? 12.5 : 13.5,
+                    fontSize: compact ? 12.5 : 13.2,
+                    letterSpacing: -0.15,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Datos sincronizados por empresa',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: compact ? 10.5 : 11.2,
-                  ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: AppColors.success,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.success.withValues(alpha: 0.35),
+                            blurRadius: 5,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Sincronizado',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: compact ? 10.2 : 10.8,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -155,7 +258,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   Expanded(
                     child: _MobileDrawerFooterButton(
                       compact: compact,
-                      icon: Icons.badge_outlined,
+                      icon: AppIcons.user,
                       label: 'Perfil',
                       selected: isNavigationRouteActive(
                         location,
@@ -166,7 +269,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   ),
                   _MobileDrawerFooterIconButton(
                     compact: compact,
-                    icon: Icons.settings_outlined,
+                    icon: AppIcons.settings,
                     tooltip: 'Configuración',
                     selected: isNavigationRouteActive(
                       location,
@@ -176,7 +279,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   ),
                   _MobileDrawerFooterIconButton(
                     compact: compact,
-                    icon: Icons.logout_rounded,
+                    icon: AppIcons.logout,
                     tooltip: 'Cerrar sesión',
                     color: logoutColor,
                     onTap: onLogoutTap,
@@ -187,7 +290,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                 const Divider(height: 1, color: footerBorder),
                 _MobileDrawerFooterButton(
                   compact: compact,
-                  icon: Icons.manage_accounts_outlined,
+                  icon: AppIcons.users,
                   label: 'Usuario',
                   selected: isNavigationRouteActive(location, Routes.users),
                   onTap: onUsersTap,
@@ -212,7 +315,7 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
   });
 
   final bool compact;
-  final IconData icon;
+  final AppIconData icon;
   final String tooltip;
   final VoidCallback onTap;
   final bool selected;
@@ -238,7 +341,12 @@ class _MobileDrawerFooterIconButton extends StatelessWidget {
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: foreground, size: compact ? 20 : 21),
+            child: AppIcon(
+              icon,
+              color: foreground,
+              size: compact ? 20 : 21,
+              semanticLabel: tooltip,
+            ),
           ),
         ),
       ),
@@ -256,7 +364,7 @@ class _MobileDrawerFooterButton extends StatelessWidget {
   });
 
   final bool compact;
-  final IconData icon;
+  final AppIconData icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -280,7 +388,12 @@ class _MobileDrawerFooterButton extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: foreground, size: compact ? 19 : 20),
+              AppIcon(
+                icon,
+                color: foreground,
+                size: compact ? 19 : 20,
+                semanticLabel: label,
+              ),
               SizedBox(width: compact ? 10 : 11),
               Expanded(
                 child: Text(
@@ -298,6 +411,76 @@ class _MobileDrawerFooterButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Wordmark del producto.
+///
+/// `Cloud` entra con un fundido + deslizamiento suave y lleva el acento azul
+/// de la marca, de modo que la cabecera transmite movimiento sin distraer.
+class _DrawerWordmark extends StatelessWidget {
+  const _DrawerWordmark({
+    required this.compact,
+    this.onDark = false,
+    this.inline = false,
+  });
+
+  final bool compact;
+  final bool onDark;
+  final bool inline;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = onDark ? const Color(0xFF9CD2FF) : AppColors.primary;
+    final cloud = TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * 6),
+          child: child,
+        ),
+      ),
+      child: Text(
+        'Cloud',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTextStyles.body.copyWith(
+          color: accent,
+          fontSize: inline ? (compact ? 17 : 18) : (compact ? 12.2 : 13),
+          fontWeight: FontWeight.w900,
+          letterSpacing: inline ? -0.2 : 0.7,
+          height: 1.1,
+        ),
+      ),
+    );
+
+    // En la cabecera móvil se muestra al lado de "FullPOS": se deja flexible
+    // para que nunca desborde en pantallas estrechas.
+    if (inline) return Flexible(child: cloud);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'FullPOS',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.title.copyWith(
+            fontSize: compact ? 16.5 : 17.5,
+            fontWeight: FontWeight.w900,
+            color: const Color(0xFF0E2340),
+            letterSpacing: -0.3,
+            height: 1.1,
+          ),
+        ),
+        const SizedBox(height: 2),
+        cloud,
+      ],
     );
   }
 }
@@ -428,12 +611,17 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       await controller.refresh();
       if (!rootContext.mounted) return;
       final printResult = result?.printResult;
-      final message = printResult == null
-          ? 'Turno cerrado'
+      final detail = printResult == null
+          ? 'Efectivo contado y cierre registrado correctamente.'
           : printResult.success
-          ? 'Turno cerrado e impreso'
-          : 'Turno cerrado. ${printResult.message}';
-      showCashToast(rootContext, message, overlay: overlay);
+          ? 'Cierre registrado y ticket enviado a la impresora.'
+          : 'Cierre registrado. ${printResult.message}';
+      showCashToast(
+        rootContext,
+        'Turno cerrado',
+        detail: detail,
+        overlay: overlay,
+      );
     } catch (error) {
       if (!rootContext.mounted) return;
       showCashToast(
@@ -465,7 +653,23 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       if (!rootContext.mounted || opened != true) return;
       await controller.refresh();
       if (!rootContext.mounted) return;
-      showCashToast(rootContext, 'Caja abierta', overlay: overlay);
+      // Solo se anuncia el éxito cuando el estado autoritativo confirma el
+      // turno abierto (ver cash_turn_menu_button._openCash).
+      if (ref.read(activeCashSessionControllerProvider).valueOrNull == null) {
+        showCashToast(
+          rootContext,
+          'La caja no quedó abierta en el servidor. Intenta de nuevo.',
+          isError: true,
+          overlay: overlay,
+        );
+        return;
+      }
+      showCashToast(
+        rootContext,
+        'Turno abierto',
+        detail: 'La caja está lista para operar.',
+        overlay: overlay,
+      );
     } catch (error) {
       if (!rootContext.mounted) return;
       showCashToast(
@@ -553,10 +757,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     // configuración que el Drawer ya observa, así que el menú no añade ninguna
     // petición de red. Mientras no esté confirmada vale `false`.
     final ecfPilotEligible =
-        ref
-            .watch(companySettingsProvider)
-            .valueOrNull
-            ?.ecfPilotEligible ??
+        ref.watch(companySettingsProvider).valueOrNull?.ecfPilotEligible ??
         false;
     final sections = buildAppNavigationSections(
       currentUser,
@@ -600,7 +801,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: isDesktop ? AppColors.surface : const Color(0xFFF8FBFF),
+          color: isDesktop ? const Color(0xFFFBFCFE) : const Color(0xFFF8FBFF),
           gradient: isDesktop
               ? null
               : const LinearGradient(
@@ -643,32 +844,38 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                             width: double.infinity,
                             padding: EdgeInsets.symmetric(
                               horizontal: isCompactMobile ? 12 : 14,
-                              vertical: isCompactMobile ? 12 : 14,
+                              vertical: isCompactMobile ? 12 : 13,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF8FBFD),
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [Colors.white, Color(0xFFF2F7FF)],
+                              ),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: const Color(0xFFD8E5EC),
+                                color: const Color(0xFFD6E4F7),
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.07,
+                                  ),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
                             ),
                             child: Row(
                               children: [
                                 _DrawerAppLogo(
-                                  width: isCompactMobile ? 58 : 66,
-                                  height: isCompactMobile ? 48 : 56,
+                                  width: isCompactMobile ? 52 : 56,
+                                  height: isCompactMobile ? 44 : 48,
                                 ),
-                                SizedBox(width: isCompactMobile ? 8 : 10),
+                                SizedBox(width: isCompactMobile ? 10 : 12),
                                 Expanded(
-                                  child: Text(
-                                    'FullPOS Cloud',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.title.copyWith(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF102436),
-                                    ),
+                                  child: _DrawerWordmark(
+                                    compact: isCompactMobile,
                                   ),
                                 ),
                                 IconButton(
@@ -676,14 +883,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                   onPressed: () => Navigator.pop(context),
                                   icon: AppIcon(
                                     AppIcons.close,
-                                    size: AppIconSizes.button,
+                                    size: 18,
                                     color: AppColors.textSecondary,
                                     semanticLabel: 'Cerrar menú',
                                   ),
                                   style: IconButton.styleFrom(
-                                    backgroundColor: Colors.white,
+                                    backgroundColor: const Color(0xFFEFF4FB),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
                                 ),
@@ -703,27 +910,29 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        'FullPOS',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.title.copyWith(
-                                          color: Colors.white,
-                                          fontSize: isCompactMobile ? 25 : 27,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Cloud',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.body.copyWith(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.90,
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'FullPOS',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTextStyles.title.copyWith(
+                                              color: Colors.white,
+                                              fontSize: isCompactMobile
+                                                  ? 24
+                                                  : 26,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: -0.4,
+                                            ),
                                           ),
-                                          fontSize: isCompactMobile ? 12 : 13,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                          const SizedBox(width: 5),
+                                          _DrawerWordmark(
+                                            compact: isCompactMobile,
+                                            onDark: true,
+                                            inline: true,
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -828,7 +1037,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                       isDesktop ? 12 : 14,
                     ),
                     child: isDesktop
-                        ? _DrawerCloudFooter(compact: isCompactMobile)
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _DrawerShortcutHint(compact: isCompactMobile),
+                              const SizedBox(height: 8),
+                              _DrawerCloudFooter(compact: isCompactMobile),
+                            ],
+                          )
                         : _MobileDrawerAccountFooter(
                             compact: isCompactMobile,
                             location: location,
@@ -896,13 +1112,25 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   }
 
   final groups = <_DrawerMenuGroup>[];
-  void addGroup(String title, IconData icon, List<String> routes) {
+  void addGroup(
+    String title,
+    AppIconData icon,
+    List<String> routes, {
+    String? assetIcon,
+  }) {
     final items = <AppNavigationItem>[
       for (final route in routes)
         if (pick(route) case final item?) item,
     ];
     if (items.isEmpty) return;
-    groups.add(_DrawerMenuGroup(title: title, icon: icon, items: items));
+    groups.add(
+      _DrawerMenuGroup(
+        title: title,
+        icon: icon,
+        assetIcon: assetIcon,
+        items: items,
+      ),
+    );
   }
 
   List<AppNavigationItem> pickItems(List<String> routes) {
@@ -920,11 +1148,11 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   final kardexItem = pick(Routes.catalogoKardex);
   final priceListsItem = pick(Routes.listasPrecios);
   final warehousesItem = pick(Routes.configuracionAlmacenes);
-  final cashItems = pickItems([
-    Routes.cajaRegistrarIngreso,
-    Routes.cajaRegistrarSalida,
-    Routes.cajaMovimientos,
-  ]);
+  // Los accesos de efectivo (registrar entrada, registrar salida e historial de
+  // movimientos) ya NO forman parte de `sections`: viven en el selector
+  // superior «Turno» (CashTurnMenuButton) y en el grupo «Turno» del drawer,
+  // construidos directamente. Así tampoco pueden reaparecer en los grupos
+  // comodín («Más módulos» / «Otros»), que se alimentan de lo que sobra.
   final rawClientItem = pick(Routes.clientes);
   final clientItem = rawClientItem == null
       ? null
@@ -1002,7 +1230,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       _DrawerMenuGroup(
         title: 'Inventario',
-        icon: Icons.inventory_2_outlined,
+        icon: AppIcons.product,
+        assetIcon: 'assets/iconos/menu-inventario.png',
         items: items,
         openOnHover: false,
       ),
@@ -1014,7 +1243,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       const _DrawerMenuGroup(
         title: 'Compras',
-        icon: Icons.shopping_bag_outlined,
+        icon: AppIcons.purchase,
+        assetIcon: 'assets/iconos/menu-compras.png',
         items: [
           AppNavigationItem(
             icon: Icons.add_shopping_cart_outlined,
@@ -1047,23 +1277,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     );
   }
 
-  void addAccountingGroup() {
-    final items = <AppNavigationItem>[
-      if (pick(Routes.contabilidadDepositos) case final item?) item,
-      if (pick(Routes.contabilidadFacturaFiscal) case final item?) item,
-      if (pick(Routes.contabilidadPagosPendientes) case final item?) item,
-      if (pick(Routes.nomina) case final item?) item,
-    ];
-    if (items.isEmpty) return;
-    groups.add(
-      _DrawerMenuGroup(
-        title: 'Contabilidad',
-        icon: Icons.account_balance_outlined,
-        items: items,
-        openOnHover: false,
-      ),
-    );
-  }
+  // El grupo «Contabilidad» se retiró de la navegación (ver
+  // `buildAppNavigationSections`). Sus rutas y pantallas siguen existiendo,
+  // pero ya no se construye el grupo para ninguna plataforma.
 
   if (mobileLayout) {
     // Grupo "Turno" reactivo al estado autoritativo del backend:
@@ -1086,6 +1302,29 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
             title: 'Turno actual',
             route: Routes.caja,
           ),
+      // Entradas y salidas manuales: SOLO con turno abierto confirmado por el
+      // backend. `_handleItemTap` intercepta estas dos rutas y abre el diálogo
+      // existente (`showCashMovementDialog`), nunca una pantalla nueva.
+      if (hasOpenShift && cashConfirmed)
+        if (hasPermission(role, AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.add_circle_outline_rounded,
+            title: 'Registrar entrada',
+            route: Routes.cajaRegistrarIngreso,
+          ),
+      if (hasOpenShift && cashConfirmed)
+        if (hasPermission(role, AppPermission.viewSales))
+          const AppNavigationItem(
+            icon: Icons.remove_circle_outline_rounded,
+            title: 'Registrar salida',
+            route: Routes.cajaRegistrarSalida,
+          ),
+      if (hasPermission(role, AppPermission.viewSales))
+        const AppNavigationItem(
+          icon: Icons.receipt_long_outlined,
+          title: 'Historial de movimientos',
+          route: Routes.cajaMovimientos,
+        ),
       if (hasOpenShift && cashConfirmed)
         if (hasPermission(role, AppPermission.viewSales))
           const AppNavigationItem(
@@ -1110,7 +1349,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       _DrawerMenuGroup(
         title: 'Turno',
-        icon: Icons.play_circle_outline_rounded,
+        icon: AppIcons.cashRegister,
+        assetIcon: 'assets/iconos/menu-turno.png',
         items: turnosItems,
         openOnHover: false,
         featured: true,
@@ -1133,7 +1373,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       groups.add(
         _DrawerMenuGroup(
           title: 'Ventas',
-          icon: Icons.point_of_sale_rounded,
+          icon: AppIcons.sales,
+          assetIcon: 'assets/iconos/menu-ventas.png',
           items: ventasItems,
           openOnHover: false,
         ),
@@ -1143,18 +1384,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       groups.add(
         _DrawerMenuGroup(
           title: 'Cliente',
-          icon: Icons.groups_2_outlined,
+          icon: AppIcons.users,
+          assetIcon: 'assets/iconos/menu-clientes.png',
           items: clientItems,
-          openOnHover: false,
-        ),
-      );
-    }
-    if (cashItems.isNotEmpty) {
-      groups.add(
-        _DrawerMenuGroup(
-          title: 'Movimiento efectivo',
-          icon: Icons.account_balance_wallet_outlined,
-          items: cashItems,
           openOnHover: false,
         ),
       );
@@ -1174,14 +1406,13 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       groups.add(
         _DrawerMenuGroup(
           title: 'Reportes',
-          icon: Icons.analytics_outlined,
+          icon: AppIcons.report,
+          assetIcon: 'assets/iconos/menu-reportes.png',
           items: [reportsItem],
           openOnHover: false,
         ),
       );
     }
-    addAccountingGroup();
-
     discard([
       Routes.ai,
       Routes.administracion,
@@ -1208,7 +1439,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       groups.add(
         _DrawerMenuGroup(
           title: only?.title ?? 'Más módulos',
-          icon: only?.icon ?? Icons.apps_rounded,
+          icon: only?.appIcon ?? AppIcons.more,
           items: leftovers,
           openOnHover: false,
         ),
@@ -1222,18 +1453,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       _DrawerMenuGroup(
         title: 'Ventas',
-        icon: Icons.point_of_sale_rounded,
+        icon: AppIcons.sales,
+        assetIcon: 'assets/iconos/menu-ventas.png',
         items: ventasItems,
-        openOnHover: false,
-      ),
-    );
-  }
-  if (cashItems.isNotEmpty) {
-    groups.add(
-      _DrawerMenuGroup(
-        title: 'Movimiento efectivo',
-        icon: Icons.account_balance_wallet_outlined,
-        items: cashItems,
         openOnHover: false,
       ),
     );
@@ -1242,7 +1464,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       _DrawerMenuGroup(
         title: 'Cliente',
-        icon: Icons.groups_2_outlined,
+        icon: AppIcons.users,
+        assetIcon: 'assets/iconos/menu-clientes.png',
         items: clientItems,
         openOnHover: false,
       ),
@@ -1254,7 +1477,8 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       _DrawerMenuGroup(
         title: 'Reportes',
-        icon: Icons.analytics_outlined,
+        icon: AppIcons.report,
+        assetIcon: 'assets/iconos/menu-reportes.png',
         items: [reportsItem],
         openOnHover: false,
       ),
@@ -1277,8 +1501,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.amonestaciones,
     Routes.configuracion,
   ]);
-  addAccountingGroup();
-  addGroup('Operaciones', Icons.work_outline_rounded, [
+  addGroup('Operaciones', AppIcons.business, [
     Routes.serviceOrders,
     Routes.mediaGallery,
     Routes.redTecnica,
@@ -1291,7 +1514,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     groups.add(
       _DrawerMenuGroup(
         title: only?.title ?? 'Más módulos',
-        icon: only?.icon ?? Icons.apps_rounded,
+        icon: only?.appIcon ?? AppIcons.more,
         items: leftovers,
       ),
     );
@@ -1305,6 +1528,7 @@ class _DrawerMenuGroup {
     required this.title,
     required this.icon,
     required this.items,
+    this.assetIcon,
     this.openOnHover = true,
     this.featured = false,
     this.subtitle,
@@ -1312,7 +1536,14 @@ class _DrawerMenuGroup {
   });
 
   final String title;
-  final IconData icon;
+
+  /// Icono propio del sistema (HugeIcons) para el módulo.
+  final AppIconData icon;
+
+  /// PNG propio del módulo (p. ej. `assets/iconos/menu-ventas.png`).
+  /// Si el archivo no existe, se renderiza [icon] como respaldo.
+  final String? assetIcon;
+
   final List<AppNavigationItem> items;
   final bool openOnHover;
   final bool featured;
@@ -1532,6 +1763,58 @@ class _TurnStatusPulse extends StatelessWidget {
   }
 }
 
+/// Glifo del módulo en el encabezado del grupo.
+///
+/// Usa el PNG propio cuando existe; si el archivo todavía no está en el
+/// bundle, cae automaticamente al icono del sistema ([AppIcons]) sin romper
+/// ni dejar huecos en la lista.
+class _DrawerGroupGlyph extends StatelessWidget {
+  const _DrawerGroupGlyph({
+    required this.icon,
+    required this.size,
+    required this.color,
+    this.assetIcon,
+    this.semanticLabel,
+    this.strokeWidth = 1.7,
+  });
+
+  final AppIconData icon;
+  final String? assetIcon;
+  final double size;
+  final Color color;
+  final String? semanticLabel;
+  final double strokeWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = assetIcon;
+    if (asset == null || asset.isEmpty) {
+      return AppIcon(
+        icon,
+        size: size,
+        color: color,
+        strokeWidth: strokeWidth,
+        semanticLabel: semanticLabel,
+      );
+    }
+    return Image.asset(
+      asset,
+      width: size,
+      height: size,
+      color: color,
+      colorBlendMode: BlendMode.srcIn,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (context, error, stackTrace) => AppIcon(
+        icon,
+        size: size,
+        color: color,
+        strokeWidth: strokeWidth,
+        semanticLabel: semanticLabel,
+      ),
+    );
+  }
+}
+
 class _DrawerMenuGroupTile extends StatelessWidget {
   const _DrawerMenuGroupTile({
     required this.group,
@@ -1561,21 +1844,20 @@ class _DrawerMenuGroupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasSubmenu = group.hasSubmenu;
     final featured = group.featured && !desktop;
+    final highlighted = selected || expanded;
     final foreground = desktop
-        ? AppColors.textPrimary
+        ? (highlighted ? const Color(0xFF0B2E6F) : AppColors.textPrimary)
         : featured
         ? const Color(0xFF102A6B)
         : const Color(0xFF0F1F45);
-    final iconColor = selected && !desktop
-        ? const Color(0xFF2563EB)
-        : desktop
-        ? foreground
+    final iconColor = desktop
+        ? (highlighted ? Colors.white : AppColors.primary)
         : featured
         ? Colors.white
         : const Color(0xFF155EEF);
     final headerBg = desktop
-        ? (selected || expanded
-              ? AppColors.primary.withValues(alpha: 0.09)
+        ? (highlighted
+              ? AppColors.primary.withValues(alpha: 0.07)
               : Colors.transparent)
         : featured
         ? const Color(0xFFF1F7FF)
@@ -1587,7 +1869,7 @@ class _DrawerMenuGroupTile extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(
           bottom: desktop
-              ? (compact ? 4 : 5)
+              ? (compact ? 2 : 3)
               : featured
               ? 12
               : 5,
@@ -1596,10 +1878,22 @@ class _DrawerMenuGroupTile extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
           decoration: BoxDecoration(
-            color: desktop && expanded
-                ? AppColors.surfaceMuted.withValues(alpha: 0.36)
-                : Colors.transparent,
+            color: desktop && expanded ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(desktop ? 14 : 16),
+            border: Border.all(
+              color: desktop && expanded
+                  ? AppColors.border
+                  : Colors.transparent,
+            ),
+            boxShadow: desktop && expanded
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF0B2A3A).withValues(alpha: 0.07),
+                      blurRadius: 18,
+                      offset: const Offset(0, 7),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             children: [
@@ -1613,11 +1907,15 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                         ? 16
                         : 13,
                   ),
+                  mouseCursor: SystemMouseCursors.click,
                   onTap: onTapHeader,
+                  hoverColor: AppColors.primary.withValues(alpha: 0.045),
+                  splashColor: AppColors.primary.withValues(alpha: 0.08),
+                  highlightColor: AppColors.primary.withValues(alpha: 0.05),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     height: desktop
-                        ? (compact ? 46 : 50)
+                        ? (compact ? 42 : 46)
                         : featured
                         ? (compact ? 58 : 62)
                         : (compact ? 48 : 52),
@@ -1644,7 +1942,7 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                             : selected
                             ? AppColors.secondaryBorder
                             : Colors.transparent,
-                        width: desktop ? 0 : 0.9,
+                        width: desktop ? (highlighted ? 1 : 0) : 0.9,
                       ),
                       boxShadow: desktop
                           ? null
@@ -1662,37 +1960,64 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        Container(
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
                           width: desktop
-                              ? (compact ? 32 : 34)
+                              ? (compact ? 34 : 36)
                               : featured
                               ? 30
                               : 36,
                           height: desktop
-                              ? (compact ? 32 : 34)
+                              ? (compact ? 34 : 36)
                               : featured
                               ? 30
                               : 36,
                           decoration: BoxDecoration(
                             color: desktop
-                                ? foreground.withValues(alpha: 0.10)
+                                ? (highlighted
+                                      ? AppColors.primary
+                                      : AppColors.primary.withValues(
+                                          alpha: 0.09,
+                                        ))
                                 : featured
                                 ? AppColors.primary
-                                : selected
-                                ? const Color(0xFFE0ECFF)
-                                : Colors.transparent,
+                                : const Color(0xFFE0ECFF),
                             borderRadius: BorderRadius.circular(
-                              featured ? 999 : 11,
+                              featured ? 999 : 10,
                             ),
+                            border: Border.all(
+                              color: desktop
+                                  ? (highlighted
+                                        ? AppColors.primary
+                                        : const Color(0xFFD5E3F7))
+                                  : Colors.transparent,
+                            ),
+                            boxShadow: desktop && highlighted
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.26,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ]
+                                : null,
                           ),
-                          child: Icon(
-                            group.icon,
-                            color: iconColor,
-                            size: desktop
-                                ? (compact ? 18 : 19)
-                                : featured
-                                ? 17
-                                : 20,
+                          child: Center(
+                            child: _DrawerGroupGlyph(
+                              icon: group.icon,
+                              assetIcon: group.assetIcon,
+                              size: desktop
+                                  ? (compact ? 18 : 20)
+                                  : featured
+                                  ? 16
+                                  : 19,
+                              color: iconColor,
+                              semanticLabel: group.title,
+                              strokeWidth: compact ? 1.8 : 1.7,
+                            ),
                           ),
                         ),
                         SizedBox(width: featured ? 11 : 10),
@@ -1707,14 +2032,16 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.body.copyWith(
                                   color: foreground,
-                                  fontWeight: featured || selected
+                                  fontWeight: highlighted || featured
                                       ? FontWeight.w800
                                       : FontWeight.w700,
                                   fontSize: desktop
-                                      ? (compact ? 13.8 : 14.6)
+                                      ? (compact ? 13.9 : 14.5)
                                       : featured
                                       ? (compact ? 14.4 : 15)
                                       : (compact ? 14.7 : 15.3),
+                                  height: 1.15,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
                               if (featured) ...[
@@ -1767,16 +2094,23 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                             ],
                           ),
                         ),
-                        Icon(
-                          hasSubmenu
-                              ? Icons.keyboard_arrow_down_rounded
-                              : Icons.chevron_right_rounded,
-                          color: desktop
-                              ? AppColors.textSecondary
-                              : featured
-                              ? AppColors.primary
-                              : const Color(0xFF64748B),
-                          size: desktop ? (compact ? 20 : 22) : 21,
+                        AnimatedRotation(
+                          turns: hasSubmenu && expanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOutCubic,
+                          child: Icon(
+                            hasSubmenu
+                                ? Icons.keyboard_arrow_down_rounded
+                                : Icons.chevron_right_rounded,
+                            color: desktop
+                                ? (highlighted
+                                      ? AppColors.primary
+                                      : AppColors.textMuted)
+                                : featured
+                                ? AppColors.primary
+                                : const Color(0xFF64748B),
+                            size: desktop ? (compact ? 20 : 22) : 21,
+                          ),
                         ),
                       ],
                     ),
@@ -1882,9 +2216,9 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
     final tileBg = enabled
         ? (widget.desktop
               ? (selected
-                    ? AppColors.primary.withValues(alpha: 0.09)
+                    ? AppColors.primary.withValues(alpha: 0.075)
                     : (_hovered
-                          ? AppColors.surfaceMuted.withValues(alpha: 0.72)
+                          ? AppColors.primary.withValues(alpha: 0.045)
                           : Colors.transparent))
               : (selected
                     ? const Color(0xFFE8F1FF)
@@ -1895,7 +2229,7 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
     final foreground = !enabled
         ? const Color(0xFFA7B4C4)
         : selected
-        ? const Color(0xFF2563EB)
+        ? AppColors.primary
         : widget.desktop
         ? AppColors.textSecondary
         : const Color(0xFF334155);
@@ -1918,6 +2252,9 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
+                mouseCursor: widget.enabled
+                    ? SystemMouseCursors.click
+                    : SystemMouseCursors.basic,
                 onTap: widget.enabled
                     ? () {
                         _handlePointerUp();
@@ -1930,7 +2267,7 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOut,
                   height: widget.desktop
-                      ? (widget.compact ? 44 : 48)
+                      ? (widget.compact ? 42 : 46)
                       : (widget.compact ? 38 : 40),
                   padding: EdgeInsets.symmetric(
                     horizontal: widget.desktop
@@ -1946,16 +2283,16 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                     children: [
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        width: selected ? 4 : 3,
-                        height: 28,
+                        width: 3,
+                        height: 22,
                         decoration: BoxDecoration(
                           color: selected
-                              ? const Color(0xFF2563EB)
+                              ? AppColors.primary
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
-                      SizedBox(width: selected ? 9 : 12),
+                      SizedBox(width: selected ? 10 : 11),
                       widget.appIcon == null
                           ? Icon(
                               widget.icon,
@@ -1979,10 +2316,14 @@ class _DrawerMenuItemState extends State<_DrawerMenuItem>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.body.copyWith(
-                            fontWeight: FontWeight.w500,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                             fontSize: widget.desktop
-                                ? (widget.compact ? 13.8 : 14.4)
+                                ? (widget.compact ? 13.6 : 14.2)
                                 : 13.4,
+                            height: 1.2,
+                            letterSpacing: -0.1,
                             color: foreground,
                           ),
                         ),

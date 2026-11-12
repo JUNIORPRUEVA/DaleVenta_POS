@@ -72,10 +72,13 @@ class WebGuardianStore implements GuardianStore {
     if (events.length > maxPersistedEvents) {
       final entries = events.entries.toList()
         ..sort((a, b) {
-          final bySeverity =
-              (b.value['severity'] as String).compareTo(a.value['severity'] as String);
+          final bySeverity = (b.value['severity'] as String).compareTo(
+            a.value['severity'] as String,
+          );
           if (bySeverity != 0) return bySeverity;
-          return (a.value['occurred_at_ms'] as int).compareTo(b.value['occurred_at_ms'] as int);
+          return (a.value['occurred_at_ms'] as int).compareTo(
+            b.value['occurred_at_ms'] as int,
+          );
         });
       for (final entry in entries) {
         if (events.length <= maxPersistedEvents) break;
@@ -89,18 +92,28 @@ class WebGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<List<GuardianEvent>> dueEvents({required int limit, DateTime? now}) async {
+  Future<List<GuardianEvent>> dueEvents({
+    required int limit,
+    DateTime? now,
+  }) async {
     final at = (now ?? DateTime.now()).millisecondsSinceEpoch;
     final events = await _loadEvents();
-    final due = events.entries
-        .where((entry) => ((entry.value['next_attempt_at_ms'] as int?) ?? 0) <= at)
-        .toList()
-      ..sort((a, b) {
-        final bySeverity =
-            (a.value['severity'] as String).compareTo(b.value['severity'] as String);
-        if (bySeverity != 0) return bySeverity;
-        return (a.value['occurred_at_ms'] as int).compareTo(b.value['occurred_at_ms'] as int);
-      });
+    final due =
+        events.entries
+            .where(
+              (entry) =>
+                  ((entry.value['next_attempt_at_ms'] as int?) ?? 0) <= at,
+            )
+            .toList()
+          ..sort((a, b) {
+            final bySeverity = (a.value['severity'] as String).compareTo(
+              b.value['severity'] as String,
+            );
+            if (bySeverity != 0) return bySeverity;
+            return (a.value['occurred_at_ms'] as int).compareTo(
+              b.value['occurred_at_ms'] as int,
+            );
+          });
 
     return due.take(limit).map((entry) {
       final payload = (entry.value['payload'] as Map).cast<String, dynamic>();
@@ -154,10 +167,20 @@ class WebGuardianStore implements GuardianStore {
   }) async {
     if (eventsToDrop <= 0 && bytesToDrop <= 0) return const [];
     final events = await _loadEvents();
-    final candidates = events.entries
-        .where((entry) => !['SEV1', 'SEV2'].contains(entry.value['severity'] as String?))
-        .toList()
-      ..sort((a, b) => (b.value['severity'] as String).compareTo(a.value['severity'] as String));
+    final candidates =
+        events.entries
+            .where(
+              (entry) => ![
+                'SEV1',
+                'SEV2',
+              ].contains(entry.value['severity'] as String?),
+            )
+            .toList()
+          ..sort(
+            (a, b) => (b.value['severity'] as String).compareTo(
+              a.value['severity'] as String,
+            ),
+          );
 
     final selected = <GuardianEvent>[];
     var bytes = 0;
@@ -184,13 +207,18 @@ class WebGuardianStore implements GuardianStore {
       'reason': record.reason,
       'at': record.at.millisecondsSinceEpoch,
     });
-    await prefs.setString(_discardsKey, jsonEncode(discards.take(200).toList()));
+    await prefs.setString(
+      _discardsKey,
+      jsonEncode(discards.take(200).toList()),
+    );
   }
 
   @override
   Future<List<GuardianDiscardRecord>> discards() async {
     final prefs = await _prefs();
-    return _decodeList(prefs.getString(_discardsKey)).whereType<Map>().map((row) {
+    return _decodeList(prefs.getString(_discardsKey)).whereType<Map>().map((
+      row,
+    ) {
       return GuardianDiscardRecord(
         eventId: (row['eventId'] ?? '').toString(),
         reason: (row['reason'] ?? '').toString(),
@@ -200,7 +228,10 @@ class WebGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<bool> wasRecentlyRecorded(String fingerprint, {required Duration window}) async {
+  Future<bool> wasRecentlyRecorded(
+    String fingerprint, {
+    required Duration window,
+  }) async {
     final prefs = await _prefs();
     final entries = _decodeMap(prefs.getString(_fingerprintsKey));
     final at = entries[fingerprint];

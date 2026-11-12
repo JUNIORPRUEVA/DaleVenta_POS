@@ -16,6 +16,7 @@ class FullTechPageHeader extends StatelessWidget
     this.preferDrawerLeading = false,
     this.toolbarHeight,
     this.titleSpacing,
+    this.brandMenu = false,
   });
 
   final String title;
@@ -28,6 +29,7 @@ class FullTechPageHeader extends StatelessWidget
   final bool preferDrawerLeading;
   final double? toolbarHeight;
   final double? titleSpacing;
+  final bool brandMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +45,7 @@ class FullTechPageHeader extends StatelessWidget
       preferDrawerLeading: preferDrawerLeading,
       toolbarHeight: toolbarHeight,
       titleSpacing: titleSpacing,
+      brandMenu: brandMenu,
     );
   }
 

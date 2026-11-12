@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/app_permissions.dart';
@@ -267,9 +268,7 @@ class _ManualInternoScreenState extends ConsumerState<ManualInternoScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(
@@ -631,6 +630,7 @@ class _ManualRemovableChip extends StatelessWidget {
           if (onRemove != null) ...[
             const SizedBox(width: 4),
             InkWell(
+              mouseCursor: SystemMouseCursors.click,
               onTap: onRemove,
               borderRadius: BorderRadius.circular(999),
               child: Padding(
@@ -727,6 +727,7 @@ class _ManualTopicCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: AnimatedContainer(
@@ -1196,6 +1197,7 @@ class _FloatingDetailAction extends StatelessWidget {
         shadowColor: Colors.black.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: Container(

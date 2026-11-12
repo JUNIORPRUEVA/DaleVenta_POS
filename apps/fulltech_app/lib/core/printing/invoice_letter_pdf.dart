@@ -86,7 +86,9 @@ class InvoiceLetterPdf {
                       'Vencimiento: ${DateFormat('dd/MM/yyyy').format(sale.ncfExpirationDate!)}',
                     ),
                   pw.Text(
-                    date.format(toBusinessTime(sale.saleDate ?? DateTime.now())),
+                    date.format(
+                      toBusinessTime(sale.saleDate ?? DateTime.now()),
+                    ),
                   ),
                   if ((cashierName ?? sale.userName ?? '').trim().isNotEmpty)
                     pw.Text('Cajero: ${(cashierName ?? sale.userName)!}'),

@@ -981,6 +981,104 @@ class AuthRepository {
     }
   }
 
+  /// Canjea un ticket de handoff emitido por el sitio web (Astro).
+  ///
+  /// El ticket es de un solo uso, vive 2 minutos y no es un token: el backend
+  /// lo consume y responde con una sesión ya rotada (access + refresh + user).
+  /// Se reutiliza la misma normalización que `login`, de modo que el snapshot
+  /// local, la empresa activa y el rol quedan idénticos a un acceso normal.
+  Future<UserModel> exchangeHandoffTicket(String ticket) async {
+    final raw = ticket.trim();
+    if (raw.isEmpty) {
+      throw ApiException.detailed(
+        message: 'No pudimos preparar tu acceso. Inicia sesión nuevamente.',
+        type: ApiErrorType.parse,
+        displayCode: 'HANDOFF_TICKET_EMPTY',
+        retryable: false,
+      );
+    }
+
+    final res = await _dio
+        .post(
+          ApiRoutes.handoffExchange,
+          data: {'ticket': raw},
+          options: Options(
+            extra: const {
+              'silent': true,
+              'skipLoader': true,
+              'disableOfflineCache': true,
+            },
+          ),
+        )
+        .timeout(_loginTimeout);
+
+    final access = res.data['accessToken'] as String?;
+    final refresh = res.data['refreshToken'] as String?;
+    if (access == null || access.isEmpty) {
+      throw ApiException.detailed(
+        message: 'No pudimos preparar tu acceso. Inicia sesión nuevamente.',
+        type: ApiErrorType.parse,
+        displayCode: 'HANDOFF_NO_TOKEN',
+        retryable: false,
+      );
+    }
+
+    await _safeClearTokens();
+    await _storage.saveTokens(access, refresh);
+
+    try {
+      final me = await _dio
+          .get(
+            ApiRoutes.usersMe,
+            options: Options(
+              extra: const {'disableOfflineCache': true, 'skipLoader': true},
+            ),
+          )
+          .timeout(_loginTimeout);
+      final user = _requireReadySession(
+        _userFromMeResponse(me.data, access),
+        accountCreated: true,
+      );
+      await _storage.saveUserSnapshot(user);
+      unawaited(_refreshOfflineEmergencyAuthorizationSafe());
+      return user;
+    } on DioException {
+      final fallbackUser = _userFromLoginResponse(res.data);
+      if (fallbackUser == null) rethrow;
+      final user = _requireReadySession(
+        _ensureCompanyFromAccessToken(fallbackUser, access),
+        accountCreated: true,
+      );
+      await _storage.saveUserSnapshot(user);
+      unawaited(_refreshOfflineEmergencyAuthorizationSafe());
+      return user;
+    }
+  }
+
+  /// Revoca la sesión actual en el servidor (logout voluntario del dispositivo).
+  ///
+  /// Es "best effort" y silencioso: si no hay red, si el servidor falla o si la
+  /// sesión ya no existe, el llamador limpia igualmente las credenciales locales.
+  /// No lanza excepciones ni produce ningún aviso visual.
+  Future<void> revokeCurrentSession() async {
+    try {
+      await _dio
+          .post(
+            ApiRoutes.logout,
+            options: Options(
+              extra: const {
+                'silent': true,
+                'skipLoader': true,
+                'disableOfflineCache': true,
+              },
+            ),
+          )
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // Silencioso por diseño: el cierre de sesión local no depende de la red.
+    }
+  }
+
   Future<SessionVerificationResult> verifySession({bool silent = false}) async {
     if (isFlutterTest) {
       return const SessionVerificationResult.invalid();
@@ -1044,6 +1142,12 @@ class AuthRepository {
     } on DioException catch (e) {
       final status = e.response?.statusCode ?? 0;
       if (status == 400 || status == 401 || status == 403) {
+        // Carrera de renovación: otra petición ya rotó el token y la sesión
+        // sigue viva. No se cierra sesión; el llamador reintenta con el token
+        // vigente que ya está guardado.
+        if (await _tokensRotatedByAnotherRequest(refresh)) {
+          return _RefreshOutcome.refreshed;
+        }
         return _RefreshOutcome.invalid;
       }
       return _RefreshOutcome.failed;
@@ -1051,6 +1155,21 @@ class AuthRepository {
       return _RefreshOutcome.failed;
     }
     return _RefreshOutcome.failed;
+  }
+
+  /// `true` cuando otra petición rotó el refresh token mientras este intento
+  /// usaba el anterior (carrera de renovación con la sesión aún válida).
+  Future<bool> _tokensRotatedByAnotherRequest(String sentRefreshToken) async {
+    try {
+      final current = await _storage.getRefreshToken().timeout(_storageTimeout);
+      if (current == null || current.isEmpty || current == sentRefreshToken) {
+        return false;
+      }
+      final access = await _storage.getAccessToken().timeout(_storageTimeout);
+      return access != null && access.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 }
 

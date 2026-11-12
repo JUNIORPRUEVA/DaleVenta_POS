@@ -173,7 +173,8 @@ class EcfDocumentSummary {
       documentType: _string(json, 'documentType'),
       status: _string(json, 'status'),
       statusGroup: EcfStatusGroup.fromApi(json['statusGroup'] as String?),
-      encf: _nullableString(json, 'encf') ??
+      encf:
+          _nullableString(json, 'encf') ??
           _nullableString(json, 'externalDocumentNumber'),
       internalDocumentNumber: _nullableString(json, 'internalDocumentNumber'),
       sourceType: _nullableString(json, 'sourceType'),
@@ -353,7 +354,9 @@ class EcfDocumentDetail {
           .toList(growable: false),
       evidenceReceipts: (json['evidenceReceipts'] as num?)?.toInt() ?? 0,
       creditReservation: reservation is Map
-          ? EcfCreditReservationInfo.fromJson(reservation.cast<String, dynamic>())
+          ? EcfCreditReservationInfo.fromJson(
+              reservation.cast<String, dynamic>(),
+            )
           : null,
       originalDocument: original is Map
           ? EcfOriginalReference.fromJson(original.cast<String, dynamic>())
@@ -431,8 +434,10 @@ class EcfCapabilities {
       emissionPathAvailable: json['emissionPathAvailable'] == true,
       documentTypes: types
           .whereType<Map>()
-          .map((row) =>
-              EcfDocumentTypeCapability.fromJson(row.cast<String, dynamic>()))
+          .map(
+            (row) =>
+                EcfDocumentTypeCapability.fromJson(row.cast<String, dynamic>()),
+          )
           .toList(growable: false),
     );
   }
@@ -575,12 +580,15 @@ class EcfOnboardingView {
       steps: rawSteps is List
           ? rawSteps
                 .whereType<Map>()
-                .map((row) =>
-                    EcfOnboardingStepView.fromJson(row.cast<String, dynamic>()))
+                .map(
+                  (row) => EcfOnboardingStepView.fromJson(
+                    row.cast<String, dynamic>(),
+                  ),
+                )
                 .toList(growable: false)
           : const <EcfOnboardingStepView>[],
-      certificationStatus:
-          (configMap['certificationStatus'] ?? 'NOT_STARTED').toString(),
+      certificationStatus: (configMap['certificationStatus'] ?? 'NOT_STARTED')
+          .toString(),
       productionEnabled: configMap['productionEnabled'] == true,
     );
   }
@@ -731,9 +739,11 @@ class EcfDgiiProgress {
     return EcfDgiiProgress(
       requirements: list
           .whereType<Map>()
-          .map((row) => EcfDgiiRequirementProgress.fromJson(
-                row.cast<String, dynamic>(),
-              ))
+          .map(
+            (row) => EcfDgiiRequirementProgress.fromJson(
+              row.cast<String, dynamic>(),
+            ),
+          )
           .toList(growable: false),
       total: asInt(json['total']),
       resolvedCount: asInt(json['resolvedCount']),
@@ -887,7 +897,8 @@ class EcfDgiiEvidenceView {
       createdAt: DateTime.tryParse(text(json['createdAt']) ?? ''),
       reviewStatus: (json['reviewStatus'] ?? 'PENDING').toString(),
       level: json['level']?.toString(),
-      supportsOfficialAuthorization: json['supportsOfficialAuthorization'] == true,
+      supportsOfficialAuthorization:
+          json['supportsOfficialAuthorization'] == true,
       reviewedAt: DateTime.tryParse(text(json['reviewedAt']) ?? ''),
       reviewNote: text(json['reviewNote']),
     );
@@ -954,7 +965,8 @@ class EcfDgiiEmissionState {
     return EcfDgiiEmissionState(
       realEmissionAuthorized: json['realEmissionAuthorized'] == true,
       simulatedDispatchAuthorized: json['simulatedDispatchAuthorized'] == true,
-      productionEmissionImplemented: json['productionEmissionImplemented'] == true,
+      productionEmissionImplemented:
+          json['productionEmissionImplemented'] == true,
     );
   }
 }
@@ -1050,7 +1062,11 @@ class EcfDgiiHabilitationView {
       case 'APPLICATION_PENDING':
         return const ['IN_PROGRESS', 'REQUIRES_CORRECTION'];
       case 'IN_PROGRESS':
-        return const ['TESTS_PENDING', 'IN_CERTIFICATION', 'REQUIRES_CORRECTION'];
+        return const [
+          'TESTS_PENDING',
+          'IN_CERTIFICATION',
+          'REQUIRES_CORRECTION',
+        ];
       case 'TESTS_PENDING':
         return const ['IN_CERTIFICATION', 'REQUIRES_CORRECTION'];
       case 'IN_CERTIFICATION':
@@ -1060,7 +1076,11 @@ class EcfDgiiHabilitationView {
       case 'REJECTED':
         return const ['PREPARING_REQUIREMENTS', 'APPLICATION_PENDING'];
       case 'REQUIRES_CORRECTION':
-        return const ['PREPARING_REQUIREMENTS', 'APPLICATION_PENDING', 'IN_PROGRESS'];
+        return const [
+          'PREPARING_REQUIREMENTS',
+          'APPLICATION_PENDING',
+          'IN_PROGRESS',
+        ];
       default:
         return const [];
     }
@@ -1127,8 +1147,8 @@ class EcfDgiiHabilitationView {
       authorizationSource: (json['authorizationSource'] ?? 'NONE').toString(),
       authorizedAt: DateTime.tryParse(authorizedAt ?? ''),
       moduleEnabled: json['moduleEnabled'] == true,
-      certificationStatus:
-          (json['certificationStatus'] ?? 'NOT_STARTED').toString(),
+      certificationStatus: (json['certificationStatus'] ?? 'NOT_STARTED')
+          .toString(),
       provider: text(json['provider']),
       providerIntegrationConfigured:
           json['providerIntegrationConfigured'] == true,
@@ -1138,9 +1158,10 @@ class EcfDgiiHabilitationView {
       evidence: evidence is List
           ? evidence
                 .whereType<Map>()
-                .map((row) => EcfDgiiEvidenceView.fromJson(
-                      row.cast<String, dynamic>(),
-                    ))
+                .map(
+                  (row) =>
+                      EcfDgiiEvidenceView.fromJson(row.cast<String, dynamic>()),
+                )
                 .toList(growable: false)
           : const <EcfDgiiEvidenceView>[],
       emission: emission is Map
@@ -1227,7 +1248,8 @@ class EcfEligibleOriginal {
     return EcfEligibleOriginal(
       id: _string(json, 'id'),
       documentType: _string(json, 'documentType'),
-      encf: _nullableString(json, 'encf') ??
+      encf:
+          _nullableString(json, 'encf') ??
           _nullableString(json, 'externalDocumentNumber'),
       availableAmount: _string(json, 'availableAmount'),
       createdAt: _date(json, 'createdAt'),
@@ -1339,12 +1361,13 @@ class EcfPendingClassificationLine {
       canConfirm: json['canConfirm'] == true,
       fiscallyFrozen: false,
       frozenClassification: _nullableString(json, 'frozenClassification'),
-      supervisedClassification:
-          _nullableString(json, 'supervisedClassification'),
+      supervisedClassification: _nullableString(
+        json,
+        'supervisedClassification',
+      ),
       supervisedReason: _nullableString(json, 'supervisedReason'),
       supervisedAt: _date(json, 'supervisedAt'),
-      effectiveClassification:
-          _nullableString(json, 'effectiveClassification'),
+      effectiveClassification: _nullableString(json, 'effectiveClassification'),
     );
   }
 
@@ -1390,9 +1413,11 @@ class EcfPendingClassifications {
       fiscallyFrozen: fiscallyFrozen,
       lines: raw
           .whereType<Map>()
-          .map((row) => EcfPendingClassificationLine.fromJson(
-                row.cast<String, dynamic>(),
-              ))
+          .map(
+            (row) => EcfPendingClassificationLine.fromJson(
+              row.cast<String, dynamic>(),
+            ),
+          )
           .map((line) => line.withFrozen(fiscallyFrozen))
           .toList(growable: false),
     );

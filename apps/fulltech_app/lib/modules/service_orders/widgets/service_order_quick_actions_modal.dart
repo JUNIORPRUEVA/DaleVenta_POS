@@ -1987,6 +1987,7 @@ class _MediaTypeChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Ink(
@@ -2119,6 +2120,7 @@ class _ActionButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(12),
         onTap: enabled && !isLoading ? onTap : null,
         splashColor: leadingColor.withValues(alpha: 0.08),

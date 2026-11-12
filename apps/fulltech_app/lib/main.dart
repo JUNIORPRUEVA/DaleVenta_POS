@@ -10,6 +10,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
+import 'core/ai_assistant/presentation/widgets/global_ai_assistant_entry_point.dart';
+import 'features/onboarding/presentation/widgets/activation_entry_point.dart';
 import 'core/config/uat_identity.dart';
 import 'core/api/env.dart';
 import 'core/routing/app_router.dart';
@@ -19,9 +21,11 @@ import 'core/loading/app_loading_overlay.dart';
 import 'core/auth/app_role.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/auth/auth_session_events.dart';
+import 'core/auth/session_handoff_bootstrap.dart';
 import 'core/company/company_settings_repository.dart';
 import 'core/debug/app_error_reporter.dart';
 import 'core/debug/app_error_overlay.dart';
+import 'core/debug/error_notice_gate.dart';
 import 'core/debug/runtime_diagnostics.dart';
 import 'core/guardian/guardian_bootstrap.dart';
 import 'core/license/license_repository.dart';
@@ -70,6 +74,10 @@ Future<void> main([List<String> args = const []]) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Límite de avisos recuperables: debe estar cargado antes de que
+      // cualquier componente (por ejemplo el actualizador) reporte un error.
+      // Si falla, el gate opera solo en memoria y nunca lanza.
+      await ErrorNoticeGate.instance.load();
       // Captura de fallos de arranque de Guardian: síncrona y barata. Debe ir
       // antes de SQLite, almacenamiento y licencias para no perder los errores
       // previos a que el agente esté listo. Sin `--dart-define` no hace nada.
@@ -83,6 +91,11 @@ Future<void> main([List<String> args = const []]) async {
       _configureImageCacheForPlatform();
       _initializeSqlite();
       await AppStorageScopeGuard.ensureCurrentScope();
+
+      // Handoff del sitio web: canjea `?handoff=` ANTES de que Riverpod
+      // inicialice la sesión, para no pedir la contraseña una segunda vez.
+      // Es no-op fuera de Web y nunca lanza.
+      await SessionHandoffBootstrap.consumeFromUrl();
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -393,7 +406,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       locale: const Locale('es', 'DO'),
       supportedLocales: const [Locale('es', 'DO'), Locale('es')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      theme: AppTheme.lightForRole(role),
+      theme: _withHandCursorOnButtons(AppTheme.lightForRole(role)),
       routerConfig: router,
       builder: (context, child) {
         final effectiveChild = child == null
@@ -412,11 +425,20 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
               enableBlurEffects:
                   widget.enableBackgroundStartup && _backgroundStartupStarted,
             ),
-            if (effectiveChild != null) effectiveChild,
+            if (effectiveChild != null)
+              ActivationEntryPoint(
+                child: GlobalAiAssistantEntryPoint(child: effectiveChild),
+              ),
             const AppLoadingOverlay(),
-            const AppErrorOverlay(),
             const UpdateGuardOverlay(),
             const LicensePurchaseOverlay(),
+            // ÚLTIMO a propósito: el aviso compacto de errores recuperables se
+            // pinta encima de los overlays de bloqueo (`UpdateGuardOverlay`,
+            // `LicensePurchaseOverlay`), que cubren la pantalla con un velo
+            // semitransparente. Debajo de ellos el aviso quedaba ilegible
+            // (verificado en Windows). Sigue siendo una tarjeta de esquina: no
+            // captura clics fuera de su caja ni bloquea el modal.
+            const AppErrorOverlay(),
           ],
         );
       },
@@ -579,12 +601,24 @@ class LicensePurchaseOverlay extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
+                        // SIN `tooltip:` a propósito.
+                        //
+                        // Este overlay vive en el `Stack` del `builder` de
+                        // MaterialApp, POR ENCIMA del Navigator: no existe
+                        // ningún `Overlay` ancestro. `Tooltip`/`RawTooltip`
+                        // exige uno y lanzaba `No Overlay widget found` en cada
+                        // reconstrucción, que el manejador global convertía en
+                        // «No pudimos completar la operación». La accesibilidad
+                        // se conserva con `Icon.semanticLabel`, que no necesita
+                        // Overlay.
                         IconButton.outlined(
-                          tooltip: 'Cerrar aviso',
                           onPressed: () => ref
                               .read(authSessionEventsProvider)
                               .dismissReason(),
-                          icon: const Icon(Icons.close_rounded),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            semanticLabel: 'Cerrar aviso',
+                          ),
                         ),
                       ],
                     ),
@@ -597,4 +631,38 @@ class LicensePurchaseOverlay extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Fuerza el cursor de mano en los botones Material de toda la app.
+///
+/// En Windows algunos `FilledButton`/`TextButton`/`IconButton` construidos con
+/// `styleFrom(...)` resolvían el cursor por defecto a la flecha. Se declara en
+/// un único punto compartido y respetando los estados: los botones
+/// deshabilitados conservan la flecha y los campos de texto mantienen el suyo.
+ThemeData _withHandCursorOnButtons(ThemeData theme) {
+  final cursor = WidgetStateProperty.resolveWith<MouseCursor>(
+    (states) => states.contains(WidgetState.disabled)
+        ? SystemMouseCursors.basic
+        : SystemMouseCursors.click,
+  );
+  ButtonStyle merge(ButtonStyle? base) =>
+      (base ?? const ButtonStyle()).copyWith(mouseCursor: cursor);
+
+  return theme.copyWith(
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: merge(theme.elevatedButtonTheme.style),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: merge(theme.filledButtonTheme.style),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: merge(theme.outlinedButtonTheme.style),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: merge(theme.textButtonTheme.style),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: merge(theme.iconButtonTheme.style),
+    ),
+  );
 }

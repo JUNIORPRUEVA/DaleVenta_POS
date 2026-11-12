@@ -1,8 +1,10 @@
 // ignore_for_file: unused_element
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import 'app_gesture_detector.dart';
 
 import '../app_update/app_update_mini_control.dart';
 import '../auth/app_role.dart';
@@ -11,8 +13,10 @@ import '../routing/routes.dart';
 import '../design_system/icons/app_icon.dart';
 import '../design_system/icons/app_icons.dart';
 import '../theme/role_branding.dart';
+import '../theme/app_colors.dart';
 import '../routing/app_navigator.dart';
 import 'user_avatar.dart';
+import 'branded_menu_button.dart';
 
 class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
@@ -32,6 +36,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final double? titleSpacing;
   final String? fallbackRoute;
   final bool preferDrawerLeading;
+  final bool brandMenu;
 
   const CustomAppBar({
     super.key,
@@ -52,6 +57,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     this.titleSpacing,
     this.fallbackRoute,
     this.preferDrawerLeading = false,
+    this.brandMenu = false,
   });
 
   double get _resolvedToolbarHeight => toolbarHeight ?? kToolbarHeight;
@@ -70,7 +76,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final appBarColor = branding.drawerSolidColor;
     const desktopForeground = Color(0xFF111827);
     const desktopAccent = Color(0xFF1957E6);
-    const desktopLine = Color(0xFF9FB6C8);
+    const desktopLine = AppColors.border;
     final shadowColor = Colors.black.withValues(
       alpha: highContrast
           ? 0.28
@@ -121,6 +127,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
         drawerButton ??
         backButton;
 
+    final useBrandedMenu = brandMenu && (onMenuPressed != null || hasDrawer);
     final resolvedTitle =
         titleWidget ??
         (!(showLogo || showDepartmentLabel)
@@ -262,9 +269,20 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     return AppBar(
       toolbarHeight: _resolvedToolbarHeight,
       centerTitle: centerTitle,
-      titleSpacing: titleSpacing,
-      leading: resolvedLeading,
-      title: resolvedTitle,
+      titleSpacing: useBrandedMenu ? 8 : titleSpacing,
+      automaticallyImplyLeading: !useBrandedMenu,
+      leading: useBrandedMenu ? null : resolvedLeading,
+      title: useBrandedMenu
+          ? Row(
+              children: [
+                BrandedMenuButton(
+                  onDark: isMobileLayout,
+                  onPressed: onMenuPressed ?? () => scaffold?.openDrawer(),
+                ),
+                titleUpdateControl,
+              ],
+            )
+          : resolvedTitle,
       actions: resolvedActions.isEmpty ? null : resolvedActions,
       bottom: bottom,
       elevation: 0,

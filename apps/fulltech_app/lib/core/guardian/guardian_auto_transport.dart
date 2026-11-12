@@ -62,7 +62,8 @@ class AutoEnrollingGuardianTransport implements GuardianTransport {
 
     final now = _clock();
     final last = _lastEnrollmentAttemptAt;
-    if (last != null && now.difference(last) < minIntervalBetweenEnrollmentAttempts) {
+    if (last != null &&
+        now.difference(last) < minIntervalBetweenEnrollmentAttempts) {
       return null;
     }
     _lastEnrollmentAttemptAt = now;

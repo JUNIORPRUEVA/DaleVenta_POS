@@ -2046,6 +2046,7 @@ class _ProductCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onView,
+        mouseCursor: SystemMouseCursors.click,
         child: Stack(
           fit: StackFit.expand,
           children: [

@@ -150,9 +150,10 @@ final dosaPortalApiProvider = Provider<DosaPortalApi>((ref) {
 /// de la configuración. Consultar esta sonda desde un `build` provocaba una
 /// petición por cada reconstrucción del menú. Se conserva para diagnósticos y
 /// para la propia pantalla del portal.
-final dosaPortalEligibilityProvider =
-    FutureProvider.autoDispose<bool>((ref) async {
-      final auth = ref.watch(authStateProvider);
-      if (!auth.isAuthenticated) return false;
-      return ref.watch(dosaPortalApiProvider).isEligible();
-    });
+final dosaPortalEligibilityProvider = FutureProvider.autoDispose<bool>((
+  ref,
+) async {
+  final auth = ref.watch(authStateProvider);
+  if (!auth.isAuthenticated) return false;
+  return ref.watch(dosaPortalApiProvider).isEligible();
+});

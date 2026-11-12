@@ -81,7 +81,8 @@ List<EcfFiscalItem> buildEcfFiscalItems(CompanySettings settings) {
       value: name,
       requirement: EcfFiscalRequirement.blocking,
       ok: name.isNotEmpty,
-      hint: 'Es el nombre que sale impreso como emisor. Debe coincidir con el '
+      hint:
+          'Es el nombre que sale impreso como emisor. Debe coincidir con el '
           'registrado en la DGII.',
     ),
     EcfFiscalItem(
@@ -133,10 +134,9 @@ int ecfBlockingMissingCount(CompanySettings settings) => buildEcfFiscalItems(
 ).where((item) => item.blocking && !item.ok).length;
 
 /// Cuántos datos recomendados siguen sin cumplirse.
-int ecfRecommendedMissingCount(CompanySettings settings) =>
-    buildEcfFiscalItems(
-      settings,
-    ).where((item) => !item.blocking && !item.ok).length;
+int ecfRecommendedMissingCount(CompanySettings settings) => buildEcfFiscalItems(
+  settings,
+).where((item) => !item.blocking && !item.ok).length;
 
 /// `true` cuando la empresa ya puede emitir sin `ECF_ISSUER_DATA_INCOMPLETE`.
 bool ecfIssuerDataReady(CompanySettings settings) =>

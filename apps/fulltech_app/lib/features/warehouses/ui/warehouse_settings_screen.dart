@@ -1392,6 +1392,7 @@ class _TransferProductPicker extends StatelessWidget {
                           sourceWarehouseId,
                         );
                         return InkWell(
+                          mouseCursor: SystemMouseCursors.click,
                           onTap: () => onSelected(product.id),
                           child: Container(
                             color: selected

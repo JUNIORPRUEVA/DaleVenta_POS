@@ -1146,6 +1146,7 @@ class _FiscalKindChip extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(9),
         onTap: onTap,
         child: Ink(
@@ -1941,6 +1942,7 @@ class _FiscalInvoiceImage extends StatelessWidget {
       return Material(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: () => _openExternalFile(context, url),
           child: Center(
             child: Column(

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,10 +21,13 @@ import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/pdf_document_file_name.dart';
+import '../../core/utils/pdf_file_actions.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
+import '../../core/widgets/pdf_preview_panel.dart';
 import '../../features/ecf/ui/ecf_prepare_action.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import '../cash/cash_dialogs.dart';
@@ -162,7 +167,8 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback: 'No se pudo completar la limpieza. Inténtalo nuevamente.',
+              fallback:
+                  'No se pudo completar la limpieza. Inténtalo nuevamente.',
             ),
           ),
         ),
@@ -1057,10 +1063,7 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     try {
       await ref
           .read(ventasControllerProvider.notifier)
-          .returnSale(
-            sale.id,
-            originalSaleCashSessionId: sale.cashSessionId,
-          );
+          .returnSale(sale.id, originalSaleCashSessionId: sale.cashSessionId);
       if (!context.mounted) return;
       showCashToast(
         context,
@@ -1226,101 +1229,106 @@ class _MisVentasScreenState extends ConsumerState<MisVentasScreen> {
     BuildContext context,
     SaleModel sale,
   ) async {
+    final fileName =
+        'factura_${_shortSaleId(sale.id).replaceAll(' ', '_')}.pdf';
+    final downloadFileName = buildPdfDocumentFileName(
+      documentKind: 'Factura',
+      customerName: sale.customerName,
+      fallbackCode: _shortSaleId(sale.id),
+    );
+    // La construcción del PDF arranca antes de abrir el panel: la columna
+    // aparece al instante y el documento se muestra en cuanto está listo.
+    final pdfBytesFuture = _buildSaleInvoicePdfBytes(sale);
+
+    await showPdfPreviewPanel<void>(
+      context: context,
+      barrierLabel: 'Vista previa de la factura',
+      builder: (dialogContext) {
+        return Column(
+          children: [
+            PdfPreviewPanelHeader(
+              title: 'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
+              onClose: () => Navigator.of(dialogContext).pop(),
+            ),
+            Expanded(
+              child: FutureBuilder(
+                future: pdfBytesFuture,
+                builder: (context, snapshot) {
+                  final bytes = snapshot.data;
+                  return PdfPreviewStage(
+                    bytes: bytes,
+                    errorMessage: snapshot.hasError
+                        ? userSafeErrorMessage(
+                            snapshot.error!,
+                            fallback:
+                                'No se pudo preparar la factura. Inténtalo nuevamente.',
+                          )
+                        : null,
+                    actions: [
+                      if (bytes != null)
+                        PdfActionMenu(
+                          bytes: bytes,
+                          fileName: fileName,
+                          circular: true,
+                          iconAsset: PdfPanelIcons.share,
+                          onShareWithClient: (menuContext) =>
+                              _shareInvoicePdfWithClient(
+                                launchContext: menuContext,
+                                sale: sale,
+                                bytes: bytes,
+                                filename: fileName,
+                              ),
+                        ),
+                      if (bytes != null)
+                        PdfPanelActionButton(
+                          iconAsset: PdfPanelIcons.download,
+                          label: 'Descargar la factura',
+                          onPressed: () => unawaited(
+                            _downloadInvoicePdf(
+                              context: dialogContext,
+                              bytes: bytes,
+                              fileName: downloadFileName,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Uint8List> _buildSaleInvoicePdfBytes(SaleModel sale) async {
     final company = await ref
         .read(companySettingsRepositoryProvider)
         .getCachedSettings();
     final printerSettings = await ref
         .read(printerSettingsRepositoryProvider)
         .getOrCreate();
-    final pdfBytes = await buildSaleInvoicePdf(
+    return buildSaleInvoicePdf(
       sale: sale,
       company: company,
       warrantyPolicy: printerSettings.warrantyPolicy,
     );
-    if (!context.mounted) return;
-    final fileName =
-        'factura_${_shortSaleId(sale.id).replaceAll(' ', '_')}.pdf';
+  }
 
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: const Color(0x990B1720),
-      builder: (dialogContext) {
-        final media = MediaQuery.sizeOf(dialogContext);
-        final isCompact = media.width < 720;
-        return Dialog(
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: isCompact ? 10 : 28,
-            vertical: isCompact ? 10 : 24,
-          ),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(isCompact ? 8 : 12),
-          ),
-          child: SizedBox(
-            width: isCompact ? media.width - 20 : 980,
-            height: isCompact ? media.height - 20 : media.height * 0.88,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.picture_as_pdf_outlined,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      PdfActionMenu(
-                        bytes: pdfBytes,
-                        fileName: fileName,
-                        compact: isCompact,
-                        onShareWithClient: (menuContext) =>
-                            _shareInvoicePdfWithClient(
-                              launchContext: menuContext,
-                              sale: sale,
-                              bytes: pdfBytes,
-                              filename: fileName,
-                            ),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        tooltip: 'Cerrar',
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: PdfPreview(
-                    canChangePageFormat: false,
-                    canChangeOrientation: false,
-                    canDebug: false,
-                    allowPrinting: true,
-                    allowSharing: false,
-                    maxPageWidth: isCompact ? 640 : 900,
-                    pdfFileName: fileName,
-                    build: (_) async => pdfBytes,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  Future<void> _downloadInvoicePdf({
+    required BuildContext context,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final saved = await savePdfBytes(bytes: bytes, fileName: fileName);
+    if (!context.mounted) return;
+    showCashToast(
+      context,
+      saved
+          ? 'Factura guardada en Descargas como «$fileName».'
+          : 'No se pudo guardar la factura en Descargas.',
+      isError: !saved,
     );
   }
 
@@ -1826,6 +1834,7 @@ class _SalesLedgerMobileRow extends StatelessWidget {
       color: theme.colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: () => onView(sale),
         borderRadius: BorderRadius.circular(12),
         child: Container(

@@ -85,8 +85,7 @@ class PagedResult<T> {
       final limit = _asInt(data['limit']) ?? items.length;
       final total = _asInt(data['total']);
       final hasMore = data['hasMore'] == true;
-      final nextPage = _asInt(data['nextPage']) ??
-          (hasMore ? page + 1 : null);
+      final nextPage = _asInt(data['nextPage']) ?? (hasMore ? page + 1 : null);
       return PagedResult<T>(
         items: items,
         page: page,

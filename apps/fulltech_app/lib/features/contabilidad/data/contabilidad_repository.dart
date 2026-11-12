@@ -74,10 +74,11 @@ class AccountingPage<T> {
 }
 
 /// Secuencias NCF activas de la empresa (se recargan al invalidar el provider).
-final ncfSequencesProvider =
-    FutureProvider.autoDispose<List<NcfSequenceModel>>((ref) {
-  return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
-});
+final ncfSequencesProvider = FutureProvider.autoDispose<List<NcfSequenceModel>>(
+  (ref) {
+    return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
+  },
+);
 
 class ContabilidadRepository {
   final Dio _dio;
@@ -317,9 +318,7 @@ class ContabilidadRepository {
         );
       } catch (e) {
         debugPrint('[CONTABILIDAD] cierres parse failure: $e');
-        throw ApiException(
-          'Se recibieron cierres con formato inválido.',
-        );
+        throw ApiException('Se recibieron cierres con formato inválido.');
       }
     } on DioException catch (e) {
       throw ApiException(

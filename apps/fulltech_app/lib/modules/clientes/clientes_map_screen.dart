@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -847,6 +848,7 @@ class _MapStyleToggleButton extends StatelessWidget {
     return Tooltip(
       message: 'Cambiar entre vista mapa y satélite',
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Ink(
@@ -944,6 +946,7 @@ class _MapZoomButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         child: SizedBox(
           width: 48,
@@ -1228,6 +1231,7 @@ class _FloatingMapButton extends StatelessWidget {
       child: Tooltip(
         message: tooltip,
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(18),
           onTap: onPressed,
           child: Ink(
@@ -1282,6 +1286,7 @@ class _MapFiltersFloatingButton extends StatelessWidget {
     return Tooltip(
       message: 'Filtrar por vendedor, fecha y estado',
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(12),
         onTap: () => _open(context),
         child: Ink(

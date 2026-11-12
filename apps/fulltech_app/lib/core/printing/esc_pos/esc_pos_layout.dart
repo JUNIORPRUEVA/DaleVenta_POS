@@ -70,8 +70,7 @@ class EscPosLayout {
     return fitSingleLine(value, width).padLeft(width);
   }
 
-  static String rule(ThermalPrinterProfile profile, int width) =>
-      '-' * width;
+  static String rule(ThermalPrinterProfile profile, int width) => '-' * width;
 
   static String money(double value) => ReceiptTextUtils.money(value);
 
@@ -114,9 +113,10 @@ class EscPosLayout {
     const gap = 2;
     final leftWidth = profile.usableChars - gap - rightWidth;
     final leftText = fitSingleLine(clean(left), leftWidth).padRight(leftWidth);
-    final rightText = fitSingleLine(clean(right), rightWidth).padLeft(
+    final rightText = fitSingleLine(
+      clean(right),
       rightWidth,
-    );
+    ).padLeft(rightWidth);
     return '$leftText${' ' * gap}$rightText';
   }
 
@@ -145,9 +145,7 @@ class EscPosLayout {
     required String rnc,
   }) {
     final cleanName = clean(companyName).toUpperCase();
-    final lines = <String>[
-      fitSingleLine(cleanName, profile.usableChars),
-    ];
+    final lines = <String>[fitSingleLine(cleanName, profile.usableChars)];
     for (final value in [
       address,
       if (phone.trim().isNotEmpty) 'Tel: $phone',
@@ -181,11 +179,7 @@ class EscPosLayout {
   }) async {
     final p = profile ?? ThermalPrinterProfile.mm80();
     final capability = await CapabilityProfile.load(name: profileName);
-    final generator = Generator(
-      p.paperSize,
-      capability,
-      codec: latin1,
-    );
+    final generator = Generator(p.paperSize, capability, codec: latin1);
     final bytes = <int>[
       ...generator.reset(),
       ...generator.setGlobalCodeTable(codeTable),

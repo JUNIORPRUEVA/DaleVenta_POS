@@ -3,14 +3,15 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../../../core/company/company_settings_model.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/pdf/pdf_kit.dart';
 import '../../../core/tax/product_tax_preview_calculator.dart';
 import '../../../core/uom/uom_formatters.dart';
+import '../../../core/utils/pdf_document_file_name.dart';
 import '../../../core/utils/pdf_file_actions.dart';
+import '../../../core/utils/pdf_share.dart';
 import '../cotizacion_models.dart';
 
 final PdfColor _pageBackground = PdfColors.white;
@@ -676,12 +677,19 @@ pw.Widget _totalsPanel(CotizacionPdfTotalsData totals, NumberFormat money) {
   );
 }
 
-Future<void> shareCotizacionPdf({
+/// Comparte el PDF de la cotización con la hoja de compartir del sistema.
+///
+/// Devuelve el resultado real para que la pantalla pueda avisar cuando el PDF
+/// acaba guardado en Descargas en lugar de compartido.
+Future<PdfShareOutcome> shareCotizacionPdf({
   required Uint8List bytes,
   required CotizacionModel cotizacion,
-}) async {
-  final filename = buildCotizacionPdfFileName(cotizacion);
-  await Printing.sharePdf(bytes: bytes, filename: filename);
+}) {
+  return sharePdfWithSystem(
+    bytes: bytes,
+    fileName: buildCotizacionPdfFileName(cotizacion),
+    subject: 'Cotización ${_buildQuoteCode(cotizacion.id)}',
+  );
 }
 
 Future<bool> saveCotizacionPdfToDownloads({
@@ -694,25 +702,16 @@ Future<bool> saveCotizacionPdfToDownloads({
   );
 }
 
+/// Nombre del PDF: «Cotización de Juan Pérez.pdf» y, sin cliente real,
+/// «Cotización COT-17944462.pdf».
+///
+/// El mismo nombre se usa al compartir y al guardar en Descargas.
 String buildCotizacionPdfFileName(CotizacionModel cotizacion) {
-  final customerName = cotizacion.customerName.trim();
-  final hasRealCustomerName =
-      customerName.isNotEmpty &&
-      customerName.toLowerCase() != 'sin cliente' &&
-      customerName.toLowerCase() != 'consumidor final';
-  final customerToken = hasRealCustomerName ? _fileNameToken(customerName) : '';
-  final quoteToken = _buildQuoteCode(cotizacion.id);
-  final token = customerToken.isNotEmpty ? customerToken : quoteToken;
-  return '$token.pdf';
-}
-
-String _fileNameToken(String value) {
-  return value
-      .trim()
-      .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .replaceAll(RegExp(r'_+'), '_')
-      .trim();
+  return buildPdfDocumentFileName(
+    documentKind: 'Cotización',
+    customerName: cotizacion.customerName,
+    fallbackCode: _buildQuoteCode(cotizacion.id),
+  );
 }
 
 String _buildQuoteCode(String id) {

@@ -92,22 +92,21 @@ class SqfliteGuardianStore implements GuardianStore {
   @override
   Future<void> upsert(GuardianEvent event) async {
     final db = await _database;
-    await db.insert(
-      'guardian_events',
-      <String, Object?>{
-        'event_id': event.eventId,
-        'severity': event.severity,
-        'occurred_at_ms': event.occurredAt.millisecondsSinceEpoch,
-        'attempts': event.attempts,
-        'next_attempt_at_ms': event.nextAttemptAtMs,
-        'payload': event.toDbJson(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert('guardian_events', <String, Object?>{
+      'event_id': event.eventId,
+      'severity': event.severity,
+      'occurred_at_ms': event.occurredAt.millisecondsSinceEpoch,
+      'attempts': event.attempts,
+      'next_attempt_at_ms': event.nextAttemptAtMs,
+      'payload': event.toDbJson(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   @override
-  Future<List<GuardianEvent>> dueEvents({required int limit, DateTime? now}) async {
+  Future<List<GuardianEvent>> dueEvents({
+    required int limit,
+    DateTime? now,
+  }) async {
     final db = await _database;
     final at = (now ?? DateTime.now()).millisecondsSinceEpoch;
     final rows = await db.query(
@@ -129,7 +128,10 @@ class SqfliteGuardianStore implements GuardianStore {
     final db = await _database;
     await db.update(
       'guardian_events',
-      <String, Object?>{'attempts': attempts, 'next_attempt_at_ms': nextAttemptAtMs},
+      <String, Object?>{
+        'attempts': attempts,
+        'next_attempt_at_ms': nextAttemptAtMs,
+      },
       where: 'event_id = ?',
       whereArgs: <Object?>[eventId],
     );
@@ -141,20 +143,28 @@ class SqfliteGuardianStore implements GuardianStore {
     if (ids.isEmpty) return;
     final db = await _database;
     final placeholders = List.filled(ids.length, '?').join(',');
-    await db.delete('guardian_events', where: 'event_id IN ($placeholders)', whereArgs: ids);
+    await db.delete(
+      'guardian_events',
+      where: 'event_id IN ($placeholders)',
+      whereArgs: ids,
+    );
   }
 
   @override
   Future<int> count() async {
     final db = await _database;
-    final result = await db.rawQuery('SELECT COUNT(*) AS c FROM guardian_events');
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM guardian_events',
+    );
     return (result.first['c'] as int?) ?? 0;
   }
 
   @override
   Future<int> totalBytes() async {
     final db = await _database;
-    final result = await db.rawQuery('SELECT COALESCE(SUM(LENGTH(payload)), 0) AS b FROM guardian_events');
+    final result = await db.rawQuery(
+      'SELECT COALESCE(SUM(LENGTH(payload)), 0) AS b FROM guardian_events',
+    );
     return (result.first['b'] as int?) ?? 0;
   }
 
@@ -194,7 +204,11 @@ class SqfliteGuardianStore implements GuardianStore {
   @override
   Future<List<GuardianDiscardRecord>> discards() async {
     final db = await _database;
-    final rows = await db.query('guardian_discards', orderBy: 'at_ms ASC', limit: 100);
+    final rows = await db.query(
+      'guardian_discards',
+      orderBy: 'at_ms ASC',
+      limit: 100,
+    );
     return rows
         .map(
           (row) => GuardianDiscardRecord(
@@ -207,12 +221,18 @@ class SqfliteGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<bool> wasRecentlyRecorded(String fingerprint, {required Duration window}) async {
+  Future<bool> wasRecentlyRecorded(
+    String fingerprint, {
+    required Duration window,
+  }) async {
     final db = await _database;
     final rows = await db.query(
       'guardian_fingerprints',
       where: 'fingerprint = ? AND at_ms >= ?',
-      whereArgs: <Object?>[fingerprint, DateTime.now().subtract(window).millisecondsSinceEpoch],
+      whereArgs: <Object?>[
+        fingerprint,
+        DateTime.now().subtract(window).millisecondsSinceEpoch,
+      ],
       limit: 1,
     );
     return rows.isNotEmpty;
@@ -221,10 +241,9 @@ class SqfliteGuardianStore implements GuardianStore {
   @override
   Future<void> markRecorded(String fingerprint) async {
     final db = await _database;
-    await db.insert(
-      'guardian_fingerprints',
-      <String, Object?>{'fingerprint': fingerprint, 'at_ms': DateTime.now().millisecondsSinceEpoch},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('guardian_fingerprints', <String, Object?>{
+      'fingerprint': fingerprint,
+      'at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }

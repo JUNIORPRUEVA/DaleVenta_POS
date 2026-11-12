@@ -111,6 +111,31 @@ void main() {
       }
     });
 
+    // Guarda de regresión del cambio de producto: el grupo «Contabilidad» y sus
+    // cuatro accesos (Depósitos, Factura fiscal, Pagos, Nómina) no se dibujan en
+    // el menú. Las rutas siguen existiendo en el router; lo que se retiró es
+    // únicamente su representación en la navegación.
+    test('el grupo Contabilidad está oculto de la navegación', () {
+      final sections = buildAppNavigationSections(
+        _user(),
+        multiWarehouseEnabled: true,
+      );
+      final titles = _titles(sections);
+
+      expect(
+        sections.map((section) => section.title),
+        isNot(contains('Contabilidad')),
+      );
+      for (final hidden in [
+        'Depósitos',
+        'Factura fiscal',
+        'Pagos',
+        'Nómina',
+      ]) {
+        expect(titles, isNot(contains(hidden)), reason: hidden);
+      }
+    });
+
     // Paridad desktop: `DesktopSidebar` consume exactamente esta salida. El
     // orden y el contenido deben permanecer idénticos a la línea base de PC.
     test('paridad desktop: árbol de navegación con multiWarehouseEnabled=false', () {
@@ -121,15 +146,12 @@ void main() {
 
       expect(
         sections.map((section) => section.title).toList(),
-        ['Principal', 'Contabilidad', 'Cuenta'],
+        ['Principal', 'Cuenta'],
       );
       expect(_titles(sections), [
         'Clientes',
         'Facturación',
         'Lista de ventas',
-        'Registrar entrada',
-        'Registrar salida',
-        'Historial',
         'Créditos',
         'Productos',
         'Ajuste stock',
@@ -137,10 +159,6 @@ void main() {
         'Recuento',
         'Compras',
         'Reportes',
-        'Factura fiscal',
-        'Depósitos',
-        'Pagos',
-        'Nómina',
         'Usuario',
       ]);
     });
@@ -155,9 +173,6 @@ void main() {
         'Clientes',
         'Facturación',
         'Lista de ventas',
-        'Registrar entrada',
-        'Registrar salida',
-        'Historial',
         'Créditos',
         'Productos',
         'Ajuste stock',
@@ -167,12 +182,29 @@ void main() {
         'Almacenes',
         'Compras',
         'Reportes',
-        'Factura fiscal',
-        'Depósitos',
-        'Pagos',
-        'Nómina',
         'Usuario',
       ]);
+    });
+
+    // Guarda de regresión: las acciones de efectivo se unificaron en el
+    // selector «Turno». Ya no son secciones de navegación lateral, así que no
+    // pueden reaparecer en los grupos comodín («Otros» / «Más módulos»).
+    test('las acciones de efectivo no están en la navegación lateral', () {
+      for (final enabled in [true, false]) {
+        final titles = _titles(
+          buildAppNavigationSections(
+            _user(),
+            multiWarehouseEnabled: enabled,
+          ),
+        );
+        for (final hidden in [
+          'Registrar entrada',
+          'Registrar salida',
+          'Historial',
+        ]) {
+          expect(titles, isNot(contains(hidden)), reason: hidden);
+        }
+      }
     });
   });
 
@@ -232,13 +264,15 @@ void main() {
         'Productos',
         'Compras',
         'Reportes',
-        'Factura fiscal',
-        'Depósitos',
-        'Pagos',
-        'Nómina',
         'Usuario',
       ]) {
         expect(off, contains(traditional), reason: traditional);
+      }
+
+      // El módulo Contabilidad se retiró de la navegación por decisión de
+      // producto: encender o apagar e-CF no debe reintroducirlo.
+      for (final hidden in ['Factura fiscal', 'Depósitos', 'Pagos', 'Nómina']) {
+        expect(off, isNot(contains(hidden)), reason: hidden);
       }
     });
   });

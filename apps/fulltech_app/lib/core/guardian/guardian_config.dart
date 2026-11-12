@@ -100,7 +100,10 @@ class GuardianConfig {
 
   /// Lee los flags de compilación (`--dart-define`). Sin defines → desactivado.
   factory GuardianConfig.fromEnvironment() {
-    const enabled = bool.fromEnvironment('GUARDIAN_ENABLED', defaultValue: false);
+    const enabled = bool.fromEnvironment(
+      'GUARDIAN_ENABLED',
+      defaultValue: false,
+    );
     if (!enabled) return GuardianConfig.disabled;
 
     return GuardianConfig(
@@ -110,24 +113,44 @@ class GuardianConfig {
         defaultValue: '/guardian/incidents',
       ),
       maxEvents: int.fromEnvironment('GUARDIAN_MAX_EVENTS', defaultValue: 200),
-      maxBytes: int.fromEnvironment('GUARDIAN_MAX_BYTES', defaultValue: 5242880),
+      maxBytes: int.fromEnvironment(
+        'GUARDIAN_MAX_BYTES',
+        defaultValue: 5242880,
+      ),
       batchSize: int.fromEnvironment('GUARDIAN_BATCH_SIZE', defaultValue: 20),
       minSeverityToPersist: String.fromEnvironment(
         'GUARDIAN_MIN_SEVERITY',
         defaultValue: 'SEV3',
       ),
       sampleRateSev3Sev4: _readDouble(
-        const String.fromEnvironment('GUARDIAN_SAMPLE_SEV34', defaultValue: '0.25'),
+        const String.fromEnvironment(
+          'GUARDIAN_SAMPLE_SEV34',
+          defaultValue: '0.25',
+        ),
         0.25,
       ),
       flushInterval: Duration(seconds: _resolveFlushSeconds()),
-      baseUrl: const String.fromEnvironment('GUARDIAN_BASE_URL', defaultValue: ''),
-      useMachineApi: const bool.fromEnvironment('GUARDIAN_USE_MACHINE_API', defaultValue: false),
-      autoEnroll: const bool.fromEnvironment('GUARDIAN_AUTO_ENROLL', defaultValue: false),
+      baseUrl: const String.fromEnvironment(
+        'GUARDIAN_BASE_URL',
+        defaultValue: '',
+      ),
+      useMachineApi: const bool.fromEnvironment(
+        'GUARDIAN_USE_MACHINE_API',
+        defaultValue: false,
+      ),
+      autoEnroll: const bool.fromEnvironment(
+        'GUARDIAN_AUTO_ENROLL',
+        defaultValue: false,
+      ),
       // El código NUNCA se compila: solo la ruta del archivo que lo contiene.
-      enrollmentCodeFile:
-          const String.fromEnvironment('GUARDIAN_ENROLLMENT_CODE_FILE', defaultValue: ''),
-      selfTest: const bool.fromEnvironment('GUARDIAN_SELFTEST', defaultValue: false),
+      enrollmentCodeFile: const String.fromEnvironment(
+        'GUARDIAN_ENROLLMENT_CODE_FILE',
+        defaultValue: '',
+      ),
+      selfTest: const bool.fromEnvironment(
+        'GUARDIAN_SELFTEST',
+        defaultValue: false,
+      ),
     );
   }
 
@@ -164,8 +187,13 @@ double _readDouble(String raw, double fallback) {
 /// `GUARDIAN_FLUSH_SECONDS` (operación de UAT/piloto sin recompilar) y, si no
 /// existe, con `--dart-define=GUARDIAN_FLUSH_SECONDS`.
 int _resolveFlushSeconds() {
-  const compileTime = int.fromEnvironment('GUARDIAN_FLUSH_SECONDS', defaultValue: 120);
-  final fromEnv = int.tryParse(guardianRuntimeEnv('GUARDIAN_FLUSH_SECONDS') ?? '');
+  const compileTime = int.fromEnvironment(
+    'GUARDIAN_FLUSH_SECONDS',
+    defaultValue: 120,
+  );
+  final fromEnv = int.tryParse(
+    guardianRuntimeEnv('GUARDIAN_FLUSH_SECONDS') ?? '',
+  );
   final value = fromEnv ?? compileTime;
   if (value < 5) return 5;
   if (value > 3600) return 3600;

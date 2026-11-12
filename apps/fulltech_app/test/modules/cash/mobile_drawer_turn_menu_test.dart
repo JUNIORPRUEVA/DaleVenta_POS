@@ -345,6 +345,12 @@ void main() {
       expect(find.text('Historial de turnos'), findsWidgets);
       expect(find.text('Cerrar turno'), findsNothing);
       expect(find.text('Turno actual'), findsNothing);
+      // Con turno cerrado no hay movimientos manuales posibles (el backend los
+      // rechaza), pero el historial sigue consultable.
+      expect(find.text('Registrar entrada'), findsNothing);
+      expect(find.text('Registrar salida'), findsNothing);
+      expect(find.text('Historial de movimientos'), findsOneWidget);
+      expect(find.text('Movimiento efectivo'), findsNothing);
     });
 
     testWidgets('Test 2 — turno ABIERTO: "Turno actual" + "Cerrar turno"', (
@@ -367,6 +373,12 @@ void main() {
       expect(find.text('Cerrar turno'), findsOneWidget);
       expect(find.text('Historial de turnos'), findsWidgets);
       expect(find.text('Abrir turno'), findsNothing);
+      // Acciones de efectivo unificadas en el grupo «Turno». El grupo lateral
+      // «Movimiento efectivo» ya no existe en ninguna plataforma.
+      expect(find.text('Registrar entrada'), findsOneWidget);
+      expect(find.text('Registrar salida'), findsOneWidget);
+      expect(find.text('Historial de movimientos'), findsOneWidget);
+      expect(find.text('Movimiento efectivo'), findsNothing);
     });
 
     testWidgets('Test 3 — abierto → cerrado sin recrear la app', (

@@ -67,7 +67,8 @@ class _SaleAttemptRecoveryScreenState
       if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
         setState(() {
           _loading = false;
-          _error = 'No pudimos identificar tu empresa y usuario. Vuelve a iniciar sesión.';
+          _error =
+              'No pudimos identificar tu empresa y usuario. Vuelve a iniciar sesión.';
         });
         return;
       }
@@ -212,8 +213,7 @@ class _SaleAttemptRecoveryScreenState
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      final moneyReceived =
-          decision == SaleAttemptDecision.manualMoneyReceived;
+      final moneyReceived = decision == SaleAttemptDecision.manualMoneyReceived;
       final String title;
       final String body;
       if (resolved) {
@@ -245,7 +245,8 @@ class _SaleAttemptRecoveryScreenState
       if (!mounted) return;
       await _showInfo(
         title: 'No se pudo cerrar la incidencia',
-        body: 'El intento sigue intacto. Pide ayuda a soporte antes de cobrar de '
+        body:
+            'El intento sigue intacto. Pide ayuda a soporte antes de cobrar de '
             'nuevo este contenido.',
       );
     } finally {
@@ -278,7 +279,10 @@ class _SaleAttemptRecoveryScreenState
                         'venta retroactiva ni marca el pago como recibido: la '
                         'conciliación se hace después por el flujo oficial. '
                         'Describe la evidencia que tienes.',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -472,13 +476,15 @@ class _SaleAttemptRecoveryScreenState
         actorRole: user?.role,
         note: 'Autorización de venta nueva independiente',
       );
-      await ref.read(saleAttemptReconcilerProvider).resolveManually(
-        action: action,
-        decision: SaleAttemptDecision.manualAuthorizedNewSale,
-        actorUserId: user?.id,
-        actorRole: user?.role,
-        note: 'Autorización de venta nueva independiente',
-      );
+      await ref
+          .read(saleAttemptReconcilerProvider)
+          .resolveManually(
+            action: action,
+            decision: SaleAttemptDecision.manualAuthorizedNewSale,
+            actorUserId: user?.id,
+            actorRole: user?.role,
+            note: 'Autorización de venta nueva independiente',
+          );
       if (!mounted) return;
       await _load();
       if (!mounted) return;
@@ -526,7 +532,10 @@ class _SaleAttemptRecoveryScreenState
       await Clipboard.setData(ClipboardData(text: template));
       if (!mounted) return;
       final count = audit
-          .where((entry) => entry.decision == SaleAttemptDecision.manualMoneyReceived)
+          .where(
+            (entry) =>
+                entry.decision == SaleAttemptDecision.manualMoneyReceived,
+          )
           .map((entry) => entry.clientRequestId)
           .toSet()
           .length;
@@ -566,9 +575,7 @@ class _SaleAttemptRecoveryScreenState
 
   String _amountText(PendingSyncAction action) {
     final raw = action.payload['expectedTotalSold'];
-    final value = raw is num
-        ? raw.toDouble()
-        : double.tryParse('${raw ?? ''}');
+    final value = raw is num ? raw.toDouble() : double.tryParse('${raw ?? ''}');
     if (value != null) return value.toStringAsFixed(2);
     var sum = 0.0;
     for (final item in _items(action)) {
@@ -593,7 +600,8 @@ class _SaleAttemptRecoveryScreenState
   ) {
     final raw = action.payload['items'];
     if (raw is! List) return const [];
-    final result = <({String name, String productId, double qty, double price})>[];
+    final result =
+        <({String name, String productId, double qty, double price})>[];
     for (final entry in raw) {
       if (entry is! Map) continue;
       final map = entry.cast<String, dynamic>();
@@ -878,7 +886,11 @@ class _IncidentCardState extends State<_IncidentCard> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.warningBorder),
         boxShadow: const [
-          BoxShadow(color: AppColors.shadow, blurRadius: 10, offset: Offset(0, 3)),
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
         ],
       ),
       child: Column(
@@ -962,10 +974,7 @@ class _IncidentCardState extends State<_IncidentCard> {
             ),
             _DetailRow(label: 'Empresa', value: action.companyId ?? '-'),
             _DetailRow(label: 'Usuario', value: action.userId ?? '-'),
-            _DetailRow(
-              label: 'Artículos',
-              value: widget.itemLines.join(' · '),
-            ),
+            _DetailRow(label: 'Artículos', value: widget.itemLines.join(' · ')),
             for (final entry in widget.history.take(5))
               _DetailRow(
                 label: _decisionLabel(entry.decision),
@@ -1080,7 +1089,9 @@ class _IncidentCardState extends State<_IncidentCard> {
               ),
               Expanded(
                 child: TextButton(
-                  onPressed: widget.busy ? null : () => widget.onMoneyReceived(),
+                  onPressed: widget.busy
+                      ? null
+                      : () => widget.onMoneyReceived(),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.primary,
                     alignment: Alignment.centerLeft,
@@ -1116,12 +1127,10 @@ class _IncidentCardState extends State<_IncidentCard> {
       SaleAttemptDecision.autoRegisteredThenVoided =>
         'Registrada y luego anulada',
       SaleAttemptDecision.keptInconclusive => 'Sin conclusión: conservada',
-      SaleAttemptDecision.manualNotPerformed =>
-        'Declarada como no realizada',
+      SaleAttemptDecision.manualNotPerformed => 'Declarada como no realizada',
       SaleAttemptDecision.manualMoneyReceived => 'Dinero recibido declarado',
       SaleAttemptDecision.manualEscalated => 'Revisión solicitada',
-      SaleAttemptDecision.manualAuthorizedNewSale =>
-        'Venta nueva autorizada',
+      SaleAttemptDecision.manualAuthorizedNewSale => 'Venta nueva autorizada',
     };
   }
 }

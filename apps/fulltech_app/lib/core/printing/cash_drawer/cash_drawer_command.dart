@@ -124,7 +124,13 @@ class CashDrawerCommand {
   /// no existe evidencia suficiente de soporte explícito en la SEWOO
   /// SLK-TS100 y el comando principal sigue siendo `ESC p`, que es el
   /// estándar de apertura ya utilizado y validado.
-  static const List<int> defaultPulseBytes = <int>[0x1B, 0x70, 0x00, 0x19, 0xFA];
+  static const List<int> defaultPulseBytes = <int>[
+    0x1B,
+    0x70,
+    0x00,
+    0x19,
+    0xFA,
+  ];
 
   /// Descripción legible del pulso (para logs/reportes de soporte).
   static String describe(CashDrawerPin pin) {

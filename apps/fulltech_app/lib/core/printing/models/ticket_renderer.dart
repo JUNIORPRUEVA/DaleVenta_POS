@@ -275,19 +275,14 @@ class TicketRenderer {
     addMoneyLine('TOTAL', data.total);
     final hasPaymentSection =
         layout.showPaymentMethod &&
-        (((data.paymentMethod ?? '').trim().isNotEmpty) ||
-            data.hasCashTender);
+        (((data.paymentMethod ?? '').trim().isNotEmpty) || data.hasCashTender);
     if (hasPaymentSection) {
       // Separación visual: el bloque de pago no debe parecer parte del
       // cálculo de impuestos/subtotal.
       blank();
       if ((data.paymentMethod ?? '').trim().isNotEmpty) {
         add(
-          ReceiptTextUtils.leftRight(
-            'Pago',
-            data.paymentMethod!.trim(),
-            width,
-          ),
+          ReceiptTextUtils.leftRight('Pago', data.paymentMethod!.trim(), width),
         );
       }
       if (data.hasCashTender) {

@@ -5159,6 +5159,7 @@ class _SalesCompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _SalesSettingsSubmenu(
               showPrinter: !kIsWeb,
+              onApps: () => _goAfterMenu(context, Routes.apps),
               onPrinter: () =>
                   _goAfterMenu(context, Routes.configuracionImpresora),
               onDeleteAccount: () {
@@ -5348,11 +5349,13 @@ class _SalesCompanyLogoBox extends StatelessWidget {
 class _SalesSettingsSubmenu extends StatefulWidget {
   const _SalesSettingsSubmenu({
     required this.showPrinter,
+    required this.onApps,
     required this.onPrinter,
     required this.onDeleteAccount,
   });
 
   final bool showPrinter;
+  final VoidCallback onApps;
   final VoidCallback onPrinter;
   final VoidCallback onDeleteAccount;
 
@@ -5408,6 +5411,11 @@ class _SalesSettingsSubmenuState extends State<_SalesSettingsSubmenu> {
           ),
         ),
         if (_expanded) ...[
+          _SalesSettingsSubmenuAction(
+            icon: Icons.devices_other_rounded,
+            label: 'Aplicaciones y descargas',
+            onTap: widget.onApps,
+          ),
           if (widget.showPrinter)
             _SalesSettingsSubmenuAction(
               icon: Icons.print_outlined,

@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/debug/app_error_reporter.dart';
 import '../../core/debug/trace_log.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/refined_topbar_controls.dart';
 import '../../core/time/business_time.dart';
 import '../../core/utils/money_formatters.dart';
 import 'cash_close_ticket_printer.dart';
@@ -15,7 +19,13 @@ import 'cash_providers.dart';
 import 'cash_repository.dart';
 
 class CashTurnMenuButton extends ConsumerWidget {
-  const CashTurnMenuButton({super.key, this.compact = false});
+  const CashTurnMenuButton({
+    super.key,
+    this.compact = false,
+    this.refined = false,
+  });
+
+  final bool refined;
 
   static const _navigatorSettleDelay = Duration(milliseconds: 220);
 
@@ -60,7 +70,22 @@ class CashTurnMenuButton extends ConsumerWidget {
         );
         await controller.refresh();
         if (!context.mounted) return;
-        showCashToast(context, 'Caja abierta');
+        // El aviso de éxito solo se da si el estado autoritativo confirma el
+        // turno: nunca se anuncia "Caja abierta" mientras el selector sigue en
+        // "Cerrado".
+        if (ref.read(activeCashSessionControllerProvider).valueOrNull == null) {
+          showCashToast(
+            context,
+            'La caja no quedó abierta en el servidor. Intenta de nuevo.',
+            isError: true,
+          );
+          return;
+        }
+        showCashToast(
+          context,
+          'Turno abierto',
+          detail: 'La caja está lista para operar.',
+        );
       }
     } catch (error, stack) {
       AppErrorReporter.instance.record(
@@ -95,17 +120,64 @@ class CashTurnMenuButton extends ConsumerWidget {
       await controller.refresh();
       if (!context.mounted) return;
       final printResult = result?.printResult;
-      final message = printResult == null
-          ? 'Turno cerrado'
+      // Título corto + detalle útil: el resultado de impresión no expone
+      // detalles técnicos, solo el desenlace para el cajero.
+      final detail = printResult == null
+          ? 'Efectivo contado y cierre registrado correctamente.'
           : printResult.success
-          ? 'Turno cerrado e impreso'
-          : 'Turno cerrado. ${printResult.message}';
-      showCashToast(context, message);
+          ? 'Cierre registrado y ticket enviado a la impresora.'
+          : 'Cierre registrado. ${printResult.message}';
+      showCashToast(context, 'Turno cerrado', detail: detail);
     } catch (error, stack) {
       AppErrorReporter.instance.record(
         error,
         stack,
         context: 'Cerrar caja desde menu de turno',
+        notifyUser: false,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, resolveCashError(error), isError: true);
+    }
+  }
+
+  /// Registra una entrada o salida manual de efectivo desde el selector.
+  ///
+  /// Reutiliza EXACTAMENTE la misma implementación que la pantalla de Caja y el
+  /// historial de movimientos: `showCashMovementDialog` (un único formulario) y
+  /// `ActiveCashSessionController.addMovement` (un único camino al endpoint
+  /// `POST /cash/movements`, con su `operationId`, `sessionId`, cola offline y
+  /// validaciones intactas). No hay formulario ni endpoint alternativo.
+  Future<void> _addMovement(
+    BuildContext context,
+    WidgetRef ref,
+    String type,
+  ) async {
+    final controller = ref.read(activeCashSessionControllerProvider.notifier);
+    // El backend rechaza un movimiento sin turno abierto. La acción se muestra
+    // siempre en el selector, pero sin turno no se abre un formulario que no
+    // puede guardarse: se informa con el mensaje normal de estado.
+    final active = ref.read(activeCashSessionControllerProvider).valueOrNull;
+    if (active == null) {
+      showCashToast(context, _noOpenTurnMessage);
+      return;
+    }
+    final input = await showCashMovementDialog(context, type: type);
+    if (input == null) return;
+    try {
+      await controller.addMovement(
+        type: type,
+        amount: input.amount,
+        reason: input.reason,
+        movementType: input.movementType,
+        affectsProfit: input.affectsProfit,
+      );
+      if (!context.mounted) return;
+      showCashToast(context, 'Movimiento guardado');
+    } catch (error, stack) {
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Registrar movimiento desde menu de turno',
         notifyUser: false,
       );
       if (!context.mounted) return;
@@ -246,12 +318,13 @@ class CashTurnMenuButton extends ConsumerWidget {
       tooltip: 'Estado del turno',
       offset: const Offset(0, 42),
       color: Colors.white,
-      elevation: 8,
-      shadowColor: Colors.black.withValues(alpha: 0.10),
+      surfaceTintColor: Colors.transparent,
+      elevation: 10,
+      shadowColor: const Color(0xFF0F172A).withValues(alpha: 0.10),
       constraints: const BoxConstraints(minWidth: 292),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFF9FB6C8)),
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: AppColors.border),
       ),
       itemBuilder: (menuContext) => [
         if (requiresReview)
@@ -279,36 +352,40 @@ class CashTurnMenuButton extends ConsumerWidget {
                   'el servidor y se actualizará al recuperar conexión.',
             ),
           ),
-        // Abrir otra caja mientras el estado del servidor no está confirmado
-        // podría crear un segundo turno sobre un estado ambiguo/legacy.
-        if (active == null && !unverified && !requiresReview)
+        // ─────────────────── TURNO ABIERTO (5 opciones) ───────────────────
+        // Orden fijo del contrato: 1) Cerrar turno  2) Turno actual
+        // 3) Registrar entrada  4) Registrar salida  5) Historial de caja.
+        if (active != null && !requiresReview) ...[
+          // 1. Cierre DIRECTO: abre el diálogo de corte existente
+          //    (`showCloseShiftDialog`) sin pasar antes por "Turno actual".
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
+            height: 44,
             child: _TurnMenuItem(
-              icon: Icons.lock_open_rounded,
-              label: 'Abrir caja',
+              icon: Icons.price_check_rounded,
+              tone: AppColors.primary,
+              emphasized: true,
+              highlight: true,
+              label: 'Cerrar turno',
               helpText:
-                  'Inicia un turno de caja registrando la base inicial de efectivo. Esto habilita el control de ventas, entradas, salidas y cierre del día.',
+                  'Abre el corte del turno activo y pide el efectivo contado. Es el mismo cierre de siempre: registra el corte y emite el ticket según la configuración de impresión.',
               onTap: () => _activateMenuItem(
                 context,
                 menuContext,
-                () => _openCash(context, ref),
+                () => _closeCash(context, ref),
               ),
             ),
           ),
-        // El detalle del turno está SIEMPRE disponible como información: con
-        // turno abierto muestra su corte, y sin turno abierto informa con UI
-        // normal ("No tienes un turno abierto actualmente."), nunca con el
-        // sistema global de errores. Antes pedía el corte de un turno
-        // inexistente (GET /cash/summary -> 404) sobre un estado no confirmado
-        // (caché local) y el error quedaba sin capturar.
-        if (!requiresReview)
+          // 2. Detalle informativo del turno en curso.
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
+            height: 44,
             child: _TurnMenuItem(
-              icon: Icons.receipt_long_outlined,
+              icon: Icons.point_of_sale_rounded,
+              tone: AppColors.primary,
+              emphasized: true,
               label: 'Turno actual',
               helpText:
                   'Muestra el resumen del turno activo, total vendido, efectivo esperado, tickets y composición del corte sin salir de la pantalla de ventas.',
@@ -317,44 +394,110 @@ class CashTurnMenuButton extends ConsumerWidget {
               }),
             ),
           ),
-        // "Hacer corte de turno" solo cuando existe un turno abierto
-        // identificable: no se cierra un turno que no existe.
-        if (active != null && !requiresReview)
+          // Separador: bloque primario → operaciones de efectivo.
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
+            height: 7,
+            child: _TurnMenuDivider(width: _turnMenuRowWidth(menuContext)),
+          ),
+          // 3./4. Movimientos manuales: solo con turno abierto confirmado. Sin
+          // turno el backend rechaza el movimiento, así que la opción no se
+          // ofrece (el bloqueo real sigue en el backend).
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            height: 44,
             child: _TurnMenuItem(
-              icon: Icons.point_of_sale_rounded,
-              label: 'Hacer corte de turno',
+              icon: Icons.south_west_rounded,
+              tone: AppColors.success,
+              label: 'Registrar entrada',
               helpText:
-                  'Cierra el turno activo confirmando el efectivo real de caja. Al finalizar queda registrado el corte y puede imprimirse el comprobante.',
+                  'Registra efectivo que entra a la caja fuera de una venta (fondo adicional, reposición, cobro no facturado).',
               onTap: () => _activateMenuItem(
                 context,
                 menuContext,
-                () => _closeCash(context, ref),
+                () => _addMovement(context, ref, 'IN'),
               ),
             ),
           ),
-        PopupMenuItem(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: _TurnMenuItem(
-            icon: Icons.history_rounded,
-            label: 'Historial de turnos',
-            helpText:
-                'Consulta los turnos cerrados anteriormente, revisa sus montos y reimprime el ticket de cierre cuando sea necesario.',
-            onTap: () => _activateMenuItem(
-              context,
-              menuContext,
-              () => _showHistory(context, ref),
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            height: 44,
+            child: _TurnMenuItem(
+              icon: Icons.north_east_rounded,
+              tone: AppColors.error,
+              label: 'Registrar salida',
+              helpText:
+                  'Registra efectivo que sale de la caja (gasto, retiro del dueño o transferencia). No permite dejar la caja en negativo.',
+              onTap: () => _activateMenuItem(
+                context,
+                menuContext,
+                () => _addMovement(context, ref, 'OUT'),
+              ),
             ),
           ),
-        ),
+          // Separador: operaciones de efectivo → consultas.
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            height: 7,
+            child: _TurnMenuDivider(width: _turnMenuRowWidth(menuContext)),
+          ),
+        ],
+        // ─────────────────── TURNO CERRADO (2 opciones) ───────────────────
+        // Contrato: exactamente "Abrir turno" y "Historial de caja". No se
+        // muestran "Turno actual", entradas/salidas ni cierre.
+        //
+        // Abrir otra caja mientras el estado del servidor no está confirmado
+        // podría crear un segundo turno sobre un estado ambiguo/legacy.
+        if (active == null && !unverified && !requiresReview)
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            height: 44,
+            child: _TurnMenuItem(
+              icon: Icons.lock_open_rounded,
+              emphasized: true,
+              highlight: true,
+              label: 'Abrir turno',
+              helpText:
+                  'Inicia un turno de caja registrando el fondo inicial de efectivo. Habilita ventas, entradas, salidas y cierre del día.',
+              onTap: () => _activateMenuItem(
+                context,
+                menuContext,
+                () => _openCash(context, ref),
+              ),
+            ),
+          ),
+        // 5. Historial de caja: disponible siempre (también sin turno abierto).
+        // Turnos cerrados y movimientos en un solo panel con selector interno.
+        if (!requiresReview)
+          PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            height: 44,
+            child: _TurnMenuItem(
+              icon: Icons.history_rounded,
+              tone: AppColors.textSecondary,
+              emphasized: true,
+              label: 'Historial de caja',
+              helpText:
+                  'Consulta los turnos cerrados y los movimientos de efectivo en un solo lugar. Cambia entre ambas vistas con el selector del panel. Solo lectura.',
+              onTap: () => _activateMenuItem(
+                context,
+                menuContext,
+                () => _showHistory(context, ref),
+              ),
+            ),
+          ),
       ],
       child: _TurnTopbarButton(
         open: active != null,
         unverified: unverified,
         compact: compact,
+        refined: refined,
       ),
     );
   }
@@ -365,11 +508,13 @@ class _TurnTopbarButton extends StatefulWidget {
     required this.open,
     required this.unverified,
     required this.compact,
+    required this.refined,
   });
 
   final bool open;
   final bool unverified;
   final bool compact;
+  final bool refined;
 
   @override
   State<_TurnTopbarButton> createState() => _TurnTopbarButtonState();
@@ -406,6 +551,19 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton>
   Widget build(BuildContext context) {
     final active = _hovered || _pressed;
     final open = widget.open;
+    if (widget.refined) {
+      return RefinedTurnChip(
+        open: open,
+        unverified: widget.unverified,
+        activity: open
+            ? _TurnLiveDot(animation: _pulse, compact: true)
+            : const _TurnClosedDot(
+                color: AppColors.textSecondary,
+                background: AppColors.surfaceAlt,
+                compact: true,
+              ),
+      );
+    }
     final accent = open ? const Color(0xFF1957E6) : const Color(0xFF64748B);
     final accentSoft = open ? const Color(0xFFE4F8FF) : const Color(0xFFF1F5F9);
     final borderColor = open
@@ -611,18 +769,41 @@ class _TurnClosedDot extends StatelessWidget {
   }
 }
 
+/// Ancho de las filas del menú «Turno».
+///
+/// En escritorio apunta a ~332 px para que «Historial de movimientos» se lea
+/// completo sin elipsis (icono 36 + hueco 12 + texto + ayuda 32 + chevron 18 +
+/// padding). En pantallas estrechas se acota al ancho disponible menos los
+/// márgenes del popup, de modo que nunca haya recorte ni overflow horizontal.
+double _turnMenuRowWidth(BuildContext context) {
+  final screenWidth = MediaQuery.sizeOf(context).width;
+  return math.min(332.0, math.max(232.0, screenWidth - 56.0));
+}
+
 class _TurnMenuItem extends StatefulWidget {
   const _TurnMenuItem({
     required this.icon,
     required this.label,
     required this.helpText,
     required this.onTap,
+    this.tone = AppColors.primary,
+    this.emphasized = false,
+    this.highlight = false,
   });
 
   final IconData icon;
   final String label;
   final String helpText;
   final VoidCallback onTap;
+
+  /// Color semántico del glifo (token del sistema de diseño).
+  final Color tone;
+
+  /// Acción principal: tipografía y contraste reforzados.
+  final bool emphasized;
+
+  /// Destino principal del menú: superficie resaltada de forma sutil.
+  final bool highlight;
 
   @override
   State<_TurnMenuItem> createState() => _TurnMenuItemState();
@@ -631,48 +812,89 @@ class _TurnMenuItem extends StatefulWidget {
 class _TurnMenuItemState extends State<_TurnMenuItem> {
   bool _showHelp = false;
 
+  /// Acción clave del menú (apertura, cierre, historial): recibe superficie
+  /// tonal y tipografía reforzada frente a las acciones secundarias.
+  bool get _isPrimary => widget.emphasized || widget.highlight;
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 258,
+    // Jerarquía en tres niveles, todos con el mismo lenguaje visual:
+    //   highlight  → velo azul suave + borde tenue (acción principal)
+    //   emphasized → velo azul muy discreto (acciones clave secundarias)
+    //   normal     → sin superficie (movimientos manuales)
+    final surface = widget.highlight
+        ? AppColors.primarySoft.withValues(alpha: 0.66)
+        : widget.emphasized
+        ? AppColors.primarySoft.withValues(alpha: 0.34)
+        : Colors.transparent;
+    final iconSurface = widget.tone.withValues(
+      alpha: widget.highlight
+          ? 0.14
+          : widget.emphasized
+          ? 0.10
+          : 0.055,
+    );
+    final labelColor = widget.highlight
+        ? AppColors.primaryDark
+        : AppColors.textPrimary;
+
+    return Container(
+      width: _turnMenuRowWidth(context),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(8),
+        border: widget.highlight
+            ? Border.all(color: AppColors.primary.withValues(alpha: 0.13))
+            : null,
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: AppColors.primary.withValues(alpha: 0.05),
+          splashColor: AppColors.primary.withValues(alpha: 0.07),
+          highlightColor: AppColors.primary.withValues(alpha: 0.04),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
-                  height: 48,
+                  height: 44,
                   child: Row(
                     children: [
+                      // Squircle tintado: da vida al glifo sin bloques grandes.
                       Container(
                         width: 30,
                         height: 30,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF7FAFC),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFDDE7EE)),
+                          color: iconSurface,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: widget.tone.withValues(
+                              alpha: _isPrimary ? 0.16 : 0.10,
+                            ),
+                          ),
                         ),
-                        child: Icon(
-                          widget.icon,
-                          color: const Color(0xFF1957E6),
-                          size: 16,
-                        ),
+                        child: Icon(widget.icon, color: widget.tone, size: 17),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 11),
                       Expanded(
                         child: Text(
                           widget.label,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF183548),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                          style: TextStyle(
+                            color: labelColor,
+                            fontWeight: _isPrimary
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            fontSize: 14,
                             letterSpacing: 0,
+                            height: 1.35,
                           ),
                         ),
                       ),
@@ -684,21 +906,23 @@ class _TurnMenuItemState extends State<_TurnMenuItem> {
                               ? Icons.help_rounded
                               : Icons.help_outline_rounded,
                         ),
-                        iconSize: 17,
+                        iconSize: 16,
                         color: _showHelp
-                            ? const Color(0xFF1957E6)
-                            : const Color(0xFF7C8DA1),
+                            ? AppColors.primary
+                            : AppColors.textMuted.withValues(alpha: 0.85),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints.tightFor(
                           width: 30,
                           height: 30,
                         ),
-                        splashRadius: 17,
+                        splashRadius: 15,
                       ),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
-                        color: Color(0xFF94A3B8),
-                        size: 18,
+                        color: widget.highlight
+                            ? AppColors.primary.withValues(alpha: 0.55)
+                            : AppColors.textMuted.withValues(alpha: 0.45),
+                        size: 15,
                       ),
                     ],
                   ),
@@ -721,6 +945,27 @@ class _TurnMenuItemState extends State<_TurnMenuItem> {
   }
 }
 
+/// Separador sutil entre bloques del menú (primario / efectivo / historial).
+///
+/// No añade encabezados ni ruido: solo agrupa visualmente sin sumar altura.
+class _TurnMenuDivider extends StatelessWidget {
+  const _TurnMenuDivider({required this.width});
+
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: math.max(0, width - 16),
+        height: 1,
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        color: AppColors.border.withValues(alpha: 0.75),
+      ),
+    );
+  }
+}
+
 class _TurnInlineMenuHelp extends StatelessWidget {
   const _TurnInlineMenuHelp({required this.text});
 
@@ -730,7 +975,7 @@ class _TurnInlineMenuHelp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(42, 0, 4, 8),
+      margin: const EdgeInsets.fromLTRB(46, 0, 8, 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F8FF),
@@ -740,10 +985,10 @@ class _TurnInlineMenuHelp extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(
-          color: Color(0xFF52667C),
-          fontSize: 11.6,
-          height: 1.25,
-          fontWeight: FontWeight.w700,
+          color: AppColors.textSecondary,
+          fontSize: 11.8,
+          height: 1.35,
+          fontWeight: FontWeight.w500,
           letterSpacing: 0,
         ),
       ),
@@ -768,7 +1013,7 @@ class _TurnMenuNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 258,
+      width: _turnMenuRowWidth(context),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
@@ -791,8 +1036,8 @@ class _TurnMenuNotice extends StatelessWidget {
                     label,
                     style: const TextStyle(
                       color: Color(0xFF7A4D04),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
                       letterSpacing: 0,
                     ),
                   ),
@@ -801,9 +1046,9 @@ class _TurnMenuNotice extends StatelessWidget {
                     helpText,
                     style: const TextStyle(
                       color: Color(0xFF7A4D04),
-                      fontSize: 11.4,
-                      height: 1.25,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w500,
                       letterSpacing: 0,
                     ),
                   ),
@@ -886,6 +1131,12 @@ class _CurrentTurnDialog extends StatelessWidget {
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
+                          ),
+                          IconButton(
+                            tooltip: 'Historial de turnos',
+                            onPressed: onOpenHistory,
+                            color: Colors.white,
+                            icon: const Icon(Icons.history_rounded),
                           ),
                           const Padding(
                             padding: EdgeInsets.only(right: 12),
@@ -1002,18 +1253,6 @@ class _CurrentTurnDialog extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-            Positioned(
-              right: 14,
-              bottom: 14 + MediaQuery.viewPaddingOf(context).bottom,
-              child: FloatingActionButton(
-                heroTag: 'current_turn_history',
-                tooltip: 'Historial de turnos',
-                onPressed: onOpenHistory,
-                backgroundColor: const Color(0xFF1957E6),
-                foregroundColor: Colors.white,
-                child: const Icon(Icons.history_rounded),
-              ),
             ),
           ],
         ),
@@ -1378,21 +1617,30 @@ class _Line extends StatelessWidget {
   }
 }
 
-class _TurnHistoryDialog extends StatefulWidget {
+class _TurnHistoryDialog extends ConsumerStatefulWidget {
   const _TurnHistoryDialog({required this.rows, required this.onPrint});
 
   final List<CashSessionHistoryModel> rows;
   final Future<void> Function(CashSessionHistoryModel row) onPrint;
 
   @override
-  State<_TurnHistoryDialog> createState() => _TurnHistoryDialogState();
+  ConsumerState<_TurnHistoryDialog> createState() => _TurnHistoryDialogState();
 }
 
-class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
+/// Vistas del panel único de historial.
+enum _HistoryTab { turns, movements }
+
+class _TurnHistoryDialogState extends ConsumerState<_TurnHistoryDialog> {
   final TextEditingController _searchController = TextEditingController();
   String? _selectedCashier;
   String? _selectedStatus;
   String? _selectedBusinessDate;
+
+  _HistoryTab _tab = _HistoryTab.turns;
+  List<CashMovementModel> _movements = const [];
+  bool _movementsLoading = false;
+  bool _movementsLoaded = false;
+  Object? _movementsError;
 
   @override
   void initState() {
@@ -1404,6 +1652,53 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _selectTab(_HistoryTab tab) {
+    if (tab == _tab) return;
+    setState(() => _tab = tab);
+    if (tab == _HistoryTab.movements) {
+      unawaited(_loadMovements());
+    }
+  }
+
+  /// Carga diferida: los movimientos solo se piden cuando el usuario abre esa
+  /// vista, reutilizando `CashRepository.movementHistory` (misma fuente de
+  /// datos y misma política offline que la pantalla de movimientos).
+  Future<void> _loadMovements() async {
+    if (_movementsLoading || _movementsLoaded) return;
+    setState(() {
+      _movementsLoading = true;
+      _movementsError = null;
+    });
+    try {
+      final rows = await ref
+          .read(cashRepositoryProvider)
+          .movementHistory(take: 200);
+      if (!mounted) return;
+      setState(() {
+        _movements = rows;
+        _movementsLoaded = true;
+        _movementsLoading = false;
+      });
+    } catch (error, stack) {
+      if (!mounted) return;
+      AppErrorReporter.instance.record(
+        error,
+        stack,
+        context: 'Cargar movimientos en panel de historial',
+        notifyUser: false,
+      );
+      setState(() {
+        _movementsError = error;
+        _movementsLoading = false;
+      });
+    }
+  }
+
+  void _retryMovements() {
+    setState(() => _movementsLoaded = false);
+    unawaited(_loadMovements());
   }
 
   List<String> get _cashiers {
@@ -1467,6 +1762,102 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
     });
   }
 
+  String _headerSubtitle(int visibleTurns) {
+    if (_tab == _HistoryTab.turns) {
+      return '$visibleTurns de ${widget.rows.length} turnos registrados';
+    }
+    if (_movementsLoading) return 'Cargando movimientos...';
+    if (_movementsError != null && _movements.isEmpty) {
+      return 'No se pudieron cargar los movimientos';
+    }
+    return '${_movements.length} movimientos registrados';
+  }
+
+  Widget _buildBody({required bool isPhone}) {
+    if (_tab == _HistoryTab.movements) {
+      return _buildMovementsBody(isPhone: isPhone);
+    }
+    final rows = _filteredRows;
+    if (rows.isEmpty) return const _HistoryEmptyState();
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(
+        isPhone ? 10 : 14,
+        12,
+        isPhone ? 10 : 14,
+        18,
+      ),
+      itemCount: rows.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        return _HistoryTurnCard(
+          row: rows[index],
+          onPrint: () => widget.onPrint(rows[index]),
+          isPhone: isPhone,
+        );
+      },
+    );
+  }
+
+  Widget _buildMovementsBody({required bool isPhone}) {
+    if (_movementsLoading && _movements.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_movementsError != null && _movements.isEmpty) {
+      return _HistoryEmptyState(
+        icon: Icons.cloud_off_rounded,
+        title: 'No se pudieron cargar los movimientos',
+        detail: resolveCashError(_movementsError!),
+        actionLabel: 'Reintentar',
+        onAction: _retryMovements,
+      );
+    }
+    if (_movements.isEmpty) {
+      return const _HistoryEmptyState(
+        icon: Icons.swap_vert_rounded,
+        title: 'Sin movimientos',
+        detail: 'No hay entradas ni salidas de efectivo registradas.',
+      );
+    }
+    final entries = _movements
+        .where((row) => row.isIn)
+        .fold<double>(0, (sum, row) => sum + row.amount);
+    final exits = _movements
+        .where((row) => !row.isIn)
+        .fold<double>(0, (sum, row) => sum + row.amount);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            isPhone ? 10 : 14,
+            10,
+            isPhone ? 10 : 14,
+            0,
+          ),
+          child: _HistoryMovementsSummary(
+            entries: entries,
+            exits: exits,
+            count: _movements.length,
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.fromLTRB(
+              isPhone ? 10 : 14,
+              10,
+              isPhone ? 10 : 14,
+              18,
+            ),
+            itemCount: _movements.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) =>
+                _HistoryMovementCard(row: _movements[index]),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
@@ -1491,8 +1882,7 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _HistoryPanelHeader(
-                  total: widget.rows.length,
-                  visible: rows.length,
+                  subtitle: _headerSubtitle(rows.length),
                   onClose: () => Navigator.pop(context),
                 ),
                 Padding(
@@ -1500,175 +1890,167 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
                     isPhone ? 10 : 14,
                     10,
                     isPhone ? 10 : 14,
-                    8,
+                    0,
                   ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              height: 42,
-                              child: TextField(
-                                controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: 'Buscar turno...',
-                                  prefixIcon: const Icon(
-                                    Icons.search_rounded,
-                                    size: 19,
-                                  ),
-                                  suffixIcon:
-                                      _searchController.text.trim().isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Limpiar',
-                                          onPressed: () =>
-                                              _searchController.clear(),
-                                          icon: const Icon(
-                                            Icons.close_rounded,
-                                            size: 18,
-                                          ),
-                                        ),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 10,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFFD6E3F5),
+                  child: _HistoryTabSwitch(value: _tab, onChanged: _selectTab),
+                ),
+                // Los filtros (cajero / día / estado) pertenecen solo a la vista
+                // de turnos: los movimientos tienen su propio resumen.
+                if (_tab == _HistoryTab.turns)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isPhone ? 10 : 14,
+                      10,
+                      isPhone ? 10 : 14,
+                      8,
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: 42,
+                                child: TextField(
+                                  controller: _searchController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Buscar turno...',
+                                    prefixIcon: const Icon(
+                                      Icons.search_rounded,
+                                      size: 19,
                                     ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFFD6E3F5),
+                                    suffixIcon:
+                                        _searchController.text.trim().isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Limpiar',
+                                            onPressed: () =>
+                                                _searchController.clear(),
+                                            icon: const Icon(
+                                              Icons.close_rounded,
+                                              size: 18,
+                                            ),
+                                          ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFD6E3F5),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFFD6E3F5),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (!isPhone)
-                            SizedBox(
-                              width: 132,
-                              child: _HistoryFilterDropdown(
-                                label: 'Cajero',
-                                value: _selectedCashier,
-                                values: _cashiers,
-                                onChanged: (value) =>
-                                    setState(() => _selectedCashier = value),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _HistoryFilterDropdown(
-                              label: 'Día',
-                              value: _selectedBusinessDate,
-                              values: _dates,
-                              onChanged: (value) =>
-                                  setState(() => _selectedBusinessDate = value),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (!isPhone) ...[
-                            SizedBox(
-                              width: 142,
-                              child: _HistoryFilterDropdown(
-                                label: 'Estado',
-                                value: _selectedStatus,
-                                values: _statuses,
-                                onChanged: (value) =>
-                                    setState(() => _selectedStatus = value),
                               ),
                             ),
                             const SizedBox(width: 8),
-                          ],
-                          SizedBox(
-                            width: 46,
-                            height: 42,
-                            child: Tooltip(
-                              message: 'Limpiar filtros',
-                              child: OutlinedButton(
-                                onPressed: _clearFilters,
-                                style: OutlinedButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  foregroundColor: const Color(0xFF334155),
-                                  side: const BorderSide(
-                                    color: Color(0xFFD6E3F5),
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.filter_alt_off_rounded,
-                                  size: 18,
+                            if (!isPhone)
+                              SizedBox(
+                                width: 132,
+                                child: _HistoryFilterDropdown(
+                                  label: 'Cajero',
+                                  value: _selectedCashier,
+                                  values: _cashiers,
+                                  onChanged: (value) =>
+                                      setState(() => _selectedCashier = value),
                                 ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (isPhone) ...[
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
                             Expanded(
                               child: _HistoryFilterDropdown(
-                                label: 'Cajero',
-                                value: _selectedCashier,
-                                values: _cashiers,
-                                onChanged: (value) =>
-                                    setState(() => _selectedCashier = value),
+                                label: 'Día',
+                                value: _selectedBusinessDate,
+                                values: _dates,
+                                onChanged: (value) => setState(
+                                  () => _selectedBusinessDate = value,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Expanded(
-                              child: _HistoryFilterDropdown(
-                                label: 'Estado',
-                                value: _selectedStatus,
-                                values: _statuses,
-                                onChanged: (value) =>
-                                    setState(() => _selectedStatus = value),
+                            if (!isPhone) ...[
+                              SizedBox(
+                                width: 142,
+                                child: _HistoryFilterDropdown(
+                                  label: 'Estado',
+                                  value: _selectedStatus,
+                                  values: _statuses,
+                                  onChanged: (value) =>
+                                      setState(() => _selectedStatus = value),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            SizedBox(
+                              width: 46,
+                              height: 42,
+                              child: Tooltip(
+                                message: 'Limpiar filtros',
+                                child: OutlinedButton(
+                                  onPressed: _clearFilters,
+                                  style: OutlinedButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    foregroundColor: const Color(0xFF334155),
+                                    side: const BorderSide(
+                                      color: Color(0xFFD6E3F5),
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.filter_alt_off_rounded,
+                                    size: 18,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ],
-                  ),
-                ),
-                const Divider(height: 1, color: Color(0xFFDDE7EE)),
-                Expanded(
-                  child: rows.isEmpty
-                      ? const _HistoryEmptyState()
-                      : ListView.separated(
-                          padding: EdgeInsets.fromLTRB(
-                            isPhone ? 10 : 14,
-                            12,
-                            isPhone ? 10 : 14,
-                            18,
+                        if (isPhone) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _HistoryFilterDropdown(
+                                  label: 'Cajero',
+                                  value: _selectedCashier,
+                                  values: _cashiers,
+                                  onChanged: (value) =>
+                                      setState(() => _selectedCashier = value),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _HistoryFilterDropdown(
+                                  label: 'Estado',
+                                  value: _selectedStatus,
+                                  values: _statuses,
+                                  onChanged: (value) =>
+                                      setState(() => _selectedStatus = value),
+                                ),
+                              ),
+                            ],
                           ),
-                          itemCount: rows.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            return _HistoryTurnCard(
-                              row: rows[index],
-                              onPrint: () => widget.onPrint(rows[index]),
-                              isPhone: isPhone,
-                            );
-                          },
-                        ),
-                ),
+                        ],
+                      ],
+                    ),
+                  ),
+                const Divider(height: 1, color: Color(0xFFDDE7EE)),
+                Expanded(child: _buildBody(isPhone: isPhone)),
               ],
             ),
           ),
@@ -1679,14 +2061,9 @@ class _TurnHistoryDialogState extends State<_TurnHistoryDialog> {
 }
 
 class _HistoryPanelHeader extends StatelessWidget {
-  const _HistoryPanelHeader({
-    required this.total,
-    required this.visible,
-    required this.onClose,
-  });
+  const _HistoryPanelHeader({required this.subtitle, required this.onClose});
 
-  final int total;
-  final int visible;
+  final String subtitle;
   final VoidCallback onClose;
 
   @override
@@ -1725,7 +2102,9 @@ class _HistoryPanelHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$visible de $total turnos registrados',
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF52667C),
                     fontSize: 12,
@@ -1739,6 +2118,288 @@ class _HistoryPanelHeader extends StatelessWidget {
             tooltip: 'Cerrar',
             onPressed: onClose,
             icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Selector interno del panel de historial: Turnos / Movimientos.
+///
+/// Mismo lenguaje visual que el resto del panel (blanco, borde suave, radio
+/// pequeño) y sin color de acento en el segmento inactivo.
+class _HistoryTabSwitch extends StatelessWidget {
+  const _HistoryTabSwitch({required this.value, required this.onChanged});
+
+  final _HistoryTab value;
+  final ValueChanged<_HistoryTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF3F9),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Row(
+        children: [
+          _HistoryTabSegment(
+            label: 'Turnos',
+            icon: Icons.history_rounded,
+            selected: value == _HistoryTab.turns,
+            onTap: () => onChanged(_HistoryTab.turns),
+          ),
+          _HistoryTabSegment(
+            label: 'Movimientos',
+            icon: Icons.swap_vert_rounded,
+            selected: value == _HistoryTab.movements,
+            onTap: () => onChanged(_HistoryTab.movements),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryTabSegment extends StatelessWidget {
+  const _HistoryTabSegment({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFF1957E6) : const Color(0xFF52667C);
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: selected ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 15, color: color),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Resumen compacto de la vista de movimientos (entradas / salidas / total).
+class _HistoryMovementsSummary extends StatelessWidget {
+  const _HistoryMovementsSummary({
+    required this.entries,
+    required this.exits,
+    required this.count,
+  });
+
+  final double entries;
+  final double exits;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _HistoryAmount(
+              'Entradas',
+              entries,
+              color: const Color(0xFF16A34A),
+            ),
+          ),
+          Expanded(
+            child: _HistoryAmount(
+              'Salidas',
+              exits,
+              color: const Color(0xFFDC2626),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Movimientos',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Etiqueta legible del tipo de movimiento (única fuente de la copia).
+String _movementTypeLabel(CashMovementModel movement) {
+  return switch (movement.movementType) {
+    'expense' => 'Gasto',
+    'owner_draw' => 'Retiro',
+    'transfer' => movement.isIn ? 'Entrada' : 'Transfer.',
+    _ => movement.isIn ? 'Entrada' : 'Salida',
+  };
+}
+
+/// Fila de movimiento para el panel de historial (densidad compacta).
+class _HistoryMovementCard extends StatelessWidget {
+  const _HistoryMovementCard({required this.row});
+
+  final CashMovementModel row;
+
+  @override
+  Widget build(BuildContext context) {
+    final isIn = row.isIn;
+    final color = isIn ? const Color(0xFF16A34A) : const Color(0xFFDC2626);
+    final date = DateFormat(
+      'dd/MM/yyyy HH:mm',
+      'es_DO',
+    ).format(toBusinessTime(row.createdAt));
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE7EE)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(
+              isIn ? Icons.south_west_rounded : Icons.north_east_rounded,
+              size: 15,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _movementTypeLabel(row),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
+                  ),
+                ),
+                if (row.reason.trim().isNotEmpty) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    row.reason,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF52667C),
+                      fontSize: 11.5,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 3),
+                Text(
+                  row.userName == null || row.userName!.trim().isEmpty
+                      ? date
+                      : '$date · ${row.userName!.trim()}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF7C8DA1),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${isIn ? '+' : '-'}${formatRdCurrencyAccounting(row.amount)}',
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),
@@ -2314,14 +2975,8 @@ class _HistoryMovementsSection extends StatelessWidget {
 
   final List<CashMovementModel> movements;
 
-  String _movementLabel(CashMovementModel movement) {
-    return switch (movement.movementType) {
-      'expense' => 'Gasto',
-      'owner_draw' => 'Retiro',
-      'transfer' => movement.isIn ? 'Entrada' : 'Transfer.',
-      _ => movement.isIn ? 'Entrada' : 'Salida',
-    };
-  }
+  String _movementLabel(CashMovementModel movement) =>
+      _movementTypeLabel(movement);
 
   @override
   Widget build(BuildContext context) {
@@ -2518,7 +3173,20 @@ class _HistoryStatusPill extends StatelessWidget {
 }
 
 class _HistoryEmptyState extends StatelessWidget {
-  const _HistoryEmptyState();
+  const _HistoryEmptyState({
+    this.icon = Icons.history_toggle_off_rounded,
+    this.title = 'Sin turnos para mostrar',
+    this.detail =
+        'Prueba cambiando los filtros o revisa cuando existan turnos cerrados.',
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -2535,31 +3203,43 @@ class _HistoryEmptyState extends StatelessWidget {
                 color: const Color(0xFFEAF1FF),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(
-                Icons.history_toggle_off_rounded,
-                color: Color(0xFF1957E6),
-              ),
+              child: Icon(icon, color: Color(0xFF1957E6)),
             ),
             const SizedBox(height: 14),
-            const Text(
-              'Sin turnos para mostrar',
+            Text(
+              title,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Color(0xFF0F172A),
                 fontSize: 17,
                 fontWeight: FontWeight.w900,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Prueba cambiando los filtros o revisa cuando existan turnos cerrados.',
+            Text(
+              detail,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Color(0xFF52667C),
                 fontSize: 13,
                 height: 1.35,
               ),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.refresh_rounded, size: 17),
+                label: Text(actionLabel!),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1957E6),
+                  side: const BorderSide(color: Color(0xFFD6E3F5)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -28,6 +28,7 @@ class EcfFlowPreviewButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onPressed,
         borderRadius: BorderRadius.circular(999),
         child: Container(

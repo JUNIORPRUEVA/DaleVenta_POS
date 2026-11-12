@@ -37,8 +37,10 @@ class WindowsProductPaths {
   /// `DALEVENTAS_POS_ROOT` explicito, se devuelve `null` y los consumidores caen
   /// al directorio de datos de la propia aplicacion (que en UAT es otro por
   /// tener identidad de ejecutable distinta).
-  static const bool uatIsolation =
-      bool.fromEnvironment('DALEVENTAS_POS_UAT_ISOLATION', defaultValue: false);
+  static const bool uatIsolation = bool.fromEnvironment(
+    'DALEVENTAS_POS_UAT_ISOLATION',
+    defaultValue: false,
+  );
 
   static bool get isOfficialWindowsStorageEnabled {
     if (kIsWeb || !Platform.isWindows) return false;

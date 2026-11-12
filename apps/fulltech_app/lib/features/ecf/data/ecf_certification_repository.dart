@@ -57,7 +57,9 @@ class EcfCertificationRepository {
     });
     final res = await _dio.post(ApiRoutes.ecfDgiiPostulationXml, data: form);
     final data = res.data;
-    final map = data is Map ? data.cast<String, dynamic>() : const <String, dynamic>{};
+    final map = data is Map
+        ? data.cast<String, dynamic>()
+        : const <String, dynamic>{};
     return EcfPostulationXmlResult.fromJson(map);
   }
 
@@ -92,7 +94,9 @@ class EcfCertificationRepository {
       },
     );
     final data = res.data;
-    final map = data is Map ? data.cast<String, dynamic>() : const <String, dynamic>{};
+    final map = data is Map
+        ? data.cast<String, dynamic>()
+        : const <String, dynamic>{};
     // Un rechazo del backend no se puede presentar como éxito: si `ok` no es
     // exactamente `true`, la decisión NO quedó registrada.
     if (map['ok'] != true) {
@@ -110,9 +114,10 @@ final ecfCertificationRepositoryProvider = Provider<EcfCertificationRepository>(
   (ref) => EcfCertificationRepository(ref.watch(dioProvider)),
 );
 
-final ecfPreparationProvider = FutureProvider.autoDispose<EcfPreparationMetadata>(
-  (ref) => ref.watch(ecfCertificationRepositoryProvider).preparation(),
-);
+final ecfPreparationProvider =
+    FutureProvider.autoDispose<EcfPreparationMetadata>(
+      (ref) => ref.watch(ecfCertificationRepositoryProvider).preparation(),
+    );
 
 /// Progreso del motor: al reabrir la aplicación se recupera desde el servidor.
 final ecfActivationProgressProvider =

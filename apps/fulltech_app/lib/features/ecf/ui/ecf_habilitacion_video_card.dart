@@ -153,6 +153,7 @@ class _VideoSurface extends StatelessWidget {
     return Material(
       color: const Color(0xFF0F172A),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onPlay,
         child: Center(
           child: Column(

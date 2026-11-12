@@ -605,6 +605,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                   final p = visible[index];
 
                   return InkWell(
+                    mouseCursor: SystemMouseCursors.click,
                     borderRadius: BorderRadius.circular(10),
                     onTap: () => _addProduct(p),
                     child: Card(
@@ -808,6 +809,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
                               return Material(
                                 color: Colors.transparent,
                                 child: InkWell(
+                                  mouseCursor: SystemMouseCursors.click,
                                   borderRadius: BorderRadius.circular(8),
                                   onTap: () => _openEditCartItemDialog(index),
                                   child: Container(
@@ -1372,9 +1374,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       ).showSnackBar(const SnackBar(content: Text('Cliente creado')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(
@@ -1450,9 +1450,7 @@ class _RegistrarVentaScreenState extends ConsumerState<RegistrarVentaScreen>
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(

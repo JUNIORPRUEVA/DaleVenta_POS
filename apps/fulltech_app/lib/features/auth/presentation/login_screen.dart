@@ -304,9 +304,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final theme = Theme.of(context);
     final headerStyle = theme.textTheme.headlineSmall?.copyWith(
       color: AppColors.textPrimary,
-      fontWeight: FontWeight.w900,
-      letterSpacing: 0,
-      height: 1.05,
+      fontSize: 26,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+      height: 1.1,
     );
     final inputBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -351,7 +352,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.2),
+            TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.25,
+              height: 1.2,
+            ),
           ),
           shadowColor: WidgetStatePropertyAll(
             AppColors.primary.withValues(alpha: 0.34),
@@ -445,11 +451,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   children: [
                                     Text.rich(
                                       TextSpan(
-                                        text: 'FULLPOS ',
+                                        text: 'FullPOS ',
                                         style: headerStyle,
                                         children: <InlineSpan>[
                                           TextSpan(
-                                            text: 'CLOUD',
+                                            text: 'Cloud',
                                             style: headerStyle?.copyWith(
                                               color: AppColors.primary,
                                             ),
@@ -457,13 +463,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 6),
                                     const Text(
-                                      'Inicia sesión para continuar',
+                                      'Todo tu negocio bajo control',
                                       style: TextStyle(
                                         color: AppColors.textSecondary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                        letterSpacing: 0.1,
+                                        height: 1.35,
                                       ),
                                     ),
                                   ],
@@ -537,11 +545,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   loading: loading,
                                   onPressed: _submit,
                                 ),
+                                const SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.center,
+                                  child: TextButton(
+                                    onPressed: loading
+                                        ? null
+                                        : () =>
+                                              context.go(Routes.forgotPassword),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor:
+                                          theme.colorScheme.primary,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      minimumSize: const Size(0, 0),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      textStyle: const TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.1,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      '¿Olvidaste tu contraseña?',
+                                    ),
+                                  ),
+                                ),
                                 if (businessRegistrationDisabled) ...[
                                   const SizedBox(height: 14),
                                   const _ExistingBusinessAccountNotice(),
                                 ] else ...[
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 14),
                                   OutlinedButton.icon(
                                     onPressed: loading
                                         ? null
@@ -572,23 +610,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                 ],
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: loading
-                                      ? null
-                                      : () => context.go(Routes.forgotPassword),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: theme.colorScheme.primary,
-                                    textStyle: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0,
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    '¿Olvidaste tu contraseña?',
-                                  ),
-                                ),
                               ],
                             ),
                           ),

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import '../debug/trace_log.dart';
+
 class AppLifecycleCoordinator {
-  AppLifecycleCoordinator({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  AppLifecycleCoordinator({DateTime Function()? now})
+    : _now = now ?? DateTime.now;
 
   static const sessionThrottle = Duration(minutes: 2);
   static const licenseThrottle = Duration(minutes: 2);
@@ -15,9 +18,7 @@ class AppLifecycleCoordinator {
   Future<bool>? _licenseValidationFuture;
   Future<void>? _syncFuture;
 
-  Future<Object?> runSessionValidation(
-    Future<Object?> Function() task,
-  ) {
+  Future<Object?> runSessionValidation(Future<Object?> Function() task) {
     final existing = _sessionValidationFuture;
     if (existing != null) return existing;
 
@@ -27,14 +28,16 @@ class AppLifecycleCoordinator {
     }
 
     late final Future<Object?> future;
-    future = task().then((result) {
-      if (result != null) _lastSessionValidationAt = _now();
-      return result;
-    }).whenComplete(() {
-      if (identical(_sessionValidationFuture, future)) {
-        _sessionValidationFuture = null;
-      }
-    });
+    future = task()
+        .then((result) {
+          if (result != null) _lastSessionValidationAt = _now();
+          return result;
+        })
+        .whenComplete(() {
+          if (identical(_sessionValidationFuture, future)) {
+            _sessionValidationFuture = null;
+          }
+        });
     _sessionValidationFuture = future;
     return future;
   }
@@ -49,14 +52,16 @@ class AppLifecycleCoordinator {
     }
 
     late final Future<bool> future;
-    future = task().then((succeeded) {
-      if (succeeded) _lastLicenseValidationAt = _now();
-      return succeeded;
-    }).whenComplete(() {
-      if (identical(_licenseValidationFuture, future)) {
-        _licenseValidationFuture = null;
-      }
-    });
+    future = task()
+        .then((succeeded) {
+          if (succeeded) _lastLicenseValidationAt = _now();
+          return succeeded;
+        })
+        .whenComplete(() {
+          if (identical(_licenseValidationFuture, future)) {
+            _licenseValidationFuture = null;
+          }
+        });
     _licenseValidationFuture = future;
     return future;
   }
@@ -80,6 +85,21 @@ class AppLifecycleCoordinator {
     }
 
     _lastUpdateCheckAt = _now();
-    return task();
+    // Defensa en profundidad: un fallo del actualizador no puede llegar al
+    // `Zone` global. Ahí se convertía en una notificación al cliente, y en el
+    // peor caso el propio manejador de errores volvía a fallar al persistir.
+    // El diagnóstico se conserva en el log técnico.
+    return task().catchError((Object error, StackTrace stackTrace) {
+      try {
+        TraceLog.log(
+          'Lifecycle',
+          'update check failed and was isolated',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      } catch (_) {
+        // Ignorado a propósito.
+      }
+    });
   }
 }

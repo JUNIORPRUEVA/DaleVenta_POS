@@ -344,9 +344,7 @@ class EcfPlatformAccess {
   factory EcfPlatformAccess.fromJson(Map<String, dynamic> json) {
     final grant = json['grant'];
     if (grant is! Map) {
-      return EcfPlatformAccess(
-        companyId: (json['companyId'] ?? '') as String,
-      );
+      return EcfPlatformAccess(companyId: (json['companyId'] ?? '') as String);
     }
     final map = grant.cast<String, dynamic>();
     final rawScopes = map['scopes'];

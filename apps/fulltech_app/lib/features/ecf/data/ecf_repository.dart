@@ -54,11 +54,12 @@ final ecfOnboardingProvider = FutureProvider.autoDispose<EcfOnboardingView>((
 /// Habilitación DGII de la empresa: seguimiento interno + autorización oficial.
 final ecfDgiiHabilitationProvider =
     FutureProvider.autoDispose<EcfDgiiHabilitationView>((ref) {
-      ref.watch(authStateProvider.select((state) => (
-        state.isAuthenticated,
-        state.user?.id,
-        state.user?.companyId,
-      )));
+      ref.watch(
+        authStateProvider.select(
+          (state) =>
+              (state.isAuthenticated, state.user?.id, state.user?.companyId),
+        ),
+      );
       return ref.watch(ecfRepositoryProvider).dgiiHabilitation();
     });
 
@@ -92,11 +93,10 @@ final ecfSequencesProvider = FutureProvider.autoDispose<List<EcfSequenceInfo>>((
   return ref.watch(ecfRepositoryProvider).sequences();
 });
 
-final ecfEligibleOriginalsProvider = FutureProvider.autoDispose<
-  List<EcfEligibleOriginal>
->((ref) {
-  return ref.watch(ecfRepositoryProvider).eligibleOriginals();
-});
+final ecfEligibleOriginalsProvider =
+    FutureProvider.autoDispose<List<EcfEligibleOriginal>>((ref) {
+      return ref.watch(ecfRepositoryProvider).eligibleOriginals();
+    });
 
 /// Filtro de la bandeja de comprobantes. Es `immutable` y con igualdad por
 /// valor para que la familia de providers no recree la consulta en cada build.
@@ -163,16 +163,16 @@ class EcfRepository {
 
   Future<List<EcfSequenceInfo>> sequences() async {
     final res = await _dio.get(ApiRoutes.ecfSequences);
-    return _asList(res.data)
-        .map(EcfSequenceInfo.fromJson)
-        .toList(growable: false);
+    return _asList(
+      res.data,
+    ).map(EcfSequenceInfo.fromJson).toList(growable: false);
   }
 
   Future<List<EcfEligibleOriginal>> eligibleOriginals() async {
     final res = await _dio.get(ApiRoutes.ecfDocumentsEligibleOriginals);
-    return _asList(res.data)
-        .map(EcfEligibleOriginal.fromJson)
-        .toList(growable: false);
+    return _asList(
+      res.data,
+    ).map(EcfEligibleOriginal.fromJson).toList(growable: false);
   }
 
   /// Sube un documento del expediente DGII.
@@ -332,16 +332,19 @@ class EcfRepository {
     String? sequenceDueDate,
     String? paymentDeadline,
   }) async {
-    final res = await _dio.post(ApiRoutes.ecfDocumentsPrepare, data: {
-      'saleId': saleId,
-      'documentType': 'E31',
-      'paymentType': paymentType,
-      if (incomeType != null) 'incomeType': incomeType,
-      if (sequenceDueDate != null && sequenceDueDate.isNotEmpty)
-        'sequenceDueDate': sequenceDueDate,
-      if (paymentDeadline != null && paymentDeadline.isNotEmpty)
-        'paymentDeadline': paymentDeadline,
-    });
+    final res = await _dio.post(
+      ApiRoutes.ecfDocumentsPrepare,
+      data: {
+        'saleId': saleId,
+        'documentType': 'E31',
+        'paymentType': paymentType,
+        if (incomeType != null) 'incomeType': incomeType,
+        if (sequenceDueDate != null && sequenceDueDate.isNotEmpty)
+          'sequenceDueDate': sequenceDueDate,
+        if (paymentDeadline != null && paymentDeadline.isNotEmpty)
+          'paymentDeadline': paymentDeadline,
+      },
+    );
     final payload = _asMap(res.data);
     if (payload['ok'] == true) {
       final value = _asMap(payload['value']);
@@ -353,7 +356,8 @@ class EcfRepository {
     }
     return EcfPreparationOutcome.failure(
       code: (payload['code'] as String?) ?? 'ECF_PREPARATION_FAILED',
-      message: (payload['safeMessage'] as String?) ??
+      message:
+          (payload['safeMessage'] as String?) ??
           'No se pudo preparar el comprobante.',
     );
   }
@@ -388,7 +392,8 @@ class EcfRepository {
     }
     return EcfPreparationOutcome.failure(
       code: (payload['code'] as String?) ?? 'ECF_CONSUMO_PREPARATION_FAILED',
-      message: (payload['safeMessage'] as String?) ??
+      message:
+          (payload['safeMessage'] as String?) ??
           'No se pudo preparar el comprobante de consumo.',
     );
   }
@@ -430,7 +435,8 @@ class EcfRepository {
     }
     return EcfPreparationOutcome.failure(
       code: (payload['code'] as String?) ?? 'ECF_CREDIT_NOTE_FAILED',
-      message: (payload['safeMessage'] as String?) ??
+      message:
+          (payload['safeMessage'] as String?) ??
           'No se pudo preparar la nota de crédito.',
     );
   }
@@ -452,17 +458,17 @@ class EcfRepository {
   /// Historial de cambios de la habilitación.
   Future<List<EcfDgiiHistoryEntry>> dgiiHistory() async {
     final res = await _dio.get(ApiRoutes.ecfDgiiHistory);
-    return _asList(res.data)
-        .map(EcfDgiiHistoryEntry.fromJson)
-        .toList(growable: false);
+    return _asList(
+      res.data,
+    ).map(EcfDgiiHistoryEntry.fromJson).toList(growable: false);
   }
 
   /// Evidencias registradas por la empresa.
   Future<List<EcfDgiiEvidenceView>> dgiiEvidence() async {
     final res = await _dio.get(ApiRoutes.ecfDgiiEvidence);
-    return _asList(res.data)
-        .map(EcfDgiiEvidenceView.fromJson)
-        .toList(growable: false);
+    return _asList(
+      res.data,
+    ).map(EcfDgiiEvidenceView.fromJson).toList(growable: false);
   }
 
   /// Avanza el seguimiento INTERNO del proceso.
@@ -600,8 +606,7 @@ class EcfRepository {
       data: {
         'scopes': scopes,
         'expiresAt': expiresAt,
-        if (reason != null && reason.trim().isNotEmpty)
-          'reason': reason.trim(),
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
       },
     );
     return EcfSupportGrant.fromJson(_asMap(res.data));

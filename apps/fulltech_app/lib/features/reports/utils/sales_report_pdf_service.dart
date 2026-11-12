@@ -380,26 +380,24 @@ pw.Widget _salesTable(List<SaleModel> sales, DateFormat dateFmt) {
     cellStyle: const pw.TextStyle(fontSize: 7.6),
     cellAlignment: pw.Alignment.centerLeft,
     headers: const ['Fecha', 'Cliente', 'Venta', 'Costo', 'Utilidad'],
-    data: sales
-        .map(
-          // Fila coherente con la semantica state-aware: el monto vigente y el
-          // costo/utilidad remanentes se derivan del MISMO ratio, de modo que
-          // una venta devuelta en su totalidad muestra 0/0/0 y una parcial
-          // muestra su parte vigente (misma regla que el backend).
-          (sale) {
-            final ratio = sale.totalSold == 0
-                ? 1.0
-                : (sale.netActiveAmount / sale.totalSold).clamp(0.0, 1.0);
-            return [
-              sale.saleDate == null ? '-' : dateFmt.format(sale.saleDate!),
-              sale.customerName ?? 'Consumidor final',
-              formatRdCurrencyAccounting(sale.netActiveAmount),
-              formatRdCurrencyAccounting(sale.totalCost * ratio),
-              formatRdCurrencyAccounting(sale.totalProfit * ratio),
-            ];
-          },
-        )
-        .toList(),
+    data: sales.map(
+      // Fila coherente con la semantica state-aware: el monto vigente y el
+      // costo/utilidad remanentes se derivan del MISMO ratio, de modo que
+      // una venta devuelta en su totalidad muestra 0/0/0 y una parcial
+      // muestra su parte vigente (misma regla que el backend).
+      (sale) {
+        final ratio = sale.totalSold == 0
+            ? 1.0
+            : (sale.netActiveAmount / sale.totalSold).clamp(0.0, 1.0);
+        return [
+          sale.saleDate == null ? '-' : dateFmt.format(sale.saleDate!),
+          sale.customerName ?? 'Consumidor final',
+          formatRdCurrencyAccounting(sale.netActiveAmount),
+          formatRdCurrencyAccounting(sale.totalCost * ratio),
+          formatRdCurrencyAccounting(sale.totalProfit * ratio),
+        ];
+      },
+    ).toList(),
   );
 }
 

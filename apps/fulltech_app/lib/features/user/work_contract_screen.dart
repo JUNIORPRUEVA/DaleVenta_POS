@@ -264,8 +264,7 @@ class _WorkContractScreenState extends ConsumerState<WorkContractScreen> {
           content: Text(
             userSafeErrorMessage(
               e,
-              fallback:
-                  'No se pudo firmar el contrato. Inténtalo nuevamente.',
+              fallback: 'No se pudo firmar el contrato. Inténtalo nuevamente.',
             ),
           ),
         ),

@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -5399,6 +5400,7 @@ class _SquareSegmentButton<T> extends StatelessWidget {
     return Material(
       color: selected ? const Color(0xFFD8F0F6) : Colors.white,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         child: Container(
           height: 34,
@@ -5461,6 +5463,7 @@ class _StockProductRow extends StatelessWidget {
         color: selected ? _lightBlueHover : Colors.white,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: onSelected,
           borderRadius: BorderRadius.circular(8),
           child: Container(
@@ -5681,12 +5684,17 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          category == null ? 'Categoría creada' : 'Categoría editada',
-        ),
-      ),
+    // Aviso flotante en la esquina superior derecha: mismo estilo que el resto
+    // de avisos de la app, no una barra pegada al borde inferior.
+    AppFeedback.showToast(
+      context,
+      title: category == null ? 'Categoría creada' : 'Categoría editada',
+      body: category == null
+          ? 'La categoría «${saved.name}» ya está disponible para tus productos.'
+          : 'Se guardaron los cambios de la categoría «${saved.name}».',
+      kind: AppFeedbackKind.success,
+      dedupeKey: 'inventory.category.saved:${saved.name}',
+      scope: 'InventoryCategory',
     );
   }
 
@@ -6067,6 +6075,7 @@ class _CategoryManagementCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(mobile ? 8 : 14),
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: mobile ? onOpenDetail : null,
           borderRadius: BorderRadius.circular(mobile ? 8 : 14),
           child: Container(
@@ -6648,6 +6657,7 @@ class CompactProductCard extends StatelessWidget {
         color: selected ? _lightBlueHover : Colors.white,
         borderRadius: BorderRadius.circular(mobile ? 8 : 12),
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: mobile ? onTap : null,
           borderRadius: BorderRadius.circular(mobile ? 8 : 12),
           child: Container(
@@ -9010,8 +9020,16 @@ class _InventoryProductEditorPageState
     if (!mounted || created == null) return;
     _categoryCtrl.text = created.name;
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Categoría creada: ${created.name}')),
+    // Aviso flotante en la esquina superior derecha, igual que el resto de la
+    // app: nunca una barra de una línea en el borde inferior de la pantalla.
+    AppFeedback.showToast(
+      context,
+      title: 'Categoría creada',
+      body:
+          'La categoría «${created.name}» ya está disponible y quedó seleccionada en este producto.',
+      kind: AppFeedbackKind.success,
+      dedupeKey: 'inventory.product.category.created:${created.name}',
+      scope: 'InventoryProductForm',
     );
   }
 
@@ -9763,6 +9781,7 @@ class _InventoryCategoryChoiceChip extends StatelessWidget {
       color: selected ? const Color(0xFF0F6170) : Colors.white,
       shape: const RoundedRectangleBorder(side: BorderSide(color: _borderSoft)),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),

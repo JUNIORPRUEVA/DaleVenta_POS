@@ -76,20 +76,25 @@ class DosaCertificationDiagnostic {
               number: number!,
               status: '${attempt['status'] ?? ''}',
               recordedProvider: '${attempt['recordedProvider'] ?? ''}',
-              effectiveProvider: '${attempt['effectiveProvider'] ?? attempt['recordedProvider'] ?? ''}',
+              effectiveProvider:
+                  '${attempt['effectiveProvider'] ?? attempt['recordedProvider'] ?? ''}',
               hasEffectiveAttribution: attempt.containsKey('effectiveProvider'),
               hasProviderSessionUrl: attempt['hasProviderSessionUrl'] == true,
               hasProviderPostulationId:
                   attempt['hasProviderPostulationId'] == true,
             ),
       providerHistory: List<String>.unmodifiable(
-        rawHistory.where((entry) =>
-            entry is! Map<String, dynamic> ||
-            entry['action'] == null ||
-            entry['action'] == 'ONBOARDING_STARTED').map((entry) {
-          if (entry is! Map<String, dynamic>) return 'UNVERIFIED';
-          return '${entry['recordedProvider'] ?? 'UNVERIFIED'}';
-        }),
+        rawHistory
+            .where(
+              (entry) =>
+                  entry is! Map<String, dynamic> ||
+                  entry['action'] == null ||
+                  entry['action'] == 'ONBOARDING_STARTED',
+            )
+            .map((entry) {
+              if (entry is! Map<String, dynamic>) return 'UNVERIFIED';
+              return '${entry['recordedProvider'] ?? 'UNVERIFIED'}';
+            }),
       ),
     );
   }

@@ -92,9 +92,7 @@ class DosaAssistantConfig {
       defaultValue: officialScriptUrl,
     ),
     sessionUrl: String.fromEnvironment('DOSA_ASSISTANT_SESSION_URL'),
-    publishableKey: String.fromEnvironment(
-      'DOSA_ASSISTANT_PUBLISHABLE_KEY',
-    ),
+    publishableKey: String.fromEnvironment('DOSA_ASSISTANT_PUBLISHABLE_KEY'),
     baseUrl: String.fromEnvironment('DOSA_ASSISTANT_BASE_URL'),
   );
 

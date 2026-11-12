@@ -134,11 +134,10 @@ class _EcfDgiiHabilitationPageState
   void initState() {
     super.initState();
     ref.listenManual(
-      authStateProvider.select((state) => (
-        state.isAuthenticated,
-        state.user?.id,
-        state.user?.companyId,
-      )),
+      authStateProvider.select(
+        (state) =>
+            (state.isAuthenticated, state.user?.id, state.user?.companyId),
+      ),
       (previous, next) {
         if (previous == next || !mounted) return;
         setState(() {
@@ -466,332 +465,371 @@ class _EcfDgiiHabilitationPageState
                       : settingsState.hasError || settings == null
                       ? _ErrorBody(onRetry: _refresh)
                       : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final fiscalReady = fiscalDataReady(settings);
-                      final stage = _stageOf(
-                        view.progress,
-                        view.state,
-                        fiscalReady: fiscalReady,
-                      );
-                      // El paso se deduce del expediente real mientras la persona no
-                      // navegue: al volver a la pantalla se entra en la etapa actual
-                      // y nunca se reinicia la postulación.
-                      var step =
-                          _step ??
-                          initialEcfFlowStep(
-                            state: view.state,
-                            hasResolvedRequirement:
-                                view.progress.resolvedCount > 0 ||
-                                view.progress.requirements.any(
-                                  (item) => item.resolved,
-                                ),
-                            officialAuthorization: view.officialAuthorization,
-                            fiscalReady: fiscalReady,
-                            certificateValidated: _certificateReady(view),
-                            dosaOwnsCertificate: dosaOwnsCertificate,
-                            testsOrLater:
-                                stage == _EcfStage.tests ||
-                                stage == _EcfStage.activation,
-                          );
-                      // Sin datos fiscales no hay nada que preparar: se resuelven
-                      // primero, en su propio paso, para no mostrar acciones que el
-                      // backend rechazaría. La vista previa del diseño sí puede
-                      // recorrer todas las pantallas.
-                      final preview = _previewFor(settings);
-                      if (!fiscalReady &&
-                          step != EcfFlowStep.welcome &&
-                          !preview) {
-                        step = EcfFlowStep.company;
-                      }
-                      final wide = constraints.maxWidth >= 900;
-                      final preparation = ref.watch(ecfPreparationProvider);
-                      final activation = ref.watch(
-                        ecfActivationProgressProvider,
-                      );
-
-                      final Widget body;
-                      if (_applicationOpen) {
-                        body = Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: EcfDgiiApplicationWizard(
-                            key: _wizardKey,
-                            embedded: true,
-                            onClose: () => setState(() {
-                              // Cerrar el expediente devuelve al paso de la
-                              // empresa, donde viven los datos fiscales: nunca a
-                              // un paso intermedio sin contexto.
-                              _applicationOpen = false;
-                              _fiscalOpen = true;
-                              _step = EcfFlowStep.company;
-                            }),
-                            onSubmitted: () => setState(() {
-                              _applicationOpen = false;
-                              _step = EcfFlowStep.tracking;
-                            }),
-                          ),
-                        );
-                      } else if (_activationOpen) {
-                        body = const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: EcfActivationPage(embedded: true),
-                        );
-                      } else if (step == EcfFlowStep.company &&
-                          (_fiscalOpen || (!fiscalReady && !preview))) {
-                        body = Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: EcfFiscalDataContent(
-                            compact: true,
-                            onSaved: () => setState(() => _fiscalOpen = false),
-                            onClose: fiscalReady
-                                ? () => setState(() => _fiscalOpen = false)
-                                : null,
-                          ),
-                        );
-                      } else {
-                        body = switch (step) {
-                          EcfFlowStep.welcome => EcfWelcomeStep(
-                            videoUrl: preparation.valueOrNull?.videoUrl ?? '',
-                            wide: wide,
-                            onStart: () => _goToStep(EcfFlowStep.company),
-                          ),
-                          EcfFlowStep.company => EcfCompanyStep(
-                            settings: settings,
-                            fiscalReady: fiscalReady,
-                            wide: wide,
-                            // El paso decide con el estado real: mientras el
-                            // certificado no sea utilizable y del titular, no
-                            // deja avanzar y explica qué falta.
-                            certificateReady: _certificateReady(view),
-                            certificateVerifiedHere:
-                                _verifiedCertificate != null ||
-                                view.certificateValidation?.ready == true,
-                            dosaOwnsCertificate: dosaOwnsCertificate,
-                            certificateBlockedReason: _certificateBlockedReason(
-                              view,
-                            ),
-                            certificate: EcfCertificateCard(
-                              persistedValidation: _certificateRestarted
-                                  ? null
-                                  : view.certificateValidation,
-                              onRestart: () async {
-                                await ref
-                                    .read(ecfCertificateRepositoryProvider)
-                                    .restart();
-                                if (mounted) {
-                                  setState(() => _certificateRestarted = true);
-                                }
-                              },
-                              initialReport: _verifiedCertificate,
-                              initialFileName: _verifiedCertificateFileName,
-                              onVerified: (report, fileName) {
-                                setState(() {
-                                  _verifiedCertificate = report;
-                                  _verifiedCertificateFileName = fileName;
-                                  _certificateRestarted = false;
-                                });
-                                ref.invalidate(ecfDgiiHabilitationProvider);
-                              },
-                              onGateChanged: (gate) => setState(() {
-                                _certificateGate = gate;
-                                if (!gate.ready) {
-                                  _verifiedCertificate = null;
-                                  _verifiedCertificateFileName = null;
-                                }
-                              }),
-                            ),
-                            onEditFiscalData: () =>
-                                setState(() => _fiscalOpen = true),
-                            onContinue: () =>
-                                _goToStep(EcfFlowStep.preparation),
-                          ),
-                          EcfFlowStep.preparation => EcfPreparationStep(
-                            companyReady: fiscalReady,
-                            certificateReady: _certificateReady(view),
-                            dosaOwnsCertificate: dosaOwnsCertificate,
-                            dosaEntry:
-                                hasUserPermission(
-                                  user,
-                                  AppPermission.manageEcfOnboarding,
-                                )
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      // Abrir el portal solo exige los datos de
-                                      // la empresa y el permiso administrativo.
-                                      // El certificado lo pide DOSA dentro de su
-                                      // propio asistente: no se duplica aquí.
-                                      if (fiscalReady) ...[
-                                        DosaAssistantSection(
-                                          key: ValueKey(
-                                            'dosa-preparation-${user?.companyId}',
-                                          ),
-                                          portalOnly: true,
-                                          postulationExternalId:
-                                              view.externalId,
-                                        ),
-                                        const SizedBox(height: 12),
-                                      ],
-                                      DosaCertificationDiagnosticSection(
-                                        key: ValueKey(
-                                          'dosa-diagnostic-${user?.companyId}',
-                                        ),
+                          builder: (context, constraints) {
+                            final fiscalReady = fiscalDataReady(settings);
+                            final stage = _stageOf(
+                              view.progress,
+                              view.state,
+                              fiscalReady: fiscalReady,
+                            );
+                            // El paso se deduce del expediente real mientras la persona no
+                            // navegue: al volver a la pantalla se entra en la etapa actual
+                            // y nunca se reinicia la postulación.
+                            var step =
+                                _step ??
+                                initialEcfFlowStep(
+                                  state: view.state,
+                                  hasResolvedRequirement:
+                                      view.progress.resolvedCount > 0 ||
+                                      view.progress.requirements.any(
+                                        (item) => item.resolved,
                                       ),
-                                    ],
-                                  )
-                                : null,
-                            dgiiAccessReady: _requirementResolved(
-                              view,
-                              'REQUIREMENTS',
-                            ),
-                            pendingRequirements: view.progress.requirements
-                                .where(
-                                  (item) => !item.resolved && item.mandatory,
-                                )
-                                .length,
-                            simulationAvailable:
-                                preparation.valueOrNull?.simulationAvailable ??
-                                false,
-                            simulationBadge:
-                                preparation.valueOrNull?.simulationBadge,
-                            simulationReason:
-                                preparation.valueOrNull?.simulationReason,
-                            canManage: canManage,
-                            busy: _busy,
-                            onStart: _startIntelligentCertification,
-                            onGoCompany: () => _goToStep(EcfFlowStep.company),
-                            onGoCertificate: () =>
-                                _goToStep(EcfFlowStep.company),
-                          ),
-                          EcfFlowStep.tracking => _trackingStep(
-                            view: view,
-                            stage: stage,
-                            wide: wide,
-                            canManage: canManage,
-                            canRecordAuthorization: canRecordAuthorization,
-                            canRegisterEvidence: canRegisterEvidence,
-                            canReviewEvidence: canReviewEvidence,
-                            activation: activation.valueOrNull,
-                            testBadge:
-                                preparation.valueOrNull?.simulationAvailable ==
-                                    true
-                                ? preparation.valueOrNull?.simulationBadge
-                                : null,
-                          ),
-                        };
-                      }
+                                  officialAuthorization:
+                                      view.officialAuthorization,
+                                  fiscalReady: fiscalReady,
+                                  certificateValidated: _certificateReady(view),
+                                  dosaOwnsCertificate: dosaOwnsCertificate,
+                                  testsOrLater:
+                                      stage == _EcfStage.tests ||
+                                      stage == _EcfStage.activation,
+                                );
+                            // Sin datos fiscales no hay nada que preparar: se resuelven
+                            // primero, en su propio paso, para no mostrar acciones que el
+                            // backend rechazaría. La vista previa del diseño sí puede
+                            // recorrer todas las pantallas.
+                            final preview = _previewFor(settings);
+                            if (!fiscalReady &&
+                                step != EcfFlowStep.welcome &&
+                                !preview) {
+                              step = EcfFlowStep.company;
+                            }
+                            final wide = constraints.maxWidth >= 900;
+                            final preparation = ref.watch(
+                              ecfPreparationProvider,
+                            );
+                            final activation = ref.watch(
+                              ecfActivationProgressProvider,
+                            );
 
-                      // Errores y progreso de escritura: fuera del cuerpo del paso,
-                      // para que un fallo se vea sin perder el contexto.
-                      Widget framed(Widget child) => Column(
-                        children: [
-                          // Atajo de vista previa: solo existe compilado con la
-                          // empresa de prueba y no escribe nada.
-                          if (preview)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: EcfFlowPreviewButton(
-                                  nextLabel: nextEcfFlowStep(step).railLabel,
-                                  onPressed: () => setState(() {
+                            final Widget body;
+                            if (_applicationOpen) {
+                              body = Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: EcfDgiiApplicationWizard(
+                                  key: _wizardKey,
+                                  embedded: true,
+                                  onClose: () => setState(() {
+                                    // Cerrar el expediente devuelve al paso de la
+                                    // empresa, donde viven los datos fiscales: nunca a
+                                    // un paso intermedio sin contexto.
                                     _applicationOpen = false;
-                                    _activationOpen = false;
-                                    _fiscalOpen = false;
-                                    _step = nextEcfFlowStep(step);
+                                    _fiscalOpen = true;
+                                    _step = EcfFlowStep.company;
+                                  }),
+                                  onSubmitted: () => setState(() {
+                                    _applicationOpen = false;
+                                    _step = EcfFlowStep.tracking;
                                   }),
                                 ),
-                              ),
-                            ),
-                          if (_error != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.fromLTRB(
-                                  12,
-                                  10,
-                                  8,
-                                  10,
+                              );
+                            } else if (_activationOpen) {
+                              body = const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: EcfActivationPage(embedded: true),
+                              );
+                            } else if (step == EcfFlowStep.company &&
+                                (_fiscalOpen || (!fiscalReady && !preview))) {
+                              body = Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: EcfFiscalDataContent(
+                                  compact: true,
+                                  onSaved: () =>
+                                      setState(() => _fiscalOpen = false),
+                                  onClose: fiscalReady
+                                      ? () =>
+                                            setState(() => _fiscalOpen = false)
+                                      : null,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.errorSoft,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: AppColors.errorBorder,
+                              );
+                            } else {
+                              body = switch (step) {
+                                EcfFlowStep.welcome => EcfWelcomeStep(
+                                  videoUrl:
+                                      preparation.valueOrNull?.videoUrl ?? '',
+                                  wide: wide,
+                                  onStart: () => _goToStep(EcfFlowStep.company),
+                                ),
+                                EcfFlowStep.company => EcfCompanyStep(
+                                  settings: settings,
+                                  fiscalReady: fiscalReady,
+                                  wide: wide,
+                                  // El paso decide con el estado real: mientras el
+                                  // certificado no sea utilizable y del titular, no
+                                  // deja avanzar y explica qué falta.
+                                  certificateReady: _certificateReady(view),
+                                  certificateVerifiedHere:
+                                      _verifiedCertificate != null ||
+                                      view.certificateValidation?.ready == true,
+                                  dosaOwnsCertificate: dosaOwnsCertificate,
+                                  certificateBlockedReason:
+                                      _certificateBlockedReason(view),
+                                  certificate: EcfCertificateCard(
+                                    persistedValidation: _certificateRestarted
+                                        ? null
+                                        : view.certificateValidation,
+                                    onRestart: () async {
+                                      await ref
+                                          .read(
+                                            ecfCertificateRepositoryProvider,
+                                          )
+                                          .restart();
+                                      if (mounted) {
+                                        setState(
+                                          () => _certificateRestarted = true,
+                                        );
+                                      }
+                                    },
+                                    initialReport: _verifiedCertificate,
+                                    initialFileName:
+                                        _verifiedCertificateFileName,
+                                    onVerified: (report, fileName) {
+                                      setState(() {
+                                        _verifiedCertificate = report;
+                                        _verifiedCertificateFileName = fileName;
+                                        _certificateRestarted = false;
+                                      });
+                                      ref.invalidate(
+                                        ecfDgiiHabilitationProvider,
+                                      );
+                                    },
+                                    onGateChanged: (gate) => setState(() {
+                                      _certificateGate = gate;
+                                      if (!gate.ready) {
+                                        _verifiedCertificate = null;
+                                        _verifiedCertificateFileName = null;
+                                      }
+                                    }),
                                   ),
+                                  onEditFiscalData: () =>
+                                      setState(() => _fiscalOpen = true),
+                                  onContinue: () =>
+                                      _goToStep(EcfFlowStep.preparation),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.error_outline,
-                                      size: 16,
-                                      color: AppColors.error,
+                                EcfFlowStep.preparation => EcfPreparationStep(
+                                  companyReady: fiscalReady,
+                                  certificateReady: _certificateReady(view),
+                                  dosaOwnsCertificate: dosaOwnsCertificate,
+                                  dosaEntry:
+                                      hasUserPermission(
+                                        user,
+                                        AppPermission.manageEcfOnboarding,
+                                      )
+                                      ? Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            // Abrir el portal solo exige los datos de
+                                            // la empresa y el permiso administrativo.
+                                            // El certificado lo pide DOSA dentro de su
+                                            // propio asistente: no se duplica aquí.
+                                            if (fiscalReady) ...[
+                                              DosaAssistantSection(
+                                                key: ValueKey(
+                                                  'dosa-preparation-${user?.companyId}',
+                                                ),
+                                                portalOnly: true,
+                                                postulationExternalId:
+                                                    view.externalId,
+                                              ),
+                                              const SizedBox(height: 12),
+                                            ],
+                                            DosaCertificationDiagnosticSection(
+                                              key: ValueKey(
+                                                'dosa-diagnostic-${user?.companyId}',
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : null,
+                                  dgiiAccessReady: _requirementResolved(
+                                    view,
+                                    'REQUIREMENTS',
+                                  ),
+                                  pendingRequirements: view
+                                      .progress
+                                      .requirements
+                                      .where(
+                                        (item) =>
+                                            !item.resolved && item.mandatory,
+                                      )
+                                      .length,
+                                  simulationAvailable:
+                                      preparation
+                                          .valueOrNull
+                                          ?.simulationAvailable ??
+                                      false,
+                                  simulationBadge:
+                                      preparation.valueOrNull?.simulationBadge,
+                                  simulationReason:
+                                      preparation.valueOrNull?.simulationReason,
+                                  canManage: canManage,
+                                  busy: _busy,
+                                  onStart: _startIntelligentCertification,
+                                  onGoCompany: () =>
+                                      _goToStep(EcfFlowStep.company),
+                                  onGoCertificate: () =>
+                                      _goToStep(EcfFlowStep.company),
+                                ),
+                                EcfFlowStep.tracking => _trackingStep(
+                                  view: view,
+                                  stage: stage,
+                                  wide: wide,
+                                  canManage: canManage,
+                                  canRecordAuthorization:
+                                      canRecordAuthorization,
+                                  canRegisterEvidence: canRegisterEvidence,
+                                  canReviewEvidence: canReviewEvidence,
+                                  activation: activation.valueOrNull,
+                                  testBadge:
+                                      preparation
+                                              .valueOrNull
+                                              ?.simulationAvailable ==
+                                          true
+                                      ? preparation.valueOrNull?.simulationBadge
+                                      : null,
+                                ),
+                              };
+                            }
+
+                            // Errores y progreso de escritura: fuera del cuerpo del paso,
+                            // para que un fallo se vea sin perder el contexto.
+                            Widget framed(Widget child) => Column(
+                              children: [
+                                // Atajo de vista previa: solo existe compilado con la
+                                // empresa de prueba y no escribe nada.
+                                if (preview)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      16,
+                                      0,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _error!,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textPrimary,
-                                        ),
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: EcfFlowPreviewButton(
+                                        nextLabel: nextEcfFlowStep(
+                                          step,
+                                        ).railLabel,
+                                        onPressed: () => setState(() {
+                                          _applicationOpen = false;
+                                          _activationOpen = false;
+                                          _fiscalOpen = false;
+                                          _step = nextEcfFlowStep(step);
+                                        }),
                                       ),
                                     ),
-                                    TextButton(
-                                      onPressed: _refresh,
-                                      child: const Text('Reintentar'),
+                                  ),
+                                if (_error != null)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      16,
+                                      0,
                                     ),
-                                  ],
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        10,
+                                        8,
+                                        10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.errorSoft,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: AppColors.errorBorder,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.error_outline,
+                                            size: 16,
+                                            color: AppColors.error,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _error!,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          TextButton(
+                                            onPressed: _refresh,
+                                            child: const Text('Reintentar'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                if (_busy)
+                                  const LinearProgressIndicator(minHeight: 2),
+                                Expanded(child: child),
+                              ],
+                            );
+
+                            if (step == EcfFlowStep.welcome &&
+                                !_applicationOpen) {
+                              return framed(body);
+                            }
+
+                            if (!wide) {
+                              return Column(
+                                children: [
+                                  EcfStepRail(
+                                    current: step,
+                                    horizontal: true,
+                                    allowForward: true,
+                                    onSelect: _goToStep,
+                                  ),
+                                  const Divider(height: 1),
+                                  Expanded(child: framed(body)),
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: framed(body)),
+                                SizedBox(
+                                  width: 216,
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      0,
+                                      16,
+                                      16,
+                                      16,
+                                    ),
+                                    child: SingleChildScrollView(
+                                      child: EcfStepRail(
+                                        current: step,
+                                        allowForward: true,
+                                        onSelect: _goToStep,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          if (_busy)
-                            const LinearProgressIndicator(minHeight: 2),
-                          Expanded(child: child),
-                        ],
-                      );
-
-                      if (step == EcfFlowStep.welcome && !_applicationOpen) {
-                        return framed(body);
-                      }
-
-                      if (!wide) {
-                        return Column(
-                          children: [
-                            EcfStepRail(
-                              current: step,
-                              horizontal: true,
-                              allowForward: true,
-                              onSelect: _goToStep,
-                            ),
-                            const Divider(height: 1),
-                            Expanded(child: framed(body)),
-                          ],
-                        );
-                      }
-
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: framed(body)),
-                          SizedBox(
-                            width: 216,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
-                              child: SingleChildScrollView(
-                                child: EcfStepRail(
-                                  current: step,
-                                  allowForward: true,
-                                  onSelect: _goToStep,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                              ],
+                            );
+                          },
+                        ),
                 ),
               ),
             ),
@@ -808,7 +846,8 @@ class _EcfDgiiHabilitationPageState
   /// Qué falta exactamente para poder continuar. `null` si ya se puede.
   String? _certificateBlockedReason(EcfDgiiHabilitationView view) {
     if (_certificateReady(view)) return null;
-    return view.certificateValidation?.reason ?? _certificateGate.reason ??
+    return view.certificateValidation?.reason ??
+        _certificateGate.reason ??
         'Valida el certificado digital del representante legal para continuar.';
   }
 
@@ -1534,7 +1573,11 @@ class _RequirementRow extends StatelessWidget {
     if (!canTrack || requirement.automatable || resolved) return row;
     return Tooltip(
       message: 'Registrar seguimiento interno',
-      child: InkWell(onTap: busy ? null : onTrack, child: row),
+      child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
+        onTap: busy ? null : onTrack,
+        child: row,
+      ),
     );
   }
 }

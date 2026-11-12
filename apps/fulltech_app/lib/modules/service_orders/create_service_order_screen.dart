@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -1535,6 +1536,7 @@ class _PickerListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Ink(
@@ -1698,6 +1700,7 @@ class _CompactSelectorField extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(10),
       child: Ink(
@@ -1759,6 +1762,7 @@ class _CompactActionIconButton extends StatelessWidget {
       color: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: Ink(
@@ -1789,6 +1793,7 @@ class _TechnicianSelectorField extends StatelessWidget {
     final text = (value ?? '').trim().isEmpty ? 'Seleccionar técnico' : value!;
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Ink(
@@ -1955,6 +1960,7 @@ class InputSelector extends StatelessWidget {
         value.trim().toLowerCase() != 'seleccionar técnico';
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(18),
       child: Ink(
@@ -2237,17 +2243,20 @@ class MediaPreviewCard extends StatelessWidget {
                                             _resolvedReferenceSource(reference),
                                             fit: BoxFit.contain,
                                             errorBuilder:
-                                                (context, error, stackTrace) =>
-                                                    Center(
-                                                      child: Icon(
-                                                        Icons
-                                                            .image_not_supported_outlined,
-                                                        size: 48,
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .onSurfaceVariant,
-                                                      ),
-                                                    ),
+                                                (
+                                                  context,
+                                                  error,
+                                                  stackTrace,
+                                                ) => Center(
+                                                  child: Icon(
+                                                    Icons
+                                                        .image_not_supported_outlined,
+                                                    size: 48,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                ),
                                           ),
                                   )
                                 : Center(
@@ -2540,6 +2549,7 @@ class _ReferenceSheetOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Ink(

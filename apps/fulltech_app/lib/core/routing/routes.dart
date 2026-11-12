@@ -104,6 +104,7 @@ class Routes {
   /// (`configuracionEmpresa`) sigue existiendo sin cambios y sigue siendo la
   /// fuente de verdad del formulario completo.
   static const ecfFiscalData = '/ecf/fiscal';
+
   /// Habilitación DGII por empresa, dentro del módulo e-CF.
   static const ecfDgii = '/ecf/dgii';
 

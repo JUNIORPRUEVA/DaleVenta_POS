@@ -106,6 +106,7 @@ class EcfStepRail extends StatelessWidget {
     final reachable = _reachable(index);
     final fg = active || done ? AppColors.primary : AppColors.textMuted;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: reachable && !active ? () => onSelect(step) : null,
       borderRadius: BorderRadius.circular(999),
       child: Container(
@@ -179,6 +180,7 @@ class EcfStepRail extends StatelessWidget {
         ? ecfToneStyle(EcfTone.done)
         : ecfToneStyle(EcfTone.pending);
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: reachable && !active ? () => onSelect(step) : null,
       borderRadius: BorderRadius.circular(10),
       child: Padding(

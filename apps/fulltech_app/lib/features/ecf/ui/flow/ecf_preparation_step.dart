@@ -131,41 +131,43 @@ class EcfPreparationStep extends StatelessWidget {
           if (dosaEntry != null) ...[dosaEntry!, const SizedBox(height: 12)],
           // Con el portal oficial presente no se ofrece un segundo camino de
           // postulación: un solo proceso, un solo botón principal.
-          if (simulationAvailable && dosaEntry == null) EcfSection(
-            title: 'Postulación inteligente',
-            icon: Icons.auto_awesome_outlined,
-            subtitle:
-                'FullPOS ejecuta los pasos que dependen del proveedor '
-                'certificado. Lo que dependa de la DGII te lo indicaremos.',
-            trailing: simulationAvailable && (simulationBadge ?? '').isNotEmpty
-                ? EcfBadge(
-                    key: const ValueKey('ecf_test_mode_badge'),
-                    label: simulationBadge!,
-                  )
-                : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                EcfPrimaryAction(
-                  label: 'Iniciar postulación inteligente',
-                  buttonKey: const ValueKey(
-                    'ecf_intelligent_certification_button',
+          if (simulationAvailable && dosaEntry == null)
+            EcfSection(
+              title: 'Postulación inteligente',
+              icon: Icons.auto_awesome_outlined,
+              subtitle:
+                  'FullPOS ejecuta los pasos que dependen del proveedor '
+                  'certificado. Lo que dependa de la DGII te lo indicaremos.',
+              trailing:
+                  simulationAvailable && (simulationBadge ?? '').isNotEmpty
+                  ? EcfBadge(
+                      key: const ValueKey('ecf_test_mode_badge'),
+                      label: simulationBadge!,
+                    )
+                  : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EcfPrimaryAction(
+                    label: 'Iniciar postulación inteligente',
+                    buttonKey: const ValueKey(
+                      'ecf_intelligent_certification_button',
+                    ),
+                    icon: Icons.auto_awesome_outlined,
+                    busy: busy,
+                    onPressed: _canRun ? onStart : null,
                   ),
-                  icon: Icons.auto_awesome_outlined,
-                  busy: busy,
-                  onPressed: _canRun ? onStart : null,
-                ),
-                const SizedBox(height: 8),
-                EcfInlineNote(
-                  tone: _canRun ? EcfTone.done : EcfTone.pending,
-                  icon: _canRun
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.info_outline_rounded,
-                  text: _blockedReason,
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  EcfInlineNote(
+                    tone: _canRun ? EcfTone.done : EcfTone.pending,
+                    icon: _canRun
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.info_outline_rounded,
+                    text: _blockedReason,
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
