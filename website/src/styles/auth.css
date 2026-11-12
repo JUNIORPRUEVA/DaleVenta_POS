@@ -1,0 +1,1060 @@
+/* ==========================================================================
+   Autenticacion — pantalla partida (login, registro, recuperar)
+   --------------------------------------------------------------------------
+   Se carga DESPUES de global.css desde AuthLayout.astro, de modo que afina el
+   lenguaje visual existente sin duplicar tokens ni tocar otras paginas.
+   La vista de bienvenida conserva su tarjeta unica: aqui queda excluida.
+   ========================================================================== */
+
+/* ---------- Estructura: marca a la izquierda, formulario a la derecha ---- */
+.auth-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
+  grid-template-rows: none;
+  gap: 0;
+  padding: 0;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.auth-side {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Volver: fijo en la esquina superior izquierda de la pantalla. En escritorio
+   cae sobre el panel azul; en movil, sobre el fondo blanco. */
+.auth-back-top {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  /* Por encima del cuadro de alta: sigue visible y pulsable */
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 36px;
+  padding: 0 13px 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 0.815rem;
+  font-weight: 560;
+  text-decoration: none;
+  backdrop-filter: blur(10px);
+  transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.auth-back-top:hover {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+.auth-back-top svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+}
+
+/* Con el cuadro abierto, el boton pasa a superficie clara para seguir legible */
+body.reg-modal-open .auth-back-top {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink-2);
+  box-shadow: var(--shadow-sm);
+}
+
+body.reg-modal-open .auth-back-top:hover {
+  border-color: var(--blue-line);
+  background: var(--blue-soft);
+  color: var(--blue-700);
+}
+
+@media (max-width: 1024px) {
+  .auth-back-top {
+    top: 14px;
+    left: 14px;
+    border-color: var(--line);
+    background: #fff;
+    color: var(--ink-2);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .auth-back-top:hover {
+    background: var(--blue-soft);
+    border-color: var(--blue-line);
+    color: var(--blue-700);
+  }
+}
+
+/* ---------- Panel de marca ---------- */
+.auth-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(32px, 5vh, 64px);
+  padding: clamp(28px, 3.6vw, 64px);
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(120% 90% at 12% 0%, rgba(255, 255, 255, 0.22), transparent 58%),
+    linear-gradient(152deg, #2a6bff 0%, var(--blue) 34%, var(--blue-700) 82%, #062a72 100%);
+}
+
+/* Retícula muy tenue: da profundidad sin competir con el texto */
+.auth-brand::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(120% 100% at 30% 20%, #000 30%, transparent 78%);
+}
+
+.auth-brand > * {
+  position: relative;
+  z-index: 1;
+}
+
+.auth-brand-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auth-brand-name {
+  font-size: 1.02rem;
+  font-weight: 680;
+  letter-spacing: -0.026em;
+}
+
+.auth-brand-by {
+  font-size: 0.76rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.auth-brand-copy {
+  max-width: min(440px, 100%);
+}
+
+/* Nombre del sistema pegado al título, dentro del mismo bloque */
+.auth-brand-title {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 0.86rem;
+  font-weight: 620;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.auth-brand-copy h2 {
+  margin: 0 0 18px;
+  max-width: none;
+  font-size: clamp(1.9rem, 1.2rem + 1.65vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.auth-brand-copy p {
+  margin: 0;
+  max-width: none;
+  font-size: clamp(0.95rem, 0.9rem + 0.22vw, 1.05rem);
+  line-height: 1.6;
+  letter-spacing: -0.008em;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.auth-benefits {
+  display: grid;
+  gap: 12px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-benefit {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 540;
+  line-height: 1.5;
+  letter-spacing: -0.006em;
+  color: rgba(255, 255, 255, 0.93);
+}
+
+.auth-benefit svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  stroke-width: 2.1;
+  color: #fff;
+  opacity: 0.9;
+}
+
+/* ---------- Variante producto (login): bloque editorial centrado ----------
+   Sin marca arriba ni soporte abajo: un unico bloque a la izquierda, con
+   jerarquia fuerte y medida de lectura comoda. */
+.auth-brand--product {
+  justify-content: center;
+  padding: clamp(28px, 4.6vw, 88px);
+}
+
+.auth-eyebrow {
+  display: block;
+  margin: 0 0 16px;
+  font-size: 0.675rem;
+  font-weight: 620;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+/* Beneficios compactos: icono discreto + etiqueta, en una sola linea */
+.auth-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  font-weight: 540;
+  letter-spacing: -0.006em;
+  color: rgba(255, 255, 255, 0.93);
+}
+
+.auth-highlight svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9;
+  opacity: 0.9;
+}
+
+/* En escritorio estrecho el panel pierde aire: se ajusta sin romper linea */
+@media (max-width: 1180px) {
+  .auth-highlights {
+    gap: 10px 16px;
+  }
+
+  .auth-highlight {
+    font-size: 0.84rem;
+  }
+}
+
+/* ---------- Columna del formulario ---------- */
+.auth-side .auth-main {
+  display: grid;
+  place-items: center;
+  /* `safe` evita que el centrado recorte el inicio cuando no cabe */
+  align-content: safe center;
+  overflow-y: auto;
+  min-height: 0;
+  padding: clamp(56px, 6vw, 68px) clamp(20px, 3vw, 40px) clamp(12px, 1.7vw, 20px);
+}
+/* El formulario va suelto sobre el fondo: mas aire, menos caja */
+.auth-shell:not(:has(.auth-panel--welcome)) .auth-panel,
+.auth-shell:not(:has(.auth-panel--welcome)) .auth-panel--single {
+  width: min(448px, 100%);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.auth-shell:not(:has(.auth-panel--welcome)) .auth-panel h1 {
+  margin: 0 0 8px;
+  font-size: clamp(1.6rem, 1.35rem + 0.7vw, 1.95rem);
+  font-weight: 700;
+  letter-spacing: -0.036em;
+  line-height: 1.1;
+}
+
+.auth-shell:not(:has(.auth-panel--welcome)) .auth-sub {
+  margin: 0 0 20px;
+  max-width: 38ch;
+  font-size: 0.935rem;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+/* ---------- Campos ---------- */
+.auth-panel .field {
+  margin-bottom: 13px;
+}
+
+.auth-panel .field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 0.815rem;
+  font-weight: 600;
+  letter-spacing: -0.004em;
+  color: var(--ink-2);
+}
+
+.auth-panel .field input {
+  width: 100%;
+  height: 50px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 450;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.auth-panel .field input::placeholder {
+  color: #9aa3b2;
+}
+
+.auth-panel .field input:hover {
+  border-color: #c9d1de;
+}
+
+.auth-panel .field input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(11, 92, 255, 0.13);
+}
+
+.auth-panel .field.is-invalid input {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.1);
+}
+
+.auth-panel .field-error {
+  margin: 7px 0 0;
+  font-size: 0.78rem;
+  font-weight: 520;
+  color: #d92d20;
+}
+
+/* ---------- Contraseña: ver/ocultar + fuerza ---------- */
+.field-password {
+  position: relative;
+}
+
+.field-password input {
+  padding-right: 48px;
+}
+
+.pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: color var(--fast) var(--ease), background-color var(--fast) var(--ease);
+}
+
+.pw-toggle:hover {
+  background: var(--blue-soft);
+  color: var(--blue-700);
+}
+
+.pw-toggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.pw-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9;
+}
+
+.pw-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 9px 0 0;
+}
+
+/* Sin esto, `display:flex` anula el atributo hidden del navegador */
+.pw-strength[hidden] {
+  display: none;
+}
+
+.pw-strength-bars {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+}
+
+.pw-strength-bars i {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background-color var(--med) var(--ease);
+}
+
+.pw-strength[data-score='1'] .pw-strength-bars i:nth-child(-n + 1) {
+  background: #dc2626;
+}
+
+.pw-strength[data-score='2'] .pw-strength-bars i:nth-child(-n + 2) {
+  background: #d97706;
+}
+
+.pw-strength[data-score='3'] .pw-strength-bars i:nth-child(-n + 3) {
+  background: #0284c7;
+}
+
+.pw-strength[data-score='4'] .pw-strength-bars i:nth-child(-n + 4) {
+  background: var(--teal);
+}
+
+.pw-strength-text {
+  flex: 0 0 auto;
+  min-width: 76px;
+  font-size: 0.745rem;
+  font-weight: 560;
+  letter-spacing: -0.004em;
+  color: var(--ink-3);
+  text-align: right;
+}
+
+/* ---------- Boton principal ---------- */
+.auth-panel .btn.btn-block {
+  min-height: 52px;
+  margin-top: 4px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+}
+
+/* ---------- Enlaces y notas ---------- */
+.auth-panel .checkline--tight {
+  margin: 4px 0 18px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+.auth-panel .legal-note {
+  margin: 16px 0 0;
+  font-size: 0.775rem;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+.auth-panel .legal-note a {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+}
+
+.auth-panel .legal-note a:hover {
+  color: var(--blue-700);
+  text-decoration-color: currentColor;
+}
+
+.auth-panel .auth-switch {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 0.855rem;
+  color: var(--ink-3);
+}
+
+.auth-panel .auth-switch a {
+  color: var(--blue-700);
+  font-weight: 620;
+  text-decoration: none;
+}
+
+.auth-panel .auth-switch a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---------- Sello de confianza bajo el titulo ---------- */
+.auth-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 16px;
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--blue-line);
+  border-radius: 999px;
+  background: var(--blue-soft);
+  font-size: 0.755rem;
+  font-weight: 560;
+  letter-spacing: -0.004em;
+  color: var(--blue-700);
+}
+
+.auth-trust svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.3;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1024px) {
+  .auth-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth-brand {
+    display: none;
+  }
+}
+
+/* Bienvenida: se queda con su tarjeta unica, sin panel de marca */
+.auth-shell:has(.auth-panel--welcome) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.auth-shell:has(.auth-panel--welcome) .auth-brand {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .auth-side .auth-topbar,
+  .auth-side .auth-main {
+    padding-inline: 16px;
+  }
+
+  .auth-panel .field {
+    margin-bottom: 13px;
+  }
+
+  .auth-panel .field input {
+    height: 50px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-panel .field input,
+  .pw-toggle,
+  .pw-strength-bars i {
+    transition: none;
+  }
+}
+
+/* ---------- Select con chevron (nicho del negocio) ---------- */
+.field-select {
+  position: relative;
+}
+
+.field-select select {
+  width: 100%;
+  height: 50px;
+  padding: 0 40px 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 450;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.field-select select:hover {
+  border-color: #c9d1de;
+}
+
+.field-select select:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(11, 92, 255, 0.13);
+}
+
+/* Placeholder del select en gris hasta elegir un valor real */
+.field-select select:has(option[value='']:checked) {
+  color: #9aa3b2;
+}
+
+.field-select svg {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+  color: var(--ink-3);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.field.is-invalid .field-select select {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.1);
+}
+
+/* ---------- Pantalla de preparación ---------- */
+.prepare-card {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.prepare-spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 0 24px;
+  border: 3px solid var(--blue-line);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: prepare-spin 900ms linear infinite;
+}
+
+@keyframes prepare-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.prepare-card h1 {
+  max-width: 22ch;
+  margin: 0 auto 10px;
+}
+
+.prepare-card .auth-sub {
+  max-width: 34ch;
+  margin: 0 auto 10px;
+  font-size: 0.95rem;
+  color: var(--ink-2);
+}
+
+.prepare-hint {
+  max-width: 32ch;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.prepare-actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 26px;
+}
+
+/* Sin esto, `display:grid` anula el atributo hidden del navegador */
+.prepare-actions[hidden] {
+  display: none;
+}
+
+.prepare-hint[hidden] {
+  display: none;
+}
+
+.prepare-actions .btn {
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prepare-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* ==========================================================================
+   Variante tecnológica (datos del negocio): degradado a pantalla completa
+   con retícula sutil y tarjeta blanca centrada.
+   ========================================================================== */
+.auth-shell--tech {
+  grid-template-columns: minmax(0, 1fr);
+  background:
+    radial-gradient(95% 70% at 12% 0%, rgba(255, 255, 255, 0.18), transparent 58%),
+    radial-gradient(80% 60% at 88% 100%, rgba(0, 210, 255, 0.18), transparent 62%),
+    linear-gradient(152deg, #2a6bff 0%, var(--blue) 32%, var(--blue-700) 76%, #062a72 100%);
+}
+
+/* El panel lateral no existe en esta variante */
+.auth-brand--tech {
+  display: none;
+}
+
+/* Retícula tecnológica, muy tenue, sólo sobre el fondo */
+.auth-shell--tech::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(115% 95% at 50% 32%, #000 32%, transparent 82%);
+}
+
+.auth-shell--tech .auth-side {
+  position: relative;
+  z-index: 1;
+}
+
+/* Tarjeta blanca centrada sobre el degradado */
+.auth-shell--tech:not(:has(.auth-panel--welcome)) .auth-panel,
+.auth-shell--tech:not(:has(.auth-panel--welcome)) .auth-panel--single {
+  width: min(462px, 100%);
+  padding: clamp(24px, 3vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 44px 90px -34px rgba(3, 12, 32, 0.62);
+}
+
+/* Sin barra arriba que reservar: se centra de verdad */
+.auth-shell--tech .auth-main {
+  padding-top: clamp(16px, 2vw, 24px);
+  padding-bottom: clamp(16px, 2vw, 24px);
+}
+
+/* Sobre azul, el boton Volver mantiene el estilo claro tambien en movil */
+@media (max-width: 1024px) {
+  .auth-shell--tech .auth-back-top {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    box-shadow: none;
+  }
+
+  .auth-shell--tech .auth-back-top:hover {
+    border-color: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.26);
+    color: #fff;
+  }
+}
+
+/* ---------- Cuadro centrado del alta (datos del negocio) ---------- */
+body.reg-modal-open {
+  overflow: hidden;
+}
+
+.reg-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.reg-modal[hidden] {
+  display: none;
+}
+
+/* El aviso de salida va por encima del cuadro de datos y del boton Volver */
+[data-exit-modal] {
+  z-index: 90;
+}
+
+.reg-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  /* Velo solido: se pinta igual en todos los motores, sin `backdrop-filter` */
+  background: rgba(6, 20, 45, 0.62);
+}
+
+.reg-modal-card {
+  position: relative;
+  width: min(462px, 100%);
+  max-height: min(88dvh, 740px);
+  overflow-y: auto;
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 42px 90px -32px rgba(6, 20, 45, 0.5);
+}
+
+/* El cuadro aparece ya visible: sin animaciones de opacidad que puedan
+   dejarlo transparente si el navegador no reinicia la animación. */
+.reg-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.reg-modal-close:hover {
+  background: var(--blue-soft);
+  color: var(--blue-700);
+}
+
+.reg-modal-close svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+
+.reg-modal-card h2 {
+  margin: 0 0 6px;
+  padding-right: 34px;
+  font-size: clamp(1.32rem, 1.12rem + 0.55vw, 1.58rem);
+  font-weight: 700;
+  line-height: 1.16;
+  letter-spacing: -0.034em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.reg-modal-sub {
+  margin: 0 0 20px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+/* Mismo lenguaje de campo que el formulario principal */
+.reg-modal-card .field {
+  margin-bottom: 13px;
+}
+
+.reg-modal-card .field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 0.815rem;
+  font-weight: 600;
+  letter-spacing: -0.004em;
+  color: var(--ink-2);
+}
+
+.reg-modal-card .field input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 450;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.reg-modal-card .field input::placeholder {
+  color: #9aa3b2;
+}
+
+.reg-modal-card .field input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(11, 92, 255, 0.13);
+}
+
+.reg-modal-card .field.is-invalid input,
+.reg-modal-card .field.is-invalid .field-select select {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.1);
+}
+
+.reg-modal-card .field-error {
+  margin: 7px 0 0;
+  font-size: 0.78rem;
+  font-weight: 520;
+  color: #d92d20;
+}
+
+.reg-modal-card .field-select select {
+  height: 48px;
+}
+
+.reg-modal-card .checkline--tight {
+  margin: 4px 0 16px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+.reg-modal-card .btn.btn-block {
+  min-height: 50px;
+  margin-top: 4px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+}
+
+/* Aviso de salida: acciones apiladas con aire */
+.reg-modal-card .btn + .btn {
+  margin-top: 8px;
+}
+
+.exit-hint {
+  margin: 7px 0 2px;
+  font-size: 0.775rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* ---------- Etiqueta de paso dentro de la tarjeta ---------- */
+.auth-step-label {
+  display: inline-block;
+  margin: 0 0 10px;
+  font-size: 0.705rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+
+/* En la tarjeta del último paso el titular gana presencia */
+.auth-shell--tech:not(:has(.auth-panel--welcome)) .auth-panel h1 {
+  font-size: clamp(1.72rem, 1.4rem + 0.9vw, 2.05rem);
+  line-height: 1.12;
+  letter-spacing: -0.038em;
+}
+
+/* Y la entradilla se lee como un párrafo, no como una nota al pie */
+.auth-shell--tech:not(:has(.auth-panel--welcome)) .auth-sub {
+  max-width: 38ch;
+  margin: 0 0 24px;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  letter-spacing: -0.004em;
+  color: #52667c;
+}
+
+/* Campo de teléfono con prefijo de país dentro del propio control */
+.field-prefix {
+  display: flex;
+  align-items: center;
+  height: 50px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.field-prefix:hover {
+  border-color: #c9d1de;
+}
+
+.field-prefix:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 4px rgba(11, 92, 255, 0.13);
+}
+
+.field-prefix-tag {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 13px;
+  border-right: 1px solid var(--line-strong);
+  background: #f4f7fb;
+  font-size: 0.92rem;
+  font-weight: 620;
+  color: var(--ink-2);
+}
+
+.auth-panel .field-prefix input,
+.reg-modal-card .field-prefix input {
+  flex: 1 1 auto;
+  width: auto;
+  height: 100%;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.auth-panel .field-prefix input:hover,
+.auth-panel .field-prefix input:focus,
+.reg-modal-card .field-prefix input:hover,
+.reg-modal-card .field-prefix input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+.field.is-invalid .field-prefix {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.1);
+}
+
+/* Estado de carga dentro del mismo cuadro */
+.reg-modal-loading {
+  display: grid;
+  justify-items: center;
+  padding: 22px 4px 8px;
+  text-align: center;
+}
+
+.reg-modal-loading[hidden] {
+  display: none;
+}
+
+.reg-modal-loading h2 {
+  padding-right: 0;
+  margin-bottom: 8px;
+}
+
+.reg-modal-loading .reg-modal-sub {
+  max-width: 30ch;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .reg-modal {
+    padding: 12px;
+  }
+
+  .reg-modal-card {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 18px;
+  }
+}

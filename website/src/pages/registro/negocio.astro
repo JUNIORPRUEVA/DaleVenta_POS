@@ -1,0 +1,381 @@
+---
+import AuthLayout from '../../layouts/AuthLayout.astro';
+import { niches } from '../../config/niches';
+
+const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+---
+
+<AuthLayout
+  title="Datos de tu negocio"
+  description="Completa los datos de tu negocio y crea tu cuenta de FullPOS Cloud."
+  path="/registro/negocio"
+  panel="tech"
+>
+  <div class="auth-panel auth-panel--single">
+    <div data-business-root data-api={apiBase}>
+      <p class="auth-step-label">Último paso</p>
+      <h1>Cuéntanos de tu negocio</h1>
+      <p class="auth-sub">Solo faltan estos datos para dejar tu cuenta lista.</p>
+
+      <form data-business-form novalidate>
+        <p class="form-alert" data-form-alert hidden role="alert"></p>
+
+        <div class="field" data-field="commercialName">
+          <label for="commercialName">Nombre del negocio</label>
+          <input
+            id="commercialName"
+            name="commercialName"
+            type="text"
+            autocomplete="organization"
+            maxlength="120"
+            placeholder="Ferretería La Esquina"
+            required
+          />
+          <p class="field-error" data-error="commercialName" hidden></p>
+        </div>
+
+        <div class="field" data-field="businessType">
+          <label for="businessType">Nicho del negocio</label>
+          <div class="field-select">
+            <select id="businessType" name="businessType" required>
+              <option value="" selected disabled>Ej. Ferretería, colmado, farmacia…</option>
+              {niches.map((niche) => <option value={niche}>{niche}</option>)}
+            </select>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6"></path>
+            </svg>
+          </div>
+          <p class="field-error" data-error="businessType" hidden></p>
+        </div>
+
+        <div class="field" data-field="phone">
+          <label for="phone">Número de WhatsApp</label>
+          <div class="field-prefix">
+            <span class="field-prefix-tag">+1</span>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              maxlength="24"
+              placeholder="809 000 0000"
+              required
+            />
+          </div>
+          <p class="field-error" data-error="phone" hidden></p>
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" data-submit>
+          Finalizar
+        </button>
+      </form>
+    </div>
+
+    <!-- Estado de creación dentro de la misma tarjeta -->
+    <div class="reg-modal-loading" data-reg-loading hidden>
+      <span class="prepare-spinner" aria-hidden="true"></span>
+      <h2>Estamos creando tu cuenta</h2>
+      <p class="reg-modal-sub" data-reg-status role="status">Preparando todo para ti…</p>
+    </div>
+  </div>
+
+  <!-- Aviso al intentar abandonar antes de terminar -->
+  <div class="reg-modal" data-exit-modal hidden>
+    <div class="reg-modal-backdrop" data-exit-stay></div>
+
+    <div
+      class="reg-modal-card"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="exit-title"
+      aria-describedby="exit-desc"
+    >
+      <h2 id="exit-title">¿Seguro que quieres salir?</h2>
+      <p class="reg-modal-sub" id="exit-desc">
+        Tu cuenta todavía no está creada. Si sales ahora, tendrás que empezar de nuevo.
+      </p>
+
+      <div class="field">
+        <label for="exitPhone">Tu WhatsApp (opcional)</label>
+        <input
+          id="exitPhone"
+          name="exitPhone"
+          type="tel"
+          inputmode="tel"
+          maxlength="24"
+          placeholder="809 000 0000"
+        />
+        <p class="exit-hint">Si nos lo dejas, te escribimos más tarde con más información.</p>
+      </div>
+
+      <button type="button" class="btn btn-primary btn-block" data-exit-stay>
+        Seguir creando mi cuenta
+      </button>
+      <button type="button" class="btn btn-ghost btn-block" data-exit-leave>
+        Salir de todos modos
+      </button>
+    </div>
+  </div>
+</AuthLayout>
+
+<script>
+  import { saveSessionFromAuth } from '../../scripts/site-session';
+  import { waLink } from '../../config/site';
+
+  type StepOne = { firstName?: string; email?: string; password?: string };
+
+  const root = document.querySelector<HTMLElement>('[data-business-root]');
+
+  if (root) {
+    const apiBase = (root.dataset.api ?? '/api').replace(/\/+$/, '');
+    const form = root.querySelector<HTMLFormElement>('[data-business-form]')!;
+    const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
+    const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
+
+    /* El bloque de carga vive al lado del contenedor del formulario, no dentro */
+    const loading = document.querySelector<HTMLElement>('[data-reg-loading]')!;
+    const statusEl = document.querySelector<HTMLElement>('[data-reg-status]')!;
+
+    const exitModal = document.querySelector<HTMLElement>('[data-exit-modal]');
+    const exitPhone = exitModal?.querySelector<HTMLInputElement>('#exitPhone') ?? null;
+
+    let submitting = false;
+
+    /* ---------- Datos del paso 1 ---------- */
+    const readStepOne = (): StepOne | null => {
+      try {
+        const raw = sessionStorage.getItem('fullpos_registro_paso1');
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as StepOne;
+        if (!parsed?.email || !parsed?.password || !parsed?.firstName) return null;
+        return parsed;
+      } catch {
+        return null;
+      }
+    };
+
+    const stepOne = readStepOne();
+
+    if (!stepOne) {
+      window.location.replace('/registro');
+    } else {
+      const setError = (name: string, message: string | null): void => {
+        const field = root.querySelector<HTMLElement>(`[data-field="${name}"]`);
+        const output = root.querySelector<HTMLElement>(`[data-error="${name}"]`);
+        const control = form.elements.namedItem(name) as
+          | HTMLInputElement
+          | HTMLSelectElement
+          | null;
+        if (!field || !output) return;
+        if (message) {
+          field.classList.add('is-invalid');
+          output.textContent = message;
+          output.hidden = false;
+          control?.setAttribute('aria-invalid', 'true');
+        } else {
+          field.classList.remove('is-invalid');
+          output.hidden = true;
+          output.textContent = '';
+          control?.removeAttribute('aria-invalid');
+        }
+      };
+
+      const value = (name: string): string => {
+        const control = form.elements.namedItem(name) as
+          | HTMLInputElement
+          | HTMLSelectElement
+          | null;
+        return (control?.value ?? '').trim();
+      };
+
+      const showAlert = (message: string, withLoginLink = false): void => {
+        alertBox.textContent = '';
+        alertBox.append(document.createTextNode(`${message} `));
+        if (withLoginLink) {
+          const link = document.createElement('a');
+          link.href = '/login';
+          link.textContent = 'Inicia sesión';
+          alertBox.append(link);
+        }
+        alertBox.hidden = false;
+        alertBox.scrollIntoView({ block: 'nearest' });
+      };
+
+      /* ---------- Aviso de salida ---------- */
+      const closeExit = (): void => {
+        if (exitModal) exitModal.hidden = true;
+      };
+
+      const openExit = (): void => {
+        if (!exitModal || submitting) return;
+        exitModal.hidden = false;
+        exitPhone?.focus();
+      };
+
+      /* Salir: si dejo un WhatsApp, se abre el chat de soporte con ese número
+         escrito para que el equipo pueda responderle después. */
+      const leaveForGood = (): void => {
+        const phone = (exitPhone?.value ?? '').replace(/\D/g, '');
+        if (phone.length >= 10) {
+          const text = encodeURIComponent(
+            `Hola, estaba creando mi cuenta en FullPOS Cloud y quiero más información. Mi WhatsApp es ${phone}.`,
+          );
+          window.open(`${waLink}?text=${text}`, '_blank', 'noopener');
+        }
+        sessionStorage.removeItem('fullpos_registro_paso1');
+        window.location.assign('/');
+      };
+
+      exitModal?.querySelectorAll<HTMLElement>('[data-exit-stay]').forEach((el) => {
+        el.addEventListener('click', closeExit);
+      });
+
+      exitModal
+        ?.querySelector<HTMLElement>('[data-exit-leave]')
+        ?.addEventListener('click', leaveForGood);
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        if (exitModal && !exitModal.hidden) {
+          closeExit();
+          return;
+        }
+        /* Escapa también es intentar salir: se confirma antes */
+        openExit();
+      });
+
+      /* El botón "Volver" del layout pasa por el aviso: no se abandona en frío */
+      document.addEventListener(
+        'click',
+        (event) => {
+          const target = event.target as HTMLElement | null;
+          if (!target?.closest('.auth-back-top')) return;
+          event.preventDefault();
+          openExit();
+        },
+        true,
+      );
+
+      /* Cerrar o recargar la pestaña a media creación: aviso del navegador */
+      window.addEventListener('beforeunload', (event) => {
+        if (!submitting) return;
+        event.preventDefault();
+        event.returnValue = '';
+      });
+
+      /* ---------- Validación y alta ---------- */
+      const validate = (): boolean => {
+        ['commercialName', 'businessType', 'phone'].forEach((name) => setError(name, null));
+        let ok = true;
+        if (value('commercialName').length < 2) {
+          setError('commercialName', 'Escribe el nombre de tu negocio.');
+          ok = false;
+        }
+        if (!value('businessType')) {
+          setError('businessType', 'Elige el nicho de tu negocio.');
+          ok = false;
+        }
+        if (value('phone').replace(/\D/g, '').length < 10) {
+          setError('phone', 'Escribe un WhatsApp con al menos 10 dígitos.');
+          ok = false;
+        }
+        return ok;
+      };
+
+      form.addEventListener('input', (event) => {
+        const target = event.target as HTMLInputElement | HTMLSelectElement | null;
+        if (target?.name) setError(target.name, null);
+      });
+
+      form.addEventListener('change', (event) => {
+        const target = event.target as HTMLSelectElement | null;
+        if (target?.name) setError(target.name, null);
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        alertBox.hidden = true;
+
+        if (submitting) return;
+        if (!validate()) {
+          form
+            .querySelector<HTMLElement>('.field.is-invalid input, .field.is-invalid select')
+            ?.focus();
+          return;
+        }
+
+        const marketing = form.elements.namedItem('marketingOptIn') as HTMLInputElement | null;
+        const email = stepOne.email!;
+        const payload = {
+          commercialName: value('commercialName'),
+          firstName: stepOne.firstName,
+          email,
+          password: stepOne.password,
+          confirmPassword: stepOne.password,
+          phone: value('phone'),
+          /* El backend acepta `businessType` en el alta y lo guarda en la
+             configuración de la empresa (mismo dato que lee la licencia). */
+          businessType: value('businessType'),
+          /* Esta pantalla ya no pide novedades por WhatsApp */
+          marketingOptIn: marketing?.checked === true,
+          locale: 'es-DO',
+        };
+
+        submitting = true;
+        form.hidden = true;
+        loading.hidden = false;
+        statusEl.textContent = 'Creando tu cuenta…';
+
+        try {
+          const response = await fetch(`${apiBase}/auth/register-business`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            form.hidden = false;
+            loading.hidden = true;
+            submitting = false;
+
+            if (response.status === 409) {
+              showAlert('Ya existe una cuenta con este correo.', true);
+              return;
+            }
+            const detail = await response
+              .json()
+              .then((body: { message?: string | string[] }) =>
+                Array.isArray(body.message) ? body.message.join(' ') : body.message,
+              )
+              .catch(() => null);
+            showAlert(detail || 'No pudimos crear la cuenta. Inténtalo de nuevo.');
+            return;
+          }
+
+          const result = await response.json().catch(() => ({}));
+          saveSessionFromAuth(result, email);
+
+          statusEl.textContent = 'Cuenta creada. Abriendo tu sistema…';
+          sessionStorage.removeItem('fullpos_registro_paso1');
+          submitting = false;
+          window.location.assign('/preparando');
+        } catch {
+          form.hidden = false;
+          loading.hidden = true;
+          submitting = false;
+          showAlert(
+            'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.',
+          );
+        }
+      });
+    }
+  }
+</script>

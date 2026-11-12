@@ -1,0 +1,199 @@
+---
+import '../styles/global.css';
+import '../styles/auth.css';
+import { site } from '../config/site';
+
+export interface Props {
+  title: string;
+  description: string;
+  path: string;
+  /**
+   * `promo` = marca, beneficios y soporte (captacion, p. ej. crear cuenta).
+   * `product` = solo el bloque central, sin cabecera ni pie (iniciar sesion).
+   * `tech` = sin panel lateral: fondo degradado y tarjeta centrada.
+   */
+  panel?: 'promo' | 'product' | 'tech';
+}
+
+const { title, description, path, panel = 'promo' } = Astro.props;
+const isPromo = panel === 'promo';
+const isTech = panel === 'tech';
+const canonical = new URL(path, site.url).toString();
+const fullTitle = title.includes(site.name) ? title : `${title} · ${site.name}`;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/icon-48.png" sizes="48x48" type="image/png" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+  </head>
+
+  <body>
+    <div class:list={['auth-shell', isTech && 'auth-shell--tech']}>
+      <a class="auth-back-top" href="/">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M19 12H5M11 5l-7 7 7 7"></path>
+        </svg>
+        Volver
+      </a>
+
+      <aside class:list={['auth-brand', `auth-brand--${panel}`]} aria-hidden="true">
+        <div class="auth-brand-copy">
+          {
+            isPromo ? (
+              <>
+                <span class="auth-brand-title">{site.name}</span>
+                <h2>Tu punto de venta, listo en minutos.</h2>
+                <p>{site.tagline}</p>
+
+                <ul class="auth-benefits">
+                  <li class="auth-benefit">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                    7 días gratis, sin tarjeta de crédito
+                  </li>
+                  <li class="auth-benefit">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3.5 2" />
+                    </svg>
+                    Sigue vendiendo hasta 48 horas sin internet
+                  </li>
+                  <li class="auth-benefit">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect x="2" y="4" width="20" height="13" rx="2" />
+                      <path d="M8 21h8M12 17v4" />
+                    </svg>
+                    Windows, Android, iPhone y web
+                  </li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <span class="auth-eyebrow">FullPOS Cloud</span>
+                <h2>
+                  Tu negocio bajo control.<br />Todo en un solo lugar.
+                </h2>
+                <p>
+                  Vende, administra tu inventario, controla tu caja y consulta los resultados
+                  de tu negocio desde donde estés.
+                </p>
+
+                <ul class="auth-highlights">
+                  <li class="auth-highlight">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M6 3h12a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z" />
+                      <path d="M9 8h6M9 12h6" />
+                    </svg>
+                    Ventas
+                  </li>
+                  <li class="auth-highlight">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 8.5 12 3l9 5.5v7L12 21l-9-5.5z" />
+                      <path d="m3 8.5 9 5.5 9-5.5" />
+                      <path d="M12 14v7" />
+                    </svg>
+                    Inventario
+                  </li>
+                  <li class="auth-highlight">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+                    </svg>
+                    Control de caja
+                  </li>
+                </ul>
+              </>
+            )
+          }
+        </div>
+      </aside>
+
+      <div class="auth-side">
+        <main class="auth-main">
+          <slot />
+        </main>
+      </div>
+    </div>
+
+    <script>
+      // Mostrar / ocultar contraseña: disponible en cualquier pantalla de auth.
+      document.querySelectorAll<HTMLElement>('[data-pw-toggle]').forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+          const input = toggle.parentElement?.querySelector<HTMLInputElement>('input');
+          if (!input) return;
+          const reveal = input.type === 'password';
+          input.type = reveal ? 'text' : 'password';
+          toggle.setAttribute('aria-pressed', String(reveal));
+          toggle.setAttribute('aria-label', reveal ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        });
+      });
+    </script>
+  </body>
+</html>

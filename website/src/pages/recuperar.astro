@@ -1,0 +1,133 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { icons, site, waLink } from '../config/site';
+
+const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+---
+
+<AuthLayout
+  title="Recuperar contraseña"
+  description="Solicita el restablecimiento de la contraseña de tu cuenta de FullPOS Cloud."
+  path="/recuperar"
+>
+  <div class="auth-panel auth-panel--single">
+    <div data-recover-root data-api={apiBase}>
+      <h1>Recupera tu contraseña</h1>
+      <p class="auth-sub">
+        Escribe el correo de tu cuenta y te enviaremos un enlace para restablecerla.
+      </p>
+
+      <form data-recover-form novalidate>
+        <p class="form-alert" data-form-alert hidden role="alert"></p>
+
+        <div class="field" data-field="email">
+          <label for="email">Correo de la cuenta</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            maxlength="120"
+            placeholder="tucorreo@dominio.com"
+            required
+          />
+          <p class="field-error" data-error="email" hidden></p>
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" data-submit>
+          Enviar enlace
+        </button>
+      </form>
+
+      <div class="auth-done form-hidden" data-recover-done role="status">
+        <span class="auth-done-icon">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.check}
+          />
+        </span>
+        <h2>Revisa tu correo</h2>
+        <p>
+          Si ese correo tiene una cuenta, enviamos un enlace para restablecer la contraseña.
+          Revisa también la carpeta de spam.
+        </p>
+        <a class="link-arrow" href="/login">Volver a iniciar sesión</a>
+      </div>
+
+      <p class="auth-switch">
+        ¿No tienes cuenta? <a href="/registro">Créala gratis</a> ·
+        ¿Necesitas ayuda? Escríbenos por
+        {" "}<a href={waLink} rel="noopener" target="_blank">WhatsApp ({site.supportPhoneLabel})</a>.
+      </p>
+    </div>
+  </div>
+</AuthLayout>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-recover-root]');
+
+  if (root) {
+    const apiBase = root.dataset.api ?? '/api';
+    const form = root.querySelector<HTMLFormElement>('[data-recover-form]')!;
+    const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
+    const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
+    const doneBox = root.querySelector<HTMLElement>('[data-recover-done]')!;
+    const field = root.querySelector<HTMLElement>('[data-field="email"]')!;
+    const errorOut = root.querySelector<HTMLElement>('[data-error="email"]')!;
+
+    const emailInput = form.elements.namedItem('email') as HTMLInputElement;
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      alertBox.hidden = true;
+      field.classList.remove('is-invalid');
+      errorOut.hidden = true;
+      emailInput.removeAttribute('aria-invalid');
+
+      const email = (emailInput.value ?? '').trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+        field.classList.add('is-invalid');
+        errorOut.textContent = 'Escribe un correo válido.';
+        errorOut.hidden = false;
+        emailInput.setAttribute('aria-invalid', 'true');
+        return;
+      }
+
+      submitBtn.setAttribute('aria-busy', 'true');
+      submitBtn.disabled = true;
+      const original = submitBtn.textContent ?? 'Enviar enlace';
+      submitBtn.textContent = 'Enviando…';
+
+      try {
+        /* La respuesta del backend es siempre genérica: no revela si el correo existe. */
+        await fetch(`${apiBase}/auth/forgot-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.toLowerCase() }),
+        });
+        form.classList.add('form-hidden');
+        doneBox.classList.remove('form-hidden');
+      } catch {
+        alertBox.textContent =
+          'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.';
+        alertBox.hidden = false;
+      } finally {
+        submitBtn.removeAttribute('aria-busy');
+        submitBtn.disabled = false;
+        submitBtn.textContent = original;
+      }
+    });
+
+    emailInput.addEventListener('input', () => {
+      field.classList.remove('is-invalid');
+      errorOut.hidden = true;
+      emailInput.removeAttribute('aria-invalid');
+    });
+  }
+</script>

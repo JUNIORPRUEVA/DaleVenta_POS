@@ -1,0 +1,88 @@
+---
+import { downloads, icons } from '../config/site';
+---
+
+<ul class="dl-list" data-dl-list>
+  {downloads.map((dl) => (
+    <li class="dl-row" data-platform={dl.pending ? `${dl.id}-soon` : dl.id}>
+      <div class="icon-box">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          set:html={dl.icon}
+        />
+      </div>
+
+      <div class="dl-body">
+        <h3>{dl.name}</h3>
+        <p>{dl.detail}</p>
+        {dl.pending && <span class="dl-soon">Enlace próximamente</span>}
+      </div>
+
+      {dl.pending ? (
+        <span class="dl-action dl-action--soon" aria-disabled="true">
+          {dl.status}
+        </span>
+      ) : dl.direct ? (
+        <a class="dl-action" href={dl.url} rel="noopener" download="FullPOS-Setup.exe">
+          {dl.status}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.download}
+          />
+        </a>
+      ) : (
+        <button
+          class="dl-action"
+          type="button"
+          data-dl={dl.id}
+          data-dl-name={dl.name}
+          data-dl-url={dl.url}
+        >
+          {dl.status}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.download}
+          />
+        </button>
+      )}
+    </li>
+  ))}
+</ul>
+
+<script>
+  /* Prioridad de presentacion segun el equipo. Solo reordena: no oculta nada. */
+  const list = document.querySelector('[data-dl-list]');
+
+  if (list) {
+    const ua = navigator.userAgent.toLowerCase();
+    const isIpad = ua.includes('macintosh') && navigator.maxTouchPoints > 1;
+    const platform = ua.includes('android')
+      ? 'android'
+      : ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod') || isIpad
+        ? 'ios'
+        : ua.includes('windows')
+          ? 'windows'
+          : 'web';
+
+    const preferred = list.querySelector(`[data-platform="${platform}"]`);
+
+    if (preferred && list.firstElementChild !== preferred) {
+      list.prepend(preferred);
+    }
+  }
+</script>

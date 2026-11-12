@@ -1,0 +1,123 @@
+---
+import { site, waLink, cta, icons } from '../config/site';
+
+const year = new Date().getFullYear();
+
+/* En las paginas de cuenta el formulario ya es la accion: sin CTA repetido. */
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const showCta = !['/registro', '/login', '/recuperar'].includes(path);
+
+const columns = [
+  {
+    title: 'Explorar',
+    links: [
+      { href: '/funciones', label: 'Funciones' },
+      { href: '/precios', label: 'Precios' },
+      { href: '/descargas', label: 'Descargas' },
+    ],
+  },
+  {
+    title: 'Ayuda',
+    links: [
+      { href: '/soporte', label: 'Soporte' },
+      { href: waLink, label: 'WhatsApp', external: true },
+      { href: `mailto:${site.supportEmail}`, label: 'Contacto' },
+    ],
+  },
+];
+---
+
+<footer class="site-footer">
+  <!-- Cierre a sangre: solo escritorio, en movil manda la barra fija -->
+  {showCta && (
+    <section class="footer-cta">
+      <div class="container footer-cta-inner">
+        <h2>Empieza hoy y decide después</h2>
+        <p>
+          7 días de prueba gratis con el sistema completo. Al terminar, eliges tu plan y el
+          pago se realiza con tarjeta.
+        </p>
+
+        <div class="footer-cta-actions">
+          <a class="btn btn-primary btn-lg cta-pulse" href="/registro">
+            {cta.final.primary}
+            <svg
+              class="icon-arrow"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.arrowRight}
+            />
+          </a>
+          <a class="link-arrow link-arrow--light" href={waLink} rel="noopener">
+            {cta.final.secondary}
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.arrowRight}
+            />
+          </a>
+        </div>
+
+        <p class="footer-cta-note">
+          7 días sin costo · Pago con tarjeta al terminar · Datos separados por empresa
+        </p>
+      </div>
+    </section>
+  )}
+
+  <div class="container footer-top">
+    <div class="footer-brand">
+      <a class="brand" href="/" aria-label={`${site.name}, inicio`}>
+        <img
+          class="brand-logo"
+          src="/img/logo.webp"
+          alt=""
+          width="40"
+          height="40"
+          loading="lazy"
+          decoding="async"
+        />
+        <span class="brand-text">
+          <strong>{site.name}</strong>
+          <span class="brand-by">{site.byline}</span>
+        </span>
+      </a>
+
+      <p>Sistema POS en la nube para tu negocio.</p>
+    </div>
+
+    {columns.map((column) => (
+      <div class="footer-col">
+        <h2>{column.title}</h2>
+        <ul>
+          {column.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                rel={'external' in link && link.external ? 'noopener' : undefined}
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </div>
+
+  <div class="container footer-bottom">
+    <span>© {year} {site.company}.</span>
+    <nav aria-label="Enlaces legales">
+      <a href="/terminos">Términos</a>
+      <a href="/privacidad">Privacidad</a>
+    </nav>
+  </div>
+</footer>

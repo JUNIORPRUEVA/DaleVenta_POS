@@ -1,0 +1,120 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import DownloadRows from '../components/DownloadRows.astro';
+import DlPhoneCard from '../components/DlPhoneCard.astro';
+import { icons, site, cta, waLink } from '../config/site';
+---
+
+<BaseLayout
+  title="Descargas e instalación"
+  description="Usa FullPOS Cloud en la web, Windows, Android o iPhone. La misma cuenta y los mismos datos en todos tus dispositivos."
+  path="/descargas"
+>
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Descargas</span>
+        <h1 style="font-size: clamp(1.95rem, 1.3rem + 2vw, 3rem)">
+          Usa FullPOS Cloud en <span class="grad">tu plataforma</span>
+        </h1>
+        <p class="lead">
+          Crea tu cuenta y entra desde donde estés. Las apps se abren con la misma cuenta
+          que creas aquí.
+        </p>
+      </div>
+
+      <DownloadRows />
+
+      <DlPhoneCard />
+
+      <div class="note dl-note" style="margin-top: 24px">
+        <strong>Importante:</strong> para usar cualquier app necesitas tu cuenta. Al
+        crearla empiezan tus <strong>7 días de prueba gratis</strong>; el pago del plan se
+        realiza con tarjeta al terminar.
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top: 0">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Antes de instalar</span>
+        <h2>Tres cosas que conviene saber</h2>
+      </div>
+
+      <div class="grid">
+        <article class="card" data-reveal>
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.wifi}
+            />
+          </div>
+          <h3>Hasta 48 horas sin internet</h3>
+          <p>
+            Si se cae la conexión, sigues operando con tus datos guardados de forma segura y
+            todo se sincroniza al volver.
+          </p>
+        </article>
+        <article class="card" data-reveal>
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.lock}
+            />
+          </div>
+          <h3>Una cuenta, todos los equipos</h3>
+          <p>
+            Las apps de Windows, Android e iPhone son de inicio de sesión: la cuenta se crea
+            desde esta web.
+          </p>
+        </article>
+        <article class="card" data-reveal>
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.headphones}
+            />
+          </div>
+          <h3>Instalación acompañada</h3>
+          <p>
+            {site.supportHours}. Escríbenos por
+            {" "}<a href={waLink} rel="noopener">WhatsApp</a> o a
+            {" "}<a href={`mailto:${site.supportEmail}`}>{site.supportEmail}</a>.
+          </p>
+        </article>
+      </div>
+
+      <div class="hero-actions" style="margin-top: 26px; margin-bottom: 0">
+        <a class="btn btn-primary btn-lg cta-pulse" href="/registro">{cta.hero.primary}</a>
+        <a class="link-arrow" href="/precios">
+          Ver planes y precios
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.arrowRight}
+          />
+        </a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

@@ -1,0 +1,239 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { plans, planIncludes, planPlatform, icons, site, billing, faqs } from '../config/site';
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'OfferCatalog',
+  name: 'Planes FullPOS Cloud',
+  itemListElement: plans.map((plan) => ({
+    '@type': 'Offer',
+    name: plan.name,
+    description: plan.summary,
+    price: plan.monthly,
+    priceCurrency: 'DOP',
+    url: new URL('/precios', site.url).toString(),
+  })),
+};
+---
+
+<BaseLayout
+  title="Precios"
+  description="Planes de FullPOS Cloud desde RD$1,000 al mes. Incluye 7 días de prueba gratis; el pago se realiza con tarjeta al terminar la prueba."
+  path="/precios"
+  schema={[schema]}
+>
+  <section class="section plans-band">
+    <div class="container">
+      <div class="plans-head">
+        <span class="eyebrow">Precios</span>
+        <h1 style="font-size: clamp(1.95rem, 1.3rem + 2vw, 3rem)">
+          Prueba 7 días y elige tu plan
+        </h1>
+        <p class="lead">
+          Todos los planes incluyen los mismos módulos en todos tus dispositivos. Empiezas
+          con la prueba gratuita y el pago se realiza con tarjeta al terminar.
+        </p>
+      </div>
+
+      <ol class="billing">
+        {billing.map((step) => (
+          <li>
+            <span class="billing-n">{step.n}</span>
+            <span class="billing-text">
+              <strong>{step.title}</strong>
+              <span>{step.text}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <div class="pricing">
+        {plans.map((plan) => (
+          <article class={`plan${plan.highlight ? ' is-highlight' : ''}`}>
+            {plan.badge && (
+              <span class="plan-badge">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  set:html={icons.spark}
+                />
+                {plan.badge}
+              </span>
+            )}
+
+            <p class="plan-name">{plan.name}</p>
+            <p class="plan-price">{plan.price} <span>{plan.period}</span></p>
+            <span class="plan-trial">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={icons.gift}
+              />
+              {plan.trial}
+            </span>
+            <p class="plan-sum">{plan.summary}</p>
+
+            <ul class="plan-specs">
+              {plan.specs.map((spec) => (
+                <li>
+                  <span class="plan-spec-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      set:html={spec.svg}
+                    />
+                  </span>
+                  {spec.label}
+                </li>
+              ))}
+            </ul>
+
+            <p class="plan-platform">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={icons.globe}
+              />
+              {planPlatform}
+            </p>
+
+            <a
+              class={`btn ${plan.highlight ? 'btn-primary' : 'btn-ghost'} btn-block plan-cta`}
+              href="/registro"
+            >
+              {plan.cta}
+              <svg
+                class="icon-arrow"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={icons.arrowRight}
+              />
+            </a>
+            <small class="plan-hint">{plan.ctaHint}</small>
+          </article>
+        ))}
+      </div>
+
+      <p class="pricing-hint only-mobile" aria-hidden="true">Desliza para ver los 4 planes →</p>
+
+      <p class="plans-note">
+        La postulación e-CF se hace con el asistente guiado incluido en el plan. La
+        aprobación la decide la DGII, el certificado digital no está incluido y el
+        acompañamiento gestionado es un servicio aparte.
+      </p>
+
+      <ul class="includes">
+        {planIncludes.map((item) => (
+          <li>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.check}
+            />
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Antes de decidir</span>
+        <h2>Lo que no cambia con el plan</h2>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.gift}
+            />
+          </div>
+          <h3>Prueba de 7 días</h3>
+          <p>Usas el sistema completo sin costo durante 7 días.</p>
+        </article>
+        <article class="card">
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.card}
+            />
+          </div>
+          <h3>Pago con tarjeta</h3>
+          <p>Al terminar la prueba eliges tu plan y pagas con tarjeta.</p>
+        </article>
+        <article class="card">
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.shield}
+            />
+          </div>
+          <h3>Datos separados</h3>
+          <p>Cada empresa tiene su propio espacio, usuarios y permisos.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top: 0">
+    <div class="container--narrow" style="margin-inline: auto">
+      <div class="section-head">
+        <span class="eyebrow">Dudas</span>
+        <h2>Preguntas sobre planes</h2>
+      </div>
+
+      <div class="faq">
+        {faqs.slice(0, 2).map((item) => (
+          <details name="faq-precios">
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+</BaseLayout>
