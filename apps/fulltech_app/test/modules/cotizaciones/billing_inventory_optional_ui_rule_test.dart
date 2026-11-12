@@ -54,7 +54,11 @@ Future<void> main() async {
       ).readAsStringSync();
 
       expect(source, contains('ref.invalidate(companySettingsProvider);'));
-      expect(source, contains('if (widget.inventoryEnabled) ...['));
+      expect(source, contains('inventoryEnabled: widget.inventoryEnabled,'));
+      final commandBar = File(
+        'lib/modules/cotizaciones/presentation/widgets/sales_catalog_command_bar.dart',
+      ).readAsStringSync();
+      expect(commandBar, contains('if (inventoryEnabled) ...['));
       expect(source, contains('required this.showStockState'));
       expect(source, contains('if (widget.showStockState)'));
     },

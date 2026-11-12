@@ -30,9 +30,10 @@
         "preLaunchTask": "finales: pub get",
         "env": {
           "FULLPOS_WINDOWS_CHANNEL": "uat-mayoreo",
+          "DALEVENTAS_POS_ROOT": "C:/b/fp-uat-data",
           "CL": "/FS"
         },
-        "args": [
+        "toolArgs": [
           "--dart-define=APP_ENV=uat",
           "--dart-define=FULLPOS_UAT_PROFILE=true",
           "--dart-define=DISABLE_APP_UPDATES=true",
@@ -73,6 +74,7 @@
           "cwd": "${workspaceFolder}/apps/fulltech_app",
           "env": {
             "FULLPOS_WINDOWS_CHANNEL": "uat-mayoreo",
+            "DALEVENTAS_POS_ROOT": "C:/b/fp-uat-data",
             "CL": "/FS"
           }
         },

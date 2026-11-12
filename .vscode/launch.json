@@ -20,11 +20,12 @@
       "flutterMode": "debug",
       "env": {
         "FULLPOS_WINDOWS_CHANNEL": "uat-mayoreo",
-        "DALEVENTAS_POS_ROOT": "${env:LOCALAPPDATA}/DaleVentasPOS/UAT-HotReload"
+        "DALEVENTAS_POS_ROOT": "C:/b/fp-uat-data"
       },
       "toolArgs": [
         "--dart-define=APP_ENV=uat",
         "--dart-define=FULLPOS_UAT_PROFILE=true",
+        "--dart-define=DISABLE_APP_UPDATES=true",
         "--dart-define=API_BASE_URL=http://127.0.0.1:4004",
         "--dart-define=APP_BASE_URL=http://127.0.0.1:4004"
       ]

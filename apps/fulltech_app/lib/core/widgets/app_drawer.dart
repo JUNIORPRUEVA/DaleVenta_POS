@@ -270,7 +270,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   _MobileDrawerFooterIconButton(
                     compact: compact,
                     icon: AppIcons.settings,
-                    tooltip: 'Configuraci├│n',
+                    tooltip: 'Configuración',
                     selected: isNavigationRouteActive(
                       location,
                       Routes.configuracion,
@@ -280,7 +280,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   _MobileDrawerFooterIconButton(
                     compact: compact,
                     icon: AppIcons.logout,
-                    tooltip: 'Cerrar sesi├│n',
+                    tooltip: 'Cerrar sesión',
                     color: logoutColor,
                     onTap: onLogoutTap,
                   ),
@@ -658,7 +658,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       if (ref.read(activeCashSessionControllerProvider).valueOrNull == null) {
         showCashToast(
           rootContext,
-          'La caja no qued├│ abierta en el servidor. Intenta de nuevo.',
+          'La caja no quedó abierta en el servidor. Intenta de nuevo.',
           isError: true,
           overlay: overlay,
         );
@@ -667,7 +667,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       showCashToast(
         rootContext,
         'Turno abierto',
-        detail: 'La caja est├í lista para operar.',
+        detail: 'La caja está lista para operar.',
         overlay: overlay,
       );
     } catch (error) {
@@ -879,13 +879,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'Cerrar men├║',
+                                  tooltip: 'Cerrar menú',
                                   onPressed: () => Navigator.pop(context),
                                   icon: AppIcon(
                                     AppIcons.close,
                                     size: 18,
                                     color: AppColors.textSecondary,
-                                    semanticLabel: 'Cerrar men├║',
+                                    semanticLabel: 'Cerrar menú',
                                   ),
                                   style: IconButton.styleFrom(
                                     backgroundColor: const Color(0xFFEFF4FB),
@@ -941,13 +941,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                   height: 42,
                                   width: 42,
                                   child: IconButton(
-                                    tooltip: 'Cerrar men├║',
+                                    tooltip: 'Cerrar menú',
                                     onPressed: () => Navigator.pop(context),
                                     icon: AppIcon(
                                       AppIcons.close,
                                       size: 20,
                                       color: Colors.white,
-                                      semanticLabel: 'Cerrar men├║',
+                                      semanticLabel: 'Cerrar menú',
                                     ),
                                     style: IconButton.styleFrom(
                                       backgroundColor: Colors.white.withValues(
@@ -1072,7 +1072,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                               context,
                               const AppNavigationItem(
                                 icon: Icons.settings_outlined,
-                                title: 'Configuraci├│n',
+                                title: 'Configuración',
                                 route: Routes.configuracion,
                               ),
                             ),
@@ -1198,7 +1198,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       if (categoriesItem != null)
         const AppNavigationItem(
           icon: Icons.category_outlined,
-          title: 'Categor├¡as',
+          title: 'Categorías',
           route: Routes.catalogoCategorias,
         ),
       if (inventoryCountItem != null)
@@ -1355,7 +1355,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         openOnHover: false,
         featured: true,
         subtitle: cashStaleShift
-            ? 'Turno de otro d├¡a ÔÇö ci├®rralo'
+            ? 'Turno de otro día — ciérralo'
             : !cashConfirmed
             ? 'Estado no disponible'
             : hasOpenShift
@@ -1438,7 +1438,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       final only = leftovers.length == 1 ? leftovers.first : null;
       groups.add(
         _DrawerMenuGroup(
-          title: only?.title ?? 'M├ís m├│dulos',
+          title: only?.title ?? 'Más módulos',
           icon: only?.appIcon ?? AppIcons.more,
           items: leftovers,
           openOnHover: false,
@@ -1513,7 +1513,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     final only = leftovers.length == 1 ? leftovers.first : null;
     groups.add(
       _DrawerMenuGroup(
-        title: only?.title ?? 'M├ís m├│dulos',
+        title: only?.title ?? 'Más módulos',
         icon: only?.appIcon ?? AppIcons.more,
         items: leftovers,
       ),
@@ -2118,26 +2118,31 @@ class _DrawerMenuGroupTile extends StatelessWidget {
                 ),
               ),
               if (hasSubmenu)
-                AnimatedCrossFade(
-                  firstChild: const SizedBox(width: double.infinity),
-                  secondChild: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      desktop ? (compact ? 6 : 7) : 7,
-                      desktop ? 2 : 5,
-                      desktop ? (compact ? 6 : 7) : 7,
-                      desktop ? (compact ? 5 : 6) : 6,
-                    ),
-                    child: Column(
-                      children: [
-                        for (final item in group.items) itemBuilder(item),
-                      ],
-                    ),
-                  ),
-                  crossFadeState: expanded
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
+                // Las entradas del submenú solo se construyen cuando el grupo
+                // está desplegado. Con `AnimatedCrossFade` el hijo oculto se
+                // seguía maquetando y quedaba en el árbol fuera del área
+                // visible: no se veía, no se podía pulsar, y el menú no
+                // desplazaba hasta él (las últimas opciones eran inalcanzables
+                // en pantallas bajas o con escalado alto).
+                AnimatedSize(
                   duration: const Duration(milliseconds: 200),
-                  sizeCurve: Curves.easeOut,
+                  curve: Curves.easeOut,
+                  alignment: Alignment.topCenter,
+                  child: expanded
+                      ? Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            desktop ? (compact ? 6 : 7) : 7,
+                            desktop ? 2 : 5,
+                            desktop ? (compact ? 6 : 7) : 7,
+                            desktop ? (compact ? 5 : 6) : 6,
+                          ),
+                          child: Column(
+                            children: [
+                              for (final item in group.items) itemBuilder(item),
+                            ],
+                          ),
+                        )
+                      : const SizedBox(width: double.infinity),
                 ),
             ],
           ),
