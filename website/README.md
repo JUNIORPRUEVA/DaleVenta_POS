@@ -38,8 +38,15 @@ PUBLIC_WEB_TEST_URL=http://127.0.0.1:4016 node tests/public-web-smoke.mjs
   El primer paso todavía no crea una cuenta persistente.
 - Un ticket de un solo uso (dos minutos) traspasa la sesión. Flutter lo consume
   antes de iniciar y lo elimina de la URL.
-- El asistente inicial de Flutter sigue recogiendo datos empresariales/fiscales.
-- `/bienvenida` permite revisar el perfil; registro y login van a `/preparando`.
+- Flutter abre la bienvenida nueva y el panel «Activa tu FullPOS». Los datos de
+  empresa, impuestos, logo y e-CF se completan en las pantallas reales enlazadas
+  desde ese panel; `/onboarding` antiguo redirige al POS. El estado legacy del
+  backend se conserva para clientes anteriores y no decide el progreso nuevo.
+- Registro y login generan el ticket desde el formulario y abren Flutter
+  directamente, con el mismo logo de carga; `/preparando` queda como ruta de
+  compatibilidad. `/bienvenida` permite revisar el perfil si se abre explícitamente.
+- El selector de negocio es un diálogo centrado con buscador y opciones por
+  teclado. Las transiciones respetan la preferencia de movimiento reducido.
 - Las cuentas antiguas con empresa activa pueden acceder aunque no tengan las
   membresías nuevas. El cliente actual no tiene selector de empresa: si falta
   empresa activa, muestra soporte en lugar de abrir una sesión incompleta.

@@ -96,11 +96,6 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
       }
     }
 
-    // Un solo onboarding a la vez: mientras el asistente legacy de primera
-    // configuración esté en pantalla, el panel de activación no aparece. Sin
-    // esto se verían dos sistemas de onboarding superpuestos.
-    if (_isLegacyOnboardingRoute(context, ref)) return widget.child;
-
     // Auto-apertura única: el backend recuerda que el usuario ya cerró el panel.
     if (!_autoOpenEvaluated) {
       _autoOpenEvaluated = true;
@@ -125,12 +120,7 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
         pendingSteps > 0 &&
         !_welcomeDismissedThisSession &&
         !panelOpen &&
-        tourKey == null &&
-        // Misma condición que la guarda temprana: mientras el asistente de
-        // primera configuración esté en pantalla, la bienvenida NO se pinta.
-        // Sin esto, la tarjeta se superponía al cuestionario de «Datos de tu
-        // negocio» y las etapas dejaban de ser secuenciales.
-        !_isLegacyOnboardingRoute(context, ref);
+        tourKey == null;
 
     final size = MediaQuery.sizeOf(context);
     final isMobile = size.width < 900;
@@ -172,7 +162,7 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
               },
             ),
           ),
-        if (showWelcome) Positioned.fill(child: _buildWelcome(state)),
+        if (showWelcome) Positioned.fill(child: _buildWelcome(pendingSteps)),
         // La ayuda se abre como columna pegada al borde izquierdo, sin fondo
         // oscuro ni desenfoque: la pantalla sigue visible e interactiva para
         // poder ejecutar los pasos mientras se leen.
@@ -232,19 +222,7 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
     }
   }
 
-  /// `true` cuando la pantalla visible es el asistente legacy de onboarding.
-  bool _isLegacyOnboardingRoute(BuildContext context, WidgetRef ref) {
-    try {
-      final router = ref.watch(routerProvider);
-      final location = router.routerDelegate.currentConfiguration.uri.path;
-      return location == '/onboarding' || location.startsWith('/onboarding/');
-    } catch (_) {
-      // Si el router no está disponible todavía, no se oculta nada.
-      return false;
-    }
-  }
-
-  Widget _buildWelcome(ActivationState state) {
+  Widget _buildWelcome(int pendingSteps) {
     return Stack(
       children: [
         Positioned.fill(
@@ -252,8 +230,9 @@ class _ActivationEntryPointState extends ConsumerState<ActivationEntryPoint> {
         ),
         Positioned.fill(
           child: ActivationWelcomeCard(
-            companyName: 'tu negocio',
-            remainingTasks: state.pending,
+            companyName:
+                ref.read(authStateProvider).user?.companyName ?? 'tu negocio',
+            remainingTasks: pendingSteps,
             onStart: () {
               setState(() => _welcomeDismissedThisSession = true);
               unawaited(

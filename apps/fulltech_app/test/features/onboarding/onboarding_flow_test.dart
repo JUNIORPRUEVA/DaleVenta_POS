@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 class _FakeOnboardingRepository extends OnboardingRepository {
   _FakeOnboardingRepository(this.state) : super(Dio());
@@ -100,6 +101,7 @@ class _AuthenticatedAuthController extends AuthController {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() => initializeDateFormatting('es_DO'));
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -199,45 +201,53 @@ void main() {
     expect(backendSource, isNot(contains('this.prisma.product.findMany')));
   });
 
-  testWidgets('router mantiene /onboarding cuando requiresOnboarding=true', (
-    tester,
-  ) async {
-    final user = _user(requiresOnboarding: true);
-    final repo = _FakeOnboardingRepository(
-      _state(status: 'IN_PROGRESS', shouldShowWelcome: false),
-    );
-    late GoRouter router;
+  testWidgets(
+    'el enlace antiguo no abre el cuestionario aunque requiresOnboarding=true',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final user = _user(requiresOnboarding: true);
+      final repo = _FakeOnboardingRepository(
+        _state(status: 'IN_PROGRESS', shouldShowWelcome: false),
+      );
+      late GoRouter router;
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authStateProvider.overrideWith(
-            (ref) => _AuthenticatedAuthController(ref, user),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith(
+              (ref) => _AuthenticatedAuthController(ref, user),
+            ),
+            appBootstrapStatusProvider.overrideWith(
+              (_) => AppBootstrapStatus.ready,
+            ),
+            businessRegistrationDisabledProvider.overrideWithValue(false),
+            onboardingRepositoryProvider.overrideWithValue(repo),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(routerProvider);
+              return MaterialApp.router(routerConfig: router);
+            },
           ),
-          appBootstrapStatusProvider.overrideWith(
-            (_) => AppBootstrapStatus.ready,
-          ),
-          businessRegistrationDisabledProvider.overrideWithValue(false),
-          onboardingRepositoryProvider.overrideWithValue(repo),
-        ],
-        child: Consumer(
-          builder: (context, ref, _) {
-            router = ref.watch(routerProvider);
-            return MaterialApp.router(routerConfig: router);
-          },
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    addTearDown(router.dispose);
+      );
+      await tester.pumpAndSettle();
+      addTearDown(router.dispose);
 
-    router.go(Routes.onboarding);
-    await tester.pumpAndSettle();
+      router.go(Routes.onboarding);
+      await tester.pumpAndSettle();
 
-    expect(router.routeInformationProvider.value.uri.path, Routes.onboarding);
-    expect(find.byType(OnboardingScreen), findsOneWidget);
-    expect(find.text('Datos de tu negocio'), findsOneWidget);
-  });
+      expect(
+        router.routerDelegate.currentConfiguration.uri.path,
+        Routes.profile,
+      );
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.text('Datos de tu negocio'), findsNothing);
+    },
+  );
 }
 
 OnboardingStateModel _state({
@@ -278,7 +288,13 @@ UserModel _user({required bool requiresOnboarding}) {
     email: 'admin@example.test',
     nombreCompleto: 'Admin',
     telefono: '',
-    role: 'ADMIN',
+    role: 'CAJERO',
+    userPermissions: const {
+      'viewQuotes': false,
+      'viewClients': false,
+      'viewSales': false,
+      'viewCatalog': false,
+    },
     companyId: 'company-a',
     companyName: 'Company A',
     onboardingRequired: requiresOnboarding,

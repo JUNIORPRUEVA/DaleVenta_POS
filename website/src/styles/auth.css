@@ -7,6 +7,22 @@
    ========================================================================== */
 
 /* ---------- Estructura: marca a la izquierda, formulario a la derecha ---- */
+::view-transition-old(auth-card) {
+  animation: auth-card-leave 200ms var(--ease) both;
+}
+::view-transition-new(auth-card) {
+  animation: auth-card-enter 380ms var(--ease) both;
+}
+html[data-auth-motion='enter'] .auth-panel {
+  animation: auth-card-enter 380ms var(--ease) both;
+}
+@keyframes auth-card-enter {
+  from { opacity: 0; transform: translateX(32px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes auth-card-leave {
+  to { opacity: 0; transform: translateX(-20px); }
+}
 .auth-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
@@ -1057,4 +1073,58 @@ body.reg-modal-open {
     max-height: 92dvh;
     border-radius: 18px;
   }
+}
+
+/* Business selection uses the top layer, so it stays centered over every layout. */
+.auth-step-progress { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; color: var(--ink-3); font-size: .78rem; font-weight: 600; }
+.auth-step-done { color: var(--teal); }
+.niche-trigger { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--white); color: var(--ink-3); text-align: left; font: inherit; font-size: .9rem; cursor: pointer; transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
+.niche-trigger:hover, .niche-trigger:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); outline: none; }
+.niche-trigger.has-selection { color: var(--ink); }
+.niche-trigger-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: var(--r-sm); background: var(--blue-soft); color: var(--blue); }
+.niche-trigger svg { width: 18px; height: 18px; stroke-width: 1.8; }
+.niche-chevron { margin-left: auto; flex-shrink: 0; color: var(--ink-3); }
+.field.is-invalid .niche-trigger { border-color: #dc2626; }
+.niche-picker { width: min(680px, calc(100vw - 32px)); max-height: min(80dvh, 720px); margin: auto; padding: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--white); color: var(--ink); box-shadow: var(--shadow-lg); }
+.niche-picker::backdrop { background: rgba(11, 15, 23, .38); backdrop-filter: blur(6px); }
+.niche-picker[open] .niche-picker-content { animation: niche-enter 240ms var(--ease) both; }
+.niche-picker-content { padding: 28px; }
+.niche-picker-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.niche-picker-header .auth-step-label { margin-bottom: 8px; }
+.niche-picker h2 { margin: 0; font-size: clamp(1.2rem, 3vw, 1.5rem); line-height: 1.2; letter-spacing: -.03em; }
+.niche-close { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--white); color: var(--ink-2); font: inherit; font-size: 24px; cursor: pointer; }
+.niche-close:hover { background: var(--blue-soft); color: var(--blue); }
+#niche-description { margin: 12px 0 24px; color: var(--ink-2); font-size: .9rem; }
+.niche-search-label { display: block; margin-bottom: 8px; font-size: .8rem; font-weight: 600; }
+.niche-search { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--blue-soft); color: var(--ink); font: inherit; font-size: .9rem; }
+.niche-search:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.niche-results { margin: 12px 0; font-size: .75rem; color: var(--ink-3); }
+.niche-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 320px; overflow: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 3px; }
+.niche-grid [hidden] { display: none; }
+.niche-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--white); color: var(--ink-2); text-align: left; font: inherit; font-size: .84rem; cursor: pointer; }
+.niche-option svg { width: 18px; height: 18px; flex-shrink: 0; stroke-width: 1.7; color: var(--ink-3); }
+.niche-option:hover, .niche-option:focus-visible, .niche-option[aria-pressed='true'] { border-color: var(--blue-line); background: var(--blue-soft); color: var(--blue-700); outline: none; }
+.niche-option:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.niche-check { margin-left: auto; color: var(--blue); visibility: hidden; }
+.niche-option[aria-pressed='true'] .niche-check { visibility: visible; }
+.niche-empty { padding: 20px 0; color: var(--ink-2); font-size: .85rem; }
+.niche-picker-footer { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: .76rem; line-height: 1.5; }
+@keyframes niche-enter { from { opacity: 0; transform: translateY(8px) scale(.985); } }
+.app-handoff { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; background: #f3f7fa; color: var(--ink); text-align: center; }
+.app-handoff[hidden] { display: none; }
+.app-handoff-brand { display: grid; justify-items: center; gap: 12px; }
+.app-handoff-brand img { border-radius: var(--r-lg); }
+.app-handoff-brand strong { font-size: 1.2rem; letter-spacing: -.03em; }
+.app-handoff-brand span { font-size: .7rem; letter-spacing: .18em; color: var(--ink-3); }
+.app-handoff-spinner { width: 28px; height: 28px; border: 2px solid var(--blue-line); border-top-color: var(--blue); border-radius: 50%; animation: prepare-spin 900ms linear infinite; }
+.app-handoff p { margin: 0; color: var(--ink-2); font-size: .85rem; }
+@media (max-width: 480px) {
+  .niche-picker { width: calc(100vw - 24px); max-height: 88dvh; }
+  .niche-picker-content { padding: 20px; }
+  .niche-grid { grid-template-columns: minmax(0, 1fr); max-height: 42dvh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-auth-motion='enter'] .auth-panel, .niche-picker[open] .niche-picker-content,
+  ::view-transition-old(auth-card), ::view-transition-new(auth-card) { animation: none !important; }
+  .app-handoff-spinner { animation: none; }
 }

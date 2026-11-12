@@ -14,8 +14,12 @@ FullPOS Cloud contains the operational apps and a public static website:
   through `pos.html`. `/api` keeps the existing backend proxy. Auth uses the
   existing API and a two-minute single-use handoff ticket; no separate user or
   tenant store is introduced. Registration creates account and company together
-  only after step two. Flutter onboarding still handles initial company/fiscal
-  setup.
+  only after step two. The form creates the handoff directly; `/preparando`
+  remains for compatibility. Flutter opens the activation welcome and panel;
+  company/fiscal setup remains available through its real configuration routes.
+  The old questionnaire is retired from routing (`/onboarding` redirects to
+  `/home`). Legacy status fields remain for old clients; the new progress is
+  derived from activation data, not from an invented completion flag.
 
 ```text
 Flutter app / PWA / Windows

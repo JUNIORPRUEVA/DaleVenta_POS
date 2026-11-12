@@ -16,6 +16,8 @@ import '../ecf/data/ecf_repository.dart';
 import '../ecf/ui/ecf_config_page.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
+import '../onboarding/application/activation_controller.dart';
+import '../onboarding/presentation/widgets/activation_steps.dart';
 import '../../core/company/company_settings_feedback.dart';
 import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
@@ -216,13 +218,12 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authStateProvider).user;
     final multiWarehouseEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
         true;
+    final activation = ref.watch(activationControllerProvider).valueOrNull;
     final showOnboardingResume =
-        user?.onboardingRequired == true &&
-        user?.onboardingStatus != 'COMPLETED';
+        activation != null && activationPendingSteps(activation) > 0;
     return _SettingsHubScaffold(
       children: [
         if (showOnboardingResume)
@@ -231,7 +232,12 @@ class AccountSettingsScreen extends ConsumerWidget {
             title: 'Termina de preparar FullPOS',
             description: 'Continua la configuracion inicial cuando quieras.',
             accent: AppColors.primary,
-            onTap: () => context.go(Routes.onboarding),
+            onTap: () {
+              ref.read(activationPanelOpenProvider.notifier).state = true;
+              unawaited(
+                ref.read(activationControllerProvider.notifier).reopen(),
+              );
+            },
           ),
         // Empresa va primero: es la configuracion de mayor impacto del negocio
         // (datos fiscales, logo, direccion y contacto) y debe estar disponible

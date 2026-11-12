@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/design_system/typography/app_typography.dart';
 
 /// Bienvenida inicial del onboarding de activación.
 ///
@@ -34,6 +35,7 @@ class ActivationWelcomeCard extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Container(
             decoration: BoxDecoration(
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.border),
               boxShadow: const [
@@ -117,6 +119,7 @@ class ActivationWelcomeCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(9),
                       ),
                       textStyle: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -133,6 +136,7 @@ class ActivationWelcomeCard extends StatelessWidget {
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.textMuted,
                       textStyle: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                       ),

@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import '../styles/auth.css';
 import { site } from '../config/site';
+import AppHandoff from '../components/AppHandoff.astro';
 
 export interface Props {
   title: string;
@@ -33,6 +34,16 @@ const fullTitle = title.includes(site.name) ? title : `${title} · ${site.name}`
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="color-scheme" content="light" />
+    <script is:inline>
+      // Native page transitions where available; a short entry animation otherwise.
+      if ('onpagereveal' in window) {
+        window.addEventListener('pagereveal', function (event) {
+          if (!event.viewTransition) document.documentElement.dataset.authMotion = 'enter';
+        }, { once: true });
+      } else {
+        document.documentElement.dataset.authMotion = 'enter';
+      }
+    </script>
     <link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png" />
     <link rel="icon" href="/icon-48.png" sizes="48x48" type="image/png" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
@@ -181,6 +192,8 @@ const fullTitle = title.includes(site.name) ? title : `${title} · ${site.name}`
         </main>
       </div>
     </div>
+
+    <AppHandoff />
 
     <script>
       // Mostrar / ocultar contraseña: disponible en cualquier pantalla de auth.

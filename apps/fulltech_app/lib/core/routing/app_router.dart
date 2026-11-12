@@ -8,8 +8,6 @@ import '../../features/auth/presentation/landing_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
-import '../../features/onboarding/application/activation_config.dart';
-import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
 import '../../features/user/users_screen.dart';
@@ -135,7 +133,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.onboarding,
-        builder: (context, state) => const OnboardingScreen(),
+        // Preserve old bookmarks without exposing the retired questionnaire.
+        redirect: (context, state) => Routes.home,
       ),
       // El registro de venta vive en el punto de venta principal
       // (`/cotizaciones`). Había dos pantallas para lo mismo y la antigua no
@@ -467,12 +466,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isAuth) {
         if (isAuthRoute) return null;
         return unauthenticatedEntryRoute();
-      }
-
-      if (!ActivationConfig.retireLegacyOnboardingGate &&
-          auth.user?.requiresOnboarding == true &&
-          path != Routes.onboarding) {
-        return Routes.onboarding;
       }
 
       if (isAuth && isAuthRoute) {

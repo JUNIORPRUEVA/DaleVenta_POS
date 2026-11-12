@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/design_system/typography/app_typography.dart';
 import '../../data/activation_models.dart';
 
 /// Fila de tarea del panel de activación.
@@ -203,6 +204,7 @@ class _ExpandedBody extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     textStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -230,6 +232,7 @@ class _ExpandedBody extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       textStyle: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -247,6 +250,7 @@ class _ExpandedBody extends StatelessWidget {
                       minimumSize: const Size(0, 32),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       textStyle: const TextStyle(
+                        fontFamily: AppTypography.fontFamily,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                       ),
@@ -292,6 +296,7 @@ class _SkippedBody extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               textStyle: const TextStyle(
+                fontFamily: AppTypography.fontFamily,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),

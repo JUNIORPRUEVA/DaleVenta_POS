@@ -89,6 +89,23 @@ export function clearSession(): void {
   }
 }
 
+/** One handoff from the current form to Flutter; no intermediate auth page. */
+export async function getAppHandoffUrl(apiBase: string, appUrl = '/home'): Promise<string> {
+  const token = await getAccessToken(apiBase);
+  if (!token) throw new Error('Tu sesión expiró. Inicia sesión para continuar.');
+  const response = await fetch(`${apiBase}/auth/handoff/ticket`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ platform: 'web' }),
+  });
+  if (!response.ok) throw new Error('No pudimos abrir FullPOS. Inicia sesión para continuar.');
+  const data = await response.json() as { ticket?: string };
+  if (!data.ticket?.trim()) throw new Error('El servidor no pudo preparar tu acceso.');
+  const target = new URL(appUrl, window.location.origin);
+  target.searchParams.set('handoff', data.ticket);
+  return target.toString();
+}
+
 /**
  * Devuelve un access token util. Si el guardado expiró, intenta refrescarlo
  * una vez y guarda el par nuevo. Devuelve `null` si ya no hay sesion válida.

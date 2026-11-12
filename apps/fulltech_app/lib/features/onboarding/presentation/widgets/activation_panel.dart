@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/routing/app_router.dart';
 import '../../../../core/routing/routes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/design_system/typography/app_typography.dart';
 import '../../application/activation_controller.dart';
 import '../../data/activation_models.dart';
 import 'activation_segmented_progress.dart';
@@ -601,6 +602,7 @@ class _CompletionCelebrationState extends State<_CompletionCelebration>
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
                                   textStyle: const TextStyle(
+                                    fontFamily: AppTypography.fontFamily,
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1010,6 +1012,7 @@ class _CompanyStepBody extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   textStyle: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1026,6 +1029,7 @@ class _CompanyStepBody extends StatelessWidget {
                 minimumSize: const Size(0, 30),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: const TextStyle(
+                  fontFamily: AppTypography.fontFamily,
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1112,6 +1116,7 @@ class _EcfStepBody extends StatelessWidget {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   textStyle: const TextStyle(
+                    fontFamily: AppTypography.fontFamily,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1131,6 +1136,7 @@ class _EcfStepBody extends StatelessWidget {
                     minimumSize: const Size(0, 32),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     textStyle: const TextStyle(
+                      fontFamily: AppTypography.fontFamily,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   saveSessionFromAuth, readSession, getAccessToken, clearSession,
   SiteSessionStorageError,
+  getAppHandoffUrl,
 } from '../src/scripts/site-session.ts';
 
 const originalFetch = globalThis.fetch;
@@ -21,7 +22,7 @@ beforeEach(() => {
     removeItem: (key) => values.delete(key),
   } });
 });
-afterEach(() => { globalThis.fetch = originalFetch; delete globalThis.sessionStorage; });
+afterEach(() => { globalThis.fetch = originalFetch; delete globalThis.sessionStorage; delete globalThis.window; });
 
 test('persists a complete session across page reads and clears it on logout', () => {
   const saved = saveSessionFromAuth(auth());
@@ -86,4 +87,32 @@ test('a server outage does not erase an otherwise usable access token', async ()
   globalThis.fetch = async () => new Response('{}', { status: 503 });
   assert.equal(await getAccessToken('/api'), 'test-access');
   assert.notEqual(readSession(), null);
+});
+
+test('the form opens Flutter directly using a ticket, without reusable tokens in the URL', async () => {
+  saveSessionFromAuth(auth());
+  globalThis.window = { location: { origin: 'https://local.example.invalid' } };
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith('/me')) return Response.json({});
+    assert.equal(url, '/api/auth/handoff/ticket');
+    assert.equal(options.headers.Authorization, 'Bearer test-access');
+    return Response.json({ ticket: 'single-use-fixture' });
+  };
+  const target = new URL(await getAppHandoffUrl('/api'));
+  assert.equal(target.pathname, '/home');
+  assert.equal(target.searchParams.get('handoff'), 'single-use-fixture');
+  assert.ok(!target.href.includes('test-access') && !target.href.includes('test-refresh'));
+});
+
+test('an expired session cannot navigate into Flutter', async () => {
+  globalThis.fetch = async () => { throw new Error('must not request a ticket'); };
+  await assert.rejects(getAppHandoffUrl('/api'), /sesión expiró/);
+});
+
+test('a missing ticket or failed handoff leaves the form recoverable', async () => {
+  saveSessionFromAuth(auth());
+  globalThis.fetch = async (url) => url.endsWith('/me') ? Response.json({}) : Response.json({});
+  await assert.rejects(getAppHandoffUrl('/api'), /preparar tu acceso/);
+  globalThis.fetch = async (url) => url.endsWith('/me') ? Response.json({}) : new Response('{}', { status: 503 });
+  await assert.rejects(getAppHandoffUrl('/api'), /abrir FullPOS/);
 });
