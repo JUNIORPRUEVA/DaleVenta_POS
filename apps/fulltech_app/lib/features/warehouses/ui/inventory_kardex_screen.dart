@@ -407,6 +407,7 @@ class _MovementCard extends StatelessWidget {
     return _Surface(
       margin: const EdgeInsets.only(bottom: 10),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: () => _showMovementDetail(context, movement),
         child: Padding(
           padding: const EdgeInsets.all(12),

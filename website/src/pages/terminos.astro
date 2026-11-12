@@ -1,0 +1,80 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../config/site';
+---
+
+<BaseLayout
+  title="Términos y condiciones"
+  description="Términos y condiciones de uso de FullPOS Cloud, plataforma de punto de venta y gestión empresarial de FULLTECH SRL."
+  path="/terminos"
+>
+  <section class="section">
+    <div class="container prose">
+      <span class="eyebrow">Última actualización: 14 de agosto de 2026</span>
+      <h1>Términos y condiciones</h1>
+      <p class="lead">
+        Estos términos regulan el uso de FullPOS Cloud, una plataforma de punto de venta y
+        gestión empresarial ofrecida por FULLTECH SRL.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top: 0">
+    <div class="container prose">
+      <h2>Naturaleza del servicio</h2>
+      <p>
+        FullPOS Cloud permite administrar ventas, caja, inventario, clientes, compras,
+        cotizaciones, documentos, usuarios y otros módulos empresariales según la configuración
+        contratada o habilitada.
+      </p>
+
+      <div class="grid" style="margin-top: 18px">
+        <article class="card">
+          <h2>Uso autorizado</h2>
+          <p>El usuario debe usar la plataforma para operaciones legítimas de su empresa y mantener actualizada la información que registre.</p>
+        </article>
+        <article class="card">
+          <h2>Credenciales</h2>
+          <p>Cada usuario es responsable de proteger su contraseña, dispositivos y sesiones. Debe reportar accesos no autorizados tan pronto los detecte.</p>
+        </article>
+        <article class="card">
+          <h2>Disponibilidad</h2>
+          <p>FULLTECH SRL trabaja para mantener el servicio disponible, pero pueden existir interrupciones por mantenimiento, conectividad, proveedores o causas fuera de control razonable.</p>
+        </article>
+        <article class="card">
+          <h2>Respaldo y sincronización</h2>
+          <p>La plataforma incluye funciones de sincronización y caché local. La empresa debe revisar sus cierres, documentos y respaldos operativos de acuerdo con sus procesos internos.</p>
+        </article>
+        <article class="card">
+          <h2>Mantenimiento</h2>
+          <p>Podemos aplicar actualizaciones, correcciones o cambios técnicos para seguridad, estabilidad o mejora del servicio.</p>
+        </article>
+        <article class="card">
+          <h2>Suspensión</h2>
+          <p>Podemos suspender cuentas por abuso, uso indebido, riesgos de seguridad, falta de licencia vigente o incumplimiento relevante de estos términos.</p>
+        </article>
+      </div>
+
+      <h2>Propiedad intelectual y contenido</h2>
+      <p>
+        FullPOS Cloud, su diseño y software pertenecen a FULLTECH SRL o sus licenciantes. La
+        empresa usuaria conserva responsabilidad sobre los datos, documentos, archivos,
+        productos, clientes y demás contenido que registre.
+      </p>
+
+      <h2>Limitación razonable de responsabilidad</h2>
+      <p>
+        El servicio se ofrece para apoyar la gestión empresarial. El usuario debe validar
+        información fiscal, contable, inventario, precios y documentos antes de usarlos para
+        decisiones críticas o reportes externos.
+      </p>
+
+      <h2>Modificaciones, terminación y contacto</h2>
+      <p>
+        Podemos actualizar estos términos cuando el servicio cambie. Para consultas, escribe a
+        {" "}<a href={`mailto:${site.supportEmail}`}>{site.supportEmail}</a> o visita
+        {" "}<a href="/soporte">Soporte</a>.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

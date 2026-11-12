@@ -771,6 +771,7 @@ class EcfDgiiApplicationWizardState
                     // Toda la fila es pulsable: la casilla sola es un objetivo
                     // pequeño en móvil.
                     child: InkWell(
+                      mouseCursor: SystemMouseCursors.click,
                       onTap: () => setDialogState(() => accepted = !accepted),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(

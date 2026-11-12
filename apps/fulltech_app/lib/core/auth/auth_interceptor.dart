@@ -17,8 +17,12 @@ class AuthInterceptor extends Interceptor {
   static const String _retryFlagKey = '__auth_retry';
   Future<_RefreshAttempt>? _refreshFuture;
 
-  AuthInterceptor(this.tokenStorage, this.sessionEvents, this.dio)
-    : _refreshDio = Dio(dio.options);
+  AuthInterceptor(
+    this.tokenStorage,
+    this.sessionEvents,
+    this.dio, {
+    Dio? refreshDio,
+  }) : _refreshDio = refreshDio ?? Dio(dio.options);
 
   @override
   void onRequest(
@@ -125,6 +129,12 @@ class AuthInterceptor extends Interceptor {
 
           final refreshed = await _refresh(refreshToken);
           if (!refreshed.isSuccess) {
+            // Carrera de renovación: si otra petición ya renovó y guardó tokens
+            // nuevos, este intento perdió usando el token anterior. El servidor
+            // lo rechaza como inválido, pero la sesión sigue viva: se reutilizan
+            // los tokens vigentes en vez de cerrar sesión.
+            final winner = await _tokensUpdatedByAnotherRefresh(refreshToken);
+            if (winner != null) return winner;
             return refreshed;
           }
 
@@ -141,6 +151,27 @@ class AuthInterceptor extends Interceptor {
         });
 
     return _refreshFuture!;
+  }
+
+  /// Detecta que otra petición ya renovó la sesión mientras este intento perdía
+  /// la carrera con el token anterior. Devuelve el intento con el access token
+  /// vigente (sin volver a guardar nada) o `null` si no hubo carrera.
+  Future<_RefreshAttempt?> _tokensUpdatedByAnotherRefresh(
+    String sentRefreshToken,
+  ) async {
+    try {
+      final currentRefresh = await tokenStorage.getRefreshToken();
+      if (currentRefresh == null ||
+          currentRefresh.isEmpty ||
+          currentRefresh == sentRefreshToken) {
+        return null;
+      }
+      final currentAccess = await tokenStorage.getAccessToken();
+      if (currentAccess == null || currentAccess.isEmpty) return null;
+      return _RefreshAttempt.success(accessToken: currentAccess);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<_RefreshAttempt> _refresh(String refreshToken) async {

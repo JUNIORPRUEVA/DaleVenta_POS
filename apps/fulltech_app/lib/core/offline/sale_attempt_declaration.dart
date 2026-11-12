@@ -54,8 +54,7 @@ class SaleAttemptDeclaration {
   /// Importe normalizado a 2 decimales, tal como lo guarda la base de datos.
   String get normalizedTotal => totalDeclared.toStringAsFixed(2);
 
-  String get declaredAtIso =>
-      declaredAtUtc.toUtc().toIso8601String();
+  String get declaredAtIso => declaredAtUtc.toUtc().toIso8601String();
 
   /// Huella del contenido declarado: identidad de la operación, importe, medio
   /// de pago, actor y nota.
@@ -79,7 +78,8 @@ class SaleAttemptDeclaration {
 
   /// Identidad local de la declaración. Una corrección de importe, de medio de
   /// pago o de nota es una declaración NUEVA; repetir lo mismo no lo es.
-  String get localId => '$_localPrefix$clientRequestId:${contentHash.substring(0, 12)}';
+  String get localId =>
+      '$_localPrefix$clientRequestId:${contentHash.substring(0, 12)}';
 
   /// `válida` exige identidad, importe positivo y hora.
   bool get isValid =>
@@ -124,9 +124,10 @@ class SaleAttemptDeclaration {
     };
   }
 
-  static SaleAttemptDeclaration? fromQueuePayload(Map<String, dynamic> payload) {
-    final requestId =
-        (payload['clientRequestId'] ?? '').toString().trim();
+  static SaleAttemptDeclaration? fromQueuePayload(
+    Map<String, dynamic> payload,
+  ) {
+    final requestId = (payload['clientRequestId'] ?? '').toString().trim();
     if (requestId.isEmpty) return null;
     final total = _toDouble(payload['totalDeclared']);
     final declaredAt = DateTime.tryParse(
@@ -143,9 +144,7 @@ class SaleAttemptDeclaration {
       declaredByRole: payload['declaredByRole']?.toString(),
       note: payload['note']?.toString(),
       operationFingerprint: payload['operationFingerprint']?.toString(),
-      attemptPayload: attempt is Map
-          ? attempt.cast<String, dynamic>()
-          : null,
+      attemptPayload: attempt is Map ? attempt.cast<String, dynamic>() : null,
     );
   }
 

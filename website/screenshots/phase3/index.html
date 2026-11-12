@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FullPOS Cloud · Fase 3 · Índice visual</title>
+    <style>
+      :root {
+        --ink: #0b0f17;
+        --ink-2: #46505f;
+        --ink-3: #6d7684;
+        --line: #eceff4;
+        --blue: #0b5cff;
+        --blue-soft: #f2f6ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px clamp(16px, 4vw, 48px) 64px;
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: #fbfcfe;
+      }
+      h1 { font-size: 1.5rem; letter-spacing: -0.03em; margin: 0 0 6px; }
+      .sub { margin: 0 0 28px; color: var(--ink-3); font-size: 0.9rem; }
+      .env {
+        margin: 0 0 28px;
+        padding: 12px 14px;
+        border: 1px solid #dbe6ff;
+        background: var(--blue-soft);
+        border-radius: 10px;
+        font-size: 0.85rem;
+        line-height: 1.7;
+        color: var(--ink-2);
+      }
+      .env code { font-size: 0.83rem; color: var(--blue); }
+      .env span.det { color: #b42318; font-weight: 600; }
+      section { margin-bottom: 34px; }
+      h2 {
+        font-size: 0.95rem;
+        letter-spacing: -0.01em;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      h2 small { font-weight: 400; color: var(--ink-3); font-size: 0.8rem; margin-left: 8px; }
+      .row { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+      @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+      figure { margin: 0; }
+      figcaption {
+        font-size: 0.76rem;
+        color: var(--ink-3);
+        margin-bottom: 6px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+      .single { max-width: 900px; }
+    </style>
+  </head>
+  <body>
+    <h1>FullPOS Cloud · Fase 3 · Verificación real en navegador</h1>
+    <p class="sub">
+      Capturas tomadas con Playwright contra servicios <strong>exclusivamente locales</strong>.
+      Ninguna imagen contiene tokens, contraseñas ni correos completos visibles.
+    </p>
+
+    <p class="env">
+      Sitio Astro <code>http://127.0.0.1:4330</code> ·
+      App Flutter Web <code>http://127.0.0.1:4400</code> ·
+      API <code>http://127.0.0.1:4004</code> ·
+      PostgreSQL <code>127.0.0.1:56561</code> (daleventa_local)<br />
+      Escritorio 1280 × 860 · Móvil 390 × 844 ·
+      <span class="det">Producción no utilizada</span>
+    </p>
+
+    <section>
+      <h2>1. Registro <small>una sola pantalla, 5 campos</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Escritorio 1280</figcaption>
+          <img src="desktop-01-registro.png" alt="Registro en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Móvil 390</figcaption>
+          <img src="mobile-01-registro.png" alt="Registro en móvil" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Iniciar sesión <small>estado normal y error de credenciales</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Escritorio 1280</figcaption>
+          <img src="desktop-09-login.png" alt="Login en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Móvil 390</figcaption>
+          <img src="mobile-02-login.png" alt="Login en móvil" />
+        </figure>
+      </div>
+      <div class="row" style="margin-top: 18px">
+        <figure>
+          <figcaption>Error de credenciales · 401 · se queda en el login</figcaption>
+          <img src="desktop-10-login-error.png" alt="Error de credenciales" />
+        </figure>
+        <figure>
+          <figcaption>Registro duplicado · 409 · sin crear empresa</figcaption>
+          <img src="desktop-13-registro-duplicado.png" alt="Registro duplicado" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Bienvenida <small>nombre real de la empresa + 3 preguntas</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Escritorio 1280</figcaption>
+          <img src="desktop-02-bienvenida.png" alt="Bienvenida en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Móvil 390 · respuestas guardadas al reabrir</figcaption>
+          <img src="mobile-03-bienvenida.png" alt="Bienvenida en móvil" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Invitación al asistente <small>recorrido opcional, no bloquea</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Escritorio 1280</figcaption>
+          <img src="desktop-04-recorrido.png" alt="Invitación al recorrido en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Móvil 390</figcaption>
+          <img src="mobile-04-recorrido.png" alt="Invitación al recorrido en móvil" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Preparando el espacio de trabajo <small>sin porcentajes falsos</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Escritorio 1280</figcaption>
+          <img src="desktop-05-preparando.png" alt="Pantalla de preparación en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Móvil 390</figcaption>
+          <img src="mobile-05-preparando.png" alt="Pantalla de preparación en móvil" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>6. Entrada a Flutter Web <small>sesión entregada, sin segundo login</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Escritorio 1280</figcaption>
+          <img src="desktop-06-app-entry.png" alt="Entrada a la app en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Móvil 390</figcaption>
+          <img src="mobile-06-app-entry.png" alt="Entrada a la app en móvil" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>7. POS autenticado <small>Facturación con la empresa correcta</small></h2>
+      <figure class="single">
+        <figcaption>Escritorio 1280 · /cotizaciones · empresa «Colmado»</figcaption>
+        <img src="desktop-15-pos.png" alt="POS en escritorio" />
+      </figure>
+    </section>
+
+    <section>
+      <h2>8. Sesión restaurada <small>recarga y reapertura sin pedir credenciales</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Reapertura de la app</figcaption>
+          <img src="desktop-07-reapertura-sesion.png" alt="Reapertura de sesión" />
+        </figure>
+        <figure>
+          <figcaption>Refresh de la ruta profunda</figcaption>
+          <img src="desktop-08-refresh.png" alt="Refresh de la ruta profunda" />
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>9. Estados de error <small>recuperable y sesión expirada</small></h2>
+      <div class="row">
+        <figure>
+          <figcaption>Error recuperable · escritorio 1280</figcaption>
+          <img src="desktop-14-error-recuperable.png" alt="Error recuperable en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Error recuperable · móvil 390</figcaption>
+          <img src="mobile-08-error-recuperable.png" alt="Error recuperable en móvil" />
+        </figure>
+      </div>
+      <div class="row" style="margin-top: 18px">
+        <figure>
+          <figcaption>Sesión expirada · escritorio 1280</figcaption>
+          <img src="desktop-16-sesion-expirada.png" alt="Sesión expirada en escritorio" />
+        </figure>
+        <figure>
+          <figcaption>Sesión expirada · móvil 390</figcaption>
+          <img src="mobile-07-sesion-expirada.png" alt="Sesión expirada en móvil" />
+        </figure>
+      </div>
+    </section>
+  </body>
+</html>

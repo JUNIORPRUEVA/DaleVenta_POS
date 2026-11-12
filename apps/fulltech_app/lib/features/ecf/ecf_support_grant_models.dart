@@ -80,9 +80,7 @@ class EcfSupportGrant {
     return EcfSupportGrant(
       id: (json['id'] ?? '') as String,
       scopes: (json['scopes'] is List)
-          ? (json['scopes'] as List)
-                .whereType<String>()
-                .toList(growable: false)
+          ? (json['scopes'] as List).whereType<String>().toList(growable: false)
           : const <String>[],
       reason: json['reason'] as String?,
       createdAt: _parseDate(json['createdAt']),
@@ -137,7 +135,8 @@ class EcfSupportGrantList {
 
 DateTime _parseDate(dynamic value) {
   if (value is String) {
-    return DateTime.tryParse(value)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return DateTime.tryParse(value)?.toLocal() ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
   return DateTime.fromMillisecondsSinceEpoch(0);
 }

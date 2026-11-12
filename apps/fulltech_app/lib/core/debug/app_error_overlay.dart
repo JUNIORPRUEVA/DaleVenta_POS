@@ -6,7 +6,25 @@ import 'app_diagnostics.dart';
 import 'app_error_diagnostics_sheet.dart';
 import 'app_error_reporter.dart';
 
-/// Compact, non-blocking notification shown at the top of the screen.
+/// Ancho lógico desde el cual el aviso se ancla **abajo a la derecha**.
+///
+/// Es el mismo umbral con el que el POS decide que está en escritorio
+/// (`global_ai_assistant_entry_point.dart`). Por debajo, el pie de la pantalla
+/// lo ocupan Cobrar/Cotizar y taparlos sí interrumpiría una venta.
+const double kDesktopErrorNoticeMinWidth = 900;
+
+/// Altura reservada en la parte inferior de la ventana para la barra de
+/// acciones del POS (Cobrar / Guardar / Limpiar).
+///
+/// El aviso se ancla **por encima** de esa franja: así queda abajo a la derecha
+/// (lo discreto) sin tapar nunca los controles con los que el comercio cobra.
+const double kErrorNoticeBottomReservedHeight = 80;
+
+/// Compact, non-blocking notification for incidents.
+///
+/// Placement: desktop (width >= [kDesktopErrorNoticeMinWidth]) anchors it to the
+/// bottom-right corner, above the POS action bar; compact layouts keep it at the
+/// top because the cart footer occupies the bottom of the screen.
 ///
 /// Customer-facing rules:
 /// - Never shows technical information (exception text, endpoints, status
@@ -100,7 +118,10 @@ class _AppErrorOverlayState extends State<AppErrorOverlay> {
     final scheme = Theme.of(context).colorScheme;
     switch (severity) {
       case AppErrorSeverity.warning:
-        return const Color(0xFFB45309);
+        // Neutro a propósito: un fallo recuperable (por ejemplo el actualizador)
+        // no debe alarmar al comercio. `error` y `fatal` conservan el rojo del
+        // tema porque exigen intervención.
+        return scheme.onSurfaceVariant;
       case AppErrorSeverity.fatal:
       case AppErrorSeverity.error:
         return scheme.error;
@@ -110,7 +131,7 @@ class _AppErrorOverlayState extends State<AppErrorOverlay> {
   IconData _severityIcon(AppErrorSeverity severity) {
     switch (severity) {
       case AppErrorSeverity.warning:
-        return Icons.warning_amber_rounded;
+        return Icons.info_outline_rounded;
       case AppErrorSeverity.fatal:
         return Icons.dangerous_rounded;
       case AppErrorSeverity.error:
@@ -167,6 +188,166 @@ class _NotificationBanner extends StatelessWidget {
     final width = mediaQuery.size.width;
     final isCompact = width < 600;
     final topOffset = mediaQuery.viewPadding.top + kToolbarHeight + 8;
+    // Escritorio (Windows): el aviso se ancla en la esquina inferior derecha,
+    // lejos de la barra superior y del buscador. En layouts compactos el pie de
+    // la pantalla lo ocupan Cobrar/Cotizar, así que ahí se mantiene arriba.
+    final isDesktopLayout = width >= kDesktopErrorNoticeMinWidth;
+    // Aviso **recuperable** (`warning`) y **sin acción posible**: dos líneas
+    // exactas, sin fila de acciones. Un fallo del actualizador no interrumpe: el
+    // comercio solo necesita saber que puede seguir trabajando. Si el usuario SÍ
+    // puede actuar (reintentar una impresión, por ejemplo) se mantiene el diseño
+    // completo, y `error`/`fatal` conservan siempre su fila de acciones.
+    final isNeutralNotice =
+        error.severity == AppErrorSeverity.warning && onRetry == null;
+    final showActions =
+        onRetry != null || (onDiagnostics != null && !isNeutralNotice);
+
+    final card = Semantics(
+      liveRegion: true,
+      container: true,
+      label: '${error.title}. ${error.userMessage}',
+      child: Material(
+        color: scheme.surface,
+        elevation: 6,
+        shadowColor: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(isNeutralNotice ? 12 : 14),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(isNeutralNotice ? 12 : 14),
+            border: Border(left: BorderSide(color: severityColor, width: 3)),
+          ),
+          padding: isNeutralNotice
+              ? const EdgeInsets.fromLTRB(10, 6, 2, 6)
+              : const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          child: Row(
+            crossAxisAlignment: isNeutralNotice
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(top: isNeutralNotice ? 0 : 1),
+                child: Icon(
+                  severityIcon,
+                  size: isNeutralNotice ? 16 : 18,
+                  color: severityColor,
+                ),
+              ),
+              SizedBox(width: isNeutralNotice ? 7 : 8),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      error.title,
+                      maxLines: isNeutralNotice ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: isNeutralNotice
+                          ? TextStyle(
+                              fontSize: 12.5,
+                              height: 1.2,
+                              letterSpacing: 0,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface,
+                            )
+                          : theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                    ),
+                    if (error.userMessage.trim().isNotEmpty) ...[
+                      SizedBox(height: isNeutralNotice ? 1 : 2),
+                      Text(
+                        error.userMessage,
+                        maxLines: isNeutralNotice ? 1 : (isCompact ? 3 : 2),
+                        overflow: TextOverflow.ellipsis,
+                        style: isNeutralNotice
+                            ? TextStyle(
+                                fontSize: 12,
+                                height: 1.25,
+                                letterSpacing: 0,
+                                fontWeight: FontWeight.w500,
+                                color: scheme.onSurfaceVariant,
+                              )
+                            : theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                height: 1.35,
+                              ),
+                      ),
+                    ],
+                    if (showActions) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (onRetry != null)
+                            _BannerAction(
+                              onPressed: retrying ? null : onRetry,
+                              busy: retrying,
+                              filled: true,
+                              label: error.retryLabel ?? 'Reintentar',
+                            ),
+                          if (onDiagnostics != null)
+                            _BannerAction(
+                              onPressed: onDiagnostics,
+                              filled: false,
+                              label: 'Detalles',
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // SIN `tooltip:` a propósito.
+              //
+              // Este banner vive en el `builder` de MaterialApp, es
+              // decir POR ENCIMA del Navigator, donde no existe ningún
+              // Overlay. `Tooltip`/`RawTooltip` exige un Overlay
+              // ancestro y, al mostrarse (hover/tap), lanza un
+              // FlutterError duro (también en release) que taparía el
+              // error original con un segundo error del propio sistema
+              // de errores. La accesibilidad se conserva etiquetando
+              // el icono (`Icon.semanticLabel`), que no necesita
+              // Overlay.
+              IconButton(
+                onPressed: onDismiss,
+                padding: isNeutralNotice ? EdgeInsets.zero : null,
+                constraints: isNeutralNotice
+                    ? const BoxConstraints(minWidth: 28, minHeight: 28)
+                    : null,
+                visualDensity: VisualDensity.compact,
+                iconSize: isNeutralNotice ? 16 : 18,
+                icon: Icon(
+                  Icons.close_rounded,
+                  semanticLabel: 'Cerrar',
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (isDesktopLayout) {
+      // El desplazamiento respeta la barra de tareas y el escalado DPI, y sube
+      // por encima de la franja de acciones del POS. El aviso ocupa SÓLO su
+      // propia caja: nunca captura clics fuera de ella, así que no bloquea la
+      // navegación ni una venta en curso.
+      return Positioned(
+        right: 16 + mediaQuery.viewPadding.right,
+        bottom:
+            16 +
+            mediaQuery.viewPadding.bottom +
+            kErrorNoticeBottomReservedHeight,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: card,
+        ),
+      );
+    }
 
     return Positioned(
       top: topOffset,
@@ -181,112 +362,7 @@ class _NotificationBanner extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: isCompact ? 12 : 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
-              child: Semantics(
-                liveRegion: true,
-                container: true,
-                label: '${error.title}. ${error.userMessage}',
-                child: Material(
-                  color: scheme.surface,
-                  elevation: 6,
-                  shadowColor: Colors.black.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border(
-                        left: BorderSide(color: severityColor, width: 4),
-                      ),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 1),
-                          child: Icon(
-                            severityIcon,
-                            size: 20,
-                            color: severityColor,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                error.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              if (error.userMessage.trim().isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  error.userMessage,
-                                  maxLines: isCompact ? 3 : 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                    height: 1.35,
-                                  ),
-                                ),
-                              ],
-                              if (onRetry != null || onDiagnostics != null) ...[
-                                const SizedBox(height: 6),
-                                Wrap(
-                                  spacing: 4,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    if (onRetry != null)
-                                      _BannerAction(
-                                        onPressed: retrying ? null : onRetry,
-                                        busy: retrying,
-                                        filled: true,
-                                        label: error.retryLabel ?? 'Reintentar',
-                                      ),
-                                    if (onDiagnostics != null)
-                                      _BannerAction(
-                                        onPressed: onDiagnostics,
-                                        filled: false,
-                                        label: 'Detalles',
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        // SIN `tooltip:` a propósito.
-                        //
-                        // Este banner vive en el `builder` de MaterialApp, es
-                        // decir POR ENCIMA del Navigator, donde no existe ningún
-                        // Overlay. `Tooltip`/`RawTooltip` exige un Overlay
-                        // ancestro y, al mostrarse (hover/tap), lanza un
-                        // FlutterError duro (también en release) que taparía el
-                        // error original con un segundo error del propio sistema
-                        // de errores. La accesibilidad se conserva etiquetando
-                        // el icono (`Icon.semanticLabel`), que no necesita
-                        // Overlay.
-                        IconButton(
-                          onPressed: onDismiss,
-                          visualDensity: VisualDensity.compact,
-                          iconSize: 18,
-                          icon: Icon(
-                            Icons.close_rounded,
-                            semanticLabel: 'Cerrar',
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              child: card,
             ),
           ),
         ),
@@ -340,4 +416,3 @@ class _BannerAction extends StatelessWidget {
     return TextButton(onPressed: onPressed, style: style, child: child);
   }
 }
-

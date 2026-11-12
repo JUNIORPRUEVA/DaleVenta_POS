@@ -26,14 +26,14 @@ DateTime? parseServerInstant(Object? value) {
   if (!_hasExplicitTimeZone(text)) {
     return toBusinessTime(
       DateTime.utc(
-      parsed.year,
-      parsed.month,
-      parsed.day,
-      parsed.hour,
-      parsed.minute,
-      parsed.second,
-      parsed.millisecond,
-      parsed.microsecond,
+        parsed.year,
+        parsed.month,
+        parsed.day,
+        parsed.hour,
+        parsed.minute,
+        parsed.second,
+        parsed.millisecond,
+        parsed.microsecond,
       ),
     );
   }
@@ -65,26 +65,22 @@ String businessDateKey(DateTime instant) {
 
 DateTime businessDayStartUtc(DateTime businessDate) {
   final location = businessLocation;
-  return tz
-      .TZDateTime(
-        location,
-        businessDate.year,
-        businessDate.month,
-        businessDate.day,
-      )
-      .toUtc();
+  return tz.TZDateTime(
+    location,
+    businessDate.year,
+    businessDate.month,
+    businessDate.day,
+  ).toUtc();
 }
 
 DateTime businessDayEndExclusiveUtc(DateTime businessDate) {
   final location = businessLocation;
-  return tz
-      .TZDateTime(
-        location,
-        businessDate.year,
-        businessDate.month,
-        businessDate.day + 1,
-      )
-      .toUtc();
+  return tz.TZDateTime(
+    location,
+    businessDate.year,
+    businessDate.month,
+    businessDate.day + 1,
+  ).toUtc();
 }
 
 bool sameBusinessDay(DateTime left, DateTime right) {

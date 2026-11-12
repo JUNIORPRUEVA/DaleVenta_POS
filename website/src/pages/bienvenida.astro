@@ -1,0 +1,543 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+
+const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/';
+
+/*
+ * Bienvenida del sitio publico (Astro) ANTES de entrar a FullPOS.
+ *
+ * Flujo real, contra el API local/UAT unicamente:
+ *   registro o login -> esta pantalla -> respuestas -> recorrido (opcional)
+ *   -> preparacion -> handoff de sesion -> app Flutter Web.
+ *
+ * Reglas que respeta:
+ * - Reutiliza el onboarding que ya existe en el backend
+ *   (`GET/PUT /onboarding/welcome`, `PATCH /onboarding/tutorial`); no crea un
+ *   segundo onboarding ni toca el de Flutter.
+ * - Guarda las respuestas en el perfil de la empresa autenticada; repetir el
+ *   envio actualiza la misma fila.
+ * - Si la empresa ya respondio, se saltan las preguntas salvo que se abra la
+ *   pantalla con `?revisar=1`.
+ * - Nunca cambia plan, licencia, trial, almacenes, cajas ni permisos.
+ * - El nombre del negocio sale del backend, nunca se inventa.
+ */
+---
+
+<AuthLayout
+  title="Bienvenida"
+  description="Cuéntanos un poco sobre tu negocio para preparar FullPOS Cloud a tu medida."
+  path="/bienvenida"
+>
+  <div
+    class="auth-panel auth-panel--welcome"
+    data-welcome-root
+    data-api={apiBase}
+    data-app-url={appUrl}
+  >
+    <!-- Cargando el contexto real de la empresa -->
+    <section data-welcome-step="loading" class="welcome-loading" aria-live="polite">
+      <span class="welcome-spinner" aria-hidden="true"></span>
+      <p class="auth-sub">Verificando tu cuenta…</p>
+    </section>
+
+    <!-- Paso 1: las tres preguntas -->
+    <section data-welcome-step="form" class="form-hidden">
+      <h1>¡Bienvenido a FullPOS!</h1>
+      <p class="welcome-company" data-company hidden></p>
+      <p class="auth-sub">
+        Queremos conocer un poco tu negocio para ofrecerte una mejor experiencia.
+      </p>
+
+      <form data-welcome-form novalidate>
+        <div class="welcome-field" data-field="businessType">
+          <label for="businessType">¿Qué tipo de negocio tienes?</label>
+          <select
+            id="businessType"
+            name="businessType"
+            required
+            aria-describedby="error-businessType"
+          >
+            <option value="" selected disabled>Selecciona una opción</option>
+          </select>
+          <p
+            class="field-error"
+            id="error-businessType"
+            data-error="businessType"
+            aria-live="polite"
+            hidden
+          >
+          </p>
+        </div>
+
+        <div class="welcome-field" data-field="businessAgeRange">
+          <label for="businessAgeRange">¿Cuánto tiempo tiene tu negocio?</label>
+          <select
+            id="businessAgeRange"
+            name="businessAgeRange"
+            required
+            aria-describedby="error-businessAgeRange"
+          >
+            <option value="" selected disabled>Selecciona una opción</option>
+          </select>
+          <p
+            class="field-error"
+            id="error-businessAgeRange"
+            data-error="businessAgeRange"
+            aria-live="polite"
+            hidden
+          >
+          </p>
+        </div>
+
+        <div class="welcome-field" data-field="businessSize">
+          <label for="businessSize">¿Qué tamaño tiene tu negocio?</label>
+          <select
+            id="businessSize"
+            name="businessSize"
+            required
+            aria-describedby="error-businessSize"
+          >
+            <option value="" selected disabled>Selecciona una opción</option>
+          </select>
+          <p
+            class="field-error"
+            id="error-businessSize"
+            data-error="businessSize"
+            aria-live="polite"
+            hidden
+          >
+          </p>
+        </div>
+
+        <p class="form-alert" data-form-alert hidden role="alert"></p>
+
+        <button class="btn btn-primary btn-block" type="submit" data-welcome-submit>
+          Continuar
+        </button>
+      </form>
+    </section>
+
+    <!-- Paso 2: recorrido opcional (no implementado aqui) -->
+    <section data-welcome-step="tour" class="form-hidden">
+      <h2 class="welcome-title">¿Quieres que te mostremos cómo funciona FullPOS?</h2>
+      <p class="auth-sub">
+        Un recorrido corto por las partes que más vas a usar: ventas, inventario y caja.
+      </p>
+
+      <button class="btn btn-primary btn-block" type="button" data-tour-start>
+        Comenzar recorrido
+      </button>
+      <button class="welcome-skip" type="button" data-tour-skip>Omitir por ahora</button>
+    </section>
+
+    <!-- Paso 3: preparando el espacio de trabajo -->
+    <section data-welcome-step="preparing" class="form-hidden" aria-live="polite">
+      <div class="prepare-head">
+        <span class="prepare-orbit" aria-hidden="true">
+          <span class="prepare-orbit-dot"></span>
+        </span>
+        <h2 class="welcome-title">Estamos preparando tu espacio de trabajo</h2>
+        <p class="auth-sub">
+          Un momento, estamos verificando que todo esté listo para comenzar.
+        </p>
+      </div>
+      <p class="prepare-status" data-prepare-status role="status">
+        Verificando tu cuenta y tu empresa…
+      </p>
+    </section>
+
+    <!-- Error recuperable: reintento seguro (no repite el registro) -->
+    <section data-welcome-step="failed" class="form-hidden" aria-live="assertive">
+      <div class="prepare-head">
+        <span class="prepare-mark prepare-mark--error" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 9v4m0 4h.01M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+          </svg>
+        </span>
+        <h2 class="welcome-title">No pudimos preparar tu espacio</h2>
+        <p class="auth-sub" data-fail-message>
+          Ocurrió un problema al conectar con el servidor. Tu cuenta ya está creada; no
+          hace falta registrarte otra vez.
+        </p>
+      </div>
+      <button class="btn btn-primary btn-block" type="button" data-prepare-retry>
+        Reintentar
+      </button>
+      <button class="welcome-skip" type="button" data-prepare-login>
+        Volver a iniciar sesión
+      </button>
+    </section>
+
+    <!-- Sesion expirada: vuelta segura al login -->
+    <section data-welcome-step="expired" class="form-hidden" aria-live="assertive">
+      <div class="prepare-head">
+        <span class="prepare-mark" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 8v4l3 2" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+        </span>
+        <h2 class="welcome-title">Tu sesión expiró</h2>
+        <p class="auth-sub">
+          Por seguridad cerramos la sesión del sitio. Entra de nuevo y continuamos donde
+          estabas.
+        </p>
+      </div>
+      <a class="btn btn-primary btn-block" href="/login">Iniciar sesión</a>
+    </section>
+  </div>
+</AuthLayout>
+
+<script>
+  import { clearSession, getAccessToken } from '../scripts/site-session';
+
+  type WelcomeOptions = {
+    businessTypes?: string[];
+    businessAgeRanges?: string[];
+    businessSizes?: string[];
+  };
+
+  type WelcomeContext = {
+    companyName?: string;
+    businessType?: string;
+    businessAgeRange?: string;
+    businessSize?: string;
+    completedAt?: string | null;
+    options?: WelcomeOptions;
+  };
+
+  const root = document.querySelector<HTMLElement>('[data-welcome-root]');
+
+  if (root) {
+    const apiBase = (root.dataset.api ?? '/api').replace(/\/+$/, '');
+    const appUrl = root.dataset.appUrl ?? '/';
+    const reviewMode = new URL(window.location.href).searchParams.get('revisar') === '1';
+
+    const stepEls = {
+      loading: root.querySelector<HTMLElement>('[data-welcome-step="loading"]')!,
+      form: root.querySelector<HTMLElement>('[data-welcome-step="form"]')!,
+      tour: root.querySelector<HTMLElement>('[data-welcome-step="tour"]')!,
+      preparing: root.querySelector<HTMLElement>('[data-welcome-step="preparing"]')!,
+      failed: root.querySelector<HTMLElement>('[data-welcome-step="failed"]')!,
+      expired: root.querySelector<HTMLElement>('[data-welcome-step="expired"]')!,
+    };
+    type StepName = keyof typeof stepEls;
+
+    const form = root.querySelector<HTMLFormElement>('[data-welcome-form]')!;
+    const submitBtn = root.querySelector<HTMLButtonElement>('[data-welcome-submit]')!;
+    const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
+    const companyEl = root.querySelector<HTMLElement>('[data-company]')!;
+    const statusEl = root.querySelector<HTMLElement>('[data-prepare-status]')!;
+    const failMessage = root.querySelector<HTMLElement>('[data-fail-message]')!;
+    const retryBtn = root.querySelector<HTMLButtonElement>('[data-prepare-retry]')!;
+
+    let retryAction: (() => void) | null = null;
+    let busy = false;
+
+    const showStep = (step: StepName): void => {
+      (Object.keys(stepEls) as StepName[]).forEach((name) => {
+        stepEls[name].classList.toggle('form-hidden', name !== step);
+      });
+    };
+
+    const toLogin = (): void => {
+      clearSession();
+      window.location.assign('/login');
+    };
+
+    const showFailure = (message: string, retry: () => void): void => {
+      failMessage.textContent = message;
+      retryAction = retry;
+      showStep('failed');
+    };
+
+    const setError = (name: string, message: string | null): void => {
+      const field = root.querySelector<HTMLElement>(`[data-field="${name}"]`);
+      const output = root.querySelector<HTMLElement>(`[data-error="${name}"]`);
+      const select = form.elements.namedItem(name) as HTMLSelectElement | null;
+      if (!field || !output) return;
+      if (message) {
+        field.classList.add('is-invalid');
+        output.textContent = message;
+        output.hidden = false;
+        select?.setAttribute('aria-invalid', 'true');
+      } else {
+        field.classList.remove('is-invalid');
+        output.hidden = true;
+        output.textContent = '';
+        select?.removeAttribute('aria-invalid');
+      }
+    };
+
+    const validate = (): boolean => {
+      let ok = true;
+      (['businessType', 'businessAgeRange', 'businessSize'] as const).forEach((name) => {
+        const select = form.elements.namedItem(name) as HTMLSelectElement;
+        if (!select.value) {
+          setError(name, 'Elige una opción para continuar.');
+          ok = false;
+        } else {
+          setError(name, null);
+        }
+      });
+      return ok;
+    };
+
+    const value = (name: string): string =>
+      (form.elements.namedItem(name) as HTMLSelectElement | null)?.value ?? '';
+
+    /** Rellena un select con las opciones que dicta el backend. */
+    const fillSelect = (name: string, options: string[] | undefined): void => {
+      const select = form.elements.namedItem(name) as HTMLSelectElement | null;
+      if (!select || !options?.length) return;
+      const previous = select.value;
+      select.length = 1; /* conserva solo el placeholder */
+      options.forEach((option) => {
+        const el = document.createElement('option');
+        el.value = option;
+        el.textContent = option;
+        select.append(el);
+      });
+      if (previous && options.includes(previous)) select.value = previous;
+    };
+
+    const preselect = (data: WelcomeContext): void => {
+      const pairs: Array<[string, string | undefined]> = [
+        ['businessType', data.businessType],
+        ['businessAgeRange', data.businessAgeRange],
+        ['businessSize', data.businessSize],
+      ];
+      pairs.forEach(([name, saved]) => {
+        const select = form.elements.namedItem(name) as HTMLSelectElement | null;
+        if (select && saved) select.value = saved;
+      });
+    };
+
+    /** Paso 1: contexto de la empresa autenticada. */
+    const loadContext = async (): Promise<void> => {
+      showStep('loading');
+      const token = await getAccessToken(apiBase);
+      if (!token) {
+        showStep('expired');
+        return;
+      }
+
+      let response: Response;
+      try {
+        response = await fetch(`${apiBase}/onboarding/welcome`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        showFailure(
+          'No hubo conexión con el servidor. Tu cuenta ya está creada; no hace falta registrarte otra vez.',
+          () => void loadContext(),
+        );
+        return;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        showStep('expired');
+        return;
+      }
+      if (!response.ok) {
+        showFailure(
+          'No pudimos consultar tu cuenta. Tu cuenta ya está creada; no hace falta registrarte otra vez.',
+          () => void loadContext(),
+        );
+        return;
+      }
+
+      const data = (await response.json().catch(() => ({}))) as WelcomeContext;
+
+      fillSelect('businessType', data.options?.businessTypes);
+      fillSelect('businessAgeRange', data.options?.businessAgeRanges);
+      fillSelect('businessSize', data.options?.businessSizes);
+
+      const companyName = (data.companyName ?? '').trim();
+      if (companyName) {
+        companyEl.textContent = companyName;
+        companyEl.hidden = false;
+      }
+
+      /* Ya respondio antes: se saltan las preguntas salvo `?revisar=1`. */
+      if (data.completedAt && !reviewMode) {
+        void runPreparation();
+        return;
+      }
+
+      preselect(data);
+      showStep('form');
+    };
+
+    /**
+     * Paso 3: verifica la sesion y entrega el acceso a Flutter Web con un
+     * ticket de un solo uso. Nunca repite el registro ni crea empresas.
+     */
+    const runPreparation = async (): Promise<void> => {
+      if (busy) return;
+      busy = true;
+      retryAction = null;
+      showStep('preparing');
+      statusEl.textContent = 'Verificando tu cuenta y tu empresa…';
+
+      try {
+        const token = await getAccessToken(apiBase);
+        if (!token) {
+          showStep('expired');
+          return;
+        }
+
+        const me = await fetch(`${apiBase}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (me.status === 401 || me.status === 403) {
+          showStep('expired');
+          return;
+        }
+        if (!me.ok) throw new Error('me');
+
+        statusEl.textContent = 'Preparando tu acceso a FullPOS…';
+
+        const handoff = await fetch(`${apiBase}/auth/handoff/ticket`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ platform: 'web' }),
+        });
+        if (handoff.status === 401 || handoff.status === 403) {
+          showStep('expired');
+          return;
+        }
+        if (!handoff.ok) throw new Error('handoff');
+
+        const payload = (await handoff.json().catch(() => ({}))) as { ticket?: string };
+        const ticket = (payload.ticket ?? '').trim();
+        if (!ticket) throw new Error('handoff');
+
+        statusEl.textContent = 'Abriendo FullPOS…';
+
+        /* El ticket es de un solo uso y vive 2 minutos: nunca son tokens. */
+        const target = new URL(appUrl, window.location.origin);
+        target.searchParams.set('handoff', ticket);
+        window.location.assign(target.toString());
+      } catch {
+        showFailure(
+          'Ocurrió un problema al conectar con el servidor. Tu cuenta ya está creada; no hace falta registrarte otra vez.',
+          () => void runPreparation(),
+        );
+      } finally {
+        busy = false;
+      }
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      alertBox.hidden = true;
+      if (busy) return;
+
+      if (!validate()) {
+        form.querySelector<HTMLElement>('.welcome-field.is-invalid select')?.focus();
+        return;
+      }
+
+      busy = true;
+      submitBtn.setAttribute('aria-busy', 'true');
+      submitBtn.disabled = true;
+      const label = submitBtn.textContent ?? 'Continuar';
+      submitBtn.textContent = 'Guardando…';
+
+      try {
+        const token = await getAccessToken(apiBase);
+        if (!token) {
+          showStep('expired');
+          return;
+        }
+
+        const response = await fetch(`${apiBase}/onboarding/welcome`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            businessType: value('businessType'),
+            businessAgeRange: value('businessAgeRange'),
+            businessSize: value('businessSize'),
+          }),
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          showStep('expired');
+          return;
+        }
+
+        if (!response.ok) {
+          const detail = await response
+            .json()
+            .then((body: { message?: string | string[] }) =>
+              Array.isArray(body.message) ? body.message.join(' ') : body.message,
+            )
+            .catch(() => null);
+          alertBox.textContent =
+            detail || 'No pudimos guardar tus respuestas. Inténtalo de nuevo.';
+          alertBox.hidden = false;
+          return;
+        }
+
+        showStep('tour');
+        window.setTimeout(
+          () => root.querySelector<HTMLElement>('[data-tour-start]')?.focus(),
+          60,
+        );
+      } catch {
+        alertBox.textContent =
+          'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.';
+        alertBox.hidden = false;
+      } finally {
+        busy = false;
+        submitBtn.removeAttribute('aria-busy');
+        submitBtn.disabled = false;
+        submitBtn.textContent = label;
+      }
+    });
+
+    form.addEventListener('change', (event) => {
+      const target = event.target as HTMLSelectElement;
+      if (target?.name) setError(target.name, null);
+    });
+
+    /* El recorrido guiado completo vive en Flutter: aqui solo se ofrece. */
+    root
+      .querySelector('[data-tour-start]')
+      ?.addEventListener('click', () => void runPreparation());
+    root
+      .querySelector('[data-tour-skip]')
+      ?.addEventListener('click', () => void runPreparation());
+
+    retryBtn.addEventListener('click', () => {
+      if (busy || !retryAction) return;
+      retryAction();
+    });
+
+    root
+      .querySelector('[data-prepare-login]')
+      ?.addEventListener('click', () => toLogin());
+
+    void loadContext();
+  }
+</script>

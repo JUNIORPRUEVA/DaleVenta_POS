@@ -291,9 +291,7 @@ class CashCloseTicketPrinter {
             label: _movementLabel(movement),
             amount: movement.amount,
             isIn: movement.isIn,
-            reason: movement.reason.trim().isEmpty
-                ? null
-                : movement.reason,
+            reason: movement.reason.trim().isEmpty ? null : movement.reason,
           ),
       ],
     );
@@ -634,7 +632,10 @@ class _CashClosePdfBuilder {
         _kv('Dia negocio', snapshot.state.businessDate.trim()),
       if (snapshot.active != null) ...[
         _kv('Cajero', snapshot.active!.userName),
-        _kv('Apertura', _date.format(toBusinessTime(snapshot.active!.openedAt))),
+        _kv(
+          'Apertura',
+          _date.format(toBusinessTime(snapshot.active!.openedAt)),
+        ),
       ],
       _divider(),
       _section('Ventas y efectivo'),

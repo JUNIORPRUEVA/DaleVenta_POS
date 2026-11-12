@@ -49,7 +49,8 @@ class AppFeedback {
     BuildContext? fallbackContext,
     String scope = 'AppFeedback',
   }) {
-    final overlay = _resolveOverlay(context) ?? _resolveOverlay(fallbackContext);
+    final overlay =
+        _resolveOverlay(context) ?? _resolveOverlay(fallbackContext);
     if (overlay == null) {
       // Sin overlay no se sustituye por un diálogo: un aviso nunca debe
       // bloquear la pantalla que el usuario está usando.
@@ -102,9 +103,7 @@ class AppFeedback {
       next.removeAt(existingIndex);
       TraceLog.log(scope, 'toast deduped id="$id"');
     }
-    next.add(
-      _ToastItem(id: id, notification: notification, hold: hold),
-    );
+    next.add(_ToastItem(id: id, notification: notification, hold: hold));
 
     while (next.length > _maxVisibleToasts) {
       next.removeAt(0);
@@ -137,10 +136,8 @@ class AppFeedback {
     final entry = OverlayEntry(
       builder: (_) => ValueListenableBuilder<List<_ToastItem>>(
         valueListenable: _toasts,
-        builder: (context, items, __) => _ToastStack(
-          items: items,
-          onDismiss: _removeToast,
-        ),
+        builder: (context, items, __) =>
+            _ToastStack(items: items, onDismiss: _removeToast),
       ),
     );
     _toastEntry = entry;
@@ -458,8 +455,7 @@ class _PersistentFeedbackCard extends StatelessWidget {
     );
   }
 
-  static Color _backgroundFor(AppFeedbackKind kind) =>
-      _softBackgroundFor(kind);
+  static Color _backgroundFor(AppFeedbackKind kind) => _softBackgroundFor(kind);
 }
 
 /// Fondo discreto del aviso, según su tipo. Compartido por las dos
@@ -560,10 +556,11 @@ class _ToastStackState extends State<_ToastStack> {
     if (items.isEmpty) return const SizedBox.shrink();
     final media = MediaQuery.of(context);
     final narrow = media.size.width < 640;
-    final rightMargin = (narrow ? 12.0 : 24.0) + media.padding.right;
-    final leftMargin = narrow ? 12.0 : 24.0;
-    // Debajo de la barra superior estándar para no tapar encabezados.
-    final top = media.padding.top + kToolbarHeight + (narrow ? 8.0 : 12.0);
+    // Pegado a la esquina superior derecha, dejando aire sobre el borde y sin
+    // tapar la barra superior de la pantalla.
+    final rightMargin = (narrow ? 12.0 : 16.0) + media.padding.right;
+    final leftMargin = narrow ? 12.0 : 16.0;
+    final top = media.padding.top + kToolbarHeight + (narrow ? 6.0 : 8.0);
     final available = media.size.width - rightMargin - leftMargin;
     final width = (narrow ? available : 360.0).clamp(200.0, 360.0).toDouble();
 

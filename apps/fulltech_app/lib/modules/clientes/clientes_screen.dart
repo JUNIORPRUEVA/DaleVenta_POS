@@ -901,6 +901,7 @@ class _ClienteCard extends ConsumerWidget {
             ? colorScheme.primary.withValues(alpha: 0.08)
             : Colors.transparent,
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: onTap,
           hoverColor: colorScheme.primary.withValues(alpha: 0.05),
           child: Container(
@@ -984,6 +985,7 @@ class _ClienteCard extends ConsumerWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap ?? () => context.push(Routes.clienteDetail(client.id)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 12),
@@ -2171,6 +2173,7 @@ class _FilterSection<T> extends StatelessWidget {
                       ),
                 borderRadius: BorderRadius.circular(16),
                 child: InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => onSelected(options[index]),
                   child: Padding(

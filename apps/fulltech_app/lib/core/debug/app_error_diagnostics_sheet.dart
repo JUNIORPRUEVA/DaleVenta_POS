@@ -83,7 +83,10 @@ Future<void> showAppErrorDiagnosticsDialog(
                         if ((error.method ?? '').trim().isNotEmpty)
                           _Section(label: 'Método', value: error.method!),
                         if ((error.endpointUrl ?? '').trim().isNotEmpty)
-                          _Section(label: 'Endpoint', value: error.endpointUrl!),
+                          _Section(
+                            label: 'Endpoint',
+                            value: error.endpointUrl!,
+                          ),
                         if ((error.apiResponse ?? '').trim().isNotEmpty)
                           _Section(
                             label: 'Respuesta API',
@@ -127,9 +130,10 @@ Future<void> showAppErrorDiagnosticsDialog(
                         label: const Text('Copiar reporte'),
                       ),
                       FilledButton(
-                        onPressed: () =>
-                            Navigator.of(dialogContext, rootNavigator: true)
-                                .pop(),
+                        onPressed: () => Navigator.of(
+                          dialogContext,
+                          rootNavigator: true,
+                        ).pop(),
                         child: const Text('Cerrar'),
                       ),
                     ],
@@ -174,10 +178,7 @@ class _Section extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: SelectableText(
-              value,
-              style: theme.textTheme.bodySmall,
-            ),
+            child: SelectableText(value, style: theme.textTheme.bodySmall),
           ),
         ],
       ),

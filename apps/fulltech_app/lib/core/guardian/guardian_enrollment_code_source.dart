@@ -11,8 +11,10 @@ import 'package:flutter/foundation.dart';
 /// Tras un canje correcto, el archivo se elimina para que el código no pueda
 /// reutilizarse desde el mismo equipo.
 class GuardianEnrollmentCodeSource {
-  GuardianEnrollmentCodeSource({this.filePath = '', Map<String, String>? environment})
-      : _environment = environment ?? Platform.environment;
+  GuardianEnrollmentCodeSource({
+    this.filePath = '',
+    Map<String, String>? environment,
+  }) : _environment = environment ?? Platform.environment;
 
   static const String envVar = 'GUARDIAN_ENROLLMENT_CODE';
 
@@ -35,7 +37,9 @@ class GuardianEnrollmentCodeSource {
         await file.delete();
       }
     } catch (error) {
-      debugPrint('GUARDIAN: no se pudo eliminar el archivo de enrolamiento ($error)');
+      debugPrint(
+        'GUARDIAN: no se pudo eliminar el archivo de enrolamiento ($error)',
+      );
     }
   }
 

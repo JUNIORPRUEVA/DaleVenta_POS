@@ -114,7 +114,7 @@ void main() {
       platform: TargetPlatform.iOS,
     );
 
-    expect(find.text('FULLPOS CLOUD'), findsOneWidget);
+    expect(find.text('FullPOS Cloud', findRichText: true), findsOneWidget);
     expect(find.text('Usuario'), findsOneWidget);
     expect(find.text('Contraseña'), findsOneWidget);
     expect(find.text('Iniciar sesión'), findsOneWidget);

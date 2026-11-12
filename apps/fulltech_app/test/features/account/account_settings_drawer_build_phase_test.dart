@@ -320,6 +320,21 @@ Future<void> _openHubDrawer(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// El menú agrupa las entradas: sus hijos solo se construyen cuando el grupo
+/// está desplegado. Se despliega el grupo indicado para que comprobar la
+/// presencia de una entrada signifique algo.
+Future<void> _ensureDrawerGroupOpen(
+  WidgetTester tester,
+  String grupo,
+  String entrada,
+) async {
+  if (_drawerText(entrada).evaluate().isNotEmpty) return;
+  final cabecera = _drawerText(grupo);
+  if (cabecera.evaluate().isEmpty) return;
+  await tester.tap(cabecera.first);
+  await tester.pumpAndSettle();
+}
+
 Finder _drawerText(String text) =>
     find.descendant(of: find.byType(AppDrawer), matching: find.text(text));
 
@@ -421,6 +436,7 @@ void main() {
         );
 
         await _openHubDrawer(tester);
+        await _ensureDrawerGroupOpen(tester, 'Inventario', 'Almacenes');
         expect(_drawerText('Almacenes'), findsNothing);
         expect(_drawerText('Kardex'), findsNothing);
 
@@ -433,6 +449,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
+        await _ensureDrawerGroupOpen(tester, 'Inventario', 'Almacenes');
         expect(_drawerText('Almacenes'), findsOneWidget);
         expect(_drawerText('Kardex'), findsOneWidget);
 
@@ -445,6 +462,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
+        await _ensureDrawerGroupOpen(tester, 'Inventario', 'Almacenes');
         expect(_drawerText('Almacenes'), findsNothing);
         expect(_drawerText('Kardex'), findsNothing);
       },
@@ -490,6 +508,7 @@ void main() {
           isNull,
           reason: 'multiWarehouseEnabled=${settings.multiWarehouseEnabled}',
         );
+        await _ensureDrawerGroupOpen(tester, 'Inventario', 'Almacenes');
         expect(
           _drawerText('Almacenes'),
           settings.multiWarehouseEnabled ? findsOneWidget : findsNothing,

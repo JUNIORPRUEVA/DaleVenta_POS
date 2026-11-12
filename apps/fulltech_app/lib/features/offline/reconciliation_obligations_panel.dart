@@ -57,7 +57,9 @@ class ReconciliationObligation {
       totalDeclared: total ?? 0,
       currency: (json['currency'] ?? 'DOP').toString(),
       status: (json['status'] ?? 'PENDING').toString(),
-      declaredAtUtc: DateTime.tryParse('${json['declaredAtUtc'] ?? ''}')?.toUtc(),
+      declaredAtUtc: DateTime.tryParse(
+        '${json['declaredAtUtc'] ?? ''}',
+      )?.toUtc(),
       paymentMethod: json['paymentMethod']?.toString(),
       declaredByUserId: json['declaredByUserId']?.toString(),
       declaredByRole: json['declaredByRole']?.toString(),
@@ -84,9 +86,7 @@ final reconciliationObligationsProvider = FutureProvider.autoDispose
       return [
         for (final row in rows)
           if (row is Map)
-            if (ReconciliationObligation.fromJson(
-                  row.cast<String, dynamic>(),
-                )
+            if (ReconciliationObligation.fromJson(row.cast<String, dynamic>())
                 case final obligation?)
               obligation,
       ];
@@ -219,7 +219,9 @@ class _PendingDeclarationCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  amount == null ? 'Importe en revisión' : 'RD\$ ${amount.toStringAsFixed(2)}',
+                  amount == null
+                      ? 'Importe en revisión'
+                      : 'RD\$ ${amount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w800,
@@ -310,7 +312,10 @@ class _ObligationCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Operación ${obligation.clientRequestId}',
-            style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+            ),
           ),
           if (obligation.declaredAtUtc != null)
             Text(

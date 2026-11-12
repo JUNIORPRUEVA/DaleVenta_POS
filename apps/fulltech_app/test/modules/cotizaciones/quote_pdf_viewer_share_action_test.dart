@@ -3,58 +3,51 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('Quote PDF viewer share action', () {
-    test('current quote viewer uses direct PDF share without dropdown', () {
+  group('Visor de PDF de cotización', () {
+    test('el POS abre el panel con acciones de compartir y descargar', () {
       final source = File(
         'lib/modules/cotizaciones/cotizaciones_screen.dart',
       ).readAsStringSync();
-      final viewer = _extractViewerSource(source);
 
-      expect(viewer, contains("'PDF de cotización'"));
-      expect(viewer, contains('TextButton.icon'));
-      expect(viewer, contains('runShareAction'));
-      expect(viewer, contains('_QuotePdfShareAction.sharePdf'));
-      expect(viewer, isNot(contains('_QuotePdfShareAction.shareClient,')));
-      expect(viewer, isNot(contains('PopupMenuButton<_QuotePdfShareAction>')));
-      expect(viewer, isNot(contains('PopupMenuItem<_QuotePdfShareAction>')));
-      expect(viewer, isNot(contains('for (final action')));
-      expect(viewer, contains('Navigator.pop(context)'));
+      expect(source, contains('showPdfPreviewPanel<void>'));
+      expect(source, contains('PdfPreviewPanelHeader'));
+      expect(source, contains('PdfPreviewStage'));
+      expect(source, contains('PdfPanelIcons.share'));
+      expect(source, contains('PdfPanelIcons.download'));
+      // El panel se abre antes de tener el PDF: se construye en segundo plano.
+      expect(source, contains('_buildQuotePdfBytes'));
+      expect(source, contains('FutureBuilder'));
+      // Nada de visores incrustados en la pantalla ni de hojas del sistema.
+      expect(source, isNot(contains('SfPdfViewer.memory')));
+      expect(source, isNot(contains('Printing.sharePdf')));
     });
 
-    test('quote history viewer uses direct PDF share without dropdown', () {
+    test('el historial de cotizaciones abre el panel con las mismas acciones', () {
       final source = File(
         'lib/modules/cotizaciones/cotizaciones_historial_screen.dart',
       ).readAsStringSync();
-      final viewer = _extractViewerSource(source);
 
-      expect(viewer, contains("'PDF de cotización'"));
-      expect(viewer, contains('TextButton.icon'));
-      expect(viewer, contains('runShareAction'));
-      expect(viewer, contains('_QuotePdfShareAction.sharePdf'));
-      expect(viewer, isNot(contains('_QuotePdfShareAction.shareClient,')));
-      expect(viewer, isNot(contains('PopupMenuButton<_QuotePdfShareAction>')));
-      expect(viewer, isNot(contains('PopupMenuItem<_QuotePdfShareAction>')));
-      expect(viewer, isNot(contains('for (final action')));
-      expect(viewer, contains('Navigator.pop(context)'));
+      expect(source, contains('showPdfPreviewPanel<void>'));
+      expect(source, contains('PdfPreviewPanelHeader'));
+      expect(source, contains('PdfPreviewStage'));
+      expect(source, contains('PdfPanelIcons.share'));
+      expect(source, contains('PdfPanelIcons.download'));
+      expect(source, isNot(contains('SfPdfViewer.memory')));
+      expect(source, isNot(contains('Printing.sharePdf')));
     });
 
-    test('shared document menu remains available for other PDF viewers', () {
-      final source = File(
-        'lib/core/widgets/pdf_action_menu.dart',
-      ).readAsStringSync();
-
-      expect(source, contains('PopupMenuButton<PdfDocumentAction>'));
-      expect(source, contains('Compartir PDF'));
-      expect(source, contains('Compartir con cliente'));
-      expect(source, contains('Guardar en descargas'));
+    test('las vistas previas de factura usan el mismo panel', () {
+      // `mis_ventas_screen.dart` ya no existe: producción la sustituyó por el
+      // historial del TPV y el panel de ventas recientes.
+      for (final path in <String>[
+        'lib/modules/ventas/sales_credit_screen.dart',
+        'lib/modules/ventas/tpv_sales_history_screen.dart',
+      ]) {
+        final source = File(path).readAsStringSync();
+        expect(source, contains('PdfPreviewPanelHeader'), reason: path);
+        expect(source, contains('PdfPreviewStage'), reason: path);
+        expect(source, contains('PdfPanelIcons.download'), reason: path);
+      }
     });
   });
-}
-
-String _extractViewerSource(String source) {
-  final start = source.indexOf("'PDF de cotización'");
-  expect(start, isNonNegative);
-  final end = source.indexOf('SfPdfViewer.memory', start);
-  expect(end, isNonNegative);
-  return source.substring(start, end);
 }

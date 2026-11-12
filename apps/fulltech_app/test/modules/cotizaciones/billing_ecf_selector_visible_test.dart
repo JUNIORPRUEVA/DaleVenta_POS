@@ -21,6 +21,10 @@ import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/price_lists/data/price_lists_repository.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizacion_models.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizaciones_screen.dart';
+import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_catalog_command_bar.dart';
+import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_client_selector.dart';
+import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_detail_header.dart';
+import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_detail_shortcut.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -214,6 +218,14 @@ void main() {
     tester,
   ) async {
     await _pumpScreen(tester);
+
+    // La integración de ramas debe conservar la interfaz aprobada en la
+    // pantalla real, además del selector fiscal. Probar solo los componentes
+    // por separado no detecta que el POS haya dejado de utilizarlos.
+    expect(find.byType(SalesCatalogCommandBar), findsOneWidget);
+    expect(find.byType(SalesDetailHeader), findsOneWidget);
+    expect(find.byType(SalesClientSelector), findsOneWidget);
+    expect(find.byType(SalesDetailShortcut), findsNWidgets(2));
 
     expect(
       find.text('COMPROBANTE ELECTRÓNICO'),

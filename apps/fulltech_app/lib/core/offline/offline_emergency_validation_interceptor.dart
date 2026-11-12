@@ -22,12 +22,20 @@ class OfflineEmergencyValidationInterceptor extends Interceptor {
   final OfflineEmergencyPolicy _policy;
 
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  void onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     final path = options.uri.path.replaceFirst(RegExp(r'^/api(?=/)'), '');
-    final advanced = options.data is Map &&
-        ((options.data as Map)['operationId'] ?? '').toString().trim().isNotEmpty &&
+    final advanced =
+        options.data is Map &&
+        ((options.data as Map)['operationId'] ?? '')
+            .toString()
+            .trim()
+            .isNotEmpty &&
         ((options.method == 'POST' && path == '/products') ||
-            (options.method == 'PATCH' && RegExp(r'^/products/[^/]+/stock$').hasMatch(path)));
+            (options.method == 'PATCH' &&
+                RegExp(r'^/products/[^/]+/stock$').hasMatch(path)));
     if (!advanced) {
       handler.next(options);
       return;
@@ -42,15 +50,25 @@ class OfflineEmergencyValidationInterceptor extends Interceptor {
       );
       final current = await _tokenStorage.getUserSnapshot();
       final data = response.data;
-      if (owner?.companyId != current?.companyId || owner?.id != current?.id ||
-          data is! Map || data['companyId'] != owner?.companyId ||
+      if (owner?.companyId != current?.companyId ||
+          owner?.id != current?.id ||
+          data is! Map ||
+          data['companyId'] != owner?.companyId ||
           data['userId'] != owner?.id ||
           data['deviceFingerprint'] != headers['x-client-device-id'] ||
           data['authorized'] != true) {
-        throw DioException(requestOptions: options, response: Response(
-          requestOptions: options, statusCode: 401,
-          data: {'message': 'La sesión cambió. Tus pendientes conservan su empresa original.'},
-        ), type: DioExceptionType.badResponse);
+        throw DioException(
+          requestOptions: options,
+          response: Response(
+            requestOptions: options,
+            statusCode: 401,
+            data: {
+              'message':
+                  'La sesión cambió. Tus pendientes conservan su empresa original.',
+            },
+          ),
+          type: DioExceptionType.badResponse,
+        );
       }
       await _recordValidation(data);
       if (!OfflineEmergencyPolicy.supportsAdvancedProtocol(data)) {
@@ -60,21 +78,30 @@ class OfflineEmergencyValidationInterceptor extends Interceptor {
       }
       handler.next(options);
     } on DioException catch (error) {
-      if (error.response?.statusCode == 404 || error.response?.statusCode == 400) {
+      if (error.response?.statusCode == 404 ||
+          error.response?.statusCode == 400) {
         await _disableAdvanced(owner?.companyId, owner?.id);
         handler.reject(_incompatible(options));
       } else {
         handler.reject(error.copyWith(requestOptions: options));
       }
     } catch (error, stackTrace) {
-      TraceLog.log('OfflineCompatibility', 'No se pudo comprobar compatibilidad', error: error, stackTrace: stackTrace);
+      TraceLog.log(
+        'OfflineCompatibility',
+        'No se pudo comprobar compatibilidad',
+        error: error,
+        stackTrace: stackTrace,
+      );
       handler.reject(DioException(requestOptions: options, error: error));
     }
   }
 
   Future<void> _disableAdvanced(String? companyId, String? userId) async {
     if (companyId == null || userId == null) return;
-    await _policy.disableAdvancedOperations(companyId: companyId, userId: userId);
+    await _policy.disableAdvancedOperations(
+      companyId: companyId,
+      userId: userId,
+    );
   }
 
   DioException _incompatible(RequestOptions options) {
@@ -82,12 +109,17 @@ class OfflineEmergencyValidationInterceptor extends Interceptor {
     options.extra['disableOfflineFastFail'] = true;
     options.extra['disableRetry'] = true;
     return DioException(
-    requestOptions: options,
-    type: DioExceptionType.badResponse,
-    response: Response(requestOptions: options, statusCode: 503, data: {
-      'code': 'OFFLINE_PROTOCOL_UNSUPPORTED',
-      'message': 'Esta operación necesita una actualización del servicio. Tus pendientes permanecen guardados.',
-    }),
+      requestOptions: options,
+      type: DioExceptionType.badResponse,
+      response: Response(
+        requestOptions: options,
+        statusCode: 503,
+        data: {
+          'code': 'OFFLINE_PROTOCOL_UNSUPPORTED',
+          'message':
+              'Esta operación necesita una actualización del servicio. Tus pendientes permanecen guardados.',
+        },
+      ),
     );
   }
 

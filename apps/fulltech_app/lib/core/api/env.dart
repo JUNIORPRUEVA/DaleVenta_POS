@@ -279,7 +279,10 @@ class Env {
     // Perfil UAT: el actualizador no puede apuntar a infraestructura remota. Si
     // la variable falta, no hay valor por defecto (null); si está, debe ser local.
     if (UatNetworkGuard.isUat) {
-      return UatNetworkGuard.requireAllowedUrl(raw, key: 'RELEASES_API_BASE_URL');
+      return UatNetworkGuard.requireAllowedUrl(
+        raw,
+        key: 'RELEASES_API_BASE_URL',
+      );
     }
 
     if (raw.startsWith('/')) {

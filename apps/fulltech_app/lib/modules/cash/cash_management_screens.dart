@@ -1131,6 +1131,7 @@ class _CashFilterSection<T> extends StatelessWidget {
                       ),
                 borderRadius: BorderRadius.circular(16),
                 child: InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => onSelected(options[index]),
                   child: Padding(
@@ -2730,6 +2731,7 @@ class _TurnHistoryWideCard extends StatelessWidget {
       color: Colors.white,
       borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: () => _showDetail(context),
         borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
         child: Container(

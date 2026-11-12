@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_colors.dart';
+
 class AiAssistantDockButton extends StatelessWidget {
   const AiAssistantDockButton({
     super.key,
@@ -8,74 +10,55 @@ class AiAssistantDockButton extends StatelessWidget {
     this.compact = false,
   });
 
+  static const imageAsset = 'assets/image/asistente-ia.png';
+
   final VoidCallback onPressed;
   final bool isActive;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
-    final borderRadius = BorderRadius.only(
-      topLeft: const Radius.circular(24),
-      bottomLeft: const Radius.circular(24),
-      topRight: Radius.circular((isDesktop && !compact) ? 0 : 24),
-      bottomRight: Radius.circular((isDesktop && !compact) ? 0 : 24),
-    );
+    final size = compact ? 64.0 : 72.0;
+    final label = isActive
+        ? 'Asistente de IA, abierto. Cerrar el asistente'
+        : 'Abrir el asistente de IA';
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: borderRadius,
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: borderRadius,
-            gradient: LinearGradient(
-              colors: isActive
-                  ? const [
-                      Color(0xFF0E2A6F),
-                      Color(0xFF173DA8),
-                      Color(0xFF13B8C8),
-                    ]
-                  : const [
-                      Color(0xFF173DA8),
-                      Color(0xFF2457D6),
-                      Color(0xFF13B8C8),
-                    ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    return Semantics(
+      button: true,
+      label: label,
+      // SIN `Tooltip` a propósito, igual que en `LicensePurchaseOverlay` y en el
+      // banner de errores: este botón vive en el `Stack` del `builder` de
+      // MaterialApp, POR ENCIMA del Navigator, donde no existe ningún `Overlay`.
+      // `RawTooltip` lo exige y lanzaba `No Overlay widget found` en cada build,
+      // que el manejador global convertía en un aviso de error. La etiqueta
+      // accesible se conserva en `Semantics` y el `InkWell` mantiene el realce
+      // al pasar el ratón.
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: isActive
+              ? Border.all(color: AppColors.primary, width: 2)
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryDark.withValues(alpha: 0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF173DA8).withValues(alpha: 0.26),
-                blurRadius: 28,
-                offset: const Offset(0, 14),
-              ),
-            ],
-          ),
-          child: SizedBox(
-            height: compact ? 40 : 64,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: compact ? 14 : (isDesktop ? 18 : 16),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.auto_awesome_rounded, color: Colors.white),
-                  if (isDesktop && !compact) ...[
-                    const SizedBox(width: 10),
-                    const Text(
-                      'IA',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed,
+            child: Ink.image(
+              image: const AssetImage(imageAsset),
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
             ),
           ),
         ),

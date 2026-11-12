@@ -1,0 +1,104 @@
+{
+  // Abre ESTE archivo en VS Code. La carpeta del workspace apunta a la ruta
+  // corta C:/b/finales, que es una junction NTFS hacia el worktree real
+  // C:/Users/pc/DEV/PROYECTOS/PRODUCTOS/finalesdaleventas.
+  // Motivo: MSBuild no admite rutas > 260 caracteres en los plugins nativos
+  // (media_kit) y el script oficial del repo exige un app root <= 60 chars.
+  "folders": [
+    {
+      "name": "finalesdaleventas",
+      "path": "C:/b/finales"
+    }
+  ],
+  "settings": {
+    "files.watcherExclude": {
+      "**/build/**": true,
+      "**/.dart_tool/**": true
+    }
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "FullPOS Windows - DEBUG (API local 127.0.0.1:4004)",
+        "request": "launch",
+        "type": "dart",
+        "program": "${workspaceFolder}/apps/fulltech_app/lib/main.dart",
+        "cwd": "${workspaceFolder}/apps/fulltech_app",
+        "deviceId": "windows",
+        "flutterMode": "debug",
+        "preLaunchTask": "finales: pub get",
+        "env": {
+          "FULLPOS_WINDOWS_CHANNEL": "uat-mayoreo",
+          "DALEVENTAS_POS_ROOT": "C:/b/fp-uat-data",
+          "CL": "/FS"
+        },
+        "toolArgs": [
+          "--dart-define=APP_ENV=uat",
+          "--dart-define=FULLPOS_UAT_PROFILE=true",
+          "--dart-define=DISABLE_APP_UPDATES=true",
+          "--dart-define=API_BASE_URL=http://127.0.0.1:4004",
+          "--dart-define=APP_BASE_URL=http://127.0.0.1:4004",
+          "--dart-define=API_TIMEOUT_MS=15000"
+        ]
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "finales: pub get",
+        "type": "shell",
+        "command": "flutter",
+        "args": ["pub", "get"],
+        "options": { "cwd": "${workspaceFolder}/apps/fulltech_app" },
+        "problemMatcher": []
+      },
+      {
+        "label": "finales: flutter run windows (DEBUG + Hot Reload)",
+        "type": "shell",
+        "command": "flutter",
+        "args": [
+          "run",
+          "-d",
+          "windows",
+          "--dart-define=APP_ENV=uat",
+          "--dart-define=FULLPOS_UAT_PROFILE=true",
+          "--dart-define=DISABLE_APP_UPDATES=true",
+          "--dart-define=API_BASE_URL=http://127.0.0.1:4004",
+          "--dart-define=APP_BASE_URL=http://127.0.0.1:4004",
+          "--dart-define=API_TIMEOUT_MS=15000"
+        ],
+        "options": {
+          "cwd": "${workspaceFolder}/apps/fulltech_app",
+          "env": {
+            "FULLPOS_WINDOWS_CHANNEL": "uat-mayoreo",
+            "DALEVENTAS_POS_ROOT": "C:/b/fp-uat-data",
+            "CL": "/FS"
+          }
+        },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "finales: flutter analyze",
+        "type": "shell",
+        "command": "flutter",
+        "args": ["analyze"],
+        "options": { "cwd": "${workspaceFolder}/apps/fulltech_app" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "finales: flutter test",
+        "type": "shell",
+        "command": "flutter",
+        "args": ["test"],
+        "options": { "cwd": "${workspaceFolder}/apps/fulltech_app" },
+        "group": "test",
+        "problemMatcher": []
+      }
+    ]
+  }
+}

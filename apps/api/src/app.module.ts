@@ -30,6 +30,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { BackupsModule } from './backups/backups.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { SessionHandoffModule } from './session-handoff/session-handoff.module';
 import { ServiceOrdersModule } from './service-orders/service-orders.module';
 import { AppUpdatesModule } from './app-updates/app-updates.module';
 import { PriceListsModule } from './price-lists/price-lists.module';
@@ -75,6 +76,7 @@ import { EcfModule } from './ecf/ecf.module';
     WarehousesModule,
     BackupsModule,
     OnboardingModule,
+    SessionHandoffModule,
     ServiceOrdersModule,
     AppUpdatesModule,
     PriceListsModule,

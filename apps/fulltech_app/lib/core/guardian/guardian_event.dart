@@ -73,11 +73,14 @@ class GuardianEvent {
       'module': module,
       'operation': operation,
       'occurredAt': occurredAt.toUtc().toIso8601String(),
-      if (exceptionType != null && exceptionType!.isNotEmpty) 'exceptionType': exceptionType,
+      if (exceptionType != null && exceptionType!.isNotEmpty)
+        'exceptionType': exceptionType,
       if (platform != null && platform!.isNotEmpty) 'platform': platform,
-      if (appVersion != null && appVersion!.isNotEmpty) 'appVersion': appVersion,
+      if (appVersion != null && appVersion!.isNotEmpty)
+        'appVersion': appVersion,
       if (deviceId != null && deviceId!.isNotEmpty) 'deviceId': deviceId,
-      if (correlationId != null && correlationId!.isNotEmpty) 'correlationId': correlationId,
+      if (correlationId != null && correlationId!.isNotEmpty)
+        'correlationId': correlationId,
       if (stack != null && stack!.isNotEmpty) 'stack': stack,
       if (message != null && message!.isNotEmpty) 'message': message,
       if (offlineMinutes != null) 'offlineMinutes': offlineMinutes,
@@ -89,7 +92,8 @@ class GuardianEvent {
   String toDbJson() => jsonEncode(toApiJson());
 
   static GuardianEvent fromDbRow(Map<String, dynamic> row) {
-    final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+    final payload =
+        jsonDecode(row['payload'] as String) as Map<String, dynamic>;
     return GuardianEvent(
       eventId: payload['eventId'] as String,
       severity: payload['severity'] as String,

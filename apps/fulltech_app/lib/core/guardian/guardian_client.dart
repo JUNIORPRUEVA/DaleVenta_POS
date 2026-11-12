@@ -40,8 +40,8 @@ class GuardianClient {
     required this.config,
     Random? random,
     DateTime Function()? clock,
-  })  : _random = random ?? Random(),
-        _clock = clock ?? DateTime.now;
+  }) : _random = random ?? Random(),
+       _clock = clock ?? DateTime.now;
 
   static GuardianClient? _instance;
 
@@ -66,9 +66,11 @@ class GuardianClient {
   Future<bool> record(GuardianEvent event) async {
     if (!config.enabled) return false;
     if (!config.shouldPersist(event.severity)) {
-      unawaited(GuardianAgentLog.info(
-        'descartado por severidad sev=${event.severity} minimo=${config.minSeverityToPersist}',
-      ));
+      unawaited(
+        GuardianAgentLog.info(
+          'descartado por severidad sev=${event.severity} minimo=${config.minSeverityToPersist}',
+        ),
+      );
       return false;
     }
 
@@ -94,13 +96,17 @@ class GuardianClient {
         ),
       );
       await _enforceQuotas();
-      unawaited(GuardianAgentLog.info(
-        'evento en cola id=${event.eventId} sev=${event.severity} mod=${event.module} op=${event.operation}',
-      ));
+      unawaited(
+        GuardianAgentLog.info(
+          'evento en cola id=${event.eventId} sev=${event.severity} mod=${event.module} op=${event.operation}',
+        ),
+      );
       return true;
     } catch (error) {
       // Guardian jamás puede romper el flujo que reporta.
-      unawaited(GuardianAgentLog.warn('no se pudo encolar ${event.eventId}: $error'));
+      unawaited(
+        GuardianAgentLog.warn('no se pudo encolar ${event.eventId}: $error'),
+      );
       return false;
     }
   }
@@ -145,7 +151,10 @@ class GuardianClient {
     try {
       final batches = maxBatches ?? 3;
       for (var batch = 0; batch < batches; batch++) {
-        final due = await store.dueEvents(limit: config.batchSize, now: _clock());
+        final due = await store.dueEvents(
+          limit: config.batchSize,
+          now: _clock(),
+        );
         if (due.isEmpty) break;
         attempted += due.length;
         unawaited(GuardianAgentLog.info('flush: ${due.length} pendientes'));
@@ -154,12 +163,17 @@ class GuardianClient {
         try {
           result = await transport.send(due);
         } catch (transportError) {
-          result = GuardianSendResult(retryable: true, reason: transportError.toString());
+          result = GuardianSendResult(
+            retryable: true,
+            reason: transportError.toString(),
+          );
         }
-        unawaited(GuardianAgentLog.info(
-          'respuesta: ok=${result.acked.length} dup=${result.duplicates.length} '
-          'rech=${result.rejected.length} retry=${result.retryable} motivo=${result.reason ?? '-'}',
-        ));
+        unawaited(
+          GuardianAgentLog.info(
+            'respuesta: ok=${result.acked.length} dup=${result.duplicates.length} '
+            'rech=${result.rejected.length} retry=${result.retryable} motivo=${result.reason ?? '-'}',
+          ),
+        );
 
         final durable = <String>[...result.acked, ...result.duplicates];
         if (durable.isNotEmpty) {
@@ -169,9 +183,11 @@ class GuardianClient {
         }
 
         if (result.rejected.isNotEmpty) {
-          unawaited(GuardianAgentLog.warn(
-            'rechazados=${result.rejected.length} motivo=${result.reason}',
-          ));
+          unawaited(
+            GuardianAgentLog.warn(
+              'rechazados=${result.rejected.length} motivo=${result.reason}',
+            ),
+          );
           for (final eventId in result.rejected) {
             await store.recordDiscard(
               GuardianDiscardRecord(
@@ -186,14 +202,22 @@ class GuardianClient {
         }
 
         final pending = due
-            .where((event) => !durable.contains(event.eventId) && !result.rejected.contains(event.eventId))
+            .where(
+              (event) =>
+                  !durable.contains(event.eventId) &&
+                  !result.rejected.contains(event.eventId),
+            )
             .toList();
 
         if (pending.isNotEmpty) {
           final attempts = pending.first.attempts + 1;
           final nextAt = _clock().millisecondsSinceEpoch + _backoffMs(attempts);
           for (final event in pending) {
-            await store.markFailure(event.eventId, attempts: attempts, nextAttemptAtMs: nextAt);
+            await store.markFailure(
+              event.eventId,
+              attempts: attempts,
+              nextAttemptAtMs: nextAt,
+            );
           }
           retried += pending.length;
           error = result.reason;
@@ -211,7 +235,10 @@ class GuardianClient {
         error: error,
       );
     } catch (unexpected) {
-      return GuardianFlushSummary(attempted: attempted, error: unexpected.toString());
+      return GuardianFlushSummary(
+        attempted: attempted,
+        error: unexpected.toString(),
+      );
     } finally {
       _flushing = false;
     }

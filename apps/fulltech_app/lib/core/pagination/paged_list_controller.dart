@@ -19,9 +19,8 @@ class PagedFetchRequest {
   final Map<String, dynamic> filters;
 }
 
-typedef PagedFetcher<T> = Future<PagedResult<T>> Function(
-  PagedFetchRequest request,
-);
+typedef PagedFetcher<T> =
+    Future<PagedResult<T>> Function(PagedFetchRequest request);
 
 typedef PagedIdOf<T> = String Function(T item);
 
@@ -29,10 +28,8 @@ typedef PagedIdOf<T> = String Function(T item);
 /// Recibe la query y los filtros actuales y devuelve las coincidencias del
 /// snapshot local completo. No es paginacion: el snapshot es el dataset
 /// completo disponible en el dispositivo.
-typedef PagedOfflineFallback<T> = Future<List<T>> Function(
-  String query,
-  Map<String, dynamic> filters,
-);
+typedef PagedOfflineFallback<T> =
+    Future<List<T>> Function(String query, Map<String, dynamic> filters);
 
 /// Estado de una lista paginada por servidor.
 class PagedListState<T> {
@@ -129,12 +126,12 @@ class PagedListController<T> extends StateNotifier<PagedListState<T>> {
     Duration debounce = const Duration(milliseconds: 300),
     PagedOfflineFallback<T>? offlineFallback,
     bool Function(Object error)? isOfflineError,
-  })  : _fetcher = fetcher,
-        _idOf = idOf,
-        _debounce = debounce,
-        _offlineFallback = offlineFallback,
-        _isOfflineError = isOfflineError,
-        super(PagedListState<T>(limit: pageSize));
+  }) : _fetcher = fetcher,
+       _idOf = idOf,
+       _debounce = debounce,
+       _offlineFallback = offlineFallback,
+       _isOfflineError = isOfflineError,
+       super(PagedListState<T>(limit: pageSize));
 
   final PagedFetcher<T> _fetcher;
   final PagedIdOf<T> _idOf;

@@ -194,6 +194,16 @@ class ActiveCashSessionController
       if (!mounted) return;
       _setState(nextState);
       debugPrint('[CASH_LIFECYCLE] OPEN END id=${identityHashCode(this)}');
+      // Un fallo al abrir NUNCA puede presentarse como éxito. El estado de
+      // error ya quedó aplicado arriba, y aquí se propaga la excepción para que
+      // el diálogo que invoca la apertura muestre el mensaje real del backend y
+      // NO se cierre anunciando "Caja abierta" sobre una caja que sigue cerrada.
+      if (nextState.hasError) {
+        Error.throwWithStackTrace(
+          nextState.error!,
+          nextState.stackTrace ?? StackTrace.current,
+        );
+      }
     } finally {
       _opening = false;
     }

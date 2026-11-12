@@ -1,0 +1,212 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+
+const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+---
+
+<AuthLayout
+  title="Iniciar sesión"
+  description="Accede a tu cuenta de FullPOS Cloud."
+  path="/login"
+  panel="product"
+>
+  <div class="auth-panel auth-panel--single">
+    <div data-login-root data-api={apiBase}>
+      <h1>Inicia sesión</h1>
+      <p class="auth-sub">Usa el correo y la contraseña de tu cuenta.</p>
+
+      <form data-login-form novalidate>
+        <p class="form-alert" data-form-alert hidden role="alert"></p>
+
+        <div class="field" data-field="email">
+          <label for="email">Correo electrónico</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="username"
+            inputmode="email"
+            maxlength="120"
+            placeholder="tucorreo@dominio.com"
+            required
+          />
+          <p class="field-error" data-error="email" hidden></p>
+        </div>
+
+        <div class="field" data-field="password">
+          <label for="password">Contraseña</label>
+          <div class="field-password">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              maxlength="80"
+              placeholder="Tu contraseña"
+              required
+            />
+            <button
+              type="button"
+              class="pw-toggle"
+              data-pw-toggle
+              aria-controls="password"
+              aria-pressed="false"
+              aria-label="Mostrar contraseña"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
+          <p class="field-error" data-error="password" hidden></p>
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" data-submit>
+          Entrar a mi cuenta
+        </button>
+
+        <p class="legal-note">
+          <a href="/recuperar">¿Olvidaste tu contraseña?</a>
+        </p>
+      </form>
+
+      <div class="form-note form-hidden" data-login-done role="status">
+        <strong>Sesión iniciada.</strong>
+        <span>Preparando tu espacio en FullPOS…</span>
+      </div>
+
+      <p class="auth-switch">
+        ¿Todavía no tienes cuenta?
+        <a href="/registro"><strong>Créala gratis</strong></a> con 7 días de prueba.
+      </p>
+    </div>
+  </div>
+</AuthLayout>
+
+<script>
+  import { saveSessionFromAuth } from '../scripts/site-session';
+
+  const root = document.querySelector<HTMLElement>('[data-login-root]');
+
+  if (root) {
+    const apiBase = root.dataset.api ?? '/api';
+    const form = root.querySelector<HTMLFormElement>('[data-login-form]')!;
+    const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
+    const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
+    const doneBox = root.querySelector<HTMLElement>('[data-login-done]')!;
+    let submitting = false;
+
+    const setError = (name: string, message: string | null): void => {
+      const field = root.querySelector<HTMLElement>(`[data-field="${name}"]`);
+      const output = root.querySelector<HTMLElement>(`[data-error="${name}"]`);
+      const input = form.elements.namedItem(name) as HTMLInputElement | null;
+      if (!field || !output) return;
+      if (message) {
+        field.classList.add('is-invalid');
+        output.textContent = message;
+        output.hidden = false;
+        input?.setAttribute('aria-invalid', 'true');
+      } else {
+        field.classList.remove('is-invalid');
+        output.hidden = true;
+        output.textContent = '';
+        input?.removeAttribute('aria-invalid');
+      }
+    };
+
+    const value = (name: string): string => {
+      const input = form.elements.namedItem(name) as HTMLInputElement | null;
+      return (input?.value ?? '').trim();
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      alertBox.hidden = true;
+      setError('email', null);
+      setError('password', null);
+
+      if (submitting) return;
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value('email'))) {
+        setError('email', 'Escribe un correo válido.');
+        return;
+      }
+      if (value('password').length < 1) {
+        setError('password', 'Escribe tu contraseña.');
+        return;
+      }
+
+      submitBtn.setAttribute('aria-busy', 'true');
+      submitBtn.disabled = true;
+      submitting = true;
+      const original = submitBtn.textContent ?? 'Entrar a mi cuenta';
+      submitBtn.textContent = 'Entrando…';
+
+      try {
+        const response = await fetch(`${apiBase}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: value('email').toLowerCase(), password: value('password') }),
+        });
+
+        if (!response.ok) {
+          alertBox.textContent =
+            response.status === 401
+              ? 'Correo o contraseña incorrectos.'
+              : response.status === 403
+                ? 'Tu cuenta no tiene acceso activo. Escríbenos por soporte.'
+                : 'No pudimos iniciar sesión. Inténtalo de nuevo.';
+          alertBox.hidden = false;
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+
+        /* Casos que no pueden continuar en el sitio: se informan sin
+           inventar una sesion ni una empresa. */
+        if (data?.requiresCompanyCreation) {
+          alertBox.textContent =
+            'Tu usuario no tiene empresa asociada. Escríbenos por soporte para completarlo.';
+          alertBox.hidden = false;
+          return;
+        }
+        if (data?.requiresCompanySelection) {
+          alertBox.textContent =
+            'Tienes más de una empresa. Entra a FullPOS y elige con cuál continuar.';
+          alertBox.hidden = false;
+          return;
+        }
+
+        saveSessionFromAuth(data, value('email').toLowerCase());
+        form.classList.add('form-hidden');
+        doneBox.classList.remove('form-hidden');
+
+        /* Entra directo: la pantalla de preparacion pide el ticket de acceso
+           y abre FullPOS. Ya no pasa por las preguntas de bienvenida. */
+        window.location.assign('/preparando');
+      } catch {
+        alertBox.textContent =
+          'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.';
+        alertBox.hidden = false;
+      } finally {
+        submitBtn.removeAttribute('aria-busy');
+        submitBtn.disabled = false;
+        submitBtn.textContent = original;
+        submitting = false;
+      }
+    });
+
+    form.addEventListener('input', (event) => {
+      const target = event.target as HTMLInputElement;
+      if (target?.name) setError(target.name, null);
+    });
+  }
+</script>

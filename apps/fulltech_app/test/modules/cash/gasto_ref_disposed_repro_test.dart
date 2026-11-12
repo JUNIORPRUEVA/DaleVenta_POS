@@ -255,11 +255,12 @@ void main() {
         // 1. Abrir el drawer (accesible desde Facturación / cualquier pantalla).
         await tester.tap(find.byIcon(Icons.menu));
         await tester.pumpAndSettle();
-        expect(find.text('Movimiento efectivo'), findsOneWidget);
+        expect(find.text('Turno'), findsOneWidget);
 
-        // 2. Expandir el grupo "Movimiento efectivo" y tocar "Registrar salida"
-        //    (la acción que registra un gasto/salida).
-        await tester.tap(find.text('Movimiento efectivo'));
+        // 2. Expandir el grupo «Turno» y tocar "Registrar salida" (la acción
+        //    que registra un gasto/salida). El grupo «Movimiento efectivo» ya
+        //    no existe: sus acciones viven ahora dentro de «Turno».
+        await tester.tap(find.text('Turno'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Registrar salida'));
         await tester.pumpAndSettle();
@@ -302,7 +303,7 @@ void main() {
 
         await tester.tap(find.byIcon(Icons.menu));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Movimiento efectivo'));
+        await tester.tap(find.text('Turno'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Registrar salida'));
         await tester.pumpAndSettle();
@@ -318,7 +319,7 @@ void main() {
           findsNothing,
         );
         expect(repo.addMovementCalls, 0);
-        expect(find.text('Movimiento efectivo'), findsNothing);
+        expect(find.text('Turno'), findsNothing);
       },
     );
 

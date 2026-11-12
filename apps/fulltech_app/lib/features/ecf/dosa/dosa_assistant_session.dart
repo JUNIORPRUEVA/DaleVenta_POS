@@ -49,13 +49,11 @@ class DosaAssistantBinding {
   /// Identificador de la postulación en el proveedor, si ya existe.
   final String? postulationExternalId;
 
-  bool get isComplete =>
-      companyId.trim().isNotEmpty && taxId.trim().isNotEmpty;
+  bool get isComplete => companyId.trim().isNotEmpty && taxId.trim().isNotEmpty;
 
   /// Clave estable de la vinculación. Dos empresas con el mismo RNC no pueden
   /// compartir clave porque el `companyId` forma parte de ella.
-  String get dedupeKey =>
-      'dosa:${companyId.trim()}:${_normalizeTaxId(taxId)}';
+  String get dedupeKey => 'dosa:${companyId.trim()}:${_normalizeTaxId(taxId)}';
 
   DosaAssistantBinding copyWith({String? postulationExternalId}) =>
       DosaAssistantBinding(

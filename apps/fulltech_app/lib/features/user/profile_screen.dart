@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +14,7 @@ import '../../core/widgets/app_drawer.dart';
 import '../../core/utils/media_url.dart';
 import '../../core/utils/string_utils.dart';
 import '../../core/models/user_model.dart';
+import '../../core/theme/app_colors.dart';
 import '../user/data/users_repository.dart';
 import '../user/profile_photo_processor.dart';
 import '../../core/widgets/user_avatar.dart';
@@ -28,7 +30,31 @@ class ProfileScreen extends ConsumerWidget {
     final user = state.user;
 
     return Scaffold(
-      appBar: CustomAppBar(title: 'Mi Perfil', showLogo: false),
+      appBar: CustomAppBar(
+        title: 'Mi Perfil',
+        showLogo: false,
+        // Elemento solo de muestra: sin acción ni navegación. La foto del
+        // usuario se muestra únicamente en la tarjeta de cabecera.
+        trailing: user == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: ExcludeSemantics(
+                  child: UserAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.white24,
+                    child: Text(
+                      getInitials(user.nombreCompleto),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+      ),
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       body: user == null
           ? const Center(child: Text('Preparando perfil...'))
@@ -482,70 +508,258 @@ class _ProfileContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cols = constraints.maxWidth >= 720 ? 3 : 2;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1000),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _HeaderCard(
-                    user: user,
-                    onPhotoTap: onPhotoTap,
-                    onEdit: onEdit,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildMainSection(cols),
-                  const SizedBox(height: 20),
-                  _buildActionsRow(),
-                ],
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 26),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _HeaderCard(user: user, onPhotoTap: onPhotoTap, onEdit: onEdit),
+              const SizedBox(height: 18),
+              ..._buildDataSection(),
+              const SizedBox(height: 18),
+              const _SectionLabel(
+                icon: Icons.shield_outlined,
+                title: 'Seguridad',
               ),
-            ),
+              const SizedBox(height: 8),
+              _WhiteCard(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: _PasswordRow(onPressed: onPassword),
+              ),
+            ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMainSection(int cols) {
-    final items = <(String, String)>[];
-    if ((user.cedula ?? '').trim().isNotEmpty) {
-      items.add(('Cédula', user.cedula!.trim()));
-    }
-    if (user.fechaIngreso != null) {
-      items.add((
-        'Fecha de ingreso',
-        DateFormat('dd/MM/yyyy').format(user.fechaIngreso!),
-      ));
-    }
-    if (user.createdAt != null) {
-      items.add((
-        'Miembro desde',
-        DateFormat('dd/MM/yyyy').format(user.createdAt!),
-      ));
-    }
-    if (items.isEmpty) return const SizedBox.shrink();
-    return _CompactSection(
-      icon: Icons.badge_outlined,
-      title: 'Datos principales',
-      child: _DataGrid(items: items, cols: cols),
-    );
-  }
-
-  Widget _buildActionsRow() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: onPassword,
-        icon: const Icon(Icons.lock_outline_rounded, size: 18),
-        label: const Text('Contraseña'),
+        ),
       ),
     );
   }
+
+  List<Widget> _buildDataSection() {
+    final rows = <Widget>[];
+    if ((user.cedula ?? '').trim().isNotEmpty) {
+      rows.add(_InfoRow('Cédula', user.cedula!.trim()));
+    }
+    if (user.fechaIngreso != null) {
+      rows.add(
+        _InfoRow(
+          'Fecha de ingreso',
+          DateFormat('dd/MM/yyyy').format(user.fechaIngreso!),
+        ),
+      );
+    }
+    if (user.createdAt != null) {
+      rows.add(
+        _InfoRow(
+          'Miembro desde',
+          DateFormat('dd/MM/yyyy').format(user.createdAt!),
+        ),
+      );
+    }
+    if (rows.isEmpty) return const <Widget>[];
+
+    return [
+      const _SectionLabel(icon: Icons.badge_outlined, title: 'Datos principales'),
+      const SizedBox(height: 8),
+      _WhiteCard(
+        padding: const EdgeInsets.fromLTRB(14, 2, 14, 2),
+        child: Column(
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0)
+                const Divider(height: 1, thickness: 1, color: AppColors.border),
+              rows[i],
+            ],
+          ],
+        ),
+      ),
+    ];
+  }
+}
+
+/// Tarjeta blanca base del perfil, alineada con el resto del módulo.
+class _WhiteCard extends StatelessWidget {
+  const _WhiteCard({required this.child, this.padding});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: AppColors.shadow, blurRadius: 12, offset: Offset(0, 3)),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Encabezado de sección: icono + rótulo en mayúsculas + línea.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: AppColors.secondary),
+        const SizedBox(width: 6),
+        Text(
+          title.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: AppColors.secondary,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(child: Divider(height: 1, color: AppColors.border)),
+      ],
+    );
+  }
+}
+
+/// Fila etiqueta/valor del bloque de información.
+class _InfoRow extends StatelessWidget {
+  const _InfoRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 132,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PasswordRow extends StatelessWidget {
+  const _PasswordRow({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.secondarySoft,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFDDEAFF)),
+          ),
+          child: const Icon(
+            Icons.lock_outline_rounded,
+            size: 17,
+            color: AppColors.secondary,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Contraseña',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                'Actualiza tu clave de acceso',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        OutlinedButton(
+          onPressed: onPressed,
+          style: _profileButtonStyle(),
+          child: const Text('Cambiar'),
+        ),
+      ],
+    );
+  }
+}
+
+ButtonStyle _profileButtonStyle({bool tonal = true}) {
+  if (!tonal) {
+    return OutlinedButton.styleFrom(
+      foregroundColor: AppColors.textSecondary,
+      side: const BorderSide(color: AppColors.border),
+      minimumSize: const Size(0, 38),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0),
+    );
+  }
+  return OutlinedButton.styleFrom(
+    foregroundColor: AppColors.secondary,
+    backgroundColor: AppColors.secondarySoft,
+    side: const BorderSide(color: Color(0xFFDDEAFF)),
+    minimumSize: const Size(0, 38),
+    padding: const EdgeInsets.symmetric(horizontal: 14),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0),
+  );
 }
 
 // ─── Header card ─────────────────────────────────────────────────────────────
@@ -563,260 +777,158 @@ class _HeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final name = user.nombreCompleto.trim().isEmpty
         ? 'Usuario'
         : user.nombreCompleto.trim();
     final email = user.email.trim();
     final phone = user.telefono.trim();
     final role = (user.role ?? '').trim();
+    final subtitle = [
+      if (email.isNotEmpty) email,
+      if (phone.isNotEmpty) phone,
+    ].join(' · ');
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+    final avatar = GestureDetector(
+      onTap: onPhotoTap,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.95, end: 1).animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutBack,
+                ),
+              ),
+              child: child,
+            ),
+          );
+        },
+        child: Stack(
+          key: ValueKey((user.fotoPersonalUrl ?? '').trim()),
+          clipBehavior: Clip.none,
           children: [
-            GestureDetector(
-              onTap: onPhotoTap,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 280),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(
-                      scale: Tween<double>(begin: 0.95, end: 1).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutBack,
-                        ),
-                      ),
-                      child: child,
-                    ),
-                  );
-                },
-                child: Stack(
-                  key: ValueKey((user.fotoPersonalUrl ?? '').trim()),
-                  clipBehavior: Clip.none,
-                  children: [
-                    UserAvatar(
-                      radius: 32,
-                      backgroundColor: scheme.primary,
-                      imageUrl: user.fotoPersonalUrl,
-                      child: Text(
-                        getInitials(user.nombreCompleto),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: theme.scaffoldBackgroundColor,
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt_rounded,
-                          size: 12,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
+            UserAvatar(
+              radius: 30,
+              backgroundColor: AppColors.secondary,
+              imageUrl: user.fotoPersonalUrl,
+              child: Text(
+                getInitials(user.nombreCompleto),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    name,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      if (email.isNotEmpty)
-                        Flexible(
-                          child: Text(
-                            email,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: scheme.outline,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      if (email.isNotEmpty && phone.isNotEmpty)
-                        Text(
-                          ' · ',
-                          style: TextStyle(fontSize: 12, color: scheme.outline),
-                        ),
-                      if (phone.isNotEmpty)
-                        Text(
-                          phone,
-                          style: TextStyle(fontSize: 12, color: scheme.outline),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      if (role.isNotEmpty) _RolePill(role: role),
-                      _StatusPill(blocked: user.blocked),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Editar perfil',
-              style: IconButton.styleFrom(
-                backgroundColor: scheme.surfaceContainerHighest,
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.photo_camera_outlined,
+                  size: 12,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
         ),
       ),
     );
-  }
-}
 
-// ─── Compact section with labelled divider header ─────────────────────────────
-
-class _CompactSection extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Widget child;
-
-  const _CompactSection({
-    required this.icon,
-    required this.title,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final identity = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 15, color: scheme.primary),
-            const SizedBox(width: 6),
-            Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: scheme.primary,
-                letterSpacing: 0.8,
+        avatar,
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Divider(height: 1, color: scheme.outlineVariant)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Card(
-          margin: EdgeInsets.zero,
-          child: Padding(padding: const EdgeInsets.all(14), child: child),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (role.isNotEmpty) _RolePill(role: role),
+                  _StatusPill(blocked: user.blocked),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );
-  }
-}
 
-// ─── Data grid: label-above-value cells, N columns ───────────────────────────
-
-class _DataGrid extends StatelessWidget {
-  final List<(String, String)> items;
-  final int cols;
-
-  const _DataGrid({required this.items, required this.cols});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        final itemW = (constraints.maxWidth - spacing * (cols - 1)) / cols;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: 14,
-          children: items
-              .map((item) {
-                return SizedBox(
-                  width: itemW,
-                  child: _DataCell(label: item.$1, value: item.$2),
-                );
-              })
-              .toList(growable: false),
-        );
-      },
+    final editButton = OutlinedButton.icon(
+      onPressed: onEdit,
+      style: _profileButtonStyle(),
+      icon: const Icon(Icons.edit_outlined, size: 16),
+      label: const Text('Editar'),
     );
-  }
-}
 
-class _DataCell extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _DataCell({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.outline,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+    return _WhiteCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 520) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                identity,
+                const SizedBox(height: 12),
+                Align(alignment: Alignment.centerRight, child: editButton),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: identity),
+              const SizedBox(width: 12),
+              editButton,
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -830,21 +942,21 @@ class _RolePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: scheme.primaryContainer,
+        color: AppColors.secondarySoft,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFDDEAFF)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
         child: Text(
           role.isEmpty ? 'Sin rol' : role,
-          style: TextStyle(
-            color: scheme.onPrimaryContainer,
-            fontWeight: FontWeight.w800,
+          style: const TextStyle(
+            color: AppColors.secondary,
+            fontWeight: FontWeight.w900,
             fontSize: 11,
-            letterSpacing: 0.2,
+            letterSpacing: 0,
           ),
         ),
       ),
@@ -859,23 +971,24 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bg = blocked ? scheme.errorContainer : scheme.secondaryContainer;
-    final fg = blocked ? scheme.onErrorContainer : scheme.onSecondaryContainer;
+    final bg = blocked ? AppColors.errorSoft : AppColors.successSoft;
+    final border = blocked ? AppColors.errorBorder : AppColors.successBorder;
+    final fg = blocked ? AppColors.error : AppColors.success;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
         child: Text(
           blocked ? 'Bloqueado' : 'Activo',
           style: TextStyle(
             color: fg,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w900,
             fontSize: 11,
-            letterSpacing: 0.2,
+            letterSpacing: 0,
           ),
         ),
       ),

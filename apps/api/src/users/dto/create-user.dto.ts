@@ -12,8 +12,13 @@ export class CreateUserDto {
   @IsString()
   nombreCompleto!: string;
 
+  // Opcional: el formulario administrativo de «Nuevo usuario» ya no solicita
+  // teléfono. La columna es NOT NULL, por lo que el servicio guarda una cadena
+  // vacía («no informado») sin inventar valores. Los clientes anteriores que
+  // siguen enviándolo mantienen el mismo comportamiento.
+  @IsOptional()
   @IsString()
-  telefono!: string;
+  telefono?: string;
 
   @IsOptional()
   @IsString()

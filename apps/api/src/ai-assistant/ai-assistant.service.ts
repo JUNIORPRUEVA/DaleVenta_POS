@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { CompanyManualAudience, CompanyManualEntry, CompanyManualEntryKind, DepositOrderStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogProductsService } from '../products/catalog-products.service';
+import { AppyraIaClient, AppyraIaError, toFullPosChatResponse } from './appyra-ia.client';
+import { CONTEXT_SECRET_ENV, signCompanyContext } from './appyra-context';
 import { ChatAiAssistantDto } from './dto/chat-ai-assistant.dto';
 
 type AiRuntimeConfig = {
@@ -50,10 +52,16 @@ type AiAssistantCitation = {
 };
 
 type AiAssistantChatResponse = {
-  source: 'policy' | 'rules-only' | 'openai';
+  source: 'policy' | 'rules-only' | 'openai' | 'appyra-ia' | 'appyra-ia-rules';
   content: string;
   citations: AiAssistantCitation[];
   denied?: boolean;
+  /** La respuesta de APPYRA IA exige revisión humana (derivación o validación fallida). */
+  requiresHumanReview?: boolean;
+  /** Identificador de la conversación en APPYRA IA para el siguiente mensaje. */
+  conversationId?: string;
+  agentName?: string;
+  agentVersion?: number;
 };
 
 type PersistedAssistantMemoryRow = {
@@ -134,6 +142,7 @@ export class AiAssistantService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly catalogProducts: CatalogProductsService,
+    private readonly appyraIa: AppyraIaClient,
   ) {}
 
   async suggestCommercialOrthography(input: {
@@ -552,7 +561,7 @@ export class AiAssistantService {
       .trim();
   }
 
-  async chat(user: { id: string; role: Role }, dto: ChatAiAssistantDto) {
+  async chat(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto) {
     const message = dto.message.trim();
     if (!message) throw new BadRequestException('El mensaje es obligatorio');
 
@@ -586,6 +595,12 @@ export class AiAssistantService {
         citations: [],
         denied: true,
       }, []);
+    }
+
+    // Las barreras de política de arriba son la primera línea y no se delegan nunca.
+    // A partir de aquí, si el puente está activo, el turno lo responde APPYRA IA.
+    if (this.appyraIa.isEnabled()) {
+      return this.tryAppyraIa(user, effectiveDto, message, context, currentUserName);
     }
 
     const knowledge = await this.buildKnowledge(user, effectiveDto);
@@ -716,6 +731,95 @@ export class AiAssistantService {
       citations,
       denied: false,
     }, knowledge);
+  }
+
+  /**
+   * Delega el turno en APPYRA IA.
+   *
+   * Si el servicio no responde no se inventa una respuesta ni se cae a OpenAI (podría
+   * generar gasto): se usa el respaldo por reglas del propio sistema y se declara el motivo.
+   */
+  private async tryAppyraIa(
+    user: { id: string; role: Role; companyId?: string | null },
+    dto: ChatAiAssistantDto & { context: NormalizedAiContext },
+    message: string,
+    context: NormalizedAiContext,
+    currentUserName: string | null,
+  ) {
+    try {
+      // La empresa sale de la sesión autenticada, nunca del cliente que llama a la app.
+      // El nombre se lee de la base de datos y viaja **firmado** dentro del token: sirve para que el
+      // aviso al encargado identifique al negocio, y no para autorizar nada.
+      const companyName = await this.companyNameOf(user.companyId);
+      const companyContext = signCompanyContext(
+        {
+          companyId: user.companyId ?? '',
+          userId: user.id,
+          role: String(user.role),
+          ...(companyName === null ? {} : { companyName }),
+        },
+        this.config.get<string>(CONTEXT_SECRET_ENV) ?? '',
+      );
+      if (companyContext === null) {
+        this.logDebug('appyra.company_context.missing', { reason: 'sin empresa o sin secreto' });
+      }
+
+      const result = await this.appyraIa.chat({
+        message,
+        conversationId: dto.conversationId,
+        clientMessageId: dto.clientMessageId,
+        ...(dto.mediaJobId === undefined ? {} : { mediaJobIds: [dto.mediaJobId] }),
+        ...(companyContext === null ? {} : { companyContext }),
+        context: {
+          route: context.route,
+          module: context.module,
+          screenName: context.screenName,
+        },
+      });
+      return this.finalizeChatResponse(user, dto, toFullPosChatResponse(result, context.module), []);
+    } catch (error) {
+      const kind = error instanceof AppyraIaError ? error.kind : 'unknown';
+      const status = error instanceof AppyraIaError ? error.status : undefined;
+      this.logDebug('appyra.fallback', { kind, status });
+
+      const knowledge = await this.buildKnowledge(user, dto);
+      const fallback = this.buildRuleOnlyFallback(message, knowledge, currentUserName);
+      return this.finalizeChatResponse(
+        user,
+        dto,
+        {
+          ...fallback,
+          source: 'appyra-ia-rules',
+          content: `${fallback.content}\n\n(APPYRA IA no respondió; esta respuesta se generó con el conocimiento interno de FullPOS.)`,
+        },
+        knowledge,
+      );
+    }
+  }
+
+  /**
+   * Reenvía un archivo al motor multimedia de APPYRA IA.
+   *
+   * El archivo no se guarda en FullPOS: viaja en memoria y solo queda en el almacén del motor.
+   * Devuelve el identificador que el cliente debe enviar en el siguiente mensaje.
+   */
+  async uploadAttachment(file: { buffer: Buffer; originalname: string; mimetype: string }) {
+    try {
+      const result = await this.appyraIa.uploadMedia({
+        buffer: file.buffer,
+        filename: file.originalname,
+        mimetype: file.mimetype,
+      });
+      return { mediaJobId: result.jobId, engine: result.engine };
+    } catch (error) {
+      const kind = error instanceof AppyraIaError ? error.kind : 'unknown';
+      this.logDebug('appyra.media.failed', { kind });
+      throw new BadRequestException(
+        kind === 'configuration' || kind === 'disabled'
+          ? 'El asistente no tiene configurado el motor de archivos.'
+          : 'No se pudo procesar el archivo. Inténtalo de nuevo.',
+      );
+    }
   }
 
   private normalizeHistory(raw?: Array<{ role: 'user' | 'assistant'; content: string }>) {
@@ -1074,6 +1178,30 @@ export class AiAssistantService {
       return true;
     }
     return role === Role.ADMIN;
+  }
+
+  /**
+   * Nombre de la empresa para el aviso al encargado.
+   *
+   * Se lee de la base de datos de FullPOS y viaja **firmado** dentro del contexto de empresa. Si no
+   * se encuentra, se devuelve `null` y APPYRA mostrará un identificador corto en lugar de inventar
+   * un nombre.
+   */
+  private async companyNameOf(companyId?: string | null): Promise<string | null> {
+    const id = (companyId ?? '').trim();
+    if (id === '') {
+      return null;
+    }
+    try {
+      const company = await this.prisma.company.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      return company?.name?.trim() || null;
+    } catch {
+      // Un fallo leyendo el nombre no puede impedir la conversación.
+      return null;
+    }
   }
 
   private async buildKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {

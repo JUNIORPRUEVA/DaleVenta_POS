@@ -77,8 +77,7 @@ class EcfApplicationDraft {
           ? (json['currentSnapshotVersion'] as num).toInt()
           : 0,
       consentVersion: json['consentVersion'] as String?,
-      requiredConsentVersion:
-          (json['requiredConsentVersion'] as String?) ?? '',
+      requiredConsentVersion: (json['requiredConsentVersion'] as String?) ?? '',
       consentPurpose: (json['consentPurpose'] as String?) ?? '',
     );
   }
@@ -191,7 +190,9 @@ class EcfApplicationRepository {
     if (data is! List) return const <EcfApplicationSnapshot>[];
     return data
         .whereType<Map>()
-        .map((row) => EcfApplicationSnapshot.fromJson(row.cast<String, dynamic>()))
+        .map(
+          (row) => EcfApplicationSnapshot.fromJson(row.cast<String, dynamic>()),
+        )
         .toList(growable: false);
   }
 }

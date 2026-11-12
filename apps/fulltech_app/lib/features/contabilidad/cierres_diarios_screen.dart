@@ -957,6 +957,7 @@ class _CierresDiariosScreenState extends ConsumerState<CierresDiariosScreen> {
       validator: (_) =>
           _dateOnly(_date).trim().isEmpty ? 'Fecha obligatoria' : null,
       builder: (field) => InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: editing
             ? null
             : () async {
@@ -2133,6 +2134,7 @@ class _AssistantCloseTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Ink(
@@ -3353,6 +3355,7 @@ class _HistoryFullScreenPageState
                     child: DropdownButton<CloseType?>(
                       value: _summaryBusinessType,
                       isExpanded: true,
+                      mouseCursor: SystemMouseCursors.click,
                       items: const [
                         DropdownMenuItem<CloseType?>(
                           value: null,
@@ -3780,6 +3783,7 @@ class _HistoryFullScreenPageState
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
+                        mouseCursor: SystemMouseCursors.click,
                         borderRadius: BorderRadius.circular(10),
                         onTap: () async {
                           if (_selectionMode) {
@@ -4876,6 +4880,7 @@ class _CloseDetailFullScreenPageState
                                     children: [
                                       if (posVoucherIsImage)
                                         InkWell(
+                                          mouseCursor: SystemMouseCursors.click,
                                           onTap: () =>
                                               _showVoucherPreviewDialog(
                                                 context,
@@ -5078,6 +5083,8 @@ class _CloseDetailFullScreenPageState
                                           children: vouchers
                                               .map(
                                                 (v) => InkWell(
+                                                  mouseCursor:
+                                                      SystemMouseCursors.click,
                                                   onTap: () =>
                                                       _showVoucherPreviewDialog(
                                                         context,
@@ -5293,6 +5300,9 @@ class _CloseDetailFullScreenPageState
                                               children: imageVouchers
                                                   .map(
                                                     (v) => InkWell(
+                                                      mouseCursor:
+                                                          SystemMouseCursors
+                                                              .click,
                                                       onTap: () =>
                                                           _showVoucherPreviewDialog(
                                                             context,
@@ -5990,6 +6000,7 @@ class _CloseVoucherInlinePreview extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             onTap: onOpen,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
@@ -6058,6 +6069,7 @@ class _CloseVoucherCompactPreview extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: onOpen,
           borderRadius: BorderRadius.circular(10),
           child: Padding(

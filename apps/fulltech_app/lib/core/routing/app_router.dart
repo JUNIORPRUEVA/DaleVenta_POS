@@ -8,6 +8,7 @@ import '../../features/auth/presentation/landing_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
+import '../../features/onboarding/application/activation_config.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
@@ -468,7 +469,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return unauthenticatedEntryRoute();
       }
 
-      if (auth.user?.requiresOnboarding == true && path != Routes.onboarding) {
+      if (!ActivationConfig.retireLegacyOnboardingGate &&
+          auth.user?.requiresOnboarding == true &&
+          path != Routes.onboarding) {
         return Routes.onboarding;
       }
 

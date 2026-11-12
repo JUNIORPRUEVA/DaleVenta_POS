@@ -1355,6 +1355,7 @@ class _TimelineEventCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(16),
         child: Padding(

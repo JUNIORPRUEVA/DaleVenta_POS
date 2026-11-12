@@ -2,6 +2,10 @@
 
 The repository policy is `AGENTS.md` at the workspace root. Read it before any substantial work and follow it. This file is only a short pointer: do not create a parallel source of truth and do not duplicate project documentation here.
 
+For the current Windows application, launch profiles, source location and the
+difference between the complete app and isolated previews, read
+`docs/LOCAL_WINDOWS_APP.md` before selecting an executable or copying UI code.
+
 ## Before editing
 
 1. Restate the requirement and its acceptance criteria.

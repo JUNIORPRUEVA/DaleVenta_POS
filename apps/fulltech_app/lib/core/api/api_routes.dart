@@ -7,6 +7,8 @@ class ApiRoutes {
   static const resetPassword = '/auth/reset-password';
   static const refresh = '/auth/refresh';
   static const me = '/auth/me';
+  static const logout = '/auth/logout';
+  static const handoffExchange = '/auth/handoff/exchange';
   static const offlineEmergencyAuthorize = '/auth/offline-emergency/authorize';
   static const accountDeletionPreview = '/auth/account/deletion-preview';
   static const accountDelete = '/auth/account';
@@ -16,6 +18,17 @@ class ApiRoutes {
   static const onboardingSkipAll = '/onboarding/skip-all';
   static String onboardingStep(String step) => '/onboarding/steps/$step';
   static const onboardingTutorial = '/onboarding/tutorial';
+  // Onboarding de activación «Activa tu FullPOS». El progreso lo deriva el
+  // backend de datos reales; el cliente solo envía overrides y avance de tours.
+  static const onboardingActivation = '/onboarding/activation';
+  static const onboardingActivationWelcomeSeen =
+      '/onboarding/activation/welcome-seen';
+  static const onboardingActivationDismiss = '/onboarding/activation/dismiss';
+  static const onboardingActivationReopen = '/onboarding/activation/reopen';
+  static String onboardingActivationSkip(String key) =>
+      '/onboarding/activation/tasks/$key/skip';
+  static String onboardingActivationTour(String key) =>
+      '/onboarding/activation/tasks/$key/tour';
   static const settingsCompanyName = '/settings/company-name';
   static const fiscalSettings = '/company/fiscal-settings';
   static const taxes = '/taxes';
@@ -461,6 +474,9 @@ class ApiRoutes {
 
   // Asistente IA (global)
   static const aiChat = '/ai/chat';
+
+  /// Subida de una captura o documento para que el asistente lo lea.
+  static const aiAttachments = '/ai/attachments';
 
   // Storage (R2 presigned uploads)
   static const storagePresign = '/storage/presign';

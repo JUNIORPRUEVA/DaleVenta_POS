@@ -119,10 +119,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
           (e.code == 401 || e.type == ApiErrorType.unauthorized);
       final baseMessage = isSessionExpired
           ? 'Tu sesion expiro. Inicia sesion de nuevo para ver tus pagos.'
-          : userSafeErrorMessage(
-              e,
-              fallback: 'No se pudo cargar Mis Pagos.',
-            );
+          : userSafeErrorMessage(e, fallback: 'No se pudo cargar Mis Pagos.');
       setState(() {
         _loading = false;
         _syncing = false;
@@ -626,6 +623,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
             : Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   borderRadius: BorderRadius.circular(999),
                   onTap: () => context.push(Routes.profile),
                   child: UserAvatar(
@@ -1266,6 +1264,7 @@ class _HistoryTile extends StatelessWidget {
         : const Color(0xFFFFEDD5);
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -2420,6 +2419,7 @@ class _DesktopStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
@@ -2462,6 +2462,7 @@ class _DesktopFilterButton extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(

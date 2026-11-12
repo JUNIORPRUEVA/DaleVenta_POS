@@ -200,11 +200,7 @@ pw.Widget pdfDescriptionCell(String description) {
 }
 
 /// Row for the totals section.
-pw.Widget pdfTotalLine(
-  String label,
-  String value, {
-  PdfColor? valueColor,
-}) {
+pw.Widget pdfTotalLine(String label, String value, {PdfColor? valueColor}) {
   return pw.Padding(
     padding: const pw.EdgeInsets.symmetric(vertical: 3),
     child: pw.Row(
@@ -270,7 +266,9 @@ pw.Widget pdfContinuationHeader({
     margin: const pw.EdgeInsets.only(bottom: 10),
     padding: const pw.EdgeInsets.only(bottom: 6),
     decoration: pw.BoxDecoration(
-      border: pw.Border(bottom: pw.BorderSide(color: PdfKitColors.softLine, width: 1)),
+      border: pw.Border(
+        bottom: pw.BorderSide(color: PdfKitColors.softLine, width: 1),
+      ),
     ),
     child: pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.end,
@@ -415,11 +413,7 @@ pw.Widget pdfInfoPanel({
 }
 
 /// `label: value` line used inside information panels (e.g. supplier).
-pw.Widget pdfPersonLine(
-  String label,
-  String value, {
-  bool strong = false,
-}) {
+pw.Widget pdfPersonLine(String label, String value, {bool strong = false}) {
   return pw.SizedBox(
     width: 235,
     child: pw.RichText(

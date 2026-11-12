@@ -1,0 +1,265 @@
+---
+import '../styles/global.css';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { site, cta, icons, waLink } from '../config/site';
+
+export interface Props {
+  title: string;
+  description: string;
+  path?: string;
+  noindex?: boolean;
+  /** Bloques JSON-LD adicionales (p. ej. FAQPage, OfferCatalog). */
+  schema?: Record<string, unknown>[];
+}
+
+const { title, description, path = '/', noindex = false, schema = [] } = Astro.props;
+const canonical = new URL(path, site.url).toString();
+const fullTitle = title.includes(site.name) ? title : `${title} · ${site.name}`;
+
+const baseSchema = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: site.name,
+    legalName: site.company,
+    url: site.url,
+    email: site.supportEmail,
+    telephone: `+1${site.supportWhatsapp.slice(1)}`,
+    areaServed: 'DO',
+    description: site.description,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: site.name,
+    url: site.url,
+    inLanguage: 'es-DO',
+  },
+];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/icon-48.png" sizes="48x48" type="image/png" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    {[...baseSchema, ...schema].map((block) => (
+      <script type="application/ld+json" set:html={JSON.stringify(block)} />
+    ))}
+
+    <!-- Speculation Rules API: navegacion instantanea donde el navegador lo soporta -->
+    <script type="speculationrules" set:html={JSON.stringify({
+      prerender: [
+        { where: { href_matches: '/precios' }, eagerness: 'moderate' },
+        { where: { href_matches: '/registro' }, eagerness: 'moderate' },
+      ],
+      prefetch: [{ where: { href_matches: '/*' }, eagerness: 'moderate' }],
+    })} />
+  </head>
+  <body>
+    <div class="scroll-progress" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">Saltar al contenido</a>
+    <SiteHeader />
+    <main id="main">
+      <slot />
+    </main>
+    <SiteFooter />
+
+    <!-- Barra CTA persistente en movil -->
+    <div class="mobile-cta" role="region" aria-label="Acciones rápidas">
+      <a class="btn btn-ghost" href="/precios">{cta.mobile.secondary}</a>
+      <a class="btn btn-primary" href="/registro">{cta.mobile.primary}</a>
+    </div>
+
+    <!-- Boton flotante de WhatsApp -->
+    <a
+      class="wa-float"
+      href={waLink}
+      target="_blank"
+      rel="noopener"
+      aria-label={`Escribir por WhatsApp al ${site.supportPhoneLabel}`}
+    >
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" set:html={icons.whatsappSolid} />
+      <span class="wa-float-label">Escríbenos</span>
+    </a>
+
+    <!-- Dialogo unico para descargas -->
+    <dialog class="sheet" id="dl-dialog" aria-labelledby="dl-title">
+      <div class="sheet-body">
+        <h3 id="dl-title">Antes de instalar</h3>
+        <p>
+          Para usar <strong data-dl-name>la aplicación</strong> primero necesitas tu cuenta:
+          la app se abre con tu correo y contraseña.
+        </p>
+        <p class="small muted">
+          Crea tu cuenta ahora y tendrás <strong>7 días de prueba gratis</strong>.
+        </p>
+        <div class="sheet-actions">
+          <a class="btn btn-primary btn-block" href="/registro">Crear cuenta gratis · 7 días</a>
+          <a class="btn btn-ghost btn-block" data-dl-go href="/soporte">De todos modos ir a descargar</a>
+        </div>
+        <button class="sheet-close" type="button" data-dl-close>Volver</button>
+      </div>
+    </dialog>
+  </body>
+</html>
+
+<script>
+  const init = () => {
+    // 1) Descargas: un solo dialogo reutilizable (sin librerias).
+    if (!document.body.dataset.dlBound) {
+      document.body.dataset.dlBound = '1';
+
+      document.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+
+        const opener = target.closest<HTMLElement>('[data-dl]');
+        if (opener) {
+          event.preventDefault();
+          const dialog = document.getElementById('dl-dialog') as HTMLDialogElement | null;
+          if (!dialog) return;
+          const name = opener.dataset.dlName || '';
+          const url = opener.dataset.dlUrl || '';
+          const nameEl = dialog.querySelector('[data-dl-name]');
+          const goEl = dialog.querySelector<HTMLAnchorElement>('[data-dl-go]');
+          if (nameEl) nameEl.textContent = name;
+          if (goEl) {
+            goEl.href = url || '/soporte';
+            goEl.textContent = url ? 'De todos modos ir a descargar' : 'Pedir el enlace por WhatsApp';
+          }
+          dialog.showModal();
+          return;
+        }
+
+        const close = target.closest('[data-dl-close]');
+        if (close) {
+          const dialog = document.getElementById('dl-dialog') as HTMLDialogElement | null;
+          dialog?.close();
+        }
+      });
+
+      // 2) Formularios de la Fase 1: sin integracion todavia.
+      document.addEventListener('submit', (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (form.dataset.phase !== '2') return;
+        event.preventDefault();
+        const note = form.querySelector('[data-form-note]');
+        if (note instanceof HTMLElement) note.hidden = false;
+      });
+    }
+
+    // 3) Header con borde al hacer scroll.
+    const header = document.querySelector('.site-header');
+    if (header) {
+      const onScroll = () => header.classList.toggle('is-stuck', window.scrollY > 6);
+      onScroll();
+      window.addEventListener('scroll', onScroll, { passive: true });
+    }
+
+    // 3b) Inclinacion suave de la imagen del hero al mover el raton.
+    const heroVisual = document.querySelector<HTMLElement>('.hero-visual');
+    const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (heroVisual && finePointer && !heroVisual.dataset.tiltBound) {
+      heroVisual.dataset.tiltBound = '1';
+      let tiltFrame = 0;
+      heroVisual.addEventListener(
+        'pointermove',
+        (event) => {
+          if (tiltFrame) return;
+          const pointer = event as PointerEvent;
+          tiltFrame = window.requestAnimationFrame(() => {
+            const rect = heroVisual.getBoundingClientRect();
+            const px = (pointer.clientX - rect.left) / rect.width - 0.5;
+            const py = (pointer.clientY - rect.top) / rect.height - 0.5;
+            heroVisual.style.setProperty('--ry', `${px * 6}deg`);
+            heroVisual.style.setProperty('--rx', `${-py * 6}deg`);
+            tiltFrame = 0;
+          });
+        },
+        { passive: true },
+      );
+      heroVisual.addEventListener('pointerleave', () => {
+        heroVisual.style.setProperty('--ry', '0deg');
+        heroVisual.style.setProperty('--rx', '0deg');
+      });
+    }
+
+    // 4) Halo que sigue al puntero en tarjetas (solo punteros finos).
+    if (!document.body.dataset.spotBound) {
+      document.body.dataset.spotBound = '1';
+      let frame = 0;
+      document.addEventListener(
+        'pointermove',
+        (event) => {
+          const pointer = event as PointerEvent;
+          if (pointer.pointerType !== 'mouse') return;
+          const card = (pointer.target as HTMLElement | null)?.closest<HTMLElement>('.card');
+          if (!card || frame) return;
+          frame = window.requestAnimationFrame(() => {
+            const rect = card.getBoundingClientRect();
+            card.style.setProperty('--mx', `${pointer.clientX - rect.left}px`);
+            card.style.setProperty('--my', `${pointer.clientY - rect.top}px`);
+            frame = 0;
+          });
+        },
+        { passive: true },
+      );
+    }
+
+    // 5) Reveal: solo si el navegador no soporta animaciones ligadas al scroll.
+    const supportsScrollTimeline =
+      typeof CSS !== 'undefined' && CSS.supports?.('animation-timeline: view()');
+    if (!supportsScrollTimeline) {
+      const items = document.querySelectorAll('[data-reveal]');
+      if (items.length && 'IntersectionObserver' in window) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-in');
+                io.unobserve(entry.target);
+              }
+            }
+          },
+          { rootMargin: '0px 0px -8% 0px', threshold: 0.08 },
+        );
+        items.forEach((item) => io.observe(item));
+      } else {
+        items.forEach((item) => item.classList.add('is-in'));
+      }
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+</script>

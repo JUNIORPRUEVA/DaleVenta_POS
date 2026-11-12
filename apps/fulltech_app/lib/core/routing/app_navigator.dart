@@ -33,6 +33,19 @@ class AppNavigator {
     return _canUseNavigatorPop(context, location);
   }
 
+  /// Destino del «atrás» para [location].
+  ///
+  /// - En una pantalla hija devuelve la raíz de su módulo.
+  /// - En la raíz de un módulo devuelve el inicio del shell (Facturación).
+  /// - En el inicio devuelve `null`: ahí no se ofrece «atrás».
+  static String? backDestinationFor(String location) {
+    final normalized = _normalizeLocation(location);
+    final moduleRoot = fallbackRouteFor(normalized);
+    if (moduleRoot != null) return moduleRoot;
+    if (normalized == Routes.cotizaciones) return null;
+    return Routes.cotizaciones;
+  }
+
   static Widget? maybeBackButton(
     BuildContext context, {
     String? fallbackRoute,
@@ -40,7 +53,8 @@ class AppNavigator {
   }) {
     final fallback =
         fallbackRoute ??
-        _effectiveFallbackRouteForContext(context, currentLocation(context));
+        _effectiveFallbackRouteForContext(context, currentLocation(context)) ??
+        backDestinationFor(currentLocation(context));
     if (!canGoBack(context) && fallback == null) return null;
 
     return IconButton(

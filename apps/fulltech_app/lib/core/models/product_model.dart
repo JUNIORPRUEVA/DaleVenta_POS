@@ -26,7 +26,8 @@ double? _decimalValue(String? raw) {
   return double.tryParse(text);
 }
 
-double? _asNullableDouble(dynamic value) {  if (value == null) return null;
+double? _asNullableDouble(dynamic value) {
+  if (value == null) return null;
   if (value is num) return value.toDouble();
   final normalized = value.toString().trim().replaceAll(',', '.');
   return double.tryParse(normalized);

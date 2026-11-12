@@ -30,8 +30,8 @@ class GuardianAutoEnrollmentCodeSource {
     this.timeout = const Duration(seconds: 6),
     this.minIntervalBetweenAttempts = const Duration(minutes: 10),
     DateTime Function()? clock,
-  })  : _dio = dio ?? Dio(BaseOptions(validateStatus: (_) => true)),
-        _clock = clock ?? DateTime.now;
+  }) : _dio = dio ?? Dio(BaseOptions(validateStatus: (_) => true)),
+       _clock = clock ?? DateTime.now;
 
   static const String grantPath = '/guardian/installations/enrollment-grant';
 
@@ -51,7 +51,8 @@ class GuardianAutoEnrollmentCodeSource {
   DateTime? _lastAttemptAt;
   bool _inFlight = false;
 
-  bool get isConfigured => baseUrl.trim().isNotEmpty && installId.trim().isNotEmpty;
+  bool get isConfigured =>
+      baseUrl.trim().isNotEmpty && installId.trim().isNotEmpty;
 
   /// Devuelve el código de un solo uso o `null` si no se puede obtener.
   Future<String?> read() async {
@@ -86,8 +87,10 @@ class GuardianAutoEnrollmentCodeSource {
             '$normalizedBase$grantPath',
             data: <String, dynamic>{
               'installId': installId.trim(),
-              if (platform != null && platform!.isNotEmpty) 'platform': platform,
-              if (appVersion != null && appVersion!.isNotEmpty) 'appVersion': appVersion,
+              if (platform != null && platform!.isNotEmpty)
+                'platform': platform,
+              if (appVersion != null && appVersion!.isNotEmpty)
+                'appVersion': appVersion,
             },
             options: Options(
               validateStatus: (_) => true,
@@ -105,20 +108,28 @@ class GuardianAutoEnrollmentCodeSource {
       if (status < 200 || status >= 300) {
         // 403/404 son el resultado normal de una empresa aún no incluida en el
         // despliegue: se registra el motivo, nunca el token.
-        unawaited(GuardianAgentLog.info(
-          'auto-enrolamiento no disponible http=$status motivo=${body?['code'] ?? 'sin-codigo'}',
-        ));
+        unawaited(
+          GuardianAgentLog.info(
+            'auto-enrolamiento no disponible http=$status motivo=${body?['code'] ?? 'sin-codigo'}',
+          ),
+        );
         return null;
       }
 
       final code = (body?['code'] ?? '').toString().trim();
       if (code.isEmpty) {
-        unawaited(GuardianAgentLog.warn('auto-enrolamiento sin autorizacion utilizable'));
+        unawaited(
+          GuardianAgentLog.warn(
+            'auto-enrolamiento sin autorizacion utilizable',
+          ),
+        );
         return null;
       }
-      unawaited(GuardianAgentLog.info(
-        'autorizacion de enrolamiento obtenida (caduca ${body?['expiresAt'] ?? 'n/a'})',
-      ));
+      unawaited(
+        GuardianAgentLog.info(
+          'autorizacion de enrolamiento obtenida (caduca ${body?['expiresAt'] ?? 'n/a'})',
+        ),
+      );
       return code;
     } catch (error) {
       // Sin red o servidor caído: se reintentará en el siguiente ciclo.

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../errors/api_exception.dart';
 import '../errors/app_error_policy.dart';
 import '../errors/user_facing_error.dart';
+import 'error_notice_gate.dart';
 import 'trace_log.dart';
 
 enum AppErrorSeverity { warning, error, fatal }
@@ -173,6 +174,7 @@ class AppErrorReporter {
     String? retryLabel,
     AppErrorRetryCallback? onRetry,
     bool notifyUser = true,
+    String? noticeCategory,
   }) {
     if (_shouldSkipDedupe(dedupeKey)) return;
     final presentation = AppErrorPolicy.describe(
@@ -182,6 +184,16 @@ class AppErrorReporter {
       technicalText: technicalDetails,
     );
     final shouldNotify = notifyUser && !presentation.silent;
+    final category = _clean(noticeCategory);
+    // Los errores recuperables se limitan a **un aviso por categoría y día**.
+    // Un `fatal` no se limita nunca: exige intervención inmediata. El aviso se
+    // registra igualmente en el log técnico, solo se omite la notificación.
+    final limitedByDailyGate =
+        shouldNotify &&
+        severity != AppErrorSeverity.fatal &&
+        category != null &&
+        !ErrorNoticeGate.instance.shouldShow(category);
+    final effectiveNotify = shouldNotify && !limitedByDailyGate;
     final details = _buildDetails(
       error,
       stack,
@@ -191,11 +203,14 @@ class AppErrorReporter {
       severity: severity,
       retryLabel: retryLabel,
       onRetry: onRetry,
-      silent: !shouldNotify,
+      silent: !effectiveNotify,
     );
     _log(details);
     _remember(details);
-    if (shouldNotify) {
+    if (effectiveNotify) {
+      if (category != null) {
+        ErrorNoticeGate.instance.markShown(category);
+      }
       _setLastError(details);
     }
   }
