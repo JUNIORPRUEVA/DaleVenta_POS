@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
@@ -21,10 +21,12 @@ import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/pdf_share.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/desktop_sales_style.dart';
+import '../../core/widgets/pdf_preview_panel.dart';
 import '../clientes/cliente_model.dart';
 import '../clientes/data/clientes_repository.dart';
 import 'cotizacion_models.dart';
@@ -770,21 +772,29 @@ class _CotizacionesHistorialScreenState
         'PDF: $pdfUrl';
   }
 
+  /// Construye el PDF en segundo plano para que el panel se abra al instante.
+  Future<Uint8List> _buildQuotePdfBytes(CotizacionModel cotizacion) async {
+    final company = await _getCompanySettingsForPdf();
+    return buildCotizacionPdf(cotizacion: cotizacion, company: company);
+  }
+
   Future<void> _openPdfPreview(CotizacionModel item) async {
     final allowed = await _ensureQuoteActionPermission('Ver PDF de cotización');
     if (!allowed || !mounted) return;
-    final company = await _getCompanySettingsForPdf();
-    final bytes = await buildCotizacionPdf(cotizacion: item, company: company);
+    final fileName = buildCotizacionPdfFileName(item);
+    // La construcción del PDF arranca antes de abrir el panel: la columna
+    // aparece al instante y el documento se muestra en cuanto está listo.
+    final pdfBytesFuture = _buildQuotePdfBytes(item);
     if (!mounted) return;
 
-    await showDialog<void>(
+    await showPdfPreviewPanel<void>(
       context: context,
+      barrierLabel: 'Vista previa de la cotización',
       builder: (context) {
         var busy = false;
+        var sharingPdf = false;
         String? dialogNotification;
         bool dialogNotificationIsError = false;
-        final media = MediaQuery.sizeOf(context);
-        final compact = media.width < 560;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             void showDialogNotification(
@@ -818,14 +828,15 @@ class _CotizacionesHistorialScreenState
 
             Future<void> downloadPdf() async {
               await runBusy(() async {
+                final bytes = await pdfBytesFuture;
                 final saved = await saveCotizacionPdfToDownloads(
                   bytes: bytes,
                   cotizacion: item,
                 );
                 showDialogNotification(
                   saved
-                      ? 'Cotización descargada en la carpeta Descargas.'
-                      : 'No se pudo descargar la cotización.',
+                      ? 'Cotización guardada en Descargas como «$fileName».'
+                      : 'No se pudo guardar la cotización en Descargas.',
                   isError: !saved,
                 );
               });
@@ -835,10 +846,32 @@ class _CotizacionesHistorialScreenState
               if (!context.mounted) return;
               switch (action) {
                 case _QuotePdfShareAction.sharePdf:
-                  await shareCotizacionPdf(bytes: bytes, cotizacion: item);
+                  setDialogState(() => sharingPdf = true);
+                  try {
+                    final bytes = await pdfBytesFuture;
+                    final outcome = await shareCotizacionPdf(
+                      bytes: bytes,
+                      cotizacion: item,
+                    );
+                    if (outcome == PdfShareOutcome.savedToDownloads) {
+                      showDialogNotification(
+                        'No se pudo abrir Compartir. El PDF se guardó en la carpeta Descargas.',
+                      );
+                    } else if (outcome == PdfShareOutcome.failed) {
+                      showDialogNotification(
+                        'No se pudo compartir el PDF. Inténtalo nuevamente.',
+                        isError: true,
+                      );
+                    }
+                  } finally {
+                    if (context.mounted) {
+                      setDialogState(() => sharingPdf = false);
+                    }
+                  }
                   break;
                 case _QuotePdfShareAction.shareClient:
                   await runBusy(() async {
+                    final bytes = await pdfBytesFuture;
                     await _sendPdfToClient(
                       item,
                       bytes,
@@ -853,6 +886,7 @@ class _CotizacionesHistorialScreenState
                   break;
                 case _QuotePdfShareAction.admin:
                   await runBusy(() async {
+                    final bytes = await pdfBytesFuture;
                     await _sendPdfToAdmin(
                       item,
                       bytes,
@@ -865,102 +899,83 @@ class _CotizacionesHistorialScreenState
               }
             }
 
-            return Dialog(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.white,
-              insetPadding: EdgeInsets.symmetric(
-                horizontal: compact ? 6 : 28,
-                vertical: compact ? 6 : 16,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                width: compact
-                    ? media.width - 12
-                    : (media.width * 0.58).clamp(760.0, 1120.0),
-                height: compact ? media.height * 0.96 : media.height * 0.92,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.picture_as_pdf_outlined),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'PDF de cotización',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: busy
-                                ? null
-                                : () => unawaited(
+            return Column(
+              children: [
+                PdfPreviewPanelHeader(
+                  title: 'PDF de cotización',
+                  onClose: () => Navigator.pop(context),
+                ),
+                if (dialogNotification != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: dialogNotificationIsError
+                          ? const Color(0xFFFFEBEE)
+                          : const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: dialogNotificationIsError
+                            ? const Color(0xFFE57373)
+                            : const Color(0xFF81C784),
+                      ),
+                    ),
+                    child: Text(
+                      dialogNotification!,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: dialogNotificationIsError
+                            ? const Color(0xFFB71C1C)
+                            : const Color(0xFF1B5E20),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: FutureBuilder(
+                    future: pdfBytesFuture,
+                    builder: (context, snapshot) {
+                      final ready = snapshot.hasData && !busy && !sharingPdf;
+                      return PdfPreviewStage(
+                        bytes: snapshot.data,
+                        errorMessage: snapshot.hasError
+                            ? userSafeErrorMessage(
+                                snapshot.error!,
+                                fallback:
+                                    'No se pudo preparar la cotización. Inténtalo nuevamente.',
+                              )
+                            : null,
+                        actions: [
+                          PdfPanelActionButton(
+                            iconAsset: PdfPanelIcons.share,
+                            label: 'Compartir la cotización',
+                            busy: sharingPdf,
+                            onPressed: ready
+                                ? () => unawaited(
                                     runShareAction(
                                       _QuotePdfShareAction.sharePdf,
                                     ),
-                                  ),
-                            icon: busy
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
                                   )
-                                : const Icon(Icons.ios_share_outlined),
-                            label: const Text('Compartir'),
+                                : null,
                           ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close),
+                          PdfPanelActionButton(
+                            iconAsset: PdfPanelIcons.download,
+                            label: 'Descargar la cotización',
+                            busy: busy,
+                            onPressed: ready
+                                ? () => unawaited(downloadPdf())
+                                : null,
                           ),
                         ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    if (dialogNotification != null)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: dialogNotificationIsError
-                              ? const Color(0xFFFFEBEE)
-                              : const Color(0xFFE8F5E9),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: dialogNotificationIsError
-                                ? const Color(0xFFE57373)
-                                : const Color(0xFF81C784),
-                          ),
-                        ),
-                        child: Text(
-                          dialogNotification!,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: dialogNotificationIsError
-                                ? const Color(0xFFB71C1C)
-                                : const Color(0xFF1B5E20),
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: ColoredBox(
-                        color: Colors.white,
-                        child: SfPdfViewer.memory(
-                          bytes,
-                          canShowScrollHead: true,
-                          canShowPaginationDialog: true,
-                        ),
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             );
           },
         );
@@ -3784,6 +3799,7 @@ class _HistorialListCardState extends State<_HistorialListCard> {
           curve: Curves.easeOutCubic,
           decoration: const BoxDecoration(),
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             borderRadius: BorderRadius.circular(14),
             onTap: widget.onTap,
             onFocusChange: (focused) => setState(() => _active = focused),

@@ -761,6 +761,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         ),
       ),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: _openPurchaseFilterDrawer,
         child: Row(
           children: [
@@ -1696,6 +1697,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 ),
                 DropdownButton<String>(
                   value: _statusFilter,
+                  mouseCursor: SystemMouseCursors.click,
                   items: const [
                     DropdownMenuItem(value: '', child: Text('Todos')),
                     DropdownMenuItem(value: 'DRAFT', child: Text('Borrador')),
@@ -1922,6 +1924,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
         ),
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(8),
           onTap: open,
           child: Padding(
@@ -2480,6 +2483,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
         ),
         child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(8),
           onTap: open,
           child: Padding(
@@ -5388,6 +5392,7 @@ class _MobileOrderSummary extends StatelessWidget {
       color: theme.colorScheme.primaryContainer.withValues(alpha: .55),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(12),
         onTap: onPressed,
         child: Padding(
@@ -5437,6 +5442,7 @@ class _PurchaseProductCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Ink(
@@ -5684,6 +5690,7 @@ class _CartItemTile extends ConsumerWidget {
           : theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
       borderRadius: BorderRadius.circular(compact ? 0 : 10),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(compact ? 0 : 10),
         onTap: onEdit,
         child: Padding(
@@ -5853,6 +5860,7 @@ class _DrawerOptionTile extends StatelessWidget {
           : theme.colorScheme.surfaceContainerHighest.withValues(alpha: .34),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
@@ -5973,6 +5981,7 @@ class _PurchaseExtrasSwitch extends StatelessWidget {
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .28),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(12),
         onTap: () => onChanged(!value),
         child: Container(

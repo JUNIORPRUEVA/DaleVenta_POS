@@ -37,6 +37,7 @@ Uso
     python scripts/branding/generate_app_icons.py --analyze
     python scripts/branding/generate_app_icons.py --source <ruta-al-png>
     python scripts/branding/generate_app_icons.py --source <ruta-al-ico> --windows-only
+    python scripts/branding/generate_app_icons.py --source apps/fulltech_app/assets/image/logo_launcher.png --windows-only
 """
 
 from __future__ import annotations
@@ -71,6 +72,9 @@ ANDROID_MIPMAP_SIZES = {
 # El logo fuente ya se recorta a su bbox visible antes de escalarlo; este fill
 # deja solo un margen optico chico sin recortar contenido visible.
 CONTENT_FILL = 0.96
+# Windows reserva el espacio exterior en la barra de tareas. El dibujo puede
+# aprovechar el lienzo completo sin añadir otro margen dentro del ICO.
+WINDOWS_CONTENT_FILL = 1.0
 
 # Alfa minima para considerar un pixel como parte del contenido.
 ALPHA_THRESHOLD = 12
@@ -114,7 +118,9 @@ def build_square_icon(source: Image.Image, size: int, fill: float = CONTENT_FILL
     logo = resize_rgba(content, draw_width, draw_height)
 
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    canvas.paste(logo, ((size - draw_width) // 2, (size - draw_height) // 2), logo)
+    # Usar el propio alfa como máscara en paste multiplicaba el alfa dos veces,
+    # debilitando los bordes suaves al reducir el logo a tamaños de barra.
+    canvas.alpha_composite(logo, ((size - draw_width) // 2, (size - draw_height) // 2))
     return canvas
 
 
@@ -242,7 +248,8 @@ def analyze(source: Image.Image) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Genera los iconos de FullPOS.")
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="PNG del logo FullPOS.")
-    parser.add_argument("--fill", type=float, default=CONTENT_FILL, help="Fraccion del lienzo ocupada por el logo.")
+    parser.add_argument("--fill", type=float, help="Fraccion del lienzo ocupada por el logo; conserva el ajuste comun a todas las plataformas.")
+    parser.add_argument("--windows-fill", type=float, help="Ajuste Windows especifico (por defecto: 1.0, sin deformar el logo).")
     parser.add_argument("--analyze", action="store_true", help="Solo imprime el analisis de la fuente.")
     parser.add_argument(
         "--windows-only",
@@ -250,6 +257,12 @@ def main() -> int:
         help="Genera solo el ICO Windows; no modifica logo_launcher.png, Android ni iOS.",
     )
     args = parser.parse_args()
+    fill = CONTENT_FILL if args.fill is None else args.fill
+    windows_fill = args.windows_fill
+    if windows_fill is None:
+        windows_fill = WINDOWS_CONTENT_FILL if args.fill is None else args.fill
+    if not 0 < fill <= 1 or not 0 < windows_fill <= 1:
+        parser.error("--fill y --windows-fill deben ser mayores que 0 y menores o iguales que 1.")
 
     source = load_rgba(args.source)
     analyze(source)
@@ -257,22 +270,22 @@ def main() -> int:
         return 0
 
     if not args.windows_only:
-        master = build_square_icon(source, MASTER_SIZE, args.fill)
+        master = build_square_icon(source, MASTER_SIZE, fill)
         MASTER_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
         master.save(MASTER_OUTPUT, "PNG", optimize=True)
         print(f"\nmaster written     : {MASTER_OUTPUT.relative_to(REPO_ROOT)} ({MASTER_SIZE}x{MASTER_SIZE})")
 
-    write_ico([build_square_icon(source, size, args.fill) for size in ICO_SIZES], ICO_OUTPUT)
+    write_ico([build_square_icon(source, size, windows_fill) for size in ICO_SIZES], ICO_OUTPUT)
     print(f"ico written        : {ICO_OUTPUT.relative_to(REPO_ROOT)} ({', '.join(str(s) for s in ICO_SIZES)})")
 
     if not args.windows_only:
-        write_android_icons(source, args.fill)
+        write_android_icons(source, fill)
         print(
             "android written    : "
             + ", ".join(f"{name}/ic_launcher.png={size}x{size}" for name, size in ANDROID_MIPMAP_SIZES.items())
         )
 
-        ios_files = write_ios_icons(source, args.fill)
+        ios_files = write_ios_icons(source, fill)
         print(f"ios written        : {IOS_APPICON_DIR.relative_to(REPO_ROOT)} ({len(ios_files)} png)")
     return 0
 

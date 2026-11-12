@@ -2,14 +2,17 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
+import '../../../core/widgets/app_gesture_detector.dart';
 
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/realtime/operations_refresh_signals.dart';
+import '../../../core/routing/app_navigator.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/widgets/app_drawer.dart';
@@ -1149,6 +1152,7 @@ class _ReportsMobileAppBarAction extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             borderRadius: BorderRadius.circular(10),
             onTap: onPressed,
             child: Ink(
@@ -1597,7 +1601,11 @@ class ReportsTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final mobile = MediaQuery.sizeOf(context).width < 640;
+    final width = MediaQuery.sizeOf(context).width;
+    final mobile = width < 640;
+    // Entre 640 y 900 px el encabezado de escritorio no cabe con la etiqueta
+    // del boton de PDF: se usa la variante de solo icono para evitar desbordes.
+    final compactHeader = width < 900;
     return _Surface(
       padding: EdgeInsets.fromLTRB(12, 10, 12, mobile ? 12 : 10),
       radius: kReportsFilterRadius,
@@ -1666,13 +1674,8 @@ class ReportsTopBar extends StatelessWidget {
           else
             Row(
               children: [
-                Builder(
-                  builder: (context) => IconButton(
-                    tooltip: 'Menú',
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                    icon: const Icon(Icons.menu_rounded),
-                  ),
-                ),
+                AppNavigator.maybeBackButton(context) ??
+                    const SizedBox(width: 44),
                 Container(
                   padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
@@ -1692,37 +1695,64 @@ class ReportsTopBar extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Reportes',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: loading ? null : onReload,
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Recargar'),
-                ),
-                if (showReset) ...[
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: loading ? null : onReset,
-                    icon: const Icon(Icons.restart_alt_rounded, size: 16),
-                    label: const Text('Restablecer'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: scheme.primary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
                     ),
                   ),
-                ],
-                const SizedBox(width: 8),
-                FilledButton.tonalIcon(
-                  onPressed: loading || generatingPdf ? null : onDownloadPdf,
-                  icon: generatingPdf
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                  label: const Text('Descargar PDF'),
                 ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  // En ventanas estrechas el selector se reduce para que el
+                  // encabezado nunca desborde; en anchas conserva 240 px.
+                  width: compactHeader ? 176 : 240,
+                  child: CategoryFilterSelector(
+                    categories: categories,
+                    selectedCategory: selectedCategory,
+                    onChanged: loading ? null : onCategoryChanged,
+                  ),
+                ),
+                if (showReset) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: 'Restablecer filtros',
+                    onPressed: loading ? null : onReset,
+                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                  ),
+                ],
+                const SizedBox(width: 6),
+                IconButton.outlined(
+                  tooltip: 'Recargar',
+                  onPressed: loading ? null : onReload,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                ),
+                const SizedBox(width: 8),
+                if (compactHeader)
+                  IconButton.filledTonal(
+                    tooltip: 'Descargar PDF',
+                    onPressed: loading || generatingPdf ? null : onDownloadPdf,
+                    icon: generatingPdf
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  )
+                else
+                  FilledButton.tonalIcon(
+                    onPressed: loading || generatingPdf ? null : onDownloadPdf,
+                    icon: generatingPdf
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                    label: const Text('Descargar PDF'),
+                  ),
               ],
             ),
           const SizedBox(height: 10),
@@ -1739,17 +1769,6 @@ class ReportsTopBar extends StatelessWidget {
                   onPeriodChanged: onPeriodChanged,
                 ),
               ),
-              if (!mobile) ...[
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 260,
-                  child: CategoryFilterSelector(
-                    categories: categories,
-                    selectedCategory: selectedCategory,
-                    onChanged: loading ? null : onCategoryChanged,
-                  ),
-                ),
-              ],
             ],
           ),
           if (mobile) ...[
@@ -1807,6 +1826,9 @@ class CategoryFilterSelector extends StatelessWidget {
         child: DropdownButton<String?>(
           isExpanded: true,
           value: selected,
+          mouseCursor: onChanged == null
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
           icon: Icon(Icons.keyboard_arrow_down_rounded, color: scheme.primary),
           items: items,
           onChanged: onChanged,
@@ -1921,6 +1943,7 @@ class _FilterChip extends StatelessWidget {
         ),
       ),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
         borderRadius: BorderRadius.circular(kReportsFilterRadius),
         child: Padding(
@@ -3157,6 +3180,7 @@ class _KpiHelpButtonState extends State<_KpiHelpButton> {
       message: widget.message,
       waitDuration: const Duration(milliseconds: 350),
       child: InkResponse(
+        mouseCursor: SystemMouseCursors.click,
         onTap: _toggleHelp,
         radius: 16,
         child: const SizedBox.square(

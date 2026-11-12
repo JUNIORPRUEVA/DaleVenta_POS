@@ -71,10 +71,7 @@ final saleAttemptDeclarationAuthRecoveryProvider = Provider<void>((ref) {
       queue
           .releaseAuthBlocked(type: SaleAttemptDeclaration.actionType)
           .catchError((Object error) {
-            TraceLog.log(
-              'reconcile',
-              'declaraciones.no.rehabilitadas: $error',
-            );
+            TraceLog.log('reconcile', 'declaraciones.no.rehabilitadas: $error');
             return 0;
           }),
     );

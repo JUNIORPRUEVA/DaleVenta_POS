@@ -96,14 +96,17 @@ class EcfPreparationMetadata {
 
   factory EcfPreparationMetadata.fromJson(Map<String, dynamic> json) {
     final simulation = json['simulation'];
-    final map = simulation is Map ? simulation.cast<String, dynamic>() : const <String, dynamic>{};
+    final map = simulation is Map
+        ? simulation.cast<String, dynamic>()
+        : const <String, dynamic>{};
     final videoUrl = (json['videoUrl'] as String?)?.trim();
     final reason = (map['reason'] as String?)?.trim();
     return EcfPreparationMetadata(
       videoUrl: videoUrl == null || videoUrl.isEmpty ? null : videoUrl,
       simulationAvailable: map['available'] == true,
       simulationBadge:
-          (map['badge'] as String?)?.trim() ?? 'MODO DE PRUEBA — NO SE ENVIARÁ NADA A DGII',
+          (map['badge'] as String?)?.trim() ??
+          'MODO DE PRUEBA — NO SE ENVIARÁ NADA A DGII',
       simulationReason: reason == null || reason.isEmpty ? null : reason,
     );
   }
@@ -172,16 +175,22 @@ class EcfActivationProgress {
   List<EcfActivationStepView> get clientActions =>
       pending.where((step) => step.isClientAction).toList(growable: false);
 
-  bool get started => resolvedCount > 0 || steps.any((step) => step.status != 'PENDING');
+  bool get started =>
+      resolvedCount > 0 || steps.any((step) => step.status != 'PENDING');
 
   factory EcfActivationProgress.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'];
-    final map = summary is Map ? summary.cast<String, dynamic>() : const <String, dynamic>{};
+    final map = summary is Map
+        ? summary.cast<String, dynamic>()
+        : const <String, dynamic>{};
     final rawSteps = json['steps'];
     final steps = rawSteps is List
         ? rawSteps
               .whereType<Map>()
-              .map((row) => EcfActivationStepView.fromJson(row.cast<String, dynamic>()))
+              .map(
+                (row) =>
+                    EcfActivationStepView.fromJson(row.cast<String, dynamic>()),
+              )
               .toList(growable: false)
         : const <EcfActivationStepView>[];
     final percent = map['percent'];
@@ -190,7 +199,9 @@ class EcfActivationProgress {
     return EcfActivationProgress(
       stage: (map['stage'] as String?) ?? 'NOT_STARTED',
       percent: percent is num ? percent.toInt() : 0,
-      resolvedCount: resolved is num ? resolved.toInt() : steps.where((s) => s.resolved).length,
+      resolvedCount: resolved is num
+          ? resolved.toInt()
+          : steps.where((s) => s.resolved).length,
       total: total is num ? total.toInt() : steps.length,
       steps: steps,
       transportSimulated: (json['transport'] as String?) == 'SIMULATED',

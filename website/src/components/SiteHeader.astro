@@ -1,0 +1,80 @@
+---
+import { site, cta, waLink } from '../config/site';
+
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+
+const links = [
+  { href: '/precios', label: 'Precios' },
+  { href: '/funciones', label: 'Funciones' },
+  { href: '/descargas', label: 'Descargas' },
+  { href: '/soporte', label: 'Soporte' },
+  { href: '/#faq', label: 'FAQ' },
+];
+
+const isCurrent = (href: string) => path === href;
+---
+
+<header class="site-header">
+  <nav class="nav container" aria-label="Navegación principal">
+    <a class="brand" href="/" aria-label={`${site.name}, inicio`}>
+      <img
+        class="brand-logo"
+        src="/img/logo.webp"
+        alt=""
+        width="40"
+        height="40"
+        decoding="async"
+      />
+      <span class="brand-text">
+        <strong>{site.name}</strong>
+        <span class="brand-by">{site.byline}</span>
+      </span>
+    </a>
+
+    <ul class="nav-links">
+      {links.map((link) => (
+        <li>
+          <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+            {link.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+
+    <div class="nav-actions">
+      <a class="btn btn-quiet btn-sm" href="/login">{cta.header.login}</a>
+      <a class="btn btn-ghost btn-sm nav-dl" href="/descargas">Descargas</a>
+      <a class="btn btn-primary btn-sm nav-signup" href="/registro">Registrarse</a>
+      <button
+        class="nav-toggle"
+        type="button"
+        popovertarget="site-menu"
+        aria-label="Abrir menú"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"></path>
+        </svg>
+      </button>
+    </div>
+  </nav>
+</header>
+
+<!-- Menu movil con Popover API (cierre con Esc y clic fuera, sin JS propio) -->
+<div id="site-menu" popover class="menu" aria-label="Menú">
+  {links.map((link) => (
+    <a href={link.href}>
+      {link.label}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M5 12h14M13 5l7 7-7 7"></path>
+      </svg>
+    </a>
+  ))}
+  <a href="/login">{cta.header.login}</a>
+  <div class="menu-sep" role="presentation"></div>
+  <div class="menu-cta">
+    <a class="btn btn-primary btn-block" href="/registro">{cta.header.primary}</a>
+    <a class="btn btn-ghost btn-block" href="/precios">Ver planes y precios</a>
+  </div>
+  <div class="menu-sep" role="presentation"></div>
+  <a href={waLink} rel="noopener">WhatsApp {site.supportPhoneLabel}</a>
+</div>

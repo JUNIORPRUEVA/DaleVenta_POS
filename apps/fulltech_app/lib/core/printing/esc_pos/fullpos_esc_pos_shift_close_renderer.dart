@@ -45,9 +45,9 @@ class FullPosEscPosShiftCloseRenderer {
   /// Text preview exactly as it will be printed (physical left-safe offset
   /// included), used by tests and diagnostics.
   List<String> preview(ShiftCloseReceiptViewModel vm) {
-    return _buildLines(vm).map(
-      (line) => EscPosLayout.layoutLine(profile, line.text, line.width),
-    ).toList(growable: false);
+    return _buildLines(vm)
+        .map((line) => EscPosLayout.layoutLine(profile, line.text, line.width))
+        .toList(growable: false);
   }
 
   List<EscPosLine> _buildLines(ShiftCloseReceiptViewModel vm) {
@@ -88,10 +88,7 @@ class FullPosEscPosShiftCloseRenderer {
         return;
       }
       addB(label, styles: boldB);
-      for (final line in EscPosLayout.wrapContent(
-        value,
-        profile.usableChars,
-      )) {
+      for (final line in EscPosLayout.wrapContent(value, profile.usableChars)) {
         addB(line);
       }
     }

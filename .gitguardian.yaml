@@ -1,0 +1,18 @@
+# Configuracion de GitGuardian para este repositorio.
+#
+# Las pruebas automaticas y el script de QA local usan valores ficticios en
+# campos con nombre sensible (`password`, `accessToken`...). El detector
+# generico los marca como secretos, pero no son credenciales: no abren ninguna
+# conexion ni pertenecen a ningun entorno.
+#
+# Se excluyen SOLO rutas de prueba. Ningun archivo de codigo de la API fuera de
+# los specs, ningun `.env` real y ningun archivo de `lib/` queda fuera del
+# escaneo: un secreto real en codigo de produccion se sigue detectando.
+version: 2
+secret:
+  ignored_paths:
+    - 'apps/fulltech_app/test/**'
+    - '**/*.spec.ts'
+    - '**/*.e2e-spec.ts'
+    - '**/*.integration-spec.ts'
+    - 'website/qa-*.ps1'

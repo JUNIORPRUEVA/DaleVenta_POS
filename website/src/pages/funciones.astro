@@ -1,0 +1,99 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { moduleGroups, icons, site, cta, waLink, billing } from '../config/site';
+---
+
+<BaseLayout
+  title="Módulos del sistema"
+  description="Ventas y cotizaciones, inventarios y recuentos, compras, contabilidad, clientes, multi almacén, multi unidad de medida, mayoreo y detalle, facturación electrónica y trabajo sin internet hasta 48 horas."
+  path="/funciones"
+>
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Módulos</span>
+        <h1 style="font-size: clamp(1.95rem, 1.3rem + 2vw, 3rem)">
+          Un sistema, <span class="grad">todos tus módulos</span>
+        </h1>
+        <p class="lead">
+          Todo lo que necesitas para operar, ordenado por cómo lo usas. Sin módulos que no
+          existen y sin promesas que no se cumplen.
+        </p>
+      </div>
+
+      <div class="modules">
+        {moduleGroups.map((group) => (
+          <article class="module-group" data-reveal>
+            <h3 class="module-title">{group.title}</h3>
+            <ul class="module-list">
+              {group.items.map((item) => (
+                <li>
+                  <span class="module-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      set:html={item.svg}
+                    />
+                  </span>
+                  {item.name}
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top: 0">
+    <div class="container">
+      <div class="section-head section-head--center">
+        <span class="eyebrow">Transparencia</span>
+        <h2>Cómo funciona el pago</h2>
+      </div>
+
+      <ol class="billing">
+        {billing.map((step) => (
+          <li>
+            <span class="billing-n">{step.n}</span>
+            <span class="billing-text">
+              <strong>{step.title}</strong>
+              <span>{step.text}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <div class="note" style="margin-top: 22px">
+        <strong>Facturación electrónica:</strong> es uno de los módulos incluidos. Se
+        configura según las reglas fiscales de tu negocio y el equipo te acompaña en el
+        proceso.
+      </div>
+
+      <div class="hero-actions" style="margin-top: 26px; margin-bottom: 0">
+        <a class="btn btn-primary btn-lg cta-pulse" href="/registro">{cta.hero.primary}</a>
+        <a class="link-arrow" href={waLink} rel="noopener">
+          Preguntar por WhatsApp
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.arrowRight}
+          />
+        </a>
+      </div>
+
+      <p class="small muted" style="margin-top: 14px">
+        ¿Dudas de tu caso? Escríbenos a
+        {" "}<a href={`mailto:${site.supportEmail}`}>{site.supportEmail}</a>.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

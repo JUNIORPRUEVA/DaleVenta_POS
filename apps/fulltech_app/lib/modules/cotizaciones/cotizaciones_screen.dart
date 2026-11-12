@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -12,9 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart' as permissions;
 import 'package:printing/printing.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
-import '../../core/app_access/app_access_links.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/admin_authorization_session.dart';
 import '../../core/auth/app_permissions.dart';
@@ -29,6 +28,7 @@ import '../../core/design_system/icons/app_icon.dart';
 import '../../core/design_system/icons/app_icons.dart';
 import '../../core/debug/trace_log.dart';
 import '../../core/errors/api_exception.dart';
+import '../../features/onboarding/presentation/widgets/activation_tour_overlay.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/license/license_repository.dart';
 import '../../core/models/user_model.dart';
@@ -52,9 +52,19 @@ import '../../core/utils/app_feedback.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
+import '../../core/widgets/branded_menu_button.dart';
+import '../../core/widgets/refined_topbar_controls.dart';
+import 'presentation/widgets/sales_ticket_bar.dart';
+import 'presentation/widgets/sales_detail_shortcut.dart';
+import 'presentation/widgets/sales_detail_header.dart';
+import 'presentation/widgets/sales_client_selector.dart';
+import 'presentation/widgets/sales_catalog_command_bar.dart';
+import 'presentation/widgets/sales_auxiliary_dock.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
+import '../../core/widgets/pdf_preview_panel.dart';
+import '../../core/utils/pdf_share.dart';
 import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/user_avatar.dart';
@@ -65,6 +75,7 @@ import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/catalogo/data/product_pages_loader.dart';
 import '../../features/ecf/data/ecf_repository.dart';
 import '../../features/ecf/ecf_models.dart';
+import '../../features/account/apps_downloads_panel.dart';
 import '../../features/account/delete_account_dialog.dart';
 import '../../features/price_lists/data/price_lists_repository.dart';
 import '../../features/products/ui/inventory_module_pages.dart';
@@ -89,6 +100,11 @@ import 'ai/domain/models/quotation_context.dart';
 import 'ai/presentation/widgets/ai_chat_sheet.dart';
 import 'ai/presentation/widgets/ai_warning_banner.dart';
 import 'ai/presentation/widgets/quotation_rule_detail_sheet.dart';
+import '../../core/ai_assistant/application/ai_assistant_controller.dart';
+import '../../core/ai_assistant/presentation/widgets/ai_assistant_dock_button.dart';
+import '../../core/ai_assistant/presentation/ai_chat_context_resolver.dart';
+import '../../core/ai_assistant/presentation/widgets/global_ai_assistant_entry_point.dart';
+import '../../core/widgets/app_navigation.dart';
 import 'cotizacion_models.dart';
 import 'data/cotizaciones_repository.dart';
 import 'data/open_sales_tickets_repository.dart';
@@ -399,18 +415,13 @@ typedef _CatalogProductAddCallback =
     void Function(ProductModel product, Offset? globalStart);
 
 const Color _billingBorderColor = Color(0xFFD3E0E7);
-const Color _billingSubtleBorderColor = Color(0xFFE4EDF2);
-const String _billingClientIconAsset = 'assets/image/billing/client.png';
-const String _billingActionsIconAsset = 'assets/image/billing/actions.png';
 const String _billingDeleteIconAsset = 'assets/image/billing/delete.png';
-const String _billingQuoteIconAsset = 'assets/image/billing/quote.png';
 const String _billingMobileAppBarActionsIconAsset =
     'assets/image/billing/spark_actions.png';
 // Iconografía del panel de cliente (línea negra sobre transparente; se tinta
 // con `color` para que encaje en cualquier fondo).
 const String _billingSearchIconAsset = 'assets/image/billing/search.png';
-const String _billingClientAddIconAsset =
-    'assets/image/billing/client_add.png';
+const String _billingClientAddIconAsset = 'assets/image/billing/client_add.png';
 const String _billingClientViewIconAsset =
     'assets/image/billing/client_view.png';
 const String _billingClientEditIconAsset =
@@ -510,7 +521,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   bool _inventoryEnabledCache = false;
   ProviderSubscription<AsyncValue<CompanySettings>>?
   _companySettingsSubscription;
-  ProviderSubscription<AsyncValue<EcfCapabilities>>? _ecfCapabilitiesSubscription;
+  ProviderSubscription<AsyncValue<EcfCapabilities>>?
+  _ecfCapabilitiesSubscription;
   EcfCapabilities? _ecfCapabilitiesCache;
   ProviderSubscription<AuthState>? _authStateSubscription;
   ProviderSubscription<CatalogState>? _catalogSubscription;
@@ -2279,8 +2291,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       ref.read(companySettingsProvider).valueOrNull?.ecfEnabled == true;
 
   EcfCapabilities? get _ecfCaps =>
-      _ecfCapabilitiesCache ??
-      ref.read(ecfCapabilitiesProvider).valueOrNull;
+      _ecfCapabilitiesCache ?? ref.read(ecfCapabilitiesProvider).valueOrNull;
 
   /// Tipos que se pueden ofrecer con la numeración autorizada de hoy.
   List<EcfPosFiscalMode> get _ecfModes =>
@@ -2288,13 +2299,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   /// El receptor solo cuenta si hay un cliente seleccionado: el nombre fiscal
   /// puede haber quedado de un cliente anterior.
-  String? get _ecfBuyerTaxId => (_selectedClientId ?? '').trim().isEmpty
-      ? null
-      : _fiscalCustomerTaxId;
+  String? get _ecfBuyerTaxId =>
+      (_selectedClientId ?? '').trim().isEmpty ? null : _fiscalCustomerTaxId;
 
-  String? get _ecfBuyerName => (_selectedClientId ?? '').trim().isEmpty
-      ? null
-      : _fiscalCustomerName;
+  String? get _ecfBuyerName =>
+      (_selectedClientId ?? '').trim().isEmpty ? null : _fiscalCustomerName;
 
   /// Selector del comprobante dentro del carrito.
   ///
@@ -3058,6 +3067,18 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     });
   }
 
+  /// Abre el panel del asistente de IA desde la columna de detalle.
+  ///
+  /// Publica el contexto de la pantalla actual para que el asistente sepa
+  /// dónde está el usuario antes de abrirse.
+  void _openDesktopAiAssistant() {
+    final location = safeCurrentLocation(context);
+    ref
+        .read(aiAssistantControllerProvider.notifier)
+        .setContext(buildAiChatContextFromLocation(location));
+    GlobalAiAssistantEntryPoint.showDesktopPanel(context, ref);
+  }
+
   void _scheduleDesktopShellFooterPublish() {
     if (_desktopShellFooterPublishScheduled) return;
     final requestCompanyId = _activeCompanyId();
@@ -3487,7 +3508,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             child: SizedBox(
               width: width,
               height: double.infinity,
-              child: _DesktopCalculatorPane(
+              child: DesktopCalculatorPane(
                 onClose: () => Navigator.of(dialogContext).pop(),
               ),
             ),
@@ -5308,6 +5329,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return '$first${text.substring(1)}';
   }
 
+  Future<void> _createBillingClient() async {
+    final created = await openClienteFormAdaptive(
+      context,
+      useRootNavigator: true,
+      requireFiscalData: _activeTicketRequiresFiscalCustomer,
+    );
+    if (!mounted || created == null) return;
+    _commitEditorChange(() {
+      _selectedClientId = created.id;
+      _selectedClientName = created.nombre;
+      _selectedClientPhone = created.telefono;
+      _applyClientFiscalPrefill(created);
+    });
+    unawaited(_repriceCartForWholesale());
+    unawaited(_rememberBillingClient(created));
+  }
+
   Future<void> _openClientDialog() async {
     final searchCtrl = TextEditingController();
 
@@ -5493,9 +5531,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               // que «Ámbar» quede junto a «ambar» y no al final de la lista.
               final filteredClients = List<ClienteModel>.of(clients)
                 ..sort(
-                  (a, b) => _clientSortKey(a.nombre).compareTo(
-                    _clientSortKey(b.nombre),
-                  ),
+                  (a, b) => _clientSortKey(
+                    a.nombre,
+                  ).compareTo(_clientSortKey(b.nombre)),
                 );
 
               final selectedDetailClient = detailClient;
@@ -5605,7 +5643,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                         context,
                                         rootNavigator: true,
                                       ).overlay;
-                                      final created = await openClientFormDrawer();
+                                      final created =
+                                          await openClientFormDrawer();
                                       if (!mounted ||
                                           !dialogOpen ||
                                           !context.mounted ||
@@ -5615,8 +5654,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                       _commitEditorChange(() {
                                         _selectedClientId = created.id;
                                         _selectedClientName = created.nombre;
-                                        _selectedClientPhone =
-                                            created.telefono;
+                                        _selectedClientPhone = created.telefono;
                                         _applyClientFiscalPrefill(created);
                                       });
                                       unawaited(_repriceCartForWholesale());
@@ -5838,7 +5876,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                         .shrinkWrap,
                                               ),
                                               icon: const _BillingPngIcon(
-                                                asset: _billingClientViewIconAsset,
+                                                asset:
+                                                    _billingClientViewIconAsset,
                                                 size: 15,
                                                 color: Color(0xFF2563EB),
                                               ),
@@ -5859,7 +5898,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                         .shrinkWrap,
                                               ),
                                               icon: const _BillingPngIcon(
-                                                asset: _billingClientEditIconAsset,
+                                                asset:
+                                                    _billingClientEditIconAsset,
                                                 size: 15,
                                                 color: Color(0xFF2563EB),
                                               ),
@@ -5959,7 +5999,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                               visualDensity:
                                                   VisualDensity.compact,
                                               icon: const _BillingPngIcon(
-                                                asset: _billingClientViewIconAsset,
+                                                asset:
+                                                    _billingClientViewIconAsset,
                                                 size: 18,
                                                 color: Color(0xFF2563EB),
                                               ),
@@ -5971,7 +6012,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                               visualDensity:
                                                   VisualDensity.compact,
                                               icon: const _BillingPngIcon(
-                                                asset: _billingClientEditIconAsset,
+                                                asset:
+                                                    _billingClientEditIconAsset,
                                                 size: 18,
                                                 color: Color(0xFF2563EB),
                                               ),
@@ -6228,8 +6270,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     } else if (parts.length == 1) {
       initials = parts.first.characters.take(2).toString();
     } else {
-      initials =
-          parts.first.characters.first + parts[1].characters.first;
+      initials = parts.first.characters.first + parts[1].characters.first;
     }
     return Container(
       width: 30,
@@ -6297,12 +6338,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         ),
       ),
     );
-  }
-
-  String _tinyCustomerPhoneHint(CotizacionModel cotizacion) {
-    final phone = (cotizacion.customerPhone ?? '').trim();
-    if (phone.isEmpty) return '';
-    return 'Cliente: $phone';
   }
 
   String _formatWhatsAppSendError(ApiException error, {required bool toAdmin}) {
@@ -6537,42 +6572,45 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return saved;
   }
 
+  /// Construye el PDF en segundo plano para que el panel se abra al instante.
+  Future<Uint8List> _buildQuotePdfBytes(CotizacionModel cotizacion) async {
+    final company = await _getCompanySettingsForPdf();
+    return buildCotizacionPdf(cotizacion: cotizacion, company: company);
+  }
+
   Future<void> _openPdfPreview() async {
     if (_showWholesalePricingPending()) return;
     if (_items.isEmpty) {
       _showSalesNotice(
-        title: 'Ticket vacío',
+        title: 'Ticket vac├¡o',
         message: 'Agrega productos para generar PDF.',
         icon: Icons.picture_as_pdf_outlined,
         accent: const Color(0xFFF59E0B),
       );
       return;
     }
-    final allowed = await _ensureQuotePermission('Ver PDF de cotización');
+    final allowed = await _ensureQuotePermission('Ver PDF de cotizaci├│n');
     if (!allowed || !mounted) return;
 
     final cotizacion = _buildDraftCotizacion();
-    final company = await _getCompanySettingsForPdf();
-    final bytes = await buildCotizacionPdf(
-      cotizacion: cotizacion,
-      company: company,
-    );
+    final fileName = buildCotizacionPdfFileName(cotizacion);
+    // La construcción del PDF arranca antes de abrir el panel: la columna
+    // aparece al instante y el documento se muestra en cuanto está listo.
+    final pdfBytesFuture = _buildQuotePdfBytes(cotizacion);
 
     if (!mounted) return;
 
-    await showDialog<void>(
+    await showPdfPreviewPanel<void>(
       context: context,
+      barrierLabel: 'Vista previa de la cotización',
       builder: (context) {
         var sendingAdminApproval = false;
         var downloadingPdf = false;
+        var sharingPdf = false;
         String? dialogNotification;
         bool dialogNotificationIsError = false;
-        final media = MediaQuery.sizeOf(context);
-        final compact = media.width < 560;
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final busy = sendingAdminApproval || downloadingPdf;
-
             void showDialogNotification(
               String message, {
               bool isError = false,
@@ -6588,8 +6626,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               setDialogState(() => sendingAdminApproval = true);
               try {
                 showDialogNotification(
-                  'Enviando cotización a administradores...',
+                  'Enviando cotizaci├│n a administradores...',
                 );
+                final bytes = await pdfBytesFuture;
                 final persisted = await _ensurePersistedQuotationForSend(
                   cotizacion,
                 );
@@ -6598,7 +6637,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   pdfBytes: bytes,
                 ).timeout(const Duration(seconds: 25));
                 showDialogNotification(
-                  'Cotización enviada a administradores correctamente.',
+                  'Cotizaci├│n enviada a administradores correctamente.',
                 );
               } on TimeoutException {
                 showDialogNotification(
@@ -6615,7 +6654,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   userSafeErrorMessage(
                     e,
                     fallback:
-                        'No se pudo enviar a administradores. Inténtalo nuevamente.',
+                        'No se pudo enviar a administradores. Int├®ntalo nuevamente.',
                   ),
                   isError: true,
                 );
@@ -6629,14 +6668,15 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             Future<void> downloadPdf() async {
               setDialogState(() => downloadingPdf = true);
               try {
+                final bytes = await pdfBytesFuture;
                 final saved = await saveCotizacionPdfToDownloads(
                   bytes: bytes,
                   cotizacion: cotizacion,
                 );
                 showDialogNotification(
                   saved
-                      ? 'Cotización descargada en la carpeta Descargas.'
-                      : 'No se pudo descargar la cotización.',
+                      ? 'Cotización guardada en Descargas como «$fileName».'
+                      : 'No se pudo guardar la cotización en Descargas.',
                   isError: !saved,
                 );
               } catch (e) {
@@ -6644,7 +6684,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   userSafeErrorMessage(
                     e,
                     fallback:
-                        'No se pudo descargar la cotización. Inténtalo nuevamente.',
+                        'No se pudo descargar la cotizaci├│n. Int├®ntalo nuevamente.',
                   ),
                   isError: true,
                 );
@@ -6659,16 +6699,35 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               if (!context.mounted) return;
               switch (action) {
                 case _QuotePdfShareAction.sharePdf:
-                  await shareCotizacionPdf(
-                    bytes: bytes,
-                    cotizacion: cotizacion,
-                  );
+                  setDialogState(() => sharingPdf = true);
+                  try {
+                    final bytes = await pdfBytesFuture;
+                    final outcome = await shareCotizacionPdf(
+                      bytes: bytes,
+                      cotizacion: cotizacion,
+                    );
+                    if (outcome == PdfShareOutcome.savedToDownloads) {
+                      showDialogNotification(
+                        'No se pudo abrir Compartir. El PDF se guardó en la carpeta Descargas.',
+                      );
+                    } else if (outcome == PdfShareOutcome.failed) {
+                      showDialogNotification(
+                        'No se pudo compartir el PDF. Inténtalo nuevamente.',
+                        isError: true,
+                      );
+                    }
+                  } finally {
+                    if (context.mounted) {
+                      setDialogState(() => sharingPdf = false);
+                    }
+                  }
                   break;
                 case _QuotePdfShareAction.shareClient:
                   try {
                     showDialogNotification(
                       'Preparando enlace PDF para WhatsApp...',
                     );
+                    final bytes = await pdfBytesFuture;
                     final persisted = await _ensurePersistedQuotationForSend(
                       cotizacion,
                     );
@@ -6711,154 +6770,83 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               }
             }
 
-            return Dialog(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.white,
-              insetPadding: EdgeInsets.symmetric(
-                horizontal: compact ? 6 : 20,
-                vertical: compact ? 6 : 16,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                width: compact
-                    ? media.width - 12
-                    : (media.width * 0.58).clamp(760.0, 1120.0),
-                height: compact ? media.height * 0.96 : media.height * 0.92,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.picture_as_pdf_outlined),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text(
-                                  'PDF de cotización',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              TextButton.icon(
-                                onPressed: busy
-                                    ? null
-                                    : () => unawaited(
-                                        runShareAction(
-                                          _QuotePdfShareAction.sharePdf,
-                                        ),
-                                      ),
-                                icon: downloadingPdf
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.ios_share_outlined),
-                                label: const Text('Compartir'),
-                              ),
-                              IconButton(
-                                onPressed: () => Navigator.pop(context),
-                                icon: const Icon(Icons.close),
-                              ),
-                            ],
-                          ),
-                          Builder(
-                            builder: (context) {
-                              final tinyPhoneHint = _tinyCustomerPhoneHint(
-                                cotizacion,
-                              );
-                              if (tinyPhoneHint.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 1),
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    tinyPhoneHint,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      height: 1,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.42),
+            return Column(
+              children: [
+                PdfPreviewPanelHeader(
+                  title: 'PDF de cotización',
+                  onClose: () => Navigator.pop(context),
+                ),
+                if (dialogNotification != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: dialogNotificationIsError
+                          ? const Color(0xFFFFEBEE)
+                          : const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: dialogNotificationIsError
+                            ? const Color(0xFFE57373)
+                            : const Color(0xFF81C784),
+                      ),
+                    ),
+                    child: Text(
+                      dialogNotification!,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: dialogNotificationIsError
+                            ? const Color(0xFFB71C1C)
+                            : const Color(0xFF1B5E20),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: FutureBuilder(
+                    future: pdfBytesFuture,
+                    builder: (context, snapshot) {
+                      final ready = snapshot.hasData && !sendingAdminApproval;
+                      return PdfPreviewStage(
+                        bytes: snapshot.data,
+                        errorMessage: snapshot.hasError
+                            ? userSafeErrorMessage(
+                                snapshot.error!,
+                                fallback:
+                                    'No se pudo preparar la cotización. Inténtalo nuevamente.',
+                              )
+                            : null,
+                        actions: [
+                          PdfPanelActionButton(
+                            iconAsset: PdfPanelIcons.share,
+                            label: 'Compartir la cotización',
+                            busy: sharingPdf,
+                            onPressed: ready
+                                ? () => unawaited(
+                                    runShareAction(
+                                      _QuotePdfShareAction.sharePdf,
                                     ),
-                                  ),
-                                ),
-                              );
-                            },
+                                  )
+                                : null,
+                          ),
+                          PdfPanelActionButton(
+                            iconAsset: PdfPanelIcons.download,
+                            label: 'Descargar la cotización',
+                            busy: downloadingPdf,
+                            onPressed: ready
+                                ? () => unawaited(downloadPdf())
+                                : null,
                           ),
                         ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    if (dialogNotification != null)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: dialogNotificationIsError
-                              ? const Color(0xFFFFEBEE)
-                              : const Color(0xFFE8F5E9),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: dialogNotificationIsError
-                                ? const Color(0xFFE57373)
-                                : const Color(0xFF81C784),
-                          ),
-                        ),
-                        child: Text(
-                          dialogNotification!,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: dialogNotificationIsError
-                                ? const Color(0xFFB71C1C)
-                                : const Color(0xFF1B5E20),
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: ColoredBox(
-                        color: const Color(0xFFE8EEF5),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 960),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.10),
-                                    blurRadius: 18,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: SfPdfViewer.memory(
-                                bytes,
-                                canShowScrollHead: true,
-                                canShowPaginationDialog: true,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             );
           },
         );
@@ -7706,14 +7694,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
       trace?.finish(outcome: 'ok');
     } catch (e, stackTrace) {
-      TraceLog.log('checkout', 'sale could not be confirmed', error: e, stackTrace: stackTrace);
+      TraceLog.log(
+        'checkout',
+        'sale could not be confirmed',
+        error: e,
+        stackTrace: stackTrace,
+      );
       trace?.finish(outcome: 'error');
       if (!mounted) return;
       _showSalesNotice(
         title: 'No se pudo completar',
         duration: const Duration(seconds: 15),
-        message: userSafeErrorMessage(e, fallback:
-          'No pudimos confirmar el resultado del cobro. Revisa el historial con el encargado antes de volver a cobrar.'),
+        message: userSafeErrorMessage(
+          e,
+          fallback:
+              'No pudimos confirmar el resultado del cobro. Revisa el historial con el encargado antes de volver a cobrar.',
+        ),
         icon: Icons.error_outline_rounded,
         accent: const Color(0xFFDC2626),
       );
@@ -7846,13 +7842,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final settings = _companySettingsCache;
     return FullTechPageHeader(
       title: 'Facturación',
+      brandMenu: true,
       preferDrawerLeading: true,
       actions: [
-        const SizedBox(width: 10),
-        const CashTurnMenuButton(),
-        const SizedBox(width: 18),
-        const SyncStatusMenuButton(),
-        const SizedBox(width: 3),
+        const SizedBox(width: 8),
+        const CashTurnMenuButton(refined: true),
+        const SizedBox(width: 8),
+        const SyncStatusMenuButton(iconOnly: true),
+        const SizedBox(width: 8),
         if (showAiBanner)
           IconButton(
             tooltip: 'Cerrar comentario IA',
@@ -7895,30 +7892,16 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const Center(
-                      child: Text(
-                        'Facturación',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 19.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
                     Positioned.fill(
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: SizedBox(
-                          width: 56,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8),
                           child: Builder(
-                            builder: (context) => Center(
-                              child: _AnimatedDrawerButton(
-                                onPressed: () =>
-                                    Scaffold.maybeOf(context)?.openDrawer(),
-                              ),
+                            builder: (context) => BrandedMenuButton(
+                              onDark: true,
+                              onPressed: () =>
+                                  Scaffold.maybeOf(context)?.openDrawer(),
                             ),
                           ),
                         ),
@@ -9141,7 +9124,6 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         : null;
     final managedCategories = ref.watch(inventoryCategoriesProvider).items;
     final desktopCategories = _catalogCategories(managedCategories);
-    final hasDesktopCategories = desktopCategories.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
       child: Column(
@@ -9162,9 +9144,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final quotePaneWidth = (constraints.maxWidth * 0.31).clamp(
-                  500.0,
-                  550.0,
+                final quotePaneWidth = salesDetailPanelWidth(
+                  constraints.maxWidth,
                 );
                 final sidePaneWidth = quotePaneWidth;
                 final catalogOverlayWidth =
@@ -9241,7 +9222,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           width: sidePaneWidth,
                           child: KeyedSubtree(
                             key: _desktopCartAnimationTargetKey,
-                            child: _DesktopQuotePanel(
+                            child: DesktopSalesDetailPanel(
                               items: _items,
                               selectedCartIndex: _desktopSelectedCartIndex,
                               selectedClientName: _selectedClientName,
@@ -9262,7 +9243,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               ecfSelector: _ecfActive
                                   ? _buildCartEcfSelector()
                                   : null,
-                              onPickClient: _openClientDialog,
+                              searchClients: _searchBillingClients,
+                              onCreateClient: _createBillingClient,
+                              onSelectClient: (client) {
+                                _commitEditorChange(() {
+                                  _selectedClientId = client.id;
+                                  _selectedClientName = client.nombre;
+                                  _selectedClientPhone = client.telefono;
+                                  _applyClientFiscalPrefill(client);
+                                });
+                                unawaited(_repriceCartForWholesale());
+                              },
                               onClearClient: () {
                                 _commitEditorChange(() {
                                   _selectedClientId = null;
@@ -9292,6 +9283,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                       unawaited(_confirmAndClearSale());
                                     },
                               onFinalize: _openCheckoutDialog,
+                              onOpenCalculator: _toggleDesktopCalculator,
                               onApplyGeneralDiscount: _applyGeneralDiscount,
                               onMinusQty: (index) =>
                                   _setQty(index, _items[index].qty - 1),
@@ -9373,15 +9365,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 ),
                               ),
                             ),
-                            AnimatedPositioned(
-                              duration: const Duration(milliseconds: 260),
-                              curve: Curves.easeOutCubic,
-                              left: overlayOpen ? 0 : -overlayPaneWidth,
-                              top: 0,
-                              bottom: 0,
+                            SalesAuxiliaryDock(
+                              visible: overlayOpen,
                               width: overlayPaneWidth,
-                              child: _showDesktopManualItemForm
-                                  ? _DesktopManualItemPanel(
+                              child: !overlayOpen
+                                  ? const SizedBox.shrink()
+                                  : _showDesktopManualItemForm
+                                  ? DesktopManualItemPanel(
                                       key: ValueKey(
                                         'manual-${_desktopManualEditIndex ?? 'new'}',
                                       ),
@@ -9432,7 +9422,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                             );
                                           },
                                     )
-                                  : _DesktopCalculatorPane(
+                                  : DesktopCalculatorPane(
                                       onClose: _toggleDesktopCalculator,
                                     ),
                             ),
@@ -9442,15 +9432,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ),
                     if (!overlayOpen)
                       Positioned(
-                        left: hasDesktopCategories
-                            ? _DesktopCategoryRail.collapsedWidth + 8
-                            : 12,
-                        bottom: 10,
-                        child: _AnimatedCalculatorFab(
-                          open: _showDesktopCalculator,
-                          onTap: _toggleDesktopCalculator,
-                          filled: true,
-                        ),
+                        left: 12,
+                        bottom: 8,
+                        child: _AnimatedAiFab(onTap: _openDesktopAiAssistant),
                       ),
                   ],
                 );
@@ -10355,6 +10339,7 @@ class _TopbarActionShell extends StatefulWidget {
     this.softPrimary = false,
     this.minWidth,
     this.height = 40,
+    this.refined = false,
   });
 
   final IconData icon;
@@ -10365,6 +10350,7 @@ class _TopbarActionShell extends StatefulWidget {
   final bool softPrimary;
   final double? minWidth;
   final double height;
+  final bool refined;
 
   @override
   State<_TopbarActionShell> createState() => _TopbarActionShellState();
@@ -10376,6 +10362,14 @@ class _TopbarActionShellState extends State<_TopbarActionShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.refined) {
+      return RefinedCompanyLabel(
+        label: widget.label,
+        logo:
+            widget.leading ??
+            Icon(widget.icon, size: 18, color: AppColors.primaryDark),
+      );
+    }
     final active = _hovered || _pressed;
     final useBlueFill = widget.primary && !widget.softPrimary;
     final foreground = useBlueFill
@@ -10481,84 +10475,6 @@ class _TopbarActionShellState extends State<_TopbarActionShell> {
                   ),
                 ],
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AnimatedDrawerButton extends StatefulWidget {
-  const _AnimatedDrawerButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  State<_AnimatedDrawerButton> createState() => _AnimatedDrawerButtonState();
-}
-
-class _AnimatedDrawerButtonState extends State<_AnimatedDrawerButton>
-    with SingleTickerProviderStateMixin {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = _hovered || _pressed;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTap: widget.onPressed,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: AnimatedScale(
-              scale: _pressed ? 0.94 : (_hovered ? 1.03 : 1),
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOutCubic,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                width: 38,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: active ? 0.24 : 0.18),
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: active ? 0.36 : 0.28),
-                    width: 0.8,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: active ? 0.10 : 0.04,
-                      ),
-                      blurRadius: active ? 10 : 6,
-                      offset: Offset(0, active ? 4 : 2),
-                    ),
-                  ],
-                ),
-                child: AnimatedRotation(
-                  turns: _pressed ? 0.03 : 0,
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOutCubic,
-                  child: const Icon(
-                    Icons.menu_rounded,
-                    size: 21,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
             ),
           ),
         ),
@@ -10757,7 +10673,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
-      padding: const EdgeInsets.only(right: 10, left: 4),
+      padding: const EdgeInsets.only(right: 8),
       child: PopupMenuButton<String>(
         tooltip: 'Cuenta y empresa',
         offset: const Offset(0, 44),
@@ -10800,24 +10716,6 @@ class _CompanyAccountMenu extends ConsumerWidget {
             ),
           ),
           const PopupMenuDivider(height: 8),
-          PopupMenuItem(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _CompanyMenuItem(
-              icon: Icons.apps_rounded,
-              label: 'Apps',
-              onTap: () => _activateProtectedPanel(
-                context,
-                ref,
-                menuContext,
-                permission: AppPermission.manageSettings,
-                label: 'Apps',
-                child: const _CompanyAppsSidePanel(),
-              ),
-              helpText:
-                  'Centraliza los accesos para usar la cuenta desde Android, web y escritorio, manteniendo la misma empresa y permisos del usuario.',
-            ),
-          ),
           PopupMenuItem(
             enabled: false,
             padding: EdgeInsets.zero,
@@ -10876,6 +10774,14 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanySettingsSubmenu(
               showPrinter: !kIsWeb,
+              onApps: () => _activateProtectedPanel(
+                context,
+                ref,
+                menuContext,
+                permission: AppPermission.manageSettings,
+                label: 'Aplicaciones y descargas',
+                child: const AppsDownloadsPanel(),
+              ),
               onUpdates: () => _activateProtectedRoute(
                 context,
                 ref,
@@ -10953,6 +10859,7 @@ class _CompanyAccountMenu extends ConsumerWidget {
           icon: Icons.storefront_rounded,
           label: companyName,
           leading: _CompanyLogoBox(logoBase64: logoBase64, size: 24),
+          refined: true,
           hasChevron: true,
           primary: true,
           softPrimary: true,
@@ -10975,32 +10882,6 @@ String _compactCompanyDisplayName(String value) {
   final firstSegment = normalized.split(' ').first.trim();
   if (firstSegment.length >= 3) return firstSegment;
   return normalized.substring(0, 18);
-}
-
-class _CompanyAppsSidePanel extends StatelessWidget {
-  const _CompanyAppsSidePanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return _CompanySidePanelScaffold(
-      icon: Icons.apps_rounded,
-      title: 'Apps',
-      subtitle:
-          'Descarga las apps oficiales de FullPOS Cloud para tus dispositivos.',
-      children: [
-        for (final channel in AppAccessLinks.visibleChannels())
-          _CompanySideActionTile(
-            icon: channel.icon,
-            title: channel.title,
-            status: channel.status,
-            description: channel.description,
-            actionLabel: channel.actionLabel,
-            actionIcon: channel.actionIcon,
-            onPressed: () => safeOpenUrl(context, channel.uri),
-          ),
-      ],
-    );
-  }
 }
 
 class _CompanyLicensesSidePanel extends ConsumerWidget {
@@ -11757,73 +11638,6 @@ class _CompanySidePanelScaffold extends StatelessWidget {
   }
 }
 
-class _CompanySideActionTile extends StatelessWidget {
-  const _CompanySideActionTile({
-    required this.icon,
-    required this.title,
-    required this.status,
-    required this.description,
-    this.actionLabel,
-    this.actionIcon,
-    this.onPressed,
-  });
-
-  final IconData icon;
-  final String title;
-  final String status;
-  final String description;
-  final String? actionLabel;
-  final IconData? actionIcon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return _CompanySideSurface(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CompanySideIcon(icon: icon),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: _companySideTitleStyle(15)),
-                const SizedBox(height: 3),
-                Text(status, style: _companySideStrongStyle()),
-                const SizedBox(height: 8),
-                Text(description, style: _companySideBodyStyle()),
-                if (actionLabel != null && onPressed != null) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: onPressed,
-                    icon: Icon(
-                      actionIcon ?? Icons.open_in_new_rounded,
-                      size: 17,
-                    ),
-                    label: Text(actionLabel!),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1957E6),
-                      side: const BorderSide(color: Color(0xFF9DB9F8)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CompanySideSurface extends StatelessWidget {
   const _CompanySideSurface({required this.child});
 
@@ -11879,15 +11693,6 @@ TextStyle _companySideBodyStyle() {
     fontSize: 13,
     height: 1.3,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-  );
-}
-
-TextStyle _companySideStrongStyle() {
-  return const TextStyle(
-    color: Color(0xFF183548),
-    fontSize: 13,
-    fontWeight: FontWeight.w900,
     letterSpacing: 0,
   );
 }
@@ -12069,12 +11874,14 @@ String _companyUserInitials(String name) {
 class _CompanySettingsSubmenu extends StatefulWidget {
   const _CompanySettingsSubmenu({
     required this.showPrinter,
+    required this.onApps,
     required this.onUpdates,
     required this.onPrinter,
     required this.onDeleteAccount,
   });
 
   final bool showPrinter;
+  final VoidCallback onApps;
   final VoidCallback onUpdates;
   final VoidCallback onPrinter;
   final VoidCallback onDeleteAccount;
@@ -12141,6 +11948,11 @@ class _CompanySettingsSubmenuState extends State<_CompanySettingsSubmenu> {
           ),
         ),
         if (_expanded) ...[
+          _CompanySettingsSubmenuAction(
+            icon: Icons.devices_other_rounded,
+            label: 'Aplicaciones y descargas',
+            onTap: widget.onApps,
+          ),
           _CompanySettingsSubmenuAction(
             icon: Icons.system_update_alt_rounded,
             label: 'Actualización',
@@ -14118,8 +13930,6 @@ class _ProductPreviewPlaceholder extends StatelessWidget {
 }
 
 const bool _useModernDesktopCatalogGrid = true;
-const double _desktopCatalogToolbarControlHeight = 42.0;
-const double _desktopCatalogToolbarRadius = 7.0;
 
 class _DesktopCatalogStatusBanner extends StatelessWidget {
   const _DesktopCatalogStatusBanner({
@@ -14264,7 +14074,6 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasCategories = widget.categories.isNotEmpty;
     final catalogLeftInset = hasCategories ? 0.0 : 8.0;
 
@@ -14290,7 +14099,7 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                         padding: EdgeInsets.fromLTRB(catalogLeftInset, 4, 8, 8),
                         child: Column(
                           children: [
-                            _buildDesktopCatalogCommandBar(theme),
+                            _buildDesktopCatalogCommandBar(),
                             if (widget.offline)
                               _DesktopCatalogStatusBanner(
                                 icon: Icons.cloud_off_rounded,
@@ -14350,7 +14159,7 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
                   padding: const EdgeInsets.fromLTRB(2, 2, 8, 8),
                   child: Column(
                     children: [
-                      _buildDesktopCatalogCommandBar(theme),
+                      _buildDesktopCatalogCommandBar(),
                       _DesktopCategoryStrip(
                         categories: widget.categories,
                         allProducts: widget.allProducts,
@@ -14378,129 +14187,15 @@ class _DesktopCatalogPaneState extends State<_DesktopCatalogPane> {
     );
   }
 
-  Widget _buildDesktopCatalogCommandBar(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-      child: SizedBox(
-        height: _desktopCatalogToolbarControlHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(
-                    _desktopCatalogToolbarRadius,
-                  ),
-                  border: Border.all(color: _billingBorderColor),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0B2A3A).withValues(alpha: 0.035),
-                      blurRadius: 10,
-                      spreadRadius: -6,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: widget.searchController,
-                  focusNode: widget.searchFocusNode,
-                  onChanged: (_) => widget.onSearchChanged(),
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => widget.onSearchSubmitted(),
-                  textAlignVertical: TextAlignVertical.center,
-                  cursorHeight: 18,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    height: 1,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
-                  strutStyle: const StrutStyle(
-                    height: 1,
-                    forceStrutHeight: true,
-                  ),
-                  decoration: InputDecoration(
-                    constraints: const BoxConstraints.tightFor(
-                      height: _desktopCatalogToolbarControlHeight,
-                    ),
-                    hintText: 'Buscar producto por nombre o código...',
-                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                      height: 1,
-                      color: const Color(0xFF6A7F90),
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0,
-                    ),
-                    prefixIcon: const Center(
-                      child: Icon(
-                        Icons.search_rounded,
-                        color: Color(0xFF64748B),
-                        size: 18,
-                      ),
-                    ),
-                    prefixIconConstraints: const BoxConstraints.tightFor(
-                      width: 42,
-                      height: _desktopCatalogToolbarControlHeight,
-                    ),
-                    suffixIcon: widget.searchController.text.trim().isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Limpiar búsqueda',
-                            onPressed: () {
-                              widget.searchController.clear();
-                              widget.onSearchChanged();
-                            },
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: Color(0xFF617383),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 34,
-                              height: _desktopCatalogToolbarControlHeight,
-                            ),
-                          ),
-                    suffixIconConstraints: const BoxConstraints.tightFor(
-                      width: 38,
-                      height: _desktopCatalogToolbarControlHeight,
-                    ),
-                    filled: true,
-                    fillColor: Colors.transparent,
-                    isDense: true,
-                    isCollapsed: true,
-                    contentPadding: const EdgeInsets.only(right: 8),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            if (widget.inventoryEnabled) ...[
-              _CatalogLineActionButton(
-                icon: AppIcons.stockAdd,
-                label: 'Agregar stock',
-                width: 132,
-                onPressed: widget.onOpenStockAdjustments,
-              ),
-              const SizedBox(width: 7),
-            ],
-            _CatalogLineActionButton(
-              icon: AppIcons.productAdd,
-              label: 'Nuevo producto',
-              width: 142,
-              filled: true,
-              onPressed: widget.onOpenNewProduct,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildDesktopCatalogCommandBar() => SalesCatalogCommandBar(
+    controller: widget.searchController,
+    focusNode: widget.searchFocusNode,
+    inventoryEnabled: widget.inventoryEnabled,
+    onSearchChanged: widget.onSearchChanged,
+    onSearchSubmitted: widget.onSearchSubmitted,
+    onNewProduct: widget.onOpenNewProduct,
+    onStock: widget.onOpenStockAdjustments,
+  );
 
   Widget _buildModernDesktopCatalogGrid(BoxConstraints constraints) {
     final width = constraints.maxWidth;
@@ -14783,17 +14478,8 @@ int _desktopCatalogProductRow(int index, int columns) {
   return 2 + ((index - firstRowsCapacity) ~/ columns);
 }
 
-typedef _ManualItemSubmit =
-    void Function({
-      required String name,
-      required double qty,
-      required UnitOfMeasureModel unit,
-      required double unitPrice,
-      required double? externalCost,
-    });
-
-class _DesktopManualItemPanel extends StatefulWidget {
-  const _DesktopManualItemPanel({
+class DesktopManualItemPanel extends StatefulWidget {
+  const DesktopManualItemPanel({
     super.key,
     required this.item,
     required this.money,
@@ -14814,14 +14500,20 @@ class _DesktopManualItemPanel extends StatefulWidget {
   final bool measurementUnitsEnabled;
   final List<UnitOfMeasureModel> unitOptions;
   final VoidCallback onCancel;
-  final _ManualItemSubmit onSubmit;
+  final void Function({
+    required String name,
+    required double qty,
+    required UnitOfMeasureModel unit,
+    required double unitPrice,
+    required double? externalCost,
+  })
+  onSubmit;
 
   @override
-  State<_DesktopManualItemPanel> createState() =>
-      _DesktopManualItemPanelState();
+  State<DesktopManualItemPanel> createState() => _DesktopManualItemPanelState();
 }
 
-class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
+class _DesktopManualItemPanelState extends State<DesktopManualItemPanel> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _costCtrl;
@@ -15008,223 +14700,242 @@ class _DesktopManualItemPanelState extends State<_DesktopManualItemPanel> {
         color: Colors.white,
         border: Border(right: BorderSide(color: _billingBorderColor)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0F2FE),
-                    borderRadius: BorderRadius.circular(8),
+      child: _ScrollableSalesPane(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0F2FE),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.add_shopping_cart_outlined,
+                      color: Color(0xFF075985),
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.add_shopping_cart_outlined,
-                    color: Color(0xFF075985),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        editing
-                            ? 'Editar producto manual'
-                            : 'Producto fuera de inventario',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFF0F172A),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          editing ? 'Editar producto manual' : 'Venta rápida',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF0F172A),
+                          ),
                         ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Venta puntual sin registrar en catálogo.',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: widget.onCancel,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _keyboardField(
+                focusNode: _nameFocus,
+                controller: _nameCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: _decoration('Nombre del producto o servicio'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _keyboardField(
+                      focusNode: _qtyFocus,
+                      controller: _qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Venta puntual sin registrar en catálogo.',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF64748B),
-                          fontWeight: FontWeight.w600,
+                      onChanged: (_) => setState(() {}),
+                      decoration: _decoration('Cantidad'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _keyboardField(
+                      focusNode: _costFocus,
+                      controller: _costCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                      decoration: _decoration('Costo unitario'),
+                    ),
+                  ),
+                ],
+              ),
+              if (widget.measurementUnitsEnabled) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedUnit.id,
+                  isExpanded: true,
+                  decoration: _decoration('Unidad de medida'),
+                  items: [
+                    for (final unit in widget.unitOptions)
+                      DropdownMenuItem<String>(
+                        value: unit.id,
+                        child: Text('${unit.name} (${unit.symbol})'),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    final next = widget.unitOptions.firstWhere(
+                      (unit) => unit.id == value,
+                      orElse: () => UnitOfMeasureModel.unit,
+                    );
+                    setState(() => _selectedUnit = next);
+                  },
+                ),
+              ],
+              const SizedBox(height: 12),
+              _keyboardField(
+                focusNode: _priceFocus,
+                controller: _priceCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => setState(() {}),
+                decoration: _decoration('Precio unitario'),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _ManualItemMetric(
+                        label: 'Total',
+                        value: widget.money(_total),
+                      ),
+                    ),
+                    if (widget.isAdmin) ...[
+                      Container(
+                        width: 1,
+                        height: 30,
+                        color: const Color(0xFFE2E8F0),
+                      ),
+                      Expanded(
+                        child: _ManualItemMetric(
+                          label: 'Utilidad',
+                          value: widget.money(_profit),
+                          alignEnd: true,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Cerrar',
-                  onPressed: widget.onCancel,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _keyboardField(
-              focusNode: _nameFocus,
-              controller: _nameCtrl,
-              textInputAction: TextInputAction.next,
-              decoration: _decoration('Nombre producto o servicio'),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _keyboardField(
-                    focusNode: _qtyFocus,
-                    controller: _qtyCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    decoration: _decoration('Cantidad'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _keyboardField(
-                    focusNode: _costFocus,
-                    controller: _costCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    decoration: _decoration('Costo unitario'),
+              ),
+              if (_manualError != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _manualError!,
+                  style: const TextStyle(
+                    color: Color(0xFFDC2626),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
                   ),
                 ),
               ],
-            ),
-            if (widget.measurementUnitsEnabled) ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedUnit.id,
-                isExpanded: true,
-                decoration: _decoration('Unidad de medida'),
-                items: [
-                  for (final unit in widget.unitOptions)
-                    DropdownMenuItem<String>(
-                      value: unit.id,
-                      child: Text('${unit.name} (${unit.symbol})'),
-                    ),
-                ],
-                onChanged: (value) {
-                  final next = widget.unitOptions.firstWhere(
-                    (unit) => unit.id == value,
-                    orElse: () => UnitOfMeasureModel.unit,
-                  );
-                  setState(() => _selectedUnit = next);
-                },
-              ),
-            ],
-            const SizedBox(height: 12),
-            _keyboardField(
-              focusNode: _priceFocus,
-              controller: _priceCtrl,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              textInputAction: TextInputAction.done,
-              onChanged: (_) => setState(() {}),
-              decoration: _decoration('Precio unitario'),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
+              const Spacer(),
+              Row(
                 children: [
                   Expanded(
-                    child: _ManualItemMetric(
-                      label: 'Total',
-                      value: widget.money(_total),
+                    child: OutlinedButton(
+                      onPressed: widget.onCancel,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Cancelar'),
                     ),
                   ),
-                  if (widget.isAdmin) ...[
-                    Container(
-                      width: 1,
-                      height: 30,
-                      color: const Color(0xFFE2E8F0),
-                    ),
-                    Expanded(
-                      child: _ManualItemMetric(
-                        label: 'Utilidad',
-                        value: widget.money(_profit),
-                        alignEnd: true,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _submit,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: const Color(0xFF1957E6),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
+                      child: Text(editing ? 'Guardar' : 'Agregar'),
                     ),
-                  ],
+                  ),
                 ],
               ),
-            ),
-            if (_manualError != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _manualError!,
-                style: const TextStyle(
-                  color: Color(0xFFDC2626),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                ),
-              ),
             ],
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: widget.onCancel,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Cancelar'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _submit,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      backgroundColor: const Color(0xFF1957E6),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(editing ? 'Guardar' : 'Agregar'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _DesktopCalculatorPane extends StatefulWidget {
-  const _DesktopCalculatorPane({required this.onClose});
+/// Mantiene las acciones abajo y permite acceder al formulario en poca altura.
+class _ScrollableSalesPane extends StatelessWidget {
+  const _ScrollableSalesPane({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: IntrinsicHeight(child: child),
+      ),
+    ),
+  );
+}
+
+class DesktopCalculatorPane extends StatefulWidget {
+  const DesktopCalculatorPane({super.key, required this.onClose});
 
   final VoidCallback onClose;
 
   @override
-  State<_DesktopCalculatorPane> createState() => _DesktopCalculatorPaneState();
+  State<DesktopCalculatorPane> createState() => _DesktopCalculatorPaneState();
 }
 
-class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
+class _DesktopCalculatorPaneState extends State<DesktopCalculatorPane> {
   final FocusNode _focusNode = FocusNode();
   String _expression = '';
   String _result = '0';
@@ -15397,155 +15108,172 @@ class _DesktopCalculatorPaneState extends State<_DesktopCalculatorPane> {
       '=',
     ];
 
-    return Focus(
-      focusNode: _focusNode,
-      onKeyEvent: _handleKey,
-      child: Container(
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          color: Color(0xFFF8FBFF),
-          border: Border(right: BorderSide(color: _billingBorderColor)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _billingBorderColor),
-                ),
-                child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) => Align(
+        alignment: Alignment.centerRight,
+        child: SizedBox(
+          height: math.min(560, constraints.maxHeight),
+          child: Focus(
+            focusNode: _focusNode,
+            onKeyEvent: _handleKey,
+            child: Container(
+              height: double.infinity,
+              decoration: const BoxDecoration(
+                color: AppColors.textPrimary,
+                border: Border(right: BorderSide(color: _billingBorderColor)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
                   children: [
                     Container(
-                      width: 38,
-                      height: 38,
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEAF1FF),
+                        color: AppColors.textPrimary,
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.textSecondary),
                       ),
-                      child: const Icon(
-                        Icons.calculate_outlined,
-                        color: Color(0xFF1957E6),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            'Calculadora',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF132337),
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF1FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.calculate_outlined,
+                              color: Color(0xFF1957E6),
                             ),
                           ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Teclado y mouse',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF647985),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Calculadora',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.surface,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Cálculo independiente',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar calculadora',
+                            onPressed: widget.onClose,
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: AppColors.surface,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Cerrar calculadora',
-                      onPressed: widget.onClose,
-                      icon: const Icon(Icons.close_rounded),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.successSoft,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _billingBorderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _expression.isEmpty ? '0' : _expression,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF52657A),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _error ?? _result,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: _error == null ? 34 : 18,
+                              fontWeight: FontWeight.w900,
+                              color: _error == null
+                                  ? const Color(0xFF111827)
+                                  : Colors.red.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, keypad) => GridView.builder(
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: buttons.length,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 4,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                mainAxisExtent: math.max(
+                                  1,
+                                  (keypad.maxHeight - 32) / 5,
+                                ),
+                              ),
+                          itemBuilder: (context, index) {
+                            final label = buttons[index];
+                            final isOperator = [
+                              '÷',
+                              '×',
+                              '-',
+                              '+',
+                              '=',
+                            ].contains(label);
+                            final isUtility = label == 'C' || label == '⌫';
+                            return _CalculatorButton(
+                              label: label,
+                              filled: label == '=',
+                              operator: isOperator,
+                              utility: isUtility,
+                              onPressed: () {
+                                if (label == 'C') return _clear();
+                                if (label == '⌫') return _backspace();
+                                if (label == '=') return _calculate();
+                                _append(
+                                  label == '×'
+                                      ? '*'
+                                      : label == '÷'
+                                      ? '/'
+                                      : label,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _billingBorderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      _expression.isEmpty ? '0' : _expression,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF52657A),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _error ?? _result,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: _error == null ? 34 : 18,
-                        fontWeight: FontWeight.w900,
-                        color: _error == null
-                            ? const Color(0xFF111827)
-                            : Colors.red.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: buttons.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 1.45,
-                  ),
-                  itemBuilder: (context, index) {
-                    final label = buttons[index];
-                    final isOperator = [
-                      '÷',
-                      '×',
-                      '-',
-                      '+',
-                      '=',
-                    ].contains(label);
-                    final isUtility = label == 'C' || label == '⌫';
-                    return _CalculatorButton(
-                      label: label,
-                      filled: label == '=',
-                      operator: isOperator,
-                      utility: isUtility,
-                      onPressed: () {
-                        if (label == 'C') return _clear();
-                        if (label == '⌫') return _backspace();
-                        if (label == '=') return _calculate();
-                        _append(
-                          label == '×'
-                              ? '*'
-                              : label == '÷'
-                              ? '/'
-                              : label,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -15709,19 +15437,15 @@ class _ExpressionEvaluator {
   }
 }
 
-enum _DesktopSaleHeaderAction { quote, invoiceType, note }
-
 class _BillingPngIcon extends StatelessWidget {
   const _BillingPngIcon({
     required this.asset,
     required this.size,
-    this.fit = BoxFit.contain,
     this.color,
   });
 
   final String asset;
   final double size;
-  final BoxFit fit;
 
   /// Tiñe el glifo conservando su transparencia. Permite usar el mismo PNG
   /// negro sobre fondo claro, sobre azul o en blanco.
@@ -15735,7 +15459,7 @@ class _BillingPngIcon extends StatelessWidget {
       asset,
       width: size,
       height: size,
-      fit: fit,
+      fit: BoxFit.contain,
       cacheWidth: cacheSize,
       cacheHeight: cacheSize,
       filterQuality: FilterQuality.medium,
@@ -15753,389 +15477,6 @@ class _BillingPngIcon extends StatelessWidget {
     return ColorFiltered(
       colorFilter: ColorFilter.mode(tint, BlendMode.srcIn),
       child: image,
-    );
-  }
-}
-
-class _DesktopSaleHeaderBar extends StatelessWidget {
-  const _DesktopSaleHeaderBar({
-    required this.hasClient,
-    required this.clientName,
-    required this.clientPhone,
-    required this.fiscalLabel,
-    required this.hasNote,
-    required this.onPickClient,
-    required this.onClearClient,
-    required this.onQuote,
-    required this.onOpenFiscalData,
-    required this.onOpenNote,
-    required this.onPdf,
-  });
-
-  final bool hasClient;
-  final String clientName;
-  final String clientPhone;
-  final String fiscalLabel;
-  final bool hasNote;
-  final VoidCallback onPickClient;
-  final VoidCallback onClearClient;
-  final VoidCallback onQuote;
-  final VoidCallback? onOpenFiscalData;
-  final VoidCallback onOpenNote;
-  final VoidCallback onPdf;
-
-  @override
-  Widget build(BuildContext context) {
-    final resolvedClient = hasClient ? clientName.trim() : 'Agregar cliente';
-
-    return Material(
-      color: const Color(0xFFFCFEFF),
-      child: Container(
-        decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: _billingSubtleBorderColor, width: 1),
-          ),
-        ),
-        child: SizedBox(
-          height: 48,
-          child: Row(
-            children: [
-              const SizedBox(width: 10),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 286),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: onPickClient,
-                        borderRadius: BorderRadius.circular(7),
-                        child: Container(
-                          height: 36,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: hasClient
-                                ? const Color(0xFFF8FBFF)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(7),
-                            border: Border.all(
-                              color: _billingSubtleBorderColor,
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFF0B2A3A,
-                                ).withValues(alpha: 0.025),
-                                blurRadius: 9,
-                                spreadRadius: -7,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Opacity(
-                                opacity: hasClient ? 1 : 0.72,
-                                child: const _BillingPngIcon(
-                                  asset: _billingClientIconAsset,
-                                  size: 21,
-                                ),
-                              ),
-                              const SizedBox(width: 7),
-                              Flexible(
-                                child: Text(
-                                  resolvedClient,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: hasClient
-                                        ? const Color(0xFF111827)
-                                        : const Color(0xFF516579),
-                                    fontSize: 12.7,
-                                    height: 1,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0,
-                                  ),
-                                ),
-                              ),
-                              if (hasClient && clientPhone.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 105,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(
-                                      color: _billingSubtleBorderColor,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    clientPhone,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Color(0xFF52677C),
-                                      fontSize: 10.6,
-                                      height: 1,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ] else if (!hasClient) ...[
-                                const SizedBox(width: 9),
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFEAF1FF),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.add_rounded,
-                                    size: 15,
-                                    color: Color(0xFF1957E6),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (hasClient)
-                _DesktopSaleHeaderIconButton(
-                  tooltip: 'Quitar cliente',
-                  icon: Icons.close_rounded,
-                  onPressed: onClearClient,
-                  muted: true,
-                ),
-              const SizedBox(width: 5),
-              _DesktopSaleActionsMenu(
-                fiscalLabel: fiscalLabel,
-                hasNote: hasNote,
-                onQuote: onQuote,
-                onOpenFiscalData: onOpenFiscalData,
-                onOpenNote: onOpenNote,
-              ),
-              const SizedBox(width: 5),
-              _DesktopSaleHeaderIconButton(
-                tooltip: 'Ver PDF',
-                asset: _billingQuoteIconAsset,
-                onPressed: onPdf,
-                iconSize: 30,
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopSaleHeaderIconButton extends StatelessWidget {
-  const _DesktopSaleHeaderIconButton({
-    required this.tooltip,
-    this.icon,
-    this.asset,
-    required this.onPressed,
-    this.muted = false,
-    this.iconSize,
-  });
-
-  final String tooltip;
-  final IconData? icon;
-  final String? asset;
-  final VoidCallback onPressed;
-  final bool muted;
-  final double? iconSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = muted
-        ? const Color(0xFF64748B)
-        : const Color(0xFF111827);
-    return Tooltip(
-      message: tooltip,
-      child: SizedBox(
-        width: muted ? 30 : 38,
-        height: 38,
-        child: IconButton(
-          onPressed: onPressed,
-          padding: EdgeInsets.zero,
-          visualDensity: VisualDensity.compact,
-          style: IconButton.styleFrom(
-            backgroundColor: muted ? Colors.transparent : Colors.white,
-            foregroundColor: foreground,
-            hoverColor: const Color(0xFFEAF1FF),
-            highlightColor: const Color(0xFFDDEAFF),
-            side: muted
-                ? BorderSide.none
-                : const BorderSide(color: _billingBorderColor),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(5),
-            ),
-          ),
-          icon: asset == null
-              ? Icon(icon, size: muted ? 18 : 23)
-              : _BillingPngIcon(
-                  asset: asset!,
-                  size: iconSize ?? 22,
-                  fit: BoxFit.contain,
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopSaleActionsMenu extends StatelessWidget {
-  const _DesktopSaleActionsMenu({
-    required this.fiscalLabel,
-    required this.hasNote,
-    required this.onQuote,
-    required this.onOpenFiscalData,
-    required this.onOpenNote,
-  });
-
-  final String fiscalLabel;
-  final bool hasNote;
-  final VoidCallback onQuote;
-  final VoidCallback? onOpenFiscalData;
-  final VoidCallback onOpenNote;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 38,
-      height: 38,
-      child: PopupMenuButton<_DesktopSaleHeaderAction>(
-        tooltip: 'Acciones',
-        padding: EdgeInsets.zero,
-        position: PopupMenuPosition.under,
-        color: Colors.white,
-        surfaceTintColor: Colors.white,
-        elevation: 8,
-        shadowColor: Colors.black.withValues(alpha: 0.10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: _billingBorderColor),
-        ),
-        onSelected: (action) {
-          switch (action) {
-            case _DesktopSaleHeaderAction.quote:
-              onQuote();
-              return;
-            case _DesktopSaleHeaderAction.invoiceType:
-              onOpenFiscalData?.call();
-              return;
-            case _DesktopSaleHeaderAction.note:
-              onOpenNote();
-              return;
-          }
-        },
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: _DesktopSaleHeaderAction.quote,
-            child: _DesktopSaleActionMenuRow(
-              asset: _billingQuoteIconAsset,
-              label: 'Cotizar',
-            ),
-          ),
-          if (onOpenFiscalData != null)
-            PopupMenuItem(
-              value: _DesktopSaleHeaderAction.invoiceType,
-              child: _DesktopSaleActionMenuRow(
-                icon: Icons.receipt_long_outlined,
-                label: 'Tipo de factura',
-                trailing: fiscalLabel,
-              ),
-            ),
-          PopupMenuItem(
-            value: _DesktopSaleHeaderAction.note,
-            child: _DesktopSaleActionMenuRow(
-              icon: hasNote
-                  ? Icons.sticky_note_2_rounded
-                  : Icons.sticky_note_2_outlined,
-              label: hasNote ? 'Editar nota' : 'Agregar nota',
-            ),
-          ),
-        ],
-        icon: const _BillingPngIcon(asset: _billingActionsIconAsset, size: 26),
-        iconColor: const Color(0xFF111827),
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: const Color(0xFF111827),
-          hoverColor: const Color(0xFFEAF1FF),
-          side: const BorderSide(color: _billingBorderColor),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopSaleActionMenuRow extends StatelessWidget {
-  const _DesktopSaleActionMenuRow({
-    this.icon,
-    this.asset,
-    required this.label,
-    this.trailing,
-  });
-
-  final IconData? icon;
-  final String? asset;
-  final String label;
-  final String? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 228,
-      child: Row(
-        children: [
-          if (asset == null)
-            Icon(icon, size: 17, color: const Color(0xFF1957E6))
-          else
-            _BillingPngIcon(asset: asset!, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF183548),
-                fontWeight: FontWeight.w900,
-                fontSize: 12.5,
-              ),
-            ),
-          ),
-          if ((trailing ?? '').trim().isNotEmpty)
-            Text(
-              trailing!.trim(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w800,
-                fontSize: 10.5,
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
@@ -16161,8 +15502,27 @@ class _QuotePriceListSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final defaultLabel = (clientListName ?? '').trim().isEmpty
-        ? 'Precio general / cliente'
+        ? 'Precio general o del cliente'
         : 'Cliente: ${clientListName!.trim()}';
+    final options = [
+      DropdownMenuItem<String?>(
+        value: null,
+        child: Text(defaultLabel, overflow: TextOverflow.ellipsis),
+      ),
+      for (final list in lists)
+        DropdownMenuItem<String?>(
+          value: list.id,
+          child: Text(list.name, overflow: TextOverflow.ellipsis),
+        ),
+    ];
+    if (!compact) {
+      return SalesDetailPriceListSelector(
+        value: selectedId,
+        options: options,
+        busy: busy,
+        onChanged: onChanged,
+      );
+    }
     return InputDecorator(
       decoration: InputDecoration(
         labelText: 'Lista de precios',
@@ -16187,17 +15547,7 @@ class _QuotePriceListSelector extends StatelessWidget {
                 value: selectedId,
                 isDense: true,
                 isExpanded: true,
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(defaultLabel, overflow: TextOverflow.ellipsis),
-                  ),
-                  for (final list in lists)
-                    DropdownMenuItem<String?>(
-                      value: list.id,
-                      child: Text(list.name, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+                items: options,
                 onChanged: busy ? null : onChanged,
               ),
             ),
@@ -16215,8 +15565,72 @@ class _QuotePriceListSelector extends StatelessWidget {
   }
 }
 
-class _DesktopQuotePanel extends StatelessWidget {
-  const _DesktopQuotePanel({
+/// Botón flotante del asistente de IA.
+///
+/// Ocupa la posición donde antes estaba la calculadora (esquina inferior del
+/// catálogo). Entra con una animación suave de escala y desvanecido, y se eleva
+/// ligeramente al pasar el cursor para indicar que es pulsable.
+class _AnimatedAiFab extends StatefulWidget {
+  const _AnimatedAiFab({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_AnimatedAiFab> createState() => _AnimatedAiFabState();
+}
+
+class _AnimatedAiFabState extends State<_AnimatedAiFab>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 340),
+  );
+  late final Animation<double> _scale = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutBack,
+  );
+  bool _hovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.86, end: 1).animate(_scale),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            offset: _hovered ? const Offset(0, -0.05) : Offset.zero,
+            child: AiAssistantDockButton(
+              compact: true,
+              onPressed: widget.onTap,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DesktopSalesDetailPanel extends StatelessWidget {
+  const DesktopSalesDetailPanel({
+    super.key,
     required this.items,
     required this.selectedCartIndex,
     required this.selectedClientName,
@@ -16233,7 +15647,9 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.money,
     required this.priceListSelector,
     this.ecfSelector,
-    required this.onPickClient,
+    required this.searchClients,
+    required this.onCreateClient,
+    required this.onSelectClient,
     required this.onClearClient,
     required this.onOpenHistory,
     required this.onQuote,
@@ -16243,6 +15659,7 @@ class _DesktopQuotePanel extends StatelessWidget {
     required this.hasNote,
     required this.onOpenNote,
     required this.onClear,
+    required this.onOpenCalculator,
     required this.onFinalize,
     required this.onApplyGeneralDiscount,
     required this.onMinusQty,
@@ -16275,7 +15692,9 @@ class _DesktopQuotePanel extends StatelessWidget {
   /// Selector del comprobante electrónico. Se dibuja encima del botón Cobrar
   /// para que el vendedor lo vea sin abrir el diálogo de pago.
   final Widget? ecfSelector;
-  final VoidCallback onPickClient;
+  final Future<List<ClienteModel>> Function(String) searchClients;
+  final VoidCallback onCreateClient;
+  final ValueChanged<ClienteModel> onSelectClient;
   final VoidCallback onClearClient;
   final VoidCallback onOpenHistory;
   final VoidCallback onQuote;
@@ -16285,6 +15704,9 @@ class _DesktopQuotePanel extends StatelessWidget {
   final bool hasNote;
   final VoidCallback onOpenNote;
   final VoidCallback? onClear;
+
+  /// Abre la calculadora desde la columna de detalle (antes era un FAB flotante).
+  final VoidCallback onOpenCalculator;
   final VoidCallback onFinalize;
   final VoidCallback onApplyGeneralDiscount;
   final ValueChanged<int> onMinusQty;
@@ -16324,18 +15746,25 @@ class _DesktopQuotePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _DesktopSaleHeaderBar(
-              hasClient: hasClient,
-              clientName: selectedClientName,
-              clientPhone: clientPhone,
+            SalesDetailHeader(
+              clientSelector: SalesClientSelector(
+                hasClient: hasClient,
+                name: selectedClientName,
+                phone: clientPhone,
+                search: searchClients,
+                onCreate: onCreateClient,
+                onSelected: onSelectClient,
+                onClear: onClearClient,
+              ),
               fiscalLabel: fiscalLabel,
               hasNote: hasNote,
-              onPickClient: onPickClient,
-              onClearClient: onClearClient,
               onQuote: onQuote,
               onOpenFiscalData: onOpenFiscalData,
               onOpenNote: onOpenNote,
               onPdf: onPdf,
+              priceListSelector: priceListSelector is SizedBox
+                  ? null
+                  : priceListSelector,
             ),
             // El comprobante vive arriba, junto al cliente: es un dato de la
             // venta, no del importe. Se muestra siempre que la empresa facture
@@ -16344,11 +15773,6 @@ class _DesktopQuotePanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
                 child: ecfSelector,
-              ),
-            if (priceListSelector is! SizedBox)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                child: priceListSelector,
               ),
             Expanded(
               child: items.isEmpty
@@ -16453,11 +15877,13 @@ class _DesktopQuotePanel extends StatelessWidget {
                     child: GestureDetector(
                       onDoubleTap: onApplyGeneralDiscount,
                       child: FilledButton(
+                        key: ActivationTourTargets.keyFor('pos.collect'),
                         onPressed: onFinalize,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1957E6),
                           foregroundColor: Colors.white,
                           minimumSize: const Size.fromHeight(64),
+                          visualDensity: VisualDensity.standard,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(3),
                           ),
@@ -16471,12 +15897,20 @@ class _DesktopQuotePanel extends StatelessWidget {
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
-                            const Spacer(),
-                            Text(
-                              money(total),
-                              style: const TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w900,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    money(total),
+                                    style: const TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -16484,40 +15918,22 @@ class _DesktopQuotePanel extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  SalesDetailShortcut(
+                    tooltip: 'Calculadora',
+                    asset: SalesDetailShortcut.calculatorAsset,
+                    onPressed: onOpenCalculator,
+                  ),
+                  const SizedBox(width: 6),
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
-                    child: SizedBox(
+                    child: SalesDetailShortcut(
                       width: 70,
-                      height: 64,
-                      child: OutlinedButton(
-                        onPressed: onOpenHistory,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF111827),
-                          side: const BorderSide(
-                            color: _billingBorderColor,
-                            width: 1.35,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                        ),
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.receipt_rounded, size: 24),
-                            SizedBox(height: 2),
-                            Text(
-                              'Ventas',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      tooltip: 'Ventas',
+                      label: 'Ventas',
+                      asset: SalesDetailShortcut.salesAsset,
+                      iconSize: 28,
+                      onPressed: onOpenHistory,
                     ),
                   ),
                 ],
@@ -16536,25 +15952,32 @@ class _DesktopQuotePanel extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEAF1FF),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        itemCountText,
-                        style: const TextStyle(
-                          color: Color(0xFF1957E6),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF1FF),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              itemCountText,
+                              style: const TextStyle(
+                                color: Color(0xFF1957E6),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    const Spacer(),
                     TextButton.icon(
                       onPressed: onClear,
                       icon: const Icon(Icons.close, size: 16),
@@ -16947,72 +16370,6 @@ class _DesktopMiniTechToggle extends StatelessWidget {
               Icons.check_rounded,
               size: 10,
               color: Color(0xFF1957E6),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CatalogLineActionButton extends StatelessWidget {
-  const _CatalogLineActionButton({
-    required this.icon,
-    required this.label,
-    required this.width,
-    required this.onPressed,
-    this.filled = false,
-  });
-
-  final AppIconData icon;
-  final String label;
-  final double width;
-  final VoidCallback onPressed;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final background = filled ? const Color(0xFFE4F8FF) : Colors.white;
-    final foreground = const Color(0xFF0D5EA6);
-    const borderColor = _billingBorderColor;
-
-    return SizedBox(
-      width: width,
-      height: _desktopCatalogToolbarControlHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(_desktopCatalogToolbarRadius),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(
-                0xFF123A6F,
-              ).withValues(alpha: filled ? 0.065 : 0.035),
-              blurRadius: filled ? 10 : 7,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: OutlinedButton.icon(
-          onPressed: onPressed,
-          icon: AppIcon(icon, size: 17, color: foreground, strokeWidth: 2),
-          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-          style: OutlinedButton.styleFrom(
-            backgroundColor: background,
-            foregroundColor: foreground,
-            side: BorderSide(color: borderColor, width: 1.1),
-            fixedSize: Size(width, _desktopCatalogToolbarControlHeight),
-            minimumSize: Size(width, _desktopCatalogToolbarControlHeight),
-            maximumSize: Size(width, _desktopCatalogToolbarControlHeight),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
-            textStyle: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 12.1,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(_desktopCatalogToolbarRadius),
             ),
           ),
         ),
@@ -19395,208 +18752,162 @@ class _DesktopTicketItemState extends ConsumerState<_DesktopTicketItem> {
         onTap: widget.onSelect,
         onDoubleTap: widget.onEditLine,
         child: Ink(
-          padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
           decoration: BoxDecoration(
-            color: widget.selected ? const Color(0xFFF3F7FF) : Colors.white,
+            color: widget.selected ? AppColors.primarySoft : AppColors.surface,
             border: Border(
               left: BorderSide(
-                color: widget.selected
-                    ? const Color(0xFF1957E6)
-                    : Colors.transparent,
+                color: widget.selected ? AppColors.primary : Colors.transparent,
                 width: 3,
               ),
-              bottom: const BorderSide(color: _billingBorderColor, width: 1),
+              bottom: const BorderSide(color: AppColors.border),
             ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 6,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (outOfStock)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 2),
-                        child: Text(
-                          'Sin stock',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Color(0xFF1957E6),
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w900,
-                            height: 1,
-                            letterSpacing: 0,
-                          ),
-                        ),
-                      ),
-                    if (widget.exempt)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 2),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'EXENTO',
-                          style: TextStyle(
-                            color: Color(0xFF1957E6),
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w800,
-                            height: 1.1,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ),
-                    InkWell(
-                      onTap: _showFullProductName,
-                      child: Text(
-                        item.nombre,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    if (hasDiscount || item.isExternal)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            if (hasDiscount)
-                              Text(
-                                'desc: $discountText',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.red.shade700,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            if (item.isExternal)
-                              _buildTicketTag(
-                                label: 'Manual',
-                                backgroundColor: const Color(0xFF1957E6),
-                                foregroundColor: Colors.white,
-                              ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 4),
-              SizedBox(
-                width: 52,
-                child: InkWell(
-                  onTap: _showFullPrice,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        _formatAccountingInput(item.unitPrice),
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: const Color(0xFF52677C),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                        ),
-                      ),
+          child: SalesDetailLineLayout(
+            description: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (outOfStock)
+                  Text(
+                    'Sin existencias',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-              ),
-
-              if (hasDiscount)
-                Padding(
-                  padding: const EdgeInsets.only(left: 3),
+                if (widget.exempt)
+                  Text(
+                    'Exento',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                InkWell(
+                  onTap: _showFullProductName,
                   child: Text(
-                    widget.money(item.effectiveOriginalUnitPrice),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      decoration: TextDecoration.lineThrough,
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 10,
+                    item.nombre,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-              const SizedBox(width: 2),
-              if (useMeasuredQtyStepper)
-                _MeasuredDesktopTicketQtyStepper(
-                  qtyText: qtyText,
-                  onMinus: widget.onMinus,
-                  onPlus: widget.onPlus,
-                )
-              else ...[
-                _DesktopTicketQtyButton(
-                  tooltip: 'Restar unidad',
-                  onPressed: widget.onMinus,
-                  icon: AppIcons.remove,
-                ),
-                SizedBox(
-                  width: 24,
-                  height: 28,
-                  child: Center(
-                    child: Text(
-                      qtyText,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF183548),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                      ),
+                if (hasDiscount || item.isExternal)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (hasDiscount)
+                          Text(
+                            'Descuento: $discountText',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: AppColors.error,
+                            ),
+                          ),
+                        if (item.isExternal)
+                          _buildTicketTag(
+                            label: 'Manual',
+                            backgroundColor: AppColors.primarySoft,
+                            foregroundColor: AppColors.primary,
+                          ),
+                      ],
                     ),
                   ),
-                ),
-                _DesktopTicketQtyButton(
-                  tooltip: 'Sumar unidad',
-                  onPressed: widget.onPlus,
-                  icon: AppIcons.add,
-                ),
               ],
-              const SizedBox(width: 4),
-              SizedBox(
-                width: 92,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FittedBox(
+            ),
+            unitPrice: InkWell(
+              onTap: _showFullPrice,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FittedBox(
                     fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
                     child: Text(
-                      widget.money(item.total),
-                      textAlign: TextAlign.right,
+                      _formatAccountingInput(item.unitPrice),
                       maxLines: 1,
-                      softWrap: false,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
+                  if (hasDiscount)
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        widget.money(item.effectiveOriginalUnitPrice),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          decoration: TextDecoration.lineThrough,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            quantity: useMeasuredQtyStepper
+                ? _MeasuredDesktopTicketQtyStepper(
+                    qtyText: qtyText,
+                    onMinus: widget.onMinus,
+                    onPlus: widget.onPlus,
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _DesktopTicketQtyButton(
+                        tooltip: 'Restar unidad',
+                        onPressed: widget.onMinus,
+                        icon: AppIcons.remove,
+                      ),
+                      SizedBox(
+                        width: 24,
+                        height: 28,
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              qtyText,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      _DesktopTicketQtyButton(
+                        tooltip: 'Sumar unidad',
+                        onPressed: widget.onPlus,
+                        icon: AppIcons.add,
+                      ),
+                    ],
+                  ),
+            total: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.money(item.total),
+                  maxLines: 1,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              const SizedBox(width: 4),
-              _DesktopTicketRemoveButton(
-                tooltip: 'Quitar de la venta',
-                onPressed: widget.onRemove,
-              ),
-            ],
+            ),
+            remove: _DesktopTicketRemoveButton(
+              tooltip: 'Quitar de la venta',
+              onPressed: widget.onRemove,
+            ),
           ),
         ),
       ),
@@ -19884,280 +19195,24 @@ class _DesktopSalesTicketFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      height: 42,
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6FAFD),
-        border: const Border(
-          top: BorderSide(color: _billingBorderColor),
-          bottom: BorderSide(color: _billingBorderColor),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0B2A3A).withValues(alpha: 0.045),
-            blurRadius: 14,
-            offset: const Offset(0, -5),
-          ),
-        ],
+    return SalesTicketBar(
+      ticketCount: tickets.length,
+      activeTicketIndex: tickets.indexWhere(
+        (ticket) => ticket.id == activeTicketId,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var index = 0; index < tickets.length; index++) ...[
-                    if (index > 0) ...[
-                      const SizedBox(width: 6),
-                      const _TicketInlineDivider(),
-                      const SizedBox(width: 6),
-                    ],
-                    Builder(
-                      builder: (context) {
-                        final ticket = tickets[index];
-                        final selected = ticket.id == activeTicketId;
-                        final count = ticket.items.length;
-                        return _DesktopFooterTicketChip(
-                          label: ticket.label(index),
-                          itemCount: count,
-                          selected: selected,
-                          onTap: () => onSwitchTicket(ticket.id),
-                          onRename: () => onRenameTicket(ticket.id),
-                          onDelete: () => onDeleteTicket(ticket.id),
-                        );
-                      },
-                    ),
-                  ],
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'Nuevo ticket',
-                    child: SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: OutlinedButton(
-                        onPressed: onCreateTicket,
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF1957E6),
-                          side: const BorderSide(
-                            color: _billingBorderColor,
-                            width: 1,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        child: const Icon(Icons.add_rounded, size: 18),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          const _TicketFooterSeparator(),
-          const SizedBox(width: 10),
-          Container(
-            height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: _billingBorderColor),
-            ),
-            child: Text(
-              '${tickets.length} tickets',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: const Color(0xFF476374),
-                fontWeight: FontWeight.w800,
-                height: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DesktopFooterTicketChip extends StatelessWidget {
-  const _DesktopFooterTicketChip({
-    required this.label,
-    required this.itemCount,
-    required this.selected,
-    required this.onTap,
-    required this.onRename,
-    required this.onDelete,
-  });
-
-  final String label;
-  final int itemCount;
-  final bool selected;
-  final VoidCallback onTap;
-  final VoidCallback onRename;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = selected ? Colors.white : const Color(0x00FFFFFF);
-    final border = selected ? const Color(0xFF1957E6) : Colors.transparent;
-    final fg = selected ? const Color(0xFF1957E6) : const Color(0xFF183548);
-    final hasItems = itemCount > 0;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
-      curve: Curves.easeOutCubic,
-      width: 148,
-      height: 34,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: border, width: selected ? 1.2 : 1),
-        boxShadow: [
-          if (selected)
-            BoxShadow(
-              color: const Color(0xFF1957E6).withValues(alpha: 0.07),
-              blurRadius: 8,
-              spreadRadius: -5,
-              offset: const Offset(0, 3),
-            ),
-        ],
-      ),
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            InkWell(
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 2, 0),
-                child: Row(
-                  children: [
-                    AppIcon(AppIcons.ticket, size: 16.5, color: fg),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: fg,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    if (hasItems) const _TicketActivityDot(),
-                    SizedBox(
-                      width: 27,
-                      height: 30,
-                      child: PopupMenuButton<_FooterTicketAction>(
-                        tooltip: 'Opciones del ticket',
-                        padding: EdgeInsets.zero,
-                        color: const Color(0xFFFFFFFF),
-                        iconSize: 17,
-                        position: PopupMenuPosition.under,
-                        onSelected: (action) {
-                          switch (action) {
-                            case _FooterTicketAction.rename:
-                              onRename();
-                              return;
-                            case _FooterTicketAction.delete:
-                              onDelete();
-                              return;
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: _FooterTicketAction.rename,
-                            child: _FooterTicketMenuEntry(
-                              icon: Icons.edit_outlined,
-                              label: 'Editar',
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: _FooterTicketAction.delete,
-                            child: _FooterTicketMenuEntry(
-                              icon: Icons.delete_outline,
-                              label: 'Eliminar',
-                            ),
-                          ),
-                        ],
-                        icon: AppIcon(
-                          AppIcons.moreVertical,
-                          size: 17,
-                          color: selected
-                              ? const Color(0xFF1957E6)
-                              : const Color(0xFF647985),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (selected)
-              Positioned(
-                left: 0,
-                top: 0,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  curve: Curves.easeOutCubic,
-                  width: 58,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1957E6),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(4),
-                      bottomRight: Radius.circular(5),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TicketFooterSeparator extends StatelessWidget {
-  const _TicketFooterSeparator();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.center,
-      child: Container(width: 1, height: 24, color: _billingBorderColor),
-    );
-  }
-}
-
-class _TicketInlineDivider extends StatelessWidget {
-  const _TicketInlineDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.center,
-      child: Container(
-        width: 1,
-        height: 20,
-        decoration: BoxDecoration(
-          color: _billingBorderColor.withValues(alpha: 0.82),
-          borderRadius: BorderRadius.circular(999),
-        ),
-      ),
+      onCreateTicket: onCreateTicket,
+      ticketBuilder: (context, index) {
+        final ticket = tickets[index];
+        return SalesTicketTab(
+          key: ValueKey(ticket.id),
+          label: ticket.label(index),
+          itemCount: ticket.items.length,
+          selected: ticket.id == activeTicketId,
+          onTap: () => onSwitchTicket(ticket.id),
+          onRename: () => onRenameTicket(ticket.id),
+          onDelete: () => onDeleteTicket(ticket.id),
+        );
+      },
     );
   }
 }

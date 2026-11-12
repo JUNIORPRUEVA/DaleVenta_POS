@@ -12,7 +12,11 @@ class GuardianQueueSnapshot {
 
 /// Registro de descartes inevitables (cuota o corrupción).
 class GuardianDiscardRecord {
-  const GuardianDiscardRecord({required this.eventId, required this.reason, required this.at});
+  const GuardianDiscardRecord({
+    required this.eventId,
+    required this.reason,
+    required this.at,
+  });
 
   final String eventId;
   final String reason;
@@ -33,7 +37,11 @@ abstract class GuardianStore {
   Future<List<GuardianEvent>> dueEvents({required int limit, DateTime? now});
 
   /// Marca un intento fallido con su próximo momento de reintento.
-  Future<void> markFailure(String eventId, {required int attempts, required int nextAttemptAtMs});
+  Future<void> markFailure(
+    String eventId, {
+    required int attempts,
+    required int nextAttemptAtMs,
+  });
 
   /// Elimina eventos **solo** tras confirmación durable del servidor.
   Future<void> removeAll(Iterable<String> eventIds);
@@ -43,14 +51,20 @@ abstract class GuardianStore {
   Future<int> totalBytes();
 
   /// Eventos que deben descartarse para respetar cuotas (los menos graves y más antiguos).
-  Future<List<GuardianEvent>> selectForEviction({required int eventsToDrop, required int bytesToDrop});
+  Future<List<GuardianEvent>> selectForEviction({
+    required int eventsToDrop,
+    required int bytesToDrop,
+  });
 
   Future<void> recordDiscard(GuardianDiscardRecord record);
 
   Future<List<GuardianDiscardRecord>> discards();
 
   /// Evita reinsertar el mismo patrón en ráfaga.
-  Future<bool> wasRecentlyRecorded(String fingerprint, {required Duration window});
+  Future<bool> wasRecentlyRecorded(
+    String fingerprint, {
+    required Duration window,
+  });
 
   Future<void> markRecorded(String fingerprint);
 }
@@ -70,7 +84,10 @@ class InMemoryGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<List<GuardianEvent>> dueEvents({required int limit, DateTime? now}) async {
+  Future<List<GuardianEvent>> dueEvents({
+    required int limit,
+    DateTime? now,
+  }) async {
     final at = now ?? DateTime.now();
     final sorted = _events.values.toList()
       ..sort((a, b) {
@@ -85,10 +102,17 @@ class InMemoryGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<void> markFailure(String eventId, {required int attempts, required int nextAttemptAtMs}) async {
+  Future<void> markFailure(
+    String eventId, {
+    required int attempts,
+    required int nextAttemptAtMs,
+  }) async {
     final current = _events[eventId];
     if (current == null) return;
-    _events[eventId] = current.copyWith(attempts: attempts, nextAttemptAtMs: nextAttemptAtMs);
+    _events[eventId] = current.copyWith(
+      attempts: attempts,
+      nextAttemptAtMs: nextAttemptAtMs,
+    );
   }
 
   @override
@@ -102,8 +126,10 @@ class InMemoryGuardianStore implements GuardianStore {
   Future<int> count() async => _events.length;
 
   @override
-  Future<int> totalBytes() async =>
-      _events.values.fold<int>(0, (sum, event) => sum + utf8.encode(event.toDbJson()).length);
+  Future<int> totalBytes() async => _events.values.fold<int>(
+    0,
+    (sum, event) => sum + utf8.encode(event.toDbJson()).length,
+  );
 
   @override
   Future<List<GuardianEvent>> selectForEviction({
@@ -136,10 +162,14 @@ class InMemoryGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<List<GuardianDiscardRecord>> discards() async => List.unmodifiable(_discards);
+  Future<List<GuardianDiscardRecord>> discards() async =>
+      List.unmodifiable(_discards);
 
   @override
-  Future<bool> wasRecentlyRecorded(String fingerprint, {required Duration window}) async {
+  Future<bool> wasRecentlyRecorded(
+    String fingerprint, {
+    required Duration window,
+  }) async {
     final at = _fingerprints[fingerprint];
     if (at == null) return false;
     return DateTime.now().difference(at) < window;

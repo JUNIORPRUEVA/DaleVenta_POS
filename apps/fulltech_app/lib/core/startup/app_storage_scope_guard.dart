@@ -35,7 +35,10 @@ class AppStorageScopeGuard {
             : 'storage scope changed; clearing local auth session',
       );
 
-      if (shouldClearAuthSessionForScope(previous: previous, current: current)) {
+      if (shouldClearAuthSessionForScope(
+        previous: previous,
+        current: current,
+      )) {
         await TokenStorage().clearTokens();
       }
       await prefs.setString(_scopeKey, current);

@@ -21,6 +21,9 @@ namespace {
 #ifndef DWMWA_TEXT_COLOR
 #define DWMWA_TEXT_COLOR 36
 #endif
+#ifndef DWMWA_COLOR_DEFAULT
+#define DWMWA_COLOR_DEFAULT 0xFFFFFFFF
+#endif
 
 // Value of |WM_SETICON| used by Windows 7 and later for the small window icon
 // requested by the current DPI. Redefined in case the developer's machine has
@@ -36,13 +39,13 @@ constexpr const wchar_t kWindowClassName[] =
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 #endif
 
-/// Registry key for app theme preference.
+/// Registry key for the Windows shell theme (taskbar and system surfaces).
 ///
 /// A value of 0 indicates apps should use dark mode. A non-zero or missing
 /// value indicates apps should use light mode.
 constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
-constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme";
+constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"SystemUsesLightTheme";
 
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
@@ -265,8 +268,14 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
 
     case WM_DWMCOLORIZATIONCOLORCHANGED:
+    case WM_THEMECHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_SETTINGCHANGE:
+      // Theme, accent and high-contrast preferences can change while open.
+      UpdateTheme(hwnd);
+      break;
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
@@ -332,23 +341,36 @@ void Win32Window::OnDestroy() {
 }
 
 void Win32Window::UpdateTheme(HWND const window) {
-  const COLORREF caption_color = RGB(239, 245, 248);
-  const COLORREF text_color = RGB(16, 34, 53);
-  DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &caption_color,
-                        sizeof(caption_color));
-  DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &text_color,
-                        sizeof(text_color));
+  // Let DWM choose native colors, including the user's accent preferences.
+  // Unsupported attributes on older Windows versions leave native defaults.
+  const COLORREF native_color = DWMWA_COLOR_DEFAULT;
+  DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &native_color,
+                        sizeof(native_color));
+  DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &native_color,
+                        sizeof(native_color));
 
-  DWORD light_mode;
+  DWORD light_mode = 1;
   DWORD light_mode_size = sizeof(light_mode);
   LSTATUS result = RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,
                                kGetPreferredBrightnessRegValue,
                                RRF_RT_REG_DWORD, nullptr, &light_mode,
                                &light_mode_size);
 
-  if (result == ERROR_SUCCESS) {
-    BOOL enable_dark_mode = light_mode == 0;
-    DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                          &enable_dark_mode, sizeof(enable_dark_mode));
+  if (result != ERROR_SUCCESS) {
+    // Fall back to the app preference where the shell preference is absent.
+    light_mode_size = sizeof(light_mode);
+    RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,
+                L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light_mode,
+                &light_mode_size);
   }
+
+  HIGHCONTRAST high_contrast = {};
+  high_contrast.cbSize = sizeof(high_contrast);
+  const bool contrast_enabled =
+      SystemParametersInfo(SPI_GETHIGHCONTRAST, sizeof(high_contrast),
+                           &high_contrast, 0) &&
+      (high_contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
+  const BOOL enable_dark_mode = light_mode == 0 && !contrast_enabled;
+  DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        &enable_dark_mode, sizeof(enable_dark_mode));
 }

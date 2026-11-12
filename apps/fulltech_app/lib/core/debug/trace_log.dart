@@ -20,7 +20,14 @@ class TraceLog {
     final ts = DateTime.now().toIso8601String();
     final base = '[TRACE][$id][$ts][$scope] $message';
 
-    TraceLogSink.write(base);
+    // El registro persistido conserva la causa y el stack: sin esto, un fallo
+    // aislado (por ejemplo la persistencia del actualizador) quedaba en disco
+    // como una línea sin motivo y no se podía diagnosticar en el equipo del
+    // cliente. `TraceLogSink` redacta credenciales antes de escribir.
+    final persisted = StringBuffer(base);
+    if (error != null) persisted.write(' | error=$error');
+    if (stackTrace != null) persisted.write('\n$stackTrace');
+    TraceLogSink.write(persisted.toString());
 
     if (kDebugMode) {
       if (error != null) {

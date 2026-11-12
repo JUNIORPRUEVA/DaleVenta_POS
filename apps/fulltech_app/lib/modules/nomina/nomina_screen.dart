@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -2843,9 +2844,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
       ).showSnackBar(const SnackBar(content: Text('Quincena cerrada')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             userSafeErrorMessage(
@@ -5363,6 +5362,7 @@ class _HistoryPeriodListTile extends StatelessWidget {
         '${DateFormat('dd/MM/yyyy').format(item.period.endDate)}';
 
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -6497,6 +6497,7 @@ class _PayrollFilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
@@ -6556,6 +6557,7 @@ class _PayrollFilterButton extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return InkWell(
+      mouseCursor: SystemMouseCursors.click,
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -6616,6 +6618,7 @@ class _PayrollHistoryPeriodCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Ink(
@@ -6780,6 +6783,7 @@ class _PayrollPeriodEmployeeCardState extends State<_PayrollPeriodEmployeeCard>
         children: [
           // ── Compact header row (always visible) ──────────────────────
           InkWell(
+            mouseCursor: SystemMouseCursors.click,
             borderRadius: _expanded
                 ? const BorderRadius.vertical(top: Radius.circular(10))
                 : BorderRadius.circular(10),

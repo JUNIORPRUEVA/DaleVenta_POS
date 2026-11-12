@@ -146,8 +146,7 @@ class PrinterSettingsRepository {
     'autoOpenDrawerOnChargeWithoutTicket':
         'autoOpenDrawerOnChargeWithoutTicket INTEGER NOT NULL DEFAULT 0',
     'autoOpenCashDrawer': 'autoOpenCashDrawer INTEGER NOT NULL DEFAULT 0',
-    'cashDrawerChannel':
-        "cashDrawerChannel TEXT NOT NULL DEFAULT 'automatic'",
+    'cashDrawerChannel': "cashDrawerChannel TEXT NOT NULL DEFAULT 'automatic'",
     'copies': 'copies INTEGER NOT NULL DEFAULT 1',
     'showItbis': 'showItbis INTEGER NOT NULL DEFAULT 1',
     'showElectronicInvoiceReference':

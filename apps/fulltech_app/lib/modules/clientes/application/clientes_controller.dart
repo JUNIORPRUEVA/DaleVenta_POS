@@ -204,11 +204,7 @@ class ClientesController extends StateNotifier<ClientesState> {
       ];
       _page = next.page;
       _hasMore = next.hasMore;
-      state = state.copyWith(
-        items: merged,
-        loading: false,
-        refreshing: false,
-      );
+      state = state.copyWith(items: merged, loading: false, refreshing: false);
     } catch (e) {
       if (seq != _loadSeq) return;
       final message = e is ApiException

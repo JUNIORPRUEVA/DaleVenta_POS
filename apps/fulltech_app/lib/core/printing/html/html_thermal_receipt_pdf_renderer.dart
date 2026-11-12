@@ -325,10 +325,7 @@ class HtmlThermalReceiptPdfRenderer {
                   'EFECTIVO RECIBIDO',
                   _money(receipt.cashReceived ?? 0),
                 ),
-                _totalRow(
-                  'DEVUELTA',
-                  _money(receipt.changeAmount ?? 0),
-                ),
+                _totalRow('DEVUELTA', _money(receipt.changeAmount ?? 0)),
               ],
             ],
           ),

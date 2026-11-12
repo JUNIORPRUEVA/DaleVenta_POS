@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../theme/app_colors.dart';
+import '../widgets/refined_topbar_controls.dart';
+
 import '../api/api_routes.dart';
 import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
@@ -40,7 +43,9 @@ SyncHeaderStatus resolveSyncHeaderStatus(SyncQueueState state) {
 }
 
 class SyncStatusMenuButton extends ConsumerWidget {
-  const SyncStatusMenuButton({super.key});
+  const SyncStatusMenuButton({super.key, this.iconOnly = false});
+
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,7 +60,9 @@ class SyncStatusMenuButton extends ConsumerWidget {
         : 336.0;
 
     return PopupMenuButton<void>(
-      tooltip: 'Estado de sincronización',
+      tooltip: iconOnly
+          ? 'Estado de sincronización: $label'
+          : 'Estado de sincronización',
       offset: const Offset(0, 42),
       padding: EdgeInsets.zero,
       color: Colors.white,
@@ -93,6 +100,9 @@ class SyncStatusMenuButton extends ConsumerWidget {
         label: label,
         colors: colors,
         syncing: isProcessing,
+        iconOnly: iconOnly,
+        status: status,
+        pendingCount: state.pendingCount,
       ),
     );
   }
@@ -113,11 +123,17 @@ class _SyncHeaderButton extends StatefulWidget {
     required this.label,
     required this.colors,
     required this.syncing,
+    required this.iconOnly,
+    required this.status,
+    required this.pendingCount,
   });
 
   final String label;
   final _SyncStatusColors colors;
   final bool syncing;
+  final bool iconOnly;
+  final SyncHeaderStatus status;
+  final int pendingCount;
 
   @override
   State<_SyncHeaderButton> createState() => _SyncHeaderButtonState();
@@ -130,6 +146,23 @@ class _SyncHeaderButtonState extends State<_SyncHeaderButton> {
   @override
   Widget build(BuildContext context) {
     final active = _hovered || _pressed;
+
+    if (widget.iconOnly) {
+      final error = widget.status == SyncHeaderStatus.error;
+      final attention = error || widget.status == SyncHeaderStatus.attention;
+      final pending = widget.status == SyncHeaderStatus.pending;
+      return RefinedSyncIndicator(
+        label:
+            'Sincronización: ${widget.syncing ? 'sincronizando' : widget.label}',
+        glyph: _SyncGlyph(color: widget.colors.accent, syncing: widget.syncing),
+        badge: attention
+            ? '!'
+            : pending
+            ? (widget.pendingCount > 99 ? '99+' : '${widget.pendingCount}')
+            : null,
+        badgeColor: error ? AppColors.error : AppColors.warning,
+      );
+    }
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -417,10 +450,7 @@ class _SyncStatusPopover extends StatelessWidget {
                 icon: const Icon(Icons.health_and_safety_outlined, size: 16),
                 label: const Text(
                   'Centro de recuperación',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                 ),
               ),
             ),

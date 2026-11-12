@@ -63,6 +63,13 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard("jwt"))
+  @Post("logout")
+  async logout(@Req() req: Request) {
+    const user = req.user as any;
+    return this.auth.logout(user);
+  }
+
+  @UseGuards(AuthGuard("jwt"))
   @Post("offline-emergency/authorize")
   async authorizeOfflineEmergency(@Req() req: Request) {
     const user = req.user as any;

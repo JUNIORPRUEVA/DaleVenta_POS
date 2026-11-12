@@ -14,16 +14,17 @@ class DioGuardianTransport implements GuardianTransport {
     required Future<String?> Function() tokenProvider,
     Dio? dio,
     this.timeout = const Duration(seconds: 20),
-  })  : _tokenProvider = tokenProvider,
-        _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 20),
-                sendTimeout: const Duration(seconds: 20),
-                validateStatus: (_) => true,
-              ),
-            );
+  }) : _tokenProvider = tokenProvider,
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 20),
+               sendTimeout: const Duration(seconds: 20),
+               validateStatus: (_) => true,
+             ),
+           );
 
   final String baseUrl;
   final String path;
@@ -80,7 +81,9 @@ class DioGuardianTransport implements GuardianTransport {
     final result = data is Map ? (data['results'] as List?) : null;
     if (result == null) {
       // Servidor 2xx sin detalle: asumimos aceptados (contrato mínimo).
-      return GuardianSendResult(acked: events.map((event) => event.eventId).toList());
+      return GuardianSendResult(
+        acked: events.map((event) => event.eventId).toList(),
+      );
     }
 
     final acked = <String>[];

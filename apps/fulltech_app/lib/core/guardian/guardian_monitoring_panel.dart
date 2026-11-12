@@ -33,17 +33,18 @@ class GuardianMonitoringRepository {
     required this.tokenProvider,
     Dio? dio,
     this.timeout = const Duration(seconds: 8),
-  }) : _dio = dio ??
-            Dio(
-              BaseOptions(
-                validateStatus: (_) => true,
-                // El límite vive en el cliente HTTP: `close(force: true)` lo
-                // cancela junto con la conexión, sin dejar temporizadores vivos.
-                connectTimeout: timeout,
-                sendTimeout: timeout,
-                receiveTimeout: timeout,
-              ),
-            );
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               validateStatus: (_) => true,
+               // El límite vive en el cliente HTTP: `close(force: true)` lo
+               // cancela junto con la conexión, sin dejar temporizadores vivos.
+               connectTimeout: timeout,
+               sendTimeout: timeout,
+               receiveTimeout: timeout,
+             ),
+           );
 
   final String baseUrl;
   final Future<String?> Function() tokenProvider;
@@ -108,7 +109,9 @@ class GuardianMonitoringRepository {
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 300) {
-        unawaited(GuardianAgentLog.info('panel Guardian http=$status ruta=$path'));
+        unawaited(
+          GuardianAgentLog.info('panel Guardian http=$status ruta=$path'),
+        );
         return null;
       }
       final data = response.data;
@@ -119,7 +122,9 @@ class GuardianMonitoringRepository {
       }
       return null;
     } catch (error) {
-      unawaited(GuardianAgentLog.info('panel Guardian fallo ruta=$path: $error'));
+      unawaited(
+        GuardianAgentLog.info('panel Guardian fallo ruta=$path: $error'),
+      );
       return null;
     }
   }
@@ -130,7 +135,8 @@ class GuardianMonitoringRepository {
   }
 
   /// Instancia por defecto (sesión actual + API configurada).
-  static GuardianMonitoringRepository fromSession() => GuardianMonitoringRepository(
+  static GuardianMonitoringRepository fromSession() =>
+      GuardianMonitoringRepository(
         baseUrl: Env.apiBaseUrl,
         tokenProvider: () => TokenStorage().getAccessToken(),
       );
@@ -158,7 +164,8 @@ class GuardianMonitoringPanel extends StatefulWidget {
   final TextStyle? captionStyle;
 
   @override
-  State<GuardianMonitoringPanel> createState() => _GuardianMonitoringPanelState();
+  State<GuardianMonitoringPanel> createState() =>
+      _GuardianMonitoringPanelState();
 }
 
 class _GuardianMonitoringPanelState extends State<GuardianMonitoringPanel> {
@@ -236,7 +243,9 @@ class _GuardianMonitoringPanelState extends State<GuardianMonitoringPanel> {
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Monitoreo APPYRA Guardian AI desactivado')),
+        const SnackBar(
+          content: Text('Monitoreo APPYRA Guardian AI desactivado'),
+        ),
       );
     } else {
       if (!mounted) return;
@@ -271,7 +280,9 @@ class _GuardianMonitoringPanelState extends State<GuardianMonitoringPanel> {
               Expanded(
                 child: Text(
                   'Monitoreo APPYRA Guardian AI',
-                  style: widget.textStyle?.copyWith(fontWeight: FontWeight.w600),
+                  style: widget.textStyle?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               if (_loading)
@@ -298,7 +309,9 @@ class _GuardianMonitoringPanelState extends State<GuardianMonitoringPanel> {
             const SizedBox(height: 8),
             Text(
               'No se pudo consultar el estado del monitoreo.',
-              style: widget.captionStyle?.copyWith(color: Colors.orange.shade700),
+              style: widget.captionStyle?.copyWith(
+                color: Colors.orange.shade700,
+              ),
             ),
           ],
           if (status != null) ...[

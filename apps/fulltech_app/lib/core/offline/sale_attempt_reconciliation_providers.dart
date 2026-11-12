@@ -54,10 +54,8 @@ final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
   }
 
   return SaleAttemptReconciler(
-    listAttempts: ({companyId, userId}) => store.listUnresolvedSaleAttempts(
-      companyId: companyId,
-      userId: userId,
-    ),
+    listAttempts: ({companyId, userId}) =>
+        store.listUnresolvedSaleAttempts(companyId: companyId, userId: userId),
     lookup: (clientRequestId, expectedTotalSold) async {
       try {
         final res = await dio.get(

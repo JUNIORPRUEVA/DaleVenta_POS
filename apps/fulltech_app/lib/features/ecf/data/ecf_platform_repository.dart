@@ -152,10 +152,7 @@ class EcfPlatformRepository {
     if (state != null) body['state'] = state;
     if (reviewState != null) body['reviewState'] = reviewState;
     if (observations != null) body['observations'] = observations;
-    await _dio.patch(
-      ApiRoutes.ecfPlatformApplication(companyId),
-      data: body,
-    );
+    await _dio.patch(ApiRoutes.ecfPlatformApplication(companyId), data: body);
   }
 
   /// Requisitos del catálogo con su seguimiento (o `tracking` nulo).

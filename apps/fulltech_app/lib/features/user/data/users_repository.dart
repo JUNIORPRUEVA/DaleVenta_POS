@@ -51,7 +51,12 @@ class UsersPage {
         nextPage: (data['nextPage'] as num?)?.toInt(),
       );
     }
-    return UsersPage(items: const [], page: fallbackPage, limit: 0, hasMore: false);
+    return UsersPage(
+      items: const [],
+      page: fallbackPage,
+      limit: 0,
+      hasMore: false,
+    );
   }
 }
 

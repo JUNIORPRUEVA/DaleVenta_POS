@@ -392,8 +392,14 @@ void main() {
       final controller = container.read(
         activeCashSessionControllerProvider.notifier,
       );
-      // Primer intento falla: la guarda debe liberarse (finally).
-      await controller.open(1000);
+      // Primer intento falla: la guarda debe liberarse (finally) y el error
+      // debe PROPAGARSE, para que el diálogo muestre el mensaje real y no
+      // anuncie "Caja abierta" sobre una caja cerrada.
+      await expectLater(controller.open(1000), throwsA(isA<Exception>()));
+      expect(
+        container.read(activeCashSessionControllerProvider).hasError,
+        isTrue,
+      );
       // Reintento debe funcionar.
       await controller.open(1000);
 

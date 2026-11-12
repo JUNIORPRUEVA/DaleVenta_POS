@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide GestureDetector;
+import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
@@ -668,8 +669,7 @@ class _MobilePrinterSettingsViewState
           content: Text(
             userSafeErrorMessage(
               error,
-              fallback:
-                  'No se pudo completar la acción. Inténtalo nuevamente.',
+              fallback: 'No se pudo completar la acción. Inténtalo nuevamente.',
             ),
           ),
         ),
@@ -733,9 +733,7 @@ class _MobilePrinterSettingsViewState
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo abrir la caja registradora.'),
-        ),
+        const SnackBar(content: Text('No se pudo abrir la caja registradora.')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

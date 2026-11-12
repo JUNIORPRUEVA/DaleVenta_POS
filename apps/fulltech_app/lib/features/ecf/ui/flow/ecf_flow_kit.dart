@@ -224,6 +224,7 @@ class EcfSummaryRow extends StatelessWidget {
       child: onTap == null
           ? row
           : InkWell(
+              mouseCursor: SystemMouseCursors.click,
               onTap: onTap,
               borderRadius: BorderRadius.circular(8),
               child: row,

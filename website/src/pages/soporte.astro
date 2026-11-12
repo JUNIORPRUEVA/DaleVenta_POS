@@ -1,0 +1,113 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { icons, site, cta, waLink, faqs } from '../config/site';
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((item) => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
+  })),
+};
+---
+
+<BaseLayout
+  title="Soporte"
+  description="Soporte de FullPOS Cloud por WhatsApp y correo. Horario de atención de lunes a viernes, 9:00 a.m. a 6:00 p.m."
+  path="/soporte"
+  schema={[faqSchema]}
+>
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Soporte</span>
+        <h1 style="font-size: clamp(1.95rem, 1.3rem + 2vw, 3rem)">
+          Estamos <span class="grad">al otro lado</span> cuando lo necesitas
+        </h1>
+        <p class="lead">
+          Soporte humano por WhatsApp y correo, de lunes a viernes. También acompañamos la
+          instalación en Windows, Android e iPhone.
+        </p>
+      </div>
+
+      <div class="grid">
+        <a class="card" href={waLink} rel="noopener">
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.whatsapp}
+            />
+          </div>
+          <h3>WhatsApp</h3>
+          <p>{site.supportPhoneLabel} · respuesta directa del equipo.</p>
+        </a>
+
+        <a class="card" href={`mailto:${site.supportEmail}`}>
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.mail}
+            />
+          </div>
+          <h3>Correo</h3>
+          <p>{site.supportEmail}</p>
+        </a>
+
+        <article class="card">
+          <div class="icon-box">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.clock}
+            />
+          </div>
+          <h3>Horario</h3>
+          <p>{site.supportHours}.</p>
+        </article>
+      </div>
+
+      <div class="note" style="margin-top: 24px">
+        <strong>Pagos:</strong> la prueba de 7 días es gratuita. Al terminar eliges tu plan
+        y el pago se realiza con tarjeta.
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top: 0">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Preguntas frecuentes</span>
+        <h2>Respuestas rápidas</h2>
+      </div>
+
+      <div class="faq">
+        {faqs.map((item, index) => (
+          <details name="faq-soporte" open={index === 0}>
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
+
+      <div class="hero-actions" style="margin-top: 24px; margin-bottom: 0">
+        <a class="btn btn-primary btn-lg cta-pulse" href="/registro">{cta.hero.primary}</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

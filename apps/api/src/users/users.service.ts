@@ -905,12 +905,12 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     if (!this.normalizeOptionalString(dto.nombreCompleto)) {
       throw new BadRequestException("El nombre completo es obligatorio");
     }
-    if (!this.normalizeOptionalString(dto.telefono)) {
-      throw new BadRequestException("El teléfono es obligatorio");
-    }
-    if (!numeroFlota) {
-      throw new BadRequestException("numeroFlota es obligatorio");
-    }
+    // `telefono` y `numeroFlota` ya no se solicitan en el formulario
+    // administrativo de «Nuevo usuario». La columna `telefono` es NOT NULL, así
+    // que un alta sin teléfono se guarda como cadena vacía («no informado») y
+    // `numeroFlota` queda en NULL. No se inventan valores y los usuarios que ya
+    // tienen estos datos los conservan intactos.
+    const telefono = this.normalizeOptionalString(dto.telefono) ?? "";
 
     const exists = await this.prisma.user.findUnique({ where: { email } });
     if (exists) throw new BadRequestException("El correo ya está registrado");
@@ -935,7 +935,7 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
           companyId,
           passwordHash,
           nombreCompleto: dto.nombreCompleto.trim(),
-          telefono: dto.telefono.trim(),
+          telefono,
           numeroFlota,
           telefonoFamiliar: this.normalizeOptionalString(dto.telefonoFamiliar),
           cedula,
@@ -1200,10 +1200,6 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     });
     if (!existing) throw new NotFoundException("User not found");
 
-    const existingNumeroFlota = ((existing as any).numeroFlota ?? "")
-      .toString()
-      .trim();
-
     const nextEmail = this.hasValue(dto.email)
       ? this.normalizeEmail(dto.email)
       : undefined;
@@ -1324,12 +1320,8 @@ Requisitos: sin emojis, sin chistes, no menciones IA, no uses información no pr
     });
 
     // Enforce numeroFlota when editing users that don't have it yet.
-    if (
-      existingNumeroFlota.length === 0 &&
-      (data as any).numeroFlota === undefined
-    ) {
-      throw new BadRequestException("numeroFlota es obligatorio");
-    }
+    // Se retiró ese bloqueo: los usuarios creados sin número de flota (alta
+    // administrativa simplificada) deben poder editarse con normalidad.
 
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({

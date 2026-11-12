@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' show ImageFilter;
+
+import 'package:flutter/material.dart' hide GestureDetector;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,57 +31,20 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
     if (_shouldHideEntryPoint(location)) return child;
 
     final isDesktop = MediaQuery.sizeOf(context).width >= 900;
-    final desktopOpen = isDesktop
-        ? ref.watch(desktopAiAssistantPanelOpenProvider)
-        : false;
 
     return Stack(
       children: [
         child,
-        if (isDesktop) ...[
-          Positioned.fill(
-            child: IgnorePointer(
-              ignoring: !desktopOpen,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 90),
-                curve: Curves.easeOut,
-                opacity: desktopOpen ? 1 : 0,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (_) => _closeDesktopPanel(ref),
-                  child: Container(color: Colors.black.withValues(alpha: 0.12)),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            right: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              ignoring: !desktopOpen,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 110),
-                curve: Curves.easeOutCubic,
-                offset: desktopOpen ? Offset.zero : const Offset(1, 0),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 90),
-                  curve: Curves.easeOut,
-                  opacity: desktopOpen ? 1 : 0,
-                  child: RepaintBoundary(
-                    child: GlobalAiChatSheet(
-                      onClose: () => _closeDesktopPanel(ref),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
         if (!isDesktop)
           Positioned(
-            right: 16,
-            bottom: 16,
+            right: 14,
+            // En layouts compactos el carrito ocupa el pie de la pantalla: el
+            // botón del asistente se ancla al centro vertical del borde derecho
+            // para no superponerse a Cobrar, Cotizar ni a las líneas del
+            // carrito. Posición derivada del viewport, sin coordenadas fijas.
+            top: (MediaQuery.sizeOf(context).height * 0.5 - 32)
+                .clamp(70.0, double.infinity)
+                .toDouble(),
             child: Builder(
               builder: (innerContext) {
                 final assistantContext = _buildAssistantContext(innerContext);
@@ -154,8 +119,7 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
     controller.setContext(assistantContext);
 
     if (isDesktop) {
-      final open = ref.read(desktopAiAssistantPanelOpenProvider);
-      ref.read(desktopAiAssistantPanelOpenProvider.notifier).state = !open;
+      showDesktopPanel(context, ref);
       return;
     }
 
@@ -169,7 +133,73 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
     );
   }
 
-  void _closeDesktopPanel(WidgetRef ref) {
-    ref.read(desktopAiAssistantPanelOpenProvider.notifier).state = false;
+  /// Abre el panel lateral del asistente en escritorio.
+  ///
+  /// **Se monta como ruta, no como hijo del `Stack` de este entry point.** Este widget
+  /// envuelve al `MaterialApp` y queda **por encima del `Navigator`**, así que cualquier
+  /// cosa que pinte aquí no hereda ningún `Overlay`. Con el panel dentro del `Stack`, el
+  /// campo de texto fallaba con «No Overlay widget found»: no se podía mover el cursor,
+  /// seleccionar texto ni mostrar tooltips. Al abrirlo con `showGeneralDialog` la ruta
+  /// vive dentro del `Navigator` y hereda su `Overlay`, igual que el panel de detalle de
+  /// ventas (`registrar_venta_screen.dart`).
+  static Future<void> showDesktopPanel(BuildContext context, WidgetRef ref) {
+    ref.read(desktopAiAssistantPanelOpenProvider.notifier).state = true;
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Cerrar FullPOS IA',
+      // El velo lo pinta el propio panel para poder aplicar desenfoque real.
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, _, __) {
+        // Mismo ancho que la columna de detalle de ventas (29 % acotado 420–560).
+        final width = MediaQuery.sizeOf(dialogContext).width;
+        final panelWidth = (width * 0.29).clamp(420.0, 560.0).toDouble();
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+                child: ModalBarrier(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  dismissible: true,
+                  semanticsLabel: 'Cerrar FullPOS IA',
+                  onDismiss: () => Navigator.of(dialogContext).maybePop(),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: panelWidth,
+                height: double.infinity,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: GlobalAiChatSheet(
+                    panelWidth: panelWidth,
+                    onClose: () => Navigator.of(dialogContext).maybePop(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      transitionBuilder: (_, animation, __, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        );
+      },
+    ).whenComplete(() {
+      ref.read(desktopAiAssistantPanelOpenProvider.notifier).state = false;
+    });
   }
 }

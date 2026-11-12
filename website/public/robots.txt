@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /registro
+Disallow: /recuperar
+
+Sitemap: https://fullposcloud.fulltechrd.com/sitemap.xml

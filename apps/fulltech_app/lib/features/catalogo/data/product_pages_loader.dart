@@ -79,20 +79,22 @@ List<ProductModel> filterProductSnapshot(
     ...categories.map((value) => value.trim()).where((v) => v.isNotEmpty),
   };
 
-  return snapshot.where((product) {
-    if (categorySet.isNotEmpty &&
-        !categorySet.contains(product.categoriaLabel)) {
-      return false;
-    }
-    if (normalizedQuery.isEmpty) return true;
-    final name = product.nombre.toLowerCase();
-    final code = (product.codigo ?? '').trim().toLowerCase();
-    // Mismo criterio que el servidor: nombre, codigo y categoria.
-    final categoryLabel = product.categoriaLabel.toLowerCase();
-    return name.contains(normalizedQuery) ||
-        (code.isNotEmpty && code.contains(normalizedQuery)) ||
-        categoryLabel.contains(normalizedQuery);
-  }).toList(growable: false);
+  return snapshot
+      .where((product) {
+        if (categorySet.isNotEmpty &&
+            !categorySet.contains(product.categoriaLabel)) {
+          return false;
+        }
+        if (normalizedQuery.isEmpty) return true;
+        final name = product.nombre.toLowerCase();
+        final code = (product.codigo ?? '').trim().toLowerCase();
+        // Mismo criterio que el servidor: nombre, codigo y categoria.
+        final categoryLabel = product.categoriaLabel.toLowerCase();
+        return name.contains(normalizedQuery) ||
+            (code.isNotEmpty && code.contains(normalizedQuery)) ||
+            categoryLabel.contains(normalizedQuery);
+      })
+      .toList(growable: false);
 }
 
 /// Recorre TODAS las paginas de `/products` y devuelve el conjunto completo.

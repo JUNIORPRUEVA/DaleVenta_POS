@@ -1,0 +1,243 @@
+---
+import AuthLayout from '../../layouts/AuthLayout.astro';
+
+const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+---
+
+<AuthLayout
+  title="Crear cuenta"
+  description="Crea tu cuenta de FullPOS Cloud y empieza la prueba gratuita de 7 días."
+  path="/registro"
+  panel="promo"
+>
+  <div class="auth-panel auth-panel--single">
+    <div data-register-root data-api={apiBase}>
+      <h1>Crea tu cuenta</h1>
+      <p class="auth-sub">7 días gratis, sin tarjeta. Después eliges tu plan.</p>
+
+      <p class="auth-trust">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 3l8 3v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6z"></path>
+          <path d="m9 12 2 2 4-4"></path>
+        </svg>
+        Sin tarjeta · Cancela cuando quieras
+      </p>
+
+      <form data-register-form novalidate>
+        <p class="form-alert" data-form-alert hidden role="alert"></p>
+
+        <div class="field" data-field="firstName">
+          <label for="firstName">Nombre del representante</label>
+          <input
+            id="firstName"
+            name="firstName"
+            type="text"
+            autocomplete="name"
+            maxlength="80"
+            placeholder="Ana Pérez"
+            required
+          />
+          <p class="field-error" data-error="firstName" hidden></p>
+        </div>
+
+        <div class="field" data-field="email">
+          <label for="email">Correo electrónico</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            maxlength="120"
+            placeholder="tucorreo@dominio.com"
+            required
+          />
+          <p class="field-error" data-error="email" hidden></p>
+        </div>
+
+        <div class="field" data-field="password">
+          <label for="password">Contraseña</label>
+          <div class="field-password">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              minlength="8"
+              maxlength="80"
+              placeholder="Mínimo 8 caracteres"
+              required
+            />
+            <button
+              type="button"
+              class="pw-toggle"
+              data-pw-toggle
+              aria-controls="password"
+              aria-pressed="false"
+              aria-label="Mostrar contraseña"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
+          <div class="pw-strength" data-pw-strength data-score="0" hidden>
+            <span class="pw-strength-bars" aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+            </span>
+            <span class="pw-strength-text" data-pw-strength-text aria-live="polite"></span>
+          </div>
+          <p class="field-error" data-error="password" hidden></p>
+        </div>
+
+        <button class="btn btn-primary btn-block" type="submit" data-submit>
+          Crear cuenta
+        </button>
+
+        <p class="legal-note">
+          Al crear tu cuenta aceptas los <a href="/terminos">Términos y condiciones</a> y la
+          <a href="/privacidad">Política de privacidad</a>.
+        </p>
+
+        <p class="auth-switch">
+          ¿Ya tienes cuenta? <a href="/login">Iniciar sesión</a>
+        </p>
+      </form>
+    </div>
+  </div>
+</AuthLayout>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-register-root]');
+
+  if (root) {
+    const form = root.querySelector<HTMLFormElement>('[data-register-form]')!;
+    const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
+
+    const isEmail = (text: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(text);
+
+    const setError = (name: string, message: string | null): void => {
+      const field = root.querySelector<HTMLElement>(`[data-field="${name}"]`);
+      const output = root.querySelector<HTMLElement>(`[data-error="${name}"]`);
+      const input = form.elements.namedItem(name) as HTMLInputElement | null;
+      if (!field || !output) return;
+      if (message) {
+        field.classList.add('is-invalid');
+        output.textContent = message;
+        output.hidden = false;
+        input?.setAttribute('aria-invalid', 'true');
+      } else {
+        field.classList.remove('is-invalid');
+        output.hidden = true;
+        output.textContent = '';
+        input?.removeAttribute('aria-invalid');
+      }
+    };
+
+    const value = (name: string): string => {
+      const input = form.elements.namedItem(name) as HTMLInputElement | null;
+      return (input?.value ?? '').trim();
+    };
+
+    const validate = (): boolean => {
+      ['firstName', 'email', 'password'].forEach((name) => setError(name, null));
+      let ok = true;
+      if (value('firstName').length < 2) {
+        setError('firstName', 'Escribe el nombre de la persona responsable.');
+        ok = false;
+      }
+      if (!isEmail(value('email'))) {
+        setError('email', 'Escribe un correo válido.');
+        ok = false;
+      }
+      if (value('password').length < 8) {
+        setError('password', 'La contraseña debe tener al menos 8 caracteres.');
+        ok = false;
+      }
+      return ok;
+    };
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      alertBox.hidden = true;
+
+      if (!validate()) {
+        form.querySelector<HTMLElement>('.field.is-invalid input')?.focus();
+        return;
+      }
+
+      /* Los datos de acceso se guardan solo en la sesión del navegador.
+         La cuenta NO se crea aquí: se crea en el paso siguiente, cuando ya
+         existen el nombre del negocio y el WhatsApp que exige el backend. */
+      const draft = {
+        firstName: value('firstName'),
+        email: value('email').toLowerCase(),
+        password: value('password'),
+      };
+
+      try {
+        sessionStorage.setItem('fullpos_registro_paso1', JSON.stringify(draft));
+      } catch {
+        alertBox.textContent =
+          'Tu navegador no permite guardar datos de sesión. Actívalo e inténtalo otra vez.';
+        alertBox.hidden = false;
+        return;
+      }
+
+      window.location.assign('/registro/negocio');
+    });
+
+    form.addEventListener('input', (event) => {
+      const target = event.target as HTMLInputElement | null;
+      if (target?.name) setError(target.name, null);
+    });
+  }
+</script>
+
+<script>
+  /* Medidor de fuerza: solo orienta, no bloquea ni sustituye la validación. */
+  const pwInput = document.querySelector<HTMLInputElement>('#password');
+  const pwMeter = document.querySelector<HTMLElement>('[data-pw-strength]');
+  const pwMeterText = document.querySelector<HTMLElement>('[data-pw-strength-text]');
+
+  if (pwInput && pwMeter && pwMeterText) {
+    const labels = ['', 'Débil', 'Aceptable', 'Buena', 'Excelente'];
+
+    const score = (value: string): number => {
+      if (!value) return 0;
+      let points = 0;
+      if (value.length >= 8) points += 1;
+      if (value.length >= 12) points += 1;
+      if (/[a-z]/.test(value) && /[A-Z]/.test(value)) points += 1;
+      if (/\d/.test(value)) points += 1;
+      if (/[^A-Za-z0-9]/.test(value)) points += 1;
+      return Math.min(4, Math.max(1, points));
+    };
+
+    const render = (): void => {
+      const value = pwInput.value;
+      const level = score(value);
+      pwMeter.hidden = value.length === 0;
+      pwMeter.dataset.score = String(level);
+      pwMeterText.textContent = value ? labels[level] : '';
+    };
+
+    pwInput.addEventListener('input', render);
+    render();
+  }
+</script>

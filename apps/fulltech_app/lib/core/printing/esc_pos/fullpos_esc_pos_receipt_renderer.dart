@@ -625,9 +625,11 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
   String _fitSingleLine(String value, int width) =>
       EscPosLayout.fitSingleLine(value, width);
 
-  String _padRight(String value, int width) => EscPosLayout.padRight(value, width);
+  String _padRight(String value, int width) =>
+      EscPosLayout.padRight(value, width);
 
-  String _padLeft(String value, int width) => EscPosLayout.padLeft(value, width);
+  String _padLeft(String value, int width) =>
+      EscPosLayout.padLeft(value, width);
 
   String _rule(int width) => EscPosLayout.rule(thermalProfile, width);
 

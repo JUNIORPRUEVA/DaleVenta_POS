@@ -1145,6 +1145,7 @@ model Company {
   wholesalePriceListsEnabled Boolean        @default(false) @map("wholesale_price_lists_enabled")
   onboardingRequired         Boolean        @default(false) @map("onboarding_required")
   onboardingStatus           String         @default("NOT_REQUIRED") @map("onboarding_status") @db.VarChar(32)
+  onboardingTaskOverrides    CompanyOnboardingTask[]
   onboardingCompanyStep      String         @default("SKIPPED") @map("onboarding_company_step") @db.VarChar(24)
   onboardingBillingStep      String         @default("SKIPPED") @map("onboarding_billing_step") @db.VarChar(24)
   onboardingProductStep      String         @default("SKIPPED") @map("onboarding_product_step") @db.VarChar(24)
@@ -1155,6 +1156,11 @@ model Company {
   tutorialStatus             String         @default("NOT_REQUIRED") @map("tutorial_status") @db.VarChar(32)
   tutorialCompletedAt        DateTime?      @map("tutorial_completed_at")
   tutorialSkippedAt          DateTime?      @map("tutorial_skipped_at")
+  /// Onboarding de activación «Activa tu FullPOS». Solo se guarda que el
+  /// usuario ya vio la bienvenida y que cerró el panel, para no reabrirlos en
+  /// cada inicio de sesión. El progreso real se deriva de los datos.
+  activationWelcomeSeenAt    DateTime?      @map("activation_welcome_seen_at")
+  activationDismissedAt      DateTime?      @map("activation_dismissed_at")
   productSource              ProductSource? @map("product_source")
   fullposCompanyId           String?        @map("fullpos_company_id")
   createdAt                  DateTime       @default(now()) @map("created_at")
@@ -1825,6 +1831,28 @@ model AuthSession {
   @@index([tokenFamily])
   @@index([expiresAt])
   @@map("auth_sessions")
+}
+
+/// Ticket de un solo uso para transferir una sesión ya autenticada del sitio
+/// publico (Astro) a la app Flutter Web, sin volver a pedir credenciales.
+///
+/// Nunca guarda tokens: solo el SHA-256 del ticket. Vida corta (2 minutos) y
+/// un unico canje. Se mantiene en su propia tabla para no tocar el modelo de
+/// sesiones existente (`AuthSession`) ni su rotacion de refresh tokens.
+model SessionHandoffTicket {
+  id         String    @id @default(uuid()) @db.Uuid
+  ticketHash String    @unique @map("ticket_hash")
+  userId     String    @map("user_id") @db.Uuid
+  companyId  String?   @map("company_id") @db.Uuid
+  sessionId  String    @map("session_id") @db.Uuid
+  platform   String    @default("") @db.VarChar(24)
+  expiresAt  DateTime  @map("expires_at")
+  usedAt     DateTime? @map("used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@index([userId, usedAt])
+  @@map("session_handoff_tickets")
 }
 
 model User {
@@ -2654,6 +2682,32 @@ model WhatsappAiAnalysisReport {
   @@map("whatsapp_ai_analysis_reports")
 }
 
+/// Overrides del onboarding de activación, por empresa.
+///
+/// NO guarda si una tarea está completada: eso se deriva de los datos reales
+/// (`products`, `sales`, `companies.tax_enabled`, `app_config.logo_base64`...).
+/// Solo guarda lo que no se puede deducir: que el usuario omitió una tarea
+/// opcional y por dónde va un recorrido guiado.
+model CompanyOnboardingTask {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  taskKey     String    @map("task_key") @db.VarChar(40)
+  /// PENDING | SKIPPED
+  status      String    @default("PENDING") @db.VarChar(16)
+  skippedAt   DateTime? @map("skipped_at")
+  completedAt DateTime? @map("completed_at")
+  tourStep    Int       @default(0) @map("tour_step")
+  tourSeenAt  DateTime? @map("tour_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, taskKey])
+  @@index([companyId])
+  @@map("company_onboarding_tasks")
+}
+
 model UserLocation {
   id             String    @id @default(uuid()) @db.Uuid
   userId         String    @unique @db.Uuid
@@ -2682,6 +2736,13 @@ model AppConfig {
   phonePreferential                String   @default("") @map("phone_preferential")
   address                          String   @default("")
   description                      String   @default("")
+  /// Respuestas de la pantalla de bienvenida (onboarding guiado).
+  /// Vacías hasta que el responsable las completa. Son informativas: no
+  /// alteran plan, licencia, almacenes, cajas, permisos ni trial.
+  businessType                     String   @default("") @map("business_type") @db.VarChar(80)
+  businessAgeRange                 String   @default("") @map("business_age_range") @db.VarChar(40)
+  businessSize                     String   @default("") @map("business_size") @db.VarChar(40)
+  welcomeCompletedAt               DateTime? @map("welcome_completed_at")
   instagramUrl                     String   @default("") @map("instagram_url")
   facebookUrl                      String   @default("") @map("facebook_url")
   /// Correo de facturación electrónica de la empresa. Se captura UNA vez en la

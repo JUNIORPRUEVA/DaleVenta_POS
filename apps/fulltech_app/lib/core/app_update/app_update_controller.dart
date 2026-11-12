@@ -253,6 +253,22 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
           }
           _loaded = true;
         })
+        // La carga NUNCA puede propagar: se ejecuta durante el arranque y un
+        // fallo aquí llegaba al manejador global de errores (aviso técnico) y
+        // dejaba el actualizador reintentando en cada llamada.
+        .catchError((Object error, StackTrace stackTrace) {
+          _loaded = true;
+          try {
+            TraceLog.log(
+              'AppUpdate',
+              'state load failed (aislado, sin propagar)',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          } catch (_) {
+            // Ignorado a propósito.
+          }
+        })
         .whenComplete(() {
           if (identical(_loadFuture, future)) _loadFuture = null;
         });
@@ -261,6 +277,45 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   }
 
   Future<void> _runCheck() async {
+    try {
+      await _runCheckCore();
+    } catch (error, stackTrace) {
+      // Frontera exterior del actualizador.
+      //
+      // `readInstalledRelease()` y `_reconcileInstallerResult()` quedan FUERA
+      // del `try` interno porque pueden fallar antes de tener red o manifiesto:
+      // una build UAT sin `DALEVENTAS_POS_ROOT` lanza justo ahí
+      // (`windows_product_paths.dart`) y la excepción llegaba hasta `main.dart`,
+      // que la mostraba como aviso técnico. Una venta NUNCA se interrumpe por
+      // el actualizador: se registra, se avisa una vez al día y el POS sigue.
+      try {
+        TraceLog.log(
+          'AppUpdate',
+          'check failed (aislado, sin propagar)',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      } catch (_) {
+        // Ignorado a propósito.
+      }
+      _reportUpdaterFailure(error, stackTrace, 'CHECK_ERROR');
+      await _setState(
+        state.copyWith(
+          phase: AppUpdatePhase.idle,
+          clearManifest: true,
+          message: null,
+          persisted: state.persisted.copyWith(
+            phase: AppUpdatePhase.idle,
+            lastUpdateCheckAt: DateTime.now(),
+            lastUpdateResult: 'CHECK_ERROR',
+            lastErrorCode: 'CHECK_ERROR',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _runCheckCore() async {
     if (!_repository.isConfigured) {
       await _persistStable(
         phase: AppUpdatePhase.idle,
@@ -412,14 +467,21 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
   /// Nunca puede alterar el flujo del actualizador.
   void _reportUpdaterFailure(Object error, StackTrace stackTrace, String code) {
     try {
+      // Un fallo del actualizador es **recuperable**: el comercio puede seguir
+      // vendiendo. Se avisa con texto de negocio, nunca técnico, y como máximo
+      // una vez al día por categoría (`updater`) para no interrumpir.
+      final checking = code == 'CHECK_ERROR';
       AppErrorReporter.instance.record(
         error,
         stackTrace,
         context: 'actualizacion:$code',
-        title: 'Actualización',
-        userMessage: 'No se pudo completar la actualización.',
-        severity: AppErrorSeverity.error,
-        notifyUser: false,
+        title: checking
+            ? 'No pudimos comprobar las actualizaciones.'
+            : 'No pudimos completar la actualización.',
+        userMessage: 'Puedes seguir utilizando FullPOS normalmente.',
+        severity: AppErrorSeverity.warning,
+        notifyUser: true,
+        noticeCategory: 'updater',
         dedupeKey: 'updater:$code',
       );
     } catch (_) {
@@ -427,7 +489,8 @@ class AppUpdateController extends StateNotifier<AppUpdateState> {
     }
   }
 
-  bool _hasPreparedArtifactFor(UpdateManifest manifest) {    final persisted = state.persisted;
+  bool _hasPreparedArtifactFor(UpdateManifest manifest) {
+    final persisted = state.persisted;
     final targetBuild = manifest.buildNumber;
     final artifact = persisted.artifactRelativePath;
     if (targetBuild == null || artifact == null || artifact.trim().isEmpty) {

@@ -19,15 +19,61 @@ class AiAssistantDataSource {
     required AiChatContext context,
     required String message,
     required List<Map<String, dynamic>> history,
+    String? conversationId,
+    String? clientMessageId,
+    String? mediaJobId,
   }) async {
+    final conversation = (conversationId ?? '').trim();
+    final clientMessage = (clientMessageId ?? '').trim();
+    final media = (mediaJobId ?? '').trim();
     return _post(
       ApiRoutes.aiChat,
       data: {
         'context': context.toMap(),
         'message': message.trim(),
         if (history.isNotEmpty) 'history': history,
+        if (conversation.isNotEmpty) 'conversationId': conversation,
+        if (clientMessage.isNotEmpty) 'clientMessageId': clientMessage,
+        if (media.isNotEmpty) 'mediaJobId': media,
       },
     );
+  }
+
+  /// Sube una captura o un documento al motor multimedia del asistente.
+  ///
+  /// El archivo no se guarda en la app: se envía al backend, que lo reenvía al motor. La respuesta
+  /// trae el identificador que hay que incluir en el siguiente mensaje.
+  Future<Map<String, dynamic>> uploadAttachment({
+    required String filename,
+    required List<int> bytes,
+    required String mimeType,
+  }) async {
+    try {
+      final form = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: DioMediaType.parse(mimeType),
+        ),
+      });
+      final response = await _dio.post(
+        ApiRoutes.aiAttachments,
+        data: form,
+        // Sin `contentType` explícito: Dio añade `multipart/form-data` **con** su `boundary`, y
+        // fijarlo a mano lo dejaría fuera y el servidor no podría separar las partes.
+        options: Options(extra: const {'skipLoader': true}),
+      );
+      final data = response.data;
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) return data.cast<String, dynamic>();
+      throw ApiException('Respuesta inválida al adjuntar el archivo.');
+    } on DioException catch (error) {
+      final message = _extractMessage(
+        error.response?.data,
+        'No se pudo adjuntar el archivo.',
+      );
+      throw ApiException(message, error.response?.statusCode);
+    }
   }
 
   Future<Map<String, dynamic>> _post(

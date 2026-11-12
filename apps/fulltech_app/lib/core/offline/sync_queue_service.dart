@@ -214,7 +214,10 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       released++;
     }
     if (released > 0) {
-      TraceLog.log('sync_queue', 'released auth_blocked type=$type n=$released');
+      TraceLog.log(
+        'sync_queue',
+        'released auth_blocked type=$type n=$released',
+      );
       await refreshStats();
       unawaited(processPending());
     }

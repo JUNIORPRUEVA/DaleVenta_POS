@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FullPOS Cloud · Aceptación local · Índice visual</title>
+    <style>
+      :root {
+        --ink: #0b0f17;
+        --ink-2: #46505f;
+        --ink-3: #6d7684;
+        --line: #eceff4;
+        --blue: #0b5cff;
+        --blue-soft: #f2f6ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px clamp(16px, 4vw, 48px) 64px;
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: #fbfcfe;
+      }
+      h1 { font-size: 1.5rem; letter-spacing: -0.03em; margin: 0 0 6px; }
+      .sub { margin: 0 0 24px; color: var(--ink-3); font-size: 0.9rem; }
+      .env {
+        margin: 0 0 28px;
+        padding: 12px 14px;
+        border: 1px solid #dbe6ff;
+        border-radius: 10px;
+        background: var(--blue-soft);
+        font-size: 0.85rem;
+        line-height: 1.7;
+        color: var(--ink-2);
+      }
+      .env code { font-size: 0.83rem; color: var(--blue); }
+      section { margin-bottom: 34px; }
+      h2 {
+        font-size: 0.95rem;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      h2 small { font-weight: 400; color: var(--ink-3); font-size: 0.8rem; margin-left: 8px; }
+      .row { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+      @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+      figure { margin: 0; }
+      figcaption {
+        font-size: 0.74rem;
+        color: var(--ink-3);
+        margin-bottom: 6px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+      .single { max-width: 920px; }
+    </style>
+  </head>
+  <body>
+    <h1>FullPOS Cloud · Aceptación local antes del asistente guiado</h1>
+    <p class="sub">
+      Recorrido completo del cliente capturado con Playwright contra servicios
+      <strong>exclusivamente locales</strong>. Sin tokens, contraseñas ni datos personales en las imágenes.
+    </p>
+
+    <p class="env">
+      Sitio <code>http://127.0.0.1:4330</code> · App <code>http://127.0.0.1:4400</code> ·
+      API <code>http://127.0.0.1:4004</code> · PostgreSQL <code>127.0.0.1:56561</code> (daleventa_local)<br />
+      Escritorio 1280 × 860 · Móvil 390 × 844 · Empresa de prueba «Bodega Aceptacion …»
+    </p>
+
+    <section>
+      <h2>1. Registro <small>una pantalla, cinco campos</small></h2>
+      <div class="row">
+        <figure><figcaption>Escritorio 1280</figcaption><img src="desktop-01-registro.png" alt="Registro escritorio" /></figure>
+        <figure><figcaption>Móvil 390</figcaption><img src="mobile-01-registro.png" alt="Registro móvil" /></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Iniciar sesión</h2>
+      <div class="row">
+        <figure><figcaption>Escritorio 1280</figcaption><img src="desktop-14-login.png" alt="Login escritorio" /></figure>
+        <figure><figcaption>Móvil 390</figcaption><img src="mobile-02-login.png" alt="Login móvil" /></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Bienvenida <small>nombre real de la empresa + 3 preguntas</small></h2>
+      <div class="row">
+        <figure><figcaption>Escritorio 1280</figcaption><img src="desktop-02-bienvenida.png" alt="Bienvenida escritorio" /></figure>
+        <figure><figcaption>Móvil 390</figcaption><img src="mobile-03-bienvenida.png" alt="Bienvenida móvil" /></figure>
+      </div>
+      <div class="row" style="margin-top:18px">
+        <figure><figcaption>Escritorio · respuestas seleccionadas</figcaption><img src="desktop-03-bienvenida-respondida.png" alt="Bienvenida respondida" /></figure>
+        <figure><figcaption>Cliente existente · salta las preguntas</figcaption><img src="desktop-10-cliente-existente.png" alt="Cliente existente" /></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Invitación al asistente <small>recorrido opcional, no bloquea la entrada</small></h2>
+      <div class="row">
+        <figure><figcaption>Escritorio 1280</figcaption><img src="desktop-04-recorrido.png" alt="Recorrido escritorio" /></figure>
+        <figure><figcaption>Móvil 390</figcaption><img src="mobile-04-recorrido.png" alt="Recorrido móvil" /></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Preparando el espacio de trabajo <small>sin porcentajes falsos</small></h2>
+      <div class="row">
+        <figure><figcaption>Escritorio 1280</figcaption><img src="desktop-05-preparando.png" alt="Preparando escritorio" /></figure>
+        <figure><figcaption>Móvil 390</figcaption><img src="mobile-05-preparando.png" alt="Preparando móvil" /></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>6. Entrada al POS autenticado</h2>
+      <div class="row">
+        <figure><figcaption>Escritorio · entrada a la app</figcaption><img src="desktop-06-app-entry.png" alt="Entrada app" /></figure>
+        <figure><figcaption>Móvil · POS</figcaption><img src="mobile-06-app-entry.png" alt="POS móvil" /></figure>
+      </div>
+      <figure class="single" style="margin-top:18px">
+        <figcaption>Escritorio 1280 · POS real (/cotizaciones)</figcaption>
+        <img src="desktop-07-pos.png" alt="POS escritorio" />
+      </figure>
+    </section>
+
+    <section>
+      <h2>7. Sesión persistente <small>refresh y reapertura sin pedir credenciales</small></h2>
+      <div class="row">
+        <figure><figcaption>Refresh en la ruta del POS</figcaption><img src="desktop-08-refresh-pos.png" alt="Refresh POS" /></figure>
+        <figure><figcaption>Cerrar y reabrir</figcaption><img src="desktop-09-reapertura.png" alt="Reapertura" /></figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>8. Errores seguros</h2>
+      <div class="row">
+        <figure><figcaption>Recuperable · escritorio</figcaption><img src="desktop-13-error-recuperable.png" alt="Error recuperable escritorio" /></figure>
+        <figure><figcaption>Recuperable · móvil</figcaption><img src="mobile-13-error-recuperable.png" alt="Error recuperable móvil" /></figure>
+      </div>
+      <div class="row" style="margin-top:18px">
+        <figure><figcaption>Sesión expirada · escritorio</figcaption><img src="desktop-12-sesion-expirada.png" alt="Sesión expirada escritorio" /></figure>
+        <figure><figcaption>Sesión expirada · móvil</figcaption><img src="mobile-12-sesion-expirada.png" alt="Sesión expirada móvil" /></figure>
+      </div>
+    </section>
+  </body>
+</html>

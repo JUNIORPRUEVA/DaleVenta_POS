@@ -73,10 +73,7 @@ class RememberedLoginUsersStorage {
     }
   }
 
-  Future<void> _writeUsers(
-    SharedPreferences prefs,
-    List<String> users,
-  ) async {
+  Future<void> _writeUsers(SharedPreferences prefs, List<String> users) async {
     if (users.isEmpty) {
       if (prefs.containsKey(usersKey)) {
         await prefs.remove(usersKey);

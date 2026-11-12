@@ -84,6 +84,7 @@ class TicketData {
   /// Efectivo REAL entregado por el cliente (tender). Nulo = tender
   /// desconocido/no almacenado (ventas legadas). 0 = no hubo efectivo.
   final double? cashReceived;
+
   /// Devuelta entregada al cliente. Nulo cuando el tender es desconocido.
   final double? changeAmount;
 

@@ -1208,6 +1208,7 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
         ],
         const SizedBox(height: 24),
         InkWell(
+          mouseCursor: SystemMouseCursors.click,
           borderRadius: BorderRadius.circular(12),
           onTap: () => setState(() => _historyExpanded = !_historyExpanded),
           child: Padding(
@@ -2113,6 +2114,7 @@ class _PagosFilterSection<T> extends StatelessWidget {
                       ),
                 borderRadius: BorderRadius.circular(16),
                 child: InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => onSelected(options[index]),
                   child: Padding(
@@ -2173,6 +2175,7 @@ class _PagosActionTile extends StatelessWidget {
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(

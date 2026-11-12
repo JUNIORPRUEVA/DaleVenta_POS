@@ -32,18 +32,34 @@ class CashBoxScreen extends ConsumerWidget {
           // recreado mientras el diálogo estuvo abierto, y usar una referencia
           // vieja lanzaría 'Tried to use ActiveCashSessionController after
           // dispose was called'.
-          final controller =
-              ref.read(activeCashSessionControllerProvider.notifier);
+          final controller = ref.read(
+            activeCashSessionControllerProvider.notifier,
+          );
           await controller.open(amount);
         },
       );
       if (!context.mounted) return;
       if (opened == true) {
-        final controller =
-            ref.read(activeCashSessionControllerProvider.notifier);
+        final controller = ref.read(
+          activeCashSessionControllerProvider.notifier,
+        );
         await controller.refresh();
         if (!context.mounted) return;
-        showCashToast(context, 'Caja abierta');
+        // Solo se anuncia el éxito cuando el estado autoritativo confirma el
+        // turno abierto (ver cash_turn_menu_button._openCash).
+        if (ref.read(activeCashSessionControllerProvider).valueOrNull == null) {
+          showCashToast(
+            context,
+            'La caja no quedó abierta en el servidor. Intenta de nuevo.',
+            isError: true,
+          );
+          return;
+        }
+        showCashToast(
+          context,
+          'Turno abierto',
+          detail: 'La caja está lista para operar.',
+        );
       }
     } catch (error, stack) {
       AppErrorReporter.instance.record(
@@ -66,24 +82,24 @@ class CashBoxScreen extends ConsumerWidget {
         context,
         expectedCash: currentSummary.expectedCash,
         onCloseShift: (amount) {
-          final controller =
-              ref.read(activeCashSessionControllerProvider.notifier);
+          final controller = ref.read(
+            activeCashSessionControllerProvider.notifier,
+          );
           return controller.close(amount);
         },
       );
       if (!context.mounted) return;
       if (result?.success != true) return;
-      final controller =
-          ref.read(activeCashSessionControllerProvider.notifier);
+      final controller = ref.read(activeCashSessionControllerProvider.notifier);
       await controller.refresh();
       if (!context.mounted) return;
       final printResult = result?.printResult;
-      final message = printResult == null
-          ? 'Turno cerrado'
+      final detail = printResult == null
+          ? 'Efectivo contado y cierre registrado correctamente.'
           : printResult.success
-          ? 'Turno cerrado e impreso'
-          : 'Turno cerrado. ${printResult.message}';
-      showCashToast(context, message);
+          ? 'Cierre registrado y ticket enviado a la impresora.'
+          : 'Cierre registrado. ${printResult.message}';
+      showCashToast(context, 'Turno cerrado', detail: detail);
     } catch (error, stack) {
       AppErrorReporter.instance.record(
         error,
@@ -232,13 +248,13 @@ class CashBoxScreen extends ConsumerWidget {
                     final blocked = unverified || requiresReview;
                     final blockedMessage = requiresReview
                         ? (reviewMessage ??
-                            'El servidor detectó un estado de turno que '
-                                'necesita revisión. No abras una caja nueva '
-                                'hasta resolverlo.')
+                              'El servidor detectó un estado de turno que '
+                                  'necesita revisión. No abras una caja nueva '
+                                  'hasta resolverlo.')
                         : (blocked
-                            ? 'No se puede abrir caja mientras el estado del '
-                                  'turno no esté confirmado con el servidor.'
-                            : null);
+                              ? 'No se puede abrir caja mientras el estado del '
+                                    'turno no esté confirmado con el servidor.'
+                              : null);
                     return _ClosedCashView(
                       onOpen: blocked ? null : () => _openCash(context, ref),
                       blockedMessage: blockedMessage,

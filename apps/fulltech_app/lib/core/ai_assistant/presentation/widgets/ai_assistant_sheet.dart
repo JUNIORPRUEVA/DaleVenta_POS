@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/ai_assistant_controller.dart';
+import '../../data/voice_note_recorder.dart';
 import '../../domain/models/ai_chat_context.dart';
 import '../../domain/models/ai_assistant_message.dart';
 import '../../../widgets/app_navigation.dart';
+import '../../../theme/app_colors.dart';
+import 'ai_assistant_dock_button.dart';
 import '../ai_chat_context_resolver.dart';
 
 class GlobalAiChatSheet extends ConsumerStatefulWidget {
@@ -12,10 +19,22 @@ class GlobalAiChatSheet extends ConsumerStatefulWidget {
     super.key,
     this.onClose,
     this.embeddedInScreen = false,
+    this.panelWidth,
+    this.recorder,
   });
 
   final VoidCallback? onClose;
   final bool embeddedInScreen;
+
+  /// Sólo para pruebas: permite inyectar un grabador de notas de voz falso.
+  /// En producción se usa el micrófono real.
+  final VoiceNoteRecorderContract? recorder;
+
+  /// Ancho fijo del panel acoplado al lateral (escritorio).
+  ///
+  /// Cuando se indica, el panel ocupa todo el alto de la pantalla y ese ancho,
+  /// de modo que puede cubrir la columna de detalle de ventas al deslizarse.
+  final double? panelWidth;
 
   @override
   ConsumerState<GlobalAiChatSheet> createState() => _GlobalAiChatSheetState();
@@ -26,15 +45,28 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
   final ScrollController _scrollController = ScrollController();
   int _lastMessageCount = -1;
 
-  static const _defaultQuickPrompts = <String>[
-    'Explícame esta pantalla',
-    'Qué norma del manual aplica aquí',
-    'Este cliente existe en la app',
-    'Qué puedo hacer en este módulo',
-  ];
+  /// Nota de voz: grabador, estado y temporizador visible mientras se graba.
+  late final VoiceNoteRecorderContract _recorder;
+  bool _recording = false;
+  bool _finishingRecording = false;
+  Duration _recordElapsed = Duration.zero;
+  Timer? _recordTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _recorder = widget.recorder ?? VoiceNoteRecorder();
+  }
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
+    if (_recording) {
+      // Cerrar el panel grabando descarta la nota en curso.
+      _recording = false;
+      unawaited(_recorder.cancel());
+    }
+    unawaited(_recorder.dispose());
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -50,406 +82,331 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
     final theme = Theme.of(context);
     final aiState = ref.watch(aiAssistantControllerProvider);
     final controller = ref.read(aiAssistantControllerProvider.notifier);
-
-    final liveLocation = safeCurrentLocation(context);
-    final liveContext = buildAiChatContextFromLocation(liveLocation);
+    final liveContext = buildAiChatContextFromLocation(
+      safeCurrentLocation(context),
+    );
     if (!_isSameContext(liveContext, aiState.context)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        controller.setContext(liveContext);
+        if (mounted) controller.setContext(liveContext);
       });
     }
-    final size = MediaQuery.sizeOf(context);
-    final isDesktop = size.width >= 900;
-    final embeddedInScreen = widget.embeddedInScreen;
-    final quickPrompts = _quickPromptsForContext(aiState.context);
-    final panelRadius = embeddedInScreen
-        ? BorderRadius.circular(isDesktop ? 30 : 26)
-        : BorderRadius.only(
-            topLeft: Radius.circular(isDesktop ? 32 : 28),
-            bottomLeft: Radius.circular(isDesktop ? 32 : 28),
-            topRight: Radius.circular(isDesktop ? 0 : 28),
-            bottomRight: Radius.circular(isDesktop ? 0 : 28),
-          );
-
     if (_lastMessageCount != aiState.messages.length) {
       _lastMessageCount = aiState.messages.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _scrollToBottom();
+        if (mounted) _scrollToBottom();
       });
     }
 
+    final size = MediaQuery.sizeOf(context);
+    final isDesktop = size.width >= 900;
+    final embedded = widget.embeddedInScreen;
+    final docked = isDesktop && widget.panelWidth != null;
+    final narrow = docked && widget.panelWidth! < 360;
+    final busy =
+        aiState.sending || aiState.uploadingAttachment || _finishingRecording;
+
     return SafeArea(
+      top: !docked,
+      bottom: !docked,
+      left: !docked,
+      right: !docked,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          embeddedInScreen ? 0 : (isDesktop ? 0 : 10),
-          embeddedInScreen ? 0 : 10,
-          embeddedInScreen ? 0 : (isDesktop ? 0 : 10),
-          embeddedInScreen ? 0 : (isDesktop ? 10 : 0),
+        padding: EdgeInsets.only(
+          bottom: embedded ? 0 : MediaQuery.viewInsetsOf(context).bottom,
         ),
         child: Align(
-          alignment: embeddedInScreen
+          alignment: embedded
               ? Alignment.center
               : (isDesktop ? Alignment.centerRight : Alignment.bottomCenter),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: embeddedInScreen
+              maxWidth: embedded
                   ? (isDesktop ? 980 : size.width)
-                  : (isDesktop ? 468 : size.width),
-              maxHeight: embeddedInScreen
+                  : (isDesktop ? (widget.panelWidth ?? 468) : size.width),
+              maxHeight: embedded || docked
                   ? size.height
                   : (isDesktop ? 820 : size.height * 0.84),
             ),
-            child: Container(
-              height: embeddedInScreen ? double.infinity : null,
-              width: embeddedInScreen
-                  ? double.infinity
-                  : (isDesktop ? 468 : null),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF3F7FF), Color(0xFFFFFFFF)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                borderRadius: panelRadius,
-                border: Border.all(
-                  color: const Color(0xFFB9C9F3).withValues(alpha: 0.72),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF12367E).withValues(alpha: 0.16),
-                    blurRadius: 34,
-                    offset: const Offset(-10, 16),
+            child: Material(
+              color: AppColors.surfaceAlt,
+              shape: const Border(left: BorderSide(color: AppColors.border)),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.border),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Image.asset(
+                          AiAssistantDockButton.imageAsset,
+                          width: 40,
+                          height: 40,
+                          excludeFromSemantics: true,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'FullPOS IA',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Tu asistente de trabajo',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!narrow)
+                          _StatusChip(online: aiState.lastError == null),
+                        if (!embedded)
+                          IconButton(
+                            tooltip: 'Cerrar asistente',
+                            onPressed:
+                                widget.onClose ??
+                                () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            color: AppColors.textSecondary,
+                          ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: panelRadius,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFF0F2F73).withValues(alpha: 0.06),
-                                Colors.white,
-                              ],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Consulta sobre esta pantalla, resuelve dudas del sistema o reporta una avería.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w400,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _PromptChipsRow(
+                      children: _quickPromptsForContext(aiState.context)
+                          .map(
+                            (action) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ActionChip(
+                                avatar: Icon(
+                                  action.icon,
+                                  size: 16,
+                                  color: AppColors.primary,
+                                ),
+                                onPressed: busy || _recording
+                                    ? null
+                                    : () => _sendPreset(
+                                        controller,
+                                        action.prompt,
+                                      ),
+                                backgroundColor: AppColors.surface,
+                                elevation: 0,
+                                pressElevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                side: const BorderSide(color: AppColors.border),
+                                label: Text(
+                                  action.label,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  ),
+                  Expanded(
+                    child: _ChatMessagesList(
+                      controller: _scrollController,
+                      messages: aiState.messages,
+                    ),
+                  ),
+                  if ((aiState.lastError ?? '').trim().isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.errorSoft,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.errorBorder),
+                      ),
+                      child: Text(
+                        aiState.lastError!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.error,
                         ),
                       ),
-                      Positioned(
-                        top: 88,
-                        left: -50,
-                        child: Container(
-                          width: 180,
-                          height: 180,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(
-                              0xFF29B7C8,
-                            ).withValues(alpha: 0.09),
-                          ),
-                        ),
+                    ),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      border: Border(top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Container(
+                      key: const ValueKey('ai-assistant-composer'),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceAlt,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.borderStrong),
                       ),
-                      Positioned(
-                        top: -20,
-                        right: -30,
-                        child: Container(
-                          width: 150,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(
-                              0xFF2457D6,
-                            ).withValues(alpha: 0.11),
-                          ),
-                        ),
-                      ),
-                      Column(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(18, 16, 12, 14),
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0xFF0F2F73),
-                                  Color(0xFF1D4FBE),
-                                  Color(0xFF15AFC0),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                            child: Row(
+                          if (aiState.attachment != null)
+                            Row(
                               children: [
-                                Container(
-                                  width: 46,
-                                  height: 46,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.18,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.memory_rounded,
-                                    color: Colors.white,
-                                  ),
+                                const Icon(
+                                  Icons.attach_file_rounded,
+                                  size: 16,
+                                  color: AppColors.primary,
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 8),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'FULLTECH AI',
-                                        style: theme.textTheme.titleMedium
-                                            ?.copyWith(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: 0.2,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _buildContextLabel(aiState.context),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.82,
-                                              ),
-                                              height: 1.3,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 7,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.16,
-                                      ),
-                                    ),
-                                  ),
                                   child: Text(
-                                    embeddedInScreen
-                                        ? 'Asistente IA'
-                                        : 'Contexto actual',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.2,
-                                    ),
+                                    aiState.attachment!.filename,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall,
                                   ),
                                 ),
-                                if (!embeddedInScreen)
-                                  IconButton(
-                                    onPressed:
-                                        widget.onClose ??
-                                        () => Navigator.of(context).pop(),
-                                    icon: const Icon(
-                                      Icons.close_rounded,
-                                      color: Colors.white,
-                                    ),
+                                IconButton(
+                                  onPressed: busy
+                                      ? null
+                                      : controller.clearAttachment,
+                                  tooltip: 'Quitar adjunto',
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
                                   ),
+                                ),
                               ],
                             ),
-                          ),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                            color: const Color(0xFFEDF4FF),
-                            child: Text(
-                              'Base principal: Manual Interno. También puedo explicarte la pantalla actual y responder con datos reales autorizados de la app.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFF26427D),
-                                fontWeight: FontWeight.w600,
-                                height: 1.35,
+                          if (_recording)
+                            _RecordingBar(
+                              elapsed: _recordElapsed,
+                              busy: _finishingRecording,
+                              onCancel: _cancelRecording,
+                            ),
+                          TextField(
+                            controller: _messageController,
+                            enabled: !_recording,
+                            minLines: 2,
+                            maxLines: 4,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: busy ? null : (_) => _send(controller),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w400,
+                              height: 1.5,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Escribe tu pregunta…',
+                              hintStyle: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.textMuted,
+                                fontWeight: FontWeight.w400,
                               ),
+                              filled: false,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.all(8),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: quickPrompts
-                                      .map(
-                                        (prompt) => Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 8,
-                                          ),
-                                          child: ActionChip(
-                                            onPressed: aiState.sending
-                                                ? null
-                                                : () => _sendPreset(
-                                                    controller,
-                                                    prompt,
-                                                  ),
-                                            backgroundColor: Colors.white,
-                                            side: BorderSide(
-                                              color: const Color(
-                                                0xFFB7C8EF,
-                                              ).withValues(alpha: 0.9),
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                            ),
-                                            label: Text(
-                                              prompt,
-                                              style: theme.textTheme.labelMedium
-                                                  ?.copyWith(
-                                                    color: const Color(
-                                                      0xFF173D8E,
-                                                    ),
-                                                    fontWeight: FontWeight.w800,
-                                                  ),
-                                            ),
-                                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              IconButton(
+                                onPressed: busy || _recording
+                                    ? null
+                                    : () => _pickAttachment(controller),
+                                icon: aiState.uploadingAttachment
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
                                         ),
                                       )
-                                      .toList(growable: false),
-                                ),
+                                    : const Icon(
+                                        Icons.add_rounded,
+                                        semanticLabel:
+                                            'Adjuntar documento, foto, video o audio',
+                                      ),
+                                color: AppColors.textSecondary,
                               ),
-                            ),
-                          ),
-                          Expanded(
-                            child: _ChatMessagesList(
-                              controller: _scrollController,
-                              messages: aiState.messages,
-                            ),
-                          ),
-                          if ((aiState.lastError ?? '').trim().isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF3F0),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFFF3B3A6),
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Text(
-                                    aiState.lastError!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: const Color(0xFF8A2D1B),
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                ),
+                              IconButton(
+                                onPressed: busy
+                                    ? null
+                                    : (_recording
+                                          ? () => _finishRecording(controller)
+                                          : _startRecording),
+                                icon: _recording
+                                    ? const Icon(
+                                        Icons.stop_rounded,
+                                        color: AppColors.error,
+                                        semanticLabel:
+                                            'Detener y enviar la nota de voz',
+                                      )
+                                    : const Icon(
+                                        Icons.mic_none_rounded,
+                                        semanticLabel: 'Grabar nota de voz',
+                                      ),
+                                color: AppColors.textSecondary,
                               ),
-                            ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _messageController,
-                                    minLines: 1,
-                                    maxLines: 4,
-                                    textInputAction: TextInputAction.send,
-                                    onSubmitted: (_) async {
-                                      await _send(controller);
-                                    },
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'Pregunta por normas, pantalla actual, clientes, operaciones o procesos...',
-                                      isDense: true,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 15,
-                                          ),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFB7C8EF),
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFB7C8EF),
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFF2457D6),
-                                          width: 1.4,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                              const Spacer(),
+                              IconButton.filled(
+                                onPressed: busy || _recording
+                                    ? null
+                                    : () => _send(controller),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: AppColors.surface,
                                 ),
-                                const SizedBox(width: 10),
-                                SizedBox(
-                                  height: 52,
-                                  width: 52,
-                                  child: FilledButton(
-                                    onPressed: aiState.sending
-                                        ? null
-                                        : () => _send(controller),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF1D4FBE),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(18),
+                                icon: aiState.sending || _finishingRecording
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.arrow_upward_rounded,
+                                        size: 20,
+                                        semanticLabel: 'Enviar',
                                       ),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                    child: aiState.sending
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : const Icon(
-                                            Icons.arrow_upward_rounded,
-                                          ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -466,60 +423,222 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
         a.entityId == b.entityId;
   }
 
-  List<String> _quickPromptsForContext(AiChatContext context) {
-    switch (context.module.trim().toLowerCase()) {
-      case 'catalogo':
-      case 'catálogo':
-        return const [
-          'Qué productos hay en catálogo',
-          'Búscame taladros disponibles en catálogo',
-          'Qué categorías de productos existen',
-          'Muéstrame productos con precio',
-        ];
-      case 'clientes':
-        return const [
-          'Explícame esta pantalla',
-          'Este cliente existe en la app',
-          'Qué información puedo ver del cliente',
-          'Resumen del cliente seleccionado',
-        ];
-      case 'cotizaciones':
-        return const [
-          'Explícame esta pantalla',
-          'Resumen de la cotización actual',
-          'Qué reglas del manual aplican aquí',
-          'Qué puedo hacer en este módulo',
-        ];
-      case 'service-orders':
-        return const [
-          'Explícame esta pantalla',
-          'Resumen de esta orden de servicio',
-          'Qué reglas del manual aplican aquí',
-          'Qué puedo hacer en este módulo',
-        ];
-      case 'manual-interno':
-        return const [
-          'Explícame esta pantalla',
-          'Qué normas del manual están vigentes',
-          'Resúmeme las reglas más importantes',
-          'Qué tipo de regla debo buscar aquí',
-        ];
-      case 'profile':
-      case 'nomina':
-        return const [
-          'Cuál es mi información en la app',
-          'Cuál es mi rol',
-          'Qué datos míos puedes ver',
-          'Explícame esta pantalla',
-        ];
-      default:
-        return _defaultQuickPrompts;
+  /// Acciones que el cliente puede hacer aquí, adaptadas al módulo en el que está.
+  List<_QuickAction> _quickPromptsForContext(AiChatContext context) {
+    final module = _prettyModule(context.module);
+    return [
+      const _QuickAction(
+        'Explícame esta pantalla',
+        Icons.visibility_rounded,
+        'Explícame esta pantalla paso a paso',
+      ),
+      _QuickAction(
+        'Qué puedo hacer en $module',
+        Icons.dashboard_customize_rounded,
+        'Qué puedo hacer en el módulo $module',
+      ),
+      const _QuickAction(
+        'Normas del manual aquí',
+        Icons.menu_book_rounded,
+        'Qué normas del manual interno aplican en esta pantalla',
+      ),
+      const _QuickAction(
+        'Reportar una avería',
+        Icons.report_problem_rounded,
+        'Quiero reportar una avería',
+      ),
+      const _QuickAction(
+        'Hablar con un representante',
+        Icons.support_agent_rounded,
+        'Quiero hablar con un representante',
+      ),
+    ];
+  }
+
+  /// Abre el selector de archivos y sube el elegido para el próximo mensaje.
+  ///
+  /// El archivo no se guarda en la app: se envía al backend, que lo procesa y devuelve el
+  /// identificador que el mensaje siguiente necesita. Mientras sube, el botón queda ocupado.
+  Future<void> _pickAttachment(AiAssistantController controller) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const [
+          'pdf',
+          'doc',
+          'docx',
+          'txt',
+          'csv',
+          'png',
+          'jpg',
+          'jpeg',
+          'webp',
+          'mp4',
+          'mov',
+          'mp3',
+          'wav',
+          'm4a',
+        ],
+        withData: true,
+      );
+      final files = result?.files ?? const <PlatformFile>[];
+      if (files.isEmpty) return;
+      final file = files.first;
+      final bytes = file.bytes;
+      if (bytes == null) return;
+      await controller.attachFile(
+        filename: file.name,
+        bytes: bytes,
+        mimeType: _guessMime(file.name),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('No se pudo adjuntar el archivo: $e')),
+      );
     }
+  }
+
+  /// Empieza a grabar una nota de voz.
+  ///
+  /// Windows no pide permiso; Android/iOS sí y ya lo declaran. Si el micrófono no
+  /// está disponible se avisa y no se deja el compositor en un estado raro.
+  Future<void> _startRecording() async {
+    if (_recording || _finishingRecording) return;
+    final allowed = await _recorder.hasPermission();
+    if (!mounted) return;
+    if (!allowed) {
+      _showMessage(
+        'No hay permiso para usar el micrófono. Actívalo en los ajustes del sistema.',
+      );
+      return;
+    }
+    try {
+      await _recorder.startNew(DateTime.now());
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('No se pudo iniciar la grabación: $e');
+      return;
+    }
+    if (!mounted) {
+      unawaited(_recorder.cancel());
+      return;
+    }
+    setState(() {
+      _recording = true;
+      _recordElapsed = Duration.zero;
+    });
+    _recordTimer?.cancel();
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() => _recordElapsed = Duration(seconds: timer.tick));
+      if (_recordElapsed >= _recorder.maxDuration) {
+        // Tope de duración: se detiene y se envía sola.
+        unawaited(
+          _finishRecording(ref.read(aiAssistantControllerProvider.notifier)),
+        );
+      }
+    });
+  }
+
+  /// Detiene la grabación, sube la nota de voz y la envía en el mismo gesto.
+  Future<void> _finishRecording(AiAssistantController controller) async {
+    if (!_recording || _finishingRecording) return;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    setState(() {
+      _recording = false;
+      _finishingRecording = true;
+    });
+    try {
+      final path = await _recorder.stop();
+      if (path == null || path.trim().isEmpty) {
+        _showMessage('No se pudo guardar la nota de voz.');
+        return;
+      }
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        _showMessage('La nota de voz quedó vacía. Inténtalo otra vez.');
+        return;
+      }
+      await controller.attachFile(
+        filename: VoiceNoteRecorder.fileNameFor(DateTime.now()),
+        bytes: bytes,
+        mimeType: VoiceNoteRecorder.mimeType,
+      );
+      if (!mounted) return;
+      final pending = ref.read(aiAssistantControllerProvider).attachment;
+      if (pending != null) {
+        await _send(controller);
+      } else {
+        final failure = ref.read(aiAssistantControllerProvider).lastError;
+        if (failure != null) _showMessage(failure);
+      }
+      try {
+        await file.delete();
+      } catch (_) {
+        // El temporal lo limpia el sistema si ahora no se puede borrar.
+      }
+    } catch (e) {
+      if (mounted) {
+        _showMessage('No se pudo enviar la nota de voz: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _finishingRecording = false);
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    if (!_recording) return;
+    setState(() {
+      _recording = false;
+      _recordElapsed = Duration.zero;
+    });
+    await _recorder.cancel();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Tipo MIME aproximado por extensión.
+  ///
+  /// El motor multimedia decide la capacidad por el archivo real; esto sólo evita mandar
+  /// `application/octet-stream` en los formatos habituales.
+  String _guessMime(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.mp3')) return 'audio/mpeg';
+    if (lower.endsWith('.wav')) return 'audio/wav';
+    if (lower.endsWith('.m4a')) return 'audio/mp4';
+    if (lower.endsWith('.csv')) return 'text/csv';
+    if (lower.endsWith('.txt')) return 'text/plain';
+    if (lower.endsWith('.doc')) return 'application/msword';
+    if (lower.endsWith('.docx')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    return 'application/octet-stream';
   }
 
   Future<void> _send(AiAssistantController controller) async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    // Con un adjunto listo no hace falta escribir nada: la nota de voz, la foto
+    // o el documento también son un mensaje.
+    if (text.isEmpty &&
+        ref.read(aiAssistantControllerProvider).attachment == null) {
+      return;
+    }
     _messageController.clear();
 
     final location = safeCurrentLocation(context);
@@ -536,13 +655,6 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
     final location = safeCurrentLocation(context);
     controller.setContext(buildAiChatContextFromLocation(location));
     await controller.sendMessage(prompt);
-  }
-
-  String _buildContextLabel(AiChatContext context) {
-    final module = _prettyModule(context.module);
-    final screen = (context.screenName ?? '').trim();
-    if (screen.isEmpty) return 'Contexto actual: $module';
-    return 'Contexto actual: $module · $screen';
   }
 
   String _prettyModule(String module) {
@@ -578,6 +690,90 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
   }
 }
 
+/// Acción sugerida del asistente: etiqueta, icono y pregunta que se envía.
+class _QuickAction {
+  const _QuickAction(this.label, this.icon, this.prompt);
+  final String label;
+  final IconData icon;
+  final String prompt;
+}
+
+/// Estado del asistente.
+///
+/// Se deriva del último error conocido: sin error, «En línea»; con error, «Revisar conexión».
+/// No se inventa un ping ni se muestra «en línea» cuando la última petición falló.
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.online});
+
+  final bool online;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = online ? AppColors.success : AppColors.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: online ? AppColors.successSoft : AppColors.warningSoft,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: online ? AppColors.successBorder : AppColors.warningBorder,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            online ? 'En línea' : 'Revisar conexión',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila de sugerencias: se desplaza a mano, de borde a borde del panel.
+///
+/// Antes avanzaba sola 150 px cada 4 s; el efecto dejaba la primera sugerencia
+/// cortada por la mitad en reposo, que se veía como un error de maquetación.
+class _PromptChipsRow extends StatefulWidget {
+  const _PromptChipsRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  State<_PromptChipsRow> createState() => _PromptChipsRowState();
+}
+
+class _PromptChipsRowState extends State<_PromptChipsRow> {
+  final ScrollController _scroller = ScrollController();
+
+  @override
+  void dispose() {
+    _scroller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scroller,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(children: widget.children),
+    );
+  }
+}
+
 class _ChatMessagesList extends StatelessWidget {
   const _ChatMessagesList({required this.controller, required this.messages});
 
@@ -598,7 +794,7 @@ class _ChatMessagesList extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFFB7C8EF)),
+              border: Border.all(color: AppColors.border),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -608,16 +804,18 @@ class _ChatMessagesList extends StatelessWidget {
                   Text(
                     'Listo para orientarte con el manual y la app.',
                     style: theme.textTheme.titleSmall?.copyWith(
-                      color: const Color(0xFF173D8E),
-                      fontWeight: FontWeight.w900,
+                      color: AppColors.primaryDark,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Puedes preguntarme por normas del Manual Interno, cómo usar la pantalla actual o por datos reales autorizados como clientes, cotizaciones y operaciones. Si me das un nombre, teléfono o contexto concreto, responderé mejor.',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      height: 1.4,
-                      color: const Color(0xFF31446E),
+                      fontSize: 14,
+                      height: 1.5,
+                      letterSpacing: 0.05,
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -654,9 +852,9 @@ class _MessageBubble extends StatelessWidget {
     final theme = Theme.of(context);
     final isUser = message.isUser;
 
-    final background = isUser ? const Color(0xFF2457D6) : Colors.white;
+    final background = isUser ? AppColors.primary : Colors.white;
 
-    final foreground = isUser ? Colors.white : const Color(0xFF1A2A4E);
+    final foreground = isUser ? Colors.white : AppColors.textPrimary;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -666,40 +864,35 @@ class _MessageBubble extends StatelessWidget {
           decoration: BoxDecoration(
             color: background,
             borderRadius: BorderRadius.circular(18),
-            border: isUser ? null : Border.all(color: const Color(0xFFB7C8EF)),
-            boxShadow: [
-              BoxShadow(
-                color:
-                    (isUser ? const Color(0xFF2457D6) : const Color(0xFF173D8E))
-                        .withValues(alpha: 0.08),
-                blurRadius: 14,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            border: isUser ? null : Border.all(color: AppColors.border),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Column(
               crossAxisAlignment: isUser
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
                 Text(
-                  isUser ? 'Tú' : 'FULLTECH AI',
+                  isUser ? 'Tú' : 'FullPOS IA',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: isUser
                         ? Colors.white.withValues(alpha: 0.84)
-                        : const Color(0xFF2457D6),
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.3,
+                        : AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                    letterSpacing: 0.1,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
                   message.content,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: foreground,
-                    height: 1.35,
+                    fontSize: 14,
+                    height: 1.55,
+                    letterSpacing: 0.1,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 if (!isUser && message.citations.isNotEmpty) ...[
@@ -707,13 +900,81 @@ class _MessageBubble extends StatelessWidget {
                   Text(
                     'Fuentes: ${message.citations.map((c) => c.title).take(3).join(' • ')}',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF566B96),
+                      color: AppColors.textMuted,
                     ),
                   ),
                 ],
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Franja que se ve mientras se graba una nota de voz.
+///
+/// Mantiene el gesto claro: se graba, se ve el tiempo y se puede cancelar sin
+/// enviar nada. El envío se hace con el botón de detener del compositor.
+class _RecordingBar extends StatelessWidget {
+  const _RecordingBar({
+    required this.elapsed,
+    required this.busy,
+    required this.onCancel,
+  });
+
+  final Duration elapsed;
+  final bool busy;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    final time =
+        '${two(elapsed.inMinutes)}:${two(elapsed.inSeconds.remainder(60))}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFDECEA),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFF3B3A6)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.fiber_manual_record_rounded,
+              size: 12,
+              color: Color(0xFFD92D20),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Grabando nota de voz · $time',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF8A2D1B),
+              ),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: busy ? null : onCancel,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(0, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: const Text('Cancelar'),
+            ),
+          ],
         ),
       ),
     );

@@ -4,11 +4,16 @@ import 'guardian_event.dart';
 import 'guardian_transport.dart';
 
 /// Interpreta la respuesta del endpoint de ingesta (común a ambos transportes).
-GuardianSendResult parseGuardianIngestResponse(dynamic data, List<GuardianEvent> events) {
+GuardianSendResult parseGuardianIngestResponse(
+  dynamic data,
+  List<GuardianEvent> events,
+) {
   final results = data is Map ? (data['results'] as List?) : null;
   if (results == null) {
     // 2xx sin detalle: contrato mínimo, se asume aceptado.
-    return GuardianSendResult(acked: events.map((event) => event.eventId).toList());
+    return GuardianSendResult(
+      acked: events.map((event) => event.eventId).toList(),
+    );
   }
 
   final acked = <String>[];
@@ -63,15 +68,16 @@ class MachineGuardianTransport implements GuardianTransport {
     this.onCredentialRejected,
     Dio? dio,
     this.timeout = const Duration(seconds: 20),
-  }) : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 20),
-                sendTimeout: const Duration(seconds: 20),
-                validateStatus: (_) => true,
-              ),
-            );
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 20),
+               sendTimeout: const Duration(seconds: 20),
+               validateStatus: (_) => true,
+             ),
+           );
 
   final String baseUrl;
   final String path;
@@ -88,7 +94,10 @@ class MachineGuardianTransport implements GuardianTransport {
   Future<GuardianSendResult> send(List<GuardianEvent> events) async {
     if (events.isEmpty) return const GuardianSendResult(acked: []);
     if (credential.isEmpty) {
-      return const GuardianSendResult(retryable: true, reason: 'SIN_CREDENCIAL');
+      return const GuardianSendResult(
+        retryable: true,
+        reason: 'SIN_CREDENCIAL',
+      );
     }
 
     final normalizedBase = baseUrl.replaceAll(RegExp(r'/+$'), '');
@@ -106,7 +115,8 @@ class MachineGuardianTransport implements GuardianTransport {
               validateStatus: (_) => true,
               headers: <String, String>{
                 'x-guardian-key': credential,
-                'x-guardian-ts': '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+                'x-guardian-ts':
+                    '${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
                 'content-type': 'application/json',
               },
             ),
@@ -121,7 +131,11 @@ class MachineGuardianTransport implements GuardianTransport {
       return parseGuardianIngestResponse(response.data, events);
     }
 
-    if (status == 400 || status == 401 || status == 403 || status == 413 || status == 422) {
+    if (status == 400 ||
+        status == 401 ||
+        status == 403 ||
+        status == 413 ||
+        status == 422) {
       // Credencial inválida/caducada o lote rechazado: no reintentar en bucle.
       if (status == 401 || status == 403) {
         await onCredentialRejected?.call();

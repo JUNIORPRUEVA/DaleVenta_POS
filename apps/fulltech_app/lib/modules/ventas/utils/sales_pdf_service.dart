@@ -78,7 +78,9 @@ Future<Uint8List> buildSalesSummaryPdf({
           data: sales
               .map(
                 (sale) => [
-                  dateFmt.format(toBusinessTime(sale.saleDate ?? DateTime.now())),
+                  dateFmt.format(
+                    toBusinessTime(sale.saleDate ?? DateTime.now()),
+                  ),
                   sale.customerName ?? 'Sin cliente',
                   formatRdCurrencyAccounting(sale.totalSold),
                   formatRdCurrencyAccounting(sale.totalCost),

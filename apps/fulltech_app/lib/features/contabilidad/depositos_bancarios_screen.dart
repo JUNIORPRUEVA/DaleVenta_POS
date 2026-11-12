@@ -1738,6 +1738,7 @@ class _DepositosBancariosScreenState
                               const SizedBox(height: 8),
                               if (hasImageVoucher)
                                 InkWell(
+                                  mouseCursor: SystemMouseCursors.click,
                                   onTap: () =>
                                       _openVoucherImageFullscreen(fresh),
                                   child: ClipRRect(
@@ -2775,6 +2776,7 @@ class _DepositOrderTile extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 760;
         return InkWell(
+          mouseCursor: SystemMouseCursors.click,
           onTap: onTap,
           child: Stack(
             children: [
@@ -3461,6 +3463,7 @@ class _DepositFilterSection<T> extends StatelessWidget {
                       ),
                 borderRadius: BorderRadius.circular(16),
                 child: InkWell(
+                  mouseCursor: SystemMouseCursors.click,
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => onSelected(options[index]),
                   child: Padding(
@@ -3535,6 +3538,7 @@ class _DateRangeFilterSection extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
+            mouseCursor: SystemMouseCursors.click,
             borderRadius: BorderRadius.circular(16),
             onTap: onPick,
             child: Padding(

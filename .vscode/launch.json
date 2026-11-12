@@ -2,6 +2,35 @@
   "version": "0.2.0",
   "configurations": [
     {
+      // Perfil Windows UAT para Hot Reload / Hot Restart (F5).
+      // - `cwd` usa la ruta corta (junction) porque LongPathsEnabled=0 y el build
+      //   desde la ruta larga falla con MSB3491 (límite de 260 caracteres).
+      // - FULLPOS_WINDOWS_CHANNEL hace que CMake genere fullpos_cloud_uat_mayoreo.exe,
+      //   que es el BINARY_NAME que flutter_tools espera al lanzar.
+      // - El perfil APP_ENV=uat + FULLPOS_UAT_PROFILE=true es fail-closed: rechaza
+      //   cualquier API_BASE_URL que no sea 127.0.0.1:4004 y aísla el almacenamiento.
+      // - DALEVENTAS_POS_ROOT es obligatorio con FULLPOS_UAT_PROFILE: sin el, la app
+      //   falla con "Build UAT sin almacenamiento aislado" (fail-closed a proposito).
+      "name": "FullPOS Windows — UAT Hot Reload (F5)",
+      "type": "dart",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/fulltech_app/lib/main.dart",
+      "cwd": "C:/b/finales/apps/fulltech_app",
+      "deviceId": "windows",
+      "flutterMode": "debug",
+      "env": {
+        "FULLPOS_WINDOWS_CHANNEL": "uat-mayoreo",
+        "DALEVENTAS_POS_ROOT": "C:/b/fp-uat-data"
+      },
+      "toolArgs": [
+        "--dart-define=APP_ENV=uat",
+        "--dart-define=FULLPOS_UAT_PROFILE=true",
+        "--dart-define=DISABLE_APP_UPDATES=true",
+        "--dart-define=API_BASE_URL=http://127.0.0.1:4004",
+        "--dart-define=APP_BASE_URL=http://127.0.0.1:4004"
+      ]
+    },
+    {
       "name": "FullPOS Windows — Debug Current Source",
       "type": "dart",
       "request": "launch",

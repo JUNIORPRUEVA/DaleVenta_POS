@@ -57,6 +57,14 @@ LaunchMode _preferredLaunchMode() {
       : LaunchMode.platformDefault;
 }
 
+/// Intenta abrir un enlace externo sin mostrar UI ni copiar nada al portapapeles.
+///
+/// Reutiliza exactamente la misma estrategia que [safeOpenUrl] (primero
+/// `url_launcher`, y si falla el abridor del sistema operativo). Existe para que
+/// otras pantallas puedan decidir por sí mismas qué mensaje mostrar y si deben
+/// ofrecer una alternativa (por ejemplo, copiar un texto).
+Future<bool> tryOpenUrl(Uri uri) => _tryOpenUri(uri);
+
 Future<void> safeOpenUrl(
   BuildContext context,
   Uri uri, {

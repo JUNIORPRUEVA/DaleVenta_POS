@@ -252,15 +252,68 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 840;
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isWide ? 1040 : 560),
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildContent(isWide),
+    // Un único estilo de campos para TODO el onboarding: cualquier TextField
+    // o dropdown de los cuatro pasos hereda esta definición, sin estilos
+    // sueltos por pantalla.
+    final onboardingTheme = Theme.of(context).copyWith(
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        // Campos compactos y finos: la altura baja es lo que da el aire
+        // premium. `isDense` evita el relleno interno extra de Material.
+        isDense: true,
+        // Aire solo arriba para que el label flotante no se recorte, sin
+        // recuperar la altura que hacía ver los campos grandes.
+        contentPadding: const EdgeInsets.only(
+          left: 12,
+          right: 12,
+          top: 14,
+          bottom: 8,
+        ),
+        hintStyle: const TextStyle(
+          fontSize: 13,
+          color: Color(0xFF94A3B8),
+        ),
+        labelStyle: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF52667C),
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1957E6),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFDC2626)),
+        ),
+      ),
+    );
+    return Theme(
+      data: onboardingTheme,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isWide ? 1040 : 560),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildContent(isWide),
+            ),
           ),
         ),
       ),
@@ -417,26 +470,9 @@ class _Header extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.storefront, color: AppColors.primary),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'FullPOS Cloud',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.primaryDark,
-                ),
-              ),
-            ),
+            // Encabezado sin icono ni marca: solo el indicador de paso,
+            // alineado a la derecha. Sin huecos vacíos.
+            const Spacer(),
             Text(
               step <= 0 || step > 4 ? '' : '$step de 4',
               style: const TextStyle(
@@ -531,21 +567,72 @@ class _CompanyStep extends StatelessWidget {
           label: 'Nombre del negocio',
           textInputAction: TextInputAction.next,
         ),
+        // Selector de tipo de comercio con el mismo estilo de campo que el
+        // resto del formulario: la lista se despliega anclada al propio campo.
+        DropdownButtonFormField<String>(
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: 'Comercio al que pertenece',
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 13,
+            ),
+            labelStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF52667C),
+            ),
+            floatingLabelStyle: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1957E6),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
+            ),
+          ),
+          style: const TextStyle(fontSize: 13.5, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+          hint: const Text(
+            'Selecciona el tipo de comercio',
+            style: TextStyle(fontSize: 13.5, color: Color(0xFF94A3B8)),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'Ferretería', child: Text('Ferretería')),
+            DropdownMenuItem(value: 'Colmado', child: Text('Colmado')),
+            DropdownMenuItem(value: 'Minimarket', child: Text('Minimarket')),
+            DropdownMenuItem(value: 'Farmacia', child: Text('Farmacia')),
+            DropdownMenuItem(
+              value: 'Salón de belleza',
+              child: Text('Salón de belleza'),
+            ),
+            DropdownMenuItem(value: 'Restaurante', child: Text('Restaurante')),
+            DropdownMenuItem(
+              value: 'Tienda de ropa',
+              child: Text('Tienda de ropa'),
+            ),
+            DropdownMenuItem(value: 'Servicios', child: Text('Servicios')),
+            DropdownMenuItem(value: 'Otro', child: Text('Otro')),
+          ],
+          onChanged: (value) {
+            if (value != null) address.text = value;
+          },
+        ),
         _Field(
           controller: phone,
           label: 'Teléfono',
           keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.next,
-        ),
-        _Field(
-          controller: address,
-          label: 'Dirección',
-          textInputAction: TextInputAction.next,
-        ),
-        _Field(
-          controller: rnc,
-          label: 'RNC',
-          keyboardType: TextInputType.number,
         ),
       ],
     );
@@ -731,7 +818,39 @@ class _Field extends StatelessWidget {
         controller: controller,
         keyboardType: keyboardType,
         textInputAction: textInputAction,
-        decoration: InputDecoration(labelText: label),
+        decoration: InputDecoration(
+          labelText: label,
+          // Mismo estilo que el resto de formularios de FullPOS: borde suave
+          // de 10, relleno muy claro y padding equilibrado (sin recortes).
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+          labelStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF52667C),
+          ),
+          floatingLabelStyle: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1957E6),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
+          ),
+        ),
       ),
     );
   }
@@ -841,14 +960,6 @@ class _SidePanel extends StatelessWidget {
               height: 1.06,
               fontWeight: FontWeight.w900,
               color: AppColors.primaryDark,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            '${state?.reviewedSteps ?? 0} de 4 pasos revisados',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -987,4 +1098,122 @@ class _TutorialDialogState extends State<_TutorialDialog> {
 String _dateText(DateTime date) {
   final local = date.toLocal();
   return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
+}
+
+/// Vista previa aislada de la bienvenida del onboarding (paso 0).
+///
+/// No consulta la red ni el estado del servidor: reutiliza exactamente los
+/// mismos widgets que la pantalla real (`_OnboardingShell`, `_SidePanel`,
+/// `_WelcomeStep`) para poder revisar el diseño, capturarlo en pruebas y
+/// servirlo desde `preview/welcome_preview.dart`. No forma parte del flujo de
+/// la app.
+class OnboardingWelcomePreview extends StatelessWidget {
+  const OnboardingWelcomePreview({super.key, this.trialEndsAt});
+
+  final DateTime? trialEndsAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final isWide = MediaQuery.sizeOf(context).width >= 840;
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isWide ? 1040 : 560),
+            child: _OnboardingShell(
+              step: 0,
+              side: isWide ? const _SidePanel(state: null) : null,
+              child: _WelcomeStep(
+                trialEndsAt: trialEndsAt,
+                saving: false,
+                onStart: () {},
+                onSkip: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Vista previa aislada de los pasos 1 a 4 del onboarding.
+///
+/// Igual que [OnboardingWelcomePreview]: reutiliza el shell y los widgets
+/// reales, sin red ni estado del servidor. Sirve solo para revisar el diseño
+/// y capturarlo; no forma parte del flujo de la app.
+class OnboardingStepsPreview extends StatefulWidget {
+  const OnboardingStepsPreview({super.key, this.step = 1});
+
+  final int step;
+
+  @override
+  State<OnboardingStepsPreview> createState() => _OnboardingStepsPreviewState();
+}
+
+class _OnboardingStepsPreviewState extends State<OnboardingStepsPreview> {
+  final _name = TextEditingController(text: 'Ferretería La Esquina');
+  final _phone = TextEditingController(text: '809 000 0000');
+  final _address = TextEditingController(text: 'Ferretería');
+  final _rnc = TextEditingController();
+  final _productName = TextEditingController(text: 'Martillo 16oz');
+  final _productPrice = TextEditingController(text: '350.00');
+
+  bool _taxEnabled = true;
+  bool _ncfEnabled = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _address.dispose();
+    _rnc.dispose();
+    _productName.dispose();
+    _productPrice.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isWide = MediaQuery.sizeOf(context).width >= 840;
+    final step = widget.step.clamp(1, 4);
+
+    final child = switch (step) {
+      1 => _CompanyStep(
+          name: _name,
+          phone: _phone,
+          address: _address,
+          rnc: _rnc,
+        ),
+      2 => _BillingStep(
+          taxEnabled: _taxEnabled,
+          ncfEnabled: _ncfEnabled,
+          onTaxChanged: (value) => setState(() => _taxEnabled = value),
+          onNcfChanged: (value) => setState(() => _ncfEnabled = value),
+        ),
+      3 => _ProductStep(
+          alreadyHasProduct: false,
+          productName: _productName,
+          productPrice: _productPrice,
+        ),
+      _ => const _ReadyStep(),
+    };
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isWide ? 1040 : 560),
+            child: _OnboardingShell(
+              step: step,
+              side: isWide ? const _SidePanel(state: null) : null,
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

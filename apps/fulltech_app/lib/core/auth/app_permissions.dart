@@ -43,6 +43,7 @@ enum AppPermission {
   registerEcfDgiiEvidence,
   reviewEcfDgiiEvidence,
   recordEcfDgiiOfficialVerification,
+
   /// Confirmar la clasificación fiscal (bien o servicio) de una partida que no
   /// la tiene. Mismo nombre que valida el backend: una decisión fiscal no debe
   /// heredarse de un permiso de gestión genérico.

@@ -1,0 +1,723 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import DownloadRows from '../components/DownloadRows.astro';
+import DlPhoneCard from '../components/DlPhoneCard.astro';
+import {
+  site,
+  plans,
+  icons,
+  faqs,
+  businessTypes,
+  featureGroups,
+  startSteps,
+  heroProof,
+  planIncludes,
+  planPlatform,
+  cta,
+  waLink,
+} from '../config/site';
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((item) => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
+  })),
+};
+
+const offerSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'OfferCatalog',
+  name: 'Planes FullPOS Cloud',
+  itemListElement: plans.map((plan) => ({
+    '@type': 'Offer',
+    name: plan.name,
+    description: plan.summary,
+    price: plan.monthly,
+    priceCurrency: 'DOP',
+    url: new URL('/precios', site.url).toString(),
+  })),
+};
+
+const proofIcons = [icons.gift, icons.wifi, icons.headphones];
+---
+
+<BaseLayout
+  title="FullPOS Cloud · Sistema POS en la nube"
+  description={site.description}
+  path="/"
+  schema={[faqSchema, offerSchema]}
+>
+  <!-- ============================ HERO ============================ -->
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">
+          <span class="only-desktop">{cta.hero.eyebrow}</span>
+          <span class="only-mobile">7 días gratis</span>
+        </span>
+
+        <h1>
+          <span class="only-desktop">
+            Cobra rápido, <span class="grad">cuadra la caja</span> y sigue vendiendo sin internet
+          </span>
+          <span class="only-mobile">Vende fácil. Controla tu negocio.</span>
+        </h1>
+
+        <p class="lead">
+          <span class="only-desktop">
+            Deja de llevar la venta en un sistema y el inventario en otro. FullPOS Cloud junta
+            ventas, inventario, compras, contabilidad y facturación electrónica en una sola
+            aplicación, para que tu negocio cuadre todos los días.
+          </span>
+          <span class="only-mobile">
+            Ventas, inventario y caja en un solo lugar. Desde tu PC o celular.
+          </span>
+        </p>
+
+        <div class="hero-actions">
+          <a class="btn btn-light btn-lg" href="/registro">
+            {cta.hero.primary}
+            <svg
+              class="icon-arrow"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.arrowRight}
+            />
+          </a>
+          <a class="link-arrow link-arrow--light" href="#planes">
+            <span class="only-desktop">{cta.hero.secondary}</span>
+            <span class="only-mobile">Ver planes</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.arrowRight}
+            />
+          </a>
+        </div>
+
+        <ul class="hero-proof only-desktop">
+          {heroProof.map((item, index) => (
+            <li>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={proofIcons[index]}
+              />
+              {item}
+            </li>
+          ))}
+        </ul>
+
+        <p class="hero-reassure only-mobile">Sin tarjeta · 7 días gratis</p>
+      </div>
+
+      <div class="hero-visual">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="hero-frame">
+          <div class="hero-card">
+            <img
+              src="/img/devices.webp"
+              width="1024"
+              height="768"
+              alt="FullPOS Cloud funcionando en Windows, Android e iPhone"
+              fetchpriority="high"
+              decoding="async"
+            />
+            <span class="hero-shine" aria-hidden="true"></span>
+          </div>
+        </div>
+        <div class="float-card float-card--a">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.bolt}
+          />
+          <span>
+            <small>En caja</small>
+            Venta en segundos
+          </span>
+        </div>
+        <div class="float-card float-card--b">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.wifi}
+          />
+          <span>
+            <small>Sin internet</small>
+            Hasta 48 horas
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== TIPOS DE NEGOCIO ==================== -->
+  <div class="chips-band" aria-hidden="true">
+    <div class="chips-track">
+      {[...businessTypes, ...businessTypes].map((type) => <span class="chip">{type}</span>)}
+    </div>
+  </div>
+
+  <!-- ==================== FUNCIONES (GRUPOS) ==================== -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head section-head--center" data-reveal>
+        <span class="eyebrow">Funciones</span>
+        <h2>Todo lo que tu negocio necesita para vender, controlar y crecer</h2>
+        <p class="lead">
+          Desde pequeños comercios hasta empresas con más operación, FullPOS Cloud reúne
+          ventas, inventario, caja, clientes, facturación electrónica y más en una sola
+          plataforma.
+        </p>
+      </div>
+
+      <div class="feat-carousel">
+        <div
+          class="feat-groups"
+          data-feat-carousel
+          data-reveal
+          tabindex="0"
+          role="group"
+          aria-roledescription="carrusel"
+          aria-label="Funciones agrupadas por etapa del negocio"
+        >
+          {featureGroups.map((group, groupIndex) => (
+            <article
+              class="feat-group"
+              aria-roledescription="diapositiva"
+              aria-label={`${groupIndex + 1} de ${featureGroups.length}: ${group.title}`}
+            >
+              <header class="feat-group-head">
+                <span class="feat-group-n">
+                  {String(groupIndex + 1).padStart(2, '0')}
+                </span>
+                <h3>{group.title}</h3>
+                <p>{group.note}</p>
+              </header>
+
+              <ul class="feat-list">
+                {group.items.map((item) => (
+                  <li class="feat-item">
+                    <span class="feat-item-icon">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        set:html={item.svg}
+                      />
+                    </span>
+                    <span class="feat-item-body">
+                      <strong>{item.title}</strong>
+                      <span>{item.text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+
+        <div class="feat-nav" data-feat-nav>
+          <button class="feat-arrow" type="button" data-feat-prev aria-label="Grupo anterior">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.arrowRight}
+            />
+          </button>
+
+          <div class="feat-dots">
+            {featureGroups.map((group, dotIndex) => (
+              <button
+                class="feat-dot"
+                type="button"
+                data-feat-dot={dotIndex}
+                aria-label={`Ir a ${group.title}`}
+                aria-current={dotIndex === 0 ? 'true' : 'false'}
+              />
+            ))}
+          </div>
+
+          <button class="feat-arrow" type="button" data-feat-next aria-label="Grupo siguiente">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.arrowRight}
+            />
+          </button>
+        </div>
+      </div>
+
+      <div class="feat-foot" data-reveal>
+        <p>
+          Empieza con lo esencial y crece con más usuarios, productos, almacenes y funciones
+          cuando tu negocio lo necesite.
+        </p>
+        <a class="btn btn-ghost" href="/funciones">
+          Conoce todas las funciones
+          <svg
+            class="icon-arrow"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.arrowRight}
+          />
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================== DESCARGAS ======================== -->
+  <section class="section section--tint" id="descargas">
+    <div class="container dl-split">
+      <div data-reveal>
+        <span class="eyebrow">Descargas</span>
+        <h2>Pruébalo gratis: usa FullPOS donde quieras</h2>
+        <p class="lead">
+          Descarga la app para Windows, Android o iPhone, o entra desde el navegador. La
+          misma cuenta y los mismos datos en todos tus equipos.
+        </p>
+
+        <DownloadRows />
+
+        <DlPhoneCard />
+      </div>
+
+      <figure class="dl-figure" data-reveal>
+        <img
+          src="/img/mobile-devices.webp"
+          width="1536"
+          height="1024"
+          alt="App de FullPOS Cloud en iPhone y Android"
+          loading="lazy"
+          decoding="async"
+        />
+      </figure>
+    </div>
+  </section>
+
+  <!-- =================== EMPIEZA EN POCOS MINUTOS =================== -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head" data-reveal>
+        <span class="eyebrow">Cómo funciona</span>
+        <h2>Empieza en pocos minutos</h2>
+        <p class="lead">
+          Crea tu cuenta una sola vez y usa los mismos datos para iniciar sesión en tus
+          dispositivos.
+        </p>
+      </div>
+
+      <ol class="start-steps">
+        {startSteps.map((step, stepIndex) => (
+          <li data-reveal style={`--step-delay: ${stepIndex * 90}ms`}>
+            <span class="start-rail" aria-hidden="true"></span>
+            <span class="start-n">{step.n}</span>
+            <div class="start-body">
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <!-- =========================== PLANES =========================== -->
+  <section class="section plans-band" id="planes">
+    <div class="container">
+      <div class="plans-head" data-reveal>
+        <span class="eyebrow">Planes</span>
+        <h2>Elige tu plan</h2>
+        <p class="lead">
+          Todos incluyen los mismos módulos en todos tus dispositivos. Empiezas con la
+          prueba y pagas con tarjeta cuando decidas seguir.
+        </p>
+      </div>
+
+      <div class="pricing">
+        {plans.map((plan) => (
+          <article class={`plan${plan.highlight ? ' is-highlight' : ''}`} data-reveal>
+            {plan.badge && (
+              <span class="plan-badge">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  set:html={icons.spark}
+                />
+                {plan.badge}
+              </span>
+            )}
+
+            <p class="plan-name">{plan.name}</p>
+            <p class="plan-price">{plan.price} <span>{plan.period}</span></p>
+            <span class="plan-trial">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={icons.gift}
+              />
+              {plan.trial}
+            </span>
+            <p class="plan-sum">{plan.summary}</p>
+
+            <ul class="plan-specs">
+              {plan.specs.map((spec) => (
+                <li>
+                  <span class="plan-spec-icon">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      set:html={spec.svg}
+                    />
+                  </span>
+                  {spec.label}
+                </li>
+              ))}
+            </ul>
+
+            <p class="plan-platform">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={icons.globe}
+              />
+              {planPlatform}
+            </p>
+
+            <a
+              class={`btn ${plan.highlight ? 'btn-primary' : 'btn-ghost'} btn-block plan-cta`}
+              href="/registro"
+            >
+              {plan.cta}
+              <svg
+                class="icon-arrow"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                set:html={icons.arrowRight}
+              />
+            </a>
+            <small class="plan-hint">{plan.ctaHint}</small>
+          </article>
+        ))}
+      </div>
+
+      <p class="pricing-hint only-mobile" aria-hidden="true">Desliza para ver los 4 planes →</p>
+
+      <ul class="includes" data-reveal>
+        {planIncludes.map((item) => (
+          <li>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              set:html={icons.check}
+            />
+            {item}
+          </li>
+        ))}
+      </ul>
+
+      <p class="plans-note">
+        El pago del plan se realiza con tarjeta al terminar la prueba de 7 días.
+      </p>
+
+      <p class="plans-note">
+        La postulación e-CF se hace con el asistente guiado incluido en el plan. La
+        aprobación la decide la DGII, el certificado digital no está incluido y el
+        acompañamiento gestionado es un servicio aparte.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================= FAQ ============================ -->
+  <section class="section" id="faq">
+    <div class="container">
+      <div class="section-head" data-reveal>
+        <span class="eyebrow">Preguntas frecuentes</span>
+        <h2>Lo que preguntan antes de empezar</h2>
+        <p class="lead">
+          Prueba, pago, dispositivos, internet, datos y soporte: lo esencial antes de
+          registrarte.
+        </p>
+      </div>
+
+      <div class="faq" data-reveal>
+        {faqs.map((item, index) => (
+          <details name="faq" open={index === 0}>
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
+
+      <p class="small muted" style="margin-top: 18px">
+        ¿Otra duda? Escríbenos por
+        {" "}<a href={waLink} rel="noopener">WhatsApp</a> o a
+        {" "}<a href={`mailto:${site.supportEmail}`}>{site.supportEmail}</a>.
+      </p>
+
+      <aside class="signup-card" data-reveal>
+        <div class="signup-card-body">
+          <h3>Regístrate y usa tus credenciales en todos lados</h3>
+          <p>
+            Creas la cuenta una sola vez aquí y entras con el mismo correo y contraseña en
+            Windows, Android, iPhone o la web.
+          </p>
+        </div>
+        <a class="btn btn-primary signup-card-cta" href="/registro">
+          Registrarse
+          <svg
+            class="icon-arrow"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            set:html={icons.arrowRight}
+          />
+        </a>
+      </aside>
+    </div>
+  </section>
+</BaseLayout>
+
+<script>
+  /*
+   * Carrusel de funciones: SOLO en movil. Sin librerias.
+   * - Una tarjeta completa por vista con scroll-snap nativo (swipe real).
+   * - Avance automatico pausable; nunca desplaza la pagina, solo el track.
+   * - Respeta prefers-reduced-motion y la pestana oculta.
+   */
+  const AUTO_MS = 6000;
+  const RESUME_MS = 7000;
+  const RESUME_FIRST_DELAY = 2500;
+
+  const track = document.querySelector<HTMLElement>('[data-feat-carousel]');
+  const nav = document.querySelector<HTMLElement>('[data-feat-nav]');
+
+  if (track && nav) {
+    const cards = Array.from(track.querySelectorAll<HTMLElement>('.feat-group'));
+    const dots = Array.from(nav.querySelectorAll<HTMLElement>('[data-feat-dot]'));
+    const prevBtn = nav.querySelector<HTMLButtonElement>('[data-feat-prev]');
+    const nextBtn = nav.querySelector<HTMLButtonElement>('[data-feat-next]');
+    const mobile = window.matchMedia('(max-width: 720px)');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    let current = 0;
+    let autoTimer = 0;
+    let resumeTimer = 0;
+    let interacting = false;
+
+    const stepSize = (): number => {
+      if (cards.length < 2) return track.clientWidth;
+      return (
+        cards[1].getBoundingClientRect().left - cards[0].getBoundingClientRect().left
+      );
+    };
+
+    const markActive = (): void => {
+      dots.forEach((dot, i) => {
+        const active = i === current;
+        dot.classList.toggle('is-active', active);
+        dot.setAttribute('aria-current', active ? 'true' : 'false');
+      });
+    };
+
+    const goTo = (index: number, smooth = true): void => {
+      if (cards.length === 0) return;
+      current = ((index % cards.length) + cards.length) % cards.length;
+      const target = cards[current];
+      /* Diferencia de rects: funciona con o sin contenedor posicionado y
+         desplaza SOLO el track, nunca la pagina. */
+      const delta =
+        target.getBoundingClientRect().left - track.getBoundingClientRect().left;
+      track.scrollTo({
+        left: track.scrollLeft + delta,
+        behavior: smooth && !reduced.matches ? 'smooth' : 'auto',
+      });
+      markActive();
+    };
+
+    const stopAuto = (): void => {
+      if (autoTimer) {
+        window.clearInterval(autoTimer);
+        window.clearTimeout(autoTimer);
+        autoTimer = 0;
+      }
+    };
+
+    const canResume = (): boolean =>
+      mobile.matches &&
+      !reduced.matches &&
+      !document.hidden &&
+      /* Solo bloquea con foco de TECLADO: un toque no debe congelar el carrusel. */
+      !track.matches(':focus-visible');
+
+    /* `firstDelay` permite reanudar con un primer avance mas cercano. */
+    const startAuto = (firstDelay = AUTO_MS): void => {
+      stopAuto();
+      if (!canResume() || interacting) return;
+      autoTimer = window.setTimeout(() => {
+        goTo(current + 1);
+        autoTimer = window.setInterval(() => goTo(current + 1), AUTO_MS);
+      }, firstDelay);
+    };
+
+    /* Cualquier interaccion pausa; se reanuda sola tras un margen de calma. */
+    const pause = (): void => {
+      interacting = true;
+      stopAuto();
+      window.clearTimeout(resumeTimer);
+      resumeTimer = window.setTimeout(() => {
+        interacting = false;
+        startAuto(RESUME_FIRST_DELAY);
+      }, RESUME_MS);
+    };
+
+    prevBtn?.addEventListener('click', () => {
+      pause();
+      goTo(current - 1);
+    });
+
+    nextBtn?.addEventListener('click', () => {
+      pause();
+      goTo(current + 1);
+    });
+
+    dots.forEach((dot) => {
+      dot.addEventListener('click', () => {
+        pause();
+        goTo(Number(dot.dataset.featDot ?? '0'));
+      });
+    });
+
+    track.addEventListener('pointerdown', pause, { passive: true });
+    track.addEventListener('touchstart', pause, { passive: true });
+    track.addEventListener('wheel', pause, { passive: true });
+    track.addEventListener('mouseenter', pause);
+    track.addEventListener('focusin', pause);
+    track.addEventListener('focusout', () => {
+      window.setTimeout(() => {
+        if (!track.contains(document.activeElement)) startAuto();
+      }, 120);
+    });
+
+    track.addEventListener('keydown', (event) => {
+      if (!mobile.matches) return;
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        pause();
+        goTo(current + 1);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        pause();
+        goTo(current - 1);
+      }
+    });
+
+    /* Sincroniza puntos y flechas con el swipe y con el snap. */
+    let ticking = false;
+    track.addEventListener(
+      'scroll',
+      () => {
+        if (ticking) return;
+        ticking = true;
+        window.requestAnimationFrame(() => {
+          ticking = false;
+          const step = stepSize();
+          if (step <= 0) return;
+          const nearest = Math.round(track.scrollLeft / step);
+          if (nearest !== current && nearest >= 0 && nearest < cards.length) {
+            current = nearest;
+            markActive();
+          }
+        });
+      },
+      { passive: true },
+    );
+
+    const refresh = (): void => {
+      if (mobile.matches) {
+        if (!reduced.matches) goTo(current, false);
+        startAuto();
+      } else {
+        stopAuto();
+      }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopAuto();
+      else startAuto();
+    });
+
+    mobile.addEventListener('change', refresh);
+    reduced.addEventListener('change', refresh);
+
+    markActive();
+    startAuto();
+  }
+</script>
+

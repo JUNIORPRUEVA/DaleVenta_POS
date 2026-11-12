@@ -345,6 +345,9 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);
+    // Revoca la sesión SOLO en el servidor para este dispositivo (best effort,
+    // silencioso y con timeout corto). Si falla, se limpia igual en local.
+    await ref.read(authRepositoryProvider).revokeCurrentSession();
     await storage.clearTokens();
     state = AuthState(
       initialized: true,

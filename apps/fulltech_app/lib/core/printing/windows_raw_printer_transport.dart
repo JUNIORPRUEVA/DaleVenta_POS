@@ -289,8 +289,7 @@ final class FfiWindowsRawSpooler implements WindowsRawSpooler {
     final code = _getLastError();
     trace.add('$operation=FAIL($code)');
     // 1801 = ERROR_INVALID_PRINTER_NAME, 1905 = ERROR_PRINTER_DELETED.
-    final resolvedStage =
-        notFoundWhenMissing && (code == 1801 || code == 1905)
+    final resolvedStage = notFoundWhenMissing && (code == 1801 || code == 1905)
         ? RawPrintStage.printerNotFound
         : stage;
     throw RawPrinterException(

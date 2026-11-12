@@ -1,0 +1,24 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Página no encontrada"
+  description="La página que buscas no existe en FullPOS Cloud."
+  path="/404"
+  noindex
+>
+  <section class="section">
+    <div class="container" style="text-align: center">
+      <span class="eyebrow">Error 404</span>
+      <h1>No encontramos esa página</h1>
+      <p class="lead" style="margin-inline: auto">
+        Puede que el enlace haya cambiado. Vuelve al inicio o revisa nuestros planes.
+      </p>
+      <p>
+        <a class="btn btn-primary" href="/">Ir al inicio</a>
+        <a class="btn btn-ghost" href="/precios">Ver precios</a>
+      </p>
+    </div>
+  </section>
+</BaseLayout>
