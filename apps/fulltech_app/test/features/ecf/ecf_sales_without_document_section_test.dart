@@ -108,6 +108,26 @@ void main() {
       expect(find.byType(Switch), findsOneWidget);
     },
   );
+
+  testWidgets('encendida: el aviso del servidor se muestra una sola vez', (
+    tester,
+  ) async {
+    await _pump(tester, allow: true);
+
+    // Un único párrafo explicativo: el del servidor. El subtítulo corto no se
+    // repite cuando ya hay aviso.
+    expect(find.textContaining('Advertencia fiscal'), findsOneWidget);
+    expect(find.textContaining('Actívala cuando necesites'), findsNothing);
+  });
+
+  testWidgets('apagada: explica qué hace sin soltar el aviso completo', (
+    tester,
+  ) async {
+    await _pump(tester, allow: false);
+
+    expect(find.textContaining('Actívala cuando necesites'), findsOneWidget);
+    expect(find.textContaining('Advertencia fiscal'), findsNothing);
+  });
   testWidgets('apagado: explica qué hace y no muestra el aviso rojo', (
     tester,
   ) async {

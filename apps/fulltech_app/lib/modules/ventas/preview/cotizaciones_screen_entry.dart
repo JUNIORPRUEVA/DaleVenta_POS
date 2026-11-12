@@ -16,10 +16,13 @@ import 'package:daleventa_pos/core/auth/token_storage.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
+import 'package:daleventa_pos/core/realtime/operations_realtime_service.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/price_lists/data/price_lists_repository.dart';
+import 'package:daleventa_pos/modules/clientes/application/clientes_controller.dart';
+import 'package:daleventa_pos/modules/clientes/cliente_model.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizacion_models.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizaciones_screen.dart';
 import 'package:dio/dio.dart';
@@ -55,6 +58,10 @@ class _BillingPreviewApp extends StatelessWidget {
         ),
         priceListsRepositoryProvider.overrideWithValue(_NoPriceLists(dio)),
         ecfCapabilitiesProvider.overrideWith((_) async => _capabilities),
+        operationsRealtimeServiceProvider.overrideWith(
+          (ref) => OperationsRealtimeService(TokenStorage()),
+        ),
+        clientesControllerProvider.overrideWith(_PreviewClientes.new),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -169,6 +176,43 @@ class _NoPriceLists extends PriceListsRepository {
   _NoPriceLists(super.dio);
   @override
   Future<List<PriceListModel>> fetchPriceLists() async => const [];
+}
+
+/// Guarda el cliente en memoria para poder ver el formulario, el aviso de
+/// «Cliente creado» y el carrito con el cliente, sin backend.
+class _PreviewClientes extends ClientesController {
+  _PreviewClientes(super.ref);
+
+  @override
+  Future<void> load({String? search}) async {}
+
+  @override
+  Future<void> refresh() async {}
+
+  @override
+  Future<ClienteModel> saveCliente({
+    required String nombre,
+    required String telefono,
+    String? direccion,
+    String? locationUrl,
+    String? correo,
+    String? taxId,
+    String? businessName,
+    String? taxIdType,
+    String? id,
+  }) async {
+    state = state.copyWith(saving: true);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    state = state.copyWith(saving: false);
+    return ClienteModel(
+      id: 'preview-${DateTime.now().millisecondsSinceEpoch}',
+      ownerId: 'preview-owner',
+      nombre: nombre.trim(),
+      telefono: telefono.trim(),
+      direccion: (direccion ?? '').trim().isEmpty ? null : direccion?.trim(),
+      taxId: (taxId ?? '').trim().isEmpty ? null : taxId?.trim(),
+    );
+  }
 }
 
 /// Catálogo de un solo producto para que la pantalla tenga algo que mostrar.

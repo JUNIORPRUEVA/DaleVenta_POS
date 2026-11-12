@@ -21,11 +21,10 @@
  * aparecer una versión suavizada en la interfaz.
  */
 export const ECF_WITHOUT_DOCUMENT_WARNING =
-  "Advertencia fiscal: esta opción permite registrar ventas sin emitir un " +
-  "comprobante fiscal electrónico. Estos documentos no sustituyen los e-CF " +
-  "exigidos por la DGII. La empresa es responsable de utilizar esta función " +
-  "únicamente en operaciones permitidas por la normativa vigente. FullPOS " +
-  "conservará un registro de estas operaciones para control y auditoría.";
+  "Permite cerrar ventas sin comprobante electrónico ante la DGII. Cada uso " +
+  "queda registrado con el usuario, la fecha y el motivo, y permanece en el " +
+  "historial. La empresa decide cuándo aplicarla y asume la responsabilidad " +
+  "de ese uso; FullPOS conserva el registro disponible para auditoría.";
 
 /** Un motivo vacío o de una palabra no es una justificación. */
 export const ECF_WITHOUT_DOCUMENT_REASON_MIN_LENGTH = 10;
