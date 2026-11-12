@@ -24,8 +24,8 @@ void main() {
     expect(find.text('iPhone'), findsOneWidget);
     expect(find.text('Web / PWA'), findsOneWidget);
     expect(find.text('Descargar'), findsNWidgets(2));
-    expect(find.text('Instalar'), findsOneWidget);
-    expect(find.text('Abrir'), findsOneWidget);
+    expect(find.text('Instalar'), findsNWidgets(2));
+    expect(find.text('Abrir'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

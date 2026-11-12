@@ -347,10 +347,16 @@ void main() {
       expect(pricing.quantities, [2]);
       _press(tester, 'Quitar de la venta');
       await tester.pump();
-      expect(find.text('Agrega productos desde el catálogo'), findsOneWidget);
+      expect(
+        find.text('Aquí verás los productos que elijas\npara tu próxima venta'),
+        findsOneWidget,
+      );
       pricing.complete(0, 70);
       await tester.pump();
-      expect(find.text('Agrega productos desde el catálogo'), findsOneWidget);
+      expect(
+        find.text('Aquí verás los productos que elijas\npara tu próxima venta'),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Sumar unidad'), findsNothing);
     },
   );
@@ -369,7 +375,10 @@ void main() {
       pricing.complete(1, 80);
       pricing.complete(0, 70);
       await tester.pump();
-      expect(find.text('Agrega productos desde el catálogo'), findsOneWidget);
+      expect(
+        find.text('Aquí verás los productos que elijas\npara tu próxima venta'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -392,7 +401,10 @@ void main() {
     expect(container.read(authStateProvider).isAuthenticated, isFalse);
     expect((container.read(tokenStorageProvider) as _MemoryStorage).clears, 1);
     expect(await container.read(tokenStorageProvider).getAccessToken(), isNull);
-    expect(find.text('Agrega productos desde el catálogo'), findsOneWidget);
+    expect(
+      find.text('Aquí verás los productos que elijas\npara tu próxima venta'),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Sumar unidad'), findsNothing);
   });
 }

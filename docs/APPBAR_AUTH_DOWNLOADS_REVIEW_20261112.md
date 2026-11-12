@@ -98,9 +98,10 @@ Chrome real, API y PostgreSQL exclusivamente locales:
   de la revisión se vio interrumpida por otras ventanas superpuestas; no se
   afirma una inspección visual nativa completa en dispositivos físicos.
 
-Última ejecución Flutter: `flutter analyze --no-pub` sin incidencias y 54 pruebas
-aprobadas en ocho archivos (12 de acceso/onboarding, 9 de detalle y 33 de
-regresión de navegación/ventas). Incluye una prueba geométrica del encabezado a
+Validación dirigida final para preparar el PR: `flutter analyze --no-pub` sin
+incidencias y 118 pruebas aprobadas en catorce archivos, incluyendo login,
+Configuración, onboarding, descargas, mayoreo asíncrono, detalle y regresiones
+de navegación/ventas. Incluye una prueba geométrica del encabezado a
 320 px y la X del propio anuncio. Las primeras ejecuciones detectaron el
 solapamiento del área táctil; el resultado final incluye su corrección.
 La instalación nativa real de cada canal y la aceptación del prompt del
@@ -178,6 +179,11 @@ esperar animaciones de fondo del POS. También se protege el controlador del pie
 de página contra publicaciones/limpiezas diferidas tras su destrucción, con una
 prueba de regresión. El backend compila mediante `npm run api:build` después de
 instalar las dependencias del checkout con `npm ci`.
+
+Se actualizan también las expectativas del texto vacío en las regresiones de
+mayoreo asíncrono y la etiqueta PWA «Instalar» en el panel de descargas. Se
+mantienen los controles sobre respuestas pendientes, sesión expirada, carrito
+y plataformas; no se omiten pruebas ni se relajan comparaciones visuales.
 
 Para desplegar después del merge: EasyPanel `daleventapos/pwa`, rama
 `production-main`, contexto `/`, receta `Dockerfile.public-web`. Mantener el
