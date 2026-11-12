@@ -4,7 +4,7 @@ $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $email = "qa.f3.$stamp@example.com"
 # Contrasena efimera: se genera en cada ejecucion para no dejar credenciales
 # escritas en el repositorio. Solo se usa contra el API local.
-$password = "Qa$stamp!Aa1"
+$qaPass = ('Qa' + $stamp + '!Aa1')
 $out = [ordered]@{}
 
 function J($o) { $o | ConvertTo-Json -Depth 8 -Compress }
@@ -14,8 +14,8 @@ $payload = @{
   commercialName = "QA Fase3 $stamp"
   firstName      = 'Ana Maria'
   email          = $email
-  password       = $password
-  confirmPassword= $password
+  password       = $qaPass
+  confirmPassword= $qaPass
   phone          = '8095550000'
   marketingOptIn = $false
   locale         = 'es-DO'
@@ -92,7 +92,7 @@ try {
 } catch { $out.canje_basura_status = $_.Exception.Response.StatusCode.value__ }
 
 # 10) Login normal sigue funcionando
-$l = (Invoke-WebRequest -Uri "$api/auth/login" -Method Post -ContentType 'application/json' -Body (@{ email=$email; password=$password } | ConvertTo-Json) -UseBasicParsing).Content | ConvertFrom-Json
+$l = (Invoke-WebRequest -Uri "$api/auth/login" -Method Post -ContentType 'application/json' -Body (@{ email=$email; password=$qaPass } | ConvertTo-Json) -UseBasicParsing).Content | ConvertFrom-Json
 $out.login_ok = [bool]$l.accessToken
 
 $out | ConvertTo-Json -Depth 8

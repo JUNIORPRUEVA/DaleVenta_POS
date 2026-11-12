@@ -95,7 +95,7 @@ void main() {
   group('carrera de renovacion', () {
     test('si otra peticion ya renovo, reintenta y no cierra sesion', () async {
       final storage = _MutableTokenStorage(
-        accessToken: 'token-acceso-prueba-1',
+        accessToken: 'acc-1',
         refreshToken: 'refresh-1',
       );
       final events = AuthSessionEvents();
@@ -103,12 +103,12 @@ void main() {
       final dio = _buildDio(storage, events, (options) async {
         if (options.path == '/auth/refresh') {
           // Otro refresh gano la carrera: rota tokens y responde 401.
-          storage.accessToken = 'token-acceso-prueba-2';
+          storage.accessToken = 'acc-2';
           storage.refreshToken = 'refresh-2';
           return _json({'message': 'Invalid refresh token'}, status: 401);
         }
         final auth = options.headers['Authorization'];
-        if (auth == 'Bearer token-acceso-prueba-2') {
+        if (auth == 'Bearer acc-2') {
           return _json({'ok': true});
         }
         return _json({'message': 'Unauthorized'}, status: 401);
@@ -117,7 +117,7 @@ void main() {
       final response = await dio.get<dynamic>('/settings');
 
       expect(response.statusCode, 200);
-      expect(storage.accessToken, 'token-acceso-prueba-2');
+      expect(storage.accessToken, 'acc-2');
       expect(
         events.unauthorizedLogoutRequested,
         isFalse,
@@ -128,7 +128,7 @@ void main() {
 
     test('un refresh realmente invalido si pide logout', () async {
       final storage = _MutableTokenStorage(
-        accessToken: 'token-acceso-prueba-1',
+        accessToken: 'acc-1',
         refreshToken: 'refresh-1',
       );
       final events = AuthSessionEvents();
@@ -147,7 +147,7 @@ void main() {
 
     test('un fallo de red al renovar no pide logout', () async {
       final storage = _MutableTokenStorage(
-        accessToken: 'token-acceso-prueba-1',
+        accessToken: 'acc-1',
         refreshToken: 'refresh-1',
       );
       final events = AuthSessionEvents();
@@ -176,7 +176,7 @@ void main() {
   group('logout voluntario', () {
     test('revoca la sesion actual en el servidor', () async {
       final storage = _MutableTokenStorage(
-        accessToken: 'token-acceso-prueba-1',
+        accessToken: 'acc-1',
         refreshToken: 'refresh-1',
       );
       final paths = <String>[];
@@ -196,7 +196,7 @@ void main() {
 
     test('no lanza si el servidor no responde', () async {
       final storage = _MutableTokenStorage(
-        accessToken: 'token-acceso-prueba-1',
+        accessToken: 'acc-1',
         refreshToken: 'refresh-1',
       );
       final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
@@ -211,7 +211,7 @@ void main() {
         AuthRepository(dio: dio, storage: storage).revokeCurrentSession(),
         completes,
       );
-      expect(storage.accessToken, 'token-acceso-prueba-1', reason: 'no limpia por su cuenta');
+      expect(storage.accessToken, 'acc-1', reason: 'no limpia por su cuenta');
     });
   });
 }
