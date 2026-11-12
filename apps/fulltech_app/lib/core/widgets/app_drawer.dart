@@ -1429,23 +1429,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       Routes.amonestaciones,
     ]);
 
-    if (itemsByRoute.isNotEmpty) {
-      // Un ├║nico m├│dulo restante no debe quedar escondido tras ┬½M├ís m├│dulos┬╗:
-      // el men├║ mostraba un t├¡tulo que no identifica la funci├│n (la facturaci├│n
-      // electr├│nica aparec├¡a como ┬½M├ís m├│dulos┬╗). Con un solo ├¡tem se usa su
-      // propio nombre e icono, y el toque sigue navegando a su ruta.
-      final leftovers = itemsByRoute.values.toList();
-      final only = leftovers.length == 1 ? leftovers.first : null;
-      groups.add(
-        _DrawerMenuGroup(
-          title: only?.title ?? 'Más módulos',
-          icon: only?.appIcon ?? AppIcons.more,
-          items: leftovers,
-          openOnHover: false,
-        ),
-      );
-    }
-
     return groups;
   }
 
@@ -1506,19 +1489,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.mediaGallery,
     Routes.redTecnica,
   ]);
-
-  if (itemsByRoute.isNotEmpty) {
-    // Mismo criterio que en m├│vil: con un ├║nico ├¡tem, su propio nombre.
-    final leftovers = itemsByRoute.values.toList();
-    final only = leftovers.length == 1 ? leftovers.first : null;
-    groups.add(
-      _DrawerMenuGroup(
-        title: only?.title ?? 'Más módulos',
-        icon: only?.appIcon ?? AppIcons.more,
-        items: leftovers,
-      ),
-    );
-  }
 
   return groups;
 }

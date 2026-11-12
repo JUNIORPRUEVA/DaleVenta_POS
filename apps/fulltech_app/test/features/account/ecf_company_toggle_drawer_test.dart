@@ -26,7 +26,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Prueba FUNCIONAL de la cadena:
 ///
 ///   Configuración de empresa → Activar e-CF → Guardar →
-///   El asistente permanece en el Drawer; el interruptor controla la emisión.
+///   El interruptor controla la emisión sin añadir accesos al Drawer.
 ///
 /// Monta la pantalla REAL (`AccountCompanySettingsScreen`), el Drawer REAL
 /// (`AppDrawer`, el mismo que sirve `buildAdaptiveDrawer`), el
@@ -185,7 +185,8 @@ class _MarkerPage extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Scaffold(body: Center(child: Text(label)));
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(label)));
 }
 
 class _CashRepo implements CashRepository {
@@ -336,9 +337,8 @@ Future<_Harness> _pumpSettings(
       cashCloseTicketPrinterProvider.overrideWithValue(_Printer()),
       // El "servidor": misma forma que el provider real (depende del usuario).
       companySettingsProvider.overrideWith(
-        (ref) async => backend.settingsFor(
-          ref.watch(authStateProvider).user?.companyId,
-        ),
+        (ref) async =>
+            backend.settingsFor(ref.watch(authStateProvider).user?.companyId),
       ),
       ecfRepositoryProvider.overrideWith(
         (ref) => _FakeEcfRepository(
@@ -412,8 +412,7 @@ Future<void> _closeDrawer(WidgetTester tester) async {
 /// se relaja: sigue exigiendo el `Switch` de ESA fila concreta.
 Finder _ecfSwitch() {
   final label = find.byWidgetPredicate(
-    (widget) =>
-        widget is Text && widget.data == 'Utilizar factura electrónica',
+    (widget) => widget is Text && widget.data == 'Utilizar factura electrónica',
   );
   final row = find.ancestor(of: label, matching: find.byType(Row));
   return find.descendant(of: row.first, matching: find.byType(Switch));
@@ -437,29 +436,10 @@ Future<void> _scrollDrawerToBottom(WidgetTester tester) async {
   }
 }
 
-/// Despliega el grupo del menú que contiene [opcion], igual que haría el
-/// usuario. Si la opción ya está visible no hace nada.
-Future<void> _expandGroupContaining(WidgetTester tester, String opcion) async {
-  if (_drawerText(opcion).hitTestable().evaluate().isNotEmpty) return;
-  // «Más módulos» es el grupo comodín; si la opción fuese el único ítem
-  // restante, el grupo lleva su propio nombre y pulsarlo navega directamente.
-  for (final titulo in <String>['Más módulos', opcion]) {
-    final cabecera = _drawerText(titulo);
-    if (cabecera.evaluate().isEmpty) continue;
-    await tester.tap(cabecera.first);
-    await tester.pumpAndSettle();
-    if (_drawerText(opcion).hitTestable().evaluate().isNotEmpty) return;
-  }
-}
-
-/// Despliega el grupo comodín («Más módulos») si está en el menú. Es donde vive
-/// la facturación electrónica cuando comparte grupo con otros módulos, así que
-/// desplegarlo es lo que permite afirmar que la opción existe o no existe.
-Future<void> _openEcfGroupIfPresent(WidgetTester tester) async {
-  final comodin = _drawerText('Más módulos');
-  if (comodin.evaluate().isEmpty) return;
-  await tester.tap(comodin.first);
-  await tester.pumpAndSettle();
+/// El drawer no recupera módulos adicionales al cambiar la configuración.
+void _expectNoExtraModules() {
+  expect(_drawerText('Más módulos'), findsNothing);
+  expect(_drawerText(_ecfDrawerLabel), findsNothing);
 }
 
 Future<void> _settleToggle(WidgetTester tester) async {
@@ -477,10 +457,7 @@ Future<void> _turnEcfOn(WidgetTester tester) async {
 }
 
 /// Desactiva el interruptor aceptando el diálogo de confirmación.
-Future<void> _turnEcfOff(
-  WidgetTester tester, {
-  bool confirm = true,
-}) async {
+Future<void> _turnEcfOff(WidgetTester tester, {bool confirm = true}) async {
   await tester.ensureVisible(_ecfSwitch());
   await tester.pumpAndSettle();
   await tester.tap(_ecfSwitch());
@@ -490,11 +467,9 @@ Future<void> _turnEcfOff(
   await _settleToggle(tester);
 }
 
-_EcfBackendState _backendWith({bool companyA = false}) =>
-    _EcfBackendState(enabledByCompany: <String, bool>{
-      'company-a': companyA,
-      'company-b': false,
-    });
+_EcfBackendState _backendWith({bool companyA = false}) => _EcfBackendState(
+  enabledByCompany: <String, bool>{'company-a': companyA, 'company-b': false},
+);
 
 /// Interruptor de la excepción fiscal, distinto del general.
 Finder _allowSwitch() {
@@ -510,10 +485,7 @@ void main() {
 
       expect(enabled.ecfEnabled, isTrue);
       // El caso real: guardar CUALQUIER dato de empresa no debe apagar el e-CF.
-      expect(
-        enabled.copyWith(companyName: 'Otro nombre').ecfEnabled,
-        isTrue,
-      );
+      expect(enabled.copyWith(companyName: 'Otro nombre').ecfEnabled, isTrue);
       expect(enabled.copyWith(rnc: '130000000').ecfEnabled, isTrue);
     });
 
@@ -543,15 +515,14 @@ void main() {
 
       // Un cliente que no ha solicitado e-CF conserva su POS tradicional: la
       // entrada del módulo no existe para nadie de esa empresa.
-      // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-      await _openEcfGroupIfPresent(tester);
+      _expectNoExtraModules();
       expect(_drawerText(_ecfDrawerLabel), findsNothing);
       expect(harness.httpCalls, isEmpty);
     });
 
     testWidgets(
       '2/3/4 — el administrador activa, el backend confirma y el Drawer '
-      'muestra el módulo SIN reiniciar',
+      'mantiene el Drawer sin módulos adicionales',
       (tester) async {
         final harness = await _pumpSettings(
           tester,
@@ -565,8 +536,7 @@ void main() {
         // Antes de activarlo la empresa no tiene el módulo en el menú.
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
+        _expectNoExtraModules();
         expect(_drawerText(_ecfDrawerLabel), findsNothing);
         await _closeDrawer(tester);
 
@@ -580,19 +550,18 @@ void main() {
         expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
         expect(find.text(_ecfErrorText), findsNothing);
 
-        // 4: sin reiniciar nada, el mismo árbol ya tiene el módulo.
+        // El estado fiscal se actualiza sin añadir módulos al drawer.
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+        _expectNoExtraModules();
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
 
         // Y sin una sola petición HTTP: el menú no consulta la red.
         expect(harness.httpCalls, isEmpty);
       },
     );
 
-    testWidgets('5 — pulsar la opción abre /ecf', (tester) async {
+    testWidgets('5 — /ecf sigue disponible fuera del Drawer', (tester) async {
       final harness = await _pumpSettings(
         tester,
         backend: _backendWith(companyA: true),
@@ -601,11 +570,9 @@ void main() {
 
       await _openDrawer(tester);
       await _scrollDrawerToBottom(tester);
-      // El menú agrupa las entradas: la facturación electrónica vive en el
-      // grupo «Más módulos» y hay que desplegarlo antes de pulsarla, igual que
-      // haría el usuario. Se pulsa la instancia visible, no una copia oculta.
-      await _expandGroupContaining(tester, _ecfDrawerLabel);
-      await tester.tap(_drawerText(_ecfDrawerLabel).hitTestable().first);
+      _expectNoExtraModules();
+      await _closeDrawer(tester);
+      harness.router.go(Routes.ecf);
       await tester.pumpAndSettle();
 
       expect(find.text(_markerModule), findsOneWidget);
@@ -624,9 +591,8 @@ void main() {
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+        _expectNoExtraModules();
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
 
         await _closeDrawer(tester);
         await _turnEcfOff(tester);
@@ -636,10 +602,8 @@ void main() {
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Al desactivar, el módulo desaparece del menú: la empresa vuelve a su
-        // POS tradicional sin reiniciar.
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
+        // El drawer permanece sin módulos adicionales al desactivar e-CF.
+        _expectNoExtraModules();
         expect(_drawerText(_ecfDrawerLabel), findsNothing);
         expect(harness.httpCalls, isEmpty);
       },
@@ -676,8 +640,7 @@ void main() {
         // El interruptor sigue apagado y, por tanto, el módulo sigue oculto.
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
+        _expectNoExtraModules();
         expect(_drawerText(_ecfDrawerLabel), findsNothing);
         expect(harness.httpCalls, isEmpty);
       },
@@ -729,8 +692,7 @@ void main() {
         // El módulo está apagado y el Drawer no lo muestra...
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
+        _expectNoExtraModules();
         expect(_drawerText(_ecfDrawerLabel), findsNothing);
         await _closeDrawer(tester);
 
@@ -762,9 +724,8 @@ void main() {
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
-        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+        _expectNoExtraModules();
+        expect(_drawerText(_ecfDrawerLabel), findsNothing);
 
         // Misma sesión, misma pantalla montada: otra empresa con e-CF apagado.
         harness.auth.switchCompany('company-b');
@@ -777,8 +738,7 @@ void main() {
 
         await _scrollDrawerToBottom(tester);
         // La empresa nueva no tiene e-CF: el módulo no se hereda de la anterior.
-        // Con el grupo desplegado, la aserción comprueba de verdad si la opción existe.
-        await _openEcfGroupIfPresent(tester);
+        _expectNoExtraModules();
         expect(_drawerText(_ecfDrawerLabel), findsNothing);
         expect(harness.backend.enabledByCompany['company-a'], isTrue);
         expect(harness.httpCalls, isEmpty);

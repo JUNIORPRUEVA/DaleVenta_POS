@@ -9,17 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// El menú lateral tiene que poder recorrerse entero en pantallas pequeñas.
-///
-/// Regresión: los grupos cerrados seguían maquetando sus entradas fuera del
-/// área visible. El menú desplazaba hasta el final, pero las últimas opciones
-/// (Contabilidad y Facturación electrónica, dentro de «Más módulos») quedaban
-/// en el árbol sin estar en pantalla: no se veían ni se podían pulsar, ni con
-/// el dedo ni con la rueda del ratón.
-///
-/// Se comprueba en un teléfono pequeño (390x500) y en un portátil con escalado
-/// alto (1280x420): el encabezado no se desplaza y todas las entradas de todos
-/// los grupos acaban siendo alcanzables y pulsables.
+/// Los grupos del drawer siguen siendo alcanzables en pantallas pequeñas.
+/// Las opciones de «Más módulos» no deben reaparecer, ni siquiera con e-CF activo.
 class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
     state = fixedState;
@@ -63,8 +54,7 @@ ProviderContainer _buildContainer() {
         ),
       ),
       cashRepositoryProvider.overrideWithValue(_SilentCashRepository()),
-      // Con la facturación electrónica activada la entrada existe y es la
-      // última del menú, junto a Contabilidad, dentro de «Más módulos».
+      // Activar e-CF no debe añadir módulos extra al drawer.
       companySettingsProvider.overrideWith(
         (ref) async => CompanySettings.empty().copyWith(ecfEnabled: true),
       ),
@@ -147,34 +137,66 @@ void _expectReachable(WidgetTester tester, String etiqueta) {
 }
 
 Future<void> _expectAllOptionsReachable(WidgetTester tester) async {
-  expect(find.byType(AppDrawer), findsOneWidget, reason: 'el drawer no se abrió');
+  expect(
+    find.byType(AppDrawer),
+    findsOneWidget,
+    reason: 'el drawer no se abrió',
+  );
   expect(
     _drawerScrollable(),
     findsOneWidget,
     reason: 'el menú no tiene un área desplazable',
   );
 
-  // El encabezado del menú no se desplaza: sigue visible tras bajar del todo.
-  await _scrollUntilFound(tester, find.text('Más módulos'));
-  _expectReachable(tester, 'Más módulos');
-  expect(
-    find.text('FullPOS').hitTestable(),
-    findsWidgets,
-    reason: 'el encabezado del menú no debe desplazarse',
-  );
+  final groups = <String, List<String>>{
+    'Ventas': ['Facturación', 'Lista de ventas'],
+    'Cliente': ['Cliente', 'Cotizaciones', 'Créditos'],
+    'Inventario': ['Productos', 'Ajuste stock', 'Categorías', 'Recuento'],
+    'Compras': [
+      'Nueva compra',
+      'Lista de compra',
+      'Suplidores',
+      'Facturas',
+      'Productos por comprar',
+    ],
+  };
+  Future<void> scrollToTop() async {
+    for (var i = 0; i < 8; i++) {
+      await tester.drag(_drawerScrollable(), const Offset(0, 400));
+      await tester.pumpAndSettle();
+    }
+  }
 
-  // Al desplegar el último grupo, TODAS sus entradas son alcanzables.
-  await tester.tap(find.text('Más módulos'));
-  await tester.pumpAndSettle();
+  for (final entry in groups.entries) {
+    await scrollToTop();
+    await _scrollUntilFound(tester, find.text(entry.key));
+    await tester.tap(find.text(entry.key).first);
+    await tester.pumpAndSettle();
+    for (final label in entry.value) {
+      await _scrollUntilFound(tester, find.text(label));
+      _expectReachable(tester, label);
+    }
+    await scrollToTop();
+    await _scrollUntilFound(tester, find.text(entry.key));
+    await tester.tap(find.text(entry.key).first);
+    await tester.pumpAndSettle();
+  }
 
-  for (final etiqueta in <String>[
+  await _scrollUntilFound(tester, find.text('Reportes'));
+  _expectReachable(tester, 'Reportes');
+  expect(find.text('FullPOS').hitTestable(), findsWidgets);
+  for (final label in [
+    'Más módulos',
     'Depósitos',
     'Pagos',
     'Nómina',
     'Facturación electrónica',
   ]) {
-    await _scrollUntilFound(tester, find.text(etiqueta));
-    _expectReachable(tester, etiqueta);
+    expect(
+      find.text(label),
+      findsNothing,
+      reason: 'Los módulos adicionales se retiraron del drawer',
+    );
   }
 }
 
