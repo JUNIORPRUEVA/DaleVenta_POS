@@ -22,9 +22,10 @@ export function isDosaWebhookEndpointEnabled(
  *    hace `parseDosaWebhookPayload`, que falla cerrado.
  * 4. Read-only respecto al mundo: el servicio no llama a DOSA ni activa emisión.
  *
- * La ruta pública prevista es `https://fullposcloud.fulltechrd.com/api/webhook/dosa`
- * (el proxy elimina `/api`). La URL que sugirió el proveedor
- * (`/webhook/dosa`) hoy devuelve HTML del PWA y **no** debe usarse tal cual.
+ * Ruta pública: `https://fullposcloud.fulltechrd.com/api/webhook/dosa` (el proxy
+ * elimina `/api`). La variante sin `/api` (`/webhook/dosa`) también llega al
+ * backend — verificado con tráfico real el 06/11/2026 —, pero la explícita es la
+ * preferida.
  */
 @Controller()
 export class DosaWebhookController {

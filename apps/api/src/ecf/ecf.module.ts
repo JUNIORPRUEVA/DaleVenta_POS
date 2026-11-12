@@ -9,6 +9,7 @@ import {
 import { AlanubeReconciliationService } from "./alanube/alanube-reconciliation.service";
 import { EcfDocumentIdempotencyService } from "./documents/ecf-document-idempotency.service";
 import { EcfDocumentQueryService } from "./documents/ecf-document-query.service";
+import { EcfSalesWithoutDocumentService } from "./documents/ecf-sales-without-document.service";
 import { EcfLineClassificationService } from "./documents/ecf-line-classification.service";
 import { EcfEmissionService } from "./documents/ecf-emission.service";
 import { EcfSimulatedDispatchService } from "./documents/ecf-simulated-dispatch.service";
@@ -53,8 +54,21 @@ import {
   ECF_DOSA_SESSION_HINTS,
   ECF_DOSA_WEBHOOK_STORE,
   DosaWebhookService,
+  type DosaSessionHintRecorder,
 } from "./provider/dosa/dosa-webhook.service";
 import { PrismaDosaCompanyResolver } from "./provider/dosa/dosa-company-resolver.service";
+import {
+  DosaIncidentService,
+  ECF_DOSA_INCIDENT_RETRY,
+  type DosaIncidentRetryRunner,
+} from "./provider/dosa/dosa-incident.service";
+import { DosaIncidentRetryAdapter } from "./provider/dosa/dosa-incident-retry.adapter";
+import { DosaIncidentScheduler } from "./provider/dosa/dosa-incident.scheduler";
+import {
+  ECF_DOSA_INCIDENT_NOTIFIER,
+  LoggingDosaIncidentNotifier,
+  type DosaIncidentNotifier,
+} from "./provider/dosa/dosa-incident-notifier";
 import {
   DosaCredentialService,
   ECF_DOSA_CREDENTIAL_STORE,
@@ -109,16 +123,29 @@ import {
   readDosaEmissionConfig,
   type DosaHttpTransport,
 } from "./provider/dosa/dosa-emission.client";
+import { DosaEmissionDispatchService } from "./provider/dosa/dosa-emission-dispatch.service";
+import { validateDosaEmissionStartup } from "./provider/dosa/dosa-emission.startup";
+import {
+  FakeDosaHttpTransport,
+  resolveFakeTransportSelection,
+} from "./provider/dosa/dosa-emission.fake-transport";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfSecretResolverService } from "./ecf-secret-resolver.service";
 import { EcfService } from "./ecf.service";
 import { EcfCertificationPortalController } from "./portal/ecf-certification-portal.controller";
 import { EcfCertificationPortalService } from "./portal/ecf-certification-portal.service";
+import { EcfPortalEnrollmentService } from "./portal/ecf-portal-enrollment.service";
+import { EcfCertificationAuthorizationService } from "./certification/ecf-certification-authorization.service";
+import { EcfCertificationActivationService } from "./certification/ecf-certification-activation.service";
+import { EcfCertificationActivationController } from "./certification/ecf-certification-activation.controller";
 
 @Module({
-  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController],
+  controllers: [EcfController, EcfDocumentsController, EcfPlatformController, DosaWebhookController, DosaCertificationIntentController, DosaCertificationSessionController, EcfCertificationPortalController, EcfCertificationActivationController],
   providers: [
     EcfService,
+    EcfPortalEnrollmentService,
+    EcfCertificationAuthorizationService,
+    EcfCertificationActivationService,
     EcfCertificationPortalService,
     EcfDgiiHabilitationService,
     EcfDgiiApplicationService,
@@ -148,6 +175,7 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
     EcfDocumentQueryService,
     EcfLineClassificationService,
     EcfE34CreditService,
+    EcfSalesWithoutDocumentService,
     EcfPreparationService,
     EcfEmissionService,
     EcfSimulatedDispatchService,
@@ -223,6 +251,34 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
       inject: [EcfDosaSessionService],
       useFactory: (sessions: EcfDosaSessionService) => sessions,
     },
+    // Vigilancia de incidencias del flujo DOSA.
+    //
+    // El reintento automático se limita a la vinculación de la postulación, que
+    // es idempotente. Cualquier otra operación (rotar, activar, emitir) sigue
+    // siendo un acto humano.
+    {
+      provide: ECF_DOSA_INCIDENT_RETRY,
+      inject: [ECF_DOSA_SESSION_HINTS],
+      useFactory: (hints: DosaSessionHintRecorder) =>
+        new DosaIncidentRetryAdapter(hints),
+    },
+    // Aviso de incidencias. Por defecto solo deja un registro estructurado: no
+    // hay canal externo autorizado. Para cambiar a WhatsApp/correo se sustituye
+    // esta entrada por el proveedor real, sin tocar el servicio.
+    {
+      provide: ECF_DOSA_INCIDENT_NOTIFIER,
+      useFactory: () => new LoggingDosaIncidentNotifier(),
+    },
+    {
+      provide: DosaIncidentService,
+      inject: [PrismaService, ECF_DOSA_INCIDENT_RETRY, ECF_DOSA_INCIDENT_NOTIFIER],
+      useFactory: (
+        prisma: PrismaService,
+        retry: DosaIncidentRetryRunner,
+        notifier: DosaIncidentNotifier,
+      ) => new DosaIncidentService(prisma, retry, notifier),
+    },
+    DosaIncidentScheduler,
     // Emision DOSA detras de compuertas. Sin `DOSA_EMISSION_ENABLED=true` el
     // cliente no hace ni una peticion.
     {
@@ -316,7 +372,24 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
     },
     {
       provide: ECF_DOSA_EMISSION_TRANSPORT,
-      useFactory: () => createFetchDosaTransport(),
+      useFactory: () => {
+        // Validación de arranque: un transporte falso, una URL no HTTPS o un
+        // ambiente desconocido no pueden quedar activos en silencio. Las
+        // advertencias (p. ej. PRODUCCIÓN configurada pero no autorizada) no
+        // impiden arrancar: la compuerta rechaza cada emisión con su motivo.
+        const startup = validateDosaEmissionStartup(process.env);
+        if (!startup.ok) {
+          throw new Error(
+            `DOSA_EMISSION_CONFIG_INVALID: ${startup.problems.join(", ")}`,
+          );
+        }
+        // El transporte FALSO sólo se elige en una UAT local y de forma
+        // explícita; fuera de ahí la fábrica lanza al arrancar (falla cerrado).
+        if (resolveFakeTransportSelection(process.env) === "FAKE") {
+          return new FakeDosaHttpTransport();
+        }
+        return createFetchDosaTransport();
+      },
     },
     {
       provide: DosaEmissionService,
@@ -336,6 +409,16 @@ import { EcfCertificationPortalService } from "./portal/ecf-certification-portal
           config: readDosaEmissionConfig(process.env),
           transport,
         }),
+    },
+    {
+      provide: DosaEmissionDispatchService,
+      inject: [PrismaService, DosaEmissionService],
+      useFactory: (prisma: PrismaService, dosa: DosaEmissionService) =>
+        new DosaEmissionDispatchService(
+          prisma,
+          dosa,
+          new EcfEmissionService(prisma),
+        ),
     },
     EcfAlanubeCertificationClient,
     {

@@ -142,9 +142,11 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
   late final TextEditingController _rnc;
   late final TextEditingController _address;
   late final TextEditingController _phone;
+  late final TextEditingController _email;
   late final TextEditingController _legalName;
   late final TextEditingController _legalCedula;
   late final Map<String, FocusNode> _focusNodes;
+  late final FocusNode _emailFocus;
   late final Set<String> _pendingVisible;
   bool _saving = false;
   bool _reviewAll = false;
@@ -157,6 +159,7 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
     _rnc = TextEditingController(text: settings.rnc.trim());
     _address = TextEditingController(text: settings.address.trim());
     _phone = TextEditingController(text: settings.phone.trim());
+    _email = TextEditingController(text: settings.ecfContactEmail.trim());
     _legalName = TextEditingController(
       text: settings.legalRepresentativeName.trim(),
     );
@@ -167,6 +170,7 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
         .where((item) => !item.ok && item.key != 'phone')
         .map((item) => item.key)
         .toSet();
+    _emailFocus = FocusNode();
     _focusNodes = {
       for (final item in buildEcfFiscalItems(settings)) item.key: FocusNode(),
     };
@@ -193,6 +197,8 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
     _rnc.dispose();
     _address.dispose();
     _phone.dispose();
+    _email.dispose();
+    _emailFocus.dispose();
     _legalName.dispose();
     _legalCedula.dispose();
     for (final node in _focusNodes.values) {
@@ -207,6 +213,7 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
     rnc: _rnc.text.trim(),
     address: _address.text.trim(),
     phone: _phone.text.trim(),
+    ecfContactEmail: _email.text.trim(),
     legalRepresentativeName: _legalName.text.trim(),
     legalRepresentativeCedula: _legalCedula.text.trim(),
   );
@@ -269,6 +276,13 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
     final recommendedMissing = items
         .where((entry) => !entry.blocking && !entry.ok)
         .toList();
+    final emailValue = _email.text.trim();
+    final emailMissing = !isEcfContactEmailValid(emailValue);
+    final showEmail =
+        !widget.compact ||
+        _reviewAll ||
+        emailMissing ||
+        _emailFocus.hasFocus;
 
     return _SurfacePanel(
       child: Column(
@@ -291,6 +305,7 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
           _ReadinessBanner(
             blockingMissing: blockingMissing,
             recommendedMissing: recommendedMissing,
+            emailMissing: emailMissing,
           ),
           const SizedBox(height: 14),
           if (widget.compact)
@@ -336,6 +351,23 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
                     focusNode: _focusNodes['phone']!,
                     hintText: '8090000000',
                     keyboardType: TextInputType.phone,
+                    onChanged: () => setState(() {}),
+                  ),
+                if (showEmail)
+                  _FiscalField(
+                    item: EcfFiscalItem(
+                      key: 'ecfContactEmail',
+                      label: 'Correo fiscal',
+                      value: emailValue,
+                      requirement: EcfFiscalRequirement.recommended,
+                      ok: !emailMissing,
+                      hint:
+                          'Lo usa el portal de certificación para contactar a tu empresa.',
+                    ),
+                    controller: _email,
+                    focusNode: _emailFocus,
+                    hintText: 'facturacion@tuempresa.com',
+                    keyboardType: TextInputType.emailAddress,
                     onChanged: () => setState(() {}),
                   ),
                 if (show('legalRepresentativeName') ||
@@ -411,10 +443,12 @@ class _ReadinessBanner extends StatelessWidget {
   const _ReadinessBanner({
     required this.blockingMissing,
     required this.recommendedMissing,
+    this.emailMissing = false,
   });
 
   final List<EcfFiscalItem> blockingMissing;
   final List<EcfFiscalItem> recommendedMissing;
+  final bool emailMissing;
 
   @override
   Widget build(BuildContext context) {
@@ -432,14 +466,18 @@ class _ReadinessBanner extends StatelessWidget {
         : '${blockingMissing.length == 1 ? 'Falta 1 dato obligatorio' : 'Faltan ${blockingMissing.length} datos obligatorios'}: '
               '${blockingMissing.map((item) => item.label.toLowerCase()).join(', ')}. '
               'Sin ellos la emisión se rechaza.';
-    final note = recommendedMissing.isEmpty
-        ? null
-        : recommendedMissing.length == 1
-        ? 'Además, 1 dato recomendado está incompleto: '
-              '${recommendedMissing.first.label.toLowerCase()}.'
-        : 'Además, ${recommendedMissing.length} datos recomendados están '
-              'incompletos: '
-              '${recommendedMissing.map((item) => item.label.toLowerCase()).join(', ')}.';
+    final notes = <String>[
+      if (recommendedMissing.length == 1)
+        'Además, 1 dato recomendado está incompleto: '
+            '${recommendedMissing.first.label.toLowerCase()}.'
+      else if (recommendedMissing.length > 1)
+        'Además, ${recommendedMissing.length} datos recomendados están '
+            'incompletos: '
+            '${recommendedMissing.map((item) => item.label.toLowerCase()).join(', ')}.',
+      if (emailMissing)
+        'Falta el correo fiscal: es necesario para iniciar la postulación electrónica.',
+    ];
+    final note = notes.isEmpty ? null : notes.join(' ');
 
     return Container(
       width: double.infinity,

@@ -147,12 +147,22 @@ class EcfSummaryRow extends StatelessWidget {
     required this.value,
     required this.tone,
     this.onTap,
+    this.onCopy,
+    this.copyTooltip,
   });
 
   final String label;
   final String value;
   final EcfTone tone;
   final VoidCallback? onTap;
+
+  /// Copia el valor al portapapeles.
+  ///
+  /// Existe porque el asistente oficial de DOSA pide estos mismos datos otra
+  /// vez y no admite prellenado: así se pegan en lugar de reescribirse. No
+  /// añade un valor duplicado en pantalla.
+  final VoidCallback? onCopy;
+  final String? copyTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -172,16 +182,33 @@ class EcfSummaryRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          value,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: style.fg == AppColors.warning
-                ? AppColors.warning
-                : AppColors.textSecondary,
+        Flexible(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: style.fg == AppColors.warning
+                  ? AppColors.warning
+                  : AppColors.textSecondary,
+            ),
           ),
         ),
+        if (onCopy != null) ...[
+          const SizedBox(width: 2),
+          IconButton(
+            onPressed: onCopy,
+            tooltip: copyTooltip ?? 'Copiar',
+            icon: const Icon(Icons.content_copy_rounded, size: 15),
+            color: AppColors.textMuted,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
         if (onTap != null) ...[
           const SizedBox(width: 2),
           const Icon(
@@ -213,17 +240,24 @@ class EcfField extends StatelessWidget {
     required this.label,
     required this.value,
     this.missingLabel = 'Sin completar',
+    this.onCopy,
+    this.copyTooltip,
   });
 
   final String label;
   final String? value;
   final String missingLabel;
 
+  /// Ver `EcfSummaryRow.onCopy`.
+  final VoidCallback? onCopy;
+  final String? copyTooltip;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final text = (value ?? '').trim();
     final missing = text.isEmpty;
+    final copy = missing ? null : onCopy;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -238,13 +272,34 @@ class EcfField extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            missing ? missingLabel : text,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontSize: 13.5,
-              fontWeight: missing ? FontWeight.w400 : FontWeight.w600,
-              color: missing ? AppColors.textMuted : AppColors.textPrimary,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  missing ? missingLabel : text,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 13.5,
+                    fontWeight: missing ? FontWeight.w400 : FontWeight.w600,
+                    color: missing
+                        ? AppColors.textMuted
+                        : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              if (copy != null)
+                IconButton(
+                  onPressed: copy,
+                  tooltip: copyTooltip ?? 'Copiar',
+                  icon: const Icon(Icons.content_copy_rounded, size: 15),
+                  color: AppColors.textMuted,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
+            ],
           ),
         ],
       ),

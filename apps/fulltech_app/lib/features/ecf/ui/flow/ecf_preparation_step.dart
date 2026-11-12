@@ -1,174 +1,284 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../../core/company/company_settings_model.dart';
 import 'ecf_flow_kit.dart';
 
-/// Paso «Preparación».
+/// Única pantalla de preparación antes de iniciar la postulación.
 ///
-/// Un resumen de cuatro líneas y una sola acción. El botón del motor se habilita
-/// exactamente con las mismas condiciones que valida el backend: no se fuerza
-/// nada desde la interfaz.
+/// Reutiliza los datos que FullPOS ya tiene registrados. Solo pide lo que falta
+/// y deja una única acción principal: completar los datos o iniciar el proceso
+/// oficial. El certificado y las credenciales se gestionan dentro de DOSA, así
+/// que no se duplican aquí.
 class EcfPreparationStep extends StatelessWidget {
   const EcfPreparationStep({
     super.key,
+    required this.settings,
     required this.companyReady,
+    required this.contactEmailReady,
     required this.certificateReady,
-    required this.dgiiAccessReady,
-    required this.pendingRequirements,
-    required this.simulationAvailable,
-    required this.simulationBadge,
-    required this.simulationReason,
+    required this.dosaOwnsCertificate,
     required this.canManage,
     required this.busy,
+    required this.onEditFiscalData,
     required this.onStart,
     required this.onGoCompany,
     required this.onGoCertificate,
+    required this.onContinue,
+    this.postulationStarted = false,
     this.dosaEntry,
-    this.dosaOwnsCertificate = false,
+    this.activation,
+    this.sequence,
+    this.advanced,
+    this.simulationAvailable = false,
+    this.simulationBadge,
+    this.simulationReason,
   });
 
+  final CompanySettings? settings;
+
+  /// Datos mínimos que exige la emisión (nombre, RNC y dirección).
   final bool companyReady;
+
+  /// Correo fiscal que el backend usa al abrir la sesión oficial.
+  final bool contactEmailReady;
+
+  /// Certificado validado previamente en FullPOS. Para DOSA es historial.
   final bool certificateReady;
-  final bool dgiiAccessReady;
 
-  /// Requisitos obligatorios aún pendientes según el expediente real.
-  final int pendingRequirements;
+  /// El certificado lo pide DOSA dentro de su propio asistente.
+  final bool dosaOwnsCertificate;
 
-  final bool simulationAvailable;
-  final String? simulationBadge;
-  final String? simulationReason;
   final bool canManage;
   final bool busy;
+
+  final VoidCallback onEditFiscalData;
   final VoidCallback onStart;
   final VoidCallback onGoCompany;
   final VoidCallback onGoCertificate;
 
-  /// Entrada al portal DOSA, independiente del motor de prueba legado.
+  /// Avanza al siguiente paso cuando aquí ya no queda nada que hacer.
+  final VoidCallback onContinue;
+
+  /// La postulación ya está abierta: iniciarla otra vez no tiene sentido, así
+  /// que la única acción de esta etapa es continuar al seguimiento.
+  final bool postulationStarted;
+
+  /// Acción oficial de DOSA. Si existe, es la única acción principal.
   final Widget? dosaEntry;
 
-  /// El certificado lo gestiona el asistente oficial de DOSA. En ese caso no
-  /// se presenta como requisito previo de FullPOS ni como bloqueo.
-  final bool dosaOwnsCertificate;
+  /// Estado de la autorización de emisión (lo que falta para poder facturar).
+  ///
+  /// Va aquí y no en una pantalla aparte: el cliente ve el mismo recorrido, y
+  /// cuando vuelve días después aparece con lo que le falta sin tener que
+  /// buscar otro sitio.
+  final Widget? activation;
 
-  bool get _canRun => canManage && simulationAvailable && certificateReady;
+  /// Declaración del rango de numeración (e-NCF). Se oculta sola si ya existe.
+  final Widget? sequence;
 
-  String get _blockedReason {
-    if (!companyReady) {
-      return 'Faltan datos de la empresa para postular.';
-    }
-    if (!certificateReady && !dosaOwnsCertificate) {
-      return 'Valida primero el certificado digital.';
-    }
-    if (!canManage) {
-      return 'Solo un usuario con permiso de gestión puede iniciar la postulación.';
-    }
-    if (!simulationAvailable) {
-      return simulationReason?.trim().isNotEmpty == true
-          ? simulationReason!.trim()
-          : 'El modo de prueba no está habilitado en este entorno.';
-    }
-    return 'Todo listo para iniciar.';
+  /// Controles administrativos fuera del recorrido del cliente.
+  final Widget? advanced;
+
+  final bool simulationAvailable;
+  final String? simulationBadge;
+  final String? simulationReason;
+
+  bool get _dataReady => companyReady && contactEmailReady;
+
+  bool get _certificateReadyForDosa => certificateReady || dosaOwnsCertificate;
+
+  /// Copia un dato al portapapeles.
+  ///
+  /// El asistente oficial de DOSA vuelve a pedir el RNC y el correo y no
+  /// admite prellenado por clave publicable, así que se copian desde aquí en
+  /// lugar de reescribirlos.
+  Future<void> _copy(BuildContext context, String text, String message) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final companyName = (settings?.companyName ?? '').trim();
+    final rnc = (settings?.rnc ?? '').trim();
+    final email = (settings?.ecfContactEmail ?? '').trim();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const EcfStepTitle(
-            title: 'Preparación',
-            subtitle:
-                'La postulación se realiza en el asistente oficial de DOSA. '
-                'Aquí solo reunimos lo que ya tenemos registrado.',
-          ),
-          const SizedBox(height: 14),
-          EcfSection(
-            title: 'Antes de postular',
-            icon: Icons.fact_check_outlined,
-            child: Column(
-              children: [
-                EcfSummaryRow(
-                  label: 'Datos de la empresa',
-                  value: companyReady ? 'Listos' : 'Faltan datos',
-                  tone: companyReady ? EcfTone.done : EcfTone.warning,
-                  onTap: companyReady ? null : onGoCompany,
+      child: Center(
+        child: ConstrainedBox(
+          // Ancho del diseño aprobado: las dos tarjetas miden 700 px.
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Una empresa ya postulada con los datos completos no necesita
+              // que se le anuncie esta etapa: «Solo te pediremos lo que falte»
+              // prometía pedir algo cuando ya no falta nada. El rail de pasos
+              // ya la sitúa, así que el encabezado solo sobraba.
+              if (!(_dataReady && dosaOwnsCertificate)) ...[
+                const EcfStepTitle(
+                  title: 'Preparación',
+                  subtitle: 'Solo te pediremos lo que falte.',
                 ),
-                EcfSummaryRow(
-                  label: 'Certificado digital',
-                  value: certificateReady
-                      ? 'Validado'
-                      : dosaOwnsCertificate
-                      ? 'Se pide en el asistente de DOSA'
-                      : 'Sin validar',
-                  tone: certificateReady
-                      ? EcfTone.done
-                      : dosaOwnsCertificate
-                      ? EcfTone.pending
-                      : EcfTone.warning,
-                  onTap: certificateReady || dosaOwnsCertificate
-                      ? null
-                      : onGoCertificate,
-                ),
-                EcfSummaryRow(
-                  label: 'Acceso al portal de la DGII',
-                  value: dgiiAccessReady ? 'Confirmado' : 'Sin confirmar',
-                  tone: dgiiAccessReady ? EcfTone.done : EcfTone.pending,
-                ),
-                EcfSummaryRow(
-                  label: 'Requisitos pendientes',
-                  value: pendingRequirements == 0
-                      ? 'Ninguno'
-                      : '$pendingRequirements',
-                  tone: pendingRequirements == 0
-                      ? EcfTone.done
-                      : EcfTone.pending,
-                ),
+                const SizedBox(height: 14),
               ],
-            ),
+              // Solo lo PENDIENTE. Si los datos de la empresa ya están completos no
+              // se repiten aquí: quedan a la vista en Configuración y esta pantalla
+              // se dedica a lo que de verdad falta para poder facturar.
+              if (!_dataReady) ...[
+                EcfSection(
+                  title: 'Completa lo que falta',
+                  icon: Icons.edit_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!companyReady)
+                        EcfSummaryRow(
+                          label: 'Datos fiscales',
+                          value: 'Faltan datos de tu empresa',
+                          tone: EcfTone.warning,
+                          onTap: onEditFiscalData,
+                        ),
+                      if (!contactEmailReady)
+                        EcfSummaryRow(
+                          label: 'Correo fiscal',
+                          value: 'Falta el correo de facturación',
+                          tone: EcfTone.warning,
+                          onTap: onEditFiscalData,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ] else if (!dosaOwnsCertificate &&
+                  (rnc.isNotEmpty || email.isNotEmpty))
+                // Solo antes de postularse: el asistente oficial vuelve a pedir
+                // el RNC y el correo y no admite prellenado, así que se copian
+                // en un solo toque. Una empresa que ya se postuló no necesita
+                // volver a verlos.
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, right: 2),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        size: 15,
+                        color: Color(0xFF1B7F3B),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          companyName.isEmpty
+                              ? 'Datos de tu empresa listos'
+                              : '$companyName · $rnc',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // El asistente oficial vuelve a pedir el RNC y el correo y no
+                      // admite prellenado: se copian desde aquí en un solo toque.
+                      TextButton(
+                        onPressed: () => _copy(
+                          context,
+                          [
+                            rnc,
+                            email,
+                          ].where((value) => value.isNotEmpty).join('\n'),
+                          'Datos copiados',
+                        ),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 28),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: const Text(
+                          'Copiar',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+              if (!_dataReady)
+                EcfPrimaryAction(
+                  label: 'Completar datos',
+                  icon: Icons.edit_outlined,
+                  onPressed: onEditFiscalData,
+                  helper:
+                      'Solo completarás la información que falta. El resto ya está guardado.',
+                  buttonKey: const ValueKey('ecf_preparation_complete_data'),
+                )
+              // Con la postulación ya registrada esta etapa no tiene nada que
+              // iniciar. Sin esta acción la pantalla quedaba sin botón y el
+              // recorrido no tenía salida hacia delante.
+              else if (postulationStarted)
+                EcfPrimaryAction(
+                  label: 'Continuar',
+                  icon: Icons.arrow_forward_rounded,
+                  onPressed: onContinue,
+                  helper:
+                      'Tu postulación ya está registrada. Continúa para ver su estado y lo que falta para facturar.',
+                  buttonKey: const ValueKey('ecf_preparation_continue'),
+                )
+              else if (dosaEntry != null)
+                dosaEntry!
+              else if (!_certificateReadyForDosa)
+                EcfPrimaryAction(
+                  label: 'Validar certificado',
+                  icon: Icons.verified_user_outlined,
+                  onPressed: onGoCertificate,
+                )
+              else if (simulationAvailable && canManage)
+                EcfSection(
+                  title: 'Iniciar postulación',
+                  icon: Icons.arrow_forward_rounded,
+                  trailing: (simulationBadge ?? '').isNotEmpty
+                      ? EcfBadge(label: simulationBadge!)
+                      : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      EcfPrimaryAction(
+                        label: 'Iniciar postulación',
+                        buttonKey: const ValueKey(
+                          'ecf_intelligent_certification_button',
+                        ),
+                        icon: Icons.arrow_forward_rounded,
+                        busy: busy,
+                        onPressed: onStart,
+                      ),
+                      const SizedBox(height: 8),
+                      EcfInlineNote(
+                        tone: EcfTone.pending,
+                        text: simulationReason?.trim().isNotEmpty == true
+                            ? simulationReason!.trim()
+                            : 'El proceso se abrirá en el entorno de certificación.',
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const EcfInlineNote(
+                  tone: EcfTone.pending,
+                  text:
+                      'Un administrador con permiso de facturación electrónica debe iniciar la postulación.',
+                ),
+              // Después de la acción principal: primero se abre el asistente, luego
+              // se explica qué falta para poder facturar.
+              if (activation != null) ...[
+                const SizedBox(height: 14),
+                activation!,
+              ],
+              if (sequence != null) ...[const SizedBox(height: 12), sequence!],
+              if (advanced != null) ...[const SizedBox(height: 12), advanced!],
+            ],
           ),
-          const SizedBox(height: 12),
-          if (dosaEntry != null) ...[dosaEntry!, const SizedBox(height: 12)],
-          // Con el portal oficial presente no se ofrece un segundo camino de
-          // postulación: un solo proceso, un solo botón principal.
-          if (simulationAvailable && dosaEntry == null)
-            EcfSection(
-              title: 'Postulación inteligente',
-              icon: Icons.auto_awesome_outlined,
-              subtitle:
-                  'FullPOS ejecuta los pasos que dependen del proveedor '
-                  'certificado. Lo que dependa de la DGII te lo indicaremos.',
-              trailing:
-                  simulationAvailable && (simulationBadge ?? '').isNotEmpty
-                  ? EcfBadge(
-                      key: const ValueKey('ecf_test_mode_badge'),
-                      label: simulationBadge!,
-                    )
-                  : null,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  EcfPrimaryAction(
-                    label: 'Iniciar postulación inteligente',
-                    buttonKey: const ValueKey(
-                      'ecf_intelligent_certification_button',
-                    ),
-                    icon: Icons.auto_awesome_outlined,
-                    busy: busy,
-                    onPressed: _canRun ? onStart : null,
-                  ),
-                  const SizedBox(height: 8),
-                  EcfInlineNote(
-                    tone: _canRun ? EcfTone.done : EcfTone.pending,
-                    icon: _canRun
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.info_outline_rounded,
-                    text: _blockedReason,
-                  ),
-                ],
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

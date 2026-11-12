@@ -10,6 +10,7 @@ import { EcfEvidenceIngestionService } from "./ecf-evidence-ingestion.service";
 import { EcfBlockedAuthenticityVerifier } from "./ecf-evidence-authenticity.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
 import { assessEcfProviderResponse } from "./ecf-provider-response";
+import type { EcfProviderObservation } from "./ecf-provider-response";
 
 // Generic emission orchestrator for E31/E34 (E32 keeps its dedicated single-use
 // Sandbox service). It reuses the shared idempotency, evidence and state modules.
@@ -28,7 +29,12 @@ export class EcfEmissionService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertType(type: EcfDocumentType) {
-    if (!["E31", "E34"].includes(type)) throw new ConflictException("ECF_EMISSION_TYPE_UNSUPPORTED");
+    // E32 se prepara y numera como cualquier otro tipo: su e-NCF sale del rango
+    // autorizado de la empresa. Lo que se retiró es el cupo de sandbox de un
+    // solo uso, no el tipo.
+    if (!["E31", "E32", "E34"].includes(type)) {
+      throw new ConflictException("ECF_EMISSION_TYPE_UNSUPPORTED");
+    }
   }
 
   // Prepares and persists a local, contracted draft. No network. Idempotent.
@@ -96,8 +102,30 @@ export class EcfEmissionService {
 
   // Single dispatch attempt. Claims and commits the attempt BEFORE the network so
   // a crash or timeout can never produce a second POST for the same document.
-  async dispatchOnce(user: TenantUser, documentId: string, wire: EcfEmissionWire) {
+  //
+  // `override` permite enviar el cuerpo del PROVEEDOR cuando no coincide con el
+  // payload preparado por defecto (caso DOSA: su contrato no es el DOM interno).
+  // La huella que se registra es SIEMPRE la del cuerpo realmente enviado, nunca
+  // la del preparado, para que la evidencia no mienta sobre lo que salió.
+  async dispatchOnce(
+    user: TenantUser,
+    documentId: string,
+    wire: EcfEmissionWire,
+    override?: {
+      body: unknown;
+      fingerprint: string;
+      /**
+       * Evaluador de la respuesta del proveedor. Por defecto se usa el de
+       * Alanube; DOSA aporta el suyo porque su contrato de respuesta es
+       * distinto. El evaluador puede proponer el estado del documento.
+       */
+      observe?: (input: { statusCode: number; body: unknown }) => EcfProviderObservation & {
+        documentStatus?: string;
+      };
+    },
+  ) {
     const companyId = requireTenant(user);
+    const requestFingerprint = override?.fingerprint;
     const claim = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ecf_electronic_documents WHERE company_id = ${companyId}::uuid AND id = ${documentId}::uuid FOR UPDATE`;
       const document = await tx.ecfElectronicDocument.findFirst({ where: { companyId, id: documentId } });
@@ -126,31 +154,39 @@ export class EcfEmissionService {
       await tx.ecfElectronicDocumentStatusLog.create({ data: { companyId, documentId, statusBefore: document.status,
         statusAfter: "SEND_IN_PROGRESS", reasonCode: "EMISSION_DISPATCH_CLAIMED", changedByUserId: user.id } });
       const attempt = await tx.ecfElectronicDocumentAttempt.create({ data: { companyId, documentId,
-        operation: "SEND_TO_PROVIDER", idempotencyKey: document.idempotencyKey, requestFingerprint: emission.fingerprint,
+        operation: "SEND_TO_PROVIDER", idempotencyKey: document.idempotencyKey,
+        requestFingerprint: requestFingerprint ?? emission.fingerprint,
         statusBefore: document.status, statusAfter: "SEND_IN_PROGRESS", createdByUserId: user.id } });
       return { attempt: attempt.id, emission, documentType: document.documentType as EcfDocumentType,
         idempotencyKey: document.idempotencyKey, payloadFingerprint: document.payloadFingerprint };
     });
 
+    const sentBody = override?.body ?? claim.emission.payload;
     let result: EcfEmissionWireResult;
-    try { result = await wire.execute({ method: "POST", path: "/invoices", body: claim.emission.payload, requestId: claim.attempt }); }
+    try { result = await wire.execute({ method: "POST", path: "/invoices", body: sentBody, requestId: claim.attempt }); }
     catch { result = { ok: false, errorCode: "NETWORK_ERROR", safeMessage: "ECF_RESULT_UNKNOWN" }; }
 
     const body = result.ok ? result.body : null;
     const record = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
     const remoteConflict = typeof record.id === "string" && Boolean(await this.prisma.ecfElectronicDocument.findFirst({
       where: { companyId, externalProviderId: record.id, id: { not: documentId } }, select: { id: true } }));
-    const observation = assessEcfProviderResponse(result.ok ? result.statusCode : 0, body, {
-      documentType: claim.documentType, expectedEncf: claim.emission.encf, expectedTaxId: claim.emission.senderTaxId, remoteConflict,
-    });
+    const observation = override?.observe
+      ? override.observe({ statusCode: result.ok ? result.statusCode : 0, body })
+      : assessEcfProviderResponse(result.ok ? result.statusCode : 0, body, {
+          documentType: claim.documentType, expectedEncf: claim.emission.encf, expectedTaxId: claim.emission.senderTaxId, remoteConflict,
+        });
     if (result.ok && result.statusCode >= 200 && result.statusCode < 300 && observation.correlated) {
+      // Estado propuesto por el evaluador del proveedor. Sin propuesta se sigue
+      // usando `HUMAN_REVIEW_REQUIRED`, que es el valor conservador y el que
+      // mantiene el comportamiento de Alanube sin cambios.
+      const proposedStatus = (observation as { documentStatus?: string }).documentStatus ?? "HUMAN_REVIEW_REQUIRED";
       await this.prisma.$transaction(async (tx) => {
         const changed = await tx.ecfElectronicDocument.updateMany({ where: { companyId, id: documentId, status: "SEND_IN_PROGRESS" },
-          data: { status: "HUMAN_REVIEW_REQUIRED", safeErrorCode: observation.safeCode,
+          data: { status: proposedStatus as never, safeErrorCode: observation.safeCode,
             safeErrorMessage: "Resultado del proveedor observado; requiere revisión de evidencia fiscal. No reemitir." } });
         if (changed.count !== 1) throw new ConflictException("ECF_EMISSION_DOCUMENT_CHANGED");
         await tx.ecfElectronicDocumentStatusLog.create({ data: { companyId, documentId, statusBefore: "SEND_IN_PROGRESS",
-          statusAfter: "HUMAN_REVIEW_REQUIRED", reasonCode: observation.safeCode, changedByUserId: user.id,
+          statusAfter: proposedStatus as never, reasonCode: observation.safeCode, changedByUserId: user.id,
           metadata: observation as unknown as Prisma.InputJsonValue } });
       });
       // Bind the observed identity BEFORE ingesting evidence: the receipt freezes
@@ -160,7 +196,8 @@ export class EcfEmissionService {
       const raw = Buffer.from(JSON.stringify(body));
       await new EcfEvidenceIngestionService(this.prisma, new EcfBlockedAuthenticityVerifier()).ingest(user, {
         documentId, attemptId: claim.attempt, operationKey: claim.idempotencyKey,
-        documentFingerprint: claim.payloadFingerprint, requestFingerprint: claim.emission.fingerprint,
+        documentFingerprint: claim.payloadFingerprint,
+        requestFingerprint: requestFingerprint ?? claim.emission.fingerprint,
         source: "PROVIDER_RESPONSE", eventKey: `emission:${claim.attempt}`, raw,
         httpStatus: result.statusCode,
       });

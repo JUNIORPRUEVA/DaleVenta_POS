@@ -37,8 +37,9 @@ void main() {
     });
 
     test('las vistas previas de factura usan el mismo panel', () {
+      // `mis_ventas_screen.dart` ya no existe: producción la sustituyó por el
+      // historial del TPV y el panel de ventas recientes.
       for (final path in <String>[
-        'lib/modules/ventas/mis_ventas_screen.dart',
         'lib/modules/ventas/sales_credit_screen.dart',
         'lib/modules/ventas/tpv_sales_history_screen.dart',
       ]) {

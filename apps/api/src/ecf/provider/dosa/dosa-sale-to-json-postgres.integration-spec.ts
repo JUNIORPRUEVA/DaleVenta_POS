@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Client } from "pg";
 import request from "supertest";
@@ -93,7 +93,24 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
 
     process.env.DATABASE_URL = appUrl;
     process.env.JWT_SECRET = process.env.JWT_SECRET || "dosa-sale-json-e2e";
-    const prismaCli = resolve(process.cwd(), "node_modules", "prisma", "build", "index.js");
+    // La CLI de Prisma puede estar hoisteada en la raíz del monorepo o en el
+    // paquete. Asumir solo `apps/api/node_modules` rompía esta prueba en
+    // cualquier instalación con npm workspaces (`npm ci` en la raíz), que es la
+    // que usa CI. Mismo patrón que el resto de las pruebas de integración.
+    const prismaCandidates = [
+      resolve(process.cwd(), "node_modules", "prisma", "build", "index.js"),
+      resolve(
+        process.cwd(),
+        "..",
+        "..",
+        "node_modules",
+        "prisma",
+        "build",
+        "index.js",
+      ),
+    ];
+    const prismaCli = prismaCandidates.find((candidate) => existsSync(candidate));
+    if (!prismaCli) throw new Error("PRISMA_CLI_NOT_FOUND");
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },
@@ -209,15 +226,8 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
         defaultTaxId: tax.body.id,
         defaultTaxRate: 0.18,
         pricesIncludeTax: true,
-        ncfEnabled: true,
       });
     expect(fiscal.status).toBe(200);
-
-    const sequence = await http()
-      .post("/ncf/sequences")
-      .set("Authorization", `Bearer ${token}`)
-      .send({ voucherType: "B01", prefix: "B01", startNumber: 1, endNumber: 10 });
-    expect(sequence.status).toBe(201);
   }
 
   async function openSession(token: string, companyId: string, userId: string) {
@@ -337,7 +347,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 118,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 118,
       items: [
@@ -368,10 +377,14 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
     expect(body.encabezado.idDoc.eNCF).toBe("E310000000901");
     expect(body.encabezado.emisor.RNCEmisor).toBe(result.built.value.snapshot.seller.taxId);
     expect(body.encabezado.comprador?.RNCComprador).toBe("130000000");
-    // Unidad traducida al catálogo: 1 = Unidad.
-    expect(body.detallesItems[0].unidadMedida).toBe(1);
+    // Unidad traducida al catálogo REAL de la DGII: 43 = Unidad.
+    // (La tabla 1=Unidad, 2=Caja… era incorrecta y se corrigió en noviembre de
+    // 2026; ver `DOSA_UNIDAD_MEDIDA_BY_FULLPOS_CODE` y
+    // `dosa-ecf.fiscal-catalogues.spec.ts`, que fija esos códigos.)
+    expect(body.detallesItems[0].unidadMedida).toBe(43);
     expect(body.detallesItems[0].indicadorFacturacion).toBe(1);
-    expect(body.detallesItems[0].indicadorBienoServicio).toBe(2);
+    // 1 = bien, 2 = servicio.
+    expect(body.detallesItems[0].indicadorBienoServicio).toBe(1);
     // Los totales del comprobante son los de la venta, no un recálculo.
     expect(body.encabezado.totales.MontoGravadoTotal).toBe("100.00");
     expect(body.encabezado.totales.TotalITBIS).toBe("18.00");
@@ -422,7 +435,7 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
 
     const item = result.draft.body.detallesItems[0];
     expect(result.draft.body.encabezado.idDoc.tipoeCF).toBe("32");
-    expect(item.unidadMedida).toBe(11); // 11 = Yarda
+    expect(item.unidadMedida).toBe(41); // 41 = Yarda en el catálogo de la DGII
     expect(item.cantidadItem).toBe("5.5"); // la cantidad no se reconvierte
     expect(item.precioUnitarioItem).toBe("200.00");
     expect(item.montoItem).toBe("1100.00");
@@ -452,7 +465,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 236,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 236,
       items: [
@@ -500,8 +512,13 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
         unidad: item.unidadMedida,
       })),
     ).toEqual([
-      { facturacion: 1, bienoServicio: 2, unidad: 1 }, // bien
-      { facturacion: 2, bienoServicio: 1, unidad: 1 }, // servicio
+      // 1 = bien, 2 = servicio. `indicadorFacturacion` NO es la naturaleza: es
+      // la tasa de ITBIS aplicada (1 = ITBIS1, 18%), y ambas líneas van al 18 %.
+      // La versión anterior de esta prueba había invertido ambos indicadores y
+      // usaba el catálogo viejo de unidades (1 = Unidad); se alineó con el
+      // catálogo oficial que fija `dosa-ecf.fiscal-catalogues.spec.ts`.
+      { facturacion: 1, bienoServicio: 1, unidad: 43 }, // bien
+      { facturacion: 1, bienoServicio: 2, unidad: 43 }, // servicio
     ]);
   });
 
@@ -520,7 +537,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 118,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 118,
       items: [
@@ -613,7 +629,6 @@ uat("Venta real del POS → JSON de DOSA (sin transmitir)", () => {
       originCashSessionId: sessionId,
       paymentMethod: "cash",
       paymentCashAmount: 118,
-      fiscalVoucherType: "B01",
       customerId: client.id,
       expectedTotalSold: 118,
       items: [

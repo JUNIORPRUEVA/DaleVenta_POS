@@ -60,11 +60,6 @@ function serviceWith(prisma: Record<string, unknown>, inventory: any) {
       resolvePriceMode: jest.fn().mockReturnValue("TAX_ADDED"),
       calculatorService: taxCalculator(),
     } as never,
-    {
-      normalizeType: jest.fn(),
-      reserveNextNcf: jest.fn(),
-      markIssued: jest.fn(),
-    } as never,
     inventory as never,
   );
 }
@@ -603,6 +598,8 @@ describe("SalesService optional inventory tracking", () => {
     };
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(saleFind) },
+      // Venta sin comprobante electrónico: el arnés prueba el camino SIN nota E34.
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       cashSession: {
         findFirst: jest
           .fn()
@@ -718,6 +715,7 @@ describe("SalesService optional inventory tracking", () => {
     };
     const prisma = {
       sale: { findFirst: jest.fn().mockResolvedValue(existing) },
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       cashSession: { findFirst: jest.fn() },
       $transaction: jest.fn(),
     };

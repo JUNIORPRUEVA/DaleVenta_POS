@@ -27,6 +27,9 @@ import { PrismaService } from "../../prisma/prisma.service";
  *  - Con el opcional pero sin el requerido → solicitud PARCIAL: se rechaza
  *    siempre con `INVALID_PARTIAL_FINANCIAL_REQUEST`, haya o no interruptor.
  *    Distinguir al cliente viejo de una actualización a medias es deliberado.
+ *  - El motor NCF tradicional se retiró: una venta NUEVA que pida
+ *    `fiscalVoucherType` (B01/B02) se rechaza con `ECF_LEGACY_NCF_RETIRED`.
+ *    El comprobante histórico ya registrado se conserva y se devuelve tal cual.
  *
  * Nada de esto es e-CF: es el contrato financiero que ya existía. Lo que se
  * demuestra es que e-CF no lo altera y que vender nunca escribe en `ecf_*`.
@@ -227,28 +230,18 @@ uat("POS tradicional — compatibilidad con e-CF (HTTP + PostgreSQL)", () => {
   }
 
   /**
-   * Activa los comprobantes fiscales TRADICIONALES (NCF) y registra una serie.
+   * Conserva la bandera fiscal tradicional de la empresa.
    *
-   * Sin esto la venta con NCF se rechaza con «Los comprobantes fiscales no
-   * están activados para esta empresa»: es una precondición previa a e-CF, no
-   * una consecuencia suya.
+   * El motor NCF se retiró: `POST /ncf/sequences` y la pantalla de talonarios ya
+   * no existen. La bandera se sigue publicando porque las empresas históricas la
+   * conservan, pero NO habilita la emisión de talones.
    */
-  async function enableTraditionalFiscal(token: string) {
+  async function keepTraditionalFiscalFlag(token: string) {
     await http()
       .patch("/company/fiscal-settings")
       .set("Authorization", `Bearer ${token}`)
       .send({ ncfEnabled: true })
       .expect(200);
-    await http()
-      .post("/ncf/sequences")
-      .set("Authorization", `Bearer ${token}`)
-      .send({
-        voucherType: "B01",
-        prefix: "B01",
-        startNumber: 1,
-        endNumber: 100,
-      })
-      .expect(201);
   }
 
   async function createProduct(companyId: string) {
@@ -378,40 +371,69 @@ uat("POS tradicional — compatibilidad con e-CF (HTTP + PostgreSQL)", () => {
     ).toBe(0);
   });
 
-  it("una venta fiscal tradicional con NCF se guarda sin volverse e-CF", async () => {
+  it("el comprobante NCF histórico sigue legible y una venta nueva no puede emitirlo", async () => {
     const tenant = await registerTenant("ncf");
     await openSession(tenant.token, tenant.companyId, tenant.userId);
-    await enableTraditionalFiscal(tenant.token);
+    await keepTraditionalFiscalFlag(tenant.token);
     const client = await createFiscalClient(tenant.companyId, tenant.userId);
 
-    const res = await withLegacyFlag(true, () =>
+    // 1) Venta registrada ANTES del retiro del motor NCF. Se crea por el camino
+    //    normal y después se marcan los campos tal como los escribía el motor
+    //    retirado: eso es lo que conservan las empresas históricas.
+    const legacy = await withLegacyFlag(true, () =>
       expectStatus(
         postSale(tenant.token, {
-          items: [
-            {
-              productName: "Producto tradicional",
-              qty: 1,
-              priceSoldUnit: 118,
-              costUnitSnapshot: 80,
-            },
-          ],
-          paymentMethod: "cash",
+          ...legacySaleBody,
           customerId: client.id,
-          fiscalVoucherType: "B01",
-          ncf: "B0100000001",
-          fiscalCustomerTaxId: "130000000",
-          fiscalCustomerName: "Cliente Tradicional SA",
         }),
         201,
       ),
     );
-
-    const saleId = (res.body.id ?? res.body.sale?.id) as string;
-    const sale = await prisma.sale.findFirstOrThrow({
-      where: { id: saleId, companyId: tenant.companyId },
+    const historicalSaleId = (legacy.body.id ?? legacy.body.sale?.id) as string;
+    await prisma.sale.update({
+      where: { id: historicalSaleId },
+      data: {
+        fiscalVoucherType: "B01",
+        ncf: "B0100000001",
+        ncfExpirationDate: new Date("2027-12-31T23:59:59.000Z"),
+        fiscalCustomerTaxId: "130000000",
+        fiscalCustomerName: "Cliente Tradicional SA",
+      },
     });
-    expect(sale.ncf).toBe("B0100000001");
-    expect(sale.fiscalCustomerName).toBe("Cliente Tradicional SA");
+
+    // 2) El histórico sigue siendo legible por la API real, sin reconstruirlo.
+    const list = await http()
+      .get("/sales")
+      .set("Authorization", `Bearer ${tenant.token}`)
+      .expect(200);
+    const rows: Array<Record<string, any>> = Array.isArray(list.body)
+      ? list.body
+      : list.body.items;
+    const historical = rows.find((row) => row.id === historicalSaleId);
+    expect(historical?.fiscalVoucherType).toBe("B01");
+    expect(historical?.ncf).toBe("B0100000001");
+    expect(historical?.fiscalCustomerName).toBe("Cliente Tradicional SA");
+
+    // 3) Un POS antiguo que todavía pide un talón se rechaza con un motivo
+    //    explícito: la venta no se guarda sin el comprobante que esperaba.
+    const salesBefore = await prisma.sale.count({
+      where: { companyId: tenant.companyId },
+    });
+    const refused = await withLegacyFlag(true, () =>
+      postSale(tenant.token, {
+        ...legacySaleBody,
+        customerId: client.id,
+        fiscalVoucherType: "B01",
+        ncf: "B0100000002",
+        fiscalCustomerTaxId: "130000000",
+        fiscalCustomerName: "Cliente Tradicional SA",
+      }),
+    );
+    expect(refused.status).toBe(400);
+    expect(String(refused.body.message)).toContain("ECF_LEGACY_NCF_RETIRED");
+    expect(
+      await prisma.sale.count({ where: { companyId: tenant.companyId } }),
+    ).toBe(salesBefore);
 
     expect(await ecfRowCount(tenant.companyId)).toEqual({
       documents: 0,

@@ -382,7 +382,7 @@ class EcfDocumentTypeCapability {
   final bool contractAllowsEmission;
   final bool allowedForCompany;
 
-  /// E32 usa su propio slot de un solo uso y nunca se asigna desde el rango.
+  /// Los tres tipos toman su e-NCF del rango autorizado por la DGII.
   final bool allocatable;
 
   factory EcfDocumentTypeCapability.fromJson(Map<String, dynamic> json) {
@@ -405,6 +405,8 @@ class EcfCapabilities {
     required this.allowedTypes,
     required this.emissionPathAvailable,
     required this.documentTypes,
+    this.allowSalesWithoutEcf = false,
+    this.salesWithoutEcfWarning = '',
   });
 
   final bool enabled;
@@ -413,10 +415,19 @@ class EcfCapabilities {
   final bool productionEnabled;
   final List<String> allowedTypes;
 
-  /// `false` mientras no exista un endpoint autorizado de emisión. La interfaz
-  /// usa esto para no ofrecer nunca un botón de envío real.
+  /// `true` sólo cuando ESTA empresa puede emitir ahora mismo: proveedor DOSA,
+  /// emisión encendida en el servidor y certificación autorizada. La interfaz
+  /// usa esto para no ofrecer un botón de envío que el backend rechazaría.
   final bool emissionPathAvailable;
   final List<EcfDocumentTypeCapability> documentTypes;
+
+  /// La empresa habilitó registrar ventas sin comprobante electrónico. Si es
+  /// `false`, el POS no ofrece la opción «Normal» y el backend la rechaza.
+  final bool allowSalesWithoutEcf;
+
+  /// Texto íntegro del aviso fiscal, tal como lo declara el servidor. Se muestra
+  /// sin editar: es un requisito legal, no una etiqueta de interfaz.
+  final String salesWithoutEcfWarning;
 
   factory EcfCapabilities.fromJson(Map<String, dynamic> json) {
     final types = (json['documentTypes'] as List?) ?? const [];
@@ -432,6 +443,8 @@ class EcfCapabilities {
       productionEnabled: json['productionEnabled'] == true,
       allowedTypes: allowed.whereType<String>().toList(growable: false),
       emissionPathAvailable: json['emissionPathAvailable'] == true,
+      allowSalesWithoutEcf: json['allowSalesWithoutEcf'] == true,
+      salesWithoutEcfWarning: _string(json, 'salesWithoutEcfWarning'),
       documentTypes: types
           .whereType<Map>()
           .map(

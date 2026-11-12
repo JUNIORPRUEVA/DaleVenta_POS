@@ -9,6 +9,7 @@ import 'package:daleventa_pos/features/ecf/dosa/dosa_assistant_section.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,7 @@ void main() {
     bool portalOnly = false,
     _PortalApi? portalApi,
     _SessionApi? sessionApi,
+    DosaCertificationSessionApi? realSessionApi,
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -55,7 +57,8 @@ void main() {
         // Por defecto la API de sesiones está deshabilitada: así los casos
         // históricos comprueban el fallback seguro al portal existente.
         dosaCertificationSessionApiProvider.overrideWithValue(
-          sessionApi ??
+          realSessionApi ??
+              sessionApi ??
               _SessionApi(
                 error: DosaCertificationSessionException(
                   'ECF_DOSA_SESSION_DISABLED',
@@ -111,8 +114,8 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 1);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
+    expect(find.text('Postulación electrónica'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsOneWidget);
   });
 
   testWidgets('portal fuera del piloto falla cerrado', (tester) async {
@@ -125,7 +128,7 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 0);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Estado de certificación'), findsNothing);
+    expect(find.text('Postulación electrónica'), findsNothing);
   });
 
   testWidgets('portal sin permiso no consulta ni ofrece acciones', (
@@ -146,7 +149,7 @@ void main() {
     expect(portal.ticketCalls, 0);
     expect(api.stateCalls, 0);
     expect(api.registerCalls, isEmpty);
-    expect(find.text('Estado de certificación'), findsNothing);
+    expect(find.text('Postulación electrónica'), findsNothing);
   });
 
   testWidgets('un solo clic registra la intención y abre el portal', (
@@ -158,16 +161,19 @@ void main() {
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
     expect(portal.ticketCalls, 0);
 
-    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.tap(find.text('Iniciar postulación'));
     await tester.pumpAndSettle();
 
     // Un toque: registra la intención (una vez) y pide el ticket del portal.
     expect(api.registerCalls, hasLength(1));
     expect(portal.ticketCalls, 1);
-    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(
+      find.text('Asistente de certificación electrónica'),
+      findsOneWidget,
+    );
     // La reapertura queda como acción secundaria, no como paso obligatorio.
-    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
-    expect(find.text('Iniciar postulación electrónica'), findsNothing);
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsNothing);
   });
 
   testWidgets('doble clic no duplica la intención ni el ticket', (
@@ -177,7 +183,7 @@ void main() {
     final portal = _PortalApi();
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
-    final button = find.text('Iniciar postulación electrónica');
+    final button = find.text('Iniciar postulación');
 
     // Dos toques dentro del mismo frame: el segundo no debe crear nada nuevo.
     await tester.tap(button);
@@ -211,7 +217,7 @@ void main() {
       sessionApi: sessionApi,
     );
 
-    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.tap(find.text('Iniciar postulación'));
     await tester.pumpAndSettle();
 
     expect(sessionApi.calls, 1);
@@ -234,7 +240,7 @@ void main() {
       sessionApi: sessionApi,
     );
 
-    await tester.tap(find.text('Iniciar postulación electrónica'));
+    await tester.tap(find.text('Iniciar postulación'));
     await tester.pumpAndSettle();
 
     expect(sessionApi.calls, 1);
@@ -250,8 +256,11 @@ void main() {
 
     await pumpSection(tester, api: api, portalOnly: true, portalApi: portal);
 
-    expect(find.text('Estado de certificación'), findsOneWidget);
-    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
+    expect(
+      find.text('Asistente de certificación electrónica'),
+      findsOneWidget,
+    );
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -268,7 +277,7 @@ void main() {
       find.textContaining('Revisa el intento de certificación existente'),
       findsOneWidget,
     );
-    expect(find.text('Volver a abrir el asistente'), findsNothing);
+    expect(find.text('Continuar con el asistente'), findsNothing);
     expect(api.registerCalls, isEmpty);
     expect(portal.ticketCalls, 0);
   });
@@ -285,7 +294,7 @@ void main() {
       portalApi: portal,
     );
 
-    await tester.tap(find.text('Volver a abrir el asistente'));
+    await tester.tap(find.text('Continuar con el asistente'));
     await tester.pump();
     expect(portal.ticketCalls, 1);
 
@@ -366,11 +375,40 @@ void main() {
 
       await pumpSection(tester, api: api);
 
+      // La autorización es el paso obligatorio: se muestra sin desplegarla.
       expect(
         find.text('Autorización administrativa requerida'),
         findsOneWidget,
       );
       expect(find.text('Continuar certificación'), findsNothing);
+      expect(api.authorizeCalls, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'si la autorización no está disponible no se ofrece el formulario',
+    (tester) async {
+      // El backend ya sabe que la acción no puede completarse: interruptor
+      // apagado o expediente que dejó de estar en el Intento 1 original. Un
+      // formulario aquí solo produciría un error al pulsar «Autorizar».
+      final api = _IntentApi(
+        hasSession: true,
+        historicalReviewRequired: true,
+        historicalTransitionAvailable: false,
+      );
+
+      await pumpSection(tester, api: api);
+
+      expect(find.text('Autorización administrativa requerida'), findsNothing);
+      expect(find.text('Continuar certificación'), findsNothing);
+      // El aviso hablaba de un interruptor del servidor y contradecía el
+      // bloqueo real de la empresa, así que ya no se pinta: la sección no
+      // anuncia una gestión interna que el cliente no puede resolver aquí.
+      expect(
+        find.textContaining('no hay ninguna acción pendiente'),
+        findsNothing,
+      );
+      expect(find.textContaining('revisión histórica'), findsNothing);
       expect(api.authorizeCalls, isEmpty);
     },
   );
@@ -464,6 +502,174 @@ void main() {
     expect(find.text('Preparar certificación'), findsNothing);
     expect(find.textContaining('no tiene un RNC verificado'), findsOneWidget);
   });
+
+  group('la ruta la decide el backend, no un código de error', () {
+    /// Dio que devuelve el estado y el cuerpo indicados, sin tocar la red.
+    Dio dioCon(Object? body, int status) {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) => handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.badResponse,
+              response: Response<dynamic>(
+                requestOptions: options,
+                statusCode: status,
+                data: body,
+              ),
+            ),
+          ),
+        ),
+      );
+      return dio;
+    }
+
+    /// Respuesta real del backend con la apertura privada apagada.
+    const cuerpoReal =
+        '{"message":"ECF_DOSA_SESSION_DISABLED","error":"Service Unavailable",'
+        '"statusCode":503}';
+
+    Future<(_PortalApi, _SessionApi)> pulsarCon(
+      WidgetTester tester, {
+      required DosaCertificationMode mode,
+      _SessionApi? sessionApi,
+      Dio? dio,
+    }) async {
+      final portal = _PortalApi();
+      final sessions =
+          sessionApi ??
+          _SessionApi(
+            error: DosaCertificationSessionException(
+              'ECF_DOSA_SESSION_DISABLED',
+            ),
+          );
+      await pumpSection(
+        tester,
+        api: _IntentApi(hasSession: true, certificationMode: mode),
+        portalOnly: true,
+        portalApi: portal,
+        sessionApi: sessions,
+        realSessionApi: dio == null
+            ? null
+            : DosaCertificationSessionApi(dio),
+      );
+      await tester.tap(find.text('Continuar con el asistente'));
+      await tester.pumpAndSettle();
+      return (portal, sessions);
+    }
+
+    testWidgets('modo PUBLIC_PORTAL: no llama a la sesión privada y pide UN '
+        'ticket', (tester) async {
+      // El backend ya declaró que no puede abrir sesiones. El cliente no debe
+      // provocar un 503 ni interpretar nada: va directo al portal.
+      final (portal, sessions) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.publicPortal,
+        // Si se llamara, fallaría de forma visible.
+        sessionApi: _SessionApi(
+          error: DosaCertificationSessionException('NO_DEBIO_LLAMARSE'),
+        ),
+      );
+
+      expect(sessions.calls, 0);
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('modo PRIVATE_SESSION + apertura deshabilitada (cuerpo real): '
+        'cae al portal una sola vez', (tester) async {
+      final (portal, _) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.privateSession,
+        dio: dioCon(cuerpoReal, 503),
+      );
+
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('backend antiguo sin modo: intenta la sesión y solo un estado '
+        'explícito abre el portal', (tester) async {
+      final (portal, sessions) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.unknown,
+      );
+
+      expect(sessions.calls, 1); // sí se intentó la sesión privada
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('modo PRIVATE_SESSION + cifrado no configurado: cae al portal', (
+      tester,
+    ) async {
+      final (portal, _) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.privateSession,
+        sessionApi: _SessionApi(
+          error: DosaCertificationSessionException(
+            'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED',
+          ),
+        ),
+      );
+
+      expect(portal.ticketCalls, 1);
+    });
+
+    testWidgets('modo PRIVATE_SESSION + error desconocido (sin respuesta): NO '
+        'pide ticket ni duplica', (tester) async {
+      // Un fallo de transporte no dice si el proveedor abrió algo: no autoriza
+      // continuar por otra vía.
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) => handler.reject(
+            DioException.connectionError(
+              requestOptions: options,
+              reason: 'sin respuesta',
+            ),
+          ),
+        ),
+      );
+      final (portal, _) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.privateSession,
+        dio: dio,
+      );
+
+      expect(portal.ticketCalls, 0);
+      expect(
+        find.textContaining('No se pudo iniciar la postulación'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('modo PRIVATE_SESSION + 503 sin código legible: NO pide ticket', (
+      tester,
+    ) async {
+      final (portal, _) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.privateSession,
+        dio: dioCon('<html>error</html>', 503),
+      );
+
+      expect(portal.ticketCalls, 0);
+    });
+
+    testWidgets('resultado incierto: NO pide ticket ni duplica', (
+      tester,
+    ) async {
+      final (portal, _) = await pulsarCon(
+        tester,
+        mode: DosaCertificationMode.privateSession,
+        sessionApi: _SessionApi(
+          error: DosaCertificationSessionException(
+            'ECF_DOSA_SESSION_UNCERTAIN',
+          ),
+        ),
+      );
+
+      expect(portal.ticketCalls, 0);
+    });
+  });
 }
 
 class _FixedAuthController extends AuthController {
@@ -513,7 +719,9 @@ class _IntentApi implements DosaCertificationIntentApi {
     this.hasSession = false,
     this.provider = 'DOSA',
     this.historicalReviewRequired = false,
+    this.historicalTransitionAvailable,
     this.sessionReusable = false,
+    this.certificationMode = DosaCertificationMode.privateSession,
   });
 
   final List<String> blockingReasons;
@@ -522,7 +730,15 @@ class _IntentApi implements DosaCertificationIntentApi {
   final bool hasSession;
   final String provider;
   bool historicalReviewRequired;
+
+  /// `null` = el doble declara disponible siempre que haya revisión, que es el
+  /// caso normal. Un test puede forzar `false` para simular un despliegue con
+  /// el interruptor apagado o un expediente ya iniciado.
+  final bool? historicalTransitionAvailable;
   final bool sessionReusable;
+
+  /// Modo que declara el backend: decide la ruta sin interpretar errores.
+  final DosaCertificationMode certificationMode;
   final List<String?> registerCalls = <String?>[];
   final List<_AuthorizeCall> authorizeCalls = <_AuthorizeCall>[];
   int stateCalls = 0;
@@ -538,6 +754,13 @@ class _IntentApi implements DosaCertificationIntentApi {
       'canRegister': blockingReasons.isEmpty,
       'blockingReasons': blockingReasons,
       'historicalReviewRequired': historicalReviewRequired,
+      'historicalTransitionAvailable':
+          historicalTransitionAvailable ?? historicalReviewRequired,
+      'certificationMode': switch (certificationMode) {
+        DosaCertificationMode.privateSession => 'PRIVATE_SESSION',
+        DosaCertificationMode.publicPortal => 'PUBLIC_PORTAL',
+        DosaCertificationMode.unknown => null,
+      },
       if (hasSession)
         'session': {
           'id': 'session-1',

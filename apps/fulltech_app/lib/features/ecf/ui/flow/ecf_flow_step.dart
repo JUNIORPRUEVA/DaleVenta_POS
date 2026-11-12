@@ -8,15 +8,15 @@ import 'ecf_flow_kit.dart';
 /// Es una agrupación de PRESENTACIÓN: no crea estados nuevos ni sustituye al
 /// backend. El paso que se muestra al abrir la pantalla se deduce del expediente
 /// real (ver `initialEcfFlowStep`).
-enum EcfFlowStep { welcome, company, preparation, tracking }
+enum EcfFlowStep { welcome, preparation, tracking, authorization }
 
 extension EcfFlowStepLabels on EcfFlowStep {
   /// Etiqueta corta para la guía de pasos.
   String get railLabel => switch (this) {
     EcfFlowStep.welcome => 'Bienvenida',
-    EcfFlowStep.company => 'Empresa',
     EcfFlowStep.preparation => 'Preparación',
-    EcfFlowStep.tracking => 'Seguimiento',
+    EcfFlowStep.tracking => 'Tu postulación',
+    EcfFlowStep.authorization => 'Autorización',
   };
 }
 
@@ -26,9 +26,8 @@ extension EcfFlowStepLabels on EcfFlowStep {
 ///  * Si la empresa todavía no empezó nada, se empieza por la bienvenida.
 ///  * Si ya hay expediente, requisitos resueltos o autorización, se entra
 ///    directamente a la etapa en la que está: nunca se reinicia el recorrido.
-///  * Cuando el certificado lo gestiona el asistente oficial de DOSA
-///    (`dosaOwnsCertificate`), su validación previa en FullPOS deja de ser un
-///    requisito para avanzar: no se pide dos veces la misma cosa.
+///  * Los datos de la empresa y el correo fiscal viven en Preparación, no en un
+///    paso separado: el cliente ve un único recorrido de tres etapas.
 EcfFlowStep initialEcfFlowStep({
   required String state,
   required bool hasResolvedRequirement,
@@ -37,24 +36,23 @@ EcfFlowStep initialEcfFlowStep({
   required bool certificateValidated,
   required bool testsOrLater,
   bool dosaOwnsCertificate = false,
+  bool postulationStarted = false,
 }) {
-  if (officialAuthorization || testsOrLater) return EcfFlowStep.tracking;
+  // Con la autorización ya registrada el recorrido termina en ese paso: es el
+  // último y el único que queda del lado del cliente.
+  if (officialAuthorization) return EcfFlowStep.authorization;
+  // Con la postulación ya abierta el recorrido continúa en Seguimiento: es la
+  // etapa real del trámite y desde ahí se llega a la autorización. Sin esto una
+  // empresa con la postulación cerrada volvía a Preparación, donde ya no queda
+  // nada que iniciar y no existía ninguna forma de avanzar.
+  if (postulationStarted) return EcfFlowStep.tracking;
+  // Un expediente que ya pasó las pruebas sigue en seguimiento: el trámite con
+  // la DGII no ha terminado todavía.
+  if (testsOrLater) return EcfFlowStep.tracking;
   final started =
       state != 'NOT_STARTED' || hasResolvedRequirement || certificateValidated;
   if (!started) return EcfFlowStep.welcome;
-  if (!fiscalReady || (!certificateValidated && !dosaOwnsCertificate)) {
-    return EcfFlowStep.company;
-  }
   return EcfFlowStep.preparation;
-}
-
-/// Paso siguiente del recorrido. Tras el último vuelve al primero, para poder
-/// repasar el diseño completo sin reiniciar la aplicación.
-EcfFlowStep nextEcfFlowStep(EcfFlowStep current) {
-  final next = current.index + 1;
-  return next >= EcfFlowStep.values.length
-      ? EcfFlowStep.values.first
-      : EcfFlowStep.values[next];
 }
 
 /// Guía de pasos. Vertical en escritorio, en tira horizontal en móvil.
@@ -64,21 +62,30 @@ class EcfStepRail extends StatelessWidget {
     required this.current,
     required this.onSelect,
     this.horizontal = false,
-    this.allowForward = false,
+    this.furthest,
   });
 
   final EcfFlowStep current;
 
-  /// Solo se permite volver a un paso anterior; hacia delante manda el flujo.
-  /// Quien gestiona el proceso (administración) sí puede saltar al seguimiento.
+  /// Solo se permite moverse por lo que el estado ya justifica.
   final ValueChanged<EcfFlowStep> onSelect;
 
   final bool horizontal;
 
-  final bool allowForward;
+  /// Último paso que la empresa ya alcanzó según su expediente real.
+  ///
+  /// Antes el rail solo permitía retroceder: un paso que se quedaba sin
+  /// acciones dejaba al cliente sin ninguna salida. Ahora se puede volver a
+  /// cualquier paso ya alcanzado, y el avance lo sigue decidiendo el estado.
+  final EcfFlowStep? furthest;
 
+  /// Se puede volver a un paso ya alcanzado y, desde el seguimiento, abrir el
+  /// paso de autorización: es la acción que cierra el trámite y el cliente no
+  /// debe tener que adivinar cómo llegar a ella.
   bool _reachable(int index) =>
-      index <= current.index || (allowForward && index != current.index);
+      index <= (furthest ?? current).index ||
+      (EcfFlowStep.values[index] == EcfFlowStep.authorization &&
+          current.index >= EcfFlowStep.tracking.index);
 
   @override
   Widget build(BuildContext context) {

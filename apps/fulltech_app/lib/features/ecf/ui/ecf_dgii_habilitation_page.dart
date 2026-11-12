@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -16,6 +18,7 @@ import '../data/ecf_platform_repository.dart';
 import '../data/ecf_repository.dart';
 import '../dosa/dosa_assistant_section.dart';
 import '../dosa/dosa_certification_diagnostic_section.dart';
+import '../dosa/dosa_certification_intent_api.dart';
 import '../domain/ecf_fiscal_readiness.dart';
 import '../ecf_certificate_models.dart';
 import '../ecf_certification_models.dart';
@@ -26,9 +29,13 @@ import 'ecf_dgii_application_wizard.dart';
 import 'ecf_fiscal_data_page.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_support_grant_card.dart';
-import 'flow/ecf_company_step.dart';
+import 'debug/ecf_debug_screen_selector.dart';
+import 'flow/ecf_authorization_step.dart';
+import 'flow/ecf_completed_view.dart';
+import 'flow/ecf_dosa_activation_status.dart';
+import 'flow/ecf_sequence_range_section.dart';
+import 'flow/ecf_dosa_tracking_step.dart';
 import 'flow/ecf_flow_kit.dart';
-import 'flow/ecf_flow_preview_button.dart';
 import 'flow/ecf_flow_step.dart';
 import 'flow/ecf_preparation_step.dart';
 import 'flow/ecf_tracking_step.dart';
@@ -49,7 +56,12 @@ import 'flow/ecf_welcome_step.dart';
 ///  * Todos los datos provienen de la empresa autenticada: la aplicación nunca
 ///    envía un `companyId`.
 class EcfDgiiHabilitationPage extends ConsumerStatefulWidget {
-  const EcfDgiiHabilitationPage({super.key});
+  const EcfDgiiHabilitationPage({super.key, this.adminView = false});
+
+  /// Interfaz administrativa separada: diagnóstico, detalle técnico,
+  /// evidencias y autorización histórica. Nunca forma parte del recorrido del
+  /// cliente; se abre en su propia ruta y exige el permiso administrativo.
+  final bool adminView;
 
   @override
   ConsumerState<EcfDgiiHabilitationPage> createState() =>
@@ -58,21 +70,11 @@ class EcfDgiiHabilitationPage extends ConsumerStatefulWidget {
 
 class _EcfDgiiHabilitationPageState
     extends ConsumerState<EcfDgiiHabilitationPage> {
-  /// RNC de la empresa de prueba con la que se compila la vista previa del
-  /// diseño. Vacío en cualquier compilación normal: sin esta variable el botón
-  /// de salto no existe.
-  static const _previewRnc = String.fromEnvironment(
-    'ECF_FLOW_PREVIEW_RNC',
-    defaultValue: '',
-  );
-
-  bool _previewFor(CompanySettings? settings) =>
-      _previewRnc.isNotEmpty &&
-      (settings?.rnc ?? '').trim() == _previewRnc.trim();
-
   bool _busy = false;
+  EcfDebugScreen? _debugScreen;
   bool _applicationOpen = false;
   bool _fiscalOpen = false;
+  bool _certificateOpen = false;
   bool _activationOpen = false;
   bool _submissionGuideOpen = false;
 
@@ -80,7 +82,6 @@ class _EcfDgiiHabilitationPageState
   ///
   /// El avance se decide con la respuesta persistida del backend. El informe
   /// temporal se invalida al cambiar archivo o contraseña.
-  EcfCertificateGate _certificateGate = EcfCertificateGate.pending;
   EcfCertificateReport? _verifiedCertificate;
   String? _verifiedCertificateFileName;
   bool _certificateRestarted = false;
@@ -99,13 +100,31 @@ class _EcfDgiiHabilitationPageState
     setState(() => _step = step);
   }
 
+  /// El cierre del trámite desemboca en el punto de venta.
+  ///
+  /// Las capacidades se releen al entrar: acaban de cambiar —la empresa pasó a
+  /// estar autorizada— y el vendedor necesita los comprobantes disponibles al
+  /// cobrar, no la foto anterior.
+  void _goToSales() {
+    ref.invalidate(ecfCapabilitiesProvider);
+    context.go(Routes.cotizaciones);
+  }
+
   void _navigateBack() {
+    if (kDebugMode && _debugScreen != null) {
+      setState(() => _debugScreen = null);
+      return;
+    }
     if (_applicationOpen) {
       _wizardKey.currentState?.goBack();
       return;
     }
     if (_activationOpen) {
       setState(() => _activationOpen = false);
+      return;
+    }
+    if (_certificateOpen) {
+      setState(() => _certificateOpen = false);
       return;
     }
     if (_fiscalOpen) {
@@ -117,12 +136,18 @@ class _EcfDgiiHabilitationPageState
       setState(() => _step = EcfFlowStep.values[step.index - 1]);
       return;
     }
-    context.go(Routes.configuracion);
+    // En la primera pantalla no hay paso anterior: se vuelve a la pantalla
+    // principal, que el router resuelve según el rol. Antes se enviaba a
+    // Configuración, que en escritorio redirige a otra pantalla y dejaba al
+    // usuario fuera del módulo.
+    context.go(Routes.home);
   }
 
   bool get _canGoBack =>
+      (kDebugMode && _debugScreen != null) ||
       _applicationOpen ||
       _activationOpen ||
+      _certificateOpen ||
       _fiscalOpen ||
       (_step != null && _step != EcfFlowStep.welcome);
 
@@ -134,18 +159,30 @@ class _EcfDgiiHabilitationPageState
   void initState() {
     super.initState();
     ref.listenManual(
-      authStateProvider.select(
-        (state) =>
-            (state.isAuthenticated, state.user?.id, state.user?.companyId),
-      ),
+      authStateProvider.select((state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      )),
       (previous, next) {
         if (previous == next || !mounted) return;
+        // Todo lo que muestra esta pantalla pertenece a la empresa y a la
+        // sesión: al cambiar de empresa se descarta para no enseñar el
+        // expediente, la preparación ni el intento de la empresa anterior.
+        ref.invalidate(ecfDgiiHabilitationProvider);
+        ref.invalidate(ecfDgiiHistoryProvider);
+        ref.invalidate(ecfPreparationProvider);
+        ref.invalidate(ecfActivationProgressProvider);
+        ref.invalidate(ecfSupportGrantsProvider);
+        ref.invalidate(companySettingsProvider);
+        ref.invalidate(dosaIntentStateProvider);
         setState(() {
           _step = null;
+          _debugScreen = null;
           _fiscalOpen = false;
+          _certificateOpen = false;
           _applicationOpen = false;
           _activationOpen = false;
-          _certificateGate = EcfCertificateGate.pending;
           _verifiedCertificate = null;
           _verifiedCertificateFileName = null;
           _certificateRestarted = false;
@@ -165,6 +202,15 @@ class _EcfDgiiHabilitationPageState
             tooltip: 'Ayuda y soporte',
             onPressed: _openSupport,
           ),
+          // Exclusivo de depuración. En release esta rama es constante y el
+          // selector no se registra ni se puede habilitar por URL/dart-define.
+          if (kDebugMode)
+            DesktopShellActionItem(
+              icon: Icons.visibility_outlined,
+              tooltip: 'Ver pantallas (solo depuración)',
+              label: 'Ver pantallas',
+              onPressed: _showDebugScreens,
+            ),
         ],
       );
     });
@@ -334,28 +380,6 @@ class _EcfDgiiHabilitationPageState
     );
   }
 
-  /// Seguimiento interno de UN requisito: quién lo lleva y para cuándo.
-  Future<void> _editRequirementTracking(
-    EcfDgiiRequirementProgress requirement,
-  ) async {
-    final input = await showDialog<_RequirementTrackingInput>(
-      context: context,
-      builder: (context) =>
-          _RequirementTrackingDialog(requirement: requirement),
-    );
-    if (input == null) return;
-    await _run(
-      () => ref
-          .read(ecfRepositoryProvider)
-          .updateDgiiRequirement(
-            key: requirement.key,
-            status: input.status,
-            note: input.note,
-            dueDate: input.dueDate,
-          ),
-    );
-  }
-
   Future<void> _revokeAuthorization() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -402,8 +426,93 @@ class _EcfDgiiHabilitationPageState
     );
   }
 
+  Future<void> _showDebugScreens() async {
+    if (!kDebugMode) return;
+    final selected = await showModalBottomSheet<EcfDebugScreen>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 4, 8, 10),
+                child: Text(
+                  'Ver pantallas',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              for (final screen in EcfDebugScreen.values)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(
+                    Icons.visibility_outlined,
+                    size: 19,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    screen.label,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: _debugScreen == screen
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          size: 18,
+                          color: AppColors.primary,
+                        )
+                      : const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                  onTap: () => Navigator.of(context).pop(screen),
+                ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: EcfInlineNote(
+                  tone: EcfTone.pending,
+                  icon: Icons.info_outline_rounded,
+                  text:
+                      'Solo depuración. Estas vistas usan datos en memoria y no ejecutan acciones del backend.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() => _debugScreen = selected);
+  }
+
+  Widget _buildDebugPreview(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: EcfDebugPreview(
+          screen: _debugScreen!,
+          onExit: () => setState(() => _debugScreen = null),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode && _debugScreen != null) {
+      return _buildDebugPreview(context);
+    }
     final user = ref.watch(authStateProvider).user;
     // Cada acción se gatea con EL MISMO permiso que valida `RolesGuard` en el
     // backend. Mostrar un botón que el servidor va a rechazar es peor que no
@@ -428,12 +537,42 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.manageEcfOnboarding,
     );
+    // Permiso propio de la numeración: el backend lo exige con
+    // `manageEcfSequences`, así que la sección se gatea con el mismo.
+    final canManageSequences = hasUserPermission(
+      user,
+      AppPermission.manageEcfSequences,
+    );
+    // El diagnóstico y los registros técnicos son herramientas de soporte.
+    final isPlatformStaff =
+        ref.watch(ecfPlatformStaffProvider).valueOrNull == true;
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
-    // El certificado solo lo gestiona DOSA cuando DOSA es el proveedor efectivo
-    // de la empresa. El permiso habilita la acción, pero no cambia el proveedor:
-    // una empresa con Alanube debe seguir viendo su carga local del certificado.
+    // El certificado lo gestiona DOSA cuando DOSA gobierna la certificación de
+    // la empresa. Dos fuentes, ambas del backend, y basta con una:
+    //
+    //  * La configuración e-CF ya declara DOSA.
+    //  * Existe un intento de certificación atribuido a DOSA (tras la
+    //    reconciliación auditada), aunque la configuración conserve el valor
+    //    anterior. Sin esto, una empresa reconciliada seguía viendo «Validar
+    //    certificado» y nunca llegaba al asistente oficial.
+    //
+    // Sin intento NO se asume nada: el backend informa `DOSA` por defecto
+    // cuando no hay expediente, y eso ocultaría la carga local del certificado
+    // a una empresa que todavía no ha decidido su proveedor.
+    final intentState = ref.watch(dosaIntentStateProvider).valueOrNull;
+    final intentIsDosa =
+        intentState != null &&
+        intentState.sessionId != null &&
+        intentState.provider == 'DOSA';
     final dosaOwnsCertificate =
-        canOnboard && habilitation.valueOrNull?.provider == 'DOSA';
+        canOnboard &&
+        (habilitation.valueOrNull?.provider == 'DOSA' || intentIsDosa);
+    // El intento de certificación ya existe: la postulación está abierta y en
+    // Preparación no queda nada que iniciar. Es la señal de postulación que
+    // publica el backend; el `externalId` del expediente es la autorización de
+    // la DGII, no la postulación.
+    final postulationStarted =
+        (intentState?.sessionId ?? '').trim().isNotEmpty;
     final settingsState = ref.watch(companySettingsProvider);
     final settings = settingsState.valueOrNull;
 
@@ -465,222 +604,277 @@ class _EcfDgiiHabilitationPageState
                       : settingsState.hasError || settings == null
                       ? _ErrorBody(onRetry: _refresh)
                       : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final fiscalReady = fiscalDataReady(settings);
-                            final stage = _stageOf(
-                              view.progress,
-                              view.state,
-                              fiscalReady: fiscalReady,
-                            );
-                            // El paso se deduce del expediente real mientras la persona no
-                            // navegue: al volver a la pantalla se entra en la etapa actual
-                            // y nunca se reinicia la postulación.
-                            var step =
-                                _step ??
-                                initialEcfFlowStep(
-                                  state: view.state,
-                                  hasResolvedRequirement:
-                                      view.progress.resolvedCount > 0 ||
-                                      view.progress.requirements.any(
-                                        (item) => item.resolved,
-                                      ),
-                                  officialAuthorization:
-                                      view.officialAuthorization,
-                                  fiscalReady: fiscalReady,
-                                  certificateValidated: _certificateReady(view),
-                                  dosaOwnsCertificate: dosaOwnsCertificate,
-                                  testsOrLater:
-                                      stage == _EcfStage.tests ||
-                                      stage == _EcfStage.activation,
-                                );
-                            // Sin datos fiscales no hay nada que preparar: se resuelven
-                            // primero, en su propio paso, para no mostrar acciones que el
-                            // backend rechazaría. La vista previa del diseño sí puede
-                            // recorrer todas las pantallas.
-                            final preview = _previewFor(settings);
-                            if (!fiscalReady &&
-                                step != EcfFlowStep.welcome &&
-                                !preview) {
-                              step = EcfFlowStep.company;
-                            }
-                            final wide = constraints.maxWidth >= 900;
-                            final preparation = ref.watch(
-                              ecfPreparationProvider,
-                            );
-                            final activation = ref.watch(
-                              ecfActivationProgressProvider,
-                            );
+                    builder: (context, constraints) {
+                      final fiscalReady = fiscalDataReady(settings);
+                      final contactEmailReady = isEcfContactEmailValid(
+                        settings.ecfContactEmail,
+                      );
+                      final stage = _stageOf(
+                        view.progress,
+                        view.state,
+                        fiscalReady: fiscalReady,
+                      );
+                      // La administración es un destino propio, no una capa
+                      // encima del recorrido: al entrar por «Administrar» se
+                      // abre aquí, sin reiniciar la bienvenida ni repetir
+                      // Preparación y Postulación.
+                      if (widget.adminView) {
+                        return _adminScreen(
+                          view,
+                          stage: stage,
+                          dosaPosted: intentIsDosa,
+                          settings: settings,
+                          hasContent:
+                              canRegisterEvidence ||
+                              canRecordAuthorization ||
+                              isPlatformStaff,
+                        );
+                      }
+                      // Proceso terminado: la empresa ya está autorizada a emitir.
+                      // Volver a los pasos haría creer que falta algo, así que el
+                      // módulo abre en el cierre y desde ahí se va a facturar.
+                      if (_invoicingReady(view)) {
+                        return EcfCompletedView(
+                          onGoToSales: _goToSales,
+                          onViewDocuments: () =>
+                              context.go(Routes.ecfDocuments),
+                        );
+                      }
+                      // El paso se deduce del expediente real mientras la persona no
+                      // navegue: al volver a la pantalla se entra en la etapa actual
+                      // y nunca se reinicia la postulación.
+                      var step =
+                          _step ??
+                          initialEcfFlowStep(
+                            state: view.state,
+                            hasResolvedRequirement:
+                                view.progress.resolvedCount > 0 ||
+                                view.progress.requirements.any(
+                                  (item) => item.resolved,
+                                ),
+                            officialAuthorization: view.officialAuthorization,
+                            fiscalReady: fiscalReady,
+                            certificateValidated: _certificateReady(view),
+                            dosaOwnsCertificate: dosaOwnsCertificate,
+                            postulationStarted: postulationStarted,
+                            testsOrLater:
+                                stage == _EcfStage.tests ||
+                                stage == _EcfStage.activation,
+                          );
+                      // Si el expediente ya avanzó pero faltan datos, se vuelve a
+                      // la única pantalla que puede resolverlos: Preparación.
+                      if ((!fiscalReady || !contactEmailReady) &&
+                          step == EcfFlowStep.tracking) {
+                        step = EcfFlowStep.preparation;
+                      }
+                      final wide = constraints.maxWidth >= 900;
+                      final preparation = ref.watch(ecfPreparationProvider);
+                      final activation = ref.watch(
+                        ecfActivationProgressProvider,
+                      );
 
-                            final Widget body;
-                            if (_applicationOpen) {
-                              body = Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: EcfDgiiApplicationWizard(
-                                  key: _wizardKey,
-                                  embedded: true,
-                                  onClose: () => setState(() {
-                                    // Cerrar el expediente devuelve al paso de la
-                                    // empresa, donde viven los datos fiscales: nunca a
-                                    // un paso intermedio sin contexto.
-                                    _applicationOpen = false;
-                                    _fiscalOpen = true;
-                                    _step = EcfFlowStep.company;
-                                  }),
-                                  onSubmitted: () => setState(() {
-                                    _applicationOpen = false;
-                                    _step = EcfFlowStep.tracking;
-                                  }),
-                                ),
-                              );
-                            } else if (_activationOpen) {
-                              body = const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: EcfActivationPage(embedded: true),
-                              );
-                            } else if (step == EcfFlowStep.company &&
-                                (_fiscalOpen || (!fiscalReady && !preview))) {
-                              body = Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: EcfFiscalDataContent(
-                                  compact: true,
-                                  onSaved: () =>
-                                      setState(() => _fiscalOpen = false),
-                                  onClose: fiscalReady
-                                      ? () =>
-                                            setState(() => _fiscalOpen = false)
-                                      : null,
-                                ),
-                              );
-                            } else {
-                              body = switch (step) {
-                                EcfFlowStep.welcome => EcfWelcomeStep(
-                                  videoUrl:
-                                      preparation.valueOrNull?.videoUrl ?? '',
-                                  wide: wide,
-                                  onStart: () => _goToStep(EcfFlowStep.company),
-                                ),
-                                EcfFlowStep.company => EcfCompanyStep(
-                                  settings: settings,
-                                  fiscalReady: fiscalReady,
-                                  wide: wide,
-                                  // El paso decide con el estado real: mientras el
-                                  // certificado no sea utilizable y del titular, no
-                                  // deja avanzar y explica qué falta.
-                                  certificateReady: _certificateReady(view),
-                                  certificateVerifiedHere:
-                                      _verifiedCertificate != null ||
-                                      view.certificateValidation?.ready == true,
-                                  dosaOwnsCertificate: dosaOwnsCertificate,
-                                  certificateBlockedReason:
-                                      _certificateBlockedReason(view),
-                                  certificate: EcfCertificateCard(
-                                    persistedValidation: _certificateRestarted
-                                        ? null
-                                        : view.certificateValidation,
-                                    onRestart: () async {
-                                      await ref
-                                          .read(
-                                            ecfCertificateRepositoryProvider,
-                                          )
-                                          .restart();
-                                      if (mounted) {
-                                        setState(
-                                          () => _certificateRestarted = true,
-                                        );
-                                      }
-                                    },
-                                    initialReport: _verifiedCertificate,
-                                    initialFileName:
-                                        _verifiedCertificateFileName,
-                                    onVerified: (report, fileName) {
-                                      setState(() {
-                                        _verifiedCertificate = report;
-                                        _verifiedCertificateFileName = fileName;
-                                        _certificateRestarted = false;
-                                      });
-                                      ref.invalidate(
-                                        ecfDgiiHabilitationProvider,
-                                      );
-                                    },
-                                    onGateChanged: (gate) => setState(() {
-                                      _certificateGate = gate;
-                                      if (!gate.ready) {
-                                        _verifiedCertificate = null;
-                                        _verifiedCertificateFileName = null;
-                                      }
+                      final Widget body;
+                      // El expediente y la activación heredados solo se usan
+                      // cuando DOSA no es el proveedor efectivo. Una empresa con
+                      // DOSA no vuelve a ver formularios ni etapas duplicadas.
+                      if (_applicationOpen && !dosaOwnsCertificate) {
+                        body = Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: EcfDgiiApplicationWizard(
+                            key: _wizardKey,
+                            embedded: true,
+                            onClose: () => setState(() {
+                              _applicationOpen = false;
+                              _fiscalOpen = true;
+                              _step = EcfFlowStep.preparation;
+                            }),
+                            onSubmitted: () => setState(() {
+                              _applicationOpen = false;
+                              _step = EcfFlowStep.tracking;
+                            }),
+                          ),
+                        );
+                      } else if (_activationOpen && !dosaOwnsCertificate) {
+                        body = const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: EcfActivationPage(embedded: true),
+                        );
+                      } else if (_certificateOpen && !dosaOwnsCertificate) {
+                        body = Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: EcfCertificateCard(
+                            persistedValidation: _certificateRestarted
+                                ? null
+                                : view.certificateValidation,
+                            onRestart: () async {
+                              await ref
+                                  .read(ecfCertificateRepositoryProvider)
+                                  .restart();
+                              if (mounted) {
+                                setState(() => _certificateRestarted = true);
+                              }
+                            },
+                            initialReport: _verifiedCertificate,
+                            initialFileName: _verifiedCertificateFileName,
+                            onVerified: (report, fileName) {
+                              setState(() {
+                                _verifiedCertificate = report;
+                                _verifiedCertificateFileName = fileName;
+                                _certificateRestarted = false;
+                                _certificateOpen = false;
+                              });
+                              ref.invalidate(ecfDgiiHabilitationProvider);
+                            },
+                            onGateChanged: (gate) => setState(() {
+                              if (!gate.ready) {
+                                _verifiedCertificate = null;
+                                _verifiedCertificateFileName = null;
+                              }
+                            }),
+                          ),
+                        );
+                      } else if (_fiscalOpen) {
+                        body = Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: EcfFiscalDataContent(
+                            compact: true,
+                            onSaved: () => setState(() => _fiscalOpen = false),
+                            onClose: fiscalReady
+                                ? () => setState(() => _fiscalOpen = false)
+                                : null,
+                          ),
+                        );
+                      } else {
+                        body = switch (step) {
+                          EcfFlowStep.welcome => EcfWelcomeStep(
+                            videoUrl: preparation.valueOrNull?.videoUrl ?? '',
+                            wide: wide,
+                            onStart: () =>
+                                _goToStep(EcfFlowStep.preparation),
+                          ),
+                          EcfFlowStep.preparation => EcfPreparationStep(
+                            settings: settings,
+                            companyReady: fiscalReady,
+                            contactEmailReady: contactEmailReady,
+                            certificateReady: _certificateReady(view),
+                            dosaOwnsCertificate: dosaOwnsCertificate,
+                            // Si la postulación ya está abierta, esta etapa
+                            // no la vuelve a ofrecer: deja continuar.
+                            postulationStarted: postulationStarted,
+                            onContinue: () =>
+                                _goToStep(EcfFlowStep.tracking),
+                            dosaEntry:
+                                dosaOwnsCertificate &&
+                                    fiscalReady &&
+                                    contactEmailReady &&
+                                    canOnboard
+                                ? DosaAssistantSection(
+                                    key: ValueKey(
+                                      'dosa-preparation-${user?.companyId}',
+                                    ),
+                                    portalOnly: true,
+                                    postulationExternalId: view.externalId,
+                                    onSessionOpened: () => setState(() {
+                                      _step = EcfFlowStep.tracking;
                                     }),
-                                  ),
-                                  onEditFiscalData: () =>
-                                      setState(() => _fiscalOpen = true),
-                                  onContinue: () =>
-                                      _goToStep(EcfFlowStep.preparation),
-                                ),
-                                EcfFlowStep.preparation => EcfPreparationStep(
-                                  companyReady: fiscalReady,
-                                  certificateReady: _certificateReady(view),
-                                  dosaOwnsCertificate: dosaOwnsCertificate,
-                                  dosaEntry:
-                                      hasUserPermission(
-                                        user,
-                                        AppPermission.manageEcfOnboarding,
-                                      )
-                                      ? Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            // Abrir el portal solo exige los datos de
-                                            // la empresa y el permiso administrativo.
-                                            // El certificado lo pide DOSA dentro de su
-                                            // propio asistente: no se duplica aquí.
-                                            if (fiscalReady) ...[
-                                              DosaAssistantSection(
-                                                key: ValueKey(
-                                                  'dosa-preparation-${user?.companyId}',
-                                                ),
-                                                portalOnly: true,
-                                                postulationExternalId:
-                                                    view.externalId,
-                                              ),
-                                              const SizedBox(height: 12),
-                                            ],
-                                            DosaCertificationDiagnosticSection(
-                                              key: ValueKey(
-                                                'dosa-diagnostic-${user?.companyId}',
-                                              ),
-                                            ),
-                                          ],
+                                  )
+                                : null,
+                            // El estado de la certificación y la firma viven en
+                            // su propio paso (Autorización). Repetirlos aquí
+                            // duplicaba el mismo aviso en dos pantallas.
+                            activation: null,
+                            sequence: dosaOwnsCertificate && canManageSequences
+                                ? EcfSequenceRangeSection(
+                                    key: ValueKey(
+                                      'dosa-sequences-preparation-${user?.companyId}',
+                                    ),
+                                    canManage: canManageSequences,
+                                  )
+                                : null,
+                            simulationAvailable:
+                                preparation.valueOrNull?.simulationAvailable ??
+                                false,
+                            simulationBadge:
+                                preparation.valueOrNull?.simulationBadge,
+                            simulationReason:
+                                preparation.valueOrNull?.simulationReason,
+                            canManage: canManage,
+                            busy: _busy,
+                            onStart: _startIntelligentCertification,
+                            onEditFiscalData: () =>
+                                setState(() => _fiscalOpen = true),
+                            onGoCompany: () =>
+                                setState(() => _fiscalOpen = true),
+                            onGoCertificate: () =>
+                                setState(() => _certificateOpen = true),
+                          ),
+                          EcfFlowStep.tracking => dosaOwnsCertificate
+                              ? EcfDosaTrackingStep(
+                                  // Con la postulación registrada, el estado del
+                                  // expediente interno —que sigue en
+                                  // `NOT_STARTED`— no describe nada: diría «Sin
+                                  // iniciar» sobre un trámite ya presentado,
+                                  // encima del aviso de lo que falta para
+                                  // facturar. Se informa lo que consta y el
+                                  // detalle lo da la tarjeta de abajo.
+                                  milestone: postulationStarted
+                                      ? 1
+                                      : _milestoneOf(stage).index,
+                                  statusLabel: postulationStarted
+                                      ? 'Postulación registrada'
+                                      : _clientStateLabel(view),
+                                  statusMessage: postulationStarted
+                                      ? 'Tu postulación está registrada con DOSA. '
+                                            'Abajo tienes lo que falta para poder '
+                                            'facturar electrónicamente.'
+                                      : _clientStatusMessage(view),
+                                  official: view.officialAuthorization,
+                                  activation: canOnboard
+                                      ? EcfDosaActivationStatus(
+                                          key: ValueKey(
+                                            'dosa-activation-tracking-${user?.companyId}',
+                                          ),
+                                          canManage: canOnboard,
                                         )
                                       : null,
-                                  dgiiAccessReady: _requirementResolved(
-                                    view,
-                                    'REQUIREMENTS',
-                                  ),
-                                  pendingRequirements: view
-                                      .progress
-                                      .requirements
-                                      .where(
-                                        (item) =>
-                                            !item.resolved && item.mandatory,
-                                      )
-                                      .length,
-                                  simulationAvailable:
-                                      preparation
-                                          .valueOrNull
-                                          ?.simulationAvailable ??
-                                      false,
-                                  simulationBadge:
-                                      preparation.valueOrNull?.simulationBadge,
-                                  simulationReason:
-                                      preparation.valueOrNull?.simulationReason,
-                                  canManage: canManage,
-                                  busy: _busy,
-                                  onStart: _startIntelligentCertification,
-                                  onGoCompany: () =>
-                                      _goToStep(EcfFlowStep.company),
-                                  onGoCertificate: () =>
-                                      _goToStep(EcfFlowStep.company),
-                                ),
-                                EcfFlowStep.tracking => _trackingStep(
+                                  // La firma es el único paso que queda del lado
+                                  // del cliente: se ofrece explícita. Vivia solo
+                                  // en el rail lateral y el cliente no descubría
+                                  // que tenía que pulsarlo para terminar.
+                                  next: view.authorizationSource == 'NONE'
+                                      ? EcfPrimaryAction(
+                                          label: 'Continuar a autorización',
+                                          icon: Icons.arrow_forward_rounded,
+                                          onPressed: () => _goToStep(
+                                            EcfFlowStep.authorization,
+                                          ),
+                                          helper:
+                                              'Falta tu firma para que FullPOS Cloud pueda emitir en tu nombre.',
+                                          buttonKey: const ValueKey(
+                                            'ecf_tracking_continue_authorization',
+                                          ),
+                                        )
+                                      : null,
+                                  sequence: canManageSequences
+                                      ? EcfSequenceRangeSection(
+                                          key: ValueKey(
+                                            'dosa-sequences-tracking-${user?.companyId}',
+                                          ),
+                                          canManage: canManageSequences,
+                                        )
+                                      : null,
+                                  portal: canOnboard
+                                      ? DosaAssistantSection(
+                                          key: ValueKey(
+                                            'dosa-tracking-${user?.companyId}',
+                                          ),
+                                          portalOnly: true,
+                                          postulationExternalId:
+                                              view.externalId,
+                                        )
+                                      : null,
+                                )
+                              : _trackingStep(
                                   view: view,
                                   stage: stage,
                                   wide: wide,
@@ -698,138 +892,124 @@ class _EcfDgiiHabilitationPageState
                                       ? preparation.valueOrNull?.simulationBadge
                                       : null,
                                 ),
-                              };
-                            }
+                          // Último paso del recorrido: el cliente autoriza a
+                          // emitir. Antes vivía detrás del botón «Administrar»
+                          // del encabezado, fuera del flujo.
+                          EcfFlowStep.authorization => Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: EcfAuthorizationStep(
+                              key: ValueKey(
+                                'ecf-authorization-${user?.companyId}',
+                              ),
+                              canAuthorize: canRecordAuthorization,
+                              alreadySigned:
+                                  view.authorizationSource != 'NONE',
+                              onSigned: () {
+                                ref.invalidate(ecfDgiiHabilitationProvider);
+                                ref.invalidate(ecfActivationProgressProvider);
+                              },
+                            ),
+                          ),
+                        };
+                      }
 
-                            // Errores y progreso de escritura: fuera del cuerpo del paso,
-                            // para que un fallo se vea sin perder el contexto.
-                            Widget framed(Widget child) => Column(
-                              children: [
-                                // Atajo de vista previa: solo existe compilado con la
-                                // empresa de prueba y no escribe nada.
-                                if (preview)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      12,
-                                      16,
-                                      0,
-                                    ),
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: EcfFlowPreviewButton(
-                                        nextLabel: nextEcfFlowStep(
-                                          step,
-                                        ).railLabel,
-                                        onPressed: () => setState(() {
-                                          _applicationOpen = false;
-                                          _activationOpen = false;
-                                          _fiscalOpen = false;
-                                          _step = nextEcfFlowStep(step);
-                                        }),
-                                      ),
-                                    ),
-                                  ),
-                                if (_error != null)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      16,
-                                      12,
-                                      16,
-                                      0,
-                                    ),
-                                    child: Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        10,
-                                        8,
-                                        10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.errorSoft,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: AppColors.errorBorder,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.error_outline,
-                                            size: 16,
-                                            color: AppColors.error,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              _error!,
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.textPrimary,
-                                              ),
-                                            ),
-                                          ),
-                                          TextButton(
-                                            onPressed: _refresh,
-                                            child: const Text('Reintentar'),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                if (_busy)
-                                  const LinearProgressIndicator(minHeight: 2),
-                                Expanded(child: child),
-                              ],
-                            );
-
-                            if (step == EcfFlowStep.welcome &&
-                                !_applicationOpen) {
-                              return framed(body);
-                            }
-
-                            if (!wide) {
-                              return Column(
-                                children: [
-                                  EcfStepRail(
-                                    current: step,
-                                    horizontal: true,
-                                    allowForward: true,
-                                    onSelect: _goToStep,
-                                  ),
-                                  const Divider(height: 1),
-                                  Expanded(child: framed(body)),
-                                ],
-                              );
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(child: framed(body)),
-                                SizedBox(
-                                  width: 216,
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      0,
-                                      16,
-                                      16,
-                                      16,
-                                    ),
-                                    child: SingleChildScrollView(
-                                      child: EcfStepRail(
-                                        current: step,
-                                        allowForward: true,
-                                        onSelect: _goToStep,
-                                      ),
-                                    ),
+                      // Errores y progreso de escritura: fuera del cuerpo del paso,
+                      // para que un fallo se vea sin perder el contexto.
+                      Widget framed(Widget child) => Column(
+                        children: [
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  10,
+                                  8,
+                                  10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.errorSoft,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppColors.errorBorder,
                                   ),
                                 ),
-                              ],
-                            );
-                          },
-                        ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.error_outline,
+                                      size: 16,
+                                      color: AppColors.error,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _refresh,
+                                      child: const Text('Reintentar'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (_busy)
+                            const LinearProgressIndicator(minHeight: 2),
+                          Expanded(child: child),
+                        ],
+                      );
+
+                      if (step == EcfFlowStep.welcome && !_applicationOpen) {
+                        return framed(body);
+                      }
+
+                      if (!wide) {
+                        return Column(
+                          children: [
+                            EcfStepRail(
+                              current: step,
+                              horizontal: true,
+                              furthest: postulationStarted
+                                  ? EcfFlowStep.tracking
+                                  : step,
+                              onSelect: _goToStep,
+                            ),
+                            const Divider(height: 1),
+                            Expanded(child: framed(body)),
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: framed(body)),
+                          SizedBox(
+                            width: 216,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                              child: SingleChildScrollView(
+                                child: EcfStepRail(
+                                  current: step,
+                                  furthest: postulationStarted
+                                      ? EcfFlowStep.tracking
+                                      : step,
+                                  onSelect: _goToStep,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -843,18 +1023,18 @@ class _EcfDgiiHabilitationPageState
   bool _certificateReady(EcfDgiiHabilitationView view) =>
       !_certificateRestarted && view.certificateValidation?.ready == true;
 
-  /// Qué falta exactamente para poder continuar. `null` si ya se puede.
-  String? _certificateBlockedReason(EcfDgiiHabilitationView view) {
-    if (_certificateReady(view)) return null;
-    return view.certificateValidation?.reason ??
-        _certificateGate.reason ??
-        'Valida el certificado digital del representante legal para continuar.';
-  }
+  /// Estados de certificación con los que la empresa ya puede emitir.
+  ///
+  /// Es la misma lista que aplica el backend antes de autorizar un despacho:
+  /// si aquí se dijera «terminado» con otro estado, la pantalla prometería algo
+  /// que la compuerta fiscal rechaza.
+  static const _invoicingStatuses = {
+    'AUTHORIZED_SANDBOX',
+    'PRODUCTION_READY',
+  };
 
-  bool _requirementResolved(EcfDgiiHabilitationView view, String key) => view
-      .progress
-      .requirements
-      .any((item) => item.key == key && item.resolved);
+  bool _invoicingReady(EcfDgiiHabilitationView view) =>
+      _invoicingStatuses.contains(view.certificationStatus);
 
   /// Arranca el motor de postulación con las condiciones del servidor.
   Future<void> _startIntelligentCertification() async {
@@ -1032,15 +1212,83 @@ class _EcfDgiiHabilitationPageState
             onReview: _reviewEvidence,
           ),
       ],
-      detailsBar: canManage ? _technicalDetails(view, stage: stage) : null,
     );
   }
 
-  /// Registros técnicos: plegados y solo para administradores.
-  Widget _technicalDetails(
+  /// Pantalla propia de la administración (`/ecf/administracion`).
+  ///
+  /// No reutiliza el recorrido del cliente a propósito: entrar por «Administrar»
+  /// no debe devolver a la bienvenida ni obligar a pasar otra vez por
+  /// Preparación y Postulación. Aquí solo vive lo que acredita la aprobación de
+  /// la DGII y, para soporte, el diagnóstico del expediente.
+  Widget _adminScreen(
     EcfDgiiHabilitationView view, {
     required _EcfStage stage,
+    required bool dosaPosted,
+    required CompanySettings settings,
+    required bool hasContent,
   }) {
+    final name = settings.companyName.trim();
+    final rnc = settings.rnc.trim();
+    final identity = [
+      name,
+      rnc,
+    ].where((value) => value.isNotEmpty).join(' · ');
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const EcfStepTitle(
+                title: 'Administración e-CF',
+                subtitle: 'Evidencias y autorización oficial de la DGII.',
+              ),
+              const SizedBox(height: 14),
+              if (identity.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: EcfSummaryRow(
+                    label: 'Empresa',
+                    value: identity,
+                    tone: EcfTone.current,
+                  ),
+                ),
+              if (hasContent)
+                _adminAdvanced(view, stage: stage, dosaPosted: dosaPosted)
+              else
+                const EcfInlineNote(
+                  tone: EcfTone.pending,
+                  text:
+                      'No hay acciones administrativas pendientes para esta '
+                      'empresa.',
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Controles administrativos de la vista `/ecf/administracion`.
+  ///
+  /// Se separan DOS cosas que antes vivían juntas bajo «Avanzado»:
+  ///
+  ///  * **Acciones del cliente**: subir la constancia de la DGII y registrarla.
+  ///    Es el único camino para que la aprobación oficial conste, así que se
+  ///    muestra siempre que el usuario tenga el permiso.
+  ///  * **Herramientas de soporte**: diagnóstico del intento, avance, emisión,
+  ///    datos fiscales y estado interno. No son necesarias para facturar y solo
+  ///    se muestran al personal de plataforma.
+  Widget _adminAdvanced(
+    EcfDgiiHabilitationView view, {
+    required _EcfStage stage,
+    required bool dosaPosted,
+  }) {
+    final companyId = ref.read(authStateProvider).user?.companyId ?? '';
     final user = ref.watch(authStateProvider).user;
     final canRegisterEvidence =
         hasUserPermission(user, AppPermission.manageEcfOnboarding) ||
@@ -1053,65 +1301,133 @@ class _EcfDgiiHabilitationPageState
       user,
       AppPermission.recordEcfDgiiOfficialVerification,
     );
+    final staff = ref.watch(ecfPlatformStaffProvider).valueOrNull == true;
+    final hasDgiiActions = canRegisterEvidence || canRecordAuthorization;
+
+    // La autorización se ofrece cuando REALMENTE falta. Antes dependía del
+    // escalón interno (`stage == activation`), y una empresa que ya terminó su
+    // postulación en DOSA pero conserva el expediente interno en `NOT_STARTED`
+    // se quedaba sin la acción: su bloqueo era justo «la DGII no ha aprobado».
+    final showAuthorization =
+        canRecordAuthorization &&
+        !view.officialAuthorization &&
+        (stage == _EcfStage.activation || dosaPosted);
+
+    // Sin acciones propias ni herramientas de soporte no hay nada que mostrar.
+    if (!hasDgiiActions && !staff) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasDgiiActions)
+          _adminGroup(
+            title: 'Evidencias y autorización de la DGII',
+            subtitle:
+                'Sube la constancia oficial y regístrala: es lo que acredita la '
+                'aprobación ante la DGII.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (view.evidence.isNotEmpty || canRegisterEvidence)
+                  _EvidenceCard(
+                    view: view,
+                    canRegisterEvidence: canRegisterEvidence,
+                    canReviewEvidence: canReviewEvidence,
+                    busy: _busy,
+                    onRegister: () => _registerEvidence(),
+                    onReview: _reviewEvidence,
+                  ),
+                if (showAuthorization)
+                  _OfficialAuthorizationCard(
+                    view: view,
+                    busy: _busy,
+                    onRecordAuthorization: _recordAuthorization,
+                    onRevoke: _revokeAuthorization,
+                  ),
+              ],
+            ),
+          ),
+        if (staff) ...[
+          if (hasDgiiActions) const SizedBox(height: 10),
+          _adminGroup(
+            title: 'Diagnóstico e-CF',
+            subtitle: 'Información de soporte. No es necesaria para facturar.',
+            child: DosaCertificationDiagnosticSection(
+              key: ValueKey('dosa-diagnostic-$companyId'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _adminGroup(
+            title: 'Información técnica',
+            subtitle: 'Avance, emisión, datos fiscales y estado interno.',
+            child: _technicalDetailsBody(view, stage: stage),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Acordeón de administración con la superficie del sistema.
+  Widget _adminGroup({
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
     return EcfSurface(
       padding: EdgeInsets.zero,
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          title: const Text(
-            'Detalle técnico',
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          title: Text(
+            title,
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
           ),
-          subtitle: const Text(
-            'Requisitos, emisión, evidencias e historial.',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textMuted,
+            ),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (view.evidence.isNotEmpty || canRegisterEvidence)
-              _EvidenceCard(
-                view: view,
-                canRegisterEvidence: canRegisterEvidence,
-                canReviewEvidence: canReviewEvidence,
-                busy: _busy,
-                onRegister: () => _registerEvidence(),
-                onReview: _reviewEvidence,
-              ),
-            if (canRecordAuthorization && stage == _EcfStage.activation)
-              _OfficialAuthorizationCard(
-                view: view,
-                busy: _busy,
-                onRecordAuthorization: _recordAuthorization,
-                onRevoke: _revokeAuthorization,
-              ),
-            _AdvancedSection(
-              view: view,
-              progress: view.progress,
-              settings: ref.read(companySettingsProvider).valueOrNull,
-              history: ref.watch(ecfDgiiHistoryProvider),
-              canManage: true,
-              busy: _busy,
-              onTrack: _editRequirementTracking,
-              onAdvance: () => _advance(view),
-              onEditObservations: () => _editObservations(view),
-              showPlatform:
-                  ref.watch(ecfPlatformStaffProvider).valueOrNull == true,
-              onOpenPlatform: () => context.go(Routes.ecfPlatformReview),
-              onOpenWizard: () => setState(() => _applicationOpen = true),
-              onOpenActivation: () => setState(() => _activationOpen = true),
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => context.go(Routes.ecfCertificationRecovery),
-                icon: const Icon(Icons.fact_check_outlined, size: 18),
-                label: const Text('Reconciliación de intentos'),
-              ),
-            ),
-          ],
+          children: [child],
         ),
       ),
+    );
+  }
+
+  /// Registros técnicos internos: solo soporte.
+  Widget _technicalDetailsBody(
+    EcfDgiiHabilitationView view, {
+    required _EcfStage stage,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _AdvancedSection(
+          view: view,
+          progress: view.progress,
+          settings: ref.read(companySettingsProvider).valueOrNull,
+          history: ref.watch(ecfDgiiHistoryProvider),
+          canManage: true,
+          busy: _busy,
+          onAdvance: () => _advance(view),
+          onEditObservations: () => _editObservations(view),
+          showPlatform: ref.watch(ecfPlatformStaffProvider).valueOrNull == true,
+          onOpenPlatform: () => context.go(Routes.ecfPlatformReview),
+          onOpenWizard: () => setState(() => _applicationOpen = true),
+          onOpenActivation: () => setState(() => _activationOpen = true),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => context.go(Routes.ecfCertificationRecovery),
+            icon: const Icon(Icons.fact_check_outlined, size: 18),
+            label: const Text('Reconciliación de intentos'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1316,115 +1632,27 @@ class _EmissionCard extends StatelessWidget {
 }
 
 class _ProgressCard extends StatelessWidget {
-  const _ProgressCard({
-    required this.progress,
-    required this.state,
-    required this.canTrack,
-    required this.busy,
-    required this.onTrack,
-    required this.onOpenWizard,
-    required this.onOpenActivation,
-  });
+  const _ProgressCard({required this.progress});
 
   final EcfDgiiProgress progress;
-  final String state;
-  final bool canTrack;
-  final bool busy;
-  final ValueChanged<EcfDgiiRequirementProgress> onTrack;
-  final VoidCallback onOpenWizard;
-  final VoidCallback onOpenActivation;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // El primer paso obligatorio sin resolver es lo único que el usuario
-    // necesita decidir ahora. Todo lo demás sigue abajo, en la lista.
-    final pending = progress.requirements
-        .where((requirement) => !requirement.resolved && requirement.mandatory)
-        .toList(growable: false);
-    final next = pending.isEmpty ? null : pending.first;
-    final nextIndex = next == null
-        ? 0
-        : progress.requirements.indexOf(next) + 1;
-    // Acción que de VERDAD mueve el proceso, según el estado del expediente.
+    // Resumen, NO una lista de pasos.
     //
-    // Anotar un requisito solo deja una nota interna: el porcentaje lo calcula
-    // el backend con las etapas reales. Antes el botón principal era esa nota,
-    // así que el usuario marcaba pasos y el avance no cambiaba nunca.
-    final preparing =
-        state == 'NOT_STARTED' || state == 'PREPARING_REQUIREMENTS';
-
+    // El recorrido del trámite se hace en el asistente (que va indicando cada
+    // paso) y en la Oficina Virtual de la DGII. Repetirlo aquí añadía quince
+    // filas que el cliente no puede resolver desde esta pantalla y que además
+    // se confundían con acciones reales.
     return _Section(
-      title: 'Pasos del proceso',
+      title: 'Avance del expediente',
       subtitle:
-          'El avance lo calcula el sistema con las etapas reales del trámite. '
-          'Anotar un paso guarda una nota tuya; no cambia el porcentaje.',
+          'Dato informativo: el avance lo calcula el sistema con las etapas '
+          'reales del trámite.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F6FF),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  next == null
-                      ? 'No queda ningún paso obligatorio pendiente.'
-                      : 'Paso $nextIndex de ${progress.requirements.length}: '
-                            '${next.label}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F2A37),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  next == null
-                      ? 'Ya no queda ningún paso obligatorio pendiente.'
-                      : preparing
-                      ? 'Prepara y presenta el expediente de postulación. Ahí '
-                            'marcas lo que ya tienes y adjuntas los documentos.'
-                      : 'El expediente ya está presentado. Ejecuta la activación '
-                            'para que el sistema compruebe cada etapa.',
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                if (canTrack) ...[
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: busy
-                        ? null
-                        : preparing
-                        ? onOpenWizard
-                        : onOpenActivation,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1957E6),
-                      minimumSize: const Size(0, 36),
-                    ),
-                    icon: Icon(
-                      preparing
-                          ? Icons.assignment_outlined
-                          : Icons.play_circle_outline,
-                      size: 18,
-                    ),
-                    label: Text(
-                      preparing
-                          ? 'Preparar el expediente'
-                          : 'Ejecutar la activación',
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -1445,138 +1673,7 @@ class _ProgressCard extends StatelessWidget {
               color: const Color(0xFF64748B),
             ),
           ),
-          if (progress.requirements.isEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'El backend todavía no ha creado los requisitos de esta empresa.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-          const SizedBox(height: 8),
-          for (final requirement in progress.requirements)
-            _RequirementRow(
-              requirement: requirement,
-              canTrack: canTrack,
-              busy: busy,
-              onTrack: () => onTrack(requirement),
-            ),
         ],
-      ),
-    );
-  }
-}
-
-class _RequirementRow extends StatelessWidget {
-  const _RequirementRow({
-    required this.requirement,
-    required this.canTrack,
-    required this.busy,
-    required this.onTrack,
-  });
-
-  final EcfDgiiRequirementProgress requirement;
-  final bool canTrack;
-  final bool busy;
-  final VoidCallback onTrack;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final resolved = requirement.resolved;
-    final tracking = requirement.tracking;
-    final dueDate = tracking?.dueDate;
-    final dueSuffix = dueDate == null ? '' : ' · vence $dueDate';
-    final status = resolved
-        ? 'Hecho'
-        : tracking != null
-        ? null
-        // Distingue los requisitos que resuelve el producto con los datos de la
-        // empresa de los que dependen de un trámite externo: antes ambos decían
-        // «Pendiente» y parecía que la empresa tenía que hacer algo con los
-        // datos fiscales que ya había cargado.
-        : requirement.automatable
-        ? 'Automático'
-        : 'Pendiente';
-
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                resolved ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 16,
-                color: resolved
-                    ? const Color(0xFF1B7F3B)
-                    : theme.colorScheme.outline,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  requirement.label,
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-              if (status != null)
-                Text(
-                  status,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: resolved
-                        ? const Color(0xFF1B7F3B)
-                        : const Color(0xFF64748B),
-                  ),
-                ),
-              if (canTrack && !requirement.automatable && !resolved) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: theme.colorScheme.outline,
-                ),
-              ],
-            ],
-          ),
-          // La libreta interna NO es progreso: se muestra como nota y el
-          // requisito sigue contando como pendiente.
-          if (tracking != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 24, bottom: 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Seguimiento interno: ${tracking.statusLabel}$dueSuffix',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF94A3B8),
-                    ),
-                  ),
-                  if (tracking.note != null)
-                    Text(
-                      tracking.note!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-
-    // Toda la fila es la acción, pero SOLO en los pasos que dependen de un
-    // trámite externo: los que resuelve el producto no se marcan a mano, y un
-    // paso ya resuelto no necesita nada.
-    if (!canTrack || requirement.automatable || resolved) return row;
-    return Tooltip(
-      message: 'Registrar seguimiento interno',
-      child: InkWell(
-        mouseCursor: SystemMouseCursors.click,
-        onTap: busy ? null : onTrack,
-        child: row,
       ),
     );
   }
@@ -1893,6 +1990,16 @@ class _EvidenceRow extends StatelessWidget {
                       : 'Volver a revisar',
                   icon: const Icon(Icons.rule, size: 18),
                 ),
+              // El registro de la autorización oficial pide el identificador de
+              // la evidencia y la tarjeta no lo mostraba: sin esto el paso era
+              // imposible de completar desde la app.
+              IconButton(
+                onPressed: () => Clipboard.setData(
+                  ClipboardData(text: evidence.id),
+                ),
+                tooltip: 'Copiar ID de la evidencia',
+                icon: const Icon(Icons.copy_all_outlined, size: 18),
+              ),
             ],
           ),
         ],
@@ -2188,7 +2295,7 @@ class _AuthorizationDialogState extends State<_AuthorizationDialog> {
                 controller: _evidenceId,
                 decoration: const InputDecoration(
                   labelText: 'Identificador de la evidencia',
-                  hintText: 'UUID de una evidencia ya registrada',
+                  hintText: 'Pega el ID (botón copiar de la tarjeta)',
                 ),
                 validator: (value) {
                   if (!_requiresEvidence) return null;
@@ -2342,140 +2449,6 @@ class _ReviewDialogState extends State<_ReviewDialog> {
         FilledButton(
           onPressed: () => _submit('REVIEWED'),
           child: const Text('Marcar como revisada'),
-        ),
-      ],
-    );
-  }
-}
-
-class _RequirementTrackingInput {
-  const _RequirementTrackingInput({
-    required this.status,
-    this.note,
-    this.dueDate,
-  });
-
-  final String status;
-  final String? note;
-  final String? dueDate;
-}
-
-/// Seguimiento interno de un requisito: estado de gestión, fecha y nota.
-class _RequirementTrackingDialog extends StatefulWidget {
-  const _RequirementTrackingDialog({required this.requirement});
-
-  final EcfDgiiRequirementProgress requirement;
-
-  @override
-  State<_RequirementTrackingDialog> createState() =>
-      _RequirementTrackingDialogState();
-}
-
-class _RequirementTrackingDialogState
-    extends State<_RequirementTrackingDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _note;
-  late final TextEditingController _dueDate;
-  late String _status;
-
-  @override
-  void initState() {
-    super.initState();
-    final tracking = widget.requirement.tracking;
-    _status = tracking?.status ?? 'IN_PROGRESS';
-    _note = TextEditingController(text: tracking?.note ?? '');
-    _dueDate = TextEditingController(text: tracking?.dueDate ?? '');
-  }
-
-  @override
-  void dispose() {
-    _note.dispose();
-    _dueDate.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final requirement = widget.requirement;
-    return AlertDialog(
-      title: const Text('Seguimiento del requisito'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                requirement.label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Es una libreta de trabajo interna: no cambia el progreso real '
-                'de la empresa ni acredita nada ante la DGII.',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(labelText: 'Estado interno'),
-                items: [
-                  for (final status in EcfDgiiRequirementTracking.statuses)
-                    DropdownMenuItem(
-                      value: status,
-                      child: Text(
-                        EcfDgiiRequirementTracking.labelForStatus(status),
-                      ),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _status = value ?? _status),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _dueDate,
-                decoration: const InputDecoration(
-                  labelText: 'Fecha objetivo',
-                  hintText: 'AAAA-MM-DD',
-                ),
-                validator: (value) {
-                  final raw = value?.trim() ?? '';
-                  if (raw.isEmpty) return null;
-                  final ok = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw);
-                  return ok ? null : 'Usa el formato AAAA-MM-DD';
-                },
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _note,
-                maxLines: 3,
-                maxLength: 500,
-                decoration: const InputDecoration(labelText: 'Nota'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (_formKey.currentState?.validate() != true) return;
-            Navigator.of(context).pop(
-              _RequirementTrackingInput(
-                status: _status,
-                note: _note.text.trim().isEmpty ? null : _note.text.trim(),
-                dueDate: _dueDate.text.trim().isEmpty
-                    ? null
-                    : _dueDate.text.trim(),
-              ),
-            );
-          },
-          child: const Text('Guardar'),
         ),
       ],
     );
@@ -2820,7 +2793,6 @@ class _AdvancedSection extends StatelessWidget {
     required this.history,
     required this.canManage,
     required this.busy,
-    required this.onTrack,
     required this.onAdvance,
     required this.onEditObservations,
     required this.showPlatform,
@@ -2835,7 +2807,6 @@ class _AdvancedSection extends StatelessWidget {
   final AsyncValue<List<EcfDgiiHistoryEntry>> history;
   final bool canManage;
   final bool busy;
-  final ValueChanged<EcfDgiiRequirementProgress> onTrack;
   final VoidCallback onAdvance;
   final VoidCallback onEditObservations;
   final bool showPlatform;
@@ -2847,23 +2818,14 @@ class _AdvancedSection extends StatelessWidget {
   Widget build(BuildContext context) {
     // Vive dentro del panel de soporte, así que no es un acordeón: es la vista
     // secundaria de administrador con los registros técnicos.
+    //
+    // No repite el título «Detalle técnico»: el acordeón que lo contiene ya lo
+    // dice. Dos encabezados iguales, uno dentro del otro, se leían como dos
+    // bloques distintos con el mismo contenido.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Detalle técnico',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        _ProgressCard(
-          progress: progress,
-          state: view.state,
-          canTrack: canManage,
-          busy: busy,
-          onTrack: onTrack,
-          onOpenWizard: onOpenWizard,
-          onOpenActivation: onOpenActivation,
-        ),
+        _ProgressCard(progress: progress),
         const SizedBox(height: 12),
         _EmissionCard(view: view),
         const SizedBox(height: 12),

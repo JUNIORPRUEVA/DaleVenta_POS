@@ -436,7 +436,7 @@ describe("política DOSA — identidad fiscal de prueba separada", () => {
       verifyFiscalIdentity({
         environment: "test",
         senderTaxId: "101000001",
-        configuredTestRnc: null,
+        expectedTestRnc: null,
       }),
     ).toEqual({ ok: false, reason: "TEST_RNC_NOT_CONFIGURED" });
   });
@@ -447,7 +447,7 @@ describe("política DOSA — identidad fiscal de prueba separada", () => {
       verifyFiscalIdentity({
         environment: "test",
         senderTaxId: "130000000",
-        configuredTestRnc: "101000001",
+        expectedTestRnc: "101000001",
       }),
     ).toEqual({ ok: false, reason: "TEST_RNC_MISMATCH" });
   });
@@ -458,7 +458,7 @@ describe("política DOSA — identidad fiscal de prueba separada", () => {
         environment: "test",
         // 1-01-00000-1 normaliza a 101000001.
         senderTaxId: "1-01-00000-1",
-        configuredTestRnc: "101000001",
+        expectedTestRnc: "101000001",
       }),
     ).toEqual({ ok: true });
   });
@@ -468,14 +468,14 @@ describe("política DOSA — identidad fiscal de prueba separada", () => {
       verifyFiscalIdentity({
         environment: "production",
         senderTaxId: "101000001",
-        configuredTestRnc: null,
+        expectedTestRnc: null,
       }),
     ).toEqual({ ok: true });
     expect(
       verifyFiscalIdentity({
         environment: "production",
         senderTaxId: "  ",
-        configuredTestRnc: null,
+        expectedTestRnc: null,
       }),
     ).toEqual({ ok: false, reason: "SENDER_RNC_MISSING" });
   });

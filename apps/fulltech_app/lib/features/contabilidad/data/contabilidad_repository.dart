@@ -73,100 +73,10 @@ class AccountingPage<T> {
   }
 }
 
-/// Secuencias NCF activas de la empresa (se recargan al invalidar el provider).
-final ncfSequencesProvider = FutureProvider.autoDispose<List<NcfSequenceModel>>(
-  (ref) {
-    return ref.watch(contabilidadRepositoryProvider).listNcfSequences();
-  },
-);
-
 class ContabilidadRepository {
   final Dio _dio;
 
   ContabilidadRepository(this._dio);
-
-  Future<List<NcfSequenceModel>> listNcfSequences() async {
-    try {
-      final res = await _dio.get(ApiRoutes.ncfSequences);
-      final rows = res.data is List ? (res.data as List) : const [];
-      return rows
-          .whereType<Map>()
-          .map((row) => NcfSequenceModel.fromJson(row.cast<String, dynamic>()))
-          .toList(growable: false);
-    } on DioException catch (e) {
-      throw ApiException(
-        _extractMessage(
-          e.response?.data,
-          'No se pudieron cargar las secuencias NCF',
-        ),
-        e.response?.statusCode,
-      );
-    }
-  }
-
-  Future<NcfSequenceModel> createNcfSequence({
-    required String voucherType,
-    required int startNumber,
-    required int endNumber,
-    DateTime? validUntil,
-    bool active = true,
-  }) async {
-    final type = voucherType.trim().toUpperCase();
-    try {
-      final res = await _dio.post(
-        ApiRoutes.ncfSequences,
-        data: {
-          'voucherType': type,
-          'prefix': type,
-          'startNumber': startNumber,
-          'endNumber': endNumber,
-          if (validUntil != null)
-            'validUntil': validUntil.toUtc().toIso8601String(),
-          'active': active,
-        },
-      );
-      final data = res.data is Map
-          ? (res.data as Map).cast<String, dynamic>()
-          : <String, dynamic>{};
-      return NcfSequenceModel.fromJson(data);
-    } on DioException catch (e) {
-      throw ApiException(
-        _extractMessage(e.response?.data, 'No se pudo crear la secuencia NCF'),
-        e.response?.statusCode,
-      );
-    }
-  }
-
-  Future<NcfSequenceModel> updateNcfSequence(
-    String id, {
-    int? endNumber,
-    DateTime? validUntil,
-    bool? active,
-  }) async {
-    try {
-      final res = await _dio.patch(
-        ApiRoutes.ncfSequence(id),
-        data: {
-          if (endNumber != null) 'endNumber': endNumber,
-          if (validUntil != null)
-            'validUntil': validUntil.toUtc().toIso8601String(),
-          if (active != null) 'active': active,
-        },
-      );
-      final data = res.data is Map
-          ? (res.data as Map).cast<String, dynamic>()
-          : <String, dynamic>{};
-      return NcfSequenceModel.fromJson(data);
-    } on DioException catch (e) {
-      throw ApiException(
-        _extractMessage(
-          e.response?.data,
-          'No se pudo actualizar la secuencia NCF',
-        ),
-        e.response?.statusCode,
-      );
-    }
-  }
 
   String _extractMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data;
@@ -318,7 +228,9 @@ class ContabilidadRepository {
         );
       } catch (e) {
         debugPrint('[CONTABILIDAD] cierres parse failure: $e');
-        throw ApiException('Se recibieron cierres con formato inválido.');
+        throw ApiException(
+          'Se recibieron cierres con formato inválido.',
+        );
       }
     } on DioException catch (e) {
       throw ApiException(
@@ -1451,59 +1363,5 @@ class ContabilidadRepository {
         e.response?.statusCode,
       );
     }
-  }
-}
-
-class NcfSequenceModel {
-  const NcfSequenceModel({
-    required this.id,
-    required this.voucherType,
-    required this.prefix,
-    required this.startNumber,
-    required this.nextNumber,
-    required this.endNumber,
-    required this.active,
-    required this.status,
-    this.validUntil,
-  });
-
-  factory NcfSequenceModel.fromJson(Map<String, dynamic> json) {
-    return NcfSequenceModel(
-      id: (json['id'] ?? '').toString(),
-      voucherType: (json['voucherType'] ?? json['voucher_type'] ?? '')
-          .toString(),
-      prefix: (json['prefix'] ?? '').toString(),
-      startNumber: _intValue(json['startNumber'] ?? json['start_number'], 1),
-      nextNumber: _intValue(json['nextNumber'] ?? json['next_number'], 1),
-      endNumber: _intValue(json['endNumber'] ?? json['end_number'], 0),
-      validUntil: DateTime.tryParse(
-        (json['validUntil'] ?? json['valid_until'] ?? '').toString(),
-      ),
-      active: json['active'] != false,
-      status: (json['status'] ?? '').toString(),
-    );
-  }
-
-  final String id;
-  final String voucherType;
-  final String prefix;
-  final int startNumber;
-  final int nextNumber;
-  final int endNumber;
-  final DateTime? validUntil;
-  final bool active;
-  final String status;
-
-  int get remaining {
-    final value = endNumber - nextNumber + 1;
-    return value < 0 ? 0 : value;
-  }
-
-  String get possibleNextNcf =>
-      '$prefix${nextNumber.toString().padLeft(8, '0')}';
-
-  static int _intValue(dynamic value, int fallback) {
-    if (value is num) return value.toInt();
-    return int.tryParse((value ?? '').toString()) ?? fallback;
   }
 }

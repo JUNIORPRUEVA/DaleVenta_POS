@@ -236,10 +236,18 @@ export class PrismaDosaAuthorizationReader implements DosaAuthorizationReader {
     const providerConfirmed = postulationBound && providerEvents > 0;
 
     // La aprobación DGII debe venir de registro oficial y ser de ESTE intento.
-    const dgiiApproved =
+    //
+    // Además del registro oficial (documento + resolución), cuenta el cierre
+    // firmado del proveedor para el intento vigente: DOSA no marca
+    // `estado_certificacion = finalizado` si la DGII no aprobó la postulación, y
+    // ese evento llega con firma HMAC, con el `postulacion_id` del intento y
+    // después de que este empezara. Exigir además un documento que el proceso
+    // no entrega dejaba al cliente bloqueado sin nada que subir.
+    const officialRecord =
       row?.dgii_state === "APPROVED" &&
       row?.dgii_source === "DGII_OFFICIAL_RECORD" &&
       notBefore(dgiiAuthorizedAt, attemptStartedAt);
+    const dgiiApproved = officialRecord || providerConfirmed;
 
     // La última decisión administrativa válida prevalece: se mira la última
     // decisión (no la cantidad) y debe ser un registro posterior al inicio del

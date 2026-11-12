@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import {
   parseDosaWebhookPayload,
@@ -8,11 +8,12 @@ import {
 import {
   readDosaSignatureConfig,
   verifyDosaSignature,
+  type DosaResolvedInterpretation,
   type DosaSignatureConfig,
+  type DosaSignatureRejection,
 } from "./dosa-webhook-signature.policy";
 import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service";
-import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
 
 /** Cliente mínimo (SQL parametrizado). Se puede sustituir por un doble. */
 export interface DosaWebhookStore {
@@ -32,9 +33,16 @@ export const ECF_DOSA_WEBHOOK_STORE = Symbol("ECF_DOSA_WEBHOOK_STORE");
  * llega en el evento es una PISTA: nunca selecciona tenant por sí solo.
  */
 export interface DosaCompanyResolver {
-  resolveByRnc(
-    rnc: string,
-  ): Promise<{ companyId: string; ecfEnabled: boolean } | null>;
+  resolveByRnc(rnc: string): Promise<{
+    companyId: string;
+    ecfEnabled: boolean;
+    /**
+     * `true` si la empresa tiene autorización vigente para el asistente.
+     * Lo resuelve el servidor junto con el resto de la fila, para que el webhook
+     * no tenga que leer entorno ni hacer una segunda consulta.
+     */
+    portalEligible?: boolean;
+  } | null>;
 }
 
 export const ECF_DOSA_COMPANY_RESOLVER = Symbol("ECF_DOSA_COMPANY_RESOLVER");
@@ -99,6 +107,17 @@ export type DosaWebhookOutcome =
  */
 @Injectable()
 export class DosaWebhookService {
+  /**
+   * Registro de RECHAZOS.
+   *
+   * Un evento rechazado no deja fila en la base, así que sin esta línea un
+   * webhook mal configurado (estrategia `BLOCKED`, secreto distinto, unidad de
+   * `t` equivocada, RNC desconocido) fallaría en completo silencio: el cliente
+   * se queda esperando credenciales y nada lo explica. Se registran solo el
+   * código y el motivo: nunca el cuerpo, ni cabeceras, ni el secreto.
+   */
+  private readonly logger = new Logger(DosaWebhookService.name);
+
   constructor(
     @Inject(ECF_DOSA_WEBHOOK_STORE) private readonly store: DosaWebhookStore,
     @Inject(ECF_DOSA_COMPANY_RESOLVER)
@@ -132,18 +151,37 @@ export class DosaWebhookService {
   }): Promise<DosaWebhookOutcome> {
     // 1. Firma — se verifica sobre los BYTES ORIGINALES, nunca sobre el JSON
     //    re-serializado: `HMAC-SHA256(secret, t + "." + rawBody)`.
+    //
+    // `resolved` captura la interpretación que efectivamente validó la firma
+    // (unidad de `t` y lectura del secreto). Es la evidencia que faltaba para
+    // responder P1/P5 con un hecho en vez de con una suposición; no es un
+    // secreto y no se registra ningún valor de firma ni de clave.
+    let resolved: DosaResolvedInterpretation | null = null;
     const signature = verifyDosaSignature({
       headers: input.headers,
       config: this.signature,
       rawBody: input.rawBody,
+      onResolved: (info) => {
+        resolved = info;
+      },
     });
     if (!signature.ok) {
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_BLOCKED / ${signature.reason} ` +
+          `(estrategia ${signature.strategy})`,
+      );
       return {
         accepted: false,
-        status: 503,
+        status: httpStatusForSignatureRejection(signature.reason),
         code: "ECF_DOSA_WEBHOOK_BLOCKED",
         reason: signature.reason,
       };
+    }
+    if (resolved !== null) {
+      const info = resolved as DosaResolvedInterpretation;
+      this.logger.log(
+        `Webhook DOSA autenticado: t=${info.timestampUnit}, secreto=${info.secretEncoding}`,
+      );
     }
 
     if (!input.rawBody) {
@@ -160,6 +198,11 @@ export class DosaWebhookService {
     // 2. Esquema
     const parsed = parseDosaWebhookPayload(input.body);
     if (!parsed.ok) {
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_INVALID_PAYLOAD / ${parsed.reason}${
+          parsed.field ? `:${parsed.field}` : ""
+        }`,
+      );
       return {
         accepted: false,
         status: 400,
@@ -172,6 +215,11 @@ export class DosaWebhookService {
     // 3. Correlación server-side
     const company = await this.resolver.resolveByRnc(payload.rnc);
     if (!company) {
+      // El RNC es la única forma de correlacionar: si no lo conocemos, el evento
+      // se rechaza sin guardar. Sin esta línea sería invisible.
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_UNKNOWN_RNC / rnc=${payload.rnc}`,
+      );
       return {
         accepted: false,
         status: 404,
@@ -182,7 +230,12 @@ export class DosaWebhookService {
 
     // La certificación del piloto precede a la activación de emisión. Fuera
     // del piloto se conserva la compuerta histórica de e-CF habilitado.
-    if (!company.ecfEnabled && !isEcfPortalPilotCompany(company.companyId)) {
+    // `portalEligible` lo resuelve el servidor desde la autorización POR EMPRESA
+    // guardada en base; ya no depende de una variable del despliegue.
+    if (!company.ecfEnabled && company.portalEligible !== true) {
+      this.logger.warn(
+        `Webhook DOSA rechazado: ECF_DOSA_WEBHOOK_ECF_DISABLED / company=${company.companyId}`,
+      );
       return {
         accepted: false,
         status: 409,
@@ -192,10 +245,18 @@ export class DosaWebhookService {
     }
 
     // 5. Idempotencia + 6. persistencia redactada
-    const dedupeKey = dedupeKeyOf(payload);
     const rawHash = createHash("sha256")
       .update(input.rawBody)
       .digest("hex");
+    // La identidad del evento combina la referencia lógica (postulación, estado,
+    // fecha de disponibilidad) con el cuerpo EXACTO recibido.
+    //
+    // Consecuencia buscada: un reintento idéntico sigue siendo `duplicate` (mismo
+    // cuerpo, mismo hash), pero un envío del mismo evento con **otro contenido**
+    // —por ejemplo credenciales nuevas— deja de descartarse en silencio y se
+    // procesa como evento propio. La política de rotación decide después qué
+    // hacer con las credenciales; aquí solo se garantiza que no se pierden.
+    const dedupeKey = dedupeKeyOf(payload, rawHash);
     // El tipo de evento sale de lo que el proveedor envía, no de una constante
     // nuestra: ver `classifyDosaEventType`.
     const classification = classifyDosaEventType(payload);
@@ -280,7 +341,12 @@ export class DosaWebhookService {
     eventId: string;
     companyId: string;
     dedupeKey: string;
-    payload: { rnc: string; ambiente: string; postulacionId: string };
+    payload: {
+      rnc: string;
+      ambiente: string;
+      /** `null` en los eventos previos a la postulación. */
+      postulacionId: string | null;
+    };
     secretos: { apiKeyProduccion?: string; apiKeyTest?: string; apiSecret?: string };
     /** Tipo de evento que se persistió: clasificado o pendiente de clasificación. */
     eventType: string;
@@ -318,6 +384,26 @@ export class DosaWebhookService {
           status: 500,
           code: "ECF_DOSA_WEBHOOK_CREDENTIALS_FAILED",
           reason: stored.blockedReason,
+        };
+      }
+
+      // Rotación no autorizada: el evento queda registrado, las credenciales
+      // vigentes quedan intactas y el caso pasa a revisión humana. Nunca se
+      // sustituye una clave activa porque un webhook lo diga.
+      if ((stored.conflicts ?? []).length > 0) {
+        await this.store.$queryRaw`
+          UPDATE "ecf_dosa_webhook_events"
+             SET "processing_state" = ${CONFLICT_STATE}
+           WHERE "id" = ${input.eventId}::uuid
+             AND "company_id" = ${input.companyId}::uuid
+        `;
+
+        return {
+          accepted: true,
+          status: 200,
+          duplicate: false,
+          eventId: input.eventId,
+          code: "ECF_DOSA_WEBHOOK_CONFLICT_PENDING_REVIEW",
         };
       }
     }
@@ -358,14 +444,22 @@ export class DosaWebhookService {
       // Si devuelve `false` no se fuerza nada: el evento ya está persistido con
       // su `postulacion_id`, así que la reconciliación es posible después. Este
       // servicio NO crea sesiones ni elige una «a la primera que aparezca».
-      try {
-        await this.sessionHints.bindProviderPostulation({
-          companyId: input.companyId,
-          rnc: input.payload.rnc,
-          providerPostulationId: input.payload.postulacionId,
-        });
-      } catch {
-        // Igual que la pista: el hecho fiscal ya quedó registrado.
+      //
+      // Sin `postulacion_id` no hay nada que vincular: los eventos de conexión
+      // (`empresa.conectada`) y de prueba de firma (`webhook.prueba`) llegan con
+      // `null` porque todavía no existe postulación. Se omite la llamada en vez
+      // de enviar un identificador vacío.
+      const postulacionId = (input.payload.postulacionId ?? "").trim();
+      if (postulacionId.length > 0) {
+        try {
+          await this.sessionHints.bindProviderPostulation({
+            companyId: input.companyId,
+            rnc: input.payload.rnc,
+            providerPostulationId: postulacionId,
+          });
+        } catch {
+          // Igual que la pista: el hecho fiscal ya quedó registrado.
+        }
       }
     }
 
@@ -384,6 +478,48 @@ export class DosaWebhookService {
 /** Estados de procesamiento persistidos del evento. */
 export const PENDING_STATE = "PENDING_CREDENTIALS";
 export const COMPLETE_STATE = "COMPLETE";
+/**
+ * El evento llegó autenticado y traía credenciales que **no coinciden** con las
+ * vigentes. Se conserva como evidencia y se deja en revisión: la rotación es un
+ * acto humano, no un efecto automático de un webhook.
+ */
+export const CONFLICT_STATE = "CONFLICT_PENDING_REVIEW";
+
+/**
+ * Código HTTP correcto para cada rechazo de firma.
+ *
+ * Por qué importa: un `5xx` es, por convención, «el servidor tuvo un problema,
+ * vuelve a intentarlo». Devolverlo ante una firma inválida o un timestamp
+ * expirado le dice al proveedor exactamente lo contrario de lo que pasa: el
+ * evento **no se va a aceptar** repitiéndolo, así que solo se consigue que
+ * reintente en vano (y que el reintento llegue aún más caducado).
+ *
+ * * `401` — no autenticado. Repetir con la misma cabecera no puede funcionar;
+ *   el proveedor debe renovar la firma o revisar su secreto.
+ * * `503` — el receptor está mal configurado (estrategia bloqueada, secreto
+ *   ausente o inválido). Es transitorio desde el punto de vista del proveedor,
+ *   así que reintentar sí tiene sentido cuando operaciones corrija el secreto.
+ * * `500` — fallo propio del receptor (no pudimos leer el cuerpo crudo). No es
+ *   culpa del emisor y no se arregla reintentando, pero tampoco es un problema
+ *   de autenticación.
+ *
+ * La seguridad no cambia: el evento se rechaza igual en los tres casos y no se
+ * ejecuta ninguna consulta. Solo cambia lo que el emisor entiende.
+ */
+export function httpStatusForSignatureRejection(
+  reason: DosaSignatureRejection,
+): number {
+  switch (reason) {
+    case "STRATEGY_BLOCKED":
+    case "SECRET_NOT_CONFIGURED":
+    case "CONFIG_INVALID":
+      return 503;
+    case "RAW_BODY_UNAVAILABLE":
+      return 500;
+    default:
+      return 401;
+  }
+}
 
 /**
  * Etiqueta con la que se persiste un evento cuyo **tipo** no está confirmado.
@@ -434,14 +570,27 @@ export function classifyDosaEventType(
  * que sí es estable entre reintentos: postulación + estado + fecha de
  * disponibilidad. Se hashea para no exceder la columna.
  */
-export function dedupeKeyOf(payload: {
-  postulacionId: string;
-  estadoCertificacion: string;
-  disponiblesDesde: string;
-}): string {
+export function dedupeKeyOf(
+  payload: {
+    /** `null` en los eventos previos a la postulación: se normaliza a "". */
+    postulacionId: string | null;
+    estadoCertificacion: string | null;
+    disponiblesDesde: string | null;
+  },
+  /**
+   * SHA-256 del cuerpo exacto recibido. Sin él, un envío con el mismo
+   * identificador lógico pero contenido distinto se descartaría como duplicado y
+   * las credenciales nuevas se perderían. Es un hash del cuerpo: no expone
+   * valores y no es reversible.
+   */
+  rawBodySha256 = "",
+): string {
+  // Los nulos se normalizan a cadena vacía para que la clave siga siendo estable
+  // entre reintentos idénticos. La parte que distingue dos eventos de conexión
+  // distintos es el hash del cuerpo, no estos identificadores.
   return createHash("sha256")
     .update(
-      `${payload.postulacionId}|${payload.estadoCertificacion}|${payload.disponiblesDesde}`,
+      `${payload.postulacionId ?? ""}|${payload.estadoCertificacion ?? ""}|${payload.disponiblesDesde ?? ""}|${rawBodySha256}`,
     )
     .digest("hex");
 }

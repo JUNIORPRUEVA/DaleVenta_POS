@@ -23,7 +23,6 @@ class Routes {
   static const contabilidad = '/contabilidad';
   static const contabilidadCierresDiarios = '/contabilidad/cierres-diarios';
   static const contabilidadDepositos = '/contabilidad/depositos-bancarios';
-  static const contabilidadFacturaFiscal = '/contabilidad/factura-fiscal';
   static const contabilidadPagosPendientes = '/contabilidad/pagos-pendientes';
   static const clientes = '/clientes';
   static const ventasBase = '/ventas';
@@ -97,6 +96,9 @@ class Routes {
   static const ecf = '/ecf';
   static const ecfDocuments = '/ecf/documents';
   static const ecfConfig = '/ecf/config';
+  /// Interfaz administrativa separada: diagnóstico, evidencias y autorización
+  /// histórica. Nunca forma parte del recorrido del cliente.
+  static const ecfAdmin = '/ecf/administracion';
 
   /// Datos fiscales en versión enfocada al proceso e-CF.
   ///

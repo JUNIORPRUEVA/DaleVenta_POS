@@ -48,8 +48,19 @@ class MemoryStore implements DosaCredentialStore {
     return `${row.companyId}|${row.rnc}|${row.environment}`;
   }
 
-  async upsert(row: StoredDosaCredential): Promise<void> {
+  async upsert(row: StoredDosaCredential): Promise<boolean> {
+    const existing = this.rows.get(this.key(row));
+    // Misma guarda atómica que el SQL real: el material confirmado/activo no se
+    // sustituye por otro distinto.
+    if (
+      existing &&
+      (existing.status === "CONFIRMED" || existing.status === "ACTIVE") &&
+      existing.sealed.fingerprint !== row.sealed.fingerprint
+    ) {
+      return false;
+    }
     this.rows.set(this.key(row), { ...row, updatedAt: new Date().toISOString() });
+    return true;
   }
 
   async find(row: {
@@ -242,8 +253,10 @@ describe("DosaCredentialService", () => {
     });
 
     expect(inspection).not.toBeNull();
+    // Cada fila declara SOLO las claves de su ambiente: la de producción no
+    // aparece en la fila de pruebas aunque haya llegado en el mismo evento.
     expect(inspection?.present).toEqual({
-      apiKeyProduccion: true,
+      apiKeyProduccion: false,
       apiKeyTest: true,
       apiSecret: true,
     });
@@ -429,8 +442,11 @@ describe("DosaCredentialService", () => {
     });
 
     const listA = await service.listForCompany(COMPANY_A);
-    expect(listA).toHaveLength(1);
-    expect(listA[0].companyId).toBe(COMPANY_A);
+    // El paquete traía las dos llaves: una fila por ambiente, ninguna de otra
+    // empresa.
+    expect(listA).toHaveLength(2);
+    expect(listA.every((row) => row.companyId === COMPANY_A)).toBe(true);
+    expect(listA.map((row) => row.environment).sort()).toEqual(["production", "test"]);
     expect(JSON.stringify(listA)).not.toContain("DE-B");
   });
 });

@@ -22,8 +22,17 @@ export class UpdateEcfConfigDto {
   @IsBoolean()
   enabled?: boolean;
 
+  /**
+   * Permite registrar ventas SIN comprobante electrónico desde el POS. Es una
+   * excepción fiscal: apagada por defecto y respaldada por el registro de
+   * excepciones, que guarda motivo y usuario de cada uso.
+   */
   @IsOptional()
-  @IsIn([EcfProvider.ALANUBE])
+  @IsBoolean()
+  allowSalesWithoutEcf?: boolean;
+
+  @IsOptional()
+  @IsIn([EcfProvider.DOSA])
   provider?: EcfProvider;
 
   @IsOptional()

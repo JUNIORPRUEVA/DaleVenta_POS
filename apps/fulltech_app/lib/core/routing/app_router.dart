@@ -17,7 +17,6 @@ import '../../features/splash/splash_screen.dart';
 import '../../features/contabilidad/contabilidad_screen.dart';
 import '../../features/contabilidad/cierres_diarios_screen.dart';
 import '../../features/contabilidad/depositos_bancarios_screen.dart';
-import '../../features/contabilidad/factura_fiscal_screen.dart';
 import '../../features/contabilidad/pagos_pendientes_screen.dart';
 import '../../features/ecf/ui/ecf_config_page.dart';
 import '../../features/ecf/ui/ecf_certification_recovery_page.dart';
@@ -40,7 +39,6 @@ import '../../modules/nomina/mis_pagos_screen.dart';
 import '../../modules/cotizaciones/cotizaciones_historial_screen.dart';
 import '../../modules/cotizaciones/cotizaciones_screen.dart';
 import '../../modules/ventas/tpv_sales_history_screen.dart';
-import '../../modules/ventas/registrar_venta_screen.dart';
 import '../../modules/ventas/sales_credit_screen.dart';
 import '../../modules/compras/compras_screen.dart';
 import '../ai_assistant/presentation/ai_screen.dart';
@@ -139,9 +137,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
       ),
+      // El registro de venta vive en el punto de venta principal
+      // (`/cotizaciones`). Había dos pantallas para lo mismo y la antigua no
+      // emitía comprobante electrónico. La ruta se conserva como redirección
+      // para los enlaces y pestañas ya guardadas.
       GoRoute(
         path: Routes.registrarVenta,
-        builder: (context, state) => const RegistrarVentaScreen(),
+        redirect: (context, state) => Routes.cotizaciones,
       ),
       ShellRoute(
         builder: (context, state, child) => HomeShell(child: child),
@@ -177,6 +179,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.ecf,
             builder: (context, state) => const EcfDgiiHabilitationPage(),
+          ),
+          GoRoute(
+            path: Routes.ecfAdmin,
+            builder: (context, state) =>
+                const EcfDgiiHabilitationPage(adminView: true),
           ),
           GoRoute(
             path: Routes.ecfDocuments,
@@ -278,10 +285,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: Routes.contabilidadDepositos,
             builder: (context, state) => const DepositosBancariosScreen(),
-          ),
-          GoRoute(
-            path: Routes.contabilidadFacturaFiscal,
-            builder: (context, state) => const FacturaFiscalScreen(),
           ),
           GoRoute(
             path: Routes.contabilidadPagosPendientes,

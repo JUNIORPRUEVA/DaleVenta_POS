@@ -63,6 +63,17 @@ bool isEcfCedulaValid(String value) {
   return digits.length == 9 || digits.length == 11;
 }
 
+/// Correo fiscal que el backend usa al abrir la sesión oficial de DOSA.
+///
+/// No es un requisito de emisión: un comprobante puede emitirse sin este
+/// correo. Sí es obligatorio para iniciar la postulación electrónica.
+bool isEcfContactEmailValid(String value) {
+  final trimmed = value.trim();
+  return trimmed.length > 3 &&
+      trimmed.length <= 254 &&
+      RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$').hasMatch(trimmed);
+}
+
 /// Construye la lista de comprobaciones a partir de una configuración, guardada
 /// o en edición. Una sola fuente para el formulario fiscal y para la guía de
 /// puesta en marcha.

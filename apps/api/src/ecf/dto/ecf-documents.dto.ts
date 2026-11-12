@@ -100,8 +100,12 @@ export class ListEcfDocumentsQueryDto {
 }
 
 export class RegisterEcfSequenceDto {
-  @IsIn(["E31", "E34"])
-  documentType!: "E31" | "E34";
+  // Los tres tipos consumen el rango e-CF de la empresa (ver
+  // `ECF_SEQUENCE_TYPES` y `ALLOCATABLE` en el servicio). E32 (consumo) se
+  // declaraba y se autorizaba, pero este DTO lo rechazaba: el rango de consumo
+  // no se podía registrar y la emisión quedaba bloqueada.
+  @IsIn(["E31", "E32", "E34"])
+  documentType!: "E31" | "E32" | "E34";
 
   @Type(() => Number)
   @IsInt()
@@ -121,9 +125,50 @@ export class RegisterEcfSequenceDto {
 
 export class RenewEcfSequenceDto extends RegisterEcfSequenceDto {}
 
-// Preparación de CONSUMO (E32). Flujo independiente del genérico: no consume el
-// rango de numeración de la empresa, no toca el cupo único de sandbox y no
-// emite. El e-NCF lo entrega su propio flujo, nunca este.
+/**
+ * Declaración de la numeración que la DGII autorizó a la empresa.
+ *
+ * Se transcribe desde la Oficina Virtual; no hay API que lo entregue. La
+ * declaración es obligatoria y su versión de texto queda registrada.
+ */
+export class DeclareEcfAuthorizedSequenceDto {
+  @IsIn(["E31", "E32", "E34"])
+  documentType!: "E31" | "E32" | "E34";
+
+  @IsString()
+  @Matches(/^[0-9A-Za-z-]{4,64}$/, {
+    message: "ECF_DGII_SEQUENCE_AUTHORIZATION_REQUIRED",
+  })
+  authorizationNumber!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  rangeFrom!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  rangeTo!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  approvedQuantity!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  expiresAt?: string | null;
+
+  @IsIn([true], {
+    message: "ECF_DGII_DECLARATION_REQUIRED",
+  })
+  declarationAccepted!: boolean;
+}
+
+// Preparación de CONSUMO (E32). Toma su e-NCF del rango autorizado para E32,
+// igual que E31, de forma idempotente por venta. No emite.
 export class PrepareEcfConsumoDto {
   @IsString()
   @IsUUID()
@@ -269,4 +314,27 @@ export class PrepareEcfCreditNoteDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   sequenceDueDate?: string;
+}
+
+/**
+ * Registro de una venta hecha SIN comprobante electrónico.
+ *
+ * El motivo es obligatorio y con longitud mínima: una excepción fiscal sin
+ * justificación escrita no es auditable. El tipo esperado es opcional porque la
+ * app ya lo deduce del receptor; se guarda para saber qué comprobante quedó
+ * pendiente.
+ */
+export class RegisterEcfSaleWithoutDocumentDto {
+  @IsString()
+  @IsUUID()
+  saleId!: string;
+
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  reason!: string;
+
+  @IsOptional()
+  @IsIn(["E31", "E32"])
+  expectedDocumentType?: "E31" | "E32" | null;
 }

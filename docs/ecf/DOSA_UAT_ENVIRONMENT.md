@@ -99,6 +99,9 @@ El `.env.uat.local` se escribió en UTF-8 sin BOM.
 - `DOSA_PRODUCTION_EMISSION_ENABLED=false`
 - `ECF_EMISSION_ENABLED=false`
 - `ALANUBE_ENABLE_REAL_CALLS=false`
+- `DOSA_INCIDENT_MONITOR_ENABLED` — **apagado por defecto**: sin `true`, el barrido
+  de incidencias no ejecuta ni una consulta. Ver
+  `docs/ecf/DOSA_INCIDENT_MONITORING.md`.
 
 La clave `sk_` **no se carga**. Para activarla hará falta:
 

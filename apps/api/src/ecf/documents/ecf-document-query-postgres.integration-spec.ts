@@ -25,6 +25,21 @@ uat("e-CF document query API (tenant isolation) on PostgreSQL", () => {
   async function tenant(name = "Query synthetic") {
     const companyId = randomUUID();
     await prisma.company.create({ data: { id: companyId, name, slug: `ecf-q-${companyId}` } });
+    // La numeración exige autorización DGII declarada (fail-closed).
+    for (const documentType of ["E31", "E34"]) {
+      await prisma.ecfDgiiAuthorizedSequence.create({
+        data: {
+          companyId,
+          documentType,
+          authorizationNumber: `SYNTH-${documentType}`,
+          rangeFrom: 1,
+          rangeTo: 10_000,
+          approvedQuantity: 10_000,
+          declarationVersion: "v1",
+          declaredByUserId: actor,
+        },
+      });
+    }
     return { companyId, user: { id: actor, role: "ADMIN", companyId } as TenantUser };
   }
   async function acceptedOriginal(companyId: string, total = "100.00") {
@@ -52,7 +67,9 @@ uat("e-CF document query API (tenant isolation) on PostgreSQL", () => {
     expect(caps.productionEnabled).toBe(false);
     expect(caps.emissionPathAvailable).toBe(false);
     expect(caps.documentTypes.map((t) => t.documentType)).toEqual(["E31", "E32", "E34"]);
-    expect(caps.documentTypes.find((t) => t.documentType === "E32")?.allocatable).toBe(false);
+    // Los tres tipos consumen rango propio: ya no hay ninguno reservado a un
+    // cupo de un solo uso.
+    expect(caps.documentTypes.find((t) => t.documentType === "E32")?.allocatable).toBe(true);
   });
 
   it("never lists another company's documents", async () => {

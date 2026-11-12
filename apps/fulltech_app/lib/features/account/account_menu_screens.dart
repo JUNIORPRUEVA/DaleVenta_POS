@@ -13,7 +13,7 @@ import '../../core/app_update/app_update_models.dart';
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../ecf/data/ecf_repository.dart';
-import '../ecf/ui/ecf_onboarding_section.dart';
+import '../ecf/ui/ecf_config_page.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/company/company_settings_feedback.dart';
@@ -519,10 +519,11 @@ class AccountCompanySettingsScreen extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // Proceso INTERNO de habilitación. Se oculta solo si la empresa no
-          // tiene el módulo activado o el usuario no puede ver la configuración.
-          const EcfOnboardingSection(),
+          // El checklist interno de 15 pasos de la era ALANUBE ya no se pinta
+          // aquí: al encender la facturación electrónica inundaba la pantalla
+          // con un proceso que el cliente completa dentro del módulo. Vive en
+          // la vista administrativa de e-CF (`/ecf/administracion`), junto al
+          // diagnóstico.
         ],
       ),
     );
@@ -731,9 +732,41 @@ class _EcfCompanySwitchSectionState
   }
 }
 
+/// Excepción fiscal «vender sin comprobante electrónico», dentro de Empresa.
+///
+/// Es una decisión DISTINTA del interruptor general de arriba: aquel enciende
+/// el módulo e-CF; esta permite que el POS ofrezca además la opción «Normal».
+/// Reutiliza el mismo widget y el mismo endpoint de configuración e-CF, así que
+/// no hay una segunda fuente de verdad ni un guardado distinto.
+///
+/// Solo se muestra con el módulo encendido: sin e-CF no hay nada que exceptuar.
+class _EcfSalesWithoutDocumentControl extends ConsumerWidget {
+  const _EcfSalesWithoutDocumentControl();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final moduleEnabled =
+        ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled == true;
+    // Con el módulo apagado no se consulta nada: ni se pinta el control ni se
+    // pide la configuración al servidor.
+    if (!moduleEnabled) return const SizedBox.shrink();
+    final capabilities = ref.watch(ecfCapabilitiesProvider).valueOrNull;
+    if (capabilities == null || !capabilities.enabled) {
+      return const SizedBox.shrink();
+    }
+    return EcfSalesWithoutDocumentSection(
+      capabilities: capabilities,
+      canManage: hasUserPermission(
+        ref.watch(authStateProvider).user,
+        AppPermission.manageEcfConfig,
+      ),
+      embedded: true,
+    );
+  }
+}
+
 class AccountPrinterSettingsScreen extends StatelessWidget {
   const AccountPrinterSettingsScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return const _SettingsDetailScaffold(
@@ -2725,7 +2758,16 @@ class _CompanySettingsEditorState
               setState(() => _pricesIncludeTax = value),
           // La factura electrónica se activa AQUÍ, debajo de «Utilizar
           // impuestos»: es la misma decisión fiscal, no una pantalla aparte.
-          ecfControl: const _EcfCompanySwitchSection(embedded: true),
+          ecfControl: const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _EcfCompanySwitchSection(embedded: true),
+              SizedBox(height: 12),
+              Divider(height: 1, thickness: 1, color: Color(0xFFDDE7EE)),
+              SizedBox(height: 12),
+              _EcfSalesWithoutDocumentControl(),
+            ],
+          ),
         ),
         SizedBox(height: compactDesktop ? 6 : 10),
         _InventorySettingsPanel(

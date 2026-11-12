@@ -8,6 +8,7 @@ import {
 import { EcfDosaSessionService } from "./ecf-dosa-session.service";
 import { EcfCanonicalIdentityService } from "../../dgii/certificate/ecf-canonical-identity.service";
 import { PrismaDosaCompanyFiscalConfigReader } from "./dosa-company-fiscal-config";
+import type { DosaCertificationSessionService } from "./dosa-certification-session.service";
 import {
   DosaCredentialService,
   PrismaDosaCredentialStore,
@@ -84,6 +85,14 @@ real("Preasociación empresa-RNC — PostgreSQL real", () => {
         new DosaCredentialVault(MASTER),
       ),
       new PrismaDosaCompanyFiscalConfigReader(prisma),
+      // Doble de CONFIGURACIÓN, no de lógica de negocio. El controlador solo
+      // pregunta aquí qué modo está disponible, y ese dato se deriva de
+      // configuración (`describeReadiness()` del cliente + `urlCipher.ready`).
+      // La sesión privada de verdad no participa en este recorrido: la prueba
+      // no abre ninguna sesión.
+      {
+        describeIntegrationMode: () => "PUBLIC_PORTAL",
+      } as unknown as DosaCertificationSessionService,
     );
   });
 

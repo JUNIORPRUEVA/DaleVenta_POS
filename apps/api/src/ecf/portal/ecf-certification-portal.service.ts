@@ -11,9 +11,9 @@ import {
 
 import { PrismaService } from "../../prisma/prisma.service";
 import { effectiveIntentProvider } from "../provider/dosa/dosa-intent-attribution";
+import { EcfPortalEnrollmentService } from "./ecf-portal-enrollment.service";
 import {
   PORTAL_PILOT_COMPANIES_ENV,
-  isEcfPortalPilotCompany,
   parsePilotCompanyIds,
 } from "./ecf-portal-pilot.policy";
 
@@ -68,17 +68,25 @@ export interface PortalSessionResult {
  */
 @Injectable()
 export class EcfCertificationPortalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly enrollment: EcfPortalEnrollmentService,
+  ) {}
 
   /**
-   * `true` solo para las empresas autorizadas del piloto.
+   * `true` solo para las empresas con autorización vigente.
    *
-   * Se lee en cada llamada (no en el constructor) para que retirar una empresa
-   * del piloto surta efecto sin reiniciar, y para que Nest no tenga que
-   * resolver un segundo parametro de constructor.
+   * La decisión ya NO vive en una variable del despliegue: se lee de
+   * `ecf_portal_enrollments` en cada llamada, de modo que conceder o revocar
+   * surte efecto sin reiniciar el servicio y sin editar el entorno.
    */
-  isPilotCompany(companyId: string): boolean {
-    return isEcfPortalPilotCompany(companyId);
+  async isPilotCompany(companyId: string): Promise<boolean> {
+    // Best-effort y SIEMPRE: si la empresa cumple la regla de autoservicio y no
+    // tiene inscripción, se persiste aquí —el camino de escritura— para que la
+    // autorización quede con fecha, motivo y origen. La lectura (`eligibility`)
+    // no escribe nunca; por eso la persistencia no puede vivir ahí.
+    await this.enrollment.ensureAutoEnrollment(companyId);
+    return (await this.enrollment.eligibility(companyId)).eligible;
   }
 
   /**
@@ -88,17 +96,19 @@ export class EcfCertificationPortalService {
    * si muestra la entrada del portal. Cerrada por defecto: si el piloto no esta
    * configurado, `eligible` es `false` y el motivo lo explica.
    */
-  eligibility(companyId: string): {
+  async eligibility(companyId: string): Promise<{
     eligible: boolean;
     companyId: string;
-    reason: "ELIGIBLE" | "PILOT_NOT_INCLUDED";
+    reason: string;
     portalPath: string;
-  } {
-    const eligible = this.isPilotCompany(companyId);
+  }> {
+    const decision = await this.enrollment.eligibility(companyId);
     return {
-      eligible,
+      eligible: decision.eligible,
       companyId,
-      reason: eligible ? "ELIGIBLE" : "PILOT_NOT_INCLUDED",
+      // Se devuelve el motivo real (`NO_AUTHORIZATION`, `AUTHORIZATION_EXPIRED`…)
+      // para que la interfaz explique qué falta en vez de decir «no autorizado».
+      reason: decision.reason,
       portalPath: "/ecf/certificacion",
     };
   }
@@ -108,8 +118,9 @@ export class EcfCertificationPortalService {
     companyId: string;
     userId: string;
   }): Promise<{ ticket: string; expiresAt: string }> {
-    // Compuerta del piloto: una empresa fuera de la lista no obtiene capacidad.
-    if (!this.isPilotCompany(input.companyId)) {
+    // Compuerta de autorización: una empresa sin autorización vigente no obtiene
+    // capacidad. Se evalúa aquí y otra vez al canjear (defensa en profundidad).
+    if (!(await this.isPilotCompany(input.companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     await this.requireDosaIntention(input.companyId);
@@ -154,9 +165,9 @@ export class EcfCertificationPortalService {
       throw new GoneException("PORTAL_TICKET_EXPIRED");
     }
 
-    // Defensa en profundidad: aunque el ticket exista, si la empresa no esta
-    // autorizada (p. ej. se retiro del piloto) no se abre sesion.
-    if (!this.isPilotCompany(row.companyId)) {
+    // Defensa en profundidad: aunque el ticket exista, si la empresa perdió la
+    // autorización (revocada o caducada) no se abre sesión.
+    if (!(await this.isPilotCompany(row.companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     await this.requireDosaIntention(row.companyId);
@@ -234,8 +245,10 @@ export class EcfCertificationPortalService {
     if (session.expiresAt.getTime() <= Date.now()) {
       throw new UnauthorizedException("PORTAL_SESSION_EXPIRED");
     }
-    // Si la empresa sale del piloto, las sesiones vivas dejan de servir.
-    if (!this.isPilotCompany(session.companyId)) {
+    // Si la empresa pierde la autorizacion (revocada o caducada), las sesiones
+    // vivas dejan de servir. El `await` es imprescindible: sin el, la compuerta
+    // recibiria una promesa (siempre "verdadera") y quedaria abierta.
+    if (!(await this.isPilotCompany(session.companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     return session;

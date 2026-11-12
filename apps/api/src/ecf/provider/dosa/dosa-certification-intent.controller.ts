@@ -20,7 +20,7 @@ import { Permissions } from "../../../auth/roles.decorator";
 import { RolesGuard } from "../../../auth/roles.guard";
 import { requireTenant, type TenantUser } from "../../../auth/tenant-context";
 import { PrismaService } from "../../../prisma/prisma.service";
-import { isEcfPortalPilotCompany } from "../../portal/ecf-portal-pilot.policy";
+import { EcfPortalEnrollmentService } from "../../portal/ecf-portal-enrollment.service";
 import {
   DosaCertificationIntentService,
   type DosaIntentRejection,
@@ -30,7 +30,7 @@ import type { DosaCredentialEnvironment } from "./dosa-credential-vault.service"
 import { ECF_DOSA_FISCAL_CONFIG } from "./dosa-emission.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
 import { effectiveIntentProvider, historicalIntentProvider, intentReconciliationKind, type DosaIntentAttributionAudit } from "./dosa-intent-attribution";
-import { DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS } from "./dosa-certification-session.service";
+import { DOSA_SESSION_HISTORICAL_AUTHORIZATION_TTL_MS, DosaCertificationSessionService, type DosaIntegrationMode } from "./dosa-certification-session.service";
 import {
   INTERNAL_EVIDENCE_SCHEMA,
   internalEvidenceDigest,
@@ -138,6 +138,28 @@ export type DosaIntentStateResponse = {
   };
   /** `true` solo si una reconciliación histórica sigue necesitando la acción administrativa. */
   historicalReviewRequired: boolean;
+  /**
+   * `true` solo si este despliegue tiene habilitada la autorización histórica.
+   * Informativo: la pantalla lo usa para no ofrecer una acción que el servidor
+   * rechazaría con `DOSA_HISTORICAL_TRANSITION_DISABLED`.
+   */
+  historicalTransitionEnabled: boolean;
+  /**
+   * `true` solo si la acción puede completarse AHORA: habilitada y expediente en
+   * el único estado autorizable. Con `false` la pantalla no ofrece el
+   * formulario, porque el servidor lo rechazaría.
+   */
+  historicalTransitionAvailable: boolean;
+  /**
+   * Modo de integración disponible para la empresa, decidido por el backend.
+   *
+   * `PRIVATE_SESSION` → el backend puede abrir la sesión privada de DOSA.
+   * `PUBLIC_PORTAL` → no puede, y la ruta oficial es el portal con boleto.
+   *
+   * El cliente NO debe deducir el modo de un código de error: un error
+   * desconocido nunca autoriza a continuar por otra vía.
+   */
+  certificationMode: DosaIntegrationMode;
   fiscalAuthorizationGranted: false;
 };
 
@@ -158,6 +180,43 @@ function recordedProvider(entries: readonly IntentAuditEntry[]): string {
     }).filter((value): value is "DOSA" | "ALANUBE" => value !== null),
   );
   return providers.size === 1 ? [...providers][0] : "UNVERIFIED";
+}
+
+/**
+ * Estado del intento que la autorización histórica puede tocar: el Intento 1
+ * original, activo, sin referencias de proveedor y sin cierre. Fuente única: la
+ * usan el POST de autorización y el estado que consume la pantalla, para que la
+ * UI nunca ofrezca una acción que el servidor vaya a rechazar.
+ */
+type HistoricalTransitionIntentState = {
+  attemptNo: number;
+  status: string;
+  activeKey: string | null;
+  sessionUrl: string | null;
+  providerPostulationId: string | null;
+  lastEventType: string | null;
+  providerConfirmedAt: Date | null;
+  closedAt: Date | null;
+};
+
+function isHistoricalTransitionStateSafe(
+  intent: HistoricalTransitionIntentState,
+): boolean {
+  return (
+    intent.attemptNo === 1 &&
+    intent.status === "NOT_STARTED" &&
+    Boolean(intent.activeKey) &&
+    !intent.sessionUrl &&
+    !intent.providerPostulationId &&
+    !intent.lastEventType &&
+    !intent.providerConfirmedAt &&
+    !intent.closedAt
+  );
+}
+
+/** Interruptor de propietario: apagado salvo que el despliegue lo encienda. */
+function historicalTransitionEnabled(): boolean {
+  return process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED === "true";
 }
 
 const REJECTION_HTTP: Record<DosaIntentRejection, "CONFLICT" | "UNAVAILABLE"> = {
@@ -212,6 +271,11 @@ export class DosaCertificationIntentController {
     // valor, asi que Nest no puede resolverla por tipo. Se inyecta por token.
     @Inject(ECF_DOSA_FISCAL_CONFIG)
     private readonly fiscalConfig: DosaCompanyFiscalConfigReader,
+    private readonly sessionIntegration: DosaCertificationSessionService,
+    // Autorización del asistente POR EMPRESA (base de datos), no por variable de
+    // entorno. Las dos rutas administrativas de abajo exigen que la empresa esté
+    // autorizada, igual que el portal.
+    private readonly portalEnrollment: EcfPortalEnrollmentService,
   ) {}
 
   @Post("certification-intent")
@@ -335,6 +399,17 @@ export class DosaCertificationIntentController {
     const historicalReviewRequired = described.session
       ? await this.isHistoricalReviewRequired(companyId, described.session.id, provider)
       : false;
+    // La pantalla no debe ofrecer una acción que el servidor va a rechazar: se
+    // publica si la autorización está habilitada y si el expediente sigue en el
+    // único estado autorizable. Sin esto la UI mostraba el formulario para
+    // expedientes ya iniciados o con el interruptor apagado, y todo intento
+    // terminaba en error.
+    const transitionEnabled = historicalTransitionEnabled();
+    const transitionAvailable =
+      historicalReviewRequired &&
+      transitionEnabled &&
+      described.session !== null &&
+      (await this.isHistoricalTransitionAuthorizable(companyId, described.session.id));
 
     return {
       ok: true,
@@ -352,6 +427,11 @@ export class DosaCertificationIntentController {
         production: productionCredential,
       },
       historicalReviewRequired,
+      historicalTransitionEnabled: transitionEnabled,
+      historicalTransitionAvailable: transitionAvailable,
+      // Modo decidido en el servidor con la configuración real de esta
+      // instalación: el cliente lo lee en lugar de interpretar errores.
+      certificationMode: this.sessionIntegration.describeIntegrationMode(),
       fiscalAuthorizationGranted: false,
     };
   }
@@ -429,10 +509,10 @@ export class DosaCertificationIntentController {
     if (user.role !== "ADMIN" && user.role !== "ADMINISTRADOR") {
       throw new ForbiddenException("DOSA_HISTORICAL_TRANSITION_ADMIN_REQUIRED");
     }
-    if (process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED !== "true") {
+    if (!historicalTransitionEnabled()) {
       throw new ConflictException("DOSA_HISTORICAL_TRANSITION_DISABLED");
     }
-    if (!isEcfPortalPilotCompany(companyId)) {
+    if (!(await this.portalEnrollment.isEligible(companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     if (
@@ -468,17 +548,10 @@ export class DosaCertificationIntentController {
         );
       }
       // Solo el Intento 1 original, activo, sin referencias de proveedor y sin
-      // cierre. Nunca se autoriza un intento ya iniciado o uno nuevo.
-      if (
-        intent.attemptNo !== 1 ||
-        intent.status !== "NOT_STARTED" ||
-        !intent.activeKey ||
-        intent.sessionUrl ||
-        intent.providerPostulationId ||
-        intent.lastEventType ||
-        intent.providerConfirmedAt ||
-        intent.closedAt
-      ) {
+      // cierre. Nunca se autoriza un intento ya iniciado o uno nuevo. La misma
+      // regla se publica en `GET /certification-intent` para que la pantalla no
+      // muestre el formulario cuando aquí se rechazaría.
+      if (!isHistoricalTransitionStateSafe(intent)) {
         throw new ConflictException(
           "DOSA_HISTORICAL_TRANSITION_STATE_UNSAFE",
         );
@@ -584,7 +657,7 @@ export class DosaCertificationIntentController {
     ) {
       throw new ConflictException("DOSA_INTENT_RECONCILIATION_INTERNAL_DISABLED");
     }
-    if (!isEcfPortalPilotCompany(companyId)) {
+    if (!(await this.portalEnrollment.isEligible(companyId))) {
       throw new ForbiddenException("PORTAL_PILOT_NOT_INCLUDED");
     }
     if (!body || body.confirmation !== "RECONCILE_EXISTING_DOSA_INTENT" ||
@@ -767,6 +840,32 @@ export class DosaCertificationIntentController {
 
   private async intentProvider(companyId: string, sessionId: string): Promise<string> {
     return effectiveIntentProvider(await this.intentAudits(companyId, sessionId));
+  }
+
+  /**
+   * ¿El expediente sigue en el único estado que la autorización histórica puede
+   * tocar? Se evalúa con la MISMA regla que el POST, para que el estado y la
+   * acción no puedan discrepar: si aquí es `false`, la pantalla no ofrece el
+   * formulario en lugar de dejar que el administrador choque con un error.
+   */
+  private async isHistoricalTransitionAuthorizable(
+    companyId: string,
+    sessionId: string,
+  ): Promise<boolean> {
+    const intent = await this.prisma.ecfDosaCertificationSession.findFirst({
+      where: { id: sessionId, companyId },
+      select: {
+        attemptNo: true,
+        status: true,
+        activeKey: true,
+        sessionUrl: true,
+        providerPostulationId: true,
+        lastEventType: true,
+        providerConfirmedAt: true,
+        closedAt: true,
+      },
+    });
+    return intent !== null && isHistoricalTransitionStateSafe(intent);
   }
 
   /**

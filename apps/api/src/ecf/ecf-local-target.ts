@@ -23,6 +23,11 @@ export const ECF_LOCAL_TARGETS: readonly EcfLocalTarget[] = [
   { name: "fullpos_alanube_uat_test", port: "56551", kind: "EPHEMERAL_TEST" },
   // Destino exclusivamente desechable para las suites automáticas.
   { name: "fullpos_ecf_ephemeral_test", port: "56701", kind: "EPHEMERAL_TEST" },
+  // Mismo destino efímero en un puerto alternativo: Windows/Hyper-V reserva
+  // rangos dinámicos y a veces deja el 56701 inutilizable (`bind: access
+  // permissions`). Sigue siendo una regla EXACTA (loopback + nombre + puerto),
+  // así que no relaja ninguna comprobación: la base es la misma y desechable.
+  { name: "fullpos_ecf_ephemeral_test", port: "55500", kind: "EPHEMERAL_TEST" },
 ];
 
 export function matchEcfLocalTarget(value = process.env.DATABASE_URL ?? ""): EcfLocalTarget | null {

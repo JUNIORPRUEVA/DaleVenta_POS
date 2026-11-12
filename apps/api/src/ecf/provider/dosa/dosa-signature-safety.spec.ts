@@ -76,13 +76,15 @@ describe("isLocalLabEnvironment", () => {
 
 describe("readDosaSignatureConfig — degradación por entorno", () => {
   it("por defecto (sin variable) queda BLOCKED", () => {
-    // Los parámetros de tiempo se rellenan siempre con su valor seguro por
-    // defecto, aunque la estrategia esté bloqueada.
+    // Los parámetros de tiempo y de secreto se rellenan siempre con su valor
+    // seguro por defecto, aunque la estrategia esté bloqueada. `auto` no
+    // supone: deduce la unidad de `t` por magnitud y acepta las dos lecturas
+    // acotadas de un secreto hex (ver P1/P5 en la política).
     expect(readDosaSignatureConfig({})).toEqual({
       strategy: "BLOCKED",
       secret: null,
-      secretEncoding: "utf8",
-      timestampUnit: "seconds",
+      secretEncoding: "auto",
+      timestampUnit: "auto",
       toleranceSeconds: 300,
     });
   });

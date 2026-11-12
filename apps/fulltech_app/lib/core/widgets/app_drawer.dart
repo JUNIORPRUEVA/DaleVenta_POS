@@ -38,8 +38,8 @@ class AppDrawer extends ConsumerStatefulWidget {
 
 /// Recordatorio de atajos en el pie del drawer.
 ///
-/// Es informativo y está separado de las opciones de navegación: mantiene la
-/// columna equilibrada sin aádir acciones nuevas.
+/// Es informativo y est├í separado de las opciones de navegaci├│n: mantiene la
+/// columna equilibrada sin a├ídir acciones nuevas.
 class _DrawerShortcutHint extends StatelessWidget {
   const _DrawerShortcutHint({required this.compact});
 
@@ -270,7 +270,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   _MobileDrawerFooterIconButton(
                     compact: compact,
                     icon: AppIcons.settings,
-                    tooltip: 'Configuración',
+                    tooltip: 'Configuraci├│n',
                     selected: isNavigationRouteActive(
                       location,
                       Routes.configuracion,
@@ -280,7 +280,7 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
                   _MobileDrawerFooterIconButton(
                     compact: compact,
                     icon: AppIcons.logout,
-                    tooltip: 'Cerrar sesión',
+                    tooltip: 'Cerrar sesi├│n',
                     color: logoutColor,
                     onTap: onLogoutTap,
                   ),
@@ -458,7 +458,7 @@ class _DrawerWordmark extends StatelessWidget {
       ),
     );
 
-    // En la cabecera móvil se muestra al lado de "FullPOS": se deja flexible
+    // En la cabecera m├│vil se muestra al lado de "FullPOS": se deja flexible
     // para que nunca desborde en pantallas estrechas.
     if (inline) return Flexible(child: cloud);
 
@@ -545,12 +545,12 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   Future<void> _openMovementDialog(BuildContext context, String type) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
     // Capturar el overlay ANTES de cerrar el drawer. El overlay del drawer es
-    // el overlay raíz (sigue montado aunque el drawer se destruya), mientras
-    // que el contexto del Navigator raíz no puede resolverlo por sí mismo.
+    // el overlay ra├¡z (sigue montado aunque el drawer se destruya), mientras
+    // que el contexto del Navigator ra├¡z no puede resolverlo por s├¡ mismo.
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     // Capturar el controller ANTES de cerrar el drawer. Al hacer
     // `Navigator.pop(context)` el drawer se destruye, y usar `ref` (WidgetRef
-    // del drawer) después lanzaría:
+    // del drawer) despu├®s lanzar├¡a:
     //   Bad state: Cannot use "ref" after the widget was disposed.
     final controller = ref.read(activeCashSessionControllerProvider.notifier);
     Navigator.pop(context);
@@ -589,7 +589,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
   Future<void> _closeTurnFromDrawer(BuildContext context) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
     final repository = ref.read(cashRepositoryProvider);
-    // Capturar el overlay ANTES de cerrar el drawer (el overlay raíz sigue
+    // Capturar el overlay ANTES de cerrar el drawer (el overlay ra├¡z sigue
     // montado aunque el drawer se destruya tras el pop).
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     // Capturar el controller ANTES de cerrar el drawer: el ref del drawer
@@ -635,7 +635,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
   Future<void> _openTurnFromDrawer(BuildContext context) async {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
-    // Capturar el overlay ANTES de cerrar el drawer (el overlay raíz sigue
+    // Capturar el overlay ANTES de cerrar el drawer (el overlay ra├¡z sigue
     // montado aunque el drawer se destruya tras el pop).
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     // Capturar el controller ANTES de cerrar el drawer: el ref del drawer
@@ -653,12 +653,12 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       if (!rootContext.mounted || opened != true) return;
       await controller.refresh();
       if (!rootContext.mounted) return;
-      // Solo se anuncia el éxito cuando el estado autoritativo confirma el
+      // Solo se anuncia el ├®xito cuando el estado autoritativo confirma el
       // turno abierto (ver cash_turn_menu_button._openCash).
       if (ref.read(activeCashSessionControllerProvider).valueOrNull == null) {
         showCashToast(
           rootContext,
-          'La caja no quedó abierta en el servidor. Intenta de nuevo.',
+          'La caja no qued├│ abierta en el servidor. Intenta de nuevo.',
           isError: true,
           overlay: overlay,
         );
@@ -667,7 +667,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       showCashToast(
         rootContext,
         'Turno abierto',
-        detail: 'La caja está lista para operar.',
+        detail: 'La caja est├í lista para operar.',
         overlay: overlay,
       );
     } catch (error) {
@@ -734,9 +734,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         currentUser?.appRole ??
         ref.watch(authStateProvider).user?.appRole ??
         AppRole.unknown;
-    // Snapshot declarativo: la configuración de empresa se observa UNA sola vez
-    // aquí (build del drawer) y se pasa ya resuelta al constructor de
-    // navegación, que es puro. Así `buildAppNavigationSections` nunca ejecuta
+    // Snapshot declarativo: la configuraci├│n de empresa se observa UNA sola vez
+    // aqu├¡ (build del drawer) y se pasa ya resuelta al constructor de
+    // navegaci├│n, que es puro. As├¡ `buildAppNavigationSections` nunca ejecuta
     // `ref.watch` dentro de un helper durante el build.
     final multiWarehouseEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ??
@@ -747,15 +747,15 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
             .valueOrNull
             ?.wholesalePriceListsEnabled ??
         false;
-    // Interruptor e-CF de la EMPRESA, leído de la MISMA configuración que el
-    // Drawer ya observa: el menú no añade ninguna petición de red. Mientras la
-    // configuración no esté confirmada vale `false`, así que un error de red
-    // nunca deja el módulo a la vista.
+    // Interruptor e-CF de la EMPRESA, le├¡do de la MISMA configuraci├│n que el
+    // Drawer ya observa: el men├║ no a├▒ade ninguna petici├│n de red. Mientras la
+    // configuraci├│n no est├® confirmada vale `false`, as├¡ que un error de red
+    // nunca deja el m├│dulo a la vista.
     final ecfEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.ecfEnabled ?? false;
     // Piloto: la elegibilidad la confirma el backend y viaja en la MISMA
-    // configuración que el Drawer ya observa, así que el menú no añade ninguna
-    // petición de red. Mientras no esté confirmada vale `false`.
+    // configuraci├│n que el Drawer ya observa, as├¡ que el men├║ no a├▒ade ninguna
+    // petici├│n de red. Mientras no est├® confirmada vale `false`.
     final ecfPilotEligible =
         ref.watch(companySettingsProvider).valueOrNull?.ecfPilotEligible ??
         false;
@@ -767,14 +767,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       ecfPilotEligible: ecfPilotEligible,
     );
     // Estado autoritativo del turno (fuente de verdad = backend). El drawer
-    // móvil observa el MISMO provider que el resto de la app: si el turno
-    // cambia (realtime/poll/resumed/reconexión), el grupo "Turno" se
+    // m├│vil observa el MISMO provider que el resto de la app: si el turno
+    // cambia (realtime/poll/resumed/reconexi├│n), el grupo "Turno" se
     // reconstruye sin necesidad de cerrar/reabrir el drawer.
     final cashSession = ref.watch(activeCashSessionControllerProvider);
     final cashUnverified = ref.watch(cashStateUnverifiedProvider);
     final cashStaleShift = ref.watch(cashStateStaleShiftProvider);
     final hasOpenShift = cashSession.valueOrNull?.isOpen == true;
-    // Estado confirmado contra el backend (no loading, no error, no caché
+    // Estado confirmado contra el backend (no loading, no error, no cach├®
     // no sincronizada). Regla #28: un error de red NO es "turno cerrado".
     final cashConfirmed = cashSession.hasValue && !cashUnverified;
     final groups = _buildDrawerGroups(
@@ -879,13 +879,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'Cerrar menú',
+                                  tooltip: 'Cerrar men├║',
                                   onPressed: () => Navigator.pop(context),
                                   icon: AppIcon(
                                     AppIcons.close,
                                     size: 18,
                                     color: AppColors.textSecondary,
-                                    semanticLabel: 'Cerrar menú',
+                                    semanticLabel: 'Cerrar men├║',
                                   ),
                                   style: IconButton.styleFrom(
                                     backgroundColor: const Color(0xFFEFF4FB),
@@ -941,13 +941,13 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                                   height: 42,
                                   width: 42,
                                   child: IconButton(
-                                    tooltip: 'Cerrar menú',
+                                    tooltip: 'Cerrar men├║',
                                     onPressed: () => Navigator.pop(context),
                                     icon: AppIcon(
                                       AppIcons.close,
                                       size: 20,
                                       color: Colors.white,
-                                      semanticLabel: 'Cerrar menú',
+                                      semanticLabel: 'Cerrar men├║',
                                     ),
                                     style: IconButton.styleFrom(
                                       backgroundColor: Colors.white.withValues(
@@ -1072,7 +1072,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                               context,
                               const AppNavigationItem(
                                 icon: Icons.settings_outlined,
-                                title: 'Configuración',
+                                title: 'Configuraci├│n',
                                 route: Routes.configuracion,
                               ),
                             ),
@@ -1150,9 +1150,9 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   final warehousesItem = pick(Routes.configuracionAlmacenes);
   // Los accesos de efectivo (registrar entrada, registrar salida e historial de
   // movimientos) ya NO forman parte de `sections`: viven en el selector
-  // superior «Turno» (CashTurnMenuButton) y en el grupo «Turno» del drawer,
-  // construidos directamente. Así tampoco pueden reaparecer en los grupos
-  // comodín («Más módulos» / «Otros»), que se alimentan de lo que sobra.
+  // superior ┬½Turno┬╗ (CashTurnMenuButton) y en el grupo ┬½Turno┬╗ del drawer,
+  // construidos directamente. As├¡ tampoco pueden reaparecer en los grupos
+  // comod├¡n (┬½M├ís m├│dulos┬╗ / ┬½Otros┬╗), que se alimentan de lo que sobra.
   final rawClientItem = pick(Routes.clientes);
   final clientItem = rawClientItem == null
       ? null
@@ -1198,7 +1198,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       if (categoriesItem != null)
         const AppNavigationItem(
           icon: Icons.category_outlined,
-          title: 'Categorías',
+          title: 'Categor├¡as',
           route: Routes.catalogoCategorias,
         ),
       if (inventoryCountItem != null)
@@ -1277,16 +1277,16 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     );
   }
 
-  // El grupo «Contabilidad» se retiró de la navegación (ver
+  // El grupo ┬½Contabilidad┬╗ se retir├│ de la navegaci├│n (ver
   // `buildAppNavigationSections`). Sus rutas y pantallas siguen existiendo,
   // pero ya no se construye el grupo para ninguna plataforma.
 
   if (mobileLayout) {
     // Grupo "Turno" reactivo al estado autoritativo del backend:
-    //  - ABIERTO confirmado  → Turno actual + Cerrar turno + Historial.
-    //  - CERRADO confirmado  → Abrir turno + Historial.
-    //  - LOADING/ERROR/NO SINCRONIZADO → ítem neutro DESHABILITADO + Historial
-    //    (no se presenta ninguna acción crítica como confirmada).
+    //  - ABIERTO confirmado  ÔåÆ Turno actual + Cerrar turno + Historial.
+    //  - CERRADO confirmado  ÔåÆ Abrir turno + Historial.
+    //  - LOADING/ERROR/NO SINCRONIZADO ÔåÆ ├¡tem neutro DESHABILITADO + Historial
+    //    (no se presenta ninguna acci├│n cr├¡tica como confirmada).
     final turnosItems = <AppNavigationItem>[
       if (!cashConfirmed)
         const AppNavigationItem(
@@ -1303,7 +1303,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
             route: Routes.caja,
           ),
       // Entradas y salidas manuales: SOLO con turno abierto confirmado por el
-      // backend. `_handleItemTap` intercepta estas dos rutas y abre el diálogo
+      // backend. `_handleItemTap` intercepta estas dos rutas y abre el di├ílogo
       // existente (`showCashMovementDialog`), nunca una pantalla nueva.
       if (hasOpenShift && cashConfirmed)
         if (hasPermission(role, AppPermission.viewSales))
@@ -1355,7 +1355,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
         openOnHover: false,
         featured: true,
         subtitle: cashStaleShift
-            ? 'Turno de otro día — ciérralo'
+            ? 'Turno de otro d├¡a ÔÇö ci├®rralo'
             : !cashConfirmed
             ? 'Estado no disponible'
             : hasOpenShift
@@ -1430,15 +1430,15 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     ]);
 
     if (itemsByRoute.isNotEmpty) {
-      // Un único módulo restante no debe quedar escondido tras «Más módulos»:
-      // el menú mostraba un título que no identifica la función (la facturación
-      // electrónica aparecía como «Más módulos»). Con un solo ítem se usa su
+      // Un ├║nico m├│dulo restante no debe quedar escondido tras ┬½M├ís m├│dulos┬╗:
+      // el men├║ mostraba un t├¡tulo que no identifica la funci├│n (la facturaci├│n
+      // electr├│nica aparec├¡a como ┬½M├ís m├│dulos┬╗). Con un solo ├¡tem se usa su
       // propio nombre e icono, y el toque sigue navegando a su ruta.
       final leftovers = itemsByRoute.values.toList();
       final only = leftovers.length == 1 ? leftovers.first : null;
       groups.add(
         _DrawerMenuGroup(
-          title: only?.title ?? 'Más módulos',
+          title: only?.title ?? 'M├ís m├│dulos',
           icon: only?.appIcon ?? AppIcons.more,
           items: leftovers,
           openOnHover: false,
@@ -1508,12 +1508,12 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
   ]);
 
   if (itemsByRoute.isNotEmpty) {
-    // Mismo criterio que en móvil: con un único ítem, su propio nombre.
+    // Mismo criterio que en m├│vil: con un ├║nico ├¡tem, su propio nombre.
     final leftovers = itemsByRoute.values.toList();
     final only = leftovers.length == 1 ? leftovers.first : null;
     groups.add(
       _DrawerMenuGroup(
-        title: only?.title ?? 'Más módulos',
+        title: only?.title ?? 'M├ís m├│dulos',
         icon: only?.appIcon ?? AppIcons.more,
         items: leftovers,
       ),
@@ -1537,10 +1537,10 @@ class _DrawerMenuGroup {
 
   final String title;
 
-  /// Icono propio del sistema (HugeIcons) para el módulo.
+  /// Icono propio del sistema (HugeIcons) para el m├│dulo.
   final AppIconData icon;
 
-  /// PNG propio del módulo (p. ej. `assets/iconos/menu-ventas.png`).
+  /// PNG propio del m├│dulo (p. ej. `assets/iconos/menu-ventas.png`).
   /// Si el archivo no existe, se renderiza [icon] como respaldo.
   final String? assetIcon;
 
@@ -1763,9 +1763,9 @@ class _TurnStatusPulse extends StatelessWidget {
   }
 }
 
-/// Glifo del módulo en el encabezado del grupo.
+/// Glifo del m├│dulo en el encabezado del grupo.
 ///
-/// Usa el PNG propio cuando existe; si el archivo todavía no está en el
+/// Usa el PNG propio cuando existe; si el archivo todav├¡a no est├í en el
 /// bundle, cae automaticamente al icono del sistema ([AppIcons]) sin romper
 /// ni dejar huecos en la lista.
 class _DrawerGroupGlyph extends StatelessWidget {

@@ -32,8 +32,6 @@ class ApiRoutes {
   static const settingsCompanyName = '/settings/company-name';
   static const fiscalSettings = '/company/fiscal-settings';
   static const taxes = '/taxes';
-  static const ncfSequences = '/ncf/sequences';
-  static String ncfSequence(String id) => '/ncf/sequences/$id';
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
   static const license = '/license';
@@ -563,6 +561,13 @@ class ApiRoutes {
   static const ecfDosaAuthorizeHistoricalTransition =
       '/ecf/dosa/certification-intent/authorize-historical-transition';
   static const ecfDosaCertificationSession = '/ecf/dosa/certification-session';
+  /// Activación y autorización de emisión del PROPIO cliente.
+  ///
+  /// Evalúa la evidencia que él mismo produjo (sesión, confirmación de DOSA,
+  /// aprobación DGII y su propia autorización) y, si está completa, activa la
+  /// credencial y deriva el estado de certificación. Es idempotente y responde
+  /// `200` aunque falte algo, con los motivos en `blockingReasons`.
+  static const ecfDosaActivationAttempt = '/ecf/dosa/activation/attempt';
   static const ecfDosaCertificationDiagnostic =
       '/ecf/dosa/certification-diagnostic';
 
@@ -587,8 +592,23 @@ class ApiRoutes {
   /// apagado). Sirve para validar la cadena completa; nunca es emisión fiscal.
   static String ecfDocumentSimulateDispatch(String id) =>
       '/ecf/documents/$id/simulate-dispatch';
+
+  /// Despacho AUTORIZADO al proveedor DOSA de la empresa.
+  ///
+  /// El backend aplica la barrera del documento, la compuerta fiscal y la bóveda
+  /// de credenciales de ESTA empresa y ESTE ambiente. Puede responder `ok:false`
+  /// con motivos, que la interfaz debe mostrar tal cual.
+  static String ecfDocumentDispatchDosa(String id) =>
+      '/ecf/documents/$id/dispatch-dosa';
   static const ecfSequences = '/ecf/sequences';
   static const ecfSequencesRenew = '/ecf/sequences/renew';
+
+  /// Numeración que la DGII autorizó a la empresa, por tipo de comprobante.
+  /// Es la fuente de verdad contra la que se valida lo que se declara.
+  static const ecfDgiiAuthorizedSequences = '/ecf/dgii/authorized-sequences';
+
+  /// Registro de ventas hechas SIN comprobante electrónico (excepciones).
+  static const ecfSalesWithoutDocument = '/ecf/sales-without-document';
 
   /// Proceso INTERNO de habilitación e-CF de la empresa (pasos y auditoría).
   static const ecfOnboarding = '/ecf/onboarding';

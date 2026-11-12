@@ -72,17 +72,17 @@ void main() {
       Routes.caja,
     );
     expect(
-      AppNavigator.effectiveFallbackRouteFor(Routes.contabilidadFacturaFiscal),
+      AppNavigator.effectiveFallbackRouteFor(Routes.contabilidadPagosPendientes),
       Routes.contabilidad,
     );
   });
 
-  test('factura fiscal back goes to the real previous screen', () {
+  test('pagos pendientes back goes to the real previous screen', () {
     AppNavigator.recordShellLocation(Routes.home);
-    AppNavigator.recordShellLocation(Routes.contabilidadFacturaFiscal);
+    AppNavigator.recordShellLocation(Routes.contabilidadPagosPendientes);
 
     expect(
-      AppNavigator.effectiveFallbackRouteFor(Routes.contabilidadFacturaFiscal),
+      AppNavigator.effectiveFallbackRouteFor(Routes.contabilidadPagosPendientes),
       Routes.home,
     );
   });

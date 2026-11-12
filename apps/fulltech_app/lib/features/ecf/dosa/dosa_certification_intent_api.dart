@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_routes.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/auth_repository.dart';
 
 /// Preasociación empresa ↔ RNC antes de abrir el asistente DOSA.
@@ -48,6 +49,36 @@ class DosaCertificationIntent {
 }
 
 /// Estado interno de la preparación, para consultarlo al volver al sistema.
+/// Modo de integración DOSA que el backend declara para la empresa.
+///
+/// Es la ÚNICA fuente de verdad para elegir la ruta. El cliente no deduce el
+/// modo a partir de un código de error: un error desconocido no autoriza a
+/// continuar por otra vía.
+enum DosaCertificationMode {
+  /// El backend puede abrir (o reutilizar) la sesión privada de DOSA.
+  privateSession,
+
+  /// El backend no puede abrir sesiones: la ruta oficial es el portal con
+  /// boleto de un solo uso y el asistente público.
+  publicPortal,
+
+  /// Backend antiguo o respuesta incompleta: se intenta la sesión privada y
+  /// **solo** un estado explícito de la apertura deshabilitada permite el
+  /// portal. Un error de transporte no habilita nada.
+  unknown;
+
+  static DosaCertificationMode parse(Object? raw) {
+    switch ('${raw ?? ''}'.trim()) {
+      case 'PRIVATE_SESSION':
+        return DosaCertificationMode.privateSession;
+      case 'PUBLIC_PORTAL':
+        return DosaCertificationMode.publicPortal;
+      default:
+        return DosaCertificationMode.unknown;
+    }
+  }
+}
+
 class DosaIntentState {
   const DosaIntentState({
     required this.canonicalRnc,
@@ -62,6 +93,8 @@ class DosaIntentState {
     required this.sessionReusable,
     required this.credentialStatus,
     required this.historicalReviewRequired,
+    this.historicalTransitionAvailable = false,
+    this.certificationMode = DosaCertificationMode.unknown,
   });
 
   final String? canonicalRnc;
@@ -82,6 +115,16 @@ class DosaIntentState {
   /// El backend marca esto solo cuando una reconciliación histórica sigue
   /// necesitando la acción administrativa explícita. No autoriza nada.
   final bool historicalReviewRequired;
+
+  /// El backend afirma que la autorización puede completarse AHORA: está
+  /// habilitada en este despliegue y el expediente sigue en el único estado
+  /// autorizable. Con `false` la pantalla no ofrece el formulario, porque el
+  /// servidor lo rechazaría (interruptor apagado o expediente ya iniciado).
+  final bool historicalTransitionAvailable;
+
+  /// Modo que el backend declara para esta empresa. Decide la ruta: sesión
+  /// privada o portal público con boleto.
+  final DosaCertificationMode certificationMode;
 
   /// SIEMPRE `false`.
   bool get fiscalAuthorizationGranted => false;
@@ -109,6 +152,9 @@ class DosaIntentState {
       sessionReusable: sessionMap?['reusable'] == true,
       credentialStatus: credentialMap?['status'] as String?,
       historicalReviewRequired: json['historicalReviewRequired'] == true,
+      historicalTransitionAvailable:
+          json['historicalTransitionAvailable'] == true,
+      certificationMode: DosaCertificationMode.parse(json['certificationMode']),
     );
   }
 }
@@ -246,9 +292,22 @@ final dosaCertificationIntentApiProvider = Provider<DosaCertificationIntentApi>(
 );
 
 /// Estado de la preparación. Se invalida para refrescar tras registrar.
+///
+/// Depende de la empresa y de la sesión: el intento pertenece a una empresa
+/// concreta, y al cambiar de empresa no se puede seguir mostrando el de la
+/// anterior mientras la pantalla siga montada.
 final dosaIntentStateProvider = FutureProvider.autoDispose<DosaIntentState>((
   ref,
 ) {
+  ref.watch(
+    authStateProvider.select(
+      (state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      ),
+    ),
+  );
   return ref.watch(dosaCertificationIntentApiProvider).state();
 });
 

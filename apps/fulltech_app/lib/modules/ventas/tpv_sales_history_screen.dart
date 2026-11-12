@@ -420,16 +420,19 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     if (ok != true) return;
 
     try {
-      await ref
+      final result = await ref
           .read(ventasRepositoryProvider)
           .returnSale(sale.id, originalSaleCashSessionId: sale.cashSessionId);
       if (!mounted) return;
       await _load();
       if (!mounted) return;
+      final encf = result.creditNote?.encf ?? '';
       showCashToast(
         context,
         'Devolucion realizada',
-        detail: 'La devolucion se realizo correctamente.',
+        detail: encf.isEmpty
+            ? 'La devolucion se realizo correctamente.'
+            : 'Devolucion realizada. Nota de credito E34: $encf',
       );
     } catch (e, stackTrace) {
       if (!mounted) return;

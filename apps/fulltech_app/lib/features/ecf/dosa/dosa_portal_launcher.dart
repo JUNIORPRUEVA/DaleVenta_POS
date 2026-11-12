@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/auth/auth_repository.dart';
+import 'dosa_portal_navigation.dart';
 
 /// Portal de certificación automática (DOSA) alojado en nuestro dominio.
 ///
@@ -125,13 +127,20 @@ class DosaPortalApi {
   }
 }
 
-/// Abre el portal. En Web usa una pestaña nueva; en Windows/Android/iOS, el
-/// navegador del sistema (el componente necesita el origen autorizado, no un
-/// WebView con contenido local).
-Future<bool> openDosaPortal(String url) async {
+/// Abre el portal de certificación.
+///
+/// En Web navega en la **misma pestaña** (`sameTab: true`), que es el recorrido
+/// pedido: un solo clic en «Continuar con el asistente» y el portal ocupa la
+/// pestaña actual, sin `window.open` ni ventanas nuevas. En Windows, Android e
+/// iOS no hay pestañas: se usa el navegador del sistema, porque el componente
+/// necesita el origen autorizado y no un WebView con contenido local.
+Future<bool> openDosaPortal(String url, {bool sameTab = false}) async {
   final uri = Uri.tryParse(url);
   if (uri == null || !uri.hasScheme) return false;
   if (uri.scheme != 'https' && uri.scheme != 'http') return false;
+  if (sameTab && kIsWeb) {
+    return navigateSameTab(url);
+  }
   return launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 

@@ -140,8 +140,8 @@ class _DosaCertificationDiagnosticSectionState
   }
 
   String _provider(String value) => switch (value) {
-    'DOSA' => 'DOSA',
-    'ALANUBE' => 'ALANUBE',
+    'DOSA' => 'FullPOS Cloud',
+    'ALANUBE' => 'Proveedor anterior',
     _ => 'Sin atribución verificable',
   };
 

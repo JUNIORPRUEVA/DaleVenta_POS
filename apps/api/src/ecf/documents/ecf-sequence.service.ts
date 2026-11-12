@@ -2,15 +2,19 @@ import { BadRequestException, ConflictException, Injectable } from "@nestjs/comm
 import type { Prisma } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
 import { PrismaService } from "../../prisma/prisma.service";
+import { checkDeclaredRangeWithinAuthorization } from "./ecf-dgii-authorized-sequences.policy";
+import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
 
 type Tx = Prisma.TransactionClient;
-export type EcfSequenceDocumentType = "E31" | "E34";
+export type EcfSequenceDocumentType = "E31" | "E32" | "E34";
 
-// Only the document types that use a company e-CF range. E32 keeps its own
-// single-use sandbox slot: it is deliberately NOT allocatable here.
-const ALLOCATABLE: readonly EcfSequenceDocumentType[] = ["E31", "E34"];
+// Los tres tipos que consumen el rango e-CF de la empresa. E32 (consumo) entra
+// aquí porque el POS emite facturas de consumo con su propia numeración
+// autorizada; antes estaba reservado al cupo único de sandbox, que solo servía
+// para pruebas y dejaba los comprobantes reales sin número fiscal.
+const ALLOCATABLE: readonly EcfSequenceDocumentType[] = ["E31", "E32", "E34"];
 // e-NCF = letter + 2-digit type + 10 digits (13 characters total).
-const ENCF_PATTERN = /^E(31|34)\d{10}$/;
+const ENCF_PATTERN = /^E(31|32|34)\d{10}$/;
 const MAX_SEQUENCE_NUMBER = 9_999_999_999;
 
 type SequenceRow = {
@@ -32,9 +36,66 @@ export class EcfSequenceService {
 
   private assertType(documentType: string): EcfSequenceDocumentType {
     if (!ALLOCATABLE.includes(documentType as EcfSequenceDocumentType)) {
-      throw new ConflictException("ECF_SEQUENCE_TYPE_UNSUPPORTED");
+      // Un tipo desconocido no está «pendiente»: no tiene contrato, no tiene
+      // autorización y no hay forma de numerarlo. Se rechaza con un motivo que
+      // el operador puede accionar, no con un código seco.
+      const normalized = `${documentType ?? ""}`.trim().toUpperCase();
+      throw new ConflictException(
+        `ECF_SEQUENCE_TYPE_UNSUPPORTED: Tipo de comprobante no numerable: ` +
+          `${normalized || "(vacío)"}. Tipos admitidos: ${ALLOCATABLE.join(", ")}.`,
+      );
     }
     return documentType as EcfSequenceDocumentType;
+  }
+
+  /**
+   * El rango declarado debe caber dentro de lo que la DGII autorizó a ESTA
+   * empresa para ESE tipo. Sin autorización registrada no se declara nada: es la
+   * compuerta que impide pedir más números de los aprobados.
+   */
+  private async assertWithinAuthorization(
+    companyId: string,
+    documentType: EcfSequenceDocumentType,
+    range: { startNumber: number; endNumber: number },
+  ) {
+    const authorization = await new EcfDgiiAuthorizedSequencesService(
+      this.prisma,
+    ).findFor(companyId, documentType);
+    const check = checkDeclaredRangeWithinAuthorization(range, authorization);
+    if (!check.ok) {
+      throw new ConflictException(`${check.code}: ${check.message}`);
+    }
+  }
+
+  /**
+   * Comprueba el número concreto que se va a entregar contra la autorización de
+   * la DGII. Se ejecuta DENTRO de la transacción que bloquea la secuencia, así
+   * que ni una llamada concurrente ni un camino alternativo pueden saltárselo.
+   */
+  private async assertNumberWithinAuthorization(
+    tx: Tx,
+    companyId: string,
+    documentType: EcfSequenceDocumentType,
+    number: number,
+  ) {
+    const authorization = await tx.ecfDgiiAuthorizedSequence.findUnique({
+      where: { companyId_documentType: { companyId, documentType } },
+    });
+    const check = checkDeclaredRangeWithinAuthorization(
+      { startNumber: number, endNumber: number },
+      authorization === null
+        ? null
+        : {
+            authorizationNumber: authorization.authorizationNumber,
+            rangeFrom: authorization.rangeFrom,
+            rangeTo: authorization.rangeTo,
+            approvedQuantity: authorization.approvedQuantity,
+            expiresAt: authorization.expiresAt,
+          },
+    );
+    if (!check.ok) {
+      throw new ConflictException(`${check.code}: ${check.message}`);
+    }
   }
 
   private assertRange(input: { startNumber: number; endNumber: number }) {
@@ -64,6 +125,7 @@ export class EcfSequenceService {
     const companyId = requireTenant(user);
     const documentType = this.assertType(input.documentType);
     this.assertRange(input);
+    await this.assertWithinAuthorization(companyId, documentType, input);
     const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.ecfSequence.findFirst({ where: { companyId, documentType, active: true } });
@@ -83,6 +145,7 @@ export class EcfSequenceService {
     const companyId = requireTenant(user);
     const documentType = this.assertType(input.documentType);
     this.assertRange(input);
+    await this.assertWithinAuthorization(companyId, documentType, input);
     const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ecf_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} FOR UPDATE`;
@@ -143,9 +206,22 @@ export class EcfSequenceService {
     if (!sequence) throw new BadRequestException("ECF_SEQUENCE_EXHAUSTED");
     const encf = EcfSequenceService.encf(sequence.prefix, sequence.next_number);
     if (!ENCF_PATTERN.test(encf)) throw new ConflictException("ECF_SEQUENCE_PREFIX_INVALID");
+    // Blindaje de último paso: NINGÚN e-NCF sale fuera del rango que la DGII
+    // autorizó a esta empresa para este tipo, aunque alguien llame al asignador
+    // sin pasar por `register`. Sin autorización declarada no se entrega número.
+    await this.assertNumberWithinAuthorization(
+      tx,
+      params.companyId,
+      type,
+      sequence.next_number,
+    );
     // Consumed permanently: the increment is the only mutation, and it is inside
     // the locked transaction, so two concurrent allocations can never collide.
-    await tx.ecfSequence.update({ where: { id: sequence.id }, data: { nextNumber: { increment: 1 } } });
+    const claimed = await tx.ecfSequence.updateMany({
+      where: { id: sequence.id, companyId: params.companyId },
+      data: { nextNumber: { increment: 1 } },
+    });
+    if (claimed.count !== 1) throw new ConflictException("ECF_SEQUENCE_NOT_FOUND");
     await tx.ecfSequenceAuditLog.create({ data: { companyId: params.companyId, sequenceId: sequence.id,
       documentId: params.documentId ?? null, userId: params.userId, operationKey: params.operationKey ?? null,
       encf, type, action: "ALLOCATED" } });

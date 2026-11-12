@@ -59,6 +59,21 @@ uat("E34 desde una venta original (nota de crédito) on PostgreSQL", () => {
       },
     });
     const user = { id: userId, role: "ADMIN", companyId } as TenantUser;
+    // La numeración exige autorización DGII declarada (fail-closed).
+    for (const documentType of ["E31", "E34"]) {
+      await prisma.ecfDgiiAuthorizedSequence.create({
+        data: {
+          companyId,
+          documentType,
+          authorizationNumber: `SYNTH-${documentType}`,
+          rangeFrom: 1,
+          rangeTo: 10_000,
+          approvedQuantity: 10_000,
+          declarationVersion: "v1",
+          declaredByUserId: userId,
+        },
+      });
+    }
     // Cada tipo documental tiene SU propio rango: la nota de crédito consume el
     // rango E34, no el de la factura.
     await new EcfSequenceService(prisma).register(user, {

@@ -1,0 +1,7 @@
+# Artefactos generados por los auditores del repositorio (`npm run audit:*`).
+#
+# Se regeneran completos en cada ejecución: revisarlos línea a línea no aporta y
+# hacen que un PR real aparezca como "demasiado amplio" por miles de líneas que
+# nadie escribió a mano. Marcarlos como generados los colapsa en la revisión de
+# GitHub sin dejar de versionarlos.
+apps/api/docs/** linguist-generated=true

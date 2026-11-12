@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePrismaCliPath } from "../../testing/prisma-cli";
 import { Client } from "pg";
 import request from "supertest";
 import { AppModule } from "../../app.module";
@@ -82,13 +82,7 @@ uat("e-CF habilitación DGII — E2E HTTP + PostgreSQL desechable", () => {
 
     process.env.DATABASE_URL = appUrl;
     process.env.JWT_SECRET = process.env.JWT_SECRET || "ecf-dgii-http-e2e-secret";
-    const prismaCli = resolve(
-      process.cwd(),
-      "node_modules",
-      "prisma",
-      "build",
-      "index.js",
-    );
+    const prismaCli = resolvePrismaCliPath();
     execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
       cwd: process.cwd(),
       env: { ...process.env, DATABASE_URL: appUrl },

@@ -1,5 +1,6 @@
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -29,29 +30,150 @@ void main() {
   });
 
   group('DosaCertificationSessionException', () {
-    test('solo cae al asistente cuando la API no está habilitada', () {
-      expect(
-        DosaCertificationSessionException('ECF_DOSA_SESSION_DISABLED')
-            .canFallBackToAssistant,
-        isTrue,
-      );
-      expect(
-        DosaCertificationSessionException('HTTP_404').canFallBackToAssistant,
-        isTrue,
-      );
-      // Un resultado incierto NUNCA debe caer al asistente: duplicaría la
-      // postulación.
-      expect(
-        DosaCertificationSessionException('ECF_DOSA_SESSION_UNCERTAIN')
-            .canFallBackToAssistant,
-        isFalse,
-      );
+    test('solo cae al portal cuando el backend afirma que no está disponible', () {
+      for (final code in <String>[
+        'ECF_DOSA_SESSION_DISABLED',
+        'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED',
+      ]) {
+        expect(
+          DosaCertificationSessionException(code).canFallBackToAssistant,
+          isTrue,
+          reason: code,
+        );
+      }
+    });
+
+    test('un error desconocido NO autoriza a continuar por otra vía', () {
+      // Un 5xx sin código legible o un fallo de transporte no dice si el
+      // proveedor abrió algo: no puede interpretarse como permiso.
+      for (final code in <String>[
+        'HTTP_503',
+        'HTTP_null',
+        'HTTP_500',
+        'HTTP_404',
+      ]) {
+        expect(
+          DosaCertificationSessionException(code).canFallBackToAssistant,
+          isFalse,
+          reason: code,
+        );
+      }
+    });
+
+    test('los estados que prohíben reintentar no caen al portal', () {
+      for (final code in <String>[
+        'ECF_DOSA_SESSION_UNCERTAIN',
+        'ECF_DOSA_SESSION_NOT_PERSISTED',
+        'ECF_DOSA_SESSION_PROVIDER_ERROR',
+        'ECF_DOSA_SESSION_IN_PROGRESS',
+        'ECF_DOSA_SESSION_HISTORICAL_REVIEW_REQUIRED',
+        'ECF_DOSA_SESSION_EMAIL_REQUIRED',
+        'ECF_DOSA_SESSION_EMAIL_INVALID',
+        'ECF_DOSA_SESSION_RNC_REQUIRED',
+        'ECF_DOSA_SESSION_UNAUTHENTICATED',
+        'ECF_DOSA_SESSION_URL_UNREADABLE',
+        'ECF_DOSA_SESSION_EXPIRY_UNKNOWN',
+      ]) {
+        expect(
+          DosaCertificationSessionException(code).canFallBackToAssistant,
+          isFalse,
+          reason: code,
+        );
+      }
     });
 
     test('explica correo faltante con un texto de usuario', () {
       final error =
           DosaCertificationSessionException('ECF_DOSA_SESSION_EMAIL_REQUIRED');
       expect(error.message.toLowerCase(), contains('correo'));
+    });
+  });
+
+  group('DosaCertificationSessionApi — cuerpo de error del backend', () {
+    /// Dio que devuelve el `body` recibido con el `status` indicado.
+    Dio dioRespondiendo(Object? body, int status) {
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) => handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.badResponse,
+              response: Response<dynamic>(
+                requestOptions: options,
+                statusCode: status,
+                data: body,
+              ),
+            ),
+          ),
+        ),
+      );
+      return dio;
+    }
+
+    // Respuesta real de producción: POST /ecf/dosa/certification-session con
+    // DOSA_CERTIFICATION_SESSIONS_ENABLED=false.
+    const cuerpoReal =
+        '{"message":"ECF_DOSA_SESSION_DISABLED","error":"Service Unavailable",'
+        '"statusCode":503}';
+
+    test('503 con el cuerpo en texto: lee el código y permite el fallback', () async {
+      final api = DosaCertificationSessionApi(dioRespondiendo(cuerpoReal, 503));
+
+      await expectLater(
+        api.open(),
+        throwsA(
+          isA<DosaCertificationSessionException>()
+              .having((e) => e.code, 'code', 'ECF_DOSA_SESSION_DISABLED')
+              .having(
+                (e) => e.canFallBackToAssistant,
+                'canFallBackToAssistant',
+                isTrue,
+              ),
+        ),
+      );
+    });
+
+    test('cuerpo ya decodificado: mismo resultado', () async {
+      final api = DosaCertificationSessionApi(
+        dioRespondiendo(const {
+          'message': 'ECF_DOSA_SESSION_DISABLED',
+          'statusCode': 503,
+        }, 503),
+      );
+
+      await expectLater(
+        api.open(),
+        throwsA(
+          isA<DosaCertificationSessionException>()
+              .having((e) => e.code, 'code', 'ECF_DOSA_SESSION_DISABLED')
+              .having(
+                (e) => e.canFallBackToAssistant,
+                'canFallBackToAssistant',
+                isTrue,
+              ),
+        ),
+      );
+    });
+
+    test('un resultado incierto NO cae al asistente aunque llegue como texto', () async {
+      final api = DosaCertificationSessionApi(
+        dioRespondiendo(
+          '{"message":"ECF_DOSA_SESSION_UNCERTAIN","statusCode":503}',
+          503,
+        ),
+      );
+
+      await expectLater(
+        api.open(),
+        throwsA(
+          isA<DosaCertificationSessionException>().having(
+            (e) => e.canFallBackToAssistant,
+            'canFallBackToAssistant',
+            isFalse,
+          ),
+        ),
+      );
     });
   });
 

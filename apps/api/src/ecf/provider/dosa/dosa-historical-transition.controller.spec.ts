@@ -41,6 +41,8 @@ function fixture(options: {
   intent?: Record<string, unknown> | null;
   reconciled?: boolean;
   alreadyAuthorized?: boolean;
+  /** Resultado de la compuerta de autorización por empresa. */
+  portalEligible?: boolean;
 } = {}) {
   const intent = options.intent === undefined
     ? {
@@ -81,6 +83,10 @@ function fixture(options: {
     {} as DosaCertificationIntentService,
     {} as never,
     { read: async () => null } as DosaCompanyFiscalConfigReader,
+    {} as never,
+    // La compuerta de autorización vive ahora en la base (por empresa); aquí se
+    // sustituye por su resultado para aislar la lógica de la transición.
+    { isEligible: async () => options.portalEligible !== false } as never,
   );
   return { controller, tx };
 }
@@ -142,6 +148,16 @@ describe("POST /ecf/dosa/certification-intent/authorize-historical-transition", 
     await expect(
       controller.authorizeHistoricalTransition(req(user("VENDEDOR")), dto()),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("exige autorización del portal vigente para la empresa", async () => {
+    const { controller, tx } = fixture({ portalEligible: false });
+
+    await expect(
+      controller.authorizeHistoricalTransition(req(), dto()),
+    ).rejects.toThrow("PORTAL_PILOT_NOT_INCLUDED");
+    // Sin autorización no se escribe auditoría alguna.
+    expect(tx.ecfAuditLog.create).not.toHaveBeenCalled();
   });
 
   it("exige confirmación explícita", async () => {

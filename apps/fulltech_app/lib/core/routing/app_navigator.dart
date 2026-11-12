@@ -274,7 +274,6 @@ class AppNavigator {
     }
     if (path == Routes.contabilidadCierresDiarios ||
         path == Routes.contabilidadDepositos ||
-        path == Routes.contabilidadFacturaFiscal ||
         path == Routes.contabilidadPagosPendientes) {
       return Routes.contabilidad;
     }

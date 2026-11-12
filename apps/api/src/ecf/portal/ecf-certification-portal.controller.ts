@@ -106,10 +106,12 @@ export class EcfCertificationPortalController {
   @Get("eligibility")
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Permissions("manageEcfOnboarding")
-  eligibility(@Req() req: Request) {
+  async eligibility(@Req() req: Request) {
     const user = req.user as TenantUser;
     const companyId = requireTenant(user);
-    return { ok: true, ...this.portal.eligibility(companyId) };
+    // `eligibility` es asincrona: sin `await`, el spread repartiria una promesa
+    // y la interfaz recibiria `{ ok: true }` sin la decision.
+    return { ok: true, ...(await this.portal.eligibility(companyId)) };
   }
 
   @Delete("sessions")

@@ -12,11 +12,13 @@ import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
+import 'package:daleventa_pos/features/ecf/ecf_dosa_activation_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_application_wizard.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_fiscal_data_page.dart';
+import 'package:daleventa_pos/features/ecf/ui/flow/ecf_preparation_step.dart';
 import 'package:daleventa_pos/core/widgets/responsive_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,6 +55,53 @@ class _SessionEcfRepository extends EcfRepository {
     reads++;
     return _view(companyId: companyId());
   }
+
+  @override
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async =>
+      _fakeActivationOutcome();
+}
+
+/// El bloque de autorización consulta al aparecer: sin este doble, la prueba
+/// saldría a la red y dejaría un temporizador pendiente al desmontar.
+EcfDosaActivationOutcome _fakeActivationOutcome() =>
+    EcfDosaActivationOutcome.fromJson(const {
+      'ok': false,
+      'companyId': 'company-a',
+      'certificationStatus': 'IN_PROGRESS',
+      'changed': false,
+      'environments': [
+        {
+          'environment': 'test',
+          'status': 'PENDING_CONFIRMATION',
+          'activated': false,
+          'blockingReasons': ['ECF_DOSA_ACTIVATION_PROVIDER_NOT_CONFIRMED'],
+        },
+      ],
+    });
+
+class _ActivationOnlyEcfRepository extends EcfRepository {
+  _ActivationOnlyEcfRepository() : super(Dio());
+
+  @override
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async =>
+      _fakeActivationOutcome();
+
+  /// Numeración declarada: la sección de e-NCF no aparece y estas pruebas
+  /// siguen midiendo la pantalla, no ese formulario.
+  @override
+  Future<List<EcfSequenceInfo>> sequences() async => const [
+    EcfSequenceInfo(
+      id: 'seq-1',
+      documentType: 'E31',
+      prefix: 'E31',
+      startNumber: 1,
+      nextNumber: 2,
+      endNumber: 100,
+      active: true,
+      consumed: 1,
+      remaining: 99,
+    ),
+  ];
 }
 
 class _ApplicationRepository extends EcfApplicationRepository {
@@ -166,6 +215,7 @@ EcfDgiiHabilitationView _view({
   EcfDgiiEmissionState emission = _noAuthorization,
   List<EcfDgiiBlocker> blockers = const [],
   String? provider = 'DOSA',
+  String certificationStatus = 'NOT_STARTED',
 }) {
   return EcfDgiiHabilitationView(
     companyId: companyId,
@@ -177,7 +227,7 @@ EcfDgiiHabilitationView _view({
     authorizationSource: authorizationSource,
     authorizedAt: authorizedAt,
     moduleEnabled: true,
-    certificationStatus: 'NOT_STARTED',
+    certificationStatus: certificationStatus,
     providerIntegrationConfigured: false,
     certificateValidation: certificateValidation,
     progress: progress ?? EcfDgiiProgress.empty,
@@ -215,6 +265,9 @@ Widget _harness({
   void Function()? onRead,
   CompanySettings? settings,
   bool dosaEligible = false,
+  bool intentHasSession = false,
+  bool intentHistoricalReview = false,
+  bool platformStaff = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -223,10 +276,15 @@ Widget _harness({
     // mediría al usuario anterior.
     key: UniqueKey(),
     overrides: [
+      ecfRepositoryProvider.overrideWithValue(_ActivationOnlyEcfRepository()),
       ecfDgiiHabilitationProvider.overrideWith((ref) async {
         onRead?.call();
         if (error != null) throw error;
-        return view ?? _view();
+        return view ??
+            _view(
+              state: 'TESTS_PENDING',
+              progress: _certificateResolvedProgress(),
+            );
       }),
       ecfDgiiHistoryProvider.overrideWith((ref) async => history),
       ecfApplicationRepositoryProvider.overrideWithValue(
@@ -234,14 +292,25 @@ Widget _harness({
       ),
       // La pantalla pregunta al backend si la sesión es personal de plataforma.
       // La prueba fija la respuesta: sin esto quedaría una petición de red real
-      // con su temporizador pendiente al desmontar el árbol.
-      ecfPlatformStaffProvider.overrideWith((ref) async => false),
+      // con su temporizador pendiente al desmontar el árbol. El diagnóstico y la
+      // información técnica solo se muestran a ese personal.
+      ecfPlatformStaffProvider.overrideWith((ref) async => platformStaff),
       dosaPortalEligibilityProvider.overrideWith((ref) async => dosaEligible),
       dosaIntentStateProvider.overrideWith(
-        (ref) async => DosaIntentState.fromJson(const {
+        (ref) async => DosaIntentState.fromJson(<String, dynamic>{
           'provider': 'DOSA',
           'canRegister': true,
-          'blockingReasons': <String>[],
+          'blockingReasons': const <String>[],
+          'historicalReviewRequired': intentHistoricalReview,
+          // La pantalla solo ofrece el formulario cuando el backend afirma que
+          // la acción puede completarse; aquí se declara disponible.
+          'historicalTransitionAvailable': intentHistoricalReview,
+          if (intentHasSession)
+            'session': const <String, dynamic>{
+              'id': 'intent-1',
+              'status': 'NOT_STARTED',
+              'attemptNo': 1,
+            },
         }),
       ),
       // El panel de «Ayuda y soporte» muestra el estado de la asistencia
@@ -279,6 +348,7 @@ Widget _harness({
               companyName: 'Empresa',
               rnc: '131000001',
               address: 'Calle 1',
+              ecfContactEmail: 'facturacion@example.test',
             ),
       ),
       authStateProvider.overrideWith(
@@ -293,21 +363,34 @@ Widget _harness({
         ),
       ),
     ],
-    child: const MaterialApp(home: EcfDgiiHabilitationPage()),
+    child: const MaterialApp(home: _TestHome()),
   );
+}
+
+/// Monta la pantalla del cliente o la **interfaz administrativa separada**
+/// segun `_mountAdminView`. Se resuelve en `build`, después de que `_pumpPage`
+/// fije la bandera.
+bool _mountAdminView = false;
+
+class _TestHome extends StatelessWidget {
+  const _TestHome();
+
+  @override
+  Widget build(BuildContext context) =>
+      EcfDgiiHabilitationPage(adminView: _mountAdminView);
 }
 
 /// Monta la pantalla en una ventana amplia (objetivo Windows/Web).
 ///
-/// El recorrido ahora es por pasos: por defecto la prueba entra al paso de
-/// **Seguimiento**, donde vive el detalle técnico que antes estaba siempre
+/// El recorrido ahora es por pasos: por defecto la prueba entra a
+/// **Tu postulación**, donde vive el detalle técnico que antes estaba siempre
 /// visible, y despliega ese bloque. Las pruebas que verifican la bienvenida o la
 /// preparación pasan `step: null` o el paso que corresponda.
 Future<void> _pumpPage(
   WidgetTester tester,
   Widget harness, {
   Size size = const Size(1400, 2600),
-  String? step = 'Seguimiento',
+  String? step = 'Tu postulación',
   bool technical = true,
 }) async {
   tester.view.physicalSize = size;
@@ -332,17 +415,38 @@ Future<void> _pumpPage(
       await tester.pumpAndSettle();
     }
   }
-  // El detalle técnico (requisitos, emisión, seguimiento interno) no forma
-  // parte de la navegación del cliente: es un bloque plegado solo para
-  // administradores. Se abre para poder verificarlo.
+  // Los controles de administración no forman parte de la navegación del
+  // cliente. Ahora están separados: el cliente ve sus acciones y el personal de
+  // plataforma ve además diagnóstico e información técnica.
   if (!technical) return;
-  final block = find.text('Detalle técnico');
-  if (block.evaluate().isNotEmpty) {
-    await tester.ensureVisible(block.first);
+  for (final title in const [
+    'Evidencias y autorización de la DGII',
+    'Diagnóstico e-CF',
+    'Información técnica',
+  ]) {
+    final target = find.text(title);
+    if (target.evaluate().isEmpty) continue;
+    await tester.ensureVisible(target.first);
     await tester.pumpAndSettle();
-    await tester.tap(block.first);
+    await tester.tap(target.first);
     await tester.pumpAndSettle();
   }
+}
+
+/// Monta la **interfaz administrativa separada**.
+///
+/// El diagnóstico, el detalle técnico, las evidencias y la autorización
+/// histórica ya no viven en el recorrido del cliente: se verifican aquí, con
+/// los mismos overrides del arnés.
+Future<void> _pumpAdmin(
+  WidgetTester tester,
+  Widget harness, {
+  Size size = const Size(1400, 2600),
+  String? step = 'Tu postulación',
+}) async {
+  _mountAdminView = true;
+  addTearDown(() => _mountAdminView = false);
+  await _pumpPage(tester, harness, size: size, step: step);
 }
 
 void main() {
@@ -416,7 +520,10 @@ void main() {
   ) async {
     await _pumpPage(
       tester,
-      _harness(settings: CompanySettings.empty()),
+      _harness(
+        view: _view(state: 'NOT_STARTED'),
+        settings: CompanySettings.empty(),
+      ),
       step: null,
       technical: false,
     );
@@ -427,8 +534,10 @@ void main() {
 
     await tester.tap(find.text('Comenzar').first);
     await tester.pumpAndSettle();
-    // Al empezar, el paso de empresa pide los datos que faltan sin duplicar
-    // el expediente ni mostrar el asistente de postulación.
+    // La preparación no abre el formulario sola: primero muestra qué falta.
+    expect(find.byType(EcfFiscalDataContent), findsNothing);
+    await tester.tap(find.text('Completar datos'));
+    await tester.pumpAndSettle();
     expect(find.byType(EcfFiscalDataContent), findsOneWidget);
     expect(find.byType(EcfDgiiApplicationWizard), findsNothing);
     expect(tester.takeException(), isNull);
@@ -439,7 +548,9 @@ void main() {
   ) async {
     await _pumpPage(tester, _harness(), step: 'Preparación', technical: false);
     expect(find.byType(EcfFiscalDataContent), findsNothing);
-    expect(find.text('Antes de postular'), findsOneWidget);
+    // Los datos completos no se repiten: no hay tarjeta de empresa.
+    expect(find.text('Tu empresa'), findsNothing);
+    expect(find.text('Completa lo que falta'), findsNothing);
     expect(find.text('Postulación inteligente'), findsNothing);
   });
 
@@ -450,22 +561,29 @@ void main() {
       companyName: 'Empresa',
       rnc: '131000001',
       address: '',
+      ecfContactEmail: 'facturacion@example.test',
       legalRepresentativeName: 'Ana',
       legalRepresentativeCedula: '00100000001',
     );
-    await _pumpPage(tester, _harness(settings: settings));
+    await _pumpPage(
+      tester,
+      _harness(view: _view(state: 'NOT_STARTED'), settings: settings),
+    );
+    await tester.tap(find.text('Completar datos'));
+    await tester.pumpAndSettle();
     expect(find.byType(EcfFiscalDataContent), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Dirección fiscal'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('preparar expediente abre el formulario dentro de la guía', (
+  testWidgets('completar datos abre el formulario fiscal dentro de la preparación', (
     tester,
   ) async {
     await _pumpPage(
       tester,
       _harness(
+        view: _view(state: 'NOT_STARTED'),
         settings: CompanySettings.empty().copyWith(
           companyName: 'Empresa',
           rnc: '131000001',
@@ -473,47 +591,50 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Preparar expediente').first);
+    await tester.tap(find.text('Completar datos').first);
     await tester.pumpAndSettle();
-    expect(find.byType(EcfDgiiApplicationWizard), findsOneWidget);
-    expect(find.text('Postulación DGII'), findsNothing);
-    expect(
-      find.text(
-        'Necesitamos el correo electrónico del representante para continuar.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.byType(EcfFiscalDataContent), findsOneWidget);
+    expect(find.byType(EcfDgiiApplicationWizard), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('empresa sin habilitación: no hay autorización oficial', (
     tester,
   ) async {
-    await _pumpPage(tester, _harness(user: _adminUser()));
+    await _pumpAdmin(
+      tester,
+      _harness(
+        user: _adminUser(),
+        platformStaff: true,
+        view: _view(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
+        ),
+      ),
+    );
 
-    // Aparece en la etiqueta del cliente y en «Estado interno» del detalle
-    // técnico: son la misma información con dos niveles de lenguaje.
-    expect(find.text('Sin iniciar'), findsNWidgets(2));
-    expect(find.text('0%'), findsOneWidget);
+    // La administración tiene su propia pantalla: no repite el recorrido del
+    // cliente ni reinicia la bienvenida.
+    expect(find.text('Administración e-CF'), findsOneWidget);
+    expect(find.text('Comenzar'), findsNothing);
+    expect(find.text('Tu postulación'), findsNothing);
     // Nunca se declara una autorización oficial que no existe.
     expect(find.text('Autorización oficial registrada'), findsNothing);
-    // Los datos sintéticos del formulario ya están registrados.
-    expect(find.text('Solicitud'), findsOneWidget);
+    expect(find.text('Evidencias y autorización de la DGII'), findsOneWidget);
     expect(
       find.textContaining('Adjunta la evidencia disponible'),
       findsNothing,
     );
-    // Nunca se insinúa que la emisión esté permitida.
-    expect(find.text('Bloqueada'), findsOneWidget);
   });
 
   testWidgets(
-    'certificado pendiente no pide evidencia sin documento definido',
+    'certificado pendiente mantiene al cliente en Preparación',
     (tester) async {
       await _pumpPage(
         tester,
         _harness(
           view: _view(
+            state: 'APPLICATION_PENDING',
             progress: _progress(
               requirements: const [
                 EcfDgiiRequirementProgress(
@@ -528,24 +649,25 @@ void main() {
             ),
           ),
         ),
+        step: null,
+        technical: false,
       );
-      expect(
-        find.textContaining('Revisamos contigo lo que falta del expediente'),
-        findsOneWidget,
-      );
-      // El hito de Solicitud sigue activo: un certificado pendiente no adelanta
-      // el proceso a Pruebas.
-      expect(find.text('En curso'), findsOneWidget);
+      // Un requisito pendiente no adelanta al cliente a la vista de seguimiento.
+      expect(find.byType(EcfPreparationStep), findsOneWidget);
+      expect(find.text('Pruebas del SET'), findsNothing);
+      // DOSA no pide el certificado en FullPOS.
+      expect(find.text('Certificado digital'), findsNothing);
     },
   );
 
   testWidgets('empresa en proceso: muestra estado, progreso y requisitos', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'IN_PROGRESS',
           observations: 'Pendiente el set de pruebas',
@@ -573,16 +695,18 @@ void main() {
       ),
     );
 
-    // El cliente ve una etiqueta comprensible; el nombre técnico queda en
-    // «Detalle técnico» para administradores.
-    expect(find.text('En revisión interna'), findsOneWidget);
+    // La pantalla de administración no repite el recorrido del cliente, así que
+    // el estado se verifica en el detalle técnico, que es donde vive.
+    expect(find.text('Administración e-CF'), findsOneWidget);
     expect(find.text('Estado interno'), findsOneWidget);
     expect(find.text('En proceso'), findsOneWidget);
     expect(find.text('36%'), findsOneWidget);
     expect(find.textContaining('5 de 14 requisitos'), findsOneWidget);
     expect(find.textContaining('obligatorios 5/13'), findsOneWidget);
-    expect(find.text('Datos fiscales de la empresa'), findsOneWidget);
-    expect(find.text('Pruebas del SET'), findsOneWidget);
+    // Los pasos del trámite NO se listan: se recorren en el asistente y en la
+    // Oficina Virtual de la DGII. Aquí solo queda el resumen del avance.
+    expect(find.text('Pruebas del SET'), findsNothing);
+    expect(find.textContaining('Paso '), findsNothing);
     expect(find.text('Pendiente el set de pruebas'), findsWidgets);
   });
 
@@ -608,36 +732,13 @@ void main() {
           ),
         ),
       ),
+      step: null,
+      technical: false,
     );
-    expect(find.text('Solicitud'), findsOneWidget);
-    expect(
-      find.textContaining('Todavía no se ha presentado oficialmente'),
-      findsOneWidget,
-    );
-    expect(find.text('Ver cómo presentar'), findsOneWidget);
-    await tester.tap(find.text('Ver cómo presentar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Cómo presentar tu solicitud'), findsOneWidget);
-    // Dice lo que hace FullPOS y lo que NO hace, sin inventar integraciones.
-    expect(
-      find.textContaining('No presenta la solicitud en tu nombre'),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('todavía no está integrada en esta versión'),
-      findsOneWidget,
-    );
-    // Nunca se piden credenciales de la Oficina Virtual.
-    expect(
-      find.textContaining('FullPOS no solicita ni guarda esas credenciales'),
-      findsOneWidget,
-    );
-    // Restricciones del procedimiento, declaradas desde la auditoría externa.
-    expect(find.textContaining('CA5244'), findsOneWidget);
-    expect(
-      find.textContaining('no cubre la declaración jurada'),
-      findsOneWidget,
-    );
+    // El cliente permanece en Preparación; no ve la guía técnica antigua.
+    expect(find.byType(EcfPreparationStep), findsOneWidget);
+    expect(find.text('Ver cómo presentar'), findsNothing);
+    expect(find.text('Cómo presentar tu solicitud'), findsNothing);
   });
 
   testWidgets('preparación local: vídeo, certificado y botón sin habilitar', (
@@ -647,7 +748,11 @@ void main() {
     // finge reproducción.
     await _pumpPage(
       tester,
-      _harness(user: _adminUser()),
+      _harness(
+        user: _adminUser(),
+        dosaEligible: true,
+        view: _view(state: 'NOT_STARTED'),
+      ),
       step: null,
       technical: false,
     );
@@ -655,29 +760,88 @@ void main() {
     expect(find.text('Vídeo no disponible'), findsOneWidget);
     expect(find.text('Abrir portal de la DGII'), findsOneWidget);
 
-    // Paso de empresa: certificado digital con su acción real.
+    // Preparación con DOSA: el certificado no se pide en FullPOS.
     await tester.tap(find.text('Comenzar').first);
     await tester.pumpAndSettle();
-    expect(find.text('Certificado digital'), findsOneWidget);
-    // DOSA gestiona el certificado: no se repite el formulario P12/PFX ni se
-    // pide la contraseña en FullPOS.
+    expect(find.text('Certificado digital'), findsNothing);
     expect(find.text('Validar certificado'), findsNothing);
     expect(find.text('Ningún archivo seleccionado'), findsNothing);
-    expect(find.textContaining('No hay que subirlos aquí'), findsOneWidget);
+    expect(find.textContaining('No hay que subirlos aquí'), findsNothing);
+    expect(find.text('Iniciar postulación'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
-    // El certificado ya no es un requisito previo cuando la postulación se hace
-    // en el asistente oficial de DOSA: se pide una sola vez, allí.
-    final continueButton = find.byKey(
-      const ValueKey('ecf_company_step_continue'),
-    );
-    expect(continueButton, findsOneWidget);
-    expect(tester.widget<FilledButton>(continueButton).onPressed, isNotNull);
-    expect(
-      find.text(
-        'Puedes continuar: el certificado se pide dentro del asistente de DOSA.',
+  testWidgets(
+    'con la postulación abierta el recorrido sigue en seguimiento y llega a la firma',
+    (tester) async {
+      // Caso real reportado: con la postulación ya abierta el cliente caía en
+      // Preparación, donde no quedaba nada que iniciar y no había ninguna forma
+      // de avanzar. El recorrido debe continuar en Seguimiento y desde ahí
+      // ofrecer el último paso, que es la firma.
+      await _pumpPage(
+        tester,
+        _harness(
+          user: _adminUser(),
+          intentHasSession: true,
+          view: _view(state: 'NOT_STARTED'),
+        ),
+        step: null,
+        technical: false,
+      );
+
+      expect(find.byType(EcfPreparationStep), findsNothing);
+      // El estado del expediente interno sigue en `NOT_STARTED`: la pantalla no
+      // puede decir «Sin iniciar» sobre una postulación ya registrada.
+      expect(find.text('Postulación registrada'), findsOneWidget);
+      expect(find.text('Sin iniciar'), findsNothing);
+      expect(find.textContaining('no has iniciado'), findsNothing);
+
+      // El siguiente paso se ofrece explícito: no hay que descubrir el rail.
+      final continueToAuthorization = find.byKey(
+        const ValueKey('ecf_tracking_continue_authorization'),
+      );
+      expect(continueToAuthorization, findsOneWidget);
+      await tester.ensureVisible(continueToAuthorization);
+      await tester.pumpAndSettle();
+      await tester.tap(continueToAuthorization);
+      await tester.pumpAndSettle();
+      expect(find.text('Autorización para emitir'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('trámite terminado: felicitaciones y salto a ventas', (
+    tester,
+  ) async {
+    // La empresa ya emite: el módulo no vuelve a mostrar el recorrido, porque
+    // repetir los pasos haría creer que todavía falta algo.
+    await _pumpPage(
+      tester,
+      _harness(
+        user: _adminUser(),
+        view: _view(
+          state: 'APPROVED',
+          certificationStatus: 'AUTHORIZED_SANDBOX',
+          authorizationSource: 'MANUAL_OPERATOR_DECLARATION',
+          progress: _certificateResolvedProgress(),
+        ),
       ),
+      step: null,
+      technical: false,
+    );
+
+    expect(find.text('¡Felicidades!'), findsOneWidget);
+    expect(
+      find.textContaining('ya puede facturar electrónicamente'),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('ecf_completed_go_sales')),
+      findsOneWidget,
+    );
+    // Ni rail ni pasos del proceso.
+    expect(find.text('Bienvenida'), findsNothing);
+    expect(find.byType(EcfPreparationStep), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -688,7 +852,7 @@ void main() {
       tester,
       _harness(
         user: _adminUser(),
-        view: _view(provider: 'ALANUBE'),
+        view: _view(provider: 'ALANUBE', state: 'NOT_STARTED'),
       ),
       step: null,
       technical: false,
@@ -696,17 +860,86 @@ void main() {
     await tester.tap(find.text('Comenzar').first);
     await tester.pumpAndSettle();
 
-    // El permiso de onboarding no basta: con proveedor Alanube el formulario
-    // local sigue visible y el avance no se desbloquea solo.
+    // El proveedor legado conserva su validación local solo mientras exista
+    // esa rama; el recorrido DOSA no muestra ese paso.
     expect(find.text('Validar certificado'), findsOneWidget);
     expect(find.textContaining('No hay que subirlos aquí'), findsNothing);
-    final continueButton = find.byKey(
-      const ValueKey('ecf_company_step_continue'),
-    );
-    expect(continueButton, findsOneWidget);
-    expect(tester.widget<FilledButton>(continueButton).onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'empresa reconciliada a DOSA no exige validar el certificado en FullPOS',
+    (tester) async {
+      // Caso real de FULLTECH SRL: la configuración e-CF conserva el valor
+      // legado ALANUBE, pero su intento de certificación está atribuido a DOSA
+      // tras la reconciliación auditada. El certificado se gestiona dentro del
+      // asistente oficial, así que no se pide validarlo aquí y la acción
+      // ofrecida abre el asistente.
+      //
+      // Con el intento ya creado el recorrido abre en Seguimiento: es la etapa
+      // real del trámite y donde vive esa acción.
+      await _pumpPage(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(provider: 'ALANUBE', state: 'NOT_STARTED'),
+          dosaEligible: true,
+          intentHasSession: true,
+        ),
+        step: null,
+        technical: false,
+      );
+
+      expect(find.text('Validar certificado'), findsNothing);
+      expect(find.text('Certificado digital'), findsNothing);
+      // El expediente ya existe: la acción abre el asistente oficial, no crea
+      // otro intento.
+      expect(
+        find.text('Asistente de certificación electrónica'),
+        findsOneWidget,
+      );
+      expect(find.text('Continuar con el asistente'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'expediente histórico: la autorización se muestra sin desplegar nada',
+    (tester) async {
+      // Estado real de FULLTECH antes de autorizar: configuración ALANUBE,
+      // intento DOSA reconciliado y revisión histórica pendiente. Con el intento
+      // ya creado el recorrido abre en Seguimiento, y ahí debe verse el paso
+      // obligatorio sin desplegar nada.
+      await _pumpPage(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(provider: 'ALANUBE', state: 'NOT_STARTED'),
+          dosaEligible: true,
+          intentHasSession: true,
+          intentHistoricalReview: true,
+        ),
+        step: null,
+        technical: false,
+      );
+
+      expect(find.text('Validar certificado'), findsNothing);
+      expect(find.text('Continuar con el asistente'), findsNothing);
+
+      // El paso obligatorio se ve de entrada: no vive dentro de un desplegable
+      // «Avanzado» que se confunde con el otro panel administrativo.
+      expect(
+        find.text('Autorización administrativa requerida'),
+        findsOneWidget,
+      );
+      expect(find.text('Autorizar transición'), findsOneWidget);
+      expect(
+        find.text('Referencia de aprobación del propietario'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('preparación: el botón de postulación espera al modo de prueba', (
     tester,
@@ -726,7 +959,7 @@ void main() {
       step: null,
       technical: false,
     );
-    expect(find.text('Antes de postular'), findsOneWidget);
+    expect(find.byType(EcfPreparationStep), findsOneWidget);
 
     // El motor legado desaparece cuando el modo de prueba no está disponible.
     final button = find.byKey(
@@ -750,8 +983,8 @@ void main() {
     );
     // Sin vigencia confirmada no se finge que el certificado está validado,
     // pero tampoco se bloquea el recorrido: el certificado lo pide DOSA.
-    expect(find.text('Antes de postular'), findsOneWidget);
-    expect(find.text('Se pide en el asistente de DOSA'), findsOneWidget);
+    expect(find.byType(EcfPreparationStep), findsOneWidget);
+    expect(find.text('Certificado digital'), findsNothing);
     expect(find.text('Continuar con DOSA'), findsNothing);
   });
 
@@ -771,11 +1004,9 @@ void main() {
       technical: false,
     );
 
-    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Postulación electrónica'), findsOneWidget);
     // Un solo botón principal: inicia la postulación oficial de DOSA.
-    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
-    expect(find.text('Diagnóstico administrativo'), findsOneWidget);
-    expect(find.text('Ver diagnóstico'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsOneWidget);
     final legacy = find.byKey(
       const ValueKey('ecf_intelligent_certification_button'),
     );
@@ -798,49 +1029,18 @@ void main() {
       technical: false,
     );
 
-    expect(find.text('Estado de certificación'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsOneWidget);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('los pasos de presentación DGII no se completan por proveedor', (
-    tester,
-  ) async {
-    // El motor no es dueño de estas presentaciones: sin integración autorizada,
-    // el paso queda esperando al cliente y nunca como completado.
-    await _pumpPage(
-      tester,
-      _harness(
-        user: _adminUser(),
-        view: _view(
-          state: 'IN_PROGRESS',
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'DGII_POSTULATION',
-                label: 'Postulación DGII',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    // Se declara como acción del cliente, no como algo automático.
-    expect(find.text('Postulación DGII'), findsOneWidget);
-    expect(find.text('Pendiente'), findsWidgets);
-    expect(find.text('Automático'), findsNothing);
   });
 
   testWidgets('requisitos pendientes: aparecen como bloqueo explícito', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'APPLICATION_PENDING',
           blockers: const [
@@ -860,7 +1060,7 @@ void main() {
   testWidgets('evidencia registrada: oficial y manual no se confunden', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -932,10 +1132,11 @@ void main() {
   testWidgets(
     'empresa distinta: solo muestra los datos de la empresa de la sesión',
     (tester) async {
-      await _pumpPage(
+      await _pumpAdmin(
         tester,
         _harness(
           user: _adminUser(companyId: 'company-b'),
+          platformStaff: true,
           view: _view(
             companyId: 'company-b',
             observations: 'Solo de la empresa B',
@@ -988,10 +1189,11 @@ void main() {
   testWidgets('aprobación oficial no verificada: se declara y no se aprueba', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
+        platformStaff: true,
         view: _view(
           state: 'IN_CERTIFICATION',
           authorizationSource: 'MANUAL_OPERATOR_DECLARATION',
@@ -1028,7 +1230,10 @@ void main() {
   testWidgets('emisión real bloqueada: se declara que no está implementada', (
     tester,
   ) async {
-    await _pumpPage(tester, _harness(user: _adminUser()));
+    await _pumpAdmin(
+      tester,
+      _harness(user: _adminUser(), platformStaff: true),
+    );
 
     expect(find.text('Autorización para emitir'), findsOneWidget);
     expect(find.text('Emisión real'), findsOneWidget);
@@ -1037,32 +1242,110 @@ void main() {
     expect(find.textContaining('no está implementada'), findsOneWidget);
   });
 
-  testWidgets('el diálogo de evidencia rechaza una referencia inválida', (
+  testWidgets(
+    'administración: el cliente ve sus acciones, no la información de soporte',
+    (tester) async {
+      await _pumpAdmin(
+        tester,
+        _harness(user: _adminUser(), view: _view(state: 'IN_CERTIFICATION')),
+      );
+
+      // Subir la constancia y registrarla es el camino para acreditar la
+      // aprobación de la DGII: eso sí debe estar.
+      expect(
+        find.text('Evidencias y autorización de la DGII'),
+        findsOneWidget,
+      );
+      // El diagnóstico y los registros técnicos son herramientas de soporte y
+      // no se muestran a la empresa.
+      expect(find.text('Diagnóstico e-CF'), findsNothing);
+      expect(find.text('Información técnica'), findsNothing);
+      expect(find.text('Detalle técnico'), findsNothing);
+      expect(find.text('Autorización para emitir'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'administración: una empresa ya postulada puede registrar la autorización',
+    (tester) async {
+      // Caso real: la empresa terminó su postulación en el portal de la DGII,
+      // pero el expediente interno sigue en `NOT_STARTED`. Antes la acción se
+      // ofrecía solo en el escalón de activación, así que su único bloqueo
+      // («la DGII no ha aprobado todavía») no tenía dónde resolverse.
+      await _pumpAdmin(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(state: 'NOT_STARTED'),
+          intentHasSession: true,
+        ),
+      );
+
+      expect(find.text('Evidencias y autorización de la DGII'), findsOneWidget);
+      // El título se repite (tarjeta y resumen), por eso no se cuenta.
+      expect(find.text('Autorización oficial'), findsWidgets);
+      expect(find.text('Registrar autorización recibida'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'administración: sin postulación previa no se registra autorización',
+    (tester) async {
+      // Si la empresa nunca se postuló, la autorización todavía no existe:
+      // ofrecerla sería un atajo que falsearía el expediente.
+      await _pumpAdmin(
+        tester,
+        _harness(
+          user: _adminUser(),
+          view: _view(state: 'NOT_STARTED'),
+          intentHasSession: false,
+        ),
+      );
+
+      expect(find.text('Registrar autorización recibida'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'preparación: sin nada que pedir no repite el encabezado de la etapa',
+    (tester) async {
+      // Empresa ya postulada con los datos completos: «Solo te pediremos lo que
+      // falte» prometía pedir algo que ya no falta, y el rail ya sitúa al
+      // usuario en la etapa.
+      await _pumpPage(
+        tester,
+        _harness(user: _adminUser(), view: _view(state: 'IN_PROGRESS')),
+        step: 'Preparación',
+        technical: false,
+      );
+
+      expect(find.byType(EcfPreparationStep), findsOneWidget);
+      expect(find.text('Solo te pediremos lo que falte.'), findsNothing);
+      expect(find.text('Preparación'), findsOneWidget);
+    },
+  );
+
+  testWidgets('el cliente no ve referencias de constancia DGII', (
     tester,
   ) async {
     await _pumpPage(
       tester,
       _harness(
         user: _adminUser(),
-        view: _view(state: 'APPLICATION_PENDING'),
+        view: _view(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
+        ),
       ),
+      technical: false,
     );
 
-    await tester.tap(find.text('Ver cómo presentar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Registrar referencia de constancia DGII'));
-    await tester.pumpAndSettle();
-
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'http://no-valido');
-    await tester.tap(find.text('Registrar'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Debe empezar por'), findsOneWidget);
+    expect(find.text('Registrar referencia de constancia DGII'), findsNothing);
+    expect(find.text('Ver cómo presentar'), findsNothing);
   });
 
   testWidgets('disposición móvil: se ve sin desbordes', (tester) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
@@ -1071,10 +1354,8 @@ void main() {
       size: const Size(390, 844),
     );
 
-    expect(find.text('En revisión interna'), findsOneWidget);
-    expect(find.text('Solicitud'), findsOneWidget);
-    expect(find.text('Pruebas'), findsOneWidget);
-    expect(find.text('Certificación'), findsOneWidget);
+    expect(find.text('Administración e-CF'), findsOneWidget);
+    expect(find.text('Evidencias y autorización de la DGII'), findsOneWidget);
     // Un desbordamiento de layout se reporta como excepción en las pruebas.
     expect(tester.takeException(), isNull);
   });
@@ -1095,11 +1376,15 @@ void main() {
 
     // Con permiso de GESTIÓN pero sin el de revisión: el botón no existe y se
     // explica por qué, en vez de ofrecer una acción que el backend rechazará.
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
-        user: _userWith(const {'manageEcfDgiiRequirements': true}),
-        view: _view(evidence: evidence),
+        user: _userWith(const {'manageEcfOnboarding': true}),
+        view: _view(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
+          evidence: evidence,
+        ),
       ),
     );
     expect(find.byIcon(Icons.rule), findsNothing);
@@ -1112,8 +1397,15 @@ void main() {
     await _pumpPage(
       tester,
       _harness(
-        user: _userWith(const {'reviewEcfDgiiEvidence': true}),
-        view: _view(evidence: evidence),
+        user: _userWith(const {
+          'manageEcfOnboarding': true,
+          'reviewEcfDgiiEvidence': true,
+        }),
+        view: _view(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
+          evidence: evidence,
+        ),
       ),
     );
     expect(find.byIcon(Icons.rule), findsOneWidget);
@@ -1122,11 +1414,16 @@ void main() {
   testWidgets('el diálogo de revisión exige motivo al rechazar', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
-        user: _userWith(const {'reviewEcfDgiiEvidence': true}),
+        user: _userWith(const {
+          'manageEcfOnboarding': true,
+          'reviewEcfDgiiEvidence': true,
+        }),
         view: _view(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
           evidence: const [
             EcfDgiiEvidenceView(
               id: 'e1',
@@ -1157,11 +1454,13 @@ void main() {
   testWidgets('revisar no autoriza: la fila lo dice de forma explícita', (
     tester,
   ) async {
-    await _pumpPage(
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
         view: _view(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
           evidence: const [
             EcfDgiiEvidenceView(
               id: 'e1',
@@ -1198,150 +1497,17 @@ void main() {
     );
   });
 
-  testWidgets('el seguimiento interno se muestra pero no finge progreso', (
-    tester,
-  ) async {
-    await _pumpPage(
-      tester,
-      _harness(
-        user: _adminUser(),
-        view: _view(
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'SET_TESTS',
-                label: 'Pruebas del SET',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-                tracking: EcfDgiiRequirementTracking(
-                  status: 'COMPLETED',
-                  note: 'Enviadas el 15',
-                  dueDate: '2026-11-30',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.text('Seguimiento interno: Completado · vence 2026-11-30'),
-      findsOneWidget,
-    );
-    expect(find.text('Enviadas el 15'), findsOneWidget);
-    // El requisito sigue SIN resolver: la libreta no es el progreso.
-    expect(find.byIcon(Icons.check_circle), findsNothing);
-  });
-
-  testWidgets('el botón de seguimiento requiere permiso de gestión', (
-    tester,
-  ) async {
-    final progress = _progress(
-      requirements: const [
-        EcfDgiiRequirementProgress(
-          key: 'SET_TESTS',
-          label: 'Pruebas del SET',
-          mandatory: true,
-          automatable: false,
-          status: 'PENDING',
-          resolved: false,
-        ),
-      ],
-    );
-
-    await _pumpPage(
-      tester,
-      _harness(
-        user: _userWith(const {'viewEcfDgiiHabilitation': true}),
-        view: _view(progress: progress),
-      ),
-    );
-    expect(find.text('Tu proceso'), findsOneWidget);
-    expect(find.byTooltip('Registrar seguimiento interno'), findsNothing);
-    // Sin permiso de gestión no hay bloque técnico: no se ofrece una interfaz
-    // que el servidor rechazaría.
-    expect(find.text('Detalle técnico'), findsNothing);
-
-    await _pumpPage(
-      tester,
-      _harness(
-        user: _userWith(const {'manageEcfDgiiRequirements': true}),
-        view: _view(progress: progress),
-      ),
-    );
-    expect(find.text('Pruebas del SET'), findsOneWidget);
-    expect(find.byTooltip('Registrar seguimiento interno'), findsOneWidget);
-  });
-
-  testWidgets('el diálogo de seguimiento valida el formato de la fecha', (
-    tester,
-  ) async {
-    await _pumpPage(
-      tester,
-      _harness(
-        user: _adminUser(),
-        view: _view(
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'SET_TESTS',
-                label: 'Pruebas del SET',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byTooltip('Registrar seguimiento interno'));
-    await tester.pumpAndSettle();
-    expect(find.text('Seguimiento del requisito'), findsOneWidget);
-    expect(
-      find.textContaining('ni acredita nada ante la DGII'),
-      findsOneWidget,
-    );
-
-    await tester.enterText(find.byType(TextFormField).first, '30/11/2026');
-    await tester.tap(find.text('Guardar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Usa el formato AAAA-MM-DD'), findsOneWidget);
-  });
-
   testWidgets('disposición estrecha: los elementos nuevos no desbordan', (
     tester,
   ) async {
-    // Se recorren de verdad las tarjetas con botón de revisión, con seguimiento
-    // interno y con las tres acciones de evidencia, en el ancho de un móvil.
-    await _pumpPage(
+    // Se recorren de verdad las tarjetas con botón de revisión y con las tres
+    // acciones de evidencia, en el ancho de un móvil.
+    await _pumpAdmin(
       tester,
       _harness(
         user: _adminUser(),
         view: _view(
           state: 'IN_CERTIFICATION',
-          progress: _progress(
-            requirements: const [
-              EcfDgiiRequirementProgress(
-                key: 'SET_TESTS',
-                label: 'Pruebas del SET',
-                mandatory: true,
-                automatable: false,
-                status: 'PENDING',
-                resolved: false,
-                tracking: EcfDgiiRequirementTracking(
-                  status: 'BLOCKED',
-                  note: 'Esperando respuesta del proveedor',
-                  dueDate: '2026-11-30',
-                ),
-              ),
-            ],
-          ),
           evidence: const [
             EcfDgiiEvidenceView(
               id: 'e1',
@@ -1357,30 +1523,38 @@ void main() {
       size: const Size(360, 3200),
     );
 
-    expect(find.text('Pruebas del SET'), findsOneWidget);
-    expect(find.text('Esperando respuesta del proveedor'), findsOneWidget);
-    expect(find.byTooltip('Registrar seguimiento interno'), findsOneWidget);
     expect(find.byTooltip('Revisar evidencia'), findsOneWidget);
     // Un desbordamiento de layout se reporta como excepción en las pruebas.
     expect(tester.takeException(), isNull);
   });
 
   for (final width in [390.0, 1366.0]) {
-    testWidgets('Atrás del shell vuelve al paso fiscal a ${width.toInt()} px', (
+    testWidgets('Atrás del shell cierra el formulario fiscal a ${width.toInt()} px', (
       tester,
     ) async {
-      await _pumpPage(tester, _harness(), size: Size(width, 1000));
-      await tester.tap(find.text('Preparar expediente').first);
+      await _pumpPage(
+        tester,
+        _harness(
+          view: _view(state: 'NOT_STARTED'),
+          settings: CompanySettings.empty(),
+        ),
+        size: Size(width, 1000),
+        step: null,
+        technical: false,
+      );
+      await tester.tap(find.text('Comenzar').first);
       await tester.pumpAndSettle();
-      expect(find.byType(EcfDgiiApplicationWizard), findsOneWidget);
+      await tester.tap(find.text('Completar datos').first);
+      await tester.pumpAndSettle();
+      expect(find.byType(EcfFiscalDataContent), findsOneWidget);
       expect(tester.takeException(), isNull);
       final container = ProviderScope.containerOf(
         tester.element(find.byType(EcfDgiiHabilitationPage)),
       );
       container.read(desktopShellRouteActionsProvider)?.onBack?.call();
       await tester.pumpAndSettle();
-      expect(find.byType(EcfFiscalDataContent), findsOneWidget);
-      expect(find.byType(EcfDgiiApplicationWizard), findsNothing);
+      expect(find.byType(EcfFiscalDataContent), findsNothing);
+      expect(find.text('Preparación'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   }
@@ -1388,7 +1562,19 @@ void main() {
   testWidgets(
     'dato fiscal válido permanece visible con foco y se oculta al salir',
     (tester) async {
-      await _pumpPage(tester, _harness(settings: CompanySettings.empty()));
+      await _pumpPage(
+        tester,
+        _harness(
+          view: _view(state: 'NOT_STARTED'),
+          settings: CompanySettings.empty(),
+        ),
+        step: null,
+        technical: false,
+      );
+      await tester.tap(find.text('Comenzar').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Completar datos').first);
+      await tester.pumpAndSettle();
       final rnc = find.byKey(const ValueKey('fiscal_field_rnc'));
       final address = find.byKey(const ValueKey('fiscal_field_address'));
       await tester.enterText(rnc, '131000001');
@@ -1407,13 +1593,7 @@ void main() {
   ) async {
     await _pumpPage(tester, _harness());
     expect(find.text('Registrar referencia de constancia DGII'), findsNothing);
-    await _pumpPage(
-      tester,
-      _harness(view: _view(state: 'APPLICATION_PENDING')),
-    );
-    await tester.tap(find.text('Ver cómo presentar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Registrar referencia de constancia DGII'), findsWidgets);
+    expect(find.text('Ver cómo presentar'), findsNothing);
   });
 
   testWidgets('recarga fiscal asíncrona respeta texto, foco y selección', (

@@ -59,23 +59,29 @@ export type DosaIdentityRejection =
 /**
  * Comprueba que la identidad fiscal usada corresponde al entorno.
  *
- * En `test` el emisor debe ser el RNC de prueba que entregó DOSA. Esto es lo que
- * impide que una prueba acabe declarando el RNC real de la empresa y obtenga un
- * comprobante con validez fiscal.
+ * En `test` el emisor debe ser el RNC de **la empresa que emite**, que es a
+ * quien pertenece la API Key de prueba. El valor llega resuelto por el
+ * llamador (`input.rnc` de la petición, ya acotado a la empresa autenticada):
+ * **no hay ningún RNC global** que configurar, así que una empresa nueva
+ * funciona sin editar variables de entorno.
+ *
+ * Lo que se impide sigue siendo lo importante: una emisión de prueba que declare
+ * un RNC distinto del de la empresa cuyas credenciales se están usando.
  */
 export function verifyFiscalIdentity(input: {
   environment: DosaFiscalEnvironment;
   senderTaxId: string | null | undefined;
-  configuredTestRnc: string | null | undefined;
+  /** RNC esperado en TEST: el de la empresa, resuelto por el llamador. */
+  expectedTestRnc: string | null | undefined;
 }): { ok: true } | { ok: false; reason: DosaIdentityRejection } {
   const sender = normalize(input.senderTaxId);
   if (sender === null) return { ok: false, reason: "SENDER_RNC_MISSING" };
 
   if (input.environment === "production") return { ok: true };
 
-  const testRnc = normalize(input.configuredTestRnc);
-  if (testRnc === null) return { ok: false, reason: "TEST_RNC_NOT_CONFIGURED" };
-  if (sender !== testRnc) return { ok: false, reason: "TEST_RNC_MISMATCH" };
+  const expected = normalize(input.expectedTestRnc);
+  if (expected === null) return { ok: false, reason: "TEST_RNC_NOT_CONFIGURED" };
+  if (sender !== expected) return { ok: false, reason: "TEST_RNC_MISMATCH" };
   return { ok: true };
 }
 

@@ -7,7 +7,24 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
+import '../ecf_authorized_sequence_models.dart';
+import '../ecf_dosa_dispatch_models.dart';
+import '../ecf_dosa_activation_models.dart';
 import '../ecf_support_grant_models.dart';
+
+/// Error de numeración con el motivo que dio el servidor.
+///
+/// Dio no incluye el cuerpo de la respuesta en `toString()`, así que sin esto la
+/// pantalla solo podía decir «Inténtalo de nuevo» y el cliente no sabía qué
+/// corregir.
+class EcfSequenceException implements Exception {
+  EcfSequenceException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 Map<String, dynamic> _asMap(dynamic data) {
   if (data is Map) return data.cast<String, dynamic>();
@@ -37,6 +54,18 @@ final ecfRepositoryProvider = Provider<EcfRepository>((ref) {
 final ecfCapabilitiesProvider = FutureProvider.autoDispose<EcfCapabilities>((
   ref,
 ) {
+  // Las capacidades son POR EMPRESA: incluyen la excepción de vender sin e-CF
+  // y los tipos habilitados. Al cambiar de empresa o de sesión se releen, en
+  // lugar de dejar a la vista la configuración de la anterior.
+  ref.watch(
+    authStateProvider.select(
+      (state) => (
+        state.isAuthenticated,
+        state.user?.id,
+        state.user?.companyId,
+      ),
+    ),
+  );
   return ref.watch(ecfRepositoryProvider).capabilities();
 });
 
@@ -168,6 +197,119 @@ class EcfRepository {
     ).map(EcfSequenceInfo.fromJson).toList(growable: false);
   }
 
+  /// Declara el rango de numeración (e-NCF) que la DGII asignó a la empresa.
+  ///
+  /// Sin un rango activo no se puede preparar ningún comprobante: el backend
+  /// responde `ECF_SEQUENCE_EXHAUSTED`, que no explica nada al cliente. El
+  /// prefijo NO se envía: lo deriva el backend del tipo de comprobante
+  /// (`E31` → `E310000000001`).
+  ///
+  /// Un error aquí sí es una excepción: `ECF_SEQUENCE_ALREADY_EXISTS` (ya hay uno
+  /// activo), `ECF_SEQUENCE_RANGE_INVALID` (desde/hasta incoherentes) o
+  /// `ECF_SEQUENCE_REUSE_BLOCKED` (empezar por debajo de lo ya consumido).
+  Future<void> registerSequence({
+    required String documentType,
+    required int startNumber,
+    required int endNumber,
+    String? validUntil,
+  }) async {
+    try {
+      await _dio.post(ApiRoutes.ecfSequences, data: {
+        'documentType': documentType,
+        'startNumber': startNumber,
+        'endNumber': endNumber,
+        if (validUntil != null && validUntil.trim().isNotEmpty)
+          'validUntil': validUntil.trim(),
+      });
+    } on DioException catch (error) {
+      throw EcfSequenceException(_sequenceServerMessage(error));
+    }
+  }
+
+  /// Renueva el rango activo cuando se agotó o venció.
+  ///
+  /// El backend exige que el nuevo rango empiece en el número ya consumido o
+  /// después (`ECF_SEQUENCE_REUSE_BLOCKED`) y que quepa en la autorización
+  /// vigente de la DGII (`ECF_SEQUENCE_EXCEEDS_AUTHORIZED`). El rango anterior
+  /// se desactiva: no se borra, queda como historial.
+  Future<void> renewSequence({
+    required String documentType,
+    required int startNumber,
+    required int endNumber,
+    String? validUntil,
+  }) async {
+    try {
+      await _dio.post(ApiRoutes.ecfSequencesRenew, data: {
+        'documentType': documentType,
+        'startNumber': startNumber,
+        'endNumber': endNumber,
+        if (validUntil != null && validUntil.trim().isNotEmpty)
+          'validUntil': validUntil.trim(),
+      });
+    } on DioException catch (error) {
+      throw EcfSequenceException(_sequenceServerMessage(error));
+    }
+  }
+
+  /// Numeración que la DGII autorizó a esta empresa, por tipo de comprobante.
+  Future<EcfAuthorizedSequencesView> authorizedSequences() async {
+    final res = await _dio.get(ApiRoutes.ecfDgiiAuthorizedSequences);
+    return EcfAuthorizedSequencesView.fromJson(_asMap(res.data));
+  }
+
+  /// Declara lo que la DGII autorizó. El backend guarda quién lo declaró, cuándo
+  /// y la versión del texto aceptado; sin esta fila no se puede declarar
+  /// numeración (`ECF_SEQUENCE_NOT_AUTHORIZED`).
+  Future<void> declareAuthorizedSequence({
+    required String documentType,
+    required String authorizationNumber,
+    required int rangeFrom,
+    required int rangeTo,
+    required int approvedQuantity,
+    String? expiresAt,
+    required bool declarationAccepted,
+  }) async {
+    try {
+      await _dio.post(ApiRoutes.ecfDgiiAuthorizedSequences, data: {
+        'documentType': documentType,
+        'authorizationNumber': authorizationNumber.trim(),
+        'rangeFrom': rangeFrom,
+        'rangeTo': rangeTo,
+        'approvedQuantity': approvedQuantity,
+        if (expiresAt != null && expiresAt.trim().isNotEmpty)
+          'expiresAt': expiresAt.trim(),
+        'declarationAccepted': declarationAccepted,
+      });
+    } on DioException catch (error) {
+      throw EcfSequenceException(_sequenceServerMessage(error));
+    }
+  }
+
+  /// Motivo legible de un error de numeración.
+  ///
+  /// Los DTO de Nest responden en inglés con el nombre del campo. Se traduce el
+  /// caso que el cliente puede provocar solo y el resto se conserva tal cual,
+  /// que siempre es mejor que un «Inténtalo de nuevo» sin motivo.
+  String _sequenceServerMessage(DioException error) {
+    final data = error.response?.data;
+    String? message;
+    if (data is Map) {
+      final raw = data['message'];
+      if (raw is String && raw.trim().isNotEmpty) {
+        message = raw.trim();
+      } else if (raw is List && raw.isNotEmpty) {
+        message = raw.first.toString().trim();
+      }
+    }
+    if (message == null || message.isEmpty) {
+      return 'No se pudo guardar la numeración. Inténtalo de nuevo.';
+    }
+    if (message.contains('documentType must be one of the following values')) {
+      return 'La DGII todavía no admite ese tipo de comprobante para numeración.';
+    }
+    return message;
+  }
+
   Future<List<EcfEligibleOriginal>> eligibleOriginals() async {
     final res = await _dio.get(ApiRoutes.ecfDocumentsEligibleOriginals);
     return _asList(
@@ -278,6 +420,38 @@ class EcfRepository {
     await _dio.patch(ApiRoutes.ecfConfig, data: {'enabled': enabled});
   }
 
+  /// Habilita o deshabilita registrar ventas SIN comprobante electrónico.
+  ///
+  /// Es una excepción fiscal: el backend la respalda con el registro de
+  /// excepciones, que guarda motivo y usuario de cada uso. Requiere el permiso
+  /// `manageEcfConfig`.
+  Future<void> updateAllowSalesWithoutEcf({required bool allow}) async {
+    await _dio.patch(
+      ApiRoutes.ecfConfig,
+      data: {'allowSalesWithoutEcf': allow},
+    );
+  }
+
+  /// Registra que una venta se cerró SIN comprobante electrónico.
+  ///
+  /// Falla si la empresa no habilitó la excepción o si la venta ya tiene
+  /// comprobante: el servidor manda, la interfaz no improvisa.
+  Future<void> registerSaleWithoutDocument({
+    required String saleId,
+    required String reason,
+    String? expectedDocumentType,
+  }) async {
+    await _dio.post(
+      ApiRoutes.ecfSalesWithoutDocument,
+      data: {
+        'saleId': saleId,
+        'reason': reason,
+        if (expectedDocumentType != null)
+          'expectedDocumentType': expectedDocumentType,
+      },
+    );
+  }
+
   /// Proceso INTERNO de habilitación e-CF de la empresa.
   ///
   /// Los estados que devuelve son internos del proceso administrativo: no
@@ -316,6 +490,34 @@ class EcfRepository {
       data: {'scenario': scenario},
     );
     return EcfSimulatedDispatchOutcome.fromJson(_asMap(res.data));
+  }
+
+  /// DESPACHO AUTORIZADO al proveedor DOSA de la empresa.
+  ///
+  /// A diferencia del despacho simulado, este camino es el real: el backend
+  /// aplica barrera del documento, compuerta fiscal y credenciales de ESTA
+  /// empresa y ESTE ambiente.
+  ///
+  /// Un rechazo fiscal no lanza: llega con `ok: false`, `code` y
+  /// `blockingReasons` para que la interfaz explique qué falta. Los códigos 4xx
+  /// sí son excepciones (permiso, documento inexistente, doble intento).
+  Future<EcfDosaDispatchOutcome> dispatchDosa(String documentId) async {
+    final res = await _dio.post(ApiRoutes.ecfDocumentDispatchDosa(documentId));
+    return EcfDosaDispatchOutcome.fromJson(_asMap(res.data));
+  }
+
+  /// Intenta ACTIVAR y AUTORIZAR la emisión con la evidencia del cliente.
+  ///
+  /// Es la llamada que permite al cliente terminar el proceso sin que nadie de
+  /// Fulltech intervenga: el backend evalúa la sesión, la confirmación de DOSA,
+  /// la aprobación de la DGII y la autorización del propio cliente, y si están
+  /// las cuatro activa la credencial y deriva el estado de certificación.
+  ///
+  /// Un «todavía no» NO lanza: llega con `ok: false` y `blockingReasons`, que la
+  /// interfaz muestra tal cual. Repetir la llamada es seguro (idempotente).
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async {
+    final res = await _dio.post(ApiRoutes.ecfDosaActivationAttempt);
+    return EcfDosaActivationOutcome.fromJson(_asMap(res.data));
   }
 
   /// Prepara un borrador local (E31) a partir de una venta real.
@@ -364,9 +566,9 @@ class EcfRepository {
 
   /// Prepara un borrador local de CONSUMO (E32) desde una venta real.
   ///
-  /// Es un flujo independiente de E31: el backend NO consume numeración de la
-  /// empresa y NO toca el cupo único de sandbox, así que el borrador queda sin
-  /// e-NCF hasta que ese cupo lo entregue. No emite.
+  /// Numera igual que E31: el backend consume un e-NCF del rango que la DGII
+  /// autorizó para facturas de consumo, de forma idempotente por venta (un
+  /// reintento reutiliza el número ya asignado). No emite.
   Future<EcfPreparationOutcome> prepareConsumoFromSale({
     required String saleId,
     required int paymentType,

@@ -1,5 +1,9 @@
 # e-CF — Progress file (bitácora de misión)
 
+> **Bitácora histórica del worktree `FULLPOS-ECF-ALANUBE`.** El estado vigente de la rama
+> `agent/ecf-pos-unified-invoicing` vive en `docs/ecf/ECF_POS_UNIFIED_INVOICING_PLAN.md`.
+> No uses este archivo como fuente de verdad del trabajo actual.
+
 Actualizado: **2026-10-15**. Worktree `FULLPOS-ECF-ALANUBE`, rama `feature/ecf-alanube`.
 Sin `commit`, sin `push`, sin `deploy`. Producción y UAT histórica intactas.
 

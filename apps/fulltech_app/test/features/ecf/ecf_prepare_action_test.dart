@@ -51,7 +51,7 @@ void main() {
           // E32 nunca se asigna desde el rango de la empresa.
           'contractAllowsEmission': type != 'E32',
           'allowedForCompany': allowed.contains(type),
-          'allocatable': type != 'E32',
+          'allocatable': true,
         },
     ],
   };

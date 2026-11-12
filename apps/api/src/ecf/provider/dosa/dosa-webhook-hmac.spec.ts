@@ -5,7 +5,9 @@ import {
   DOSA_WEBHOOK_PENDING_QUESTIONS,
   parseSignatureHeader,
   readDosaSignatureConfig,
+  resolveTimestampUnit,
   verifyDosaSignature,
+  type DosaResolvedInterpretation,
   type DosaSignatureConfig,
 } from "./dosa-webhook-signature.policy";
 
@@ -269,12 +271,12 @@ describe("readDosaSignatureConfig", () => {
     expect(config.strategy).toBe("UNVERIFIED_PLAINTEXT_SECRET");
   });
 
-  it("por defecto la unidad es segundos y la tolerancia 300", () => {
+  it("por defecto la unidad se deduce (`auto`) y la tolerancia es 300", () => {
     const config = readDosaSignatureConfig({
       DOSA_WEBHOOK_SIGNATURE_STRATEGY: "HMAC_SHA256_TIMESTAMPED",
       DOSA_WEBHOOK_SECRET: "x",
     });
-    expect(config.timestampUnit).toBe("seconds");
+    expect(config.timestampUnit).toBe("auto");
     expect(config.toleranceSeconds).toBe(DOSA_DEFAULT_TOLERANCE_SECONDS);
   });
 
@@ -365,13 +367,16 @@ describe("codificación del secreto (pendiente de confirmar por DOSA)", () => {
     expect((result as { reason: string }).reason).toBe("CONFIG_INVALID");
   });
 
-  it("la codificación se lee de entorno y por defecto es utf8", () => {
+  it("la codificación se lee de entorno y por defecto es `auto`", () => {
+    // `auto` prueba las DOS lecturas acotadas del mismo secreto (texto y los 32
+    // bytes que codifica), así que un secreto hex funciona sin adivinar cuál de
+    // las dos usa el proveedor. La firma sigue teniendo que ser el HMAC exacto.
     expect(
       readDosaSignatureConfig({
         DOSA_WEBHOOK_SIGNATURE_STRATEGY: "HMAC_SHA256_TIMESTAMPED",
         DOSA_WEBHOOK_SECRET: HEX_SECRET,
       }).secretEncoding,
-    ).toBe("utf8");
+    ).toBe("auto");
     expect(
       readDosaSignatureConfig({
         DOSA_WEBHOOK_SIGNATURE_STRATEGY: "HMAC_SHA256_TIMESTAMPED",
@@ -389,5 +394,213 @@ describe("dudas externas documentadas", () => {
       /segundos o milisegundos/i,
     );
     expect(DOSA_WEBHOOK_PENDING_QUESTIONS.join(" ")).toMatch(/hex o en base64/i);
+  });
+});
+
+/**
+ * Firmas de referencia para P1 y P5, calculadas aquí con la fórmula confirmada
+ * sobre una clave concreta: el verificador se contrasta contra una
+ * implementación independiente, no contra sí mismo.
+ */
+function signedHmac(input: {
+  raw: Buffer;
+  key: string | Buffer;
+  t: string;
+  encoding?: "hex" | "base64";
+}): string {
+  const digest = createHmac("sha256", input.key)
+    .update(`${input.t}.`, "utf8")
+    .update(input.raw)
+    .digest(input.encoding ?? "hex");
+  return `t=${input.t},v1=${digest}`;
+}
+
+describe("P1 — unidad de `t` resuelta por magnitud (`auto`)", () => {
+  const verifyWith = (headerValue: string, config = hmacConfig({ timestampUnit: "auto" })) =>
+    verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: headerValue },
+      config,
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+
+  it("acepta un `t` en segundos sin configurar la unidad", () => {
+    const t = String(NOW_SECONDS);
+    expect(verifyWith(signedHmac({ raw: RAW, key: SECRET, t })).ok).toBe(true);
+  });
+
+  it("acepta un `t` en milisegundos sin configurar la unidad", () => {
+    const t = String(NOW);
+    expect(verifyWith(signedHmac({ raw: RAW, key: SECRET, t })).ok).toBe(true);
+  });
+
+  it("un mensaje antiguo en segundos sigue rechazándose por la ventana", () => {
+    // La deducción de la unidad NO relaja el anti-replay: el mensaje es
+    // auténtico y aun así se rechaza por viejo.
+    const t = String(Math.floor(NOW / 1000) - 600);
+    expect(
+      (verifyWith(signedHmac({ raw: RAW, key: SECRET, t })) as { reason: string })
+        .reason,
+    ).toBe("SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE");
+  });
+
+  it("un mensaje antiguo en milisegundos sigue rechazándose por la ventana", () => {
+    const t = String(NOW - 600_000);
+    expect(
+      (verifyWith(signedHmac({ raw: RAW, key: SECRET, t })) as { reason: string })
+        .reason,
+    ).toBe("SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE");
+  });
+
+  it("un `t` del futuro lejano se rechaza igual", () => {
+    const t = String(NOW + 86_400_000);
+    expect(
+      (verifyWith(signedHmac({ raw: RAW, key: SECRET, t })) as { reason: string })
+        .reason,
+    ).toBe("SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE");
+  });
+
+  it("informa qué unidad validó la firma (evidencia, no suposición)", () => {
+    const seen: DosaResolvedInterpretation[] = [];
+    const run = (t: string) =>
+      verifyDosaSignature({
+        headers: { [DOSA_SIGNATURE_HEADER]: signedHmac({ raw: RAW, key: SECRET, t }) },
+        config: hmacConfig({ timestampUnit: "auto" }),
+        rawBody: RAW,
+        nowMs: NOW,
+        onResolved: (info) => seen.push(info),
+      });
+
+    expect(run(String(NOW_SECONDS)).ok).toBe(true);
+    expect(run(String(NOW)).ok).toBe(true);
+    expect(seen.map((info) => info.timestampUnit)).toEqual([
+      "seconds",
+      "milliseconds",
+    ]);
+  });
+
+  it("el ajuste explícito sigue mandando sobre la deducción", () => {
+    // Declarado en segundos, un `t` de 13 dígitos no es «un segundo de 1970».
+    const t = String(NOW);
+    const result = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: signedHmac({ raw: RAW, key: SECRET, t }) },
+      config: hmacConfig({ timestampUnit: "seconds" }),
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+    expect((result as { reason: string }).reason).toBe(
+      "SIGNATURE_TIMESTAMP_OUT_OF_TOLERANCE",
+    );
+  });
+
+  it.each([
+    ["1790000000", "seconds"],
+    ["1790000000000", "milliseconds"],
+    ["0", "seconds"],
+    ["", "seconds"],
+    ["no-numerico", "seconds"],
+  ] as const)("resolveTimestampUnit(%s) → %s", (raw, expected) => {
+    expect(resolveTimestampUnit(raw, "auto")).toBe(expected);
+  });
+
+  it("un ajuste explícito ignora la magnitud", () => {
+    expect(resolveTimestampUnit("1790000000000", "seconds")).toBe("seconds");
+    expect(resolveTimestampUnit("1790000000", "milliseconds")).toBe(
+      "milliseconds",
+    );
+  });
+});
+
+describe("P5 — lectura del secreto por compatibilidad acotada (`auto`)", () => {
+  // 64 caracteres hex: exactamente la forma que tiene el secreto real, y la
+  // única en la que existen las dos lecturas (texto vs 32 bytes).
+  const HEX_SECRET = "0123456789abcdef".repeat(4);
+  const t = String(NOW_SECONDS);
+  const autoConfig = () =>
+    hmacConfig({ secret: HEX_SECRET, secretEncoding: "auto", timestampUnit: "auto" });
+
+  const verifyWith = (
+    headerValue: string,
+    config: DosaSignatureConfig = autoConfig(),
+  ) =>
+    verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: headerValue },
+      config,
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+
+  it("acepta el secreto leído como TEXTO literal", () => {
+    const headerValue = signedHmac({ raw: RAW, key: HEX_SECRET, t });
+    const seen: DosaResolvedInterpretation[] = [];
+    const result = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: headerValue },
+      config: autoConfig(),
+      rawBody: RAW,
+      nowMs: NOW,
+      onResolved: (info) => seen.push(info),
+    });
+    expect(result.ok).toBe(true);
+    expect(seen[0]?.secretEncoding).toBe("utf8");
+  });
+
+  it("acepta el secreto leído como los 32 BYTES que codifica", () => {
+    const key = Buffer.from(HEX_SECRET, "hex");
+    const headerValue = signedHmac({ raw: RAW, key, t });
+    const seen: DosaResolvedInterpretation[] = [];
+    const result = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: headerValue },
+      config: autoConfig(),
+      rawBody: RAW,
+      nowMs: NOW,
+      onResolved: (info) => seen.push(info),
+    });
+    expect(result.ok).toBe(true);
+    expect(seen[0]?.secretEncoding).toBe("hex");
+  });
+
+  it("un secreto distinto se rechaza en las dos lecturas", () => {
+    const headerValue = signedHmac({ raw: RAW, key: "otro-secreto-distinto", t });
+    expect((verifyWith(headerValue) as { reason: string }).reason).toBe(
+      "SIGNATURE_MISMATCH",
+    );
+  });
+
+  it("con `utf8` explícito la lectura hex queda cerrada", () => {
+    const key = Buffer.from(HEX_SECRET, "hex");
+    const headerValue = signedHmac({ raw: RAW, key, t });
+    const result = verifyWith(
+      headerValue,
+      hmacConfig({
+        secret: HEX_SECRET,
+        secretEncoding: "utf8",
+        timestampUnit: "auto",
+      }),
+    );
+    expect((result as { reason: string }).reason).toBe("SIGNATURE_MISMATCH");
+  });
+
+  it("un secreto que no es hex solo admite la lectura de texto", () => {
+    const result = verifyDosaSignature({
+      headers: {
+        [DOSA_SIGNATURE_HEADER]: signedHmac({ raw: RAW, key: SECRET, t }),
+      },
+      config: hmacConfig({ secret: SECRET, secretEncoding: "auto", timestampUnit: "auto" }),
+      rawBody: RAW,
+      nowMs: NOW,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("el cuerpo alterado no valida en ninguna lectura", () => {
+    const headerValue = signedHmac({ raw: RAW, key: HEX_SECRET, t });
+    const tampered = Buffer.concat([RAW, Buffer.from(" ")]);
+    const result = verifyDosaSignature({
+      headers: { [DOSA_SIGNATURE_HEADER]: headerValue },
+      config: autoConfig(),
+      rawBody: tampered,
+      nowMs: NOW,
+    });
+    expect((result as { reason: string }).reason).toBe("SIGNATURE_MISMATCH");
   });
 });

@@ -10,12 +10,11 @@ import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_intent_api.da
 import 'package:daleventa_pos/features/ecf/dosa/dosa_certification_session_api.dart';
 import 'package:daleventa_pos/features/ecf/dosa/dosa_portal_launcher.dart';
 import 'package:daleventa_pos/features/ecf/ecf_certification_models.dart';
+import 'package:daleventa_pos/features/ecf/ecf_dosa_activation_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_support_grant_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_fiscal_data_page.dart';
-import 'package:daleventa_pos/features/ecf/ui/flow/ecf_company_step.dart';
-import 'package:daleventa_pos/features/ecf/ui/flow/ecf_flow_preview_button.dart';
 import 'package:daleventa_pos/features/ecf/ui/flow/ecf_flow_step.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +27,57 @@ import 'package:flutter_test/flutter_test.dart';
 /// bienvenida sin formularios técnicos, que sus datos se reutilicen, que el
 /// seguimiento muestre **tres hitos** y no quince operaciones, y que el detalle
 /// técnico quede fuera del camino salvo para quien puede gestionarlo.
+
+/// Repositorio falso: el bloque de autorización consulta al aparecer y **ninguna
+/// prueba puede salir a la red** (ni siquiera a un host real por defecto).
+class _FakeEcfRepository extends EcfRepository {
+  _FakeEcfRepository({EcfDosaActivationOutcome? outcome})
+    : outcome =
+           outcome ??
+           EcfDosaActivationOutcome.fromJson(const {
+             'ok': false,
+             'companyId': 'company-a',
+             'certificationStatus': 'IN_PROGRESS',
+             'changed': false,
+             'environments': [
+               {
+                 'environment': 'test',
+                 'status': 'PENDING_CONFIRMATION',
+                 'activated': false,
+                 'blockingReasons': [
+                   'ECF_DOSA_ACTIVATION_PROVIDER_NOT_CONFIRMED',
+                 ],
+               },
+             ],
+           }),
+       super(Dio());
+
+  final EcfDosaActivationOutcome outcome;
+  int attempts = 0;
+
+  @override
+  Future<EcfDosaActivationOutcome> attemptDosaActivation() async {
+    attempts++;
+    return outcome;
+  }
+
+  /// Numeración ya declarada: la sección de e-NCF no aparece y estas pruebas
+  /// siguen midiendo el recorrido, no el formulario de numeración.
+  @override
+  Future<List<EcfSequenceInfo>> sequences() async => const [
+    EcfSequenceInfo(
+      id: 'seq-1',
+      documentType: 'E31',
+      prefix: 'E31',
+      startNumber: 1,
+      nextNumber: 2,
+      endNumber: 100,
+      active: true,
+      consumed: 1,
+      remaining: 99,
+    ),
+  ];
+}
 
 class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
@@ -185,6 +235,7 @@ CompanySettings _settings({bool complete = true}) =>
       companyName: 'ECF Visual UAT Demo',
       rnc: '133020232',
       address: complete ? 'Calle 1' : '',
+      ecfContactEmail: complete ? 'facturacion@example.test' : '',
       legalRepresentativeName: complete ? 'Manolo Lio' : '',
       legalRepresentativeCedula: complete ? '40323211222' : '',
     );
@@ -197,10 +248,12 @@ Widget _harness({
   bool dosaEligible = false,
   _FakeIntentApi? intentApi,
   _FakeSessionApi? sessionApi,
+  _FakeEcfRepository? repository,
 }) {
   return ProviderScope(
     key: UniqueKey(),
     overrides: [
+      ecfRepositoryProvider.overrideWithValue(repository ?? _FakeEcfRepository()),
       ecfDgiiHabilitationProvider.overrideWith(
         (ref) async => view ?? _habilitation(),
       ),
@@ -314,7 +367,7 @@ void main() {
           certificateValidated: false,
           testsOrLater: false,
         ),
-        EcfFlowStep.company,
+        EcfFlowStep.preparation,
       );
       expect(
         initialEcfFlowStep(
@@ -339,25 +392,91 @@ void main() {
         EcfFlowStep.tracking,
       );
     });
+
+    test('con la postulación abierta el recorrido sigue en seguimiento', () {
+      // El caso real: postulación cerrada con DOSA y firma pendiente. El
+      // expediente no ha avanzado de estado, así que sin esta señal el cliente
+      // volvía a Preparación, donde ya no queda nada que iniciar.
+      expect(
+        initialEcfFlowStep(
+          state: 'NOT_STARTED',
+          hasResolvedRequirement: false,
+          officialAuthorization: false,
+          fiscalReady: true,
+          certificateValidated: false,
+          testsOrLater: false,
+          postulationStarted: true,
+        ),
+        EcfFlowStep.tracking,
+      );
+      // La firma sigue siendo el paso final cuando ya está registrada.
+      expect(
+        initialEcfFlowStep(
+          state: 'NOT_STARTED',
+          hasResolvedRequirement: true,
+          officialAuthorization: true,
+          fiscalReady: true,
+          certificateValidated: false,
+          testsOrLater: false,
+          postulationStarted: true,
+        ),
+        EcfFlowStep.authorization,
+      );
+    });
   });
 
-  testWidgets('bienvenida: sin formularios técnicos y con los 3 requisitos', (
+  testWidgets('rail: se puede volver a un paso ya alcanzado', (tester) async {
+    EcfFlowStep? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EcfStepRail(
+            current: EcfFlowStep.preparation,
+            furthest: EcfFlowStep.tracking,
+            onSelect: (step) => selected = step,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Tu postulación'));
+    await tester.pumpAndSettle();
+    expect(selected, EcfFlowStep.tracking);
+  });
+
+  testWidgets('rail: sin avance justificado no se salta de paso', (tester) async {
+    EcfFlowStep? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EcfStepRail(
+            current: EcfFlowStep.preparation,
+            onSelect: (step) => selected = step,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Tu postulación'));
+    await tester.pumpAndSettle();
+    expect(selected, isNull);
+  });
+
+  testWidgets('bienvenida: vídeo, portal DGII y una sola acción', (
     tester,
   ) async {
     await _pump(tester, _harness());
 
     expect(find.text('Activa tu facturación electrónica'), findsOneWidget);
     expect(
-      find.textContaining('Te acompañamos durante el proceso de habilitación'),
+      find.textContaining('Todo el proceso, acompañado por FullPOS'),
       findsOneWidget,
     );
-    // Requisitos esenciales, en el orden de la DGII.
+    // El recorrido no repite requisitos en la portada.
     expect(
       find.text('Acceso al Portal de Certificación de la DGII'),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('Certificado digital vigente'), findsOneWidget);
-    expect(find.text('Datos fiscales de la empresa'), findsOneWidget);
+    expect(find.text('Certificado digital vigente'), findsNothing);
+    expect(find.text('Datos fiscales de la empresa'), findsNothing);
     // Espacio del vídeo sin simular reproducción + portal oficial.
     expect(find.text('Aquí irá el vídeo de preparación'), findsOneWidget);
     expect(find.text('Abrir portal de la DGII'), findsOneWidget);
@@ -369,21 +488,24 @@ void main() {
   });
 
   testWidgets(
-    'empresa: reutiliza los datos guardados y muestra el certificado',
+    'preparación: reutiliza los datos guardados y no repite el certificado',
     (tester) async {
       await _pump(tester, _harness());
       await _tapText(tester, 'Comenzar');
 
-      expect(find.text('133020232'), findsOneWidget);
-      expect(find.text('ECF Visual UAT Demo'), findsOneWidget);
-      expect(find.text('Calle 1'), findsOneWidget);
-      expect(find.text('Manolo Lio'), findsOneWidget);
-      expect(find.text('Certificado digital'), findsOneWidget);
-      // Con DOSA al mando no se muestra el formulario tradicional de archivo
-      // ni la contraseña; solo se conserva el historial.
+      // Empresa ya postulada: ni el RNC ni el nombre se repiten. Sus datos
+      // viven en Configuración de empresa y no se copian aquí, porque el
+      // asistente oficial ya los tiene.
+      expect(find.textContaining('133020232'), findsNothing);
+      expect(find.textContaining('ECF Visual UAT Demo'), findsNothing);
+      expect(find.text('Copiar'), findsNothing);
+      expect(find.text('Completa lo que falta'), findsNothing);
+      expect(find.text('Correo fiscal'), findsNothing);
+      // El certificado pertenece al asistente de DOSA: no se muestra como
+      // dato cargado ni como paso pendiente en FullPOS.
+      expect(find.text('Certificado digital'), findsNothing);
       expect(find.text('Validar certificado'), findsNothing);
       expect(find.byType(TextField), findsNothing);
-      expect(find.textContaining('No hay que subirlos aquí'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -411,130 +533,97 @@ void main() {
       size: const Size(1280, 1400),
     );
     await _tapText(tester, 'Comenzar');
-    // El recorrido puede pasar primero por el paso de empresa; con DOSA al
-    // mando y los datos completos, «Continuar» lleva a Preparación.
-    if (find.text('Continuar').evaluate().isNotEmpty) {
-      await _tapText(tester, 'Continuar');
-    }
 
-    expect(find.text('Iniciar postulación electrónica'), findsOneWidget);
-    await _tapText(tester, 'Iniciar postulación electrónica');
+    expect(find.text('Iniciar postulación'), findsOneWidget);
+    await _tapText(tester, 'Iniciar postulación');
 
     expect(intentApi.registerCalls, 1);
     expect(sessionApi.openCalls, 1);
-    expect(find.text('Volver a abrir el asistente'), findsOneWidget);
+    expect(find.text('Continuar con el asistente'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('empresa sin datos completos avisa y no deja continuar', (
+  testWidgets(
+    'preparación incompleta pide completar sin duplicar el formulario',
+    (tester) async {
+      await _pump(tester, _harness(settings: _settings(complete: false)));
+      await _tapText(tester, 'Comenzar');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Completar datos'), findsOneWidget);
+      expect(find.text('Iniciar postulación'), findsNothing);
+      expect(find.byType(EcfFiscalDataContent), findsNothing);
+
+      await _tapText(tester, 'Completar datos');
+      expect(find.byType(EcfFiscalDataContent), findsOneWidget);
+      expect(find.text('Correo fiscal'), findsOneWidget);
+    },
+  );
+
+  testWidgets('preparación DOSA: una sola acción y sin pedir certificado', (
     tester,
   ) async {
-    await _pump(tester, _harness(settings: _settings(complete: false)));
+    await _pump(tester, _harness(dosaEligible: true));
     await _tapText(tester, 'Comenzar');
-    await tester.pumpAndSettle();
 
-    // El paso de empresa exige los datos: se resuelven con el mecanismo que ya
-    // existe (el formulario fiscal del expediente) y no se ofrece «Continuar»
-    // con datos incompletos.
-    expect(find.byType(EcfFiscalDataContent), findsOneWidget);
-    expect(find.text('Continuar'), findsNothing);
+    expect(find.text('Iniciar postulación'), findsOneWidget);
+    expect(find.text('Validar certificado'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('Postulación inteligente'), findsNothing);
+    expect(find.text('Antes de postular'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-    'empresa: la vía DOSA no exige validar antes el certificado en FullPOS',
+    'preparación DOSA: RNC y correo se pueden copiar sin duplicarlos',
     (tester) async {
-      await _pump(tester, _harness());
+      // Empresa que todavía NO se ha postulado: es el único momento en el que
+      // el copiado aporta algo, porque el asistente oficial los vuelve a pedir.
+      await _pump(
+        tester,
+        _harness(
+          view: _habilitation(provider: null),
+          dosaEligible: true,
+        ),
+      );
       await _tapText(tester, 'Comenzar');
 
-      final button = find.byKey(const ValueKey('ecf_company_step_continue'));
-      expect(button, findsOneWidget);
-      // El certificado lo pide el asistente oficial de DOSA: bloquear aquí
-      // sería pedir el mismo dato dos veces.
-      expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
-      expect(
-        find.text(
-          'Puedes continuar: el certificado se pide dentro del asistente de DOSA.',
-        ),
-        findsOneWidget,
-      );
-      // Los datos ya registrados siguen a la vista y no se vuelven a pedir.
-      expect(find.text('133020232'), findsOneWidget);
-      expect(find.text('ECF Visual UAT Demo'), findsOneWidget);
+      // El asistente oficial los vuelve a pedir; se copian en un solo toque.
+      expect(find.text('Copiar'), findsOneWidget);
+      // El dato no se duplica: una sola línea con empresa y RNC.
+      expect(find.textContaining('133020232'), findsOneWidget);
+      expect(find.text('facturacion@example.test'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('empresa: sin la vía DOSA el certificado sigue bloqueando', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: EcfCompanyStep(
-            settings: _settings(),
-            fiscalReady: true,
-            certificate: const SizedBox.shrink(),
-            onEditFiscalData: () {},
-            onContinue: () {},
-            wide: false,
-            dosaOwnsCertificate: false,
-            certificateBlockedReason:
-                'Valida el certificado digital del representante legal para continuar.',
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final button = find.byKey(const ValueKey('ecf_company_step_continue'));
-    expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    expect(
-      find.text(
-        'Valida el certificado digital del representante legal para continuar.',
-      ),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('preparación: oculta el motor legado deshabilitado', (
+  testWidgets('preparación sin correo: no ofrece copiar un dato que falta', (
     tester,
   ) async {
     await _pump(
       tester,
-      _harness(view: _habilitation(progress: _certificateResolvedProgress())),
+      _harness(dosaEligible: true, settings: _settings(complete: false)),
     );
+    await _tapText(tester, 'Comenzar');
 
-    expect(find.text('Antes de postular'), findsOneWidget);
-    expect(find.text('Datos de la empresa'), findsWidgets);
-    expect(find.text('Certificado digital'), findsWidgets);
-    expect(find.text('Acceso al portal de la DGII'), findsOneWidget);
-
-    final button = find.byKey(
-      const ValueKey('ecf_intelligent_certification_button'),
-    );
-    expect(button, findsNothing);
-    expect(find.text('Postulación inteligente'), findsNothing);
+    expect(find.byTooltip('Copiar correo fiscal'), findsNothing);
+    expect(find.text('Falta el correo de facturación'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('preparación: el modo de prueba se declara cuando existe', (
+  testWidgets('preparación: sin datos no ofrece la postulación', (
     tester,
   ) async {
-    // Un usuario sin la vía DOSA: ahí sigue viviendo el motor de prueba legado.
-    // Con el portal oficial presente, ese bloque desaparece por diseño: un solo
-    // proceso y un solo botón principal.
     await _pump(
       tester,
-      _harness(
-        user: _viewer(),
-        simulationAvailable: true,
-        view: _habilitation(progress: _certificateResolvedProgress()),
-      ),
+      _harness(dosaEligible: true, settings: _settings(complete: false)),
     );
+    await _tapText(tester, 'Comenzar');
 
-    expect(find.byKey(const ValueKey('ecf_test_mode_badge')), findsOneWidget);
-    expect(find.textContaining('MODO DE PRUEBA'), findsOneWidget);
+    expect(find.text('Completar datos'), findsOneWidget);
+    expect(find.text('Iniciar postulación'), findsNothing);
+    expect(find.text('Validar certificado'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('seguimiento: solo tres hitos y no quince operaciones', (
@@ -574,14 +663,13 @@ void main() {
         ),
       ),
     );
-    await _tapText(tester, 'Seguimiento');
 
     expect(find.text('Solicitud'), findsOneWidget);
     expect(find.text('Pruebas'), findsOneWidget);
     expect(find.text('Certificación'), findsOneWidget);
-    // El cliente no ve el listado técnico de operaciones.
+    // El cliente no ve el listado técnico de operaciones ni porcentajes internos.
     expect(find.text('Pruebas del SET'), findsNothing);
-    expect(find.textContaining('36%'), findsWidgets);
+    expect(find.textContaining('36%'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -592,10 +680,12 @@ void main() {
       tester,
       _harness(
         user: _viewer(),
-        view: _habilitation(state: 'IN_PROGRESS'),
+        view: _habilitation(
+          state: 'TESTS_PENDING',
+          progress: _certificateResolvedProgress(),
+        ),
       ),
     );
-    await _tapText(tester, 'Seguimiento');
     expect(find.text('Detalle técnico'), findsNothing);
     expect(find.text('Avanzar estado'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -608,46 +698,9 @@ void main() {
     expect(find.text('Activa tu facturación electrónica'), findsOneWidget);
     await _tapText(tester, 'Comenzar');
     expect(find.text('Bienvenida'), findsOneWidget);
-    expect(find.text('Empresa'), findsOneWidget);
-    expect(find.text('Preparación'), findsOneWidget);
-    expect(find.text('Seguimiento'), findsOneWidget);
+    expect(find.text('Preparación'), findsWidgets);
+    expect(find.text('Tu postulación'), findsOneWidget);
+    expect(find.text('Empresa'), findsNothing);
     expect(tester.takeException(), isNull);
-  });
-
-  group('atajo de vista previa (solo empresa de prueba)', () {
-    test('recorre los cuatro pasos y vuelve al primero', () {
-      expect(nextEcfFlowStep(EcfFlowStep.welcome), EcfFlowStep.company);
-      expect(nextEcfFlowStep(EcfFlowStep.company), EcfFlowStep.preparation);
-      expect(nextEcfFlowStep(EcfFlowStep.preparation), EcfFlowStep.tracking);
-      expect(nextEcfFlowStep(EcfFlowStep.tracking), EcfFlowStep.welcome);
-    });
-
-    testWidgets('el botón se dibuja con el nombre del paso siguiente', (
-      tester,
-    ) async {
-      var pressed = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: EcfFlowPreviewButton(
-              nextLabel: 'Empresa',
-              onPressed: () => pressed++,
-            ),
-          ),
-        ),
-      );
-      expect(find.text('Saltar a Empresa'), findsOneWidget);
-      await tester.tap(find.text('Saltar a Empresa'));
-      expect(pressed, 1);
-    });
-
-    testWidgets('sin la variable de compilación el atajo no existe', (
-      tester,
-    ) async {
-      // La compilación de pruebas no define ECF_FLOW_PREVIEW_RNC, así que ni la
-      // empresa real ni ninguna otra ven el botón.
-      await _pump(tester, _harness());
-      expect(find.textContaining('Saltar a'), findsNothing);
-    });
   });
 }

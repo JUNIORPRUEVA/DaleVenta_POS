@@ -92,7 +92,11 @@ class VentasController extends StateNotifier<VentasState> {
         customerId: customerId,
         includeDeleted: true,
       ),
-      repo.cachedSummary(from: from, to: to, customerId: customerId),
+      repo.cachedSummary(
+        from: from,
+        to: to,
+        customerId: customerId,
+      ),
     ]);
     if (!mounted || generation != _loadGeneration) return;
     final cachedSales = cachedResults[0] as List<SaleModel>;
@@ -114,7 +118,11 @@ class VentasController extends StateNotifier<VentasState> {
           customerId: customerId,
           includeDeleted: true,
         ),
-        repo.summary(from: from, to: to, customerId: customerId),
+        repo.summary(
+          from: from,
+          to: to,
+          customerId: customerId,
+        ),
       ]);
       if (!mounted || generation != _loadGeneration) return;
 
@@ -168,26 +176,30 @@ class VentasController extends StateNotifier<VentasState> {
     }
   }
 
-  Future<void> returnSale(
+  Future<SaleReturnResult?> returnSale(
     String id, {
     String? originalSaleCashSessionId,
   }) async {
-    if (!mounted) return;
+    if (!mounted) return null;
     final previous = state.sales;
     try {
-      final returned = await ref
+      final result = await ref
           .read(ventasRepositoryProvider)
-          .returnSale(id, originalSaleCashSessionId: originalSaleCashSessionId);
-      if (!mounted) return;
+          .returnSale(
+            id,
+            originalSaleCashSessionId: originalSaleCashSessionId,
+          );
+      if (!mounted) return result;
       state = state.copyWith(
         sales: [
           for (final sale in state.sales)
-            if (sale.id == id) returned else sale,
+            if (sale.id == id) result.sale else sale,
         ],
       );
       await load();
+      return result;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return null;
       state = state.copyWith(sales: previous);
       rethrow;
     }

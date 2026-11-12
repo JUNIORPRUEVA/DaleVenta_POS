@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,13 +47,21 @@ class DosaCertificationSessionException implements Exception {
   final String code;
   final int? statusCode;
 
-  /// La API de sesiones todavía no está habilitada (o no existe en esta
-  /// versión del backend): se puede seguir con el asistente actual.
+  /// El backend declaró que **la apertura automática no está disponible** en
+  /// esta instalación, así que la ruta oficial es el portal con boleto.
+  ///
+  /// Es una lista de PERMITIDOS y solo contiene estados en los que el backend
+  /// afirmó explícitamente que no abrió nada: un error de transporte, un 5xx
+  /// sin código o un estado incierto NO habilitan otra vía, porque no se sabe
+  /// si el proveedor creó algo.
+  ///
+  /// La decisión normal no depende de esto: el backend publica
+  /// `certificationMode` en `GET /ecf/dosa/certification-intent` y el cliente
+  /// lo usa antes de llamar. Esto cubre solo backend antiguo o cambio de
+  /// configuración entre la lectura y la llamada.
   bool get canFallBackToAssistant =>
       code == 'ECF_DOSA_SESSION_DISABLED' ||
-      code == 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED' ||
-      code == 'HTTP_404' ||
-      code == 'HTTP_501';
+      code == 'ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED';
 
   String get message {
     switch (code) {
@@ -114,7 +124,7 @@ class DosaCertificationSessionApi {
 
   DosaCertificationSessionException _mapError(DioException error) {
     final status = error.response?.statusCode;
-    final data = error.response?.data;
+    final data = _decodedBody(error.response?.data);
     final code = data is Map && data['message'] is String
         ? data['message'] as String
         : data is Map &&
@@ -125,6 +135,27 @@ class DosaCertificationSessionApi {
         ? 'ECF_DOSA_SESSION_UNAUTHENTICATED'
         : 'HTTP_$status';
     return DosaCertificationSessionException(code, statusCode: status);
+  }
+
+  /// El cuerpo del error puede llegar ya decodificado o como texto JSON.
+  ///
+  /// El backend responde `503 {"message":"ECF_DOSA_SESSION_DISABLED"}` cuando
+  /// la apertura automática está apagada. Si el adaptador HTTP entrega ese
+  /// cuerpo como cadena, `data['message']` no existe, el código se convertía en
+  /// `HTTP_503` y el cliente **no** caía al asistente público: el administrador
+  /// quedaba bloqueado sin abrir nada. Decodificar aquí mantiene el código real.
+  static Object? _decodedBody(Object? data) {
+    if (data is String) {
+      final text = data.trim();
+      if (text.startsWith('{') || text.startsWith('[')) {
+        try {
+          return jsonDecode(text);
+        } catch (_) {
+          return data;
+        }
+      }
+    }
+    return data;
   }
 }
 

@@ -83,7 +83,7 @@ class _FakeVentasRepository implements VentasRepository {
   }
 
   @override
-  Future<SaleModel> returnSale(
+  Future<SaleReturnResult> returnSale(
     String id, {
     String? clientRequestId,
     String? originalSaleCashSessionId,

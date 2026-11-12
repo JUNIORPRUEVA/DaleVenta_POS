@@ -1,14 +1,42 @@
 # Tenant Data Model Inventory
 
-Generated at: 2026-08-07T02:08:14.573Z
+Generated at: 2026-11-09T03:05:42.270Z
 
 | Model | Table | Classification | Tenant Column | Nullable | FK | Index | Recommended Action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| EcfSupportGrant | ecf_support_grants | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| EcfDosaCertificationSession | ecf_dosa_certification_sessions | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfCertificationPortalTicket | ecf_certification_portal_tickets | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfCertificationPortalSession | ecf_certification_portal_sessions | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfDosaWebhookEvent | ecf_dosa_webhook_events | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfDosaCompanyCredential | ecf_dosa_company_credentials | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | Company | companies | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
+| OpenSalesTicketState | open_sales_ticket_states | Company-owned root entity | company_id | false | present | missing | Add companyId-leading index. |
 | CompanyLicenseAuditLog | company_license_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
+| EcfCompanyConfiguration | ecf_company_configurations | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfOnboardingStep | ecf_onboarding_steps | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfCertificationAttempt | ecf_certification_attempts | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfEvidence | ecf_evidences | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfAuditLog | ecf_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
+| EcfDosaIncident | ecf_dosa_incidents | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfPortalEnrollment | ecf_portal_enrollments | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfDgiiHabilitation | ecf_dgii_habilitations | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfDgiiApplicationSnapshot | ecf_dgii_application_snapshots | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfElectronicDocument | ecf_electronic_documents | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfCreditReservation | ecf_credit_reservations | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| EcfCreditReservationEvent | ecf_credit_reservation_events | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| EcfElectronicDocumentAttempt | ecf_electronic_document_attempts | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfEvidenceReceipt | ecf_evidence_receipts | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| EcfSandboxE32Trial | ecf_sandbox_e32_trials | Company-owned root entity | company_id | false | missing | missing | Add Company foreign key after ownership audit passes. |
+| EcfSandboxE32TrialEvent | ecf_sandbox_e32_trial_events | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| EcfElectronicDocumentStatusLog | ecf_electronic_document_status_logs | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CompanyMember | company_members | Join table | company_id | false | present | present | No tenant migration required. |
 | AuthSession | auth_sessions | Session/security data | company_id | true | present | present | No tenant migration required. |
 | User | users | User-personal data | company_id | true | present | present | No tenant migration required. |
+| BackupRecord | backup_records | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| AppRelease | app_releases | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| PasswordResetToken | password_reset_tokens | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PasswordResetAuditLog | password_reset_audit_logs | Audit/retention data | company_id | true | present | present | No tenant migration required. |
 | EmployeeWarning | employee_warnings | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
 | EmployeeWarningEvidence | employee_warning_evidences | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | EmployeeWarningSignature | employee_warning_signatures | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
@@ -37,9 +65,19 @@ Generated at: 2026-08-07T02:08:14.573Z
 | ChecklistItem | checklist_items | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | ChecklistExecution | checklist_executions | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | NotificationOutbox | notification_outbox | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
+| TelemetryOutbox | telemetry_outbox | Audit/retention data | company_id | false | present | present | No tenant migration required. |
 | ServiceOrderNotificationJob | service_order_notification_jobs | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | Punch | Punch | Global platform data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | Product | Product | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| Warehouse | warehouses | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| WarehouseStock | warehouse_stocks | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| Terminal | terminals | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| InventoryMovement | inventory_movements | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| WarehouseTransfer | warehouse_transfers | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| WarehouseTransferItem | warehouse_transfer_items | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| InventoryZeroConfigState | inventory_zero_config_states | Company-owned root entity | company_id | false | present | missing | Add companyId-leading index. |
+| UnitOfMeasure | unit_of_measures | Company-owned root entity | company_id | true | present | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| Tax | taxes | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | Supplier | suppliers | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | PurchaseInvoice | purchase_invoices | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | PurchaseOrderSequence | purchase_order_sequences | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
@@ -49,6 +87,9 @@ Generated at: 2026-08-07T02:08:14.573Z
 | PurchaseReceiptItem | purchase_receipt_items | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | WebsiteProductOverride | website_product_overrides | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | Client | Client | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PriceList | price_lists | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| PriceListProductRule | price_list_product_rules | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| PriceListQuantityTier | price_list_quantity_tiers | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
 | CrmCommercialCustomer | crm_commercial_customers | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | CrmCommercialStatusHistory | crm_commercial_status_history | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | CrmCommercialNote | crm_commercial_notes | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
@@ -62,10 +103,18 @@ Generated at: 2026-08-07T02:08:14.573Z
 | CashSession | cash_sessions | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CashMovement | cash_movements | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | SaleItem | SaleItem | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| NcfSequence | ncf_sequences | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| NcfAuditLog | ncf_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
+| EcfSequence | ecf_sequences | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfDgiiAuthorizedSequence | ecf_dgii_authorized_sequences | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfSaleWithoutDocument | ecf_sales_without_document | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| EcfSequenceAuditLog | ecf_sequence_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
 | Close | Close | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CloseTransfer | CloseTransfer | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | CloseTransferVoucher | CloseTransferVoucher | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | DepositOrder | DepositOrder | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| DepositBank | deposit_banks | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| DepositBankAccount | deposit_bank_accounts | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | FiscalInvoice | FiscalInvoice | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | PayableService | PayableService | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | PayablePayment | PayablePayment | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
@@ -106,6 +155,21 @@ Generated at: 2026-08-07T02:08:14.573Z
 | WorkScheduleAuditLog | work_schedule_audit_logs | Audit/retention data | company_id | false | present | present | No tenant migration required. |
 | AiAssistantConversationTurn | ai_assistant_conversation_turns | Audit/retention data | company_id | false | present | present | No tenant migration required. |
 | AiAssistantMemory | ai_assistant_memories | Audit/retention data | company_id | false | present | present | No tenant migration required. |
+| GuardianIncidentGroup | guardian_incident_groups | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| GuardianIncident | guardian_incidents | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| GuardianEvidence | guardian_evidences | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| GuardianDiagnosis | guardian_diagnoses | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| GuardianIncidentEvent | guardian_incident_events | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| GuardianAccessLog | guardian_access_logs | Company-owned root entity | company_id | true | missing | missing | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
+| GuardianCompanyQuota | guardian_company_quotas | Company-owned root entity | company_id | false | present | missing | Add companyId-leading index. |
+| GuardianAlert | guardian_alerts | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| GuardianAlertAttempt | guardian_alert_attempts | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| GuardianMachineCredential | guardian_machine_credentials | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| GuardianEnrollmentCode | guardian_enrollment_codes | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
+| GuardianWorkerHeartbeat | guardian_worker_heartbeats | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| SaleReconciliationObligation | sale_reconciliation_obligations | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| SaleReconciliationDeclarationEvent | sale_reconciliation_declaration_events | Company-owned root entity | company_id | false | missing | present | Add Company foreign key after ownership audit passes. |
+| EcfLineClassification | ecf_line_classifications | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 
 ## Notes
 

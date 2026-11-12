@@ -1236,7 +1236,16 @@ export class CashService {
       data.closedByUserId = userId;
     }
 
-    await tx.cashboxDaily.update({ where: { id: cashboxDailyId }, data });
+    // Escritura acotada por empresa: aunque el id venga de una sesión ya
+    // filtrada, un UPDATE por id solo nunca debe poder tocar la caja diaria de
+    // otra empresa.
+    const updated = await tx.cashboxDaily.updateMany({
+      where: { id: cashboxDailyId, companyId },
+      data,
+    });
+    if (updated.count === 0) {
+      throw new NotFoundException("CASHBOX_DAILY_NOT_FOUND");
+    }
   }
 
   private async closeDailyIfNoOpenSessions(

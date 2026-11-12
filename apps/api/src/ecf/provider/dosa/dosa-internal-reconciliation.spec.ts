@@ -43,6 +43,8 @@ type FixtureOptions = {
   legacyActivity?: number;
   webhookActivity?: number;
   latestIsOtherIntent?: boolean;
+  /** Resultado de la compuerta de autorización por empresa (base de datos). */
+  portalEligible?: boolean;
 };
 
 function fixture(options: FixtureOptions = {}) {
@@ -128,6 +130,8 @@ function fixture(options: FixtureOptions = {}) {
     {} as DosaCertificationIntentService,
     {} as DosaCredentialService,
     { read: async () => ({ provider: "ALANUBE", ecfEnabled: true }) } as any,
+    {} as never,
+    { isEligible: async () => options.portalEligible !== false } as never,
   );
 
   const user = { id: "admin-2", companyId: COMPANY, role: "ADMIN" } as TenantUser;
@@ -468,18 +472,16 @@ describe("reconciliación interna — rechazos", () => {
     }
   });
 
-  it("rechaza empresas fuera del piloto y ajenas", async () => {
-    const originalPilot = process.env.ECF_PORTAL_PILOT_COMPANY_IDS;
-
-    const nonPilot = fixture();
-    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = OTHER_COMPANY;
+  it("rechaza empresas sin autorización del portal y ajenas", async () => {
+    // La autorización ya no vive en una variable de entorno: es un dato por
+    // empresa. Se simula su ausencia en la compuerta.
+    const nonEligible = fixture({ portalEligible: false });
     await expect(
-      nonPilot.controller.reconcileProvider(nonPilot.request, nonPilot.body),
+      nonEligible.controller.reconcileProvider(nonEligible.request, nonEligible.body),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
-    // Con ambas empresas en el piloto, la empresa ajena no encuentra su intento:
+    // Autorizada la empresa, la empresa ajena no encuentra su intento:
     // el aislamiento por `companyId` la detiene antes de cualquier escritura.
-    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = `${COMPANY},${OTHER_COMPANY}`;
     const foreign = fixture();
     foreign.request.user = {
       id: "admin-2",
@@ -490,8 +492,6 @@ describe("reconciliación interna — rechazos", () => {
       foreign.controller.reconcileProvider(foreign.request, foreign.body),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(foreign.auditRows).toHaveLength(1);
-
-    process.env.ECF_PORTAL_PILOT_COMPANY_IDS = originalPilot;
   });
 
   it("exige rol administrador", async () => {

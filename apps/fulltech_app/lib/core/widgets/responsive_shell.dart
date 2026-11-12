@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart' hide GestureDetector;
-import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,11 +61,7 @@ class DesktopShellActionItem {
 }
 
 class DesktopShellRouteActions {
-  const DesktopShellRouteActions({
-    required this.route,
-    required this.actions,
-    this.onBack,
-  });
+  const DesktopShellRouteActions({required this.route, required this.actions, this.onBack});
 
   final String route;
   final List<DesktopShellActionItem> actions;
@@ -239,7 +234,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // Piloto: elegibilidad confirmada por el backend y servida con la misma
     // configuración que el shell ya observa, sin peticiones adicionales.
     final ecfPilotEligible =
-        ref.watch(companySettingsProvider).valueOrNull?.ecfPilotEligible ??
+        ref
+            .watch(companySettingsProvider)
+            .valueOrNull
+            ?.ecfPilotEligible ??
         false;
     final sections = buildAppNavigationSections(
       user,
@@ -261,21 +259,27 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // módulo. «Configuración e-CF» solo era un paso intermedio hacia este mismo
     // lugar y, para una empresa en habilitación, mostraba secciones vacías.
     final isEcfHome = location == Routes.ecf;
-    // Destino del botón «volver» de la barra. Los niveles del módulo e-CF
-    // vuelven a la puesta en marcha; antes se enviaba a Configuración, que en
-    // escritorio redirige a otra pantalla y el usuario aterrizaba fuera del
-    // módulo.
-    final VoidCallback? shellBack =
-        routeActions?.route == location && routeActions?.onBack != null
+    // Destino del botón «volver» de la barra. La PRIMERA pantalla de un módulo
+    // vuelve a la pantalla principal —el mismo destino que el router resuelve
+    // al iniciar sesión, según el rol—; los niveles internos vuelven al nivel
+    // anterior. Antes, el módulo e-CF y Configuración enviaban a
+    // `/configuracion`, que en escritorio redirige a otra pantalla.
+    final VoidCallback? shellBack = routeActions?.route == location &&
+            routeActions?.onBack != null
         ? routeActions!.onBack
-        : location == Routes.ecf
-        ? () => context.go(Routes.configuracion)
+        : location == Routes.ecf || location == Routes.configuracion
+        ? () => context.go(Routes.home)
         : location == Routes.ecfDocuments ||
               location == Routes.ecfFiscalData ||
               location == Routes.ecfConfig ||
-              location == Routes.ecfDgii
+              location == Routes.ecfDgii ||
+              location == Routes.ecfAdmin
         ? () => context.go(Routes.ecf)
-        : _shellGenericBack(context, location);
+        : null;
+    // La autorización y la configuración del módulo viven ahora dentro del
+    // recorrido de e-CF (paso «Autorización»), no en un botón aparte: el
+    // cliente no tiene que descubrir un destino oculto para terminar su
+    // trámite.
     final ecfActions = isEcfHome
         ? <DesktopShellActionItem>[
             DesktopShellActionItem(
@@ -283,6 +287,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               tooltip: 'Comprobantes electrónicos',
               label: 'Comprobantes',
               onPressed: () => context.go(Routes.ecfDocuments),
+            ),
+            // Cuando la postulación termina, el módulo deja de mostrar el
+            // recorrido. Lo que queda —facturar, revisar comprobantes, ajustar
+            // la configuración— vive aquí, en la barra, en un solo sitio.
+            DesktopShellActionItem(
+              icon: Icons.verified_outlined,
+              tooltip: 'Postulación',
+              label: 'Postulación',
+              onPressed: () => _openEcfPostulationMenu(context),
             ),
           ]
         : const <DesktopShellActionItem>[];
@@ -355,6 +368,64 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     _routeActionsSubscription?.close();
     _footerContentSubscription?.close();
     super.dispose();
+  }
+
+  /// Opciones de la postulación electrónica ya cerrada.
+  ///
+  /// El módulo deja de mostrar los pasos cuando la empresa queda autorizada:
+  /// repetirlos haría creer que falta algo. Lo que sí se sigue necesitando
+  /// —facturar, revisar lo emitido y ajustar la configuración— se agrupa aquí,
+  /// en un solo sitio de la barra.
+  ///
+  /// No incluye «eliminar postulación»: el backend no expone esa operación. Lo
+  /// que sí existe es revocar la autorización de emisión, que es una decisión
+  /// aparte y no se ofrece desde un menú de navegación.
+  void _openEcfPostulationMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        void go(String route) {
+          Navigator.of(sheetContext).pop();
+          context.go(route);
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Postulación electrónica',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.point_of_sale_outlined),
+                title: const Text('Ir a ventas'),
+                subtitle: const Text('Emitir con la numeración autorizada'),
+                onTap: () => go(Routes.cotizaciones),
+              ),
+              ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('Comprobantes electrónicos'),
+                subtitle: const Text('Ver lo emitido y lo pendiente de envío'),
+                onTap: () => go(Routes.ecfDocuments),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_outlined),
+                title: const Text('Configuración de facturación'),
+                onTap: () => go(Routes.ecfConfig),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -624,17 +695,6 @@ class DesktopShellAppBar extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Botón «atrás» genérico de la barra del shell.
-///
-/// En una pantalla interna devuelve la raíz de su módulo; en la raíz de un
-/// módulo devuelve Facturación (inicio). Devuelve `null` solo en el inicio,
-/// donde no existe un destino anterior y debe verse el botón de menú.
-VoidCallback? _shellGenericBack(BuildContext context, String location) {
-  final destination = AppNavigator.backDestinationFor(location);
-  if (destination == null) return null;
-  return () => AppNavigator.goBack(context, fallbackRoute: destination);
 }
 
 class _DesktopShellActionGroup extends StatelessWidget {

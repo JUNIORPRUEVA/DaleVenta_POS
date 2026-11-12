@@ -87,8 +87,6 @@ String? _screenNameFromPath(String path) {
       return 'Cierres diarios';
     case Routes.contabilidadDepositos:
       return 'Depósitos bancarios';
-    case Routes.contabilidadFacturaFiscal:
-      return 'Facturas fiscales';
     case Routes.contabilidadPagosPendientes:
       return 'Pagos pendientes';
     case Routes.clientes:

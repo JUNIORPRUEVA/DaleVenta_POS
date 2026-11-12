@@ -48,6 +48,20 @@ export type DosaSessionOpenFailureCode =
   | "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED"
   | "ECF_DOSA_SESSION_URL_UNREADABLE";
 
+/**
+ * Modo de integración que ESTA instalación puede ofrecer para la empresa.
+ *
+ * * `PRIVATE_SESSION` — el backend puede abrir (o reutilizar) la sesión privada
+ *   de DOSA: la bandera y el cifrado de URL están configurados.
+ * * `PUBLIC_PORTAL` — no puede: la ruta oficial es el portal con boleto de un
+ *   solo uso. El asistente público no necesita ni correo ni clave secreta.
+ *
+ * Se publica explícitamente para que el cliente **no** tenga que deducir el
+ * modo a partir de un código de error HTTP: un error desconocido nunca debe
+ * interpretarse como autorización para continuar por otra vía.
+ */
+export type DosaIntegrationMode = "PRIVATE_SESSION" | "PUBLIC_PORTAL";
+
 export type DosaSessionOpenResult =
   | {
       ok: true;
@@ -182,11 +196,51 @@ export class DosaCertificationSessionService {
     } = {},
   ) {}
 
+  /**
+   * Modo de integración disponible AHORA, sin leer ni escribir datos.
+   *
+   * Es la única fuente de verdad para que el cliente elija entre la sesión
+   * privada del backend y el portal público con boleto. Fail-closed: cualquier
+   * pieza faltante degrada a `PUBLIC_PORTAL`, no al revés.
+   */
+  describeIntegrationMode(): DosaIntegrationMode {
+    const readiness = this.client.describeReadiness();
+    if (!readiness.ready) return "PUBLIC_PORTAL";
+    if (!this.urlCipher.ready) return "PUBLIC_PORTAL";
+    return "PRIVATE_SESSION";
+  }
+
   async open(input: {
     companyId: string;
     userId?: string | null;
   }): Promise<DosaSessionOpenResult> {
     const companyId = `${input.companyId ?? ""}`.trim();
+
+    // Configuración PRIMERO, datos de la empresa después.
+    //
+    // Con la apertura automática apagada o sin cifrado, la respuesta es
+    // DISABLED / ENCRYPTION_NOT_CONFIGURED aunque además falten el RNC o el
+    // correo. Si se validara el correo antes, una empresa sin correo recibiría
+    // EMAIL_REQUIRED y el cliente no podría caer al asistente embebido de DOSA
+    // (clave publicable), que no necesita ni correo ni clave secreta.
+    const readiness = this.client.describeReadiness();
+    if (!readiness.ready) {
+      // Fail-closed: sin bandera o sin clave, no se llama al proveedor. El
+      // cliente puede seguir usando el asistente oficial embebido.
+      return failure(
+        "ECF_DOSA_SESSION_DISABLED",
+        "La apertura automática de sesiones DOSA no está habilitada.",
+        { providerCode: readiness.blockingReasons.join(",") },
+      );
+    }
+    if (!this.urlCipher.ready) {
+      // Sin clave de cifrado no se persiste una URL en claro.
+      return failure(
+        "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
+        "El cifrado de sesiones DOSA no está configurado. La apertura automática está deshabilitada.",
+      );
+    }
+
     const canonical = await this.identity.resolve(companyId);
     const rnc = normalizeRnc(canonical.taxId ?? "");
     if (!rnc) {
@@ -207,24 +261,6 @@ export class DosaCertificationSessionService {
       return failure(
         "ECF_DOSA_SESSION_EMAIL_INVALID",
         "El correo de facturación electrónica no es válido.",
-      );
-    }
-
-    const readiness = this.client.describeReadiness();
-    if (!readiness.ready) {
-      // Fail-closed: sin bandera o sin clave, no se llama al proveedor. El
-      // cliente puede seguir usando el asistente manual.
-      return failure(
-        "ECF_DOSA_SESSION_DISABLED",
-        "La apertura automática de sesiones DOSA no está habilitada.",
-        { providerCode: readiness.blockingReasons.join(",") },
-      );
-    }
-    if (!this.urlCipher.ready) {
-      // Sin clave de cifrado no se persiste una URL en claro.
-      return failure(
-        "ECF_DOSA_SESSION_ENCRYPTION_NOT_CONFIGURED",
-        "El cifrado de sesiones DOSA no está configurado. La apertura automática está deshabilitada.",
       );
     }
 

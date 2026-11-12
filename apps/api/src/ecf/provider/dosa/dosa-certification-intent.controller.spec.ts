@@ -8,6 +8,10 @@ import type { DosaCredentialService } from "./dosa-credential.service";
 import type { DosaCompanyFiscalConfigReader } from "./dosa-emission.service";
 import type { PrismaService } from "../../../prisma/prisma.service";
 import type { TenantUser } from "../../../auth/tenant-context";
+import type {
+  DosaCertificationSessionService,
+  DosaIntegrationMode,
+} from "./dosa-certification-session.service";
 import type { Request } from "express";
 
 /**
@@ -120,7 +124,10 @@ function fiscalConfig(
   };
 }
 
-function auditLog(historicalProvider?: string) {
+function auditLog(
+  historicalProvider?: string,
+  intentState: Record<string, unknown> = {},
+) {
   const rows: Array<Record<string, unknown>> = [];
   if (historicalProvider) rows.push({
     id: "audit-1",
@@ -147,10 +154,12 @@ function auditLog(historicalProvider?: string) {
       async findFirst(input: { where: { companyId: string } }) {
         if (input.where.companyId !== COMPANY) return null;
         return { id: "session-1", attemptNo: 1, status: "NOT_STARTED",
+          activeKey: "claim-key",
           sessionUrl: null, providerPostulationId: null,
           rnc: RNC, createdByUserId: "user-1", lastEventType: null,
           providerConfirmedAt: null, closedAt: null,
-          createdAt: new Date("2026-11-01T00:00:00Z") };
+          createdAt: new Date("2026-11-01T00:00:00Z"),
+          ...intentState };
       },
     },
   } as unknown as PrismaService;
@@ -190,20 +199,61 @@ function build(options: {
   configuredProvider?: string;
   sessionUrl?: string | null;
   credentials?: { test?: boolean; production?: boolean };
+  integrationMode?: DosaIntegrationMode;
+  intentState?: Record<string, unknown>;
 } = {}) {
   const intents = new FakeIntents(
     options.behaviour ?? "created",
     options.sessionUrl ?? null,
   );
-  const { prisma, rows } = auditLog(options.historicalProvider);
+  const { prisma, rows } = auditLog(options.historicalProvider, options.intentState);
+  const integrationMode = options.integrationMode ?? "PRIVATE_SESSION";
+  const sessionIntegration = {
+    describeIntegrationMode: () => integrationMode,
+  } as unknown as DosaCertificationSessionService;
   const controller = new DosaCertificationIntentController(
     prisma,
     intents as unknown as DosaCertificationIntentService,
     credentials(options.credentials),
     fiscalConfig(options.ecfEnabled === undefined ? true : options.ecfEnabled,
       options.configuredProvider ?? "DOSA"),
+    sessionIntegration,
+    // Autorización por empresa: en estas pruebas se concede siempre, para que la
+    // lógica bajo prueba sea la del intento y no la de la compuerta.
+    { isEligible: async () => true } as never,
   );
   return { controller, intents, rows };
+}
+
+/** Reconciliación ALANUBE → DOSA ya registrada: base del caso histórico. */
+function reconciledRow() {
+  return {
+    id: "audit-2", companyId: COMPANY, targetType: "DOSA_CERTIFICATION_INTENT",
+    targetId: "session-1", action: "INTENT_PROVIDER_RECONCILED",
+    createdAt: new Date("2026-11-01T01:00:00Z"), actorUserId: "admin-2",
+    metadata: {
+      sourceAuditId: "audit-1",
+      externalReviewReference: "provider-review",
+      ownerApprovalReference: "owner-approval",
+    },
+    before: { provider: "ALANUBE" }, after: { provider: "DOSA" },
+  };
+}
+
+/** Ejecuta con el interruptor de transición en un valor concreto y lo restaura. */
+async function withTransitionFlag<T>(
+  value: string | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED;
+  if (value === undefined) delete process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED;
+  else process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED = value;
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED;
+    else process.env.ECF_DOSA_HISTORICAL_TRANSITION_ENABLED = previous;
+  }
 }
 
 describe("POST /ecf/dosa/certification-intent", () => {
@@ -366,6 +416,20 @@ describe("POST /ecf/dosa/certification-intent", () => {
 });
 
 describe("GET /ecf/dosa/certification-intent", () => {
+  it("declara el modo de integración que el backend puede ofrecer", async () => {
+    const enabled = build({ integrationMode: "PRIVATE_SESSION" });
+    await expect(enabled.controller.state(req())).resolves.toMatchObject({
+      certificationMode: "PRIVATE_SESSION",
+    });
+
+    // Con la apertura privada apagada el cliente no debe adivinar por el código
+    // de error: el estado ya dice que la ruta es el portal público.
+    const disabled = build({ integrationMode: "PUBLIC_PORTAL" });
+    await expect(disabled.controller.state(req())).resolves.toMatchObject({
+      certificationMode: "PUBLIC_PORTAL",
+    });
+  });
+
   it("devuelve el estado sin secretos", async () => {
     const { controller } = build();
     const state = await controller.state(req());
@@ -439,6 +503,56 @@ describe("GET /ecf/dosa/certification-intent", () => {
     const authorized = await controller.state(req());
     expect(authorized.provider).toBe("DOSA");
     expect(authorized.historicalReviewRequired).toBe(false);
+  });
+
+  it("no ofrece la autorización histórica si el interruptor está apagado", async () => {
+    await withTransitionFlag(undefined, async () => {
+      const { controller, rows } = build({ historicalProvider: "ALANUBE" });
+      rows.push(reconciledRow());
+
+      const state = await controller.state(req());
+
+      // El expediente sigue necesitando revisión, pero la acción no existe en
+      // este despliegue: la pantalla no debe mostrar un formulario condenado a
+      // responder `DOSA_HISTORICAL_TRANSITION_DISABLED`.
+      expect(state.historicalReviewRequired).toBe(true);
+      expect(state.historicalTransitionEnabled).toBe(false);
+      expect(state.historicalTransitionAvailable).toBe(false);
+    });
+  });
+
+  it("solo marca la autorización como disponible si el expediente sigue autorizable", async () => {
+    await withTransitionFlag("true", async () => {
+      const clean = build({ historicalProvider: "ALANUBE" });
+      clean.rows.push(reconciledRow());
+      const available = await clean.controller.state(req());
+      expect(available.historicalTransitionEnabled).toBe(true);
+      expect(available.historicalTransitionAvailable).toBe(true);
+
+      // Un intento con referencias del proveedor ya no es autorizable: el POST
+      // respondería `STATE_UNSAFE`, así que la pantalla tampoco lo ofrece.
+      const progressed = build({
+        historicalProvider: "ALANUBE",
+        intentState: { providerConfirmedAt: new Date("2026-11-02T00:00:00Z") },
+      });
+      progressed.rows.push(reconciledRow());
+      const blocked = await progressed.controller.state(req());
+      expect(blocked.historicalReviewRequired).toBe(true);
+      expect(blocked.historicalTransitionAvailable).toBe(false);
+    });
+  });
+
+  it("una sesión ya reanudable no marca la autorización como disponible", async () => {
+    await withTransitionFlag("true", async () => {
+      const { controller, rows } = build({
+        historicalProvider: "ALANUBE",
+        intentState: { sessionUrl: "https://dosasystem.com/sesion/abc" },
+      });
+      rows.push(reconciledRow());
+
+      const state = await controller.state(req());
+      expect(state.historicalTransitionAvailable).toBe(false);
+    });
   });
 
   it("nunca devuelve la URL de sesión desde el estado; solo su presencia", async () => {
