@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../../support/inactive_activation_controller.dart';
+import 'package:daleventa_pos/features/onboarding/application/activation_controller.dart';
+
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/company/company_settings_feedback.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
@@ -206,6 +209,9 @@ Future<GoRouter> _pumpSettingsRouter(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        activationControllerProvider.overrideWith(
+          InactiveActivationController.new,
+        ),
         companySettingsProvider.overrideWith((_) async => settings),
         if (companyRepository != null)
           companySettingsRepositoryProvider.overrideWithValue(

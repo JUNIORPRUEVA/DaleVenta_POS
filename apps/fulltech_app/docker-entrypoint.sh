@@ -148,6 +148,7 @@ server {
 
   root /usr/share/nginx/html;
   index index.html;
+  access_log /var/log/nginx/access.log main if=$fullpos_log_request;
 
   location = /index.html {
     add_header Cache-Control "no-cache";
@@ -208,6 +209,18 @@ server {
     add_header Cache-Control "no-cache";
   }
 
+  # Must match nginx.conf: runtime proxy setup also serves the Astro pages.
+  location ~ ^/(login|precios|funciones|descargas|soporte|terminos|privacidad|recuperar|bienvenida|preparando)/?$ {
+    add_header Cache-Control "no-cache";
+    add_header Referrer-Policy "no-referrer" always;
+    try_files $uri/index.html $uri /pos.html;
+  }
+
+  location = /pos.html {
+    add_header Cache-Control "no-cache";
+    add_header Referrer-Policy "no-referrer" always;
+  }
+
   # Ultralight registration page. Keep it out of the Flutter SPA fallback so
   # campaigns do not download main.dart.js or CanvasKit before submitting.
   location = /registro {
@@ -222,7 +235,7 @@ server {
 
   location ^~ /registro/ {
     add_header Cache-Control "no-cache";
-    try_files $uri =404;
+    try_files $uri $uri/index.html =404;
   }
 
   location ~* \.(js|wasm|css|ttf|png|jpg|jpeg|webp|svg)$ {
@@ -278,7 +291,7 @@ server {
   # /ecf is a Flutter route, even though the portal creates a physical /ecf directory.
   location = /ecf {
     add_header Cache-Control "no-cache";
-    try_files /index.html =404;
+    try_files /pos.html =404;
   }
 
   location = /ecf/ {
@@ -300,7 +313,7 @@ server {
   }
 
   location / {
-    try_files $uri $uri/ /index.html;
+    try_files $uri $uri/ /pos.html;
   }
 }
 EOF

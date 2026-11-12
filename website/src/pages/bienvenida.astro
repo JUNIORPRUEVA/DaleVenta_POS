@@ -2,7 +2,7 @@
 import AuthLayout from '../layouts/AuthLayout.astro';
 
 const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
-const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/';
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
 
 /*
  * Bienvenida del sitio publico (Astro) ANTES de entrar a FullPOS.
@@ -223,7 +223,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/';
 
   if (root) {
     const apiBase = (root.dataset.api ?? '/api').replace(/\/+$/, '');
-    const appUrl = root.dataset.appUrl ?? '/';
+    const appUrl = root.dataset.appUrl ?? '/home';
     const reviewMode = new URL(window.location.href).searchParams.get('revisar') === '1';
 
     const stepEls = {

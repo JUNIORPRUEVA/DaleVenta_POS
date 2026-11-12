@@ -2,7 +2,7 @@
 import { site } from '../config/site';
 
 const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
-const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/';
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
 
 /*
  * Réplica web del splash real de Flutter
@@ -369,7 +369,7 @@ const lines = Array.from({ length: 7 }, (_, i) => {
 
       if (root) {
         const apiBase = (root.dataset.api ?? '/api').replace(/\/+$/, '');
-        const appUrl = root.dataset.appUrl ?? '/';
+        const appUrl = root.dataset.appUrl ?? '/home';
         const statusEl = root.querySelector<HTMLElement>('[data-prepare-status]')!;
         const actionsEl = root.querySelector<HTMLElement>('[data-prepare-actions]')!;
         const retryBtn = root.querySelector<HTMLButtonElement>('[data-prepare-retry]')!;
@@ -385,7 +385,7 @@ const lines = Array.from({ length: 7 }, (_, i) => {
           if (busy) return;
           busy = true;
           actionsEl.hidden = true;
-          statusEl.textContent = 'Estamos creando tu cuenta, espera un momento…';
+          statusEl.textContent = 'Preparando tu acceso…';
 
           try {
             const token = await getAccessToken(apiBase);

@@ -1,8 +1,10 @@
 ---
 import AuthLayout from '../../layouts/AuthLayout.astro';
 import { niches } from '../../config/niches';
+import { icons } from '../../config/site';
 
 const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
 ---
 
 <AuthLayout
@@ -12,7 +14,10 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
   panel="tech"
 >
   <div class="auth-panel auth-panel--single">
-    <div data-business-root data-api={apiBase}>
+    <div data-business-root data-api={apiBase} data-app-url={appUrl}>
+      <div class="auth-step-progress" aria-label="Paso 2 de 2">
+        <span class="auth-step-done">✓ Tus datos</span><span aria-hidden="true">/</span><span>2 · Tu negocio</span>
+      </div>
       <p class="auth-step-label">Último paso</p>
       <h1>Cuéntanos de tu negocio</h1>
       <p class="auth-sub">Solo faltan estos datos para dejar tu cuenta lista.</p>
@@ -35,24 +40,15 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         </div>
 
         <div class="field" data-field="businessType">
-          <label for="businessType">Nicho del negocio</label>
-          <div class="field-select">
-            <select id="businessType" name="businessType" required>
-              <option value="" selected disabled>Ej. Ferretería, colmado, farmacia…</option>
-              {niches.map((niche) => <option value={niche}>{niche}</option>)}
-            </select>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m6 9 6 6 6-6"></path>
-            </svg>
-          </div>
-          <p class="field-error" data-error="businessType" hidden></p>
+          <label for="businessTypeTrigger">Nicho del negocio</label>
+          <input id="businessType" name="businessType" type="hidden" />
+          <button id="businessTypeTrigger" class="niche-trigger" type="button" data-niche-open
+            aria-haspopup="dialog" aria-expanded="false" aria-controls="niche-picker" aria-describedby="businessTypeError">
+            <span class="niche-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" set:html={icons.building} /></span>
+            <span data-niche-label>Selecciona el tipo de negocio</span>
+            <svg class="niche-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+          </button>
+          <p id="businessTypeError" class="field-error" data-error="businessType" hidden></p>
         </div>
 
         <div class="field" data-field="phone">
@@ -77,14 +73,27 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
           Finalizar
         </button>
       </form>
+      <dialog id="niche-picker" class="niche-picker" aria-labelledby="niche-title" aria-describedby="niche-description">
+        <div class="niche-picker-content">
+          <header class="niche-picker-header">
+            <div><p class="auth-step-label">Tu negocio, a tu medida</p><h2 id="niche-title">¿A qué se dedica tu negocio?</h2></div>
+            <button type="button" class="niche-close" data-niche-close aria-label="Cerrar selector de negocio">×</button>
+          </header>
+          <p id="niche-description">Elige la opción que mejor describe tu actividad.</p>
+          <label class="niche-search-label" for="niche-search">Buscar un tipo de negocio</label>
+          <input id="niche-search" class="niche-search" type="search" placeholder="Busca farmacia, ferretería, restaurante…" autocomplete="off" autofocus />
+          <p class="niche-results" data-niche-results role="status" aria-live="polite"></p>
+          <ul class="niche-grid" aria-label="Tipos de negocio">
+            {niches.map((niche) => <li data-niche-item><button type="button" class="niche-option" data-niche-option={niche} aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" set:html={icons.building} /><span>{niche}</span><span class="niche-check" aria-hidden="true">✓</span>
+            </button></li>)}
+          </ul>
+          <p class="niche-empty" data-niche-empty hidden>No encontramos ese negocio. Prueba otra búsqueda o selecciona «Otros».</p>
+          <footer class="niche-picker-footer">Podrás actualizar estos datos desde la configuración de tu empresa.</footer>
+        </div>
+      </dialog>
     </div>
 
-    <!-- Estado de creación dentro de la misma tarjeta -->
-    <div class="reg-modal-loading" data-reg-loading hidden>
-      <span class="prepare-spinner" aria-hidden="true"></span>
-      <h2>Estamos creando tu cuenta</h2>
-      <p class="reg-modal-sub" data-reg-status role="status">Preparando todo para ti…</p>
-    </div>
   </div>
 
   <!-- Aviso al intentar abandonar antes de terminar -->
@@ -127,7 +136,8 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 </AuthLayout>
 
 <script>
-  import { saveSessionFromAuth } from '../../scripts/site-session';
+  import '../../scripts/niche-picker';
+  import { saveSessionFromAuth, SiteSessionStorageError, getAppHandoffUrl } from '../../scripts/site-session';
   import { waLink } from '../../config/site';
 
   type StepOne = { firstName?: string; email?: string; password?: string };
@@ -138,11 +148,8 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
     const apiBase = (root.dataset.api ?? '/api').replace(/\/+$/, '');
     const form = root.querySelector<HTMLFormElement>('[data-business-form]')!;
     const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
-    const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
 
-    /* El bloque de carga vive al lado del contenedor del formulario, no dentro */
-    const loading = document.querySelector<HTMLElement>('[data-reg-loading]')!;
-    const statusEl = document.querySelector<HTMLElement>('[data-reg-status]')!;
+    const submitButton = form.querySelector<HTMLButtonElement>('[data-submit]')!;
 
     const exitModal = document.querySelector<HTMLElement>('[data-exit-modal]');
     const exitPhone = exitModal?.querySelector<HTMLInputElement>('#exitPhone') ?? null;
@@ -170,9 +177,12 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
       const setError = (name: string, message: string | null): void => {
         const field = root.querySelector<HTMLElement>(`[data-field="${name}"]`);
         const output = root.querySelector<HTMLElement>(`[data-error="${name}"]`);
-        const control = form.elements.namedItem(name) as
+        const control = (name === 'businessType'
+          ? root.querySelector('[data-niche-open]')
+          : form.elements.namedItem(name)) as
           | HTMLInputElement
           | HTMLSelectElement
+          | HTMLButtonElement
           | null;
         if (!field || !output) return;
         if (message) {
@@ -244,6 +254,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 
       document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
+        if (root.querySelector<HTMLDialogElement>('#niche-picker')?.open) return;
         if (exitModal && !exitModal.hidden) {
           closeExit();
           return;
@@ -300,14 +311,15 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         if (target?.name) setError(target.name, null);
       });
 
+      let accountCreated = false;
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         alertBox.hidden = true;
 
-        if (submitting) return;
+        if (submitting || accountCreated) return;
         if (!validate()) {
           form
-            .querySelector<HTMLElement>('.field.is-invalid input, .field.is-invalid select')
+            .querySelector<HTMLElement>('.field.is-invalid input:not([type="hidden"]), .field.is-invalid [data-niche-open]')
             ?.focus();
           return;
         }
@@ -330,9 +342,9 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         };
 
         submitting = true;
-        form.hidden = true;
-        loading.hidden = false;
-        statusEl.textContent = 'Creando tu cuenta…';
+        submitButton.disabled = true;
+        submitButton.textContent = 'Creando tu cuenta…';
+        form.setAttribute('aria-busy', 'true');
 
         try {
           const response = await fetch(`${apiBase}/auth/register-business`, {
@@ -342,8 +354,9 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
           });
 
           if (!response.ok) {
-            form.hidden = false;
-            loading.hidden = true;
+            submitButton.disabled = false;
+            submitButton.textContent = 'Finalizar';
+            form.removeAttribute('aria-busy');
             submitting = false;
 
             if (response.status === 409) {
@@ -361,19 +374,30 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
           }
 
           const result = await response.json().catch(() => ({}));
+          accountCreated = true;
+          sessionStorage.removeItem('fullpos_registro_paso1');
           saveSessionFromAuth(result, email);
 
-          statusEl.textContent = 'Cuenta creada. Abriendo tu sistema…';
-          sessionStorage.removeItem('fullpos_registro_paso1');
+          submitButton.textContent = 'Entrando a FullPOS…';
+          const target = await getAppHandoffUrl(apiBase, root.dataset.appUrl ?? '/home');
           submitting = false;
-          window.location.assign('/preparando');
-        } catch {
-          form.hidden = false;
-          loading.hidden = true;
+          window.location.replace(target);
+        } catch (error) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Finalizar';
+          form.removeAttribute('aria-busy');
           submitting = false;
-          showAlert(
-            'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.',
-          );
+          if (accountCreated) {
+            showAlert(
+              error instanceof SiteSessionStorageError
+                ? `Tu cuenta ya está creada. ${error.message}`
+                : 'Tu cuenta ya está creada. Inicia sesión para continuar.',
+              true,
+            );
+            form.querySelector<HTMLButtonElement>('[data-submit]')!.disabled = true;
+          } else {
+            showAlert('No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.');
+          }
         }
       });
     }

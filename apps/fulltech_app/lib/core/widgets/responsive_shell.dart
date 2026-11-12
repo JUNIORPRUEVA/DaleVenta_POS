@@ -30,6 +30,7 @@ import '../utils/money_formatters.dart';
 import 'app_drawer.dart';
 import 'app_navigation.dart';
 import 'user_avatar.dart';
+import 'web_session_actions.dart';
 
 BoxDecoration _desktopSurfaceDecoration(ThemeData theme) {
   return BoxDecoration(
@@ -102,6 +103,7 @@ void setDesktopShellFooterContent(
   DesktopShellFooterContent? content,
 ) {
   runOutsideBuildPhase(() {
+    if (!notifier.mounted) return;
     if (_sameShellFooterContent(notifier.state, content)) return;
     notifier.state = content;
   });
@@ -113,6 +115,7 @@ void clearDesktopShellFooterContent({
   bool Function(DesktopShellFooterContent current)? when,
 }) {
   runOutsideBuildPhase(() {
+    if (!notifier.mounted) return;
     final current = notifier.state;
     if (current == null || current.ownerId != ownerId) return;
     if (when != null && !when(current)) return;
@@ -625,6 +628,7 @@ class DesktopShellAppBar extends ConsumerWidget {
                 const SizedBox(width: 10),
                 _DesktopShellActionGroup(actions: extraActions),
               ],
+              const WebSessionActions(),
               const SizedBox(width: 10),
               const AppUpdateMiniControl(),
               const SizedBox(width: 2),

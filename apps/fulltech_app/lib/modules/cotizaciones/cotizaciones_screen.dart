@@ -53,6 +53,9 @@ import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/branded_menu_button.dart';
+import '../../core/widgets/web_session_actions.dart';
+import '../../features/onboarding/application/activation_controller.dart';
+import '../../features/onboarding/presentation/widgets/activation_steps.dart';
 import '../../core/widgets/refined_topbar_controls.dart';
 import 'presentation/widgets/sales_ticket_bar.dart';
 import 'presentation/widgets/sales_detail_shortcut.dart';
@@ -7915,6 +7918,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              const WebSessionActions(),
                               _MobileHeaderIconButton(
                                 tooltip: 'Escanear producto',
                                 onPressed: _openBarcodeScanner,
@@ -10672,6 +10676,10 @@ class _CompanyAccountMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final activation = ref.watch(activationControllerProvider).valueOrNull;
+    final canResumeActivation = activation != null &&
+        activationPendingSteps(activation) > 0 &&
+        hasUserPermission(ref.watch(authStateProvider).user, AppPermission.manageSettings);
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: PopupMenuButton<String>(
@@ -10774,6 +10782,15 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanySettingsSubmenu(
               showPrinter: !kIsWeb,
+              onActivation: canResumeActivation ? () {
+                final panel = ref.read(activationPanelOpenProvider.notifier);
+                final controller = ref.read(activationControllerProvider.notifier);
+                _activateMenuItem(menuContext, () {
+                  if (!context.mounted) return;
+                  panel.state = true;
+                  unawaited(controller.reopen());
+                });
+              } : null,
               onApps: () => _activateProtectedPanel(
                 context,
                 ref,
@@ -11878,6 +11895,7 @@ class _CompanySettingsSubmenu extends StatefulWidget {
     required this.onUpdates,
     required this.onPrinter,
     required this.onDeleteAccount,
+    this.onActivation,
   });
 
   final bool showPrinter;
@@ -11885,6 +11903,7 @@ class _CompanySettingsSubmenu extends StatefulWidget {
   final VoidCallback onUpdates;
   final VoidCallback onPrinter;
   final VoidCallback onDeleteAccount;
+  final VoidCallback? onActivation;
 
   @override
   State<_CompanySettingsSubmenu> createState() =>
@@ -11948,9 +11967,15 @@ class _CompanySettingsSubmenuState extends State<_CompanySettingsSubmenu> {
           ),
         ),
         if (_expanded) ...[
+          if (widget.onActivation != null)
+            _CompanySettingsSubmenuAction(
+              icon: Icons.rocket_launch_outlined,
+              label: 'Termina de preparar FullPOS',
+              onTap: widget.onActivation!,
+            ),
           _CompanySettingsSubmenuAction(
             icon: Icons.devices_other_rounded,
-            label: 'Aplicaciones y descargas',
+            label: 'Apps de la empresa',
             onTap: widget.onApps,
           ),
           _CompanySettingsSubmenuAction(
@@ -15731,6 +15756,7 @@ class DesktopSalesDetailPanel extends StatelessWidget {
         ? '1 producto agregado'
         : '${items.length} productos agregados';
     final shouldShowTotalsBreakdown =
+        !hasItems ||
         discountAmount > 0 ||
         generalDiscountAmount > 0 ||
         includeItbis ||
@@ -15781,17 +15807,17 @@ class DesktopSalesDetailPanel extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.local_offer_outlined,
-                            size: 52,
+                            Icons.shopping_bag_outlined,
+                            size: 36,
                             color: theme.colorScheme.outline,
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Agrega productos desde el catálogo',
+                            'Aquí verás los productos que elijas\npara tu próxima venta',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
@@ -15823,7 +15849,7 @@ class DesktopSalesDetailPanel extends StatelessWidget {
                       },
                     ),
             ),
-            if (hasItems) ...[
+            ...[
               if (shouldShowTotalsBreakdown) ...[
                 const SizedBox(height: 3),
                 Container(
@@ -15875,10 +15901,10 @@ class DesktopSalesDetailPanel extends StatelessWidget {
                 children: [
                   Expanded(
                     child: GestureDetector(
-                      onDoubleTap: onApplyGeneralDiscount,
+                      onDoubleTap: hasItems ? onApplyGeneralDiscount : null,
                       child: FilledButton(
                         key: ActivationTourTargets.keyFor('pos.collect'),
-                        onPressed: onFinalize,
+                        onPressed: hasItems ? onFinalize : null,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1957E6),
                           foregroundColor: Colors.white,
@@ -15939,7 +15965,7 @@ class DesktopSalesDetailPanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 3),
-              Container(
+              if (hasItems) Container(
                 width: double.infinity,
                 margin: EdgeInsets.zero,
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),

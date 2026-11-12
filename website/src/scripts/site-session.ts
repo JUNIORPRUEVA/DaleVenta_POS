@@ -12,6 +12,13 @@
 
 const STORAGE_KEY = 'fullpos.site.session.v1';
 
+export class SiteSessionStorageError extends Error {
+  constructor() {
+    super('Tu navegador no permite guardar la sesión. Habilita el almacenamiento del sitio e inicia sesión de nuevo.');
+    this.name = 'SiteSessionStorageError';
+  }
+}
+
 export type SiteSession = {
   accessToken: string;
   refreshToken: string;
@@ -54,6 +61,9 @@ export function saveSessionFromAuth(
   response: ApiAuthResponse,
   fallbackEmail = '',
 ): SiteSession {
+  if (!response.accessToken?.trim() || !response.refreshToken?.trim()) {
+    throw new Error('El servidor no devolvió una sesión completa. Inicia sesión de nuevo.');
+  }
   const session: SiteSession = {
     accessToken: response.accessToken ?? '',
     refreshToken: response.refreshToken ?? '',
@@ -63,8 +73,10 @@ export function saveSessionFromAuth(
   };
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    if (readRaw()?.accessToken !== session.accessToken) throw new Error('storage');
   } catch {
-    /* almacenamiento no disponible: la sesion dura solo esta pagina */
+    clearSession();
+    throw new SiteSessionStorageError();
   }
   return session;
 }
@@ -75,6 +87,23 @@ export function clearSession(): void {
   } catch {
     /* nada que limpiar */
   }
+}
+
+/** One handoff from the current form to Flutter; no intermediate auth page. */
+export async function getAppHandoffUrl(apiBase: string, appUrl = '/home'): Promise<string> {
+  const token = await getAccessToken(apiBase);
+  if (!token) throw new Error('Tu sesión expiró. Inicia sesión para continuar.');
+  const response = await fetch(`${apiBase}/auth/handoff/ticket`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ platform: 'web' }),
+  });
+  if (!response.ok) throw new Error('No pudimos abrir FullPOS. Inicia sesión para continuar.');
+  const data = await response.json() as { ticket?: string };
+  if (!data.ticket?.trim()) throw new Error('El servidor no pudo preparar tu acceso.');
+  const target = new URL(appUrl, window.location.origin);
+  target.searchParams.set('handoff', data.ticket);
+  return target.toString();
 }
 
 /**
@@ -114,6 +143,9 @@ export async function getAccessToken(apiBase: string): Promise<string | null> {
       {
         ...data,
         refreshToken: data.refreshToken ?? session.refreshToken,
+        user: data.user ?? { email: session.email },
+        activeCompany: data.activeCompany ?? { name: session.companyName },
+        requiresOnboarding: data.requiresOnboarding ?? session.requiresOnboarding,
       },
       session.email,
     );

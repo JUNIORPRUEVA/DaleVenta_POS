@@ -106,11 +106,16 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 
       try {
         /* La respuesta del backend es siempre genérica: no revela si el correo existe. */
-        await fetch(`${apiBase}/auth/forgot-password`, {
+        const response = await fetch(`${apiBase}/auth/forgot-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: email.toLowerCase() }),
         });
+        if (!response.ok) {
+          alertBox.textContent = 'No pudimos enviar el enlace. Inténtalo de nuevo más tarde.';
+          alertBox.hidden = false;
+          return;
+        }
         form.classList.add('form-hidden');
         doneBox.classList.remove('form-hidden');
       } catch {

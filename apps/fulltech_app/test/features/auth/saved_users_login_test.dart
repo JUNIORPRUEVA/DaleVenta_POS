@@ -1,4 +1,12 @@
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
+import 'package:daleventa_pos/core/auth/auth_repository.dart';
+import 'package:dio/dio.dart';
+import '../../support/inactive_activation_controller.dart';
+import 'package:daleventa_pos/features/onboarding/application/activation_controller.dart';
+import 'package:daleventa_pos/core/theme/app_theme.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:daleventa_pos/core/auth/business_registration_policy.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
@@ -56,8 +64,20 @@ class _FakeAuthController extends AuthController {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUpAll(() async {
+    await initializeDateFormatting('es_DO');
+    final fonts = FontLoader('Manrope');
+    for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+      fonts.addFont(
+        rootBundle.load('assets/fonts/manrope/Manrope-$weight.ttf'),
+      );
+    }
+    await fonts.load();
+  });
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   Future<_FakeAuthController> pumpLogin(WidgetTester tester) async {
@@ -285,6 +305,27 @@ void main() {
           overrides: [
             authStateProvider.overrideWith(_FakeAuthController.new),
             businessRegistrationDisabledProvider.overrideWithValue(false),
+            activationControllerProvider.overrideWith(
+              InactiveActivationController.new,
+            ),
+            dioProvider.overrideWith((ref) {
+              final dio = Dio(BaseOptions(baseUrl: 'http://127.0.0.1'));
+              dio.interceptors.add(
+                InterceptorsWrapper(
+                  onRequest: (request, handler) {
+                    handler.reject(
+                      DioException(
+                        requestOptions: request,
+                        type: DioExceptionType.connectionError,
+                        error: 'Isolated login UI test: no backend connection',
+                      ),
+                    );
+                  },
+                ),
+              );
+              ref.onDispose(dio.close);
+              return dio;
+            }),
             companySettingsProvider.overrideWith(
               (ref) async =>
                   CompanySettings.empty().copyWith(companyName: 'Test Co'),
@@ -293,7 +334,10 @@ void main() {
           child: Consumer(
             builder: (context, ref, _) {
               router = ref.watch(routerProvider);
-              return MaterialApp.router(routerConfig: router);
+              return MaterialApp.router(
+                theme: AppTheme.light,
+                routerConfig: router,
+              );
             },
           ),
         ),
@@ -312,7 +356,12 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.text('Iniciar sesión'));
-      await tester.pumpAndSettle();
+      // The real POS keeps background loaders/realtime work alive. Check the
+      // route and Riverpod transition after rendering, without waiting for an
+      // unrelated perpetual animation to settle.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
       expect(

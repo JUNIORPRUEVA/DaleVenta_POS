@@ -26,7 +26,7 @@ export const waLink = `https://wa.me/${site.supportWhatsapp}`;
  * Windows: endpoint oficial que redirige al instalador publicado.
  */
 export const appLinks = {
-  pwa: 'https://fullposcloud.fulltechrd.com/',
+  pwa: 'https://fullposcloud.fulltechrd.com/home',
   windows:
     'https://daleventapos-backend.gcdndd.easypanel.host/api/app-updates/windows/latest/download',
   android:

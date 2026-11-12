@@ -2,6 +2,7 @@
 import AuthLayout from '../layouts/AuthLayout.astro';
 
 const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, '');
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
 ---
 
 <AuthLayout
@@ -11,7 +12,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
   panel="product"
 >
   <div class="auth-panel auth-panel--single">
-    <div data-login-root data-api={apiBase}>
+    <div data-login-root data-api={apiBase} data-app-url={appUrl}>
       <h1>Inicia sesión</h1>
       <p class="auth-sub">Usa el correo y la contraseña de tu cuenta.</p>
 
@@ -78,11 +79,6 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         </p>
       </form>
 
-      <div class="form-note form-hidden" data-login-done role="status">
-        <strong>Sesión iniciada.</strong>
-        <span>Preparando tu espacio en FullPOS…</span>
-      </div>
-
       <p class="auth-switch">
         ¿Todavía no tienes cuenta?
         <a href="/registro"><strong>Créala gratis</strong></a> con 7 días de prueba.
@@ -92,7 +88,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 </AuthLayout>
 
 <script>
-  import { saveSessionFromAuth } from '../scripts/site-session';
+  import { saveSessionFromAuth, SiteSessionStorageError, getAppHandoffUrl } from '../scripts/site-session';
 
   const root = document.querySelector<HTMLElement>('[data-login-root]');
 
@@ -101,7 +97,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
     const form = root.querySelector<HTMLFormElement>('[data-login-form]')!;
     const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
     const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
-    const doneBox = root.querySelector<HTMLElement>('[data-login-done]')!;
+    const handoff = document.querySelector<HTMLElement>('[data-app-handoff]')!;
     let submitting = false;
 
     const setError = (name: string, message: string | null): void => {
@@ -172,7 +168,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 
         /* Casos que no pueden continuar en el sitio: se informan sin
            inventar una sesion ni una empresa. */
-        if (data?.requiresCompanyCreation) {
+        if (data?.requiresCompanyCreation && !data?.activeCompany?.id) {
           alertBox.textContent =
             'Tu usuario no tiene empresa asociada. Escríbenos por soporte para completarlo.';
           alertBox.hidden = false;
@@ -180,21 +176,21 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         }
         if (data?.requiresCompanySelection) {
           alertBox.textContent =
-            'Tienes más de una empresa. Entra a FullPOS y elige con cuál continuar.';
+            'No pudimos determinar tu empresa activa. Contacta con soporte para revisar el acceso.';
           alertBox.hidden = false;
           return;
         }
 
         saveSessionFromAuth(data, value('email').toLowerCase());
-        form.classList.add('form-hidden');
-        doneBox.classList.remove('form-hidden');
-
-        /* Entra directo: la pantalla de preparacion pide el ticket de acceso
-           y abre FullPOS. Ya no pasa por las preguntas de bienvenida. */
-        window.location.assign('/preparando');
-      } catch {
+        handoff.hidden = false;
+        const target = await getAppHandoffUrl(apiBase, root.dataset.appUrl ?? '/home');
+        window.location.replace(target);
+      } catch (error) {
+        handoff.hidden = true;
         alertBox.textContent =
-          'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.';
+          error instanceof SiteSessionStorageError
+            ? error.message
+            : 'No pudimos preparar tu acceso. Revisa tu conexión e inténtalo de nuevo.';
         alertBox.hidden = false;
       } finally {
         submitBtn.removeAttribute('aria-busy');

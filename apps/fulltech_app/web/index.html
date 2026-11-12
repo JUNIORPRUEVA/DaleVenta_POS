@@ -96,7 +96,7 @@
       gap: 18px;
       padding: 24px;
       background: var(--soft);
-      pointer-events: none;
+      pointer-events: auto;
       transition: opacity 180ms ease, visibility 180ms ease;
     }
 
@@ -491,6 +491,10 @@
 
       function bootMetaPixel() {
         if (pixelBooted) return;
+        // Never send an unconsumed login/recovery ticket to analytics, even
+        // when the slow-start fallback fires before Flutter can clean the URL.
+        var accessParams = new URLSearchParams(window.location.search);
+        if (accessParams.has('handoff') || accessParams.has('token')) return;
         pixelBooted = true;
         if ((window.location.pathname || '/') === '/') {
           window.fullposMetaPixelTrack(
@@ -544,13 +548,15 @@
     })();
   </script>
   <script>
-    window.addEventListener('flutter-first-frame', function () {
+    window.fullposCompleteWebStartup = function () {
       var loader = document.getElementById('app-loader');
-      document.body.classList.add('has-flutter');
       if (loader) {
         loader.classList.add('is-hidden');
         window.setTimeout(function () { loader.remove(); }, 220);
       }
+    };
+    window.addEventListener('flutter-first-frame', function () {
+      document.body.classList.add('has-flutter');
     });
 
     (function () {
@@ -695,13 +701,8 @@
           hideBanner();
           return;
         }
-        if (deferredInstallPrompt && !wasRecentlyDismissed(installDismissKey, installDismissWindowMs)) {
-          showVariant('install');
-          return;
-        }
-        if (isIosSafari() && !wasRecentlyDismissed(iosDismissKey, iosDismissWindowMs)) {
-          showVariant('ios-install');
-        }
+        // Installation is offered from the Flutter AppBar and Settings.
+        // Keep the DOM banner only for the existing update mechanism.
       }
 
       window.fulltechPwaInstall = function () {
@@ -710,14 +711,13 @@
           return false;
         }
         if (deferredInstallPrompt) {
-          showVariant('install');
+          var promptEvent = deferredInstallPrompt;
+          deferredInstallPrompt = null;
+          promptEvent.prompt();
+          Promise.resolve(promptEvent.userChoice).catch(function () {});
           return true;
         }
-        if (isIosSafari()) {
-          showVariant('ios-install');
-          return true;
-        }
-        showVariant('install');
+        // Flutter displays actionable browser instructions, never a dead button.
         return false;
       };
 

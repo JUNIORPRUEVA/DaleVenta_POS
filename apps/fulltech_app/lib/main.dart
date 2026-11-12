@@ -18,6 +18,8 @@ import 'core/routing/app_router.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/loading/app_loading_overlay.dart';
+import 'core/loading/web_startup_cover.dart';
+import 'core/auth/app_bootstrap_status.dart';
 import 'core/auth/app_role.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/auth/auth_session_events.dart';
@@ -55,6 +57,12 @@ class _GlobalErrorFallback extends StatefulWidget {
 }
 
 class _GlobalErrorFallbackState extends State<_GlobalErrorFallback> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => completeWebStartup());
+  }
+
   @override
   Widget build(BuildContext context) {
     return const ColoredBox(
@@ -175,6 +183,7 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  bool _webStartupCompleted = false;
   bool _backgroundStartupStarted = false;
   ProviderSubscription<AuthState>? _authStateSubscription;
   StreamSubscription<LicenseRealtimeMessage>? _licenseRealtimeSubscription;
@@ -409,6 +418,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       theme: _withHandCursorOnButtons(AppTheme.lightForRole(role)),
       routerConfig: router,
       builder: (context, child) {
+        final bootstrap = ref.watch(appBootstrapStatusProvider);
+        if (!_webStartupCompleted &&
+            (bootstrap == AppBootstrapStatus.ready ||
+                bootstrap == AppBootstrapStatus.unauthenticated ||
+                bootstrap == AppBootstrapStatus.error)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _webStartupCompleted) return;
+            _webStartupCompleted = true;
+            completeWebStartup();
+          });
+        }
         final effectiveChild = child == null
             ? null
             : MediaQuery(

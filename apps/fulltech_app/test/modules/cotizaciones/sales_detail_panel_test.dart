@@ -89,6 +89,23 @@ void main() {
     },
   );
 
+  testWidgets('carrito vacío conserva totales y bloquea el cobro', (
+    tester,
+  ) async {
+    await pumpPanel(tester, const Size(1280, 800));
+    await tester.tap(find.text('Venta vacía'));
+    await tester.pumpAndSettle();
+    expect(find.text('Subtotal'), findsOneWidget);
+    expect(find.text('Utilidad'), findsOneWidget);
+    expect(find.textContaining('Aquí verás los productos'), findsOneWidget);
+    expect(find.byIcon(Icons.shopping_bag_outlined), findsOneWidget);
+    final collect = find.widgetWithText(FilledButton, 'Cobrar');
+    expect(collect, findsOneWidget);
+    expect(tester.widget<FilledButton>(collect).onPressed, isNull);
+    expect(find.text('Cancelar venta'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final size in [
     const Size(1920, 1080),
     const Size(1280, 800),
@@ -267,7 +284,7 @@ void main() {
       expect(find.text('Comprobante'), findsNothing);
       await tester.tap(find.text('Venta vacía'));
       await tester.pumpAndSettle();
-      expect(find.text('Agrega productos desde el catálogo'), findsOneWidget);
+      expect(find.textContaining('Aquí verás los productos'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

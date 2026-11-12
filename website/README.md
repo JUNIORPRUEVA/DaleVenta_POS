@@ -1,56 +1,68 @@
-# FullPOS Cloud — Sitio público (Astro)
+# FullPOS Cloud — sitio público Astro
 
-Sitio de marketing **estático** de FullPOS Cloud. Convive con la web actual
-(`apps/fulltech_app/web`), que **no se ha modificado ni eliminado**.
+Sitio estático publicado junto al POS Flutter mediante `Dockerfile.public-web`,
+con contexto de build en la raíz del repositorio. Node 22+ y npm se necesitan
+solo para construir y verificar; Nginx sirve los archivos de la imagen final.
 
-## Requisitos
+## Desarrollo y validación
 
-- Node 20+
-- npm
+Desde `website`:
 
-## Desarrollo
-
-```powershell
-cd website
-npm install
-npm run dev      # http://localhost:4321
+```sh
+npm ci
+npm test
+npm run check
+npm run build
+npm run preview
 ```
 
-## Validación
+`preview` sirve solo Astro. Para API y Flutter juntos, usar la imagen combinada
+con un backend local aislado. La comprobación siguiente crea una cuenta ficticia
+y rechaza destinos que no sean localhost:
 
-```powershell
-npm run check    # astro check (TypeScript + plantillas)
-npm run build    # genera dist/
-npm run preview  # sirve dist/ en http://localhost:4321
+```sh
+PUBLIC_WEB_TEST_URL=http://127.0.0.1:4016 node tests/public-web-smoke.mjs
 ```
 
-## Estructura
+## Navegación y registro
 
-```
-src/
-  config/site.ts         Datos de marca, planes, funciones, plataformas, FAQ
-  styles/global.css      Tokens y estilos (paleta del sitio aprobado actual)
-  layouts/BaseLayout.astro
-  components/SiteHeader.astro | SiteFooter.astro
-  pages/
-    index.astro          Home
-    precios.astro        4 planes
-    funciones.astro      Funcionalidades reales
-    descargas.astro      Web/PWA + Windows/Android/iOS
-    soporte.astro        Contacto + FAQ
-    terminos.astro       Contenido legal existente
-    privacidad.astro     Contenido legal existente
-    login.astro          UI preparada (sin integración)
-    registro.astro       UI preparada (4 campos obligatorios)
-    recuperar.astro      UI preparada
-    404.astro
-```
+- Astro: portada, login, registro, negocio, preparando, bienvenida, recuperar,
+  precios, funciones, descargas, soporte y páginas legales.
+- Flutter conserva `/home`, rutas del POS, `/reset-password`, `/ecf` y el portal
+  de certificación. Su shell se conserva como `pos.html`.
+- Los formularios usan `/api` y el proxy existente.
+- `PUBLIC_APP_URL` se compila como `/home`: nunca enviar el ticket a la portada.
+  `PUBLIC_API_BASE_URL` también es configuración de build, no de runtime.
+- Paso 1: nombre, correo y contraseña; borrador temporal por pestaña.
+- Paso 2: negocio, nicho y WhatsApp. **Finalizar** crea cuenta y empresa juntas.
+  El primer paso todavía no crea una cuenta persistente.
+- Un ticket de un solo uso (dos minutos) traspasa la sesión. Flutter lo consume
+  antes de iniciar y lo elimina de la URL.
+- Flutter abre la bienvenida nueva y el panel «Activa tu FullPOS». Los datos de
+  empresa, impuestos, logo y e-CF se completan en las pantallas reales enlazadas
+  desde ese panel; `/onboarding` antiguo redirige al POS. El estado legacy del
+  backend se conserva para clientes anteriores y no decide el progreso nuevo.
+- Registro y login generan el ticket desde el formulario y abren Flutter
+  directamente, con el mismo logo de carga; `/preparando` queda como ruta de
+  compatibilidad. `/bienvenida` permite revisar el perfil si se abre explícitamente.
+- El selector de negocio es un diálogo centrado con buscador y opciones por
+  teclado. Las transiciones respetan la preferencia de movimiento reducido.
+- Las cuentas antiguas con empresa activa pueden acceder aunque no tengan las
+  membresías nuevas. El cliente actual no tiene selector de empresa: si falta
+  empresa activa, muestra soporte en lugar de abrir una sesión incompleta.
 
-## Alcance de la Fase 1
+## Publicación
 
-- **Solo interfaz.** Login, registro y recuperación **no** están conectados a la API:
-  la integración es la Fase 2 (ver `data-phase="2"` en los formularios).
-- **Sin enlaces inventados.** Windows/Android/iOS remiten a WhatsApp de soporte
-  mientras no exista una URL oficial publicada.
-- **Sin precios de infraestructura ni cuotas inventadas:** los límites se
-  confirman al activar la licencia.
+Seguir `docs/RELEASE.md`, sección Astro + POS. No cambiar el contexto de
+EasyPanel a `website`: perdería las rutas de Flutter y el proxy.
+El Dockerfile anterior de Flutter continúa disponible para sus consumidores.
+
+## Dependencias
+
+Se conserva Astro 5.18.2 del lockfile. `npm audit` informa cinco dependencias
+afectadas, incluida una crítica en Astro, y propone una actualización mayor.
+La imagen final no ejecuta Astro/Node ni usa SSR, server islands, transformación
+de imágenes solicitada por usuarios, MDX/JSX o `define:vars`. Genera contenido
+versionado y lo sirve con Nginx. La actualización mayor requiere una revisión
+separada de compatibilidad y seguridad; no ejecutar automáticamente
+`npm audit fix --force`.

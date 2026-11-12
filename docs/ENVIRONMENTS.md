@@ -206,6 +206,13 @@ Seed policy:
 Deployment policy:
 
 - Do not deploy during ordinary development tasks. Follow `docs/RELEASE.md`.
+- The combined public website/POS recipe is `Dockerfile.public-web` with root
+  context. Astro destinations compile as `/api` and `/home`; Flutter runtime env
+  injection remains unchanged. Preserve the DaleVentas upstream, DOSA build
+  arguments and migration/seed flags.
+- Public-web QA uses a dedicated `fullpos-astro-qa-db` container, bound only to
+  `127.0.0.1:55474`, database `daleventa_uat_local`; API `127.0.0.1:4017`.
+  Never use production credentials or customer records for this validation.
 
 ## Data Safety Rules
 

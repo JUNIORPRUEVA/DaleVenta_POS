@@ -235,6 +235,25 @@ class _FixedTaxDrivenShellFooterWidgetState
 }
 
 void main() {
+  test(
+    'footer ignora publicaciones y limpieza con controlador ya destruido',
+    () {
+      final notifier = StateController<DesktopShellFooterContent?>(null);
+      notifier.dispose();
+      expect(
+        () => setDesktopShellFooterContent(notifier, null),
+        returnsNormally,
+      );
+      expect(
+        () => clearDesktopShellFooterContent(
+          notifier: notifier,
+          ownerId: 'closed',
+        ),
+        returnsNormally,
+      );
+    },
+  );
+
   testWidgets(
     'leer `ref` en dispose lanza StateError (mecanismo del bug reportado)',
     (tester) async {
