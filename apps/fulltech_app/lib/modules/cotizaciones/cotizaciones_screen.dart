@@ -48,6 +48,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/build_phase.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
@@ -417,6 +418,14 @@ const Color _billingBorderColor = Color(0xFFD3E0E7);
 const String _billingDeleteIconAsset = 'assets/image/billing/delete.png';
 const String _billingMobileAppBarActionsIconAsset =
     'assets/image/billing/spark_actions.png';
+// Iconografía del panel de cliente (línea negra sobre transparente; se tinta
+// con `color` para que encaje en cualquier fondo).
+const String _billingSearchIconAsset = 'assets/image/billing/search.png';
+const String _billingClientAddIconAsset = 'assets/image/billing/client_add.png';
+const String _billingClientViewIconAsset =
+    'assets/image/billing/client_view.png';
+const String _billingClientEditIconAsset =
+    'assets/image/billing/client_edit.png';
 
 /// Devuelve el id del ticket que debe quedar ACTIVO después de retirar el
 /// ticket completado [removedId] de la lista de tickets abiertos
@@ -5378,6 +5387,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     clienteId: clienteId,
                     useRootNavigator: true,
                     requireFiscalData: _activeTicketRequiresFiscalCustomer,
+                    ecfDocumentType: clienteId == null
+                        ? _ecfModeForCheckout()?.code
+                        : null,
                   );
                 }
 
@@ -5408,6 +5420,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                 compactDialog: true,
                                 requireFiscalData:
                                     _activeTicketRequiresFiscalCustomer,
+                                ecfDocumentType: clienteId == null
+                                    ? _ecfModeForCheckout()?.code
+                                    : null,
                               ),
                             ),
                           ),
@@ -5559,12 +5574,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           ),
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.search_rounded,
-                                size: 20,
+                              const _BillingPngIcon(
+                                asset: _billingSearchIconAsset,
+                                size: 18,
                                 color: Color(0xFF94A3B8),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 9),
                               Expanded(
                                 child: TextField(
                                   controller: searchCtrl,
@@ -5624,6 +5639,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(9),
                                     onTap: () async {
+                                      final overlay = Navigator.of(
+                                        context,
+                                        rootNavigator: true,
+                                      ).overlay;
                                       final created =
                                           await openClientFormDrawer();
                                       if (!mounted ||
@@ -5643,14 +5662,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                         _rememberBillingClient(created),
                                       );
                                       Navigator.pop(context);
+                                      // Aviso corto arriba a la derecha: se va
+                                      // solo y no tapa el carrito.
+                                      AppFeedback.showToastOnOverlay(
+                                        overlay,
+                                        title: 'Cliente creado',
+                                        body:
+                                            'Cliente creado y agregado a la factura.',
+                                        kind: AppFeedbackKind.success,
+                                        duration: const Duration(seconds: 3),
+                                      );
                                     },
                                     child: const SizedBox(
                                       width: 34,
                                       height: 34,
-                                      child: Icon(
-                                        Icons.add_rounded,
-                                        size: 20,
-                                        color: Colors.white,
+                                      child: Center(
+                                        child: _BillingPngIcon(
+                                          asset: _billingClientAddIconAsset,
+                                          size: 17,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -5661,65 +5692,82 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         ),
                         const SizedBox(height: 10),
                         if ((_selectedClientId ?? '').trim().isNotEmpty) ...[
-                          Material(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(12),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () {
-                                _commitEditorChange(() {
-                                  _selectedClientId = null;
-                                  _selectedClientName = 'Sin cliente';
-                                  _selectedClientPhone = null;
-                                  _fiscalCustomerTaxId = '';
-                                  _fiscalCustomerName = '';
-                                });
-                                unawaited(_repriceCartForWholesale());
-                                Navigator.pop(context);
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 16,
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE8EEF5),
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 9,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFFE2E8F0),
+                              ),
+                              child: Row(
+                                children: [
+                                  _clientInitialsAvatar(_selectedClientName),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Cliente en esta factura',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.2,
+                                            color: Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 1),
+                                        Text(
+                                          _selectedClientName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.person_remove_alt_1_outlined,
-                                      color: Color(0xFFDC2626),
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        'Quitar cliente de esta factura',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              color: const Color(0xFFB91C1C),
-                                              fontWeight: FontWeight.w800,
-                                            ),
+                                  TextButton(
+                                    onPressed: () {
+                                      _commitEditorChange(() {
+                                        _selectedClientId = null;
+                                        _selectedClientName = 'Sin cliente';
+                                        _selectedClientPhone = null;
+                                        _fiscalCustomerTaxId = '';
+                                        _fiscalCustomerName = '';
+                                      });
+                                      unawaited(_repriceCartForWholesale());
+                                      Navigator.pop(context);
+                                    },
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: const Color(0xFFB91C1C),
+                                      textStyle: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
                                       ),
+                                      minimumSize: const Size(0, 30),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                      ),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
-                                  ],
-                                ),
+                                    child: const Text('Quitar'),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 6),
                         ],
                         if (loading)
                           const LinearProgressIndicator()
@@ -5827,9 +5875,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                     MaterialTapTargetSize
                                                         .shrinkWrap,
                                               ),
-                                              icon: const Icon(
-                                                Icons.open_in_new_rounded,
-                                                size: 16,
+                                              icon: const _BillingPngIcon(
+                                                asset:
+                                                    _billingClientViewIconAsset,
+                                                size: 15,
+                                                color: Color(0xFF2563EB),
                                               ),
                                               label: const Text('Ver'),
                                             ),
@@ -5847,9 +5897,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                     MaterialTapTargetSize
                                                         .shrinkWrap,
                                               ),
-                                              icon: const Icon(
-                                                Icons.edit_outlined,
-                                                size: 16,
+                                              icon: const _BillingPngIcon(
+                                                asset:
+                                                    _billingClientEditIconAsset,
+                                                size: 15,
+                                                color: Color(0xFF2563EB),
                                               ),
                                               label: const Text('Editar'),
                                             ),
@@ -5944,22 +5996,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                                                   setStateDialog(() {
                                                     detailClient = client;
                                                   }),
-                                              iconSize: 20,
                                               visualDensity:
                                                   VisualDensity.compact,
-                                              icon: const Icon(
-                                                Icons.open_in_new_rounded,
+                                              icon: const _BillingPngIcon(
+                                                asset:
+                                                    _billingClientViewIconAsset,
+                                                size: 18,
+                                                color: Color(0xFF2563EB),
                                               ),
                                             ),
                                             IconButton(
                                               tooltip: 'Editar cliente',
                                               onPressed: () =>
                                                   editClientFromRow(client),
-                                              iconSize: 20,
                                               visualDensity:
                                                   VisualDensity.compact,
-                                              icon: const Icon(
-                                                Icons.edit_outlined,
+                                              icon: const _BillingPngIcon(
+                                                asset:
+                                                    _billingClientEditIconAsset,
+                                                size: 18,
+                                                color: Color(0xFF2563EB),
                                               ),
                                             ),
                                           ],
@@ -15382,16 +15438,24 @@ class _ExpressionEvaluator {
 }
 
 class _BillingPngIcon extends StatelessWidget {
-  const _BillingPngIcon({required this.asset, required this.size});
+  const _BillingPngIcon({
+    required this.asset,
+    required this.size,
+    this.color,
+  });
 
   final String asset;
   final double size;
+
+  /// Tiñe el glifo conservando su transparencia. Permite usar el mismo PNG
+  /// negro sobre fondo claro, sobre azul o en blanco.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final cacheSize = (size * pixelRatio).ceil().clamp(32, 96);
-    return Image.asset(
+    final image = Image.asset(
       asset,
       width: size,
       height: size,
@@ -15404,9 +15468,15 @@ class _BillingPngIcon extends StatelessWidget {
         return Icon(
           Icons.image_not_supported_outlined,
           size: size,
-          color: const Color(0xFF111827),
+          color: color ?? const Color(0xFF111827),
         );
       },
+    );
+    final tint = color;
+    if (tint == null) return image;
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(tint, BlendMode.srcIn),
+      child: image,
     );
   }
 }

@@ -370,6 +370,7 @@ class EcfSalesWithoutDocumentSection extends ConsumerStatefulWidget {
     required this.capabilities,
     required this.canManage,
     this.embedded = false,
+    this.nested = false,
   });
 
   final EcfCapabilities capabilities;
@@ -381,6 +382,11 @@ class EcfSalesWithoutDocumentSection extends ConsumerStatefulWidget {
   /// no dejar una tarjeta dentro de otra. El contenido y el guardado son los
   /// mismos que en la pantalla de estado del módulo.
   final bool embedded;
+
+  /// Subordinada al interruptor de facturación electrónica: se dibuja
+  /// sangrada y con una guía vertical, para que se lea como una opción
+  /// **dentro** de la facturación electrónica y no como un bloque aparte.
+  final bool nested;
 
   @override
   ConsumerState<EcfSalesWithoutDocumentSection> createState() =>
@@ -437,18 +443,30 @@ class _EcfSalesWithoutDocumentSectionState
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.errorSoft,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.errorBorder),
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  child: Text(
-                    warning,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.4,
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          warning,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            height: 1.45,
+                            color: Color(0xFF475569),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
@@ -480,6 +498,9 @@ class _EcfSalesWithoutDocumentSectionState
     final enabled = widget.capabilities.allowSalesWithoutEcf;
     final warning = widget.capabilities.salesWithoutEcfWarning;
     final canManage = widget.canManage;
+    // Un solo texto a la vez: apagada se explica qué hace; encendida se
+    // muestra el aviso del servidor. Repetir las dos cosas era ruido.
+    final showsWarning = enabled && warning.isNotEmpty;
 
     final content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,17 +508,19 @@ class _EcfSalesWithoutDocumentSectionState
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SectionTitle('Ventas sin comprobante electrónico'),
-                    SizedBox(height: 2),
-                    _Muted(
-                      'Permite cerrar una venta sin emitir e-CF, solo para '
-                      'operaciones que la normativa permita. Cada uso queda '
-                      'registrado con su motivo y su usuario.',
-                    ),
+                    const _SectionTitle('Ventas sin comprobante electrónico'),
+                    if (!showsWarning) ...[
+                      const SizedBox(height: 2),
+                      const _Muted(
+                        'Actívala cuando necesites cerrar ventas sin '
+                        'comprobante electrónico. Cada venta queda identificada '
+                        'con el usuario y el motivo.',
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -520,17 +543,17 @@ class _EcfSalesWithoutDocumentSectionState
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.errorSoft,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.errorBorder),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
-                    Icons.warning_amber_rounded,
+                    Icons.info_outline_rounded,
                     size: 16,
-                    color: AppColors.error,
+                    color: Color(0xFF64748B),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -538,8 +561,8 @@ class _EcfSalesWithoutDocumentSectionState
                       warning,
                       style: const TextStyle(
                         fontSize: 11.5,
-                        height: 1.4,
-                        color: AppColors.error,
+                        height: 1.45,
+                        color: Color(0xFF475569),
                       ),
                     ),
                   ),
@@ -564,6 +587,18 @@ class _EcfSalesWithoutDocumentSectionState
         ],
       );
 
+    if (widget.nested) {
+      return Container(
+        margin: const EdgeInsets.only(left: 10),
+        padding: const EdgeInsets.only(left: 12),
+        decoration: const BoxDecoration(
+          border: Border(
+            left: BorderSide(color: Color(0xFFE2E8F0), width: 2),
+          ),
+        ),
+        child: content,
+      );
+    }
     return widget.embedded ? content : _Panel(child: content);
   }
 }

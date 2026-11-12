@@ -57,7 +57,10 @@ class _FakeClientesController extends ClientesController {
   }
 }
 
-Future<_FakeClientesController> _pumpForm(WidgetTester tester) async {
+Future<_FakeClientesController> _pumpForm(
+  WidgetTester tester, {
+  String? ecfDocumentType,
+}) async {
   final container = ProviderContainer(
     overrides: [
       operationsRealtimeServiceProvider.overrideWith(
@@ -84,9 +87,10 @@ Future<_FakeClientesController> _pumpForm(WidgetTester tester) async {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     fullscreenDialog: true,
-                    builder: (_) => const ClienteFormScreen(
+                    builder: (_) => ClienteFormScreen(
                       returnSavedClient: true,
                       compactDialog: true,
+                      ecfDocumentType: ecfDocumentType,
                     ),
                   ),
                 ),
@@ -135,6 +139,11 @@ void main() {
   ) async {
     final controller = await _pumpForm(tester);
 
+    // El RNC vive detrás de «Ver más»: sin abrirlo el formulario solo pide
+    // nombre y teléfono.
+    await tester.tap(find.text('Ver más'));
+    await tester.pumpAndSettle();
+
     await tester.enterText(find.byType(TextFormField).at(0), 'Empresa SA');
     await tester.enterText(find.byType(TextFormField).at(2), '133020253');
     await tester.tap(find.text('Guardar'));
@@ -174,23 +183,71 @@ void main() {
   ) async {
     await _pumpForm(tester);
 
-    expect(find.text('Nombre o razón social *'), findsOneWidget);
+    expect(find.text('Nombre *'), findsOneWidget);
     expect(find.text('Teléfono'), findsOneWidget);
     expect(find.text('Teléfono *'), findsNothing);
   });
 
-  testWidgets('orden visual: Nombre, Teléfono, RNC/Cédula, Dirección', (
+  testWidgets('por defecto solo se ven Nombre y Teléfono; el resto en Ver más', (
     tester,
   ) async {
     await _pumpForm(tester);
 
-    final nombreY = tester.getCenter(find.text('Nombre o razón social *')).dy;
+    final nombreY = tester.getCenter(find.text('Nombre *')).dy;
     final telefonoY = tester.getCenter(find.text('Teléfono')).dy;
+    expect(nombreY, lessThan(telefonoY));
+
+    expect(find.text('RNC / Cédula'), findsNothing);
+    expect(find.text('Dirección'), findsNothing);
+    expect(find.text('Ver más'), findsOneWidget);
+
+    await tester.tap(find.text('Ver más'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ver menos'), findsOneWidget);
     final rncY = tester.getCenter(find.text('RNC / Cédula')).dy;
     final direccionY = tester.getCenter(find.text('Dirección')).dy;
-
-    expect(nombreY, lessThan(telefonoY));
     expect(telefonoY, lessThan(rncY));
     expect(rncY, lessThan(direccionY));
+  });
+
+  testWidgets('crédito fiscal (E31): pide RNC y debajo razón social', (
+    tester,
+  ) async {
+    await _pumpForm(tester, ecfDocumentType: 'E31');
+
+    expect(find.text('RNC / Cédula *'), findsOneWidget);
+    expect(find.text('Razón social *'), findsOneWidget);
+    expect(find.text('Nombre *'), findsNothing);
+
+    final rncY = tester.getCenter(find.text('RNC / Cédula *')).dy;
+    final razonY = tester.getCenter(find.text('Razón social *')).dy;
+    expect(rncY, lessThan(razonY));
+
+    // El teléfono no se pide para una factura de crédito fiscal.
+    expect(find.text('Teléfono'), findsNothing);
+  });
+
+  testWidgets('consumo (E32): pide nombre y teléfono, sin RNC a la vista', (
+    tester,
+  ) async {
+    await _pumpForm(tester, ecfDocumentType: 'E32');
+
+    expect(find.text('Nombre *'), findsOneWidget);
+    expect(find.text('Teléfono'), findsOneWidget);
+    expect(find.text('RNC / Cédula'), findsNothing);
+  });
+
+  testWidgets('crédito fiscal exige el RNC al guardar', (tester) async {
+    final controller = await _pumpForm(tester, ecfDocumentType: 'E31');
+
+    await tester.enterText(find.byType(TextFormField).at(0), '130123456');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Empresa SA');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(controller.saveCalls, 1);
+    expect(controller.lastTaxId, '130123456');
+    expect(controller.lastNombre, 'Empresa SA');
   });
 }
