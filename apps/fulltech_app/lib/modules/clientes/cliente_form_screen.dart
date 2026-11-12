@@ -20,6 +20,7 @@ Future<ClienteModel?> openClienteFormAdaptive(
   bool returnSavedClient = true,
   bool useRootNavigator = false,
   bool requireFiscalData = false,
+  String? ecfDocumentType,
 }) async {
   final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
   final width = MediaQuery.sizeOf(context).width;
@@ -33,6 +34,7 @@ Future<ClienteModel?> openClienteFormAdaptive(
           clienteId: clienteId,
           returnSavedClient: returnSavedClient,
           requireFiscalData: requireFiscalData,
+          ecfDocumentType: ecfDocumentType,
         ),
       ),
     );
@@ -67,6 +69,7 @@ Future<ClienteModel?> openClienteFormAdaptive(
               returnSavedClient: returnSavedClient,
               compactDialog: true,
               requireFiscalData: requireFiscalData,
+              ecfDocumentType: ecfDocumentType,
             ),
           ),
         ),
@@ -98,12 +101,18 @@ class ClienteFormScreen extends ConsumerStatefulWidget {
   final bool compactDialog;
   final bool requireFiscalData;
 
+  /// Comprobante elegido en el cobro (`E31`, `E32`, `NORMAL`). Decide qué
+  /// campos se piden primero: el crédito fiscal necesita RNC y razón social;
+  /// el consumo y la venta normal, nombre y teléfono.
+  final String? ecfDocumentType;
+
   const ClienteFormScreen({
     super.key,
     this.clienteId,
     this.returnSavedClient = false,
     this.compactDialog = false,
     this.requireFiscalData = false,
+    this.ecfDocumentType,
   });
 
   @override
@@ -122,11 +131,23 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   ClienteModel? _cliente;
   String? _defaultPriceListId;
 
+  /// Los campos secundarios (dirección, RNC si no hace falta...) quedan
+  /// detrás de «Ver más» para que crear un cliente sea de dos campos.
+  bool _showAllFields = false;
+
   bool get _isEdit => widget.clienteId != null && widget.clienteId!.isNotEmpty;
+
+  /// Crédito fiscal: el receptor se identifica con RNC y razón social.
+  bool get _isCreditFiscal =>
+      (widget.ecfDocumentType ?? '').trim().toUpperCase() == 'E31';
+
+  bool get _requiresTaxId => _isCreditFiscal || widget.requireFiscalData;
 
   @override
   void initState() {
     super.initState();
+    // Al editar se muestra todo: el usuario vino a revisar el cliente entero.
+    _showAllFields = _isEdit;
     _loadIfEdit();
   }
 
@@ -428,127 +449,190 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
     final priceLists = wholesaleEnabled
         ? ref.watch(priceListsProvider)
         : const AsyncValue<List<PriceListModel>>.data(<PriceListModel>[]);
+
+    final nameField = TextFormField(
+      controller: _nombreCtrl,
+      textCapitalization: TextCapitalization.words,
+      style: const TextStyle(fontSize: 14.5),
+      decoration: _fieldDecoration(
+        label: _isCreditFiscal ? 'Razón social *' : 'Nombre *',
+        hint: _isCreditFiscal
+            ? 'Como aparece en el RNC'
+            : 'Nombre del cliente',
+      ),
+      onFieldSubmitted: (_) => _save(),
+      validator: (value) {
+        final text = (value ?? '').trim();
+        if (text.isEmpty) {
+          return _isCreditFiscal
+              ? 'La razón social es obligatoria'
+              : 'El nombre es obligatorio';
+        }
+        if (text.length < 2) {
+          return 'Ingresa un nombre valido';
+        }
+        return null;
+      },
+    );
+
+    final phoneField = TextFormField(
+      controller: _telefonoCtrl,
+      keyboardType: TextInputType.phone,
+      style: const TextStyle(fontSize: 14.5),
+      decoration: _fieldDecoration(
+        label: 'Teléfono',
+        hint: 'Ej: +1 809 555 1234',
+      ),
+      onFieldSubmitted: (_) => _save(),
+      validator: (value) {
+        final text = (value ?? '').trim();
+        if (text.isEmpty) return null;
+        final sanitized = text.replaceAll(RegExp(r'[^0-9+]'), '');
+        if (sanitized.length < 7) {
+          return 'Telefono demasiado corto';
+        }
+        final allowed = RegExp(r'^[0-9+()\-\s]+$');
+        if (!allowed.hasMatch(text)) {
+          return 'Formato de telefono invalido';
+        }
+        return null;
+      },
+    );
+
+    final taxIdField = TextFormField(
+      controller: _taxIdCtrl,
+      keyboardType: TextInputType.number,
+      style: const TextStyle(fontSize: 14.5),
+      onFieldSubmitted: (_) => _save(),
+      decoration: _fieldDecoration(
+        label: _requiresTaxId ? 'RNC / Cédula *' : 'RNC / Cédula',
+        hint: _isCreditFiscal
+            ? 'Requerido para crédito fiscal'
+            : (_requiresTaxId ? 'Requerido para factura fiscal' : 'Opcional'),
+      ),
+      validator: _requiresTaxId
+          ? (value) {
+              final text = (value ?? '').trim();
+              if (text.isEmpty) {
+                return 'Requerido para factura fiscal';
+              }
+              return null;
+            }
+          : null,
+    );
+
+    final addressField = TextFormField(
+      controller: _direccionCtrl,
+      textCapitalization: TextCapitalization.sentences,
+      style: const TextStyle(fontSize: 14.5),
+      decoration: _fieldDecoration(label: 'Dirección', hint: 'Opcional'),
+      onFieldSubmitted: (_) => _save(),
+    );
+
+    final priceListField = wholesaleEnabled
+        ? priceLists.when(
+            loading: () => const LinearProgressIndicator(minHeight: 2),
+            error: (_, __) => DropdownButtonFormField<String?>(
+              initialValue: null,
+              decoration: _fieldDecoration(label: 'Lista de precios'),
+              items: const [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('No se pudieron cargar las listas'),
+                ),
+              ],
+              onChanged: null,
+            ),
+            data: (lists) {
+              final activeLists = lists.where((list) => list.active).toList();
+              final selected =
+                  activeLists.any((list) => list.id == _defaultPriceListId)
+                  ? _defaultPriceListId
+                  : null;
+              return DropdownButtonFormField<String?>(
+                initialValue: selected,
+                isExpanded: true,
+                decoration: _fieldDecoration(label: 'Lista de precios'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Sin lista mayorista'),
+                  ),
+                  for (final list in activeLists)
+                    DropdownMenuItem<String?>(
+                      value: list.id,
+                      child: Text(list.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: state.saving
+                    ? null
+                    : (value) => setState(() => _defaultPriceListId = value),
+              );
+            },
+          )
+        : null;
+
+    // Lo mínimo para identificar al cliente según el comprobante elegido:
+    // crédito fiscal pide RNC y razón social; el resto, nombre y teléfono.
+    final primaryFields = _isCreditFiscal
+        ? <Widget>[taxIdField, nameField]
+        : <Widget>[
+            nameField,
+            phoneField,
+            if (widget.requireFiscalData) taxIdField,
+          ];
+
+    // El resto queda detrás de «Ver más».
+    final extraFields = <Widget>[
+      if (_isCreditFiscal) phoneField,
+      if (!_isCreditFiscal && !widget.requireFiscalData) taxIdField,
+      addressField,
+      if (priceListField != null) priceListField,
+    ];
+
+    List<Widget> withGaps(List<Widget> fields) => [
+      for (var i = 0; i < fields.length; i++) ...[
+        if (i > 0) const SizedBox(height: 12),
+        fields[i],
+      ],
+    ];
+
     final form = Form(
       key: _formKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextFormField(
-            controller: _nombreCtrl,
-            textCapitalization: TextCapitalization.words,
-            style: const TextStyle(fontSize: 14.5),
-            decoration: _fieldDecoration(
-              label: 'Nombre o razón social *',
-              hint: 'Nombre de persona o empresa',
-            ),
-            onFieldSubmitted: (_) => _save(),
-            validator: (value) {
-              final text = (value ?? '').trim();
-              if (text.isEmpty) return 'El nombre es obligatorio';
-              if (text.length < 2) {
-                return 'Ingresa un nombre valido';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _telefonoCtrl,
-            keyboardType: TextInputType.phone,
-            style: const TextStyle(fontSize: 14.5),
-            decoration: _fieldDecoration(
-              label: 'Teléfono',
-              hint: 'Ej: +1 809 555 1234',
-            ),
-            onFieldSubmitted: (_) => _save(),
-            validator: (value) {
-              final text = (value ?? '').trim();
-              if (text.isEmpty) return null;
-              final sanitized = text.replaceAll(RegExp(r'[^0-9+]'), '');
-              if (sanitized.length < 7) {
-                return 'Telefono demasiado corto';
-              }
-              final allowed = RegExp(r'^[0-9+()\-\s]+$');
-              if (!allowed.hasMatch(text)) {
-                return 'Formato de telefono invalido';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _taxIdCtrl,
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 14.5),
-            onFieldSubmitted: (_) => _save(),
-            decoration: _fieldDecoration(
-              label: widget.requireFiscalData
-                  ? 'RNC / Cédula *'
-                  : 'RNC / Cédula',
-              hint: widget.requireFiscalData
-                  ? 'Requerido para factura fiscal'
-                  : 'Opcional para comprobante B01',
-            ),
-            validator: widget.requireFiscalData
-                ? (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty) {
-                      return 'Requerido para factura fiscal';
-                    }
-                    return null;
-                  }
-                : null,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _direccionCtrl,
-            textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(fontSize: 14.5),
-            decoration: _fieldDecoration(label: 'Dirección', hint: 'Opcional'),
-            onFieldSubmitted: (_) => _save(),
-          ),
-          if (wholesaleEnabled) ...[
-            const SizedBox(height: 12),
-            priceLists.when(
-              loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, __) => DropdownButtonFormField<String?>(
-                initialValue: null,
-                decoration: _fieldDecoration(label: 'Lista de precios'),
-                items: const [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('No se pudieron cargar las listas'),
+          ...withGaps(primaryFields),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () =>
+                    setState(() => _showAllFields = !_showAllFields),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF1957E6),
+                  textStyle: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
                   ),
-                ],
-                onChanged: null,
+                  minimumSize: const Size(0, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: Icon(
+                  _showAllFields
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  size: 18,
+                ),
+                label: Text(_showAllFields ? 'Ver menos' : 'Ver más'),
               ),
-              data: (lists) {
-                final activeLists = lists.where((list) => list.active).toList();
-                final selected =
-                    activeLists.any((list) => list.id == _defaultPriceListId)
-                    ? _defaultPriceListId
-                    : null;
-                return DropdownButtonFormField<String?>(
-                  initialValue: selected,
-                  isExpanded: true,
-                  decoration: _fieldDecoration(label: 'Lista de precios'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Sin lista mayorista'),
-                    ),
-                    for (final list in activeLists)
-                      DropdownMenuItem<String?>(
-                        value: list.id,
-                        child: Text(list.name, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: state.saving
-                      ? null
-                      : (value) => setState(() => _defaultPriceListId = value),
-                );
-              },
             ),
+          ),
+          if (_showAllFields) ...[
+            const SizedBox(height: 6),
+            ...withGaps(extraFields),
           ],
           if (withActions) ...[
             const SizedBox(height: 18),

@@ -767,6 +767,7 @@ class _EcfSalesWithoutDocumentControl extends ConsumerWidget {
         AppPermission.manageEcfConfig,
       ),
       embedded: true,
+      nested: true,
     );
   }
 }
@@ -2825,9 +2826,7 @@ class _CompanySettingsEditorState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _EcfCompanySwitchSection(embedded: true),
-              SizedBox(height: 12),
-              Divider(height: 1, thickness: 1, color: Color(0xFFDDE7EE)),
-              SizedBox(height: 12),
+              SizedBox(height: 10),
               _EcfSalesWithoutDocumentControl(),
             ],
           ),

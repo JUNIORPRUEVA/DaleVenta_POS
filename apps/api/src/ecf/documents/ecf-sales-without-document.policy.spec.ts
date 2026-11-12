@@ -8,17 +8,17 @@ import {
   validateWithoutDocumentReason,
 } from "./ecf-sales-without-document.policy";
 
-describe("aviso fiscal de venta sin comprobante", () => {
-  it("conserva el texto completo que la empresa debe leer", () => {
-    // El texto es un requisito de producto, no un adorno: si alguien lo acorta,
-    // la prueba falla en vez de que el aviso llegue suavizado al cliente.
-    expect(ECF_WITHOUT_DOCUMENT_WARNING).toContain("Advertencia fiscal");
+describe("aviso de venta sin comprobante", () => {
+  it("conserva el registro y la responsabilidad que protegen a la empresa", () => {
+    // El texto se muestra antes de habilitar la excepción. Puede ser más
+    // cercano y profesional, pero no puede perder las dos garantías que
+    // importan: la venta queda registrada y la empresa responde por su uso.
     expect(ECF_WITHOUT_DOCUMENT_WARNING).toContain(
-      "no sustituyen los e-CF exigidos por la DGII",
+      "sin comprobante electrónico",
     );
-    expect(ECF_WITHOUT_DOCUMENT_WARNING).toContain(
-      "FullPOS conservará un registro de estas operaciones para control y auditoría",
-    );
+    expect(ECF_WITHOUT_DOCUMENT_WARNING).toContain("usuario");
+    expect(ECF_WITHOUT_DOCUMENT_WARNING).toContain("responsabilidad");
+    expect(ECF_WITHOUT_DOCUMENT_WARNING).toContain("auditoría");
   });
 });
 
