@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +53,7 @@ void main() {
 
     await expectLater(
       find.byType(OnboardingWelcomePreview),
-      matchesGoldenFile('goldens/welcome_desktop_1280x800.png'),
+      matchesGoldenFile(platformGolden('goldens/welcome_desktop_1280x800.png')),
     );
   });
 
@@ -63,7 +65,7 @@ void main() {
 
     await expectLater(
       find.byType(OnboardingWelcomePreview),
-      matchesGoldenFile('goldens/welcome_tablet_834x1112.png'),
+      matchesGoldenFile(platformGolden('goldens/welcome_tablet_834x1112.png')),
     );
   });
 
@@ -75,7 +77,7 @@ void main() {
 
     await expectLater(
       find.byType(OnboardingWelcomePreview),
-      matchesGoldenFile('goldens/welcome_phone_390x844.png'),
+      matchesGoldenFile(platformGolden('goldens/welcome_phone_390x844.png')),
     );
   });
 }

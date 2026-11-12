@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_catalog_command_bar.dart';
 import 'package:flutter/material.dart';
@@ -88,7 +90,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(
         find.byKey(const ValueKey('command-bar')),
-        matchesGoldenFile('goldens/sales_catalog_bar_${width.toInt()}.png'),
+        matchesGoldenFile(
+          platformGolden('goldens/sales_catalog_bar_${width.toInt()}.png'),
+        ),
       );
     });
   }

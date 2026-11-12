@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/core/offline/sync_status_menu_button.dart';
@@ -62,7 +64,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(
         find.byType(Scaffold),
-        matchesGoldenFile('goldens/refined_topbar_${width.toInt()}.png'),
+        matchesGoldenFile(
+          platformGolden('goldens/refined_topbar_${width.toInt()}.png'),
+        ),
       );
 
       await tester.tap(find.text('Probar nombre largo'));
@@ -117,10 +121,12 @@ void main() {
       );
       queue.show(const SyncQueueState(isProcessing: true));
       await tester.pump();
-      final rotation = find.descendant(
-        of: find.byType(RefinedSyncIndicator),
-        matching: find.byType(RotationTransition),
-      ).first;
+      final rotation = find
+          .descendant(
+            of: find.byType(RefinedSyncIndicator),
+            matching: find.byType(RotationTransition),
+          )
+          .first;
       final before = tester.widget<RotationTransition>(rotation).turns.value;
       await tester.pump(const Duration(milliseconds: 300));
       expect(

@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/preview/sales_ticket_bar_preview.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_ticket_bar.dart';
@@ -174,7 +176,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(
         find.byType(Scaffold),
-        matchesGoldenFile('goldens/sales_ticket_bar_${size.width.toInt()}.png'),
+        matchesGoldenFile(
+          platformGolden('goldens/sales_ticket_bar_${size.width.toInt()}.png'),
+        ),
       );
     });
   }

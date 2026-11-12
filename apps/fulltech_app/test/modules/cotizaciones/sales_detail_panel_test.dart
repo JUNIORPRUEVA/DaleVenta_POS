@@ -1,3 +1,5 @@
+import '../../support/platform_goldens.dart';
+
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
@@ -176,7 +178,9 @@ void main() {
       await expectLater(
         find.byKey(const ValueKey('header-golden')),
         matchesGoldenFile(
-          'goldens/sales_detail_header_${size.width.toInt()}.png',
+          platformGolden(
+            'goldens/sales_detail_header_${size.width.toInt()}.png',
+          ),
         ),
       );
     });
