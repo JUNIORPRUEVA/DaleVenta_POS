@@ -12,6 +12,13 @@
 
 const STORAGE_KEY = 'fullpos.site.session.v1';
 
+export class SiteSessionStorageError extends Error {
+  constructor() {
+    super('Tu navegador no permite guardar la sesión. Habilita el almacenamiento del sitio e inicia sesión de nuevo.');
+    this.name = 'SiteSessionStorageError';
+  }
+}
+
 export type SiteSession = {
   accessToken: string;
   refreshToken: string;
@@ -54,6 +61,9 @@ export function saveSessionFromAuth(
   response: ApiAuthResponse,
   fallbackEmail = '',
 ): SiteSession {
+  if (!response.accessToken?.trim() || !response.refreshToken?.trim()) {
+    throw new Error('El servidor no devolvió una sesión completa. Inicia sesión de nuevo.');
+  }
   const session: SiteSession = {
     accessToken: response.accessToken ?? '',
     refreshToken: response.refreshToken ?? '',
@@ -63,8 +73,10 @@ export function saveSessionFromAuth(
   };
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    if (readRaw()?.accessToken !== session.accessToken) throw new Error('storage');
   } catch {
-    /* almacenamiento no disponible: la sesion dura solo esta pagina */
+    clearSession();
+    throw new SiteSessionStorageError();
   }
   return session;
 }
@@ -114,6 +126,9 @@ export async function getAccessToken(apiBase: string): Promise<string | null> {
       {
         ...data,
         refreshToken: data.refreshToken ?? session.refreshToken,
+        user: data.user ?? { email: session.email },
+        activeCompany: data.activeCompany ?? { name: session.companyName },
+        requiresOnboarding: data.requiresOnboarding ?? session.requiresOnboarding,
       },
       session.email,
     );

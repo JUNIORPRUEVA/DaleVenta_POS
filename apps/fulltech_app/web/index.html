@@ -491,6 +491,10 @@
 
       function bootMetaPixel() {
         if (pixelBooted) return;
+        // Never send an unconsumed login/recovery ticket to analytics, even
+        // when the slow-start fallback fires before Flutter can clean the URL.
+        var accessParams = new URLSearchParams(window.location.search);
+        if (accessParams.has('handoff') || accessParams.has('token')) return;
         pixelBooted = true;
         if ((window.location.pathname || '/') === '/') {
           window.fullposMetaPixelTrack(

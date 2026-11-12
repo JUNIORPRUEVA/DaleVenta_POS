@@ -127,7 +127,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 </AuthLayout>
 
 <script>
-  import { saveSessionFromAuth } from '../../scripts/site-session';
+  import { saveSessionFromAuth, SiteSessionStorageError } from '../../scripts/site-session';
   import { waLink } from '../../config/site';
 
   type StepOne = { firstName?: string; email?: string; password?: string };
@@ -138,7 +138,6 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
     const apiBase = (root.dataset.api ?? '/api').replace(/\/+$/, '');
     const form = root.querySelector<HTMLFormElement>('[data-business-form]')!;
     const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
-    const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
 
     /* El bloque de carga vive al lado del contenedor del formulario, no dentro */
     const loading = document.querySelector<HTMLElement>('[data-reg-loading]')!;
@@ -300,6 +299,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         if (target?.name) setError(target.name, null);
       });
 
+      let accountCreated = false;
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
         alertBox.hidden = true;
@@ -361,19 +361,28 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
           }
 
           const result = await response.json().catch(() => ({}));
+          accountCreated = true;
+          sessionStorage.removeItem('fullpos_registro_paso1');
           saveSessionFromAuth(result, email);
 
           statusEl.textContent = 'Cuenta creada. Abriendo tu sistema…';
-          sessionStorage.removeItem('fullpos_registro_paso1');
           submitting = false;
           window.location.assign('/preparando');
-        } catch {
+        } catch (error) {
           form.hidden = false;
           loading.hidden = true;
           submitting = false;
-          showAlert(
-            'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.',
-          );
+          if (accountCreated) {
+            showAlert(
+              error instanceof SiteSessionStorageError
+                ? `Tu cuenta ya está creada. ${error.message}`
+                : 'Tu cuenta ya está creada. Inicia sesión para continuar.',
+              true,
+            );
+            form.querySelector<HTMLButtonElement>('[data-submit]')!.disabled = true;
+          } else {
+            showAlert('No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.');
+          }
         }
       });
     }

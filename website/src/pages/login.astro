@@ -92,7 +92,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 </AuthLayout>
 
 <script>
-  import { saveSessionFromAuth } from '../scripts/site-session';
+  import { saveSessionFromAuth, SiteSessionStorageError } from '../scripts/site-session';
 
   const root = document.querySelector<HTMLElement>('[data-login-root]');
 
@@ -172,7 +172,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
 
         /* Casos que no pueden continuar en el sitio: se informan sin
            inventar una sesion ni una empresa. */
-        if (data?.requiresCompanyCreation) {
+        if (data?.requiresCompanyCreation && !data?.activeCompany?.id) {
           alertBox.textContent =
             'Tu usuario no tiene empresa asociada. Escríbenos por soporte para completarlo.';
           alertBox.hidden = false;
@@ -180,7 +180,7 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         }
         if (data?.requiresCompanySelection) {
           alertBox.textContent =
-            'Tienes más de una empresa. Entra a FullPOS y elige con cuál continuar.';
+            'No pudimos determinar tu empresa activa. Contacta con soporte para revisar el acceso.';
           alertBox.hidden = false;
           return;
         }
@@ -192,9 +192,11 @@ const apiBase = (import.meta.env.PUBLIC_API_BASE_URL ?? '/api').replace(/\/+$/, 
         /* Entra directo: la pantalla de preparacion pide el ticket de acceso
            y abre FullPOS. Ya no pasa por las preguntas de bienvenida. */
         window.location.assign('/preparando');
-      } catch {
+      } catch (error) {
         alertBox.textContent =
-          'No hubo conexión con el servidor. Revisa tu internet e inténtalo de nuevo.';
+          error instanceof SiteSessionStorageError
+            ? error.message
+            : 'No pudimos preparar tu acceso. Revisa tu conexión e inténtalo de nuevo.';
         alertBox.hidden = false;
       } finally {
         submitBtn.removeAttribute('aria-busy');

@@ -41,6 +41,34 @@ Flutter PWA:
 - Docker image: `apps/fulltech_app/Dockerfile`
 - Nginx runtime env injection through `/env.js`.
 
+Public Astro website + Flutter POS (FullPOS Cloud):
+
+- Canonical combined recipe: `Dockerfile.public-web`, build context **repository
+  root**. Its dedicated `.dockerignore` only admits public build inputs, not
+  real environment files, backend code, backups or desktop/mobile artifacts.
+- EasyPanel `daleventapos/pwa`: GitHub `JUNIORPRUEVA/DaleVenta_POS`,
+  ref `production-main`, source path `/`, Dockerfile `Dockerfile.public-web`.
+  Preserve existing runtime environment and build arguments, especially the
+  actual DOSA publishable key. Never deploy the local test-key validation image.
+- Build uses the existing Flutter release procedure plus an Astro static stage.
+  The Flutter shell is preserved as `pos.html`; Astro overwrites public pages.
+  Compressed siblings of overwritten files are removed so Brotli cannot return
+  old HTML. Large Flutter assets retain Brotli.
+- `/home` remains the app entry; PWA identity is unchanged and its launch URL
+  opens `/home`. Astro auth pages use `/api` and hand off to `/home`.
+- Static Nginx configuration and the runtime proxy template must implement
+  the same public routes. Preserve API/uploads/webhook and certification paths.
+- Before publication, record the current PWA image ID and EasyPanel source/build
+  settings. Verify the combined image locally with an isolated API using
+  `PUBLIC_WEB_TEST_URL=http://127.0.0.1:4016 node website/tests/public-web-smoke.mjs`.
+- Test registration in two steps, existing login, duplicate/invalid credentials,
+  ticket reuse/concurrency, expiry, recovery and POS refresh. Complete
+  desktop/mobile visual QA. Do not create test business data in production.
+- This integration adds no database migration, seed or fiscal behavior change.
+- Rollback: redeploy the saved previous PWA image; restore source path
+  `/apps/fulltech_app` and Dockerfile `Dockerfile` for later legacy builds.
+  Keep the current API and database; database restore is not part of UI rollback.
+
 iOS:
 
 - Workflows in `codemagic.yaml`:

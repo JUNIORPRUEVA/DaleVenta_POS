@@ -4,10 +4,18 @@ Last audited: 2026-09-02.
 
 ## High-Level Architecture
 
-FullPOS Cloud is a two-app workspace:
+FullPOS Cloud contains the operational apps and a public static website:
 
 - `apps/fulltech_app`: Flutter application for Android, iOS, Web/PWA, and Windows.
 - `apps/api`: NestJS API using Prisma and PostgreSQL.
+- `website`: Astro static public site, login and two-step business registration.
+  `Dockerfile.public-web` publishes it alongside Flutter under the same origin.
+  Astro serves public routes; Flutter retains operational URLs and `/home`
+  through `pos.html`. `/api` keeps the existing backend proxy. Auth uses the
+  existing API and a two-minute single-use handoff ticket; no separate user or
+  tenant store is introduced. Registration creates account and company together
+  only after step two. Flutter onboarding still handles initial company/fiscal
+  setup.
 
 ```text
 Flutter app / PWA / Windows

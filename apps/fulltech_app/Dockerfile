@@ -66,7 +66,8 @@ RUN set -eu; \
 
 # Runtime files the browser never requests: debug symbols and the dart2wasm /
 # skwasm variants (this build only ships the dart2js + CanvasKit build).
-RUN cd build/web \
+RUN cp build/web/index.html build/web/pos.html \
+  && cd build/web \
   && rm -f canvaskit/*.symbols canvaskit/chromium/*.symbols \
   && rm -f canvaskit/skwasm.js canvaskit/skwasm.wasm \
   && rm -f canvaskit/skwasm_heavy.js canvaskit/skwasm_heavy.wasm \
