@@ -22,6 +22,65 @@ export const TUTORIAL_STATUS = {
 
 export type OnboardingStepKey = "company" | "billing" | "product" | "ready";
 
+/**
+ * Opciones validas de la pantalla de bienvenida.
+ *
+ * Es la unica lista que acepta el backend: el sitio publico puede mostrar
+ * otras etiquetas, pero solo estas se guardan. "Otros" cierra la lista de
+ * tipos de negocio.
+ */
+export const WELCOME_BUSINESS_TYPES = [
+  "Farmacia",
+  "Colmado",
+  "Minimarket",
+  "Supermercado",
+  "Ferretería",
+  "Boutique",
+  "Licorería",
+  "Restaurante",
+  "Cafetería",
+  "Panadería",
+  "Repostería",
+  "Barbería",
+  "Salón de belleza",
+  "Distribuidora",
+  "Repuestos",
+  "Taller mecánico",
+  "Librería",
+  "Papelería",
+  "Tienda de celulares",
+  "Agropecuaria",
+  "Hotel",
+  "Vinatería",
+  "Heladería",
+  "Joyería",
+  "Zapatería",
+  "Tienda de ropa",
+  "Bodega",
+  "Almacén",
+  "Otros",
+] as const;
+
+export const WELCOME_BUSINESS_AGE_RANGES = [
+  "Estoy comenzando",
+  "Menos de 1 año",
+  "1 a 3 años",
+  "4 a 10 años",
+  "Más de 10 años",
+] as const;
+
+export const WELCOME_BUSINESS_SIZES = [
+  "Pequeño",
+  "Mediano",
+  "Grande",
+] as const;
+
+export type WelcomeProfileInput = {
+  businessType?: unknown;
+  businessAgeRange?: unknown;
+  businessSize?: unknown;
+};
+
 export function shouldRequireOnboarding(company: {
   onboardingRequired?: boolean | null;
   onboardingStatus?: string | null;

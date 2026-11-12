@@ -206,6 +206,24 @@ export class AuthService {
     return user;
   }
 
+  /**
+   * Revoca la sesión actual del usuario (logout voluntario).
+   *
+   * Solo afecta a la sesión del token que hace la petición: las sesiones de
+   * otros dispositivos viven en familias de tokens distintas y no se tocan.
+   * Idempotente: si la sesión ya estaba revocada o no existe, responde ok.
+   */
+  async logout(user: { id?: string | null; sessionId?: string | null }) {
+    const userId = (user.id ?? "").trim();
+    const sessionId = (user.sessionId ?? "").trim();
+    if (!userId || !sessionId) return { ok: true };
+    await this.prisma.authSession.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date(), revocationReason: "user_logout" },
+    });
+    return { ok: true };
+  }
+
   async authorizeOfflineEmergency(
     user: {
       id?: string | null;
@@ -827,6 +845,198 @@ export class AuthService {
     });
 
     return this.login(email, password);
+  }
+
+  /* ======================================================================
+   * Handoff de sesion sitio web (Astro) -> app Flutter Web
+   * ----------------------------------------------------------------------
+   * El sitio autentica al usuario contra este API y necesita entregar esa
+   * misma sesion a la PWA sin pedir la contrasena otra vez.
+   *
+   * Diseno:
+   *  1. El sitio (autenticado) pide un ticket de un solo uso.
+   *  2. El ticket es un valor aleatorio de 256 bits; en la base solo queda
+   *     su SHA-256, nunca el valor en claro ni ningun token.
+   *  3. La app lo canjea UNA vez dentro de 2 minutos. El canje consume el
+   *     ticket de forma atomica y ROTA la sesion, emitiendo un refresh token
+   *     nuevo: se conserva la rotacion y la proteccion contra replay.
+   *
+   * El ticket no otorga permisos nuevos: solo materializa una sesion que ya
+   * existia y que sigue sujeta a las mismas validaciones (usuario bloqueado,
+   * licencia de la empresa).
+   * ==================================================================== */
+
+  private static readonly HANDOFF_TICKET_TTL_MS = 2 * 60 * 1000;
+
+  private hashHandoffTicket(ticket: string) {
+    return createHash("sha256").update(ticket).digest("hex");
+  }
+
+  /**
+   * Emite un ticket de un solo uso para la sesion del token que lo solicita.
+   * Cualquier otra sesion del mismo usuario queda intacta.
+   */
+  async createSessionHandoffTicket(
+    user: { id?: string | null; sessionId?: string | null },
+    platform = "",
+  ) {
+    const userId = (user.id ?? "").trim();
+    const sessionId = (user.sessionId ?? "").trim();
+    if (!userId || !sessionId) {
+      throw new UnauthorizedException("Invalid session");
+    }
+
+    const session = await this.prisma.authSession.findFirst({
+      where: { id: sessionId, userId, revokedAt: null },
+      select: { id: true, companyId: true },
+    });
+    if (!session) throw new UnauthorizedException("Invalid session");
+
+    const ticket = randomBytes(32).toString("base64url");
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + AuthService.HANDOFF_TICKET_TTL_MS);
+
+    // Higiene: los tickets vencidos o ya usados del usuario no sirven de nada.
+    await this.prisma.sessionHandoffTicket.deleteMany({
+      where: {
+        userId,
+        OR: [{ expiresAt: { lt: now } }, { usedAt: { not: null } }],
+      },
+    });
+
+    await this.prisma.sessionHandoffTicket.create({
+      data: {
+        ticketHash: this.hashHandoffTicket(ticket),
+        userId,
+        companyId: session.companyId,
+        sessionId: session.id,
+        platform: platform.trim().slice(0, 24),
+        expiresAt,
+      },
+      select: { id: true },
+    });
+
+    return {
+      ticket,
+      expiresIn: Math.floor(AuthService.HANDOFF_TICKET_TTL_MS / 1000),
+    };
+  }
+
+  /**
+   * Canjea un ticket de handoff. Devuelve la misma forma que `login`, con
+   * tokens nuevos de una sesion rotada.
+   */
+  async exchangeSessionHandoffTicket(ticket: string) {
+    const raw = (ticket ?? "").trim();
+    if (!raw) throw new UnauthorizedException("Invalid handoff ticket");
+
+    const row = await this.prisma.sessionHandoffTicket.findUnique({
+      where: { ticketHash: this.hashHandoffTicket(raw) },
+      select: {
+        id: true,
+        userId: true,
+        sessionId: true,
+        expiresAt: true,
+        usedAt: true,
+      },
+    });
+    if (!row || row.usedAt || row.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException("Invalid handoff ticket");
+    }
+
+    // Consumo atomico: solo el primer canje gana la carrera.
+    const consumed = await this.prisma.sessionHandoffTicket.updateMany({
+      where: { id: row.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (consumed.count !== 1) {
+      throw new UnauthorizedException("Invalid handoff ticket");
+    }
+
+    const user = await this.findUserForLoginById(row.userId);
+    if (!user) throw new UnauthorizedException("Invalid handoff ticket");
+    if (user.blocked === true) {
+      throw new UnauthorizedException({
+        code: "USER_BLOCKED",
+        message: "User blocked",
+      });
+    }
+
+    const session = this.resolveCompanySession(user);
+    await this.licenses.assertCompanyCanUseApp(
+      session.activeCompany?.id ?? user.companyId,
+    );
+
+    const rotated = await this.rotateAuthSession(row.sessionId);
+    const accessToken = await this.jwt.signAsync({
+      sub: user.id,
+      companyId: session.activeCompany?.id ?? user.companyId,
+      email: user.email,
+      role: session.effectiveRole,
+      memberRole: session.activeMembership?.role ?? null,
+      sessionId: rotated.sessionId,
+      tokenType: "access",
+    });
+    const refreshToken = await this.signRefreshToken(
+      user.id,
+      rotated.sessionId,
+    );
+    await this.storeRefreshHash(rotated.sessionId, refreshToken);
+
+    return {
+      accessToken,
+      refreshToken,
+      user: this.toAuthUser(user, session),
+      companies: session.companies,
+      activeCompany: session.activeCompany,
+      activeMembership: session.activeMembership,
+      requiresCompanyCreation: session.companies.length === 0,
+      requiresCompanySelection:
+        session.companies.length > 1 && !session.activeCompany,
+      requiresOnboarding: session.activeCompany?.onboardingCompleted === false,
+    };
+  }
+
+  /** Misma proyeccion que `findUserForLogin`, pero por id (handoff). */
+  private async findUserForLoginById(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        role: true,
+        blocked: true,
+        companyId: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            onboardingRequired: true,
+            onboardingStatus: true,
+          },
+        },
+        companyMemberships: {
+          where: { status: CompanyMemberStatus.ACTIVE },
+          include: {
+            company: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                status: true,
+                plan: true,
+                maxUsers: true,
+                onboardingRequired: true,
+                onboardingStatus: true,
+              },
+            },
+          },
+          orderBy: { joinedAt: "asc" },
+        },
+      },
+    });
   }
 
   private refreshExpiresIn() {
