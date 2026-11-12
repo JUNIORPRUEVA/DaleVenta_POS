@@ -1,6 +1,7 @@
 // Run against the combined image and an isolated local/UAT API. No production.
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 
 const base = process.env.PUBLIC_WEB_TEST_URL ?? 'http://127.0.0.1:4016';
 assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname),
@@ -106,6 +107,21 @@ for (const path of ['/webhook/dosa', '/uploads/astro-qa-missing-file']) {
 }
 results.push('Astro public routes, Brotli negotiation, Flutter routes and PWA entry');
 results.push(`${assets.size} public assets and retained certification/webhook/uploads routing`);
+
+const marker = 'astro-qa-log-check-' + randomBytes(8).toString('hex');
+for (const path of ['/home?handoff=' + marker, '/reset-password?token=' + marker]) {
+  const r = await fetch(base + path);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
+}
+if (process.env.PUBLIC_WEB_TEST_CONTAINER) {
+  const name = process.env.PUBLIC_WEB_TEST_CONTAINER;
+  assert.equal(name, 'fullpos-astro-qa-web', 'Log inspection is limited to the disposable QA container');
+  const logs = spawnSync('docker', ['logs', name], { encoding: 'utf8' });
+  assert.equal(logs.status, 0);
+  assert.ok(!(logs.stdout + logs.stderr).includes(marker), 'Access/recovery ticket URLs must not enter logs');
+  results.push('ticket URLs excluded from container logs after the Flutter fallback');
+}
 
 if (process.argv.includes('--expiry')) {
   const expiring = await request('/auth/handoff/ticket', {
