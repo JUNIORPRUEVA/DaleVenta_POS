@@ -1,6 +1,6 @@
 # Execution State
 
-## Current work — PR43 merged, PWA artifact preparation (2026-11-14)
+## Current work — PR43 PWA source prepared with owner authorization (2026-11-14)
 
 Owner merged PR43 as38142fce54030bdac611bcbf3f928d9d6be0cbbf. Its complete
 tree dd011e11f072ba8056445d27774ab6a1a6eac535 matches validated PR source
@@ -29,12 +29,22 @@ and0 page errors. A new labelled empty local QA DB was used; prior incomplete
 test schemas were rejected. Initial QA binding was corrected in the fixture,
 not product code. No production data or configuration was changed.
 
-Read-only EasyPanel proposal passes. Current API4e6fb33c/PWA542cc3d8 remain
-running; all production/startup protections and automatic-deploy disablement
-remain. Proposed change is only PWA source to d56a9c97. The earlier source
-authorization named PR42; the exact new proposal awaits specific authorization.
-Owner retains Deploy. No API deploy, fiscal activation or new TEST send is needed.
-Live deployed E34 preview remains pending. Details:
+Owner explicitly authorized preparing only the PWA source and retained Deploy.
+A fresh read-only plan passed before invoking the installed2.37.0 official
+updateAppSourceImage operation for pwa only. Source is now immutable d56a9c97;
+an independent persisted readback passed. Backend config is byte-equivalent;
+PWA protected settings and registry credentials keep their prior fingerprints.
+No deploy/restart/migration/seed/credential or fiscal permission change occurred.
+
+Current API4e6fb33c/PWA542cc3d8 containers ca6026999fda/276854145ee5 remain
+unchanged and running; all production/startup protections and automatic-deploy
+disablement remain. Private receipts source-authorized-before.json,
+source-authorized-after.json and source-final-readback.json are under
+C:/Users/pc/.codex/backups/fullpos-pr43-pwa-20261114/.
+
+Source preparation is complete. Next: owner presses Implementar for pwa only;
+then verify the running d56a9c97 image, retained healthy API and deployed E34
+preview. No API deploy, fiscal activation or new TEST send is needed. Details:
 docs/ecf/ECF_PWA_PR43_IMAGE_2026-11-14.md.
 
 ## Previous work — deployed TEST acceptance and numbering access (2026-11-14)

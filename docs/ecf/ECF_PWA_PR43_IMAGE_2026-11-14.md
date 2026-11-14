@@ -75,19 +75,29 @@ Initial Python YAML validation lacked PyYAML and its private install failed.
 The existing Playwright YAML parser validated the workflow successfully without
 introducing a repository dependency. Neither tooling issue affects the image.
 
-## Production source proposal and operator control
+## Authorized source preparation and operator control
 
 The read-only plan sees current API4e6fb33c and PWA542cc3d8 running, automatic
 deploy disabled, production fiscal flags false, migrations false and seed off.
-The proposed operation changes only EasyPanel daleventapos/pwa's image source
-to d56a9c97 using installed2.37.0 updateAppSourceImage. It does not call deploy.
-Backend configuration must remain byte-equivalent; PWA protected configuration,
-registry credentials and running container IDs must retain their fingerprints.
+After explicit owner authorization, the operation changed only EasyPanel
+daleventapos/pwa's image source to d56a9c97 using installed2.37.0
+updateAppSourceImage. It did not call deploy. Backend configuration remains
+byte-equivalent; PWA protected configuration, registry credentials and running
+container IDs retained their fingerprints. An independent persisted readback
+confirms the new stored digest and unchanged running images/containers.
 
-At this checkpoint the new source has NOT been saved. The earlier explicit
-source authorization named PR42 images. Present this exact verified PWA proposal
-for authorization before changing productive configuration. The owner retains
-Implementar. No backend redeployment is needed for this UI-only correction.
+The owner authorized: "si correcto prepara la fuente yo depliego" after the
+specific new-image proposal. The source is saved and preparation is complete.
+The owner retains Implementar for pwa only. No backend redeployment is needed
+for this UI-only correction. No restart, migration, seed, credential creation,
+fiscal activation or POS database write was performed in this source operation.
+Current containers remain API ca6026999fda and PWA276854145ee5, with their prior
+4e6fb33c/542cc3d8 images; automatic deploy remains off.
+
+Fresh plan, authorized application and independent readback receipts are
+source-authorized-before.json, source-authorized-after.json and
+source-final-readback.json in the private evidence directory below. They retain
+only image references, fingerprints and safe state metadata, never secrets.
 
 Keep production emission, company production opt-in, migrations and seed off.
 Do not repeat the already accepted E31/E34 TEST sends. PWA rollback uses542cc3d8
@@ -95,6 +105,6 @@ with the retained API and current database; no database restore or counter rewin
 Private receipts and captures:
 C:/Users/pc/.codex/backups/fullpos-pr43-pwa-20261114/.
 
-Artifact/source proposal: GO. Source save requires the specific authorization;
-owner deployment and live E34 preview remain pending. Productive fiscal emission
-is not authorized by this artifact preparation.
+Artifact and authorized PWA source preparation: GO. Owner deployment and live
+E34 preview remain pending. Productive fiscal emission is not authorized by
+this preparation; its permissions remain off.
