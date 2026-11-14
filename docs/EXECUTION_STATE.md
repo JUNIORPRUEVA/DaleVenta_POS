@@ -1,6 +1,34 @@
 # Execution State
 
-## Current work — deployed TEST acceptance and numbering access (2026-11-14)
+## Current work — PR43 merged, PWA artifact preparation (2026-11-14)
+
+Owner merged PR43 as38142fce54030bdac611bcbf3f928d9d6be0cbbf. Its complete
+tree dd011e11f072ba8056445d27774ab6a1a6eac535 matches validated PR source
+076db49462df5489b8eb6b46f16149d1344f2427. All four PR gates43616522615 passed;
+post-merge gates43617862689 are still running. No API build input changed from
+the deployed3217 source, so retain API digest4e6fb33c.
+
+Preparation is isolated at C:/src/fullpos-ecf-pr43-image on
+agent/ecf-pr43-pwa-image-20261114. Its one-off workflow checks out only frozen
+076db494, verifies the PR, merged tree and green gates, and publishes web only
+to the existing GHCR repository. It preserves the existing assistant publishable
+key by its verified fingerprint, without printing it or using fiscal API keys.
+No deploy, restart, migration, permission or database operation is in the builder.
+The preparation branch is not an application merge candidate.
+
+Workflow YAML, web-only source/trigger policy and both embedded Node scripts
+pass with the already-installed Playwright YAML parser. Initial Python parsing
+was blocked by missing PyYAML; its private install also failed. The existing
+parser resolved that tooling blocker without a product dependency change.
+
+Next: publish the workflow, inspect immutable image receipt/revision, pull and
+validate that exact PWA locally with synthetic data, verify post-merge gates,
+then present the concrete image/source preparation to the owner. Owner retains
+Deploy. Do not activate production fiscal permissions or repeat accepted TEST
+emissions. The deployed E34 preview remains pending; A4/58/80 projection and
+both real TEST E31/E34 dispatches already passed in the previous checkpoint.
+
+## Previous work — deployed TEST acceptance and numbering access (2026-11-14)
 
 The owner deployed both final PR42 images. Read-only inspection confirms API
 4e6fb33c and PWA542cc3d8, from3217f0cd; merged ac729b16 has the identical tree.

@@ -1,0 +1,158 @@
+name: Prepare FullPOS PR43 PWA image
+
+on:
+  push:
+    branches: [agent/ecf-pr43-pwa-image-20261114]
+    paths: [.github/workflows/ecf-pr43-pwa-image.yml]
+
+concurrency:
+  group: fullpos-pr43-pwa-image
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and publish ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [web]
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      RELEASE_SHA: 076db49462df5489b8eb6b46f16149d1344f2427
+      COMPONENT: ${{ matrix.component }}
+      DOCKER_BUILDKIT: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 076db49462df5489b8eb6b46f16149d1344f2427
+          persist-credentials: false
+      - name: Verify frozen source and PR gates
+        env:
+          GH_RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const sha = process.env.RELEASE_SHA;
+          assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim(), sha);
+          assert.equal(execFileSync('git', ['status', '--porcelain'], {encoding:'utf8'}).trim(), '');
+          const headers = {Authorization:`Bearer ${process.env.GH_RELEASE_TOKEN}`, Accept:'application/vnd.github+json'};
+          let verified = false;
+          for (let check = 0; check < 90; check++) {
+            const response = await fetch('https://api.github.com/repos/JUNIORPRUEVA/DaleVenta_POS/actions/runs/43616522615', {headers});
+            assert.equal(response.status, 200);
+            const gate = await response.json();
+            assert.equal(gate.head_sha, sha);
+            if (gate.status === 'completed') {
+              assert.equal(gate.conclusion, 'success');
+              verified = true; break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 20000));
+          }
+          assert.ok(verified, 'All four PR gates must pass before publication');
+          const prResponse = await fetch('https://api.github.com/repos/JUNIORPRUEVA/DaleVenta_POS/pulls/43', {headers});
+          assert.equal(prResponse.status, 200);
+          const pr = await prResponse.json();
+          assert.equal(pr.merged, true);
+          assert.equal(pr.head.sha, sha);
+          assert.equal(pr.merge_commit_sha, '38142fce54030bdac611bcbf3f928d9d6be0cbbf');
+          const mergeResponse = await fetch('https://api.github.com/repos/JUNIORPRUEVA/DaleVenta_POS/git/commits/38142fce54030bdac611bcbf3f928d9d6be0cbbf', {headers});
+          assert.equal(mergeResponse.status, 200);
+          const merge = await mergeResponse.json();
+          assert.equal(merge.tree.sha, execFileSync('git', ['rev-parse', 'HEAD^{tree}'], {encoding:'utf8'}).trim());
+          console.log('Frozen source, merged tree and all PR gates verified.');
+          NODE
+      - name: Authenticate publication with the temporary workflow token
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build frozen image, inspect it and publish
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const component = process.env.COMPONENT, sha = process.env.RELEASE_SHA;
+          const repository = `ghcr.io/juniorprueva/fullpos-cloud-${component}`;
+          const image = `${repository}:sha-${sha}`;
+          const environment = {...process.env};
+          const args = ['build', '--platform', 'linux/amd64', '--build-arg', `GIT_SHA=${sha}`,
+            '--label', 'org.opencontainers.image.source=https://github.com/JUNIORPRUEVA/DaleVenta_POS', '-t', image];
+          if (component === 'web') {
+            const response = await fetch('https://fullposcloud.fulltechrd.com/ecf/certificacion/');
+            assert.equal(response.status, 200);
+            const html = await response.text();
+            const keys = [...new Set(html.match(/pk_(?:live|test)_[A-Za-z0-9_-]+/g) ?? [])];
+            assert.equal(keys.length, 1);
+            assert.ok(keys[0].startsWith('pk_live_'), 'Production assistant publishable key required');
+            assert.equal(createHash('sha256').update(keys[0]).digest('hex'),
+              'd8fed31506bd5fc57999442c39d4f5576d373abdabaf9ba7bdd7b379681f5caf');
+            const api = html.match(/var API\s*=\s*['"]([^'"]+)['"]/)?.[1];
+            assert.ok(api);
+            const target = new URL(api, 'https://fullposcloud.fulltechrd.com');
+            assert.ok(['fullposcloud.fulltechrd.com','daleventapos-backend.gcdndd.easypanel.host'].includes(target.hostname));
+            console.log(`::add-mask::${keys[0]}`);
+            environment.DOSA_ASSISTANT_PUBLISHABLE_KEY = keys[0];
+            environment.ECF_PORTAL_API_BASE = api;
+            args.push('--build-arg', 'DOSA_ASSISTANT_PUBLISHABLE_KEY', '--build-arg', 'ECF_PORTAL_API_BASE', '-f', 'Dockerfile.public-web', '.');
+          } else {
+            args.push('-f', 'apps/api/Dockerfile', 'apps/api');
+          }
+          execFileSync('docker', args, {env:environment, stdio:'inherit'});
+          const info = JSON.parse(execFileSync('docker', ['image', 'inspect', image], {encoding:'utf8'}))[0];
+          assert.equal(info.Os, 'linux'); assert.equal(info.Architecture, 'amd64');
+          assert.equal(info.Config.Labels['org.opencontainers.image.revision'], sha);
+          if (component === 'api') {
+            const probe = 'const a=require("node:assert/strict");a.equal(process.version,"v22.23.4");a.equal(require("@prisma/client/package.json").version,"5.22.0");a.ok(require("@nestjs/core/package.json").version.startsWith("11."));console.log("Node22/Nest11/Prisma5.22 verified without starting the API");';
+            execFileSync('docker', ['run','--rm','--network','none','--entrypoint','node',image,'-e',probe], {stdio:'inherit'});
+          } else {
+            const probe = 'test -f /usr/share/nginx/html/main.dart.js && test -f /usr/share/nginx/html/pos.html && test -f /usr/share/nginx/html/manifest.json && ! grep -q "__DOSA_PUBLISHABLE_KEY__\\|__API_BASE__" /usr/share/nginx/html/ecf/certificacion/index.html && grep -q "pk_live_" /usr/share/nginx/html/ecf/certificacion/index.html';
+            execFileSync('docker', ['run','--rm','--network','none','--entrypoint','sh',image,'-ec',probe], {stdio:'inherit'});
+            const pdfProbe = 'test -f /usr/share/nginx/html/pdfjs/4.10.38/init.mjs && test -f /usr/share/nginx/html/pdfjs/4.10.38/pdf.min.mjs && test -f /usr/share/nginx/html/pdfjs/4.10.38/pdf.worker.min.mjs && grep -q "pdfjs/4.10.38/init.mjs" /usr/share/nginx/html/flutter_bootstrap.js';
+            execFileSync('docker', ['run','--rm','--network','none','--entrypoint','sh',image,'-ec',pdfProbe], {stdio:'inherit'});
+            // Exercise the generated runtime proxy config, not only nginx.conf.
+            const qaName = `fullpos-pdf-module-qa-${sha.slice(0,8)}`;
+            try {
+              execFileSync('docker', ['run','-d','--name',qaName,'-p','127.0.0.1::80',
+                '-e','API_BASE_URL=/api','-e','API_UPSTREAM_URL=http://127.0.0.1:9',image], {stdio:'pipe'});
+              const runtime = JSON.parse(execFileSync('docker',['inspect',qaName],{encoding:'utf8'}))[0];
+              const origin = `http://127.0.0.1:${runtime.NetworkSettings.Ports['80/tcp'][0].HostPort}`;
+              const hashes = {'pdf.min.mjs':'27fc2a057a00f92a4334ad06e17dbd7259912954e9fb7f76400bcca5fd190a9c',
+                'pdf.worker.min.mjs':'1baa1844c89c80a5b2797c916e75ab29254be46d8e9cb53cb6364d7aad84be36'};
+              for (const name of ['init.mjs',...Object.keys(hashes)]) {
+                let response;
+                for (let attempt=0; attempt<40; attempt++) {
+                  try { response=await fetch(`${origin}/pdfjs/4.10.38/${name}`,{signal:AbortSignal.timeout(1500)}); break; }
+                  catch { await new Promise(resolve=>setTimeout(resolve,500)); }
+                }
+                assert.ok(response, 'Local runtime must start');
+                assert.equal(response.status,200);
+                assert.ok(response.headers.get('content-type')?.includes('application/javascript'));
+                assert.ok(response.headers.get('cache-control')?.includes('immutable'));
+                const body=Buffer.from(await response.arrayBuffer());
+                if (hashes[name]) assert.equal(createHash('sha256').update(body).digest('hex'),hashes[name]);
+              }
+              assert.equal((await fetch(`${origin}/pdfjs/4.10.38/missing.mjs`)).status,404);
+              execFileSync('docker',['exec',qaName,'nginx','-t'],{stdio:'inherit'});
+              console.log('PDF modules, upstream proxy, upstream hashes and real 404 verified.');
+            } finally {
+              execFileSync('docker',['rm','-f',qaName],{stdio:'pipe'});
+            }
+          }
+          execFileSync('docker', ['push', image], {stdio:'inherit'});
+          const published = JSON.parse(execFileSync('docker', ['image','inspect',image], {encoding:'utf8'}))[0];
+          const digest = published.RepoDigests.find(value => value.startsWith(repository+'@sha256:'));
+          assert.ok(digest, 'Published immutable digest required');
+          const receipt = {component,sourceCommit:sha,image,digest,platform:'linux/amd64',deployed:false};
+          console.log('IMAGE_RELEASE_RECEIPT='+JSON.stringify(receipt));
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## ${component}\n\nSource: ${sha}\n\nImage: ${digest}\n\nBuilt outside production. No deploy, migration or production flag change.\n`);
+          NODE
+      - name: Remove temporary registry session
+        if: always()
+        run: docker logout ghcr.io
