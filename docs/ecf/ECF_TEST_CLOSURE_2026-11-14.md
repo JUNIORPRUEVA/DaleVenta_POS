@@ -49,6 +49,13 @@ de Dart, con espera máxima de8s y preservando el worker de la PWA. Si falla la
 vista, conserva las acciones de descarga y muestra un error. No cambia los
 transportes de impresora, las ventas normales ni el contenido fiscal del PDF.
 
+La revisión del arranque con API_UPSTREAM_URL detectó que el entrypoint genera
+otra configuración Nginx. Se corrigió también esa plantilla: antes servía los
+módulos como application/octet-stream y un módulo inexistente como HTML200;
+ahora devuelve application/javascript, caché versionada y404 real. El ensayo
+comparó ambos comportamientos en contenedores locales propios. El smoke del
+sitio combinado cubre biblioteca, worker y bootstrap detrás del proxy.
+
 Referencias primarias: [Syncfusion29.2.11](https://pub.dev/packages/syncfusion_flutter_pdfviewer/versions/29.2.11),
 [inicialización Flutter](https://docs.flutter.dev/platform-integration/web/initialization).
 Se contrastó el bootstrap contra Flutter3.41.6 instalado. Context7 y Playwright
@@ -73,6 +80,10 @@ Playwright local para el motor PDF.
 | flutter build web --release --no-pub --no-wasm-dry-run --no-web-resources-cdn [defines UAT local] |PASS, código final,68–80s; no es un artefacto productivo |
 | node [ejecutor privado]/pdf-browser-qa.cjs |PASS: PDF real TEST renderizado a1280/390, worker cargado, sólo peticiones loopback,0 errores de página |
 | docker run --rm --entrypoint nginx [imagen aprobada y nginx.conf de esta rama] -t |PASS, sintaxis del servidor y módulos existentes |
+| node [ejecutor privado]/pwa-bootstrap-qa.cjs |PASS, PDF.js disponible antes del primer frame Flutter; sin conexiones externas ni errores de página; fallback de fuentes externo bloqueado en el ensayo |
+| flutter test --no-pub .dart_tool/private_completed_qa_test.dart |2/2 PASS; capturas del cierre con formulario TEST a390/1280, dobles de datos sin red |
+| comparación HTTP local de entrypoint original/corregido con API_UPSTREAM_URL |PASS, defecto reproducido y corregido: MIME de módulo y404 real |
+| PDF_QA_PROXY_ORIGIN=[proxy loopback propio] node [ejecutor privado]/pdf-browser-qa.cjs |PASS, PDF TEST real renderizado a1280/390 a través de la plantilla de proxy corregida; worker real y0 errores de página |
 
 Las seis suites PostgreSQL: sales-ecf-atomic, ecf-pos-readiness,
 ecf-legacy-test-classification, ecf-environment-isolation, ecf-e34-emission y

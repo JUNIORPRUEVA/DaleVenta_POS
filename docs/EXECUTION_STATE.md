@@ -43,6 +43,15 @@ development advisories remain outside runtime. Final diff reviewed; publication,
 CI and owner-controlled deployment remain before live FULLTECH TEST acceptance.
 Evidence: docs/ecf/ECF_TEST_CLOSURE_2026-11-14.md.
 
+Publication checkpoint: PR42, sourcea1885097, passed all four GitHub gates
+(43605208442):2247 Flutter tests PASS/16 gated skips, backend/security,
+public website and Windows updater PASS. The final runtime review then found
+the proxy-generated Nginx template lacked the PDF module rule. That template
+is now corrected as well; local before/after HTTP proved octet-stream/HTML200
+becomes JavaScript/versioned cache/404. Combined-image smoke now covers these
+assets. Sourcea188 images are superseded and must not be deployed; the final
+commit needs its own CI and immutable images. No deployment occurred.
+
 ## Previous correction — PR41 critical findings (2026-11-13)
 
 Explicit E31/E32 checkout now shares admission with POS capabilities and commits
