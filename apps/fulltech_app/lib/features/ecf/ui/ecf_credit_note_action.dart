@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
+import '../../../core/auth/auth_provider.dart';
 
 import '../data/ecf_repository.dart';
+import '../data/ecf_connection_guard.dart';
+import '../data/ecf_pending_credit_request.dart';
+import '../../../core/utils/app_feedback.dart';
 
 /// Flujo guiado para preparar una nota de crédito E34 sobre un comprobante
 /// original elegible.
@@ -28,9 +33,9 @@ class EcfCreditNoteAction extends ConsumerStatefulWidget {
 }
 
 class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
-  static const _uuid = Uuid();
-
   bool _running = false;
+  String? _requestId;
+  bool _uncertain = false;
   String _refundKind = 'TOTAL';
   int _modificationCode = 3;
   int _paymentType = 1;
@@ -68,7 +73,7 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
     return Align(
       alignment: Alignment.centerRight,
       child: TextButton.icon(
-        onPressed: _running ? null : () => _openDialog(),
+        onPressed: _running || _uncertain ? null : () => _openDialog(),
         icon: _running
             ? const SizedBox(
                 width: 14,
@@ -115,7 +120,10 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
                     ],
                     selected: {_refundKind},
                     onSelectionChanged: (value) =>
-                        setDialogState(() => _refundKind = value.first),
+                        setDialogState(() {
+                          _refundKind = value.first;
+                          if (_refundKind == 'PARTIAL') _modificationCode = 3;
+                        }),
                   ),
                   if (isPartial) ...[
                     const SizedBox(height: 10),
@@ -149,16 +157,13 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
                     decoration: const InputDecoration(
                       labelText: 'Código de modificación',
                       helperText:
-                          'Código del contrato (1–4). Se elige explícitamente: '
-                          'el esquema publicado no documenta su significado.',
+                          'Selecciona el motivo fiscal de la nota.',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 1, child: Text('Código 1')),
-                      DropdownMenuItem(value: 2, child: Text('Código 2')),
-                      DropdownMenuItem(value: 3, child: Text('Código 3')),
-                      DropdownMenuItem(value: 4, child: Text('Código 4')),
+                    items: [
+                      if (!isPartial) const DropdownMenuItem(value: 1, child: Text('Anulación total')),
+                      const DropdownMenuItem(value: 3, child: Text('Corrección de montos / devolución')),
                     ],
                     onChanged: (value) => setDialogState(
                       () => _modificationCode = value ?? _modificationCode,
@@ -247,15 +252,29 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
   }
 
   Future<void> _prepare() async {
+    if (_running) return;
     setState(() => _running = true);
+    EcfPendingCreditRequest? pending;
+    String? scope;
     try {
+      final user = ref.read(authStateProvider).user;
+      if (user?.companyId == null) throw StateError('No se pudo verificar la empresa.');
+      scope = '${user!.companyId}:${user.id}:${widget.originalId}';
+      pending = EcfPendingCreditRequest(await SharedPreferences.getInstance());
+      _requestId = await pending.obtain(scope, {
+        'refundKind': _refundKind, 'modificationCode': _modificationCode,
+        'reason': _reason.text.trim(), 'paymentType': _paymentType,
+        'creditNoteIndicator': _creditNoteIndicator,
+        'lines': _refundKind == 'PARTIAL' ? _parseLines() : null,
+      });
+      if (!mounted) return;
       final outcome = await ref
           .read(ecfRepositoryProvider)
           .prepareCreditNote(
             originalDocumentId: widget.originalId,
             // Identidad de ESTA operación: permite varias notas parciales sobre
             // el mismo original y hace idempotente un reintento.
-            clientRequestId: _uuid.v4(),
+            clientRequestId: _requestId!,
             refundKind: _refundKind,
             modificationCode: _modificationCode,
             modificationReason: _reason.text.trim(),
@@ -263,6 +282,8 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
             creditNoteIndicator: _creditNoteIndicator,
             lines: _refundKind == 'PARTIAL' ? _parseLines() : null,
           );
+      await pending.complete(scope, _requestId!);
+      _requestId = null;
       ref.invalidate(ecfDocumentsProvider);
       ref.invalidate(ecfCountersProvider);
       ref.invalidate(ecfEligibleOriginalsProvider);
@@ -298,7 +319,27 @@ class _EcfCreditNoteActionState extends ConsumerState<EcfCreditNoteAction> {
           ],
         ),
       );
-    } catch (_) {
+    } on EcfConnectionException catch (error) {
+      if (!error.uncertain && pending != null && scope != null && _requestId != null) {
+        await pending.complete(scope, _requestId!);
+        _requestId = null;
+      }
+      if (!mounted) return;
+      setState(() => _uncertain = error.uncertain);
+      AppFeedback.showToast(context, title: error.noticeTitle, body: error.message,
+        kind: AppFeedbackKind.warning, duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
+      ref.invalidate(ecfDocumentsProvider);
+    } catch (error) {
+      if (error is DioException && const {400, 401, 403, 404, 422}.contains(error.response?.statusCode) &&
+          pending != null && scope != null && _requestId != null) {
+        await pending.complete(scope, _requestId!);
+        _requestId = null;
+      }
+      if (error is StateError && mounted) {
+        AppFeedback.showToast(context, title: 'Preparación pendiente', body: error.message.toString(),
+          kind: AppFeedbackKind.warning, duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
+        return;
+      }
       if (!mounted) return;
       await showDialog<void>(
         context: context,

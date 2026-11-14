@@ -1,5 +1,12 @@
 # DOSA — contrato de emisión verificado contra la documentación oficial
 
+> Actualización 2026-11-13: este documento conserva una captura histórica de
+> noviembre 2. Sus conclusiones sobre reintentos, longitud de secuencia y ausencia
+> de consulta de estado fueron sustituidas por la documentación oficial actual.
+> Véanse [investigación del contrato](ecf/research/DOSA_EMISSION_API_2026-11.md)
+> y [cierre local de resultados DOSA](ecf/ECF_CONFIRMED_DOSA_FLOW_2026-11-13.md).
+> No utilizar la sección 6 histórica para asignar un número nuevo tras un timeout.
+
 Fuente: `https://github.com/alapaix13/DosaInvoicecloud-Documentation`
 (`README.md`, 71 668 bytes descargados de `raw.githubusercontent.com` el
 2026-11-02). Todo lo de abajo es **HECHO** leído del documento; lo que no está en

@@ -92,8 +92,80 @@ The data model uses `Company` as the tenant root. Many backend services require 
 
 Important invariant: tenant/company data must not mix across authenticated contexts.
 
+Electronic invoicing postulations, fiscal identities, credentials and numbering
+belong to each company. Dispatch uses the company's configured environment, so
+authorized production companies and test companies can dispatch independently.
+The server production permission does not replace that company's production
+opt-in and certification. A prepared document is never redirected to another
+environment or sent with a different environment's credentials.
+
+FULLTECH SRL is the pilot for FullPOS integration trials. Those engineering
+trials are not an extra manual onboarding step for every customer. Each customer
+must still have its own DGII emitter authorization. The existing DOSA assistant
+captures the certificate, its password and the certification portal password;
+FullPOS does not duplicate that capture. The signed completion event bound to
+the current postulation supplies the existing approval evidence, and the company
+records its own authorization to emit. The customer requests authorized numbering
+through the Oficina Virtual and registers it in the existing company flow.
+Provider-assisted certification remains distinct from FullPOS engineering tests.
+No new customer-facing TEST step or hardcoded FULLTECH restriction is introduced
+by company environment routing. Existing assistant and certification work is
+preserved. A final company action can activate production only after verified
+certification, its own active production credential and explicit server gates.
+Unresolved TEST outcomes block the transition. Strictly reviewed terminal
+engineering trials can close readiness without changing their fiscal status;
+commercial invoices and uncertain/pending results remain blocking. This action emits no invoice;
+production numbering must then be registered separately for that company.
+
 ## Important Business Rules Evidenced
 
+- Empresa activates the electronic invoicing module with one switch. Enabling
+  it also enables company taxes in the same transaction, using the existing tax
+  service to preserve a configured default tax or create the initial ITBIS. Disabling
+  the module does not disable taxes or change historical sales.
+- With the module enabled, Empresa exposes the price mode (ITBIS included or
+  price plus ITBIS) and the optional sale without a voucher. The latter requires
+  confirmation and defaults every new ticket to Normal when enabled. A deliberate
+  electronic selection belongs to that ticket and survives draft restoration;
+  it does not become the default for subsequent tickets.
+- An explicit Normal sale persists `fiscalVoucherType=NORMAL`, with no NCF or
+  expiry. It cannot be prepared as E31/E32, consumes no fiscal number and is
+  never sent to DOSA/DGII. Its ticket and PDF remain ordinary documents, including
+  applicable ITBIS, without electronic QR or fiscal identity. Tax calculation is
+  independent of electronic emission. Existing ordinary offline permissions
+  still apply. Historical NULL intents are not rewritten or reclassified.
+- The drawer exposes electronic invoicing when enabled and authorized. The POS
+  voucher selector additionally requires backend-confirmed readiness and an
+  active, unexpired E31/E32 numbering range with remaining numbers. Turning on
+  the module alone does not authorize fiscal emission or bypass checkout checks.
+- Fiscal preparation freezes the original payment breakdown in the document.
+  Subsequent credit collections are excluded when reconstructing that breakdown.
+  DOSA dispatch preserves the prepared income type, payment terms and sequence expiry.
+- DOSA consumer receipts below RD$250,000 may omit TrackId. Correlation then
+  requires the official DGII consumer receipt URL, matching issuer/e-NCF/amount,
+  a complete QR and a consumed sequence. Correlation alone does not grant fiscal
+  acceptance. An explicitly enabled server DOSA contract can record its documented
+  HTTP 200 accepted/conditionally accepted result only with a matching persisted
+  response receipt, fiscal identity, fingerprints and valid QR. The audit identifies
+  DOSA as the authority reporting the DGII result. Pending, rejected, mismatched or
+  incomplete responses never qualify. E34 application remains subject to the
+  original accepted document, evidence and available fiscal balance.
+  An RFCE with no TrackId uses a clearly identified local receipt reference
+  bound to environment/RNC/e-NCF; this is not a fabricated DGII TrackId.
+- During the original DOSA dispatch, a timeout, network error or HTTP 5xx may
+  trigger up to two audited repetitions of the identical request. No new e-NCF
+  is assigned. The company's environment, authorization and credential must
+  still match; accepted, conditionally accepted, rejected and HTTP 202 responses
+  stop these immediate repetitions. After a lost response, process restart or
+  HTTP202, an authorized user can verify using the identical original request
+  only after the persisted lease expires. Stored hashes bind the destination,
+  body, path, credential, document and environment. A row lock and ownership
+  checks exclude competing/stale workers. No new e-NCF or financial sale is
+  created; missing original identity requires review. A separate invoice GET
+  is not required by the provider's confirmed contract.
+- HTTP202 remains pending DGII. A complete validated provider stamp plus its
+  contingency legend can print a QR in the existing ticket/PDF; it does not
+  imply acceptance. Later verification must preserve that same fiscal identity.
 - Users must be authenticated for tenant operations and must have an assigned company.
 - `ADMIN` has broad backend access in `RolesGuard` and broad Flutter permissions.
 - Non-admin access is controlled by role defaults and optional `userPermissions` overrides.
@@ -166,6 +238,59 @@ Important invariant: tenant/company data must not mix across authenticated conte
 
 ## Integrations
 
+### Numeración electrónica por empresa y ambiente
+
+- Emitir una factura electrónica exige conexión con el servidor. Sin conexión,
+  aparece un aviso breve en la esquina superior derecha durante cuatro segundos.
+  Una respuesta perdida se identifica como resultado pendiente y requiere revisar
+  el estado antes de repetir; nunca se presenta como aceptación fiscal.
+- El historial de ventas conserva la presentación habitual de ventas normales.
+  Las electrónicas añaden tipo, e-NCF y estado; el detalle permite consultar el
+  original y sus E34, imprimir y continuar acciones fiscales pendientes según
+  permisos. TEST y aceptación condicional se identifican expresamente.
+- Una venta electrónica se devuelve o anula mediante su devolución y nota E34;
+  no utiliza la cancelación ordinaria. Una devolución financiera confirmada y una
+  nota fiscal pendiente son resultados distintos y se muestran como tales. La
+  recuperación de la nota no vuelve a devolver dinero ni inventario. Cuando el
+  plazo fiscal requiere revisión, la nota no se prepara automáticamente.
+- El PDF de una factura electrónica exige su representación fiscal persistida.
+  Si falta, se informa del problema en lugar de descargar una factura ordinaria
+  sin los datos fiscales. Los documentos pendientes no incorporan un QR inventado.
+
+- La factura y el ticket electrónicos recuperan su identificación fiscal del
+  documento persistido de la venta, con empresa, propietario autorizado y ambiente
+  verificados en el servidor. Un QR firmado no se reconstruye desde datos actuales
+  del cliente ni se fabrica para documentos pendientes o rechazados.
+- La impresión incluye la URL pública DGII validada, código de seguridad y fecha
+  de firma al pie. TEST se identifica sin validez fiscal. En A4 se repiten los
+  datos fiscales y de consulta en cada página; las páginas intermedias presentan
+  subtotales de las partidas realmente dibujadas. El monto de la venta debe
+  coincidir con el comprobante antes de imprimir. Las ventas locales pendientes
+  de sincronizar conservan su ticket interno sin inventar identidad fiscal.
+- Alcance, evidencia y pendientes de impresión:
+  [validación RI](ecf/ECF_PRINT_REPRESENTATION_2026-11-13.md).
+  Las notas E34 también pueden imprimirse desde el detalle del comprobante:
+  ticket con la impresora ya configurada o PDF fiscal A4. Se representan los
+  artículos e importes acreditados, el e-NCF y fecha del original y el motivo
+  de modificación; no se crea una venta o devolución nueva para imprimir.
+  Ver [cierre de impresión E34](ecf/ECF_E34_PRINT_COMPLETION_2026-11-13.md).
+
+- La numeración, autorización, contador e idempotencia fiscal pertenecen a una
+  empresa y a un ambiente (`SANDBOX` / `PRODUCTION`). Cambiar de ambiente no copia
+  rangos ni reinicia contadores. Un mismo texto de e-NCF puede existir en ambos
+  ambientes, siempre que cada rango haya sido confirmado para ese ambiente.
+- TEST requiere rangos y vencimientos confirmados por el proveedor para la
+  empresa. Un correo de alta en producción o disponer de una clave TEST no
+  demuestra que el rango productivo también esté autorizado para pruebas.
+- El webhook DOSA conserva una proyección segura de los campos reconocidos de
+  numeración como evidencia; no registra ni activa automáticamente esos rangos.
+  Los eventos históricos cuyo resumen descartó esos datos no se reconstruyen.
+- El despacho comprueba el ambiente persistido del documento, el configurado por
+  la empresa y el de ejecución. Los documentos antiguos sin ambiente identificado
+  no se despachan por inferencia; requieren revisión antes del despliegue.
+- Evidencia y limitaciones de la implementación local:
+  [separación TEST/producción](ecf/ECF_ENVIRONMENT_NUMBERING_2026-11-13.md).
+
 Confirmed or configured integrations:
 
 - PostgreSQL through Prisma.
@@ -194,3 +319,11 @@ OWNER VALIDATION REQUIRED:
 - Which marketing, WhatsApp CRM, technical network, AI assistant, and website features are production-ready versus experimental.
 - Which visual evidence folders represent current accepted UI versus historical validation.
 - Exact paid plan/license commercial limits beyond the code-level license service behavior.
+
+### Reviewed legacy TEST numbering
+
+Historical TEST classification preserves original allocation ledgers and counters.
+A new Sandbox declaration/renewal/allocation must stay above its reviewed
+frontier, including the original range counter; an unclassified TEST history
+requires review before further TEST numbering. No production authorization is
+copied to TEST and no historic counter is reset.

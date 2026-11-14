@@ -41,6 +41,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: node scripts/release/sync_api_docker_lock.mjs --check
       # En este monorepo el `postinstall` de @prisma/client no encuentra el
       # esquema (vive en apps/api), así que sin este paso las pruebas reciben
       # `Role` sin definir. `npm run build` sí lo genera, pero corre después.

@@ -4,12 +4,11 @@
  * Dos reglas se codifican aquí porque son las que más daño fiscal pueden hacer
  * si se dejan "a la interpretación":
  *
- * 1. **Ningún reintento automático** de un comprobante cuyo resultado es
- *    incierto. Reenviar a ciegas puede duplicar un comprobante o consumir dos
- *    secuencias. La reconciliación es un acto humano con evidencia.
- * 2. **La identidad fiscal de prueba no se mezcla con la real.** En entorno de
- *    pruebas, el RNC emisor debe ser exactamente el RNC de prueba configurado,
- *    de modo que el RNC real de la empresa no pueda usarse en un flujo de test.
+ * 1. **Ningún nuevo despacho automático** de un resultado incierto. La
+ *    recuperación idéntica dentro del despacho vivo tiene un contrato separado
+ *    en `dosa-same-request-recovery.ts`; esta política no la autoriza.
+ * 2. **La identidad fiscal pertenece a la empresa.** En TEST, el RNC emisor
+ *    coincide con el de la empresa cuyas credenciales se usan; no es global.
  */
 
 export type DosaFiscalEnvironment = "test" | "production";
@@ -27,7 +26,7 @@ export type DosaRetryDecision =
   | { allowed: true; reason: string };
 
 /**
- * Decisión de reintento automático. Hoy y en esta fase: **siempre no**.
+ * Decisión genérica de un nuevo despacho automático: **siempre no**.
  *
  * El tipo admite `allowed: true` para no reescribir la interfaz, pero esta
  * implementación nunca lo devuelve; hay una prueba que lo verifica para todos
@@ -42,7 +41,7 @@ export function mayRetryAutomatically(_outcome: DosaEmissionOutcome): DosaRetryD
   };
 }
 
-/** Constantes visibles para la revisión de seguridad. */
+/** Política de tentativas lógicas; no cuenta las llamadas del replay auditado. */
 export const DOSA_RETRY_POLICY = {
   maxAttemptsPerDocument: 1,
   retryOnUnknown: false,

@@ -1,5 +1,116 @@
 # Execution State
 
+## Current checkpoint — audited manual ECF migration and release candidate (2026-11-13)
+
+HECHO: the explicitly authorized production migrations0400/0500/0600 were
+applied manually, rehearsed against a restored backup, and recorded with their
+original checksums. All223 previous migration rows remain; the ledger has226.
+Five reviewed FULLTECH engineering trials are Sandbox; none is unclassified.
+Their fiscal status, identity and original sequence counters were preserved.
+The API container/image, disabled automatic migrations and company configuration
+were unchanged. No application deployment, restart or external fiscal send.
+
+The candidate lives at C:/src/fullpos-ecf-predeploy-20261113 on
+agent/ecf-predeploy-20261113, based on current production-main cada11f8.
+Only the prior working-tree delta was ported; the old branch's divergent commits
+were not merged. The original218 files, Git history bundle, database backups and
+running API/PWA images are retained with verified hashes outside the repository.
+
+Audit fixes close reviewed terminal TEST trials without granting fiscal
+acceptance, block unclassified documents on activation, and enforce the original
+TEST numbering frontier. Compatible API dependency patches and the explicitly
+approved Astro7.4.12 update are included. Docker uses the generated API lock
+from the authoritative root lock; the website stage pins Node22.23.4.
+
+Validation: API build;3300 broad tests;30 HTTP tests;48 PostgreSQL tests;
+Flutter analyze;1117 broad Flutter tests;14 visual widget checks; Flutter web
+validation build; Linux API, Astro and complete combined Docker builds passed.
+The combined image passed17 read-only routes/6 assets/PWA/portal checks.
+Astro browser QA passed8 desktop/mobile views with0 page errors. Both Linux runtime audits
+reported zero advisories. No hardware or deployed-client acceptance is claimed.
+
+Publication and production activation remain NO-GO: commit/push/integration
+need explicit authorization, both server production gates are still disabled,
+and the user retains the Deploy action. autoDeploy=false on API and PWA.
+The public DOSA assistant key is already configured; it was not printed/changed.
+Full evidence, current file inventory and manual deployment sequence:
+[predeployment audit](ecf/ECF_PREDEPLOY_AUDIT_2026-11-13.md).
+
+## Previous local closure — Normal sales and DOSA recovery (historical)
+
+
+Checkout finalesdaleventas, branch agent/ecf-offline-history-20261113.
+Normal is explicit, internal and the default for every new ticket when allowed.
+No e-NCF/expiry, fiscal preparation, sequence consumption or DOSA/DGII dispatch
+is possible for that intent. Ordinary ITBIS and existing offline permissions remain.
+Ticket drafts retain their own manual fiscal selection without changing the next
+ticket's default. Ordinary ticket/PDF bypass the electronic projection.
+
+Added persisted hash/lease recovery after interruption/restart, serialized queries
+and stale-worker fencing; validated RFCE E32 no-TrackId receipt references;
+HTTP202 contingency printing with pending status and provider legend; explicit
+per-company production activation/commercial preparation with certification,
+own credentials, server gates and unresolved-TEST guards. The existing assistant
+is retained. None of these source changes enables a deployed environment.
+
+Final API build and Prisma validation PASS. Full non-e2e:275 suites /3,293 tests
+PASS,101 opt-in tests skipped. PostgreSQL replay/returns:22 PASS. HTTP:26 PASS
+against localhost; forceExit remains a documented test-harness limitation.
+Flutter final analysis: no issues. Broad regression:1,041 PASS; focused:115 PASS;
+last UI recovery/POS checks:11 PASS. Final company-context guards:39 API /52 Flutter PASS;
+API build and analysis rerun after those changes. Widget screenshots were visually inspected
+at320/1280; the POS screenshot shows Normal on the new ticket. No new hardware
+or browser-device acceptance is claimed.
+
+All32 isolated API files match the checkout byte-for-byte. The owned disposable
+PostgreSQL was identity-checked and stopped, retaining data. No production access,
+external fiscal send, commit/push/deploy, credential edit or shared migration.
+
+Production remains NO-GO pending reviewed shared rollout of prior fiscal
+migrations/classification, coordinated API/client and verified runtime activation.
+Old documents without replay proof and late fiscal returns still require review.
+Current report and exact52-file inventory:
+docs/ecf/ECF_NORMAL_PRODUCTION_RECOVERY_2026-11-13.md.
+
+## Previous checkpoint — connection, sales history and E34 (historical)
+
+Checkout finalesdaleventas, branch agent/ecf-offline-history-20261113.
+The authorized implementation is locally complete and validated; nothing was
+committed, pushed, deployed, migrated on a shared database or sent to DOSA/DGII.
+Earlier dirty fiscal work is preserved. The existing DOSA assistant and printer
+transports are unchanged.
+
+Implemented: real HTTP connection checks without offline cache; four-second
+upper-right notices; E31/E32 intent and frozen E31 expiry persisted before fiscal
+preparation; bounded company/owner history projection with reserved e-NCF and
+original/E34 states; fiscal-only recovery without another financial refund;
+partial/remnant quantity correction; original-bound refund idempotency; ordinary
+electronic cancellation blocked; electronic print/PDF guards; stable unresolved
+manual E34 request identity. No schema change or new dependency in this task.
+
+Final API: build and Prisma validation PASS; 275 suites / 3,289 tests PASS,
+101 opt-in tests skipped. PostgreSQL returns 15 PASS. Local HTTP 25 PASS with
+forceExit: the two HTTP suites leave the runner alive without it, including under
+detectOpenHandles; this harness limitation remains documented.
+Flutter analyze PASS after the last source edit; directed regression 99 PASS,
+final repository/print guard 32 PASS. Broad regression 1,145 PASS / 3 SKIP /
+1 failed source-text assertion; ordinary confirmation text restored and the failed
+suite passed in the final directed regression. Actual widget screenshots at320/1280
+and existing synthetic fiscal print images were visually inspected. No new paper
+or browser-device acceptance is claimed.
+
+The owned disposable PostgreSQL fullpos_ecf_finish_20261112 was identity-checked
+and stopped, retaining its database. No unrelated process was stopped. Isolated
+API sources matched all14 current API files byte-for-byte.
+
+The pending implementation list at this checkpoint was superseded by the current
+closure above. Shared fiscal rollout and late-return tax review remain pending.
+
+Report and exact file inventory:
+docs/ecf/ECF_OFFLINE_HISTORY_E34_2026-11-13.md.
+
+Historical entries below are not authorization for this task.
+
 ## Completed — Installed144 startup regression / reference141 review
 
 Worktree C:/src/fullpos-144-fix, agent/release144-regression-audit.

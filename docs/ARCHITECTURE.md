@@ -35,6 +35,132 @@ Flutter app / PWA / Windows
 
 ## Repository Structure
 
+### Electronic sales, connection and refund recovery
+
+E31/E32 checkout persists its fiscal intent in `Sale.fiscalVoucherType` and the
+E31 sequence expiry in `ncfExpirationDate` before preparation. Preparation checks
+that type and uses the frozen expiry; a later client cannot substitute it. No
+new sale or fiscal schema is introduced. Electronic operations require a real
+read-only `/health` preflight with offline cache and retries disabled; interrupted POSTs produce an uncertain result,
+never a new offline electronic invoice. Existing Windows durable sale attempts
+retain their request identity for reconciliation.
+
+New ordinary sales under the electronic module explicitly persist `NORMAL` in
+the existing intent column, with null NCF/expiry. The sale adapter rejects fiscal
+preparation for that intent. Printing bypasses the e-CF projection for Normal;
+ordinary offline sale queues preserve the marker and existing authorization.
+The POS draft stores its selected mode and whether it was chosen explicitly;
+a new ticket independently defaults to Normal when the company permits it.
+Legacy NULL intents retain their previous behavior without a data rewrite.
+
+`GET /ecf/sales/fiscal?ids=...` projects up to 50 invoice IDs per request, scoped
+to the authenticated company and sale owner/admin. It exposes fiscal intent,
+reserved/issued e-NCF, environment, status and related E34 documents without
+raw provider payloads. Historical reads retain document environments; preparation,
+dispatch and print permissions keep their existing environment gates. Ambiguous
+multiple originals are shown for review and automatic E34 preparation stops.
+
+Electronic invoices cannot use ordinary sale cancellation. Financial returns
+remain transactional; each return prepares its own exact E34 using a stable
+refund-derived UUID. A partial return followed by returning the remainder never
+relabels the last return as cancellation of the full original amount. Preparation
+failure is returned as `ecfCreditPending`, not hidden behind financial success.
+`POST /sales/:id/refunds/:refundId/fiscal` checks company, refund ownership relation
+and refund permission, then retries only fiscal preparation. It never repeats
+cash, inventory or accounting mutations. Automatic preparation beyond the fiscal
+tax review window stops explicitly. A prepared note is reused on subsequent
+recovery even after another return or passage of time.
+
+Flutter's existing sales history presents these states and actions. Uncertain
+fiscal actions require a read-only refresh before another action. Manual E34
+preparation persists only its request UUID and payload hash, scoped to company,
+user and original document, to prevent a changed request after a lost response.
+Electronic sale PDFs require the persisted fiscal print projection. Existing
+ticket transports and printer settings remain in use.
+
+### ECF numbering environment boundary
+
+The read-only `GET /ecf/sales/:saleId/print` projection checks sale ownership,
+company and configured environment before exposing public fiscal print fields.
+`GET /ecf/documents/:id/print` additionally serves standalone E34 representations
+under `viewEcfDocuments`, always scoped to the authenticated company and current
+environment. Its allowlisted projection includes frozen line amounts and credit
+references; it exposes neither the provider response nor credential material.
+The document detail uses the existing `UnifiedTicketPrinter.printTicket` and
+shared PDF preview/actions. It creates no sale, opens no cash drawer, and emits
+or allocates no fiscal number.
+DOSA dispatch stores the public `printStamp` column only after a correlated response
+and URL/identity/amount/environment validation. It is independent of the reserved
+E34 payload and immutable once present; the reader retains legacy
+`payloadSummary.printStamp` compatibility. It stores no credential material.
+The default remains human review. The opt-in
+`DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true` contract additionally records a
+documented HTTP 200 accepted/conditionally accepted result, requiring the exact
+server response receipt, attempt/request/document fingerprints, current company
+and environment, consumed sequence, provider identity and validated stored QR.
+An atomic transaction freezes the fiscal snapshot and records the receipt/hash
+in the status log; an E34 applies its reservation under the existing balance and
+original-document guards in that same transaction. The evidence authority is
+`DOSA_REPORTED_DGII_RESULT` / `PROVIDER_DECLARED`, not an independently verified
+DGII signature. Generic evidence quarantine and authenticity rules are unchanged.
+Flutter shares the projection between
+PDF and thermal renderers; printing and reprinting never emit or allocate numbers.
+
+Numbering ranges, declared authorizations, allocation audit keys and document
+external numbers are scoped by company and environment. Documents retain their
+environment independently of subsequent company configuration changes. Database
+triggers prevent reassignment of an existing document, range or authorization to
+another environment. Numbering mutations hold a shared lock on the company ECF
+configuration row; a stale client environment is rejected instead of redirected.
+
+DOSA dispatch and pending-document selection resolve the environment from that
+company's persisted fiscal configuration. The emission client, encrypted
+credential lookup and cache use the same company/RNC/environment scope. The
+legacy server environment selector does not redirect company documents; TEST
+and authorized PRODUCTION dispatches can coexist. Production still requires
+the server permission, company production opt-in and `PRODUCTION_READY`.
+An unknown environment or a mismatch during authorization fails before opening
+the credential vault. The explicit `POST /ecf/production/enable` transition uses
+`manageEcfConfig`, a matching confirmed-company UUID, company configuration row lock, verified certification,
+that company's active production credential and both production/confirmed-outcome
+server flags. Unresolved TEST results block activation. It audits the transition
+without emitting or allocating. Commercial preparation then requires the same
+production readiness/gates and environment-scoped numbering. An environment edit
+rechecks under lock and cannot silently reverse an activated company to TEST.
+
+DOSA's live persisted dispatch may recover timeout, network or HTTP 5xx failures
+with at most three HTTP calls total, preserving the original serialized bytes,
+full URL/path (including E34 parameters), credential and e-NCF. Before calls two
+and three it rechecks company authorization and credential fingerprint, locks
+the company document and appends a hash-only recovery authorization to its status
+log. The original `SEND_TO_PROVIDER` claim stays active; no new fiscal allocation
+or logical attempt is created. Observed final fiscal results and HTTP 202 stop recovery.
+Before initial transport a separate hash-only identity/lease is committed.
+`POST /ecf/documents/:id/recover-dosa` permits a later identical POST for an
+unknown, stale sending or DGII-pending result, under the existing preparation
+permission. It validates every original identity hash and an expired lease while
+holding the document lock and configuration shared lock. Each verification is
+one HTTP call and a uniquely keyed `QUERY_PROVIDER` attempt; the original
+`SEND_TO_PROVIDER` and number remain unique. Completion and unknown-result writes
+check latest ownership under lock so a stale worker cannot overwrite recovery.
+Historical documents without this proof stay blocked. No schema/dependency is
+added by this continuation. See
+[current recovery and Normal-sale evidence](ecf/ECF_NORMAL_PRODUCTION_RECOVERY_2026-11-13.md).
+
+Validated RFCE E32 responses can bind a deterministic local receipt reference
+without TrackId. The confirmed-outcome recorder may consume a receipt from an
+authorized query attempt only with its persisted identity trace. HTTP202 with a
+validated complete stamp and provider legend projects `CONTINGENCY`, not fiscal
+acceptance. Subsequent acceptance preserves the immutable QR/security/signature;
+the old pending legend is no longer displayed once accepted.
+
+Migration `20261113040000_ecf_numbering_environment` conservatively keeps legacy
+ranges in production and leaves legacy documents unclassified. It does not copy
+TEST ranges or rewind counters. Legacy classification and coordinated API/client
+rollout require a reviewed migration plan before any shared deployment; normal
+updates cannot classify a NULL document because of the immutability trigger.
+See [local validation and deployment limits](ecf/ECF_ENVIRONMENT_NUMBERING_2026-11-13.md).
+
 - `apps/api`: backend API, Prisma schema/migrations/scripts, Dockerfile.
 - `apps/fulltech_app`: Flutter app, platform folders, tests, integration tests, PWA Dockerfile.
 - `docs`: operational docs, audits, visual evidence, UAT evidence.
@@ -254,3 +380,26 @@ Configured integrations include PostgreSQL, optional Redis, R2-compatible storag
 - `.gitignore` currently lists the observed root/API/UAT/Flutter env files, including `apps/fulltech_app/.env`; any new env-bearing path must be added before it can be considered safe.
 - Some API startup paths can run migrations automatically; release work must review environment flags before deployment.
 - Root contains temporary/test helper files from previous work that are not part of canonical governance.
+
+### Manual production ECF migration checkpoint —2026-11-13
+
+The reviewed0400/0500/0600 SQL was executed in one bounded transaction after
+restoring a verified production backup locally. Prisma5.22 migrate resolve
+recorded each original checksum; all223 prior migration rows were retained.
+The live API container/image and automatic-migration disablement are unchanged.
+Five manifest-bound FULLTECH engineering trials were classified Sandbox with
+status/fiscal identity preserved. The candidate separates reviewed terminal
+trials from unresolved operational results for production activation and checks
+their original numbering frontier on Sandbox declaration/renewal/allocation.
+See ecf/ECF_PREDEPLOY_AUDIT_2026-11-13.md for backups, gates and publication state.
+
+### Reproducible API and website build inputs
+
+The root package-lock.json remains the API dependency authority.
+scripts/release/sync_api_docker_lock.mjs projects its reachable API graph into
+a generated apps/api/package-lock.json for EasyPanel's standalone /apps/api
+context. Docker uses npm ci; CI verifies the generated lock with --check.
+The script does not resolve new versions. Linux Node20 compilation validated
+the generated graph. The static Astro7.4.12 stage pins Node22.23.4-alpine;
+no public-page source or API/auth contract was changed by that upgrade.
+The final API/PWA stages expose the supplied GIT_SHA as their image revision.

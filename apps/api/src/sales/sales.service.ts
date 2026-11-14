@@ -22,7 +22,9 @@ import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import { TaxService } from "../tax/tax.service";
+import { ecfRefundRequestId } from "../ecf/documents/ecf-refund-identity";
 import { EcfPreparationService } from "../ecf/documents/ecf-preparation.service";
+import { EcfDocumentQueryService } from "../ecf/documents/ecf-document-query.service";
 import {
   DEFAULT_UNIT_OF_MEASURE,
   unitSnapshotFields,
@@ -1550,7 +1552,13 @@ export class SalesService {
         },
         include: this.saleInclude(),
       });
-      if (existingFromQuotation) return existingFromQuotation;
+      if (existingFromQuotation) {
+        if (dto.fiscalVoucherType?.trim() &&
+            dto.fiscalVoucherType.trim().toUpperCase() !== existingFromQuotation.fiscalVoucherType) {
+          throw new ConflictException("SALE_FISCAL_INTENT_MISMATCH");
+        }
+        return existingFromQuotation;
+      }
     }
 
     perf?.mark("document_lookups");
@@ -1965,11 +1973,24 @@ export class SalesService {
     // El motor NCF tradicional se retiró: una venta nueva no consume talón. Si
     // un cliente antiguo todavía pide B01/B02 se rechaza con un motivo claro en
     // lugar de crear la venta sin el comprobante que esperaba.
-    if ((dto.fiscalVoucherType ?? "").trim().length > 0) {
+    const electronicType = (dto.fiscalVoucherType ?? "").trim().toUpperCase();
+    if (electronicType && !["E31", "E32", "NORMAL"].includes(electronicType)) {
       throw new BadRequestException(
         "ECF_LEGACY_NCF_RETIRED: el comprobante NCF tradicional ya no se emite. " +
           "La venta se registra sin comprobante y su e-CF (E31/E32) se prepara con numeración autorizada.",
       );
+    }
+    if (electronicType === "NORMAL") {
+      const config = await this.prisma.ecfCompanyConfiguration.findUnique({ where: { companyId },
+        select: { enabled: true, allowSalesWithoutEcf: true } });
+      if (config?.enabled && !config.allowSalesWithoutEcf) {
+        throw new ConflictException({ code: "ECF_NORMAL_SALES_DISABLED", message: "La empresa debe habilitar Vender sin comprobante para realizar una venta normal." });
+      }
+    } else if (electronicType) {
+      const fiscal = await new EcfDocumentQueryService(this.prisma).capabilities(user);
+      if (!fiscal.posReady || !fiscal.posAvailableTypes.includes(electronicType as "E31" | "E32")) {
+        throw new ConflictException({ code: "ECF_SALE_NOT_READY", message: "El comprobante electrónico no está disponible. Revisa la habilitación y la numeración antes de cobrar." });
+      }
     }
     const customerSnapshotTaxId = customerFiscalSnapshot?.taxId?.trim() || null;
     const customerSnapshotName =
@@ -1981,6 +2002,10 @@ export class SalesService {
       customerSnapshotTaxId || dto.fiscalCustomerTaxId?.trim() || null;
     const fiscalCustomerName =
       customerSnapshotName || dto.fiscalCustomerName?.trim() || null;
+
+    if (electronicType === "E31" && ((fiscalCustomerTaxId ?? "").replace(/\D/g, "").length < 9 || !fiscalCustomerName)) {
+      throw new BadRequestException("La factura E31 requiere un cliente identificado con RNC/Cédula y nombre.");
+    }
 
     const payment = this.normalizeSalePayment(dto, totalSold);
     const {
@@ -2060,9 +2085,9 @@ export class SalesService {
               : totalDirectCommercialLineDiscount.plus(
                   new Prisma.Decimal(taxCalculation.discountAmount),
                 ),
-            fiscalVoucherType: null,
+            fiscalVoucherType: electronicType || null,
             ncf: null,
-            ncfExpirationDate: null,
+            ncfExpirationDate: electronicType === "E31" && dto.sequenceDueDate ? new Date(dto.sequenceDueDate) : null,
             issuerNameSnapshot,
             issuerTaxIdSnapshot,
             issuerAddressSnapshot,
@@ -2569,6 +2594,16 @@ export class SalesService {
         throw new NotFoundException("Venta no encontrada");
       }
 
+      // An internal cancellation cannot invalidate an electronic fiscal document.
+      const fiscalDocument = await tx.ecfElectronicDocument.findFirst({
+        where: { companyId, sourceType: "SALE", sourceId: saleId, documentType: { in: ["E31", "E32"] } },
+        select: { id: true },
+      });
+      if (fiscalDocument || ["E31", "E32"].includes(sale.fiscalVoucherType ?? "")) {
+        throw new ConflictException({ code: "ECF_CANCELLATION_REQUIRES_CREDIT_NOTE",
+          message: "Esta factura electrónica se gestiona mediante una devolución y su nota de crédito E34 desde Historial de ventas." });
+      }
+
       const { financialReturned, inventoryReturned } =
         await this.returnQuantityMaps(
           tx,
@@ -2671,152 +2706,75 @@ export class SalesService {
     return { ok: true };
   }
 
-  /**
-   * El módulo e-CF exige un UUID como identificador de operación. Se deriva de
-   * forma DETERMINISTA del id de la devolución (UUID v5 con SHA-1) para que un
-   * reintento de la misma devolución reutilice la misma nota en lugar de crear
-   * otra o consumir numeración adicional.
-   */
-  private refundCreditRequestId(refundSaleId: string): string {
-    const digest = crypto
-      .createHash("sha1")
-      .update(`ecf-refund:${refundSaleId.toLowerCase()}`)
-      .digest();
-    const bytes = Buffer.from(digest.subarray(0, 16));
-    bytes[6] = (bytes[6] & 0x0f) | 0x50;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = bytes.toString("hex");
-    return [
-      hex.slice(0, 8),
-      hex.slice(8, 12),
-      hex.slice(12, 16),
-      hex.slice(16, 20),
-      hex.slice(20),
-    ].join("-");
+  /** A financial refund is final even if E34 preparation remains pending.
+   * The separate fiscal recovery reuses the refund identity and never repeats
+   * cash, inventory or accounting mutations. */
+  private withRefundFiscalOutcome<T extends Record<string, any>>(sale: T, result: Awaited<ReturnType<SalesService["prepareRefundCreditNote"]>>) {
+    if (!result) return sale;
+    return "pending" in result ? { ...sale, ecfCreditPending: { code: result.code, message: result.message } } : { ...sale, ecfCreditNote: result };
   }
 
-  /**
-   * Nota de crédito E34 de una devolución ya confirmada.
-   *
-   * Solo se prepara cuando la venta original tiene un comprobante electrónico
-   * ACEPTADO por la DGII y la empresa tiene el e-CF habilitado. En cualquier otro
-   * caso la devolución se comporta exactamente como siempre: no se reserva
-   * numeración ni se crea documento fiscal alguno.
-   *
-   * La numeración y la reserva las hace el módulo e-CF, idempotente por
-   * `clientRequestId`, así que repetir la misma devolución reutiliza el mismo
-   * e-NCF y nunca duplica el crédito fiscal. Un fallo aquí NUNCA deshace la
-   * devolución —ya está confirmada— pero tampoco se oculta: queda registrado con
-   * su código para revisión, y el barrido de pendientes puede completar el envío.
-   */
-  private async prepareRefundCreditNote(
-    user: TenantUser,
-    companyId: string,
-    originalSaleId: string,
-    refundSaleId: string,
-    reason?: string,
-  ) {
+  async retryRefundFiscal(user: TenantUser, saleId: string, refundId: string) {
+    const companyId = requireTenant(user);
+    if (!isAdminLike(user) && !user.authorizedPermissions?.includes("refundSales")) throw new ForbiddenException("No tienes permiso para gestionar devoluciones.");
+    const refund = await this.prisma.sale.findFirst({ where: { id: refundId, companyId, refundedSaleId: saleId, kind: "refund", isDeleted: false } });
+    if (!refund) throw new NotFoundException("Devolución no encontrada");
+    return this.withRefundFiscalOutcome(refund, await this.prepareRefundCreditNote(user, companyId, saleId, refundId));
+  }
+
+  private async prepareRefundCreditNote(user: TenantUser, companyId: string, originalSaleId: string, refundSaleId: string, reason?: string) {
+    const pending = (code: string, message = "La devolución quedó registrada; su nota E34 requiere seguimiento fiscal.") => ({ pending: true as const, code, message });
     try {
-      const original = await this.prisma.ecfElectronicDocument.findFirst({
-        where: {
-          companyId,
-          sourceType: "SALE",
-          sourceId: originalSaleId,
-          documentType: { in: ["E31", "E32"] },
-          status: "DGII_ACCEPTED",
-        },
-        select: { id: true, documentType: true },
-      });
-      if (!original) return null;
-
-      // Mismo orden que el adaptador fiscal (createdAt asc): así el `lineNumber`
-      // de una nota parcial apunta a la línea real del comprobante original.
-      const originalItems = await this.prisma.saleItem.findMany({
-        where: { saleId: originalSaleId },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, qty: true },
-      });
-      if (originalItems.length === 0) return null;
-      const lineNumberByItem = new Map(
-        originalItems.map((item, index) => [item.id, index + 1]),
-      );
-
-      // Cantidades ya devueltas de esta venta, incluida la recién confirmada:
-      // con eso se distingue nota TOTAL de PARCIAL.
-      const refundedItems = await this.prisma.saleItem.findMany({
-        where: {
-          sale: {
-            companyId,
-            refundedSaleId: originalSaleId,
-            isDeleted: false,
-          },
-        },
-        select: { refundedSaleItemId: true, qty: true },
-      });
-      const refundedByItem = new Map<string, Prisma.Decimal>();
-      for (const item of refundedItems) {
-        if (!item.refundedSaleItemId) continue;
-        refundedByItem.set(
-          item.refundedSaleItemId,
-          (refundedByItem.get(item.refundedSaleItemId) ?? new Prisma.Decimal(0))
-            .plus(item.qty.abs()),
-        );
+      const original = await this.prisma.ecfElectronicDocument.findFirst({ where: { companyId, sourceType: "SALE", sourceId: originalSaleId,
+        documentType: { in: ["E31", "E32"] } }, orderBy: { createdAt: "desc" }, select: { id: true, status: true, fiscalDocument: true, externalDocumentNumber: true } });
+      if (!original) {
+        const source = await this.prisma.sale.findFirst({ where: { companyId, id: originalSaleId }, select: { fiscalVoucherType: true } });
+        return ["E31", "E32"].includes(source?.fiscalVoucherType ?? "") ? pending("ECF_ORIGINAL_NOT_PREPARED") : null;
       }
-      const refundKind: "TOTAL" | "PARTIAL" = originalItems.every((item) =>
-        (refundedByItem.get(item.id) ?? new Prisma.Decimal(0)).gte(
-          new Prisma.Decimal(item.qty).abs(),
-        ),
-      )
-        ? "TOTAL"
-        : "PARTIAL";
-
-      let lines: { lineNumber: number; quantity: string }[] | undefined;
-      if (refundKind === "PARTIAL") {
-        const thisRefundItems = await this.prisma.saleItem.findMany({
-          where: { saleId: refundSaleId },
-          select: { refundedSaleItemId: true, qty: true },
-        });
-        lines = [];
-        for (const item of thisRefundItems) {
-          const lineNumber = item.refundedSaleItemId
-            ? lineNumberByItem.get(item.refundedSaleItemId)
-            : undefined;
-          if (!lineNumber) {
-            this.logger.warn(
-              `ECF_E34_CREDIT_LINE_UNMAPPED company=${companyId} saleId=${originalSaleId} refundSaleId=${refundSaleId}`,
-            );
-            return null;
-          }
-          lines.push({ lineNumber, quantity: item.qty.abs().toFixed(2) });
-        }
-        if (lines.length === 0) return null;
+      if (await this.prisma.ecfElectronicDocument.count({ where: { companyId, sourceType: "SALE", sourceId: originalSaleId,
+        documentType: { in: ["E31", "E32"] } } }) !== 1) return pending("ECF_CREDIT_MULTIPLE_ORIGINALS_REVIEW");
+      if (original.status !== "DGII_ACCEPTED") return pending("ECF_CREDIT_ORIGINAL_NOT_ACCEPTED", "La devolución quedó registrada; el comprobante original aún requiere confirmación fiscal.");
+      const existingNote = await this.prisma.ecfElectronicDocument.findFirst({ where: { companyId, originalDocumentId: original.id,
+        documentType: "E34", idempotencyKey: { endsWith: ":REQUEST:" + ecfRefundRequestId(refundSaleId) } },
+        select: { id: true, externalDocumentNumber: true, payloadSummary: true, status: true, creditReservation: { select: { state: true, amount: true } } } });
+      if (existingNote) return { documentId: existingNote.id, encf: existingNote.externalDocumentNumber ??
+        ((existingNote.payloadSummary as { emission?: { encf?: string } } | null)?.emission?.encf ?? null), status: existingNote.status,
+        originalDocumentId: original.id, originalEncf: original.externalDocumentNumber,
+        reservationState: existingNote.creditReservation?.state ?? "UNKNOWN_RESULT", reservedAmount: String(existingNote.creditReservation?.amount ?? 0) };
+      const originalItems = await this.prisma.saleItem.findMany({ where: { saleId: originalSaleId, sale: { companyId } },
+        orderBy: { createdAt: "asc" }, select: { id: true, qty: true } });
+      const thisRefundItems = await this.prisma.saleItem.findMany({ where: { saleId: refundSaleId, sale: { companyId, refundedSaleId: originalSaleId, kind: "refund" } },
+        select: { refundedSaleItemId: true, qty: true } });
+      if (!originalItems.length || !thisRefundItems.length) return pending("ECF_CREDIT_LINES_REQUIRED");
+      const byItem = new Map<string, Prisma.Decimal>();
+      for (const item of thisRefundItems) {
+        if (!item.refundedSaleItemId) return pending("ECF_CREDIT_LINE_UNMAPPED");
+        byItem.set(item.refundedSaleItemId, (byItem.get(item.refundedSaleItemId) ?? new Prisma.Decimal(0)).plus(item.qty.abs()));
       }
-
-      const result = await new EcfPreparationService(
-        this.prisma,
-      ).prepareCreditNote(user, {
-        originalDocumentId: original.id,
-        clientRequestId: this.refundCreditRequestId(refundSaleId),
-        refundKind,
-        ...(lines ? { lines } : {}),
-        modificationCode: refundKind === "TOTAL" ? 1 : 3,
-        modificationReason: reason?.trim() || "Devolucion de venta",
-        paymentType: 1,
-        creditNoteIndicator: 0,
+      // TOTAL describes this refund, never the cumulative financial returns.
+      const total = originalItems.every(item => (byItem.get(item.id) ?? new Prisma.Decimal(0)).eq(item.qty.abs()));
+      const lines = originalItems.flatMap((item, index) => {
+        const quantity = byItem.get(item.id);
+        return quantity ? [{ lineNumber: index + 1, quantity: quantity.toString() }] : [];
+      });
+      if (lines.length !== byItem.size) return pending("ECF_CREDIT_LINE_UNMAPPED");
+      const fiscal = original.fiscalDocument as { issueDate?: string } | null;
+      if (fiscal?.issueDate && Math.floor((Date.now() - Date.parse(fiscal.issueDate)) / 86400000) > 30) {
+        return pending("ECF_CREDIT_TAX_REVIEW_REQUIRED", "La devolución requiere revisión del plazo fiscal y del ITBIS antes de preparar la E34.");
+      }
+      const result = await new EcfPreparationService(this.prisma).prepareCreditNote(user, {
+        originalDocumentId: original.id, clientRequestId: ecfRefundRequestId(refundSaleId),
+        refundKind: total ? "TOTAL" : "PARTIAL", ...(total ? {} : { lines }), modificationCode: total ? 1 : 3,
+        modificationReason: "Devolución de venta", paymentType: 1, creditNoteIndicator: 0,
       });
       if (!result.ok) {
-        this.logger.warn(
-          `ECF_E34_CREDIT_NOT_PREPARED company=${companyId} saleId=${originalSaleId} refundSaleId=${refundSaleId} code=${result.code} message=${result.safeMessage}`,
-        );
-        return null;
+        this.logger.warn("ECF_E34_CREDIT_NOT_PREPARED company=" + companyId + " refund=" + refundSaleId + " code=" + result.code);
+        return pending(result.code, result.safeMessage);
       }
       return result.value;
     } catch (error) {
-      this.logger.error(
-        `ECF_E34_CREDIT_PREPARATION_FAILED company=${companyId} saleId=${originalSaleId} refundSaleId=${refundSaleId} ${error instanceof Error ? error.message : String(error)}`,
-        error instanceof Error ? error.stack : undefined,
-      );
-      return null;
+      this.logger.error("ECF_E34_CREDIT_PREPARATION_FAILED company=" + companyId + " refund=" + refundSaleId, error instanceof Error ? error.stack : undefined);
+      return pending("ECF_CREDIT_PREPARATION_FAILED");
     }
   }
 
@@ -2845,6 +2803,7 @@ export class SalesService {
           include: this.saleInclude(),
         });
         if (existing) {
+          if (existing.refundedSaleId !== saleId) throw new ConflictException("SALE_RETURN_IDEMPOTENCY_ORIGINAL_MISMATCH");
           const ecfCreditNote = await this.prepareRefundCreditNote(
             requestUser,
             companyId,
@@ -2852,7 +2811,7 @@ export class SalesService {
             existing.id,
             dto.reason,
           );
-          return ecfCreditNote ? { ...existing, ecfCreditNote } : existing;
+          return this.withRefundFiscalOutcome(existing, ecfCreditNote);
         }
       }
 
@@ -2950,11 +2909,17 @@ export class SalesService {
             where: { companyId, clientRequestId, kind: "refund" },
             include: this.saleInclude(),
           });
-          if (existing) return existing;
+          if (existing) {
+            if (existing.refundedSaleId !== saleId) throw new ConflictException("SALE_RETURN_IDEMPOTENCY_ORIGINAL_MISMATCH");
+            return existing;
+          }
         }
 
         const originalItems = new Map(
           sale.items.map((item) => [item.id, item]),
+        );
+        const { financialReturned, inventoryReturned } = await this.returnQuantityMaps(
+          tx, companyId, saleId, sale.items.map((item) => item.id),
         );
         const requestedInput =
           dto.items && dto.items.length
@@ -2964,8 +2929,10 @@ export class SalesService {
               }))
             : sale.items.map((item) => ({
                 saleItemId: item.id,
-                qty: new Prisma.Decimal(item.qty),
-              }));
+                qty: new Prisma.Decimal(item.qty).minus(financialReturned.get(item.id) ?? 0),
+              })).filter(item => item.qty.gt(0));
+        if (requestedInput.length === 0) throw new BadRequestException({ code: "SALE_ALREADY_FULLY_RETURNED",
+          message: "Esta factura ya fue devuelta completamente." });
 
         const requestedByItem = new Map<string, Prisma.Decimal>();
         for (const item of requestedInput) {
@@ -2980,14 +2947,6 @@ export class SalesService {
           ([saleItemId, qty]) => ({ saleItemId, qty }),
         );
         const restoreInventory = dto.restoreInventory !== false;
-        const { financialReturned, inventoryReturned } =
-          await this.returnQuantityMaps(
-            tx,
-            companyId,
-            saleId,
-            sale.items.map((item) => item.id),
-          );
-
         const refundItems = requestedItems.map((request, index) => {
           const original = originalItems.get(request.saleItemId);
           if (!original) {
@@ -3306,7 +3265,7 @@ export class SalesService {
         returned.id,
         dto.reason,
       );
-      return ecfCreditNote ? { ...returned, ecfCreditNote } : returned;
+      return this.withRefundFiscalOutcome(returned, ecfCreditNote);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -3321,7 +3280,10 @@ export class SalesService {
           },
           include: this.saleInclude(),
         });
-        if (existing) return existing;
+        if (existing) {
+          if (existing.refundedSaleId !== saleId) throw new ConflictException("SALE_RETURN_IDEMPOTENCY_ORIGINAL_MISMATCH");
+          return this.withRefundFiscalOutcome(existing, await this.prepareRefundCreditNote(requestUser, companyId, saleId, existing.id, dto.reason));
+        }
       }
       if (!this.isSchemaMismatch(error)) throw error;
       throw new NotFoundException("Venta no encontrada");

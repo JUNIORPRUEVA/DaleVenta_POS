@@ -1,0 +1,89 @@
+{
+  "company": "FULLTECH, SRL",
+  "rnc": "133080206",
+  "environment": "TEST",
+  "plan": "FULLTECH_TEST_20261113_CONFIRMED",
+  "providerConfirmation": {
+    "source": "Respuesta de Alejandro transcrita por el usuario en esta conversación",
+    "rangeFrom": 1,
+    "rangeTo": 10000000,
+    "e31ExpiresAt": "2028-12-31"
+  },
+  "results": [
+    {
+      "type": "E31",
+      "encf": "E310000000002",
+      "documentId": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "attemptId": "f88f76ac-197e-41d7-96d2-5ae462ef3496",
+      "httpStatus": 200,
+      "outcome": "ACCEPTED",
+      "correlated": true,
+      "responseSha256": "371bedfad7c0161f06c872b3474bbf40eacf10960f4e7119c8ea7796da63af40",
+      "officialGetHttp": 200,
+      "officialAccepted": true,
+      "officialPageSha256": "9f4ac84d4a6e5b549a01ee6e151c5a686939c3165bc62bc0f8506e7b8d79e354"
+    },
+    {
+      "type": "E34",
+      "encf": "E340000000001",
+      "originalEncf": "E310000000002",
+      "documentId": "501d9c0b-a4fe-489a-bf7e-5185e7847daf",
+      "attemptId": "dddfcd52-7f11-4322-8f4e-9414ec27f781",
+      "httpStatus": 200,
+      "outcome": "ACCEPTED",
+      "correlated": true,
+      "responseSha256": "81f4ad79db1f19817e49744a97b1d057d3bc73e2907450f720bca6a01e9c5c82",
+      "officialGetHttp": 200,
+      "officialAccepted": true,
+      "officialPageSha256": "ea039bf5cc6004cc6375fa8635722c5c06c1fa90a13bb767f1393f8298806ce0"
+    }
+  ],
+  "postcheck": {
+    "config": {
+      "environment": "SANDBOX",
+      "productionEnabled": false,
+      "certificationStatus": "PRODUCTION_READY"
+    },
+    "documents": [
+      {
+        "id": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+        "type": "E31",
+        "status": "HUMAN_REVIEW_REQUIRED",
+        "originalDocumentId": null,
+        "sendAttempts": 1,
+        "environment": "TEST",
+        "outcome": "ACCEPTED",
+        "correlated": true,
+        "sequenceDueDate": "2028-12-31"
+      },
+      {
+        "id": "501d9c0b-a4fe-489a-bf7e-5185e7847daf",
+        "type": "E34",
+        "status": "HUMAN_REVIEW_REQUIRED",
+        "originalDocumentId": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+        "sendAttempts": 1,
+        "environment": "TEST",
+        "outcome": "ACCEPTED",
+        "correlated": true,
+        "sequenceDueDate": "2028-12-31"
+      }
+    ],
+    "sequences": [
+      {
+        "documentType": "E31",
+        "nextNumber": 3,
+        "endNumber": 150
+      },
+      {
+        "documentType": "E32",
+        "nextNumber": 3,
+        "endNumber": 1000
+      },
+      {
+        "documentType": "E34",
+        "nextNumber": 2,
+        "endNumber": 50
+      }
+    ]
+  }
+}

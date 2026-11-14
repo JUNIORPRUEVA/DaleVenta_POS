@@ -9,6 +9,7 @@ import { EcfDocumentIdempotencyService, fingerprint } from "./ecf-document-idemp
 import { EcfEvidenceIngestionService } from "./ecf-evidence-ingestion.service";
 import { EcfBlockedAuthenticityVerifier } from "./ecf-evidence-authenticity.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
+import { numberingEnvironment } from "./ecf-numbering-environment";
 import { assessEcfProviderResponse } from "./ecf-provider-response";
 import type { EcfProviderObservation } from "./ecf-provider-response";
 
@@ -43,6 +44,7 @@ export class EcfEmissionService {
     sourceType?: "SALE" | "COTIZACION" | "MANUAL"; sourceId?: string; clientRequestId?: string;
   }) {
     const companyId = requireTenant(user);
+    const environment = await numberingEnvironment(this.prisma, companyId);
     this.assertType(input.document.type);
     // The payload embeds the e-NCF, so numbering is resolved before mapping. When
     // the caller does not fix the number, the server allocates and permanently
@@ -55,7 +57,7 @@ export class EcfEmissionService {
     const operationKey =
       input.clientRequestId ??
       (input.sourceId ? `${input.sourceType ?? "MANUAL"}:${input.sourceId}` : undefined);
-    const encf = await this.resolveEncf(user, companyId, input.document.type, input.metadata.encf, operationKey);
+    const encf = await this.resolveEncf(user, companyId, input.document.type, input.metadata.encf, operationKey, environment);
     const metadata = { ...input.metadata, encf };
     const mapping = mapEcfToAlanubeDom(input.document, metadata);
     if (mapping.schemaValidation?.ok !== true) throw new ConflictException("ECF_EMISSION_CONTRACT_BLOCKED");
@@ -65,6 +67,7 @@ export class EcfEmissionService {
     const document = await new EcfDocumentIdempotencyService(this.prisma).prepareLocalDocument({
       companyId, userId: user.id, sourceType: input.sourceType, sourceId: input.sourceId, clientRequestId: input.clientRequestId,
       document: input.document,
+      environment,
     });
     const emission: EmissionSummary = { encf, senderTaxId: input.document.sender.taxId,
       fingerprint: fingerprint(mapping.payload), payload: mapping.payload };
@@ -86,11 +89,11 @@ export class EcfEmissionService {
   // otherwise the server allocates from the company range. The allocation is keyed
   // by the operation so a retry reuses the number it already consumed.
   private async resolveEncf(user: TenantUser, companyId: string, documentType: EcfDocumentType,
-    provided: string | undefined, operationKey?: string) {
+    provided: string | undefined, operationKey?: string, environment?: "SANDBOX" | "PRODUCTION") {
     if (provided) return provided;
     const sequences = new EcfSequenceService(this.prisma);
     try {
-      return (await sequences.allocate(user, documentType, { operationKey })).encf;
+      return (await sequences.allocate(user, documentType, { operationKey, environment })).encf;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && operationKey) {
         const recorded = await sequences.alreadyAllocated(companyId, operationKey);
@@ -100,8 +103,9 @@ export class EcfEmissionService {
     }
   }
 
-  // Single dispatch attempt. Claims and commits the attempt BEFORE the network so
-  // a crash or timeout can never produce a second POST for the same document.
+  // Single logical dispatch claim, committed BEFORE the network. The generic
+  // path never redispatches a document. A DOSA wire can recover an identical
+  // request inside this live claim only with its server authorization/audit hook.
   //
   // `override` permite enviar el cuerpo del PROVEEDOR cuando no coincide con el
   // payload preparado por defecto (caso DOSA: su contrato no es el DOM interno).
@@ -114,6 +118,12 @@ export class EcfEmissionService {
     override?: {
       body: unknown;
       fingerprint: string;
+      recoverPersisted?: boolean;
+      onClaim?: (tx: Prisma.TransactionClient, input: { attemptId: string; recovering: boolean;
+        documentFingerprint: string; idempotencyKey: string }) => Promise<void>;
+      assertClaimOwner?: (tx: Prisma.TransactionClient, attemptId: string) => Promise<void>;
+      printStamp?: (body: unknown, httpStatus: number) => { qrUrl: string; securityCode: string; signedAt: string } | null;
+      afterEvidence?: (input: { receiptId: string; attemptId: string; httpStatus: number; body: unknown }) => Promise<void>;
       /**
        * Evaluador de la respuesta del proveedor. Por defecto se usa el de
        * Alanube; DOSA aporta el suyo porque su contrato de respuesta es
@@ -131,12 +141,15 @@ export class EcfEmissionService {
       const document = await tx.ecfElectronicDocument.findFirst({ where: { companyId, id: documentId } });
       if (!document) throw new ConflictException("ECF_EMISSION_DOCUMENT_NOT_FOUND");
       this.assertType(document.documentType as EcfDocumentType);
-      if (!["LOCAL_VALIDATED", "READY_TO_SEND"].includes(document.status)) throw new ConflictException("ECF_EMISSION_NOT_READY");
-      if (document.externalProviderId) throw new ConflictException("ECF_EMISSION_ALREADY_ASSOCIATED");
+      const recovering = override?.recoverPersisted === true;
+      if (recovering && !override?.onClaim) throw new ConflictException("ECF_RECOVERY_AUTHORIZATION_REQUIRED");
+      const allowed = recovering ? ["UNKNOWN_RESULT", "SEND_IN_PROGRESS", "DGII_STATUS_PENDING"] : ["LOCAL_VALIDATED", "READY_TO_SEND"];
+      if (!allowed.includes(document.status)) throw new ConflictException("ECF_EMISSION_NOT_READY");
+      if (!recovering && document.externalProviderId) throw new ConflictException("ECF_EMISSION_ALREADY_ASSOCIATED");
       const emission = (document.payloadSummary as Record<string, unknown> | null)?.emission as EmissionSummary | undefined;
       if (!emission?.payload || !emission.encf) throw new ConflictException("ECF_EMISSION_NOT_PREPARED");
       const previous = await tx.ecfElectronicDocumentAttempt.count({ where: { companyId, documentId, operation: "SEND_TO_PROVIDER" } });
-      if (previous !== 0) throw new ConflictException("ECF_EMISSION_ALREADY_ATTEMPTED");
+      if ((!recovering && previous !== 0) || (recovering && previous !== 1)) throw new ConflictException("ECF_EMISSION_ALREADY_ATTEMPTED");
       // E34 can NEVER be dispatched without a valid, active credit reservation
       // for THIS note and a matching original. Preparation alone is not emission.
       if (document.documentType === "E34") {
@@ -154,9 +167,14 @@ export class EcfEmissionService {
       await tx.ecfElectronicDocumentStatusLog.create({ data: { companyId, documentId, statusBefore: document.status,
         statusAfter: "SEND_IN_PROGRESS", reasonCode: "EMISSION_DISPATCH_CLAIMED", changedByUserId: user.id } });
       const attempt = await tx.ecfElectronicDocumentAttempt.create({ data: { companyId, documentId,
-        operation: "SEND_TO_PROVIDER", idempotencyKey: document.idempotencyKey,
+        operation: recovering ? "QUERY_PROVIDER" : "SEND_TO_PROVIDER", idempotencyKey: recovering
+          ? fingerprint({ operationKey: document.idempotencyKey, operation: "QUERY_PROVIDER", ordinal:
+              1 + await tx.ecfElectronicDocumentAttempt.count({ where: { companyId, documentId, operation: "QUERY_PROVIDER" } }) })
+          : document.idempotencyKey,
         requestFingerprint: requestFingerprint ?? emission.fingerprint,
         statusBefore: document.status, statusAfter: "SEND_IN_PROGRESS", createdByUserId: user.id } });
+      await override?.onClaim?.(tx, { attemptId: attempt.id, recovering,
+        documentFingerprint: document.payloadFingerprint, idempotencyKey: document.idempotencyKey });
       return { attempt: attempt.id, emission, documentType: document.documentType as EcfDocumentType,
         idempotencyKey: document.idempotencyKey, payloadFingerprint: document.payloadFingerprint };
     });
@@ -180,9 +198,21 @@ export class EcfEmissionService {
       // usando `HUMAN_REVIEW_REQUIRED`, que es el valor conservador y el que
       // mantiene el comportamiento de Alanube sin cambios.
       const proposedStatus = (observation as { documentStatus?: string }).documentStatus ?? "HUMAN_REVIEW_REQUIRED";
+      const printStamp = override?.printStamp?.(body, result.statusCode);
       await this.prisma.$transaction(async (tx) => {
+        if (override?.assertClaimOwner) {
+          await tx.$queryRaw`SELECT id FROM ecf_electronic_documents WHERE company_id = ${companyId}::uuid AND id = ${documentId}::uuid FOR UPDATE`;
+          await override.assertClaimOwner(tx, claim.attempt);
+        }
+        const stored = printStamp ? await tx.ecfElectronicDocument.findFirst({ where: { companyId, id: documentId }, select: { printStamp: true } }) : null;
+        const prior = stored?.printStamp as { qrUrl?: string; securityCode?: string; signedAt?: string } | null;
+        if (printStamp && prior && ["qrUrl", "securityCode", "signedAt"].some(key => prior[key as keyof typeof prior] !== printStamp[key as keyof typeof printStamp])) {
+          throw new ConflictException("ECF_PRINT_IDENTITY_CHANGED");
+        }
         const changed = await tx.ecfElectronicDocument.updateMany({ where: { companyId, id: documentId, status: "SEND_IN_PROGRESS" },
-          data: { status: proposedStatus as never, safeErrorCode: observation.safeCode,
+          data: { status: proposedStatus as never,
+            ...(printStamp && !prior ? { printStamp } : {}),
+            safeErrorCode: observation.safeCode,
             safeErrorMessage: "Resultado del proveedor observado; requiere revisión de evidencia fiscal. No reemitir." } });
         if (changed.count !== 1) throw new ConflictException("ECF_EMISSION_DOCUMENT_CHANGED");
         await tx.ecfElectronicDocumentStatusLog.create({ data: { companyId, documentId, statusBefore: "SEND_IN_PROGRESS",
@@ -194,16 +224,18 @@ export class EcfEmissionService {
       await this.prisma.ecfElectronicDocument.updateMany({ where: { companyId, id: documentId, externalProviderId: null },
         data: { externalProviderId: observation.remoteId, externalDocumentNumber: claim.emission.encf } });
       const raw = Buffer.from(JSON.stringify(body));
-      await new EcfEvidenceIngestionService(this.prisma, new EcfBlockedAuthenticityVerifier()).ingest(user, {
+      const receipt = await new EcfEvidenceIngestionService(this.prisma, new EcfBlockedAuthenticityVerifier()).ingest(user, {
         documentId, attemptId: claim.attempt, operationKey: claim.idempotencyKey,
         documentFingerprint: claim.payloadFingerprint,
         requestFingerprint: requestFingerprint ?? claim.emission.fingerprint,
         source: "PROVIDER_RESPONSE", eventKey: `emission:${claim.attempt}`, raw,
         httpStatus: result.statusCode,
       });
+      await override?.afterEvidence?.({ receiptId: receipt.id, attemptId: claim.attempt, httpStatus: result.statusCode, body });
     } else {
       await new EcfDocumentIdempotencyService(this.prisma).recordUnknownOutcome(companyId, documentId,
-        result.ok ? "RESPONSE_PENDING_REVIEW" : result.errorCode === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR");
+        result.ok ? "RESPONSE_PENDING_REVIEW" : result.errorCode === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR",
+        override?.assertClaimOwner ? tx => override.assertClaimOwner!(tx, claim.attempt) : undefined);
     }
     return { result: "STOPPED_REVIEW_REQUIRED" as const, canRetryPost: false as const,
       correlated: observation.correlated, documentType: claim.documentType, observation,

@@ -16,10 +16,14 @@ class _Builder {
   List<String> types = const ['E31', 'E32'];
   bool allowedForCompany = true;
   bool allocatable = true;
+  bool posReady = false;
+  List<String> posAvailableTypes = const [];
 
   EcfCapabilities build() {
     return EcfCapabilities(
       enabled: enabled,
+      posReady: posReady,
+      posAvailableTypes: posAvailableTypes,
       environment: 'SANDBOX',
       certificationStatus: 'NOT_STARTED',
       productionEnabled: false,
@@ -42,6 +46,24 @@ class _Builder {
 }
 
 void main() {
+  group('disponibilidad para cobrar', () {
+    test('no ofrece comprobantes antes de la preparación confirmada', () {
+      expect(ecfPosCheckoutModesFromCapabilities(_Builder().build()), isEmpty);
+      expect(
+        ecfPosCheckoutModesFromCapabilities(_Builder(allowNormal: true).build()),
+        [EcfPosFiscalMode.normal],
+      );
+    });
+    test('ofrece solo el tipo que conserva numeración disponible', () {
+      final builder = _Builder(allowNormal: true)
+        ..posReady = true
+        ..posAvailableTypes = ['E32'];
+      expect(ecfPosCheckoutModesFromCapabilities(builder.build()), [
+        EcfPosFiscalMode.e32,
+        EcfPosFiscalMode.normal,
+      ]);
+    });
+  });
   group('modos ofrecidos', () {
     test('sin e-CF activa no se ofrece nada', () {
       expect(ecfPosFiscalModesFromCapabilities(null), isEmpty);

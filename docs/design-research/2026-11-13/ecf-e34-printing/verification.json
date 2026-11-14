@@ -1,0 +1,23 @@
+[
+  {
+    "file": "nota-credito-58.pdf",
+    "qr": "https://ecf.dgii.gov.do/testecf/ConsultaTimbre?RNCEmisor=133080206&RncComprador=133306001&ENCF=E340000000001&FechaEmision=13-11-2026&MontoTotal=118.00&FechaFirma=13-11-2026%2012:00:00&CodigoSeguridad=ABC123",
+    "reference": true,
+    "date": true,
+    "security": true
+  },
+  {
+    "file": "nota-credito-80.pdf",
+    "qr": "https://ecf.dgii.gov.do/testecf/ConsultaTimbre?RNCEmisor=133080206&RncComprador=133306001&ENCF=E340000000001&FechaEmision=13-11-2026&MontoTotal=118.00&FechaFirma=13-11-2026%2012:00:00&CodigoSeguridad=ABC123",
+    "reference": true,
+    "date": true,
+    "security": true
+  },
+  {
+    "file": "nota-credito-a4.pdf",
+    "qr": "https://ecf.dgii.gov.do/testecf/ConsultaTimbre?RNCEmisor=133080206&RncComprador=133306001&ENCF=E340000000001&FechaEmision=13-11-2026&MontoTotal=118.00&FechaFirma=13-11-2026%2012:00:00&CodigoSeguridad=ABC123",
+    "reference": true,
+    "date": true,
+    "security": true
+  }
+]

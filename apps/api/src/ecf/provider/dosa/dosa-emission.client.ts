@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import {
   DOSA_AUTH_HEADER,
   DOSA_ECF_CREDIT_NOTE_PATH,
   DOSA_ECF_EMISSION_PATH,
   type DosaEcfRequestBody,
 } from "./dosa-ecf.contract";
+import { toDosaOutboundRequest, type DosaOutboundRequestBody } from "./dosa-request.serializer";
 
 /**
  * Endpoint según el tipo de comprobante.
@@ -14,10 +16,17 @@ import {
  * contrato, así que la ruta se deriva del `tipoeCF` del cuerpo y no de una
  * constante fija.
  */
-export function emissionPathFor(body: DosaEcfRequestBody): string {
-  return body.encabezado?.idDoc?.tipoeCF === "34"
-    ? DOSA_ECF_CREDIT_NOTE_PATH
-    : DOSA_ECF_EMISSION_PATH;
+export function emissionPathFor(body: DosaEcfRequestBody | DosaOutboundRequestBody): string {
+  if (body.encabezado?.idDoc?.tipoeCF !== "34") return DOSA_ECF_EMISSION_PATH;
+  const query = new URLSearchParams({
+    nuevoENCF: body.encabezado.idDoc.eNCF, tipoeCF: "34",
+    fechaEmision: body.encabezado.idDoc.fechaEmision,
+  });
+  if (body.informacionReferencia) {
+    query.set("codigoModificacion", body.informacionReferencia.codigoModificacion);
+    if (body.informacionReferencia.RazonModificacion) query.set("razonModificacion", body.informacionReferencia.RazonModificacion);
+  }
+  return `${DOSA_ECF_CREDIT_NOTE_PATH}?${query.toString()}`;
 }
 import {
   classifyDosaResponse,
@@ -36,11 +45,13 @@ import { outboundAuthViolation } from "./dosa-outbound-auth.policy";
  * * **Producción** exige además `DOSA_PRODUCTION_EMISSION_ENABLED=true`. Una
  *   clave de TEST nunca puede apuntar al host de producción: si el entorno es
  *   `PRODUCTION` y la clave no está marcada como de producción, se bloquea.
- * * **Sin reintentos automáticos.** Un timeout o un 502 dejan el intento en
- *   `UNCONFIRMED`, porque el comprobante **pudo** haberse recibido. Reintentar a
- *   ciegas consumiría la secuencia o duplicaría el documento.
- * * **Idempotencia**: la misma clave no se envía dos veces; el segundo intento
- *   se rechaza mientras el primero sigue vivo y después de completarse.
+ * * **Recuperación acotada.** Sólo el despacho persistido puede autorizar hasta
+ *   tres llamadas con exactamente los mismos bytes, ruta y e-NCF ante timeout,
+ *   red o 5xx. Cada repetición exige autorización y auditoría previas. Sin ese
+ *   observador se hace una sola llamada; un resultado incierto queda sin confirmar.
+ * * **Idempotencia**: se conserva una sola operación lógica por clave, incluso
+ *   durante la recuperación. Se bloquean los envíos paralelos y posteriores a
+ *   una respuesta interpretable; el orquestador impide otro despacho persistido.
  * * **Cortacircuitos**: tras N fallos consecutivos se abre y no se envía nada
  *   durante el enfriamiento.
  * * **Redacción**: cualquier cabecera sensible se sustituye antes de exponerla.
@@ -149,13 +160,14 @@ export type DosaSendResult =
       status: number | null;
       /**
        * Solo `true` cuando el propio proveedor afirma que la DGII no recibio
-       * nada (`estado: "Error de envio"`). En cualquier otro fallo el reintento
-       * con el mismo eNCF podria duplicar el comprobante.
+       * nada (`estado: "Error de envio"`). Este indicador no autoriza la
+       * recuperación auditada del despacho, que exige su propio observador.
        */
       retryPermitted: boolean;
       classification: DosaResponseClassification | null;
       /** Cuerpo crudo para la evidencia. `null` si no hubo respuesta legible. */
       raw: unknown | null;
+      responseHash?: string;
     }
   | {
       ok: true;
@@ -166,7 +178,31 @@ export type DosaSendResult =
       redactedHeaders: Record<string, string>;
     };
 
+export type DosaReplayInfo = Readonly<{
+  ordinal: 2 | 3;
+  reason: "TIMEOUT" | "NETWORK" | "HTTP_5XX";
+  httpStatus: number | null;
+  bodyHash: string;
+  pathHash: string;
+  requestHash: string;
+  previousResponseHash: string | null;
+}>;
+export type DosaReplayObserver = (info: DosaReplayInfo) => Promise<boolean>;
+
+/** Freeze bytes and full path (including E34 query) before the first request. */
+export function freezeDosaHttpRequest(body: DosaEcfRequestBody | DosaOutboundRequestBody) {
+  const path = emissionPathFor(body);
+  const bodyText = JSON.stringify(toDosaOutboundRequest(body));
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  return Object.freeze({ path, bodyText, bodyHash: hash(bodyText), pathHash: hash(path),
+    requestHash: hash(JSON.stringify({ method: "POST", path, bodyText })) });
+}
+
 export class DosaEmissionClient {
+  persistedDispatchIdentity() {
+    return { destinationHash: createHash("sha256").update(this.config.baseUrl).digest("hex"),
+      leaseMs: Math.max(30_000, 3 * this.config.timeoutMs + 30_000) };
+  }
   private readonly sent = new Set<string>();
   private readonly inFlight = new Set<string>();
   private consecutiveFailures = 0;
@@ -176,6 +212,7 @@ export class DosaEmissionClient {
     private readonly transport: DosaHttpTransport,
     private readonly config: DosaEmissionConfig,
     private readonly now: () => number = Date.now,
+    private readonly wait: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms)),
   ) {}
 
   /** Estado del cortacircuitos, para diagnóstico. */
@@ -190,8 +227,10 @@ export class DosaEmissionClient {
   }
 
   async sendEcf(input: {
-    body: DosaEcfRequestBody;
+    body: DosaEcfRequestBody | DosaOutboundRequestBody;
     idempotencyKey: string;
+    /** Only normal dispatch supplies this server-side authorization/audit hook. */
+    onReplay?: DosaReplayObserver;
   }): Promise<DosaSendResult> {
     if (!this.config.enabled) {
       return { ok: false, blockedReason: DOSA_EMISSION_BLOCKED.disabled };
@@ -245,23 +284,49 @@ export class DosaEmissionClient {
       return { ok: false, blockedReason: authViolation };
     }
 
-    const url = `${this.config.baseUrl}${emissionPathFor(input.body)}`;
+    const request = freezeDosaHttpRequest(input.body);
+    const idempotencyKey = input.idempotencyKey;
+    const url = `${this.config.baseUrl}${request.path}`;
+    Object.freeze(headers);
+    this.inFlight.add(idempotencyKey);
+    try {
+      let result = await this.perform(request, headers, idempotencyKey, url);
+      for (const ordinal of [2, 3] as const) {
+        if (!input.onReplay || result.ok || "blockedReason" in result || this.breakerState() === "OPEN") break;
+        if (result.classification && ["ACCEPTED", "CONDITIONALLY_ACCEPTED", "REJECTED"].includes(result.classification.outcome)) break;
+        const reason = result.transportFailure === "TIMEOUT" ? "TIMEOUT"
+          : result.transportFailure === "NETWORK" ? "NETWORK"
+          : result.status !== null && result.status >= 500 && result.status <= 599 ? "HTTP_5XX" : null;
+        if (!reason) break;
+        await this.wait(ordinal === 2 ? 1000 : 3000);
+        if (this.breakerState() === "OPEN") break;
+        const allowed = await input.onReplay(Object.freeze({ ordinal, reason, httpStatus: result.status,
+          bodyHash: request.bodyHash, pathHash: request.pathHash, requestHash: request.requestHash,
+          previousResponseHash: result.responseHash ?? null }));
+        if (!allowed) break;
+        result = await this.perform(request, headers, idempotencyKey, url);
+      }
+      return result;
+    } finally {
+      this.inFlight.delete(idempotencyKey);
+    }
+  }
+
+  private async perform(request: ReturnType<typeof freezeDosaHttpRequest>, headers: Record<string, string>, idempotencyKey: string, url: string): Promise<DosaSendResult> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
-    this.inFlight.add(input.idempotencyKey);
     try {
       const response = await this.transport.post(url, {
         headers,
-        body: JSON.stringify(input.body),
+        body: request.bodyText,
         signal: controller.signal,
       });
 
       if (response.status >= 500) {
-        // 5xx: el proveedor pudo haberlo recibido. La unica excepcion
-        // documentada es 502 con `estado: "Error de envio"`, donde el propio
-        // proveedor afirma que la DGII no recibio el eCF y autoriza reenviar
-        // con el MISMO eNCF.
+        // 5xx: el proveedor pudo haberlo recibido. Sólo el observador del
+        // despacho puede autorizar la recuperación idéntica y auditada.
+        // `retryPermitted` conserva el significado histórico NOT_RECEIVED.
         this.recordFailure();
         const classification = safeClassify(response.body);
         const notReceived = classification?.outcome === "NOT_RECEIVED";
@@ -273,6 +338,7 @@ export class DosaEmissionClient {
           retryPermitted: notReceived,
           classification,
           raw: classification === null ? null : safeParse(response.body),
+          responseHash: createHash("sha256").update(response.body).digest("hex"),
         };
       }
 
@@ -293,9 +359,9 @@ export class DosaEmissionClient {
       }
 
       const classification = classifyDosaResponse(parsed);
-      // Se marca como enviado en cuanto hubo respuesta interpretable: un segundo
-      // envío de la misma clave consumiría la secuencia.
-      this.sent.add(input.idempotencyKey);
+      // An interpretable response ends this logical dispatch, including 202
+      // and rejections. No automatic replay of an observed fiscal result.
+      this.sent.add(idempotencyKey);
       this.consecutiveFailures = 0;
 
       return {
@@ -319,7 +385,6 @@ export class DosaEmissionClient {
       };
     } finally {
       clearTimeout(timer);
-      this.inFlight.delete(input.idempotencyKey);
     }
   }
 

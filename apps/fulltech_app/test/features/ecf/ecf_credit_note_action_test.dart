@@ -1,3 +1,6 @@
+import 'package:daleventa_pos/core/auth/auth_provider.dart';
+import 'package:daleventa_pos/core/models/user_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -12,6 +15,13 @@ import 'package:daleventa_pos/features/ecf/ui/ecf_credit_note_action.dart';
 /// Acción E34: estas pruebas fijan la INTERFAZ (qué se muestra, qué se bloquea
 /// y qué se envía), no solo el transporte HTTP. No emiten nada: el backend
 /// únicamente reserva crédito fiscal y crea un borrador.
+class _FixedCreditAuth extends AuthController {
+  _FixedCreditAuth(super.ref) {
+    state = AuthState(initialized: true, isAuthenticated: true,
+      user: UserModel.fromJson({'id':'operator','companyId':'company','email':'fixture@local.test','role':'ADMIN'}));
+  }
+}
+
 void main() {
   late List<String> paths;
   late List<Map<String, dynamic>> prepared;
@@ -38,12 +48,13 @@ void main() {
   }
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     paths = <String>[];
     prepared = <Map<String, dynamic>>[];
   });
 
   Widget harness() => ProviderScope(
-    overrides: [ecfRepositoryProvider.overrideWithValue(repository())],
+    overrides: [authStateProvider.overrideWith((ref) => _FixedCreditAuth(ref)), ecfRepositoryProvider.overrideWithValue(repository())],
     child: const MaterialApp(
       home: Scaffold(
         body: EcfCreditNoteAction(
@@ -192,6 +203,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          authStateProvider.overrideWith((ref) => _FixedCreditAuth(ref)),
           ecfRepositoryProvider.overrideWithValue(EcfRepository(dio)),
         ],
         child: const MaterialApp(
@@ -246,6 +258,9 @@ class _FakeAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) {
+    if (options.path == '/health') {
+      return Future.value(ResponseBody.fromString('{"status":"ok"}', 200, headers: {Headers.contentTypeHeader: ['application/json']}));
+    }
     return _handler(options);
   }
 

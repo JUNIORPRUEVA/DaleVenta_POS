@@ -17,6 +17,7 @@ import {
 } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../auth/tenant-context";
 import { PrismaService } from "../prisma/prisma.service";
+import { TaxService } from "../tax/tax.service";
 import {
   isReadyForReviewEvidence,
   resolveCertificationStatus,
@@ -33,12 +34,14 @@ import {
 } from "./dto/ecf.dto";
 import type { AlanubeRuntimeState } from "./ecf-alanube.client";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
+import { isClosedReviewedLegacyTest } from "./ecf-reviewed-test-readiness";
 
 @Injectable()
 export class EcfService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly secretRefs: EcfSecretReferenceService,
+    private readonly taxes: TaxService,
   ) {}
 
   async getConfig(user: TenantUser) {
@@ -47,12 +50,69 @@ export class EcfService {
     return this.toConfigResponse(config);
   }
 
+  /** Explicit company action after the existing DOSA certification assistant.
+   * No credential import, numbering allocation or external emission occurs here.
+   */
+  async enableProduction(user: TenantUser, expectedCompanyId: string) {
+    const companyId = requireTenant(user);
+    if (expectedCompanyId !== companyId) throw new ConflictException("ECF_PRODUCTION_COMPANY_CONTEXT_CHANGED");
+    if (process.env.DOSA_PRODUCTION_EMISSION_ENABLED !== "true" || process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED !== "true") {
+      throw new ForbiddenException("ECF_PRODUCTION_SERVER_NOT_ENABLED");
+    }
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT company_id FROM ecf_company_configurations WHERE company_id = ${companyId}::uuid FOR UPDATE`;
+      const config = await tx.ecfCompanyConfiguration.findUnique({ where: { companyId } });
+      if (!config?.enabled || config.provider !== "DOSA" || config.certificationStatus !== "PRODUCTION_READY") {
+        throw new ForbiddenException("ECF_PRODUCTION_CERTIFICATION_REQUIRED");
+      }
+      const identity = await tx.appConfig.findFirst({ where: { companyId }, select: { rnc: true } });
+      const rnc = identity?.rnc.replace(/\D/g, "") ?? "";
+      const credential = rnc ? await tx.ecfDosaCompanyCredential.findFirst({ where: { companyId, rnc, environment: "production", status: "ACTIVE" },
+        select: { id: true, present: true } }) : null;
+      if (!credential || (credential.present as { apiKeyProduccion?: boolean } | null)?.apiKeyProduccion !== true) {
+        throw new ForbiddenException("ECF_PRODUCTION_COMPANY_CREDENTIAL_REQUIRED");
+      }
+      if (config.environment === "PRODUCTION" && config.productionEnabled) return this.toConfigResponse(config);
+      const pending = await tx.ecfElectronicDocument.findMany({ where: { companyId, OR: [
+        { environment: null },
+        { environment: "SANDBOX", status: { in: ["SEND_IN_PROGRESS", "UNKNOWN_RESULT", "DGII_STATUS_PENDING", "HUMAN_REVIEW_REQUIRED"] } },
+      ] },
+        select: { id: true, environment: true, status: true, sourceType: true, sourceId: true, payloadFingerprint: true, payloadSummary: true,
+          statusLogs: { where: { companyId, reasonCode: "LEGACY_TEST_ENVIRONMENT_CLASSIFIED" },
+            select: { metadata: true }, orderBy: { createdAt: "desc" }, take: 1 } }, take: 101 });
+      if (pending.length > 100 || pending.some(document => document.environment !== "SANDBOX" || !isClosedReviewedLegacyTest(document))) throw new ConflictException("ECF_PRODUCTION_PENDING_TEST_RESULTS");
+      const updated = await tx.ecfCompanyConfiguration.update({ where: { companyId },
+        data: { environment: "PRODUCTION", productionEnabled: true, updatedByUserId: user.id } });
+      await tx.ecfOnboardingStep.updateMany({ where: { companyId, stepKey: "PRODUCTION_ENABLEMENT" },
+        data: { status: "COMPLETED", completedAt: new Date(), updatedByUserId: user.id } });
+      await this.writeAudit(tx, companyId, user.id, EcfAuditAction.CONFIG_UPDATED, "EcfCompanyConfiguration", updated.id,
+        this.toConfigAuditSnapshot(config), this.toConfigAuditSnapshot(updated));
+      return this.toConfigResponse(updated);
+    });
+  }
+
   async updateConfig(user: TenantUser, dto: UpdateEcfConfigDto) {
     const companyId = requireTenant(user);
     await this.assertCompanyExists(companyId);
     const before = await this.ensureConfig(companyId, user.id);
     const data = this.buildConfigUpdate(dto, user.id);
     const config = await this.prisma.$transaction(async (tx) => {
+      // Serialize an environment edit against activation and persisted dispatch.
+      // The pre-transaction snapshot may already be stale when this lock is acquired.
+      if (dto.environment) {
+        await tx.$queryRaw`SELECT company_id FROM ecf_company_configurations WHERE company_id = ${companyId}::uuid FOR UPDATE`;
+        const current = await tx.ecfCompanyConfiguration.findUnique({ where: { companyId } });
+        if (current?.productionEnabled && dto.environment !== current.environment) {
+          throw new ConflictException("ECF_PRODUCTION_ENVIRONMENT_CHANGE_REQUIRES_REVIEW");
+        }
+      }
+      if (dto.enabled === true) {
+        await tx.company.updateMany({
+          where: { id: companyId },
+          data: { taxEnabled: true },
+        });
+        await this.taxes.ensureDefaultTaxIfNeeded(companyId, tx);
+      }
       const updated = await tx.ecfCompanyConfiguration.update({
         where: { companyId },
         data,

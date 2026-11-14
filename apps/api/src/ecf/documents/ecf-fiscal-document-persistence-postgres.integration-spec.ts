@@ -61,6 +61,7 @@ uat("persistencia íntegra del comprobante preparado on PostgreSQL", () => {
     // La numeración exige autorización DGII declarada (fail-closed).
     await prisma.ecfDgiiAuthorizedSequence.create({
       data: {
+          environment: "SANDBOX",
         companyId,
         documentType: "E31",
         authorizationNumber: "SYNTH-E31",
@@ -243,6 +244,7 @@ uat("persistencia íntegra del comprobante preparado on PostgreSQL", () => {
     // Fila equivalente a un comprobante preparado con una versión anterior.
     const legacy = await prisma.ecfElectronicDocument.create({
       data: {
+          environment: "SANDBOX",
         companyId,
         documentType: "E31",
         status: "LOCAL_VALIDATED",

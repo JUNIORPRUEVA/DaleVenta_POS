@@ -6,6 +6,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+
+final _environmentCaptureKey = GlobalKey();
 
 /// Declaración de la numeración autorizada por la DGII.
 ///
@@ -17,6 +23,7 @@ class _FakeRepository extends EcfRepository {
   _FakeRepository() : super(Dio());
 
   List<EcfSequenceInfo> existing = const [];
+  String environment = 'PRODUCTION';
   List<EcfAuthorizedSequence> declared = const [];
   Object? declarationFailure;
   Object? sequenceFailure;
@@ -32,10 +39,13 @@ class _FakeRepository extends EcfRepository {
   @override
   Future<EcfAuthorizedSequencesView> authorizedSequences() async {
     return EcfAuthorizedSequencesView(
+      environment: environment,
       items: declared,
       supportedTypes: const ['E31', 'E34'],
       declarationVersion: 'v1',
-      declarationText: 'Declaro que estos datos son los que la DGII autorizó.',
+      declarationText: environment == 'SANDBOX'
+          ? 'Declaro que el proveedor confirmó estos rangos para TEST. Sin validez fiscal.'
+          : 'Declaro que estos datos son los que la DGII autorizó.',
     );
   }
 
@@ -45,6 +55,7 @@ class _FakeRepository extends EcfRepository {
   @override
   Future<void> declareAuthorizedSequence({
     required String documentType,
+    String? expectedEnvironment,
     required String authorizationNumber,
     required int rangeFrom,
     required int rangeTo,
@@ -72,6 +83,7 @@ class _FakeRepository extends EcfRepository {
   @override
   Future<void> registerSequence({
     required String documentType,
+    String? expectedEnvironment,
     required int startNumber,
     required int endNumber,
     String? validUntil,
@@ -99,6 +111,7 @@ class _FakeRepository extends EcfRepository {
   @override
   Future<void> renewSequence({
     required String documentType,
+    String? expectedEnvironment,
     required int startNumber,
     required int endNumber,
     String? validUntil,
@@ -160,8 +173,10 @@ Future<_FakeRepository> _pump(
   Object? declarationFailure,
   Object? sequenceFailure,
   bool canManage = true,
+  String environment = 'PRODUCTION',
 }) async {
   final repository = _FakeRepository()
+    ..environment = environment
     ..existing = existing
     ..declared = declared
     ..declarationFailure = declarationFailure
@@ -170,12 +185,16 @@ Future<_FakeRepository> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [ecfRepositoryProvider.overrideWithValue(repository)],
-      child: MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: EcfSequenceRangeSection(canManage: canManage),
+      child: RepaintBoundary(
+        key: _environmentCaptureKey,
+        child: MaterialApp(
+          theme: ThemeData(fontFamily: 'Manrope'),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: EcfSequenceRangeSection(canManage: canManage),
+              ),
             ),
           ),
         ),
@@ -211,6 +230,62 @@ Future<void> _fill(
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    final font = FontLoader('Manrope');
+    for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+      font.addFont(rootBundle.load('assets/fonts/manrope/Manrope-$weight.ttf'));
+    }
+    await font.load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
+  for (final width in [390.0, 834.0, 1280.0]) {
+    testWidgets('TEST numbering stays readable at width $width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _pump(tester, environment: 'SANDBOX');
+      expect(find.text('Numeración de pruebas (TEST)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final output = Platform.environment['FULLPOS_ECF_ENV_QA_OUTPUT'];
+      if (output != null) {
+        final boundary =
+            _environmentCaptureKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final picture = await boundary.toImage();
+          final bytes = await picture.toByteData(
+            format: ui.ImageByteFormat.png,
+          );
+          await Directory(output).create(recursive: true);
+          await File(
+            '$output/test-numbering-${width.toInt()}.png',
+          ).writeAsBytes(bytes!.buffer.asUint8List());
+          picture.dispose();
+        });
+      }
+    });
+  }
+
+  testWidgets('TEST numbering is explicitly separated from production', (
+    tester,
+  ) async {
+    await _pump(tester, environment: 'SANDBOX');
+    expect(find.text('Numeración de pruebas (TEST)'), findsOneWidget);
+    expect(
+      find.textContaining('No se comparten con producción.'),
+      findsOneWidget,
+    );
+    expect(find.text('Referencia de autorización TEST'), findsOneWidget);
+    expect(find.text('Numeración autorizada por la DGII'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('sin autorización declarada pide los datos de la DGII', (
     tester,
   ) async {
@@ -350,7 +425,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('ecf_dgii_declaration_save')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('La DGII autorizó del 1 al 150'), findsOneWidget);
+    expect(
+      find.textContaining('La DGII autorizó del 1 al 150'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('sin permiso de gestión no muestra nada', (tester) async {
@@ -371,11 +449,12 @@ void main() {
       find.byKey(const ValueKey('ecf_sequence_register_E32')),
       findsOneWidget,
     );
-    expect(find.textContaining('Falta registrar la numeración'), findsOneWidget);
-
-    await tester.tap(
-      find.byKey(const ValueKey('ecf_sequence_register_E32')),
+    expect(
+      find.textContaining('Falta registrar la numeración'),
+      findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const ValueKey('ecf_sequence_register_E32')));
     await tester.pumpAndSettle();
 
     expect(repository.saves, 1);
@@ -418,10 +497,7 @@ void main() {
       find.byKey(const ValueKey('ecf_sequence_register_E31')),
       findsNothing,
     );
-    expect(
-      find.byKey(const ValueKey('ecf_sequence_renew_E31')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('ecf_sequence_renew_E31')), findsNothing);
   });
 
   testWidgets('re-declarar con rango activo renueva en vez de registrar', (

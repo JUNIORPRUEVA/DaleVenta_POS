@@ -603,6 +603,7 @@ class _EcfCompanySwitchSectionState
       // así el menú nunca muestra un cambio que el backend no aceptó.
       ref.invalidate(companySettingsProvider);
       ref.invalidate(ecfCapabilitiesProvider);
+      ref.invalidate(productTaxUiConfigProvider);
       setState(() => _saving = false);
     } catch (_) {
       if (!mounted) return;
@@ -660,10 +661,9 @@ class _EcfCompanySwitchSectionState
             if (!embedded) const SizedBox(height: 6),
             if (canManage)
               _CompactSwitchRow(
-                title: 'Utilizar factura electrónica',
+                title: 'Activar módulo de facturación electrónica',
                 subtitle:
-                    'Al activarla aparece el módulo en el menú lateral. Por sí '
-                    'sola no emite comprobantes ni contacta al proveedor.',
+                    'Activa impuestos y el acceso al módulo.',
                 value: enabled,
                 onChanged: (next) {
                   if (_saving) return;
@@ -678,7 +678,7 @@ class _EcfCompanySwitchSectionState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Utilizar factura electrónica',
+                          'Activar módulo de facturación electrónica',
                           style: _strongBodyStyle(),
                         ),
                         Text(
@@ -692,31 +692,6 @@ class _EcfCompanySwitchSectionState
                   Switch.adaptive(value: enabled, onChanged: null),
                 ],
               ),
-            // Camino administrativo EXPLÍCITO para iniciar la habilitación sin
-            // encender el módulo. Así el administrador puede trabajar en el
-            // expediente mientras el resto de la empresa sigue con su POS
-            // tradicional y sin ninguna pantalla de e-CF en el menú.
-            //
-            // Preparar la habilitación NO autoriza emisión real: eso depende de
-            // la DGII y de las compuertas fiscales del backend.
-            if (canManage && !enabled) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : () => context.go(Routes.ecf),
-                  icon: const Icon(Icons.assignment_outlined, size: 18),
-                  label: const Text('Preparar habilitación e-CF'),
-                  style: _outlinedButtonStyle(),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Abre el expediente de habilitación y no activa el módulo. No '
-                'emite comprobantes ni contacta con ningún proveedor fiscal.',
-                style: _bodyStyle().copyWith(height: 1.18),
-              ),
-            ],
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -2577,8 +2552,8 @@ class _CompanySettingsEditorState
       legalRepresentativeCivilStatus: _legalCivilStatus.text.trim(),
       logoBase64: _logoBase64,
       clearLogo: _logoBase64 == null,
-      taxEnabled: _taxEnabled,
-      defaultTaxRate: _taxEnabled
+      taxEnabled: _taxEnabled || widget.settings.ecfEnabled,
+      defaultTaxRate: _taxEnabled || widget.settings.ecfEnabled
           ? (widget.settings.defaultTaxRate > 0
                 ? widget.settings.defaultTaxRate
                 : 0.18)
@@ -2752,27 +2727,14 @@ class _CompanySettingsEditorState
         SizedBox(height: sectionGap),
         _FiscalSettingsPanel(
           compact: compactDesktop,
-          taxEnabled: _taxEnabled,
+          ecfEnabled: widget.settings.ecfEnabled,
           pricesIncludeTax: _pricesIncludeTax,
           defaultTaxRate: widget.settings.defaultTaxRate > 0
               ? widget.settings.defaultTaxRate
               : 0.18,
-          onTaxEnabledChanged: (value) => setState(() {
-            _taxEnabled = value;
-            if (!value) _ncfEnabled = false;
-          }),
           onPricesIncludeTaxChanged: (value) =>
               setState(() => _pricesIncludeTax = value),
-          // La factura electrónica se activa AQUÍ, debajo de «Utilizar
-          // impuestos»: es la misma decisión fiscal, no una pantalla aparte.
-          ecfControl: const Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _EcfCompanySwitchSection(embedded: true),
-              SizedBox(height: 10),
-              _EcfSalesWithoutDocumentControl(),
-            ],
-          ),
+          ecfControl: const _EcfCompanySwitchSection(embedded: true),
         ),
         SizedBox(height: compactDesktop ? 6 : 10),
         _InventorySettingsPanel(
@@ -3036,23 +2998,20 @@ class _CompactSwitchRow extends StatelessWidget {
 class _FiscalSettingsPanel extends StatelessWidget {
   const _FiscalSettingsPanel({
     this.compact = false,
-    required this.taxEnabled,
+    required this.ecfEnabled,
     required this.pricesIncludeTax,
     required this.defaultTaxRate,
-    required this.onTaxEnabledChanged,
     required this.onPricesIncludeTaxChanged,
     this.ecfControl,
   });
 
   final bool compact;
-  final bool taxEnabled;
+  final bool ecfEnabled;
   final bool pricesIncludeTax;
   final double defaultTaxRate;
-  final ValueChanged<bool> onTaxEnabledChanged;
   final ValueChanged<bool> onPricesIncludeTaxChanged;
 
-  /// Control de facturación electrónica, que se muestra solo con impuestos
-  /// activos: sin impuestos no hay nada que facturar electrónicamente.
+  /// Activación del módulo, independiente de su preparación para emitir.
   final Widget? ecfControl;
 
   @override
@@ -3070,15 +3029,10 @@ class _FiscalSettingsPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Impuestos y e-CF', style: _titleStyle(15)),
+            Text('Facturación electrónica', style: _titleStyle(15)),
             SizedBox(height: compact ? 3 : 6),
-            _CompactSwitchRow(
-              title: 'Utilizar impuestos',
-              subtitle: 'Las ventas anteriores no serán modificadas.',
-              value: taxEnabled,
-              onChanged: onTaxEnabledChanged,
-            ),
-            if (taxEnabled) ...[
+            if (ecfControl != null) ecfControl!,
+            if (ecfEnabled) ...[
               Divider(height: compact ? 10 : 16),
               Row(
                 children: [
@@ -3095,18 +3049,21 @@ class _FiscalSettingsPanel extends StatelessWidget {
                 segments: const [
                   ButtonSegment(
                     value: true,
-                    label: Text('Precio incluye impuesto'),
+                    label: Text('ITBIS incluido'),
                   ),
-                  ButtonSegment(value: false, label: Text('Precio + impuesto')),
+                  ButtonSegment(value: false, label: Text('Precio + ITBIS')),
                 ],
+                style: SegmentedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
                 selected: {pricesIncludeTax},
                 onSelectionChanged: (values) =>
                     onPricesIncludeTaxChanged(values.first),
               ),
-              if (ecfControl != null) ...[
-                Divider(height: compact ? 10 : 16),
-                ecfControl!,
-              ],
+              const SizedBox(height: 8),
+              const _EcfSalesWithoutDocumentControl(),
             ],
           ],
         ),

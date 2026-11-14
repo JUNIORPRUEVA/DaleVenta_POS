@@ -1581,6 +1581,7 @@ model EcfDgiiApplicationSnapshot {
 model EcfElectronicDocument {
   id                     String                      @id @default(uuid()) @db.Uuid
   companyId              String                      @map("company_id") @db.Uuid
+  environment            EcfEnvironment?
   documentType           EcfElectronicDocumentType   @map("document_type")
   status                 EcfElectronicDocumentStatus @default(LOCAL_DRAFT)
   internalDocumentNumber String?                     @map("internal_document_number") @db.VarChar(64)
@@ -1597,6 +1598,8 @@ model EcfElectronicDocument {
   // (trigger `ecf_protect_fiscal_document`): permite reconstruir y verificar el
   // comprobante contra su huella. Nunca se devuelve por las rutas de lectura.
   fiscalDocument         Json?                       @map("fiscal_document")
+  // Public fiscal stamp, independent of the reserved/immutable fiscal payload.
+  printStamp             Json?                       @map("print_stamp")
   safeErrorCode          String?                     @map("safe_error_code") @db.VarChar(64)
   safeErrorMessage       String?                     @map("safe_error_message") @db.Text
   createdByUserId        String?                     @map("created_by_user_id") @db.Uuid
@@ -1615,7 +1618,7 @@ model EcfElectronicDocument {
   creditReservation EcfCreditReservation?           @relation("EcfCreditNote")
 
   @@unique([companyId, id])
-  @@unique([companyId, externalDocumentNumber], map: "ecf_electronic_documents_company_id_external_document_number_ke")
+  @@unique([companyId, environment, externalDocumentNumber], map: "ecf_electronic_documents_company_env_external_number_key")
   @@unique([companyId, idempotencyKey])
   @@index([companyId, payloadFingerprint])
   @@index([companyId, status])
@@ -4124,6 +4127,7 @@ model NcfAuditLog {
 model EcfSequence {
   id           String    @id @default(uuid()) @db.Uuid
   companyId    String    @map("company_id") @db.Uuid
+  environment  EcfEnvironment @default(PRODUCTION)
   documentType String    @map("document_type") // E31 | E34
   prefix       String
   startNumber  Int       @default(1) @map("start_number")
@@ -4154,6 +4158,7 @@ model EcfSequence {
 model EcfDgiiAuthorizedSequence {
   id                 String    @id @default(uuid()) @db.Uuid
   companyId          String    @map("company_id") @db.Uuid
+  environment        EcfEnvironment @default(PRODUCTION)
   documentType       String    @map("document_type")
   authorizationNumber String   @map("authorization_number")
   rangeFrom          Int       @map("range_from")
@@ -4169,7 +4174,7 @@ model EcfDgiiAuthorizedSequence {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, documentType])
+  @@unique([companyId, documentType, environment], name: "companyId_documentType", map: "ecf_dgii_authorized_sequences_company_env_type_key")
   @@index([companyId])
   @@map("ecf_dgii_authorized_sequences")
 }
@@ -4200,6 +4205,7 @@ model EcfSaleWithoutDocument {
 model EcfSequenceAuditLog {
   id           String   @id @default(uuid()) @db.Uuid
   companyId    String   @map("company_id") @db.Uuid
+  environment  EcfEnvironment @default(PRODUCTION)
   sequenceId   String?  @map("sequence_id") @db.Uuid
   documentId   String?  @map("document_id") @db.Uuid
   userId       String?  @map("user_id") @db.Uuid
@@ -4212,7 +4218,7 @@ model EcfSequenceAuditLog {
   company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sequence EcfSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
-  @@unique([companyId, operationKey])
+  @@unique([companyId, environment, operationKey], map: "ecf_sequence_audit_logs_company_env_operation_key")
   @@index([companyId, encf])
   @@index([companyId, type, createdAt])
   @@index([documentId])

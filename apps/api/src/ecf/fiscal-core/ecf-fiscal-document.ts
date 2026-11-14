@@ -70,6 +70,8 @@ export type EcfFiscalDocument = {
   lines: EcfLine[];
   totals: EcfTotals;
   reference?: EcfReference;
+  /** Payment evidence frozen when the fiscal document is prepared. */
+  paymentForms?: Array<{ code: "1" | "2" | "3" | "4"; amount: string }>;
   notes?: string;
   unsupportedFields?: Record<string, unknown>;
 };

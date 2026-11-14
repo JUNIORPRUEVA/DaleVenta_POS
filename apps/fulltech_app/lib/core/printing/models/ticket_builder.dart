@@ -10,6 +10,8 @@ import 'receipt_text_utils.dart';
 import 'ticket_data.dart';
 import 'ticket_layout_config.dart';
 import 'ticket_renderer.dart';
+import '../html/html_thermal_receipt_pdf_renderer.dart';
+import '../esc_pos/thermal_receipt_view_model.dart';
 
 class TicketBuilder {
   const TicketBuilder({required this.layout, required this.company});
@@ -108,6 +110,14 @@ class TicketBuilder {
   String buildPlainText(TicketData data) => buildLines(data).join('\n');
 
   Future<Uint8List> buildPdf(TicketData data) async {
+    if (data.ecf != null) {
+      return HtmlThermalReceiptPdfRenderer(
+        paperWidthMm: layout.paperWidthMm.toDouble(),
+        warrantyPolicy: layout.warrantyPolicy,
+      ).render(
+        ThermalReceiptViewModel.fromTicketData(data: data, company: company),
+      );
+    }
     if (data.type == TicketType.sale ||
         data.type == TicketType.copy ||
         data.type == TicketType.refund ||

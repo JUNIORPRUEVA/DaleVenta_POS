@@ -7,6 +7,9 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../ecf_models.dart';
+import '../ecf_print_document.dart';
+import '../ecf_sale_fiscal.dart';
+import 'ecf_connection_guard.dart';
 import '../ecf_authorized_sequence_models.dart';
 import '../ecf_dosa_dispatch_models.dart';
 import '../ecf_dosa_activation_models.dart';
@@ -59,11 +62,7 @@ final ecfCapabilitiesProvider = FutureProvider.autoDispose<EcfCapabilities>((
   // lugar de dejar a la vista la configuración de la anterior.
   ref.watch(
     authStateProvider.select(
-      (state) => (
-        state.isAuthenticated,
-        state.user?.id,
-        state.user?.companyId,
-      ),
+      (state) => (state.isAuthenticated, state.user?.id, state.user?.companyId),
     ),
   );
   return ref.watch(ecfRepositoryProvider).capabilities();
@@ -171,11 +170,67 @@ final ecfDocumentDetailProvider = FutureProvider.autoDispose
       return ref.watch(ecfRepositoryProvider).documentDetail(id);
     });
 
-/// Cliente de solo lectura para la superficie e-CF.
-///
-/// No existe ningún método de emisión: el backend no expone endpoint de envío al
-/// proveedor, por lo que la aplicación nunca puede disparar una emisión real.
+final ecfSalesFiscalProvider = FutureProvider.autoDispose.family<Map<String, EcfSaleFiscal>, String>((ref, ids) {
+  ref.watch(authStateProvider.select((state) => (state.user?.id, state.user?.companyId)));
+  return ref.watch(ecfRepositoryProvider).salesFiscal(ids.split(','));
+});
+
+/// Company-scoped e-CF reads and guarded preparation/dispatch operations.
 class EcfRepository {
+  Future<void> enableProduction({required String expectedCompanyId}) async {
+    await postEcf(_dio, '/ecf/production/enable', data: {'expectedCompanyId': expectedCompanyId});
+  }
+
+  Future<Map<String, EcfSaleFiscal>> salesFiscal(List<String> ids) async {
+    final valid = ids.where((id) => RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)).toSet().toList();
+    final result = <String, EcfSaleFiscal>{};
+    for (var offset = 0; offset < valid.length; offset += 50) {
+      final chunk = valid.skip(offset).take(50).join(',');
+      final response = await _dio.get('/ecf/sales/fiscal', queryParameters: {'ids': chunk}, options: Options(extra: const {'skipLoader': true, 'disableOfflineCache': true}));
+      for (final row in _asList(_asMap(response.data)['items'])) {
+        final fiscal = EcfSaleFiscal.fromJson(row);
+        result[fiscal.saleId] = fiscal;
+      }
+    }
+    return result;
+  }
+
+  Future<EcfPrintDocument> printDocument(String documentId) async {
+    final response = await _dio.get(
+      '/ecf/documents/${Uri.encodeComponent(documentId)}/print',
+    );
+    final data = _asMap(response.data);
+    return EcfPrintDocument.fromJson(
+      Map<String, dynamic>.from(data['document'] as Map),
+    );
+  }
+
+  Future<EcfPrintDocument?> printForSale(String saleId, {bool requireElectronic = false}) async {
+    // Offline/local receipts have no server fiscal identity yet.
+    if (!RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    ).hasMatch(saleId)) {
+      if (requireElectronic) {
+        throw StateError('La venta electrónica todavía no tiene una identidad fiscal confirmada en el servidor.');
+      }
+      return null;
+    }
+    final response = await _dio.get(
+      '/ecf/sales/${Uri.encodeComponent(saleId)}/print',
+    );
+    final data = _asMap(response.data);
+    if (data['requiresReview'] == true) {
+      throw StateError(
+        'La venta tiene más de un comprobante. Revisa su historial fiscal antes de imprimir.',
+      );
+    }
+    final document = data['document'];
+    if (document is! Map && requireElectronic) throw StateError('El comprobante electrónico aún no está preparado. Revisa su estado antes de imprimir.');
+    return document is Map
+        ? EcfPrintDocument.fromJson(document.cast<String, dynamic>())
+        : null;
+  }
+
   EcfRepository(this._dio);
 
   final Dio _dio;
@@ -209,18 +264,24 @@ class EcfRepository {
   /// `ECF_SEQUENCE_REUSE_BLOCKED` (empezar por debajo de lo ya consumido).
   Future<void> registerSequence({
     required String documentType,
+    String? expectedEnvironment,
     required int startNumber,
     required int endNumber,
     String? validUntil,
   }) async {
     try {
-      await _dio.post(ApiRoutes.ecfSequences, data: {
-        'documentType': documentType,
-        'startNumber': startNumber,
-        'endNumber': endNumber,
-        if (validUntil != null && validUntil.trim().isNotEmpty)
-          'validUntil': validUntil.trim(),
-      });
+      await _dio.post(
+        ApiRoutes.ecfSequences,
+        data: {
+          'documentType': documentType,
+          if (expectedEnvironment != null)
+            'expectedEnvironment': expectedEnvironment,
+          'startNumber': startNumber,
+          'endNumber': endNumber,
+          if (validUntil != null && validUntil.trim().isNotEmpty)
+            'validUntil': validUntil.trim(),
+        },
+      );
     } on DioException catch (error) {
       throw EcfSequenceException(_sequenceServerMessage(error));
     }
@@ -234,18 +295,24 @@ class EcfRepository {
   /// se desactiva: no se borra, queda como historial.
   Future<void> renewSequence({
     required String documentType,
+    String? expectedEnvironment,
     required int startNumber,
     required int endNumber,
     String? validUntil,
   }) async {
     try {
-      await _dio.post(ApiRoutes.ecfSequencesRenew, data: {
-        'documentType': documentType,
-        'startNumber': startNumber,
-        'endNumber': endNumber,
-        if (validUntil != null && validUntil.trim().isNotEmpty)
-          'validUntil': validUntil.trim(),
-      });
+      await _dio.post(
+        ApiRoutes.ecfSequencesRenew,
+        data: {
+          'documentType': documentType,
+          if (expectedEnvironment != null)
+            'expectedEnvironment': expectedEnvironment,
+          'startNumber': startNumber,
+          'endNumber': endNumber,
+          if (validUntil != null && validUntil.trim().isNotEmpty)
+            'validUntil': validUntil.trim(),
+        },
+      );
     } on DioException catch (error) {
       throw EcfSequenceException(_sequenceServerMessage(error));
     }
@@ -262,6 +329,7 @@ class EcfRepository {
   /// numeración (`ECF_SEQUENCE_NOT_AUTHORIZED`).
   Future<void> declareAuthorizedSequence({
     required String documentType,
+    String? expectedEnvironment,
     required String authorizationNumber,
     required int rangeFrom,
     required int rangeTo,
@@ -270,16 +338,21 @@ class EcfRepository {
     required bool declarationAccepted,
   }) async {
     try {
-      await _dio.post(ApiRoutes.ecfDgiiAuthorizedSequences, data: {
-        'documentType': documentType,
-        'authorizationNumber': authorizationNumber.trim(),
-        'rangeFrom': rangeFrom,
-        'rangeTo': rangeTo,
-        'approvedQuantity': approvedQuantity,
-        if (expiresAt != null && expiresAt.trim().isNotEmpty)
-          'expiresAt': expiresAt.trim(),
-        'declarationAccepted': declarationAccepted,
-      });
+      await _dio.post(
+        ApiRoutes.ecfDgiiAuthorizedSequences,
+        data: {
+          'documentType': documentType,
+          if (expectedEnvironment != null)
+            'expectedEnvironment': expectedEnvironment,
+          'authorizationNumber': authorizationNumber.trim(),
+          'rangeFrom': rangeFrom,
+          'rangeTo': rangeTo,
+          'approvedQuantity': approvedQuantity,
+          if (expiresAt != null && expiresAt.trim().isNotEmpty)
+            'expiresAt': expiresAt.trim(),
+          'declarationAccepted': declarationAccepted,
+        },
+      );
     } on DioException catch (error) {
       throw EcfSequenceException(_sequenceServerMessage(error));
     }
@@ -303,6 +376,9 @@ class EcfRepository {
     }
     if (message == null || message.isEmpty) {
       return 'No se pudo guardar la numeración. Inténtalo de nuevo.';
+    }
+    if (message.contains('ECF_NUMBERING_ENVIRONMENT_CHANGED')) {
+      return 'El ambiente de facturación cambió. Vuelve a abrir la numeración antes de guardar.';
     }
     if (message.contains('documentType must be one of the following values')) {
       return 'La DGII todavía no admite ese tipo de comprobante para numeración.';
@@ -407,7 +483,8 @@ class EcfRepository {
   }
 
   Future<EcfDocumentDetail> documentDetail(String id) async {
-    final res = await _dio.get(ApiRoutes.ecfDocumentDetail(id));
+    final res = await _dio.get(ApiRoutes.ecfDocumentDetail(id),
+      options: Options(extra: const {'disableOfflineCache': true}));
     return EcfDocumentDetail.fromJson(_asMap(res.data));
   }
 
@@ -501,8 +578,13 @@ class EcfRepository {
   /// Un rechazo fiscal no lanza: llega con `ok: false`, `code` y
   /// `blockingReasons` para que la interfaz explique qué falta. Los códigos 4xx
   /// sí son excepciones (permiso, documento inexistente, doble intento).
+  Future<EcfDosaDispatchOutcome> recoverDosa(String documentId) async {
+    final response = await postEcf(_dio, '/ecf/documents/${Uri.encodeComponent(documentId)}/recover-dosa');
+    return EcfDosaDispatchOutcome.fromJson(_asMap(response.data));
+  }
+
   Future<EcfDosaDispatchOutcome> dispatchDosa(String documentId) async {
-    final res = await _dio.post(ApiRoutes.ecfDocumentDispatchDosa(documentId));
+    final res = await postEcf(_dio, ApiRoutes.ecfDocumentDispatchDosa(documentId));
     return EcfDosaDispatchOutcome.fromJson(_asMap(res.data));
   }
 
@@ -534,7 +616,7 @@ class EcfRepository {
     String? sequenceDueDate,
     String? paymentDeadline,
   }) async {
-    final res = await _dio.post(
+    final res = await postEcf(_dio,
       ApiRoutes.ecfDocumentsPrepare,
       data: {
         'saleId': saleId,
@@ -574,7 +656,7 @@ class EcfRepository {
     required int paymentType,
     int? incomeType,
   }) async {
-    final res = await _dio.post(
+    final res = await postEcf(_dio,
       ApiRoutes.ecfDocumentsPrepareConsumo,
       data: {
         'saleId': saleId,
@@ -613,7 +695,7 @@ class EcfRepository {
     required int creditNoteIndicator,
     List<Map<String, dynamic>>? lines,
   }) async {
-    final res = await _dio.post(
+    final res = await postEcf(_dio,
       ApiRoutes.ecfDocumentsPrepareCreditNote,
       data: {
         'originalDocumentId': originalDocumentId,

@@ -70,6 +70,41 @@ void main() {
   });
 
   test(
+    'la impresión fiscal consulta la venta y no reutiliza datos entre empresas',
+    () async {
+      var calls = 0;
+      final repo = repositoryWith((options) async {
+        calls++;
+        expect(
+          options.path,
+          '/ecf/sales/00000000-0000-4000-8000-000000000001/print',
+        );
+        return json({'document': null, 'requiresReview': false});
+      });
+      expect(await repo.printForSale('local-sale-pending-sync'), isNull);
+      expect(calls, 0);
+      expect(
+        await repo.printForSale('00000000-0000-4000-8000-000000000001'),
+        isNull,
+      );
+      expect(calls, 1);
+    },
+  );
+
+  test(
+    'más de una identidad fiscal impide elegir un QR automáticamente',
+    () async {
+      final repo = repositoryWith(
+        (_) async => json({'document': null, 'requiresReview': true}),
+      );
+      await expectLater(
+        repo.printForSale('00000000-0000-4000-8000-000000000001'),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
     'listDocuments sends the functional group exactly as the API expects',
     () async {
       RequestOptions? captured;
@@ -697,6 +732,63 @@ void main() {
     },
   );
 
+  test(
+    'las tres escrituras de numeración envían el ambiente mostrado',
+    () async {
+      final requests = <RequestOptions>[];
+      final repo = repositoryWith((options) async {
+        requests.add(options);
+        return json({});
+      });
+      await repo.declareAuthorizedSequence(
+        documentType: 'E31',
+        expectedEnvironment: 'SANDBOX',
+        authorizationNumber: 'SYNTHETIC-TEST',
+        rangeFrom: 1,
+        rangeTo: 10,
+        approvedQuantity: 10,
+        declarationAccepted: true,
+      );
+      await repo.registerSequence(
+        documentType: 'E31',
+        expectedEnvironment: 'SANDBOX',
+        startNumber: 1,
+        endNumber: 10,
+      );
+      await repo.renewSequence(
+        documentType: 'E31',
+        expectedEnvironment: 'SANDBOX',
+        startNumber: 2,
+        endNumber: 10,
+      );
+      expect(requests, hasLength(3));
+      for (final request in requests) {
+        expect(request.data['expectedEnvironment'], 'SANDBOX');
+      }
+    },
+  );
+
+  test('un ambiente desactualizado pide reabrir la numeración', () async {
+    final repo = repositoryWith(
+      (_) async => json({'message': 'ECF_NUMBERING_ENVIRONMENT_CHANGED'}, 409),
+    );
+    await expectLater(
+      repo.registerSequence(
+        documentType: 'E31',
+        expectedEnvironment: 'SANDBOX',
+        startNumber: 1,
+        endNumber: 10,
+      ),
+      throwsA(
+        isA<EcfSequenceException>().having(
+          (error) => error.message,
+          'mensaje',
+          contains('Vuelve a abrir'),
+        ),
+      ),
+    );
+  });
+
   test('registerSequence envía el tipo E32 del rango de consumo', () async {
     RequestOptions? captured;
     final repo = repositoryWith((options) async {
@@ -746,28 +838,51 @@ void main() {
     );
   });
 
-  test('registerSequence conserva el código del backend para traducirlo', () async {
-    final repo = repositoryWith(
-      (_) async => json({
-        'statusCode': 409,
-        'message': 'ECF_SEQUENCE_ALREADY_EXISTS: Ya hay un rango activo.',
-      }, 409),
-    );
+  test(
+    'registerSequence conserva el código del backend para traducirlo',
+    () async {
+      final repo = repositoryWith(
+        (_) async => json({
+          'statusCode': 409,
+          'message': 'ECF_SEQUENCE_ALREADY_EXISTS: Ya hay un rango activo.',
+        }, 409),
+      );
 
-    await expectLater(
-      repo.registerSequence(
-        documentType: 'E32',
-        startNumber: 1,
-        endNumber: 10,
-      ),
-      throwsA(
-        isA<EcfSequenceException>().having(
-          (error) => error.message,
-          'message',
-          startsWith('ECF_SEQUENCE_ALREADY_EXISTS'),
+      await expectLater(
+        repo.registerSequence(
+          documentType: 'E32',
+          startNumber: 1,
+          endNumber: 10,
         ),
-      ),
-    );
+        throwsA(
+          isA<EcfSequenceException>().having(
+            (error) => error.message,
+            'message',
+            startsWith('ECF_SEQUENCE_ALREADY_EXISTS'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test('electronic printing fails closed when the sale has no prepared fiscal document', () async {
+    final repo=repositoryWith((request) async=>json({'document':null,'requiresReview':false}));
+    await expectLater(repo.printForSale('00000000-0000-4000-8000-000000000001',requireElectronic:true),throwsStateError);
+    expect(await repo.printForSale('00000000-0000-4000-8000-000000000001'),isNull);
+    await expectLater(repo.printForSale('local_receipt',requireElectronic:true),throwsStateError);
+    expect(await repo.printForSale('local_receipt'),isNull);
+  });
+  test('history requests are bounded batches and omit local sale identifiers', () async {
+    final sizes=<int>[];
+    final repo=repositoryWith((request) async {
+      expect(request.path,'/ecf/sales/fiscal');
+      expect(request.extra['disableOfflineCache'],isTrue);
+      final ids=(request.queryParameters['ids'] as String).split(',');sizes.add(ids.length);
+      return json({'items':[for(final id in ids) {'saleId':id,'intent':'E31','documents':[],'creditNotes':[],'pendingRefundIds':[]}]});
+    });
+    final ids=[for(var i=1;i<=53;i++) '00000000-0000-4000-8000-'+i.toString().padLeft(12,'0'),'local_receipt'];
+    final result=await repo.salesFiscal(ids);
+    expect(sizes,[50,3]);expect(result.length,53);expect(result.containsKey('local_receipt'),isFalse);
   });
 }
 
@@ -782,6 +897,9 @@ class _FakeHttpClientAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) {
+    if (options.path == '/health') {
+      return Future.value(ResponseBody.fromString('{"status":"ok"}', 200, headers: {Headers.contentTypeHeader: ['application/json']}));
+    }
     return _handler(options);
   }
 

@@ -166,8 +166,6 @@ function unidadMedida(
 const UNVERIFIED_IN_DRAFT: readonly string[] = [
   "Formato de fecha (se emite dd-MM-yyyy según la documentación pública).",
   "paginacion omitida por no conocerse si es obligatoria.",
-  "tablaFormasPago no se emite: el modelo fiscal no expone la forma de pago " +
-    "de la DGII, y no se inventa una equivalencia a partir de tipoPago.",
   ...DOSA_CONTRACT_GAPS,
 ];
 
@@ -267,6 +265,15 @@ export function mapEcfToDosaDraft(
           tipoeCF: DOSA_TIPOS_ECF[document.type],
           eNCF: encf,
           fechaEmision: ddMmYyyy(document.issueDate),
+          // Fiscal line prices are net of ITBIS (DGII: 0 = tax excluded).
+          indicadorMontoGravado: 0,
+          ...(metadata.sequenceDueDate && document.type === "E31"
+            ? { fechavencimientosecuencia: ddMmYyyy(metadata.sequenceDueDate) } : {}),
+          ...(metadata.paymentDeadline ? { fechaLimitePago: ddMmYyyy(metadata.paymentDeadline) } : {}),
+          ...(document.paymentForms && document.type !== "E34"
+            ? { tablaFormasPago: { formaDePago: document.paymentForms.map(payment => ({
+                formaPago: payment.code, montoPago: payment.amount,
+              })) } } : {}),
           ...(metadata.incomeType !== undefined
             ? { tipoIngresos: String(metadata.incomeType).padStart(2, "0") }
             : {}),
@@ -277,6 +284,9 @@ export function mapEcfToDosaDraft(
         emisor: {
           RNCEmisor: document.sender.taxId,
           RazonSocialEmisor: document.sender.legalName,
+          nombreComercial: document.sender.tradeName ?? document.sender.legalName,
+          ...(document.sender.address ? { direccionEmisor: document.sender.address } : {}),
+          fechaEmision: ddMmYyyy(document.issueDate),
         },
         ...(document.buyer
           ? {

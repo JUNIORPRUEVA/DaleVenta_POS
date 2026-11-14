@@ -402,17 +402,23 @@ class EcfCapabilities {
     required this.environment,
     required this.certificationStatus,
     required this.productionEnabled,
+    this.canActivateProduction = false,
     required this.allowedTypes,
     required this.emissionPathAvailable,
     required this.documentTypes,
     this.allowSalesWithoutEcf = false,
     this.salesWithoutEcfWarning = '',
+    this.posReady = false,
+    this.posAvailableTypes = const [],
   });
 
   final bool enabled;
+  final bool posReady;
+  final List<String> posAvailableTypes;
   final String environment;
   final String certificationStatus;
   final bool productionEnabled;
+  final bool canActivateProduction;
   final List<String> allowedTypes;
 
   /// `true` sólo cuando ESTA empresa puede emitir ahora mismo: proveedor DOSA,
@@ -434,6 +440,9 @@ class EcfCapabilities {
     final allowed = (json['allowedTypes'] as List?) ?? const [];
     return EcfCapabilities(
       enabled: json['enabled'] == true,
+      posReady: json['posReady'] == true,
+      posAvailableTypes: (json['posAvailableTypes'] as List?)
+          ?.whereType<String>().toList(growable: false) ?? const [],
       environment: _string(json, 'environment').isEmpty
           ? 'SANDBOX'
           : _string(json, 'environment'),
@@ -441,6 +450,7 @@ class EcfCapabilities {
           ? 'NOT_STARTED'
           : _string(json, 'certificationStatus'),
       productionEnabled: json['productionEnabled'] == true,
+      canActivateProduction: json['canActivateProduction'] == true,
       allowedTypes: allowed.whereType<String>().toList(growable: false),
       emissionPathAvailable: json['emissionPathAvailable'] == true,
       allowSalesWithoutEcf: json['allowSalesWithoutEcf'] == true,

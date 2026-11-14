@@ -92,6 +92,7 @@ const TEXT_OUTCOME: ReadonlyArray<[RegExp, DosaDgiiOutcome]> = [
   [/^\s*aceptado\s*$/i, "ACCEPTED"],
   [/^\s*rechazado\s*$/i, "REJECTED"],
   [/en\s+proceso/i, "IN_PROCESS"],
+  [/^\s*pendiente\s+dgii\s*$/i, "IN_PROCESS"],
 ];
 
 /** El proveedor usa este texto para decir que la DGII no recibió el eCF. */
@@ -153,7 +154,7 @@ export function classifyDosaResponse(input: unknown): DosaResponseClassification
   }
 
   const encf = firstString(data, ["encf", "eNCF", "e_ncf", "ncf"]);
-  const rnc = firstString(data, ["rnc", "RNC"]);
+  const rnc = firstString(data, ["rnc", "RNC", "rncEmisor", "RNCEmisor"]);
   const secuencia = data?.secuenciaUtilizada;
 
   return {
@@ -193,9 +194,24 @@ function buildQr(
 ): DosaQrData | null {
   if (!data) return null;
 
-  const consultaUrl = firstString(data, ["url", "urlConsulta", "consultaUrl"]);
+  let consultaUrl = firstString(data, ["url", "urlConsulta", "consultaUrl", "urlQR"]);
   const codigoSeguridad = firstString(data, ["codigoSeguridad"]);
   const fechaFirma = firstString(data, ["fechaFirma"]);
+
+  // Observed provider URL contained a literal '+' in the security code. URL
+  // query parsing treats it as a space, making an accepted RFCE unfindable.
+  // Repair only this exact encoding discrepancy on the official DGII hosts.
+  if (consultaUrl && codigoSeguridad) {
+    try {
+      const url = new URL(consultaUrl);
+      const entry = Array.from(url.searchParams).find(([key]) => key.toLowerCase() === "codigoseguridad");
+      if (url.protocol === "https:" && ["fc.dgii.gov.do", "ecf.dgii.gov.do"].includes(url.hostname)
+          && entry && entry[1] !== codigoSeguridad && entry[1].replace(/ /g, "+") === codigoSeguridad) {
+        url.searchParams.set(entry[0], codigoSeguridad);
+        consultaUrl = url.toString();
+      }
+    } catch { /* Preserve the observed URL; malformed evidence is not invented. */ }
+  }
 
   if (!consultaUrl && !codigoSeguridad && !fechaFirma) return null;
 

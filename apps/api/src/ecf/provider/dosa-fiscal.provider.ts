@@ -27,10 +27,10 @@ import type {
  *   E34. E33/E41 no se declaran porque no estan implementados.
  * * **`webhookSupported` es `true`**: hay endpoint y verificacion de firma
  *   (bloqueada por defecto hasta que el proveedor documente el algoritmo).
- * * **`querySupported` es `false`**: la documentacion oficial del proveedor
- *   **no expone un endpoint de consulta de estado**. Solo documenta
- *   `EnviarFactura` y `NotaDesdeFactura`. Declarar soporte de consulta seria
- *   inventar una API.
+ * * **`querySupported` es `false`**: este adaptador aún no implementa la
+ *   consulta. El portal publica `ObtenerFactura/{id}` con `X-API-KEY`, pero el
+ *   ejemplo no vincula ese id con TrackId ni demuestra un resultado DGII final.
+ *   Ver `docs/ecf/research/DOSA_EMISSION_API_2026-11.md`.
  * * **`realEmissionEnabled` es `false` por defecto.** Solo se enciende si el
  *   llamador lo pide explicitamente, y aun asi la decision real la toma
  *   `assessDosaEmissionGate` en cada emision.

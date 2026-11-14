@@ -277,14 +277,14 @@ ActivationGuide activationGuideFor(String taskKey, ActivationTask? task) {
                 hint: 'Está dentro de Configuración.',
               ),
               ActivationGuideStep(
-                'Activa «Utilizar impuestos».',
+                'Activa «Activar módulo de facturación electrónica».',
                 hint:
-                    'Está en el panel «Impuestos y e-CF», bajando por la página.',
+                    'Está en el panel «Facturación electrónica»; los impuestos se activan junto con el módulo.',
               ),
               ActivationGuideStep(
                 'Elige cómo tratas el ITBIS.',
                 hint:
-                    '«Precio incluye impuesto» o «Precio + impuesto», según trabajes.',
+                    '«ITBIS incluido» o «Precio + ITBIS», según trabajes.',
               ),
               ActivationGuideStep(
                 'Pulsa «Guardar empresa».',
@@ -338,7 +338,7 @@ ActivationGuide activationGuideFor(String taskKey, ActivationTask? task) {
               ActivationGuideStep(
                 'Entra a Empresa › Configuración y activa el módulo de facturación electrónica.',
                 hint:
-                    'En el panel «Impuestos y e-CF». Después pulsa «Guardar empresa».',
+                    'En el panel «Facturación electrónica». El interruptor guarda la activación; usa «Guardar empresa» para los demás cambios.',
                 emphasis: true,
               ),
               ActivationGuideStep(

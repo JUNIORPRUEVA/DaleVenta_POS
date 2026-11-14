@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:pdf/widgets.dart' as pw;
 
 import 'package:intl/intl.dart';
 
@@ -31,6 +32,7 @@ class HtmlThermalReceiptRenderer {
   <title>Ticket ${_escape(receipt.ticketNumber)}</title>
   <style>
 ${_css()}
+${receipt.ecf == null ? '' : '.company-name,.company-line,.client-line,.item-name{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}'}
   </style>
 </head>
 <body>
@@ -48,6 +50,7 @@ ${_css()}
       <strong>¡GRACIAS POR SU PREFERENCIA!</strong>
       <div>FullPOS Cloud</div>
     </footer>
+    ${_ecfFooter(receipt)}
   </main>
 </body>
 </html>
@@ -354,6 +357,9 @@ body {
   }
 
   String _fiscal(ThermalReceiptViewModel receipt) {
+    if (receipt.ecf != null) {
+      return '<section class="client">${receipt.ecf!.identityLines.map((line) => '<div>${_escape(line)}</div>').join()}</section>';
+    }
     final ncf = _clean(receipt.ncf ?? '');
     final type = _clean(receipt.fiscalVoucherType ?? '');
     if (ncf.isEmpty && type.isEmpty) return '';
@@ -383,7 +389,24 @@ body {
     }
   }
 
+  String _ecfFooter(ThermalReceiptViewModel receipt) {
+    final ecf = receipt.ecf;
+    if (ecf == null || !ecf.hasStamp) return '';
+    final svg = pw.Barcode.qrCode().toSvg(
+      ecf.qrUrl!,
+      width: 220,
+      height: 220,
+      drawText: false,
+    );
+    final source =
+        'data:image/svg+xml;base64,${base64Encode(utf8.encode(svg))}';
+    return '<section style="break-inside:avoid"><div style="margin-left:16.5mm;margin-top:3mm;background:white;padding:3mm;width:28mm;height:28mm"><img alt="QR de consulta DGII" src="$source" style="width:22mm;height:22mm"></div><div>Código de seguridad: ${_escape(ecf.securityCode!)}</div><div>Fecha de firma: ${_escape(ecf.signedAt!)}</div></section>';
+  }
+
   String _items(ThermalReceiptViewModel receipt) {
+    if (receipt.ecf != null && paperWidthMm == 58) {
+      return '<section><strong>DETALLE</strong>${receipt.items.map((item) => '<div style="padding:1mm 0;border-bottom:1px solid #ccc"><div>${_escape(item.name)}</div><div style="display:flex;justify-content:space-between"><span>${_escape(item.qtyText)} x ${_escape(_money(item.unitPrice))}</span><strong>${_escape(_money(item.total))}</strong></div><div>ITBIS: ${_escape(_money(item.taxAmount))}</div>${item.discount > 0 ? '<div>Descuento: ${_escape(_money(item.discount))}</div>' : ''}</div>').join()}</section>';
+    }
     final rows = receipt.items.map((item) {
       final discount = item.discount > 0
           ? '<div class="line-discount">Desc. -${_escape(_money(item.discount))}</div>'

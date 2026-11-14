@@ -6,6 +6,8 @@
 ///   `blockingReasons`. **No** es un error de red: hay que mostrar el motivo.
 /// * `result: STOPPED_REVIEW_REQUIRED` significa que el comprobante quedó en
 ///   revisión humana. Nunca es aceptación de la DGII.
+/// * `FISCAL_RESULT_RECORDED` identifica un resultado fiscal comunicado por DOSA
+///   que el servidor correlacionó y guardó con la evidencia del envío.
 /// * `canRetryPost` es siempre `false`: reintentar a ciegas un documento ya
 ///   intentado puede duplicar el e-CF.
 class EcfDosaDispatchOutcome {
@@ -44,6 +46,14 @@ class EcfDosaDispatchOutcome {
   /// técnico: si el operador tiene que llamar a soporte, necesita el código.
   String get message {
     if (ok) {
+      if (result == 'FISCAL_RESULT_RECORDED') {
+        if (safeCode == 'ECF_DOSA_OBSERVED_CONDITIONALLY_ACCEPTED') {
+          return 'DOSA confirmó una aceptación condicional. '
+              'Revisa las observaciones del comprobante; su evidencia quedó registrada.';
+        }
+        return 'DOSA confirmó la aceptación del comprobante. '
+            'El resultado fiscal y su evidencia quedaron registrados.';
+      }
       if (result == 'STOPPED_REVIEW_REQUIRED') {
         return 'Enviado. El comprobante queda en revisión: la respuesta del '
             'proveedor no se toma como aceptación de la DGII.';

@@ -103,8 +103,10 @@ class MemoryStore implements DosaCredentialStore {
 }
 
 class FakeFiscalConfig implements DosaCompanyFiscalConfigReader {
+  constructor(private readonly environment = "SANDBOX") {}
   async read(companyId: string) {
-    return { ecfEnabled: true, provider: companyId === OTHER_COMPANY ? "ALANUBE" : "DOSA" };
+    return { ecfEnabled: true, provider: companyId === OTHER_COMPANY ? "ALANUBE" : "DOSA",
+      environment: this.environment, productionEnabled: this.environment === "PRODUCTION", certificationStatus: "PRODUCTION_READY" };
   }
 }
 
@@ -162,7 +164,7 @@ async function build(options: {
   }
   const transport = new RecordingTransport();
   const service = new DosaEmissionService({
-    fiscalConfig: new FakeFiscalConfig(),
+    fiscalConfig: new FakeFiscalConfig(options.config?.environment === "PRODUCTION" ? "PRODUCTION" : "SANDBOX"),
     credentials,
     config: emissionConfig(options.config),
     transport,
@@ -171,6 +173,29 @@ async function build(options: {
 }
 
 describe("Selección de API Key — sin sustitución entre ambientes", () => {
+  it.each([
+    { environment: "PRODUCTION", productionEnabled: false, certificationStatus: "PRODUCTION_READY", serverProduction: true, expected: "production" },
+    { environment: "PRODUCTION", productionEnabled: true, certificationStatus: "AUTHORIZED_SANDBOX", serverProduction: true, expected: "production" },
+    { environment: "PRODUCTION", productionEnabled: true, certificationStatus: "PRODUCTION_READY", serverProduction: false, expected: "production" },
+    { environment: "UNKNOWN", productionEnabled: true, certificationStatus: "PRODUCTION_READY", serverProduction: true, expected: "production" },
+    { environment: "PRODUCTION", productionEnabled: true, certificationStatus: "PRODUCTION_READY", serverProduction: true, expected: "test" },
+  ] as const)("bloquea antes de abrir la bóveda: %j", async scenario => {
+    const inspect = jest.fn(async () => ({ status: "ACTIVE", environment: "production", fingerprint: "synthetic" }));
+    const openForEmission = jest.fn();
+    const transport = new RecordingTransport();
+    const service = new DosaEmissionService({
+      fiscalConfig: { read: async () => ({ ecfEnabled: true, provider: "DOSA", ...scenario }) },
+      credentials: { inspect, openForEmission } as never,
+      config: emissionConfig({ productionEnabled: scenario.serverProduction }), transport,
+    });
+    const result = await service.authorizeForDispatch({ companyId: COMPANY, rnc: RNC, senderTaxId: RNC,
+      documentType: "E31", sequenceAvailable: true, body: BODY, expectedEnvironment: scenario.expected });
+    expect(result.ok).toBe(false);
+    expect(openForEmission).not.toHaveBeenCalled();
+    expect(transport.keys).toHaveLength(0);
+    if (scenario.environment === "UNKNOWN" || scenario.expected === "test") expect(inspect).not.toHaveBeenCalled();
+  });
+
   it("TEST usa la clave de TEST", async () => {
     const { service, transport } = await build({
       bundle: { apiKeyTest: "CLAVE-TEST", apiKeyProduccion: "CLAVE-PROD" },
@@ -288,7 +313,7 @@ describe("Selección de API Key — sin sustitución entre ambientes", () => {
     });
     const transport = new RecordingTransport();
     const service = new DosaEmissionService({
-      fiscalConfig: new FakeFiscalConfig(),
+      fiscalConfig: new FakeFiscalConfig("PRODUCTION"),
       credentials,
       config: emissionConfig({
         environment: "PRODUCTION",
@@ -331,7 +356,7 @@ describe("Selección de API Key — sin sustitución entre ambientes", () => {
     });
     const transport = new RecordingTransport();
     const service = new DosaEmissionService({
-      fiscalConfig: new FakeFiscalConfig(),
+      fiscalConfig: new FakeFiscalConfig("PRODUCTION"),
       credentials,
       config: emissionConfig({
         environment: "PRODUCTION",

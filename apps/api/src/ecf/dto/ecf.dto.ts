@@ -4,6 +4,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   ValidateNested,
@@ -16,6 +17,11 @@ import {
   EcfProvider,
 } from "@prisma/client";
 import { ECF_ALLOWED_DOCUMENT_TYPES } from "../ecf.constants";
+
+export class EnableEcfProductionDto {
+  @IsUUID()
+  expectedCompanyId!: string;
+}
 
 export class UpdateEcfConfigDto {
   @IsOptional()

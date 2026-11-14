@@ -31,12 +31,13 @@ uat("E34 credit-note emission orchestrator (simulated transport)", () => {
   async function tenant() {
     const companyId = randomUUID();
     await prisma.company.create({ data: { id: companyId, name: "Synthetic E34 emission", slug: `ecf-e34e-${companyId}` } });
+    await prisma.ecfCompanyConfiguration.create({ data: { companyId, environment: "PRODUCTION" } });
     return { companyId, user: { id: actor, role: "ADMIN", companyId } as TenantUser };
   }
   async function eligibleOriginal(companyId: string, total = "100.00", status: "DGII_ACCEPTED" | "PROVIDER_ACCEPTED" = "DGII_ACCEPTED") {
     const encf = next("E31");
     const evidenceRef = `uat://synthetic-not-dgii/${randomUUID()}`, evidenceHash = "a".repeat(64);
-    const document = await prisma.ecfElectronicDocument.create({ data: { companyId, documentType: "E31", status,
+    const document = await prisma.ecfElectronicDocument.create({ data: { environment: "PRODUCTION", companyId, documentType: "E31", status,
       externalDocumentNumber: encf, externalProviderId: `synthetic-${randomUUID()}`,
       idempotencyKey: `synthetic-original-${randomUUID()}`, payloadFingerprint: "b".repeat(64),
       fiscalSnapshot: { total, currency: "DOP", issueDate: "2026-10-14", issuerRnc: "101000001", encf, evidenceRef, evidenceHash } } });

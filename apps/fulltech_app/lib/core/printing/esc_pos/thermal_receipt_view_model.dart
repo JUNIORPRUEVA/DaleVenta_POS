@@ -1,6 +1,7 @@
 import '../models/company_info.dart';
 import '../models/receipt_text_utils.dart';
 import '../models/ticket_data.dart';
+import '../../../features/ecf/ecf_print_document.dart';
 
 class ThermalReceiptViewModel {
   const ThermalReceiptViewModel({
@@ -28,9 +29,11 @@ class ThermalReceiptViewModel {
     this.ncfExpirationDate,
     this.note,
     this.isCopy = false,
+    this.ecf,
   });
 
   final String ticketNumber;
+  final EcfPrintDocument? ecf;
   final DateTime dateTime;
   final String documentTitle;
   final CompanyInfo company;
@@ -60,10 +63,19 @@ class ThermalReceiptViewModel {
     required CompanyInfo company,
   }) {
     return ThermalReceiptViewModel(
+      ecf: data.ecf,
       ticketNumber: data.ticketNumber,
       dateTime: data.dateTime,
       documentTitle: _titleFor(data),
-      company: company,
+      company: data.ecf == null
+          ? company
+          : CompanyInfo(
+              name: data.ecf!.issuerName,
+              rnc: data.ecf!.issuerRnc,
+              address: data.ecf!.issuerAddress ?? '',
+              phone: data.issuerPhone ?? company.phone,
+              logoBytes: company.logoBytes,
+            ),
       items: data.items
           .map(
             (item) => ThermalReceiptItemViewModel(

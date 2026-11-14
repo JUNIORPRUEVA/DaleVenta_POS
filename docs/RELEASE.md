@@ -196,3 +196,57 @@ At minimum, verify:
 Release is GO only when required tests, functional QA, visual QA, data safety checks, and rollback readiness pass.
 
 Release is NO-GO when a critical validation fails, environment identity is uncertain, secrets are exposed, tenant isolation risk exists, migration state is unclear, or rollback is not acceptable.
+
+## ECF manual predeployment checkpoint — 2026-11-13
+
+HECHO: the three reviewed ECF migrations0400/0500/0600 are already applied
+on daleventapos/database. Their original SQL/checksums and all previous ledger
+rows are preserved. Do not rerun SQL manually, reset, db push, seed, rewind a
+counter or restore an old database over current sales. Evidence and backups:
+[ECF predeployment audit](ecf/ECF_PREDEPLOY_AUDIT_2026-11-13.md).
+
+The candidate is based on production-main cada11f8 and carries only the reviewed
+working-tree delta from the older fiscal checkout. Keep both EasyPanel services'
+autoDeploy disabled. Commit, push and integration require explicit authorization.
+No deploy was executed by the agent.
+
+API dependency authority is the root package-lock.json. After an intentional API
+dependency update, run node scripts/release/sync_api_docker_lock.mjs and review
+the generated apps/api/package-lock.json. CI runs the same script with --check;
+apps/api Docker uses npm ci. Never edit the generated API lock independently.
+The Astro stage uses Astro7.4.12 and Node22.23.4-alpine. The two final Docker
+stages accept GIT_SHA for org.opencontainers.image.revision. Build outside
+production; local QA images contain a synthetic assistant key and are not release
+artifacts. Preserve the existing EasyPanel public assistant key/environment.
+
+Manual operator order after the candidate is committed, reviewed and integrated:
+
+1. Verify the expected commit and CI result. Run
+   scripts/release/verify_ecf_server_predeploy.ps1 from PowerShell7. This read-only
+   checker returns2 while the production gates are not prepared; this is a block,
+   not permission to bypass it. Review backup freshness before the actual rollout.
+2. Prepare backend DOSA_PRODUCTION_EMISSION_ENABLED=true and
+   DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true in EasyPanel, under owner control.
+   Preserve RUN_MIGRATIONS=false, disabled seed, credentials, mounts and all other
+   existing settings. Saving configuration is not an instruction to restart.
+   These global permissions alone never activate a company or emit an invoice.
+3. Build immutable images outside the production host and record commit/digests.
+   The user deploys the API first. Verify /health, authentication/company context,
+   own-environment credentials, Normal intent and readiness before any new client.
+4. The user deploys the combined PWA only after the compatible API is healthy.
+   Preserve the current repository-root context and Dockerfile.public-web. Verify
+   public/auth/POS routes, runtime API/proxy and DOSA assistant configuration.
+5. Each company independently completes the existing assistant/certification,
+   explicitly enables production and registers its own DGII authorizations/ranges.
+   A company without available ranges does not gain the POS fiscal selector.
+   Never copy FULLTECH credentials, TEST metadata or counters to another company.
+6. Record post-deploy health, expected revision and acceptance evidence. A live
+   fiscal invoice is a separate business operation, never a smoke-test sale.
+
+Rollback: retain the new additive schema. Before clients with the new Normal
+intent are released, the saved prior API image can be restored under an approved
+rollback procedure. Once new clients are active, keep a compatible API or fix
+forward; the old API does not understand the new Normal marker. A PWA rollback
+must retain the compatible API and database. Do not drop columns or restore the
+whole historical database over intervening sales. Database restore needs its own
+maintenance/reconciliation plan and owner authorization.

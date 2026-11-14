@@ -7,6 +7,7 @@ import {
   type DosaResponseClassification,
 } from "./dosa-response.mapper";
 import type { DosaHttpResponse, DosaHttpTransport } from "./dosa-emission.client";
+import { toDosaOutboundRequest } from "./dosa-request.serializer";
 
 /**
  * Probador E31 de TEST — **aislado del flujo comercial**.
@@ -246,7 +247,7 @@ export class DosaE31TestProbe {
         "Content-Type": "application/json",
         "X-API-KEY": this.deps.config.apiKey,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(toDosaOutboundRequest(body)),
       signal,
     });
   }

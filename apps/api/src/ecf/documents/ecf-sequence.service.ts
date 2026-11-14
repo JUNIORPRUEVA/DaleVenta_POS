@@ -1,9 +1,12 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import type { EcfEnvironment, Prisma } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import { checkDeclaredRangeWithinAuthorization } from "./ecf-dgii-authorized-sequences.policy";
 import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
+
+import { lockNumberingEnvironment, numberingEnvironment } from "./ecf-numbering-environment";
+import { hasReviewedLegacyTestProof } from "../ecf-reviewed-test-readiness";
 
 type Tx = Prisma.TransactionClient;
 export type EcfSequenceDocumentType = "E31" | "E32" | "E34";
@@ -57,10 +60,11 @@ export class EcfSequenceService {
     companyId: string,
     documentType: EcfSequenceDocumentType,
     range: { startNumber: number; endNumber: number },
+    environment: EcfEnvironment,
   ) {
     const authorization = await new EcfDgiiAuthorizedSequencesService(
       this.prisma,
-    ).findFor(companyId, documentType);
+    ).findFor(companyId, documentType, environment);
     const check = checkDeclaredRangeWithinAuthorization(range, authorization);
     if (!check.ok) {
       throw new ConflictException(`${check.code}: ${check.message}`);
@@ -77,9 +81,10 @@ export class EcfSequenceService {
     companyId: string,
     documentType: EcfSequenceDocumentType,
     number: number,
+    environment: EcfEnvironment,
   ) {
     const authorization = await tx.ecfDgiiAuthorizedSequence.findUnique({
-      where: { companyId_documentType: { companyId, documentType } },
+      where: { companyId_documentType: { companyId, documentType, environment } },
     });
     const check = checkDeclaredRangeWithinAuthorization(
       { startNumber: number, endNumber: number },
@@ -112,25 +117,61 @@ export class EcfSequenceService {
     return parsed;
   }
 
+  /** Legacy TEST allocations retain their original ledger/environment. Their
+   * reviewed frontier must still protect a newly declared SANDBOX range.
+   * It is a lower bound only, never a copied authorization or counter reset.
+   */
+  private async assertLegacyTestFrontier(tx: Tx, companyId: string, type: EcfSequenceDocumentType, number: number, environment: EcfEnvironment) {
+    if (environment !== "SANDBOX") return;
+    const documents = await tx.ecfElectronicDocument.findMany({ where: { companyId, documentType: type,
+      OR: [{ environment: null }, { environment: "SANDBOX" }],
+      payloadSummary: { path: ["controlledTest", "environment"], equals: "TEST" } }, take: 101,
+      select: { id: true, environment: true, status: true, sourceType: true, sourceId: true, payloadFingerprint: true, payloadSummary: true,
+        statusLogs: { where: { companyId, reasonCode: "LEGACY_TEST_ENVIRONMENT_CLASSIFIED" },
+          orderBy: { createdAt: "desc" }, take: 1, select: { metadata: true } } } });
+    if (!documents.length) return;
+    const reviewRequired = () => new ConflictException("ECF_SEQUENCE_LEGACY_TEST_REVIEW_REQUIRED");
+    if (documents.length > 100 || documents.some(doc => doc.environment !== "SANDBOX" || !hasReviewedLegacyTestProof(doc))) throw reviewRequired();
+    const identities = documents.map(doc => {
+      const summary = doc.payloadSummary as { emission?: { encf?: string } } | null;
+      const review = doc.statusLogs[0].metadata as { originalAllocationId?: string };
+      const encf = summary?.emission?.encf ?? "";
+      if (!new RegExp(`^${type}\\d{10}$`).test(encf) || !/^[a-f0-9-]{36}$/i.test(review.originalAllocationId ?? "")) throw reviewRequired();
+      return { documentId: doc.id, allocationId: review.originalAllocationId!, encf };
+    });
+    const ledger = await tx.ecfSequenceAuditLog.findMany({ where: { companyId, id: { in: identities.map(row => row.allocationId) }, action: "ALLOCATED", type },
+      select: { id: true, documentId: true, sequenceId: true, encf: true } });
+    if (identities.some(row => !ledger.some(log => log.id === row.allocationId && log.documentId === row.documentId && log.encf === row.encf && log.sequenceId))) throw reviewRequired();
+    const ranges = await tx.ecfSequence.findMany({ where: { companyId, id: { in: ledger.map(row => row.sequenceId!) } }, select: { id: true, nextNumber: true } });
+    if (ledger.some(row => !ranges.some(range => range.id === row.sequenceId))) throw reviewRequired();
+    const minimum = Math.max(...identities.map(row => Number(row.encf.slice(3)) + 1), ...ranges.map(range => range.nextNumber));
+    if (number < minimum) throw new ConflictException({ code: "ECF_SEQUENCE_LEGACY_TEST_REUSE_BLOCKED",
+      message: `La empresa ya utilizó numeración de pruebas. Inicia en ${minimum} o posterior.`, minimumStartNumber: minimum });
+  }
+
   /** Tenant-scoped read of the company ranges. */
   async list(user: TenantUser) {
     const companyId = requireTenant(user);
-    return this.prisma.ecfSequence.findMany({ where: { companyId }, orderBy: [{ documentType: "asc" }, { createdAt: "asc" }] });
+    return this.prisma.ecfSequence.findMany({ where: { companyId, environment: await numberingEnvironment(this.prisma, companyId) }, orderBy: [{ documentType: "asc" }, { createdAt: "asc" }] });
   }
 
   /** Registers the first range for a company/documentType. One active range per type. */
   async register(user: TenantUser, input: {
-    documentType: string; startNumber: number; endNumber: number; validUntil?: Date | string | null;
+    documentType: string; startNumber: number; endNumber: number; validUntil?: Date | string | null; expectedEnvironment?: EcfEnvironment;
   }) {
     const companyId = requireTenant(user);
     const documentType = this.assertType(input.documentType);
+    const environment = await numberingEnvironment(this.prisma, companyId);
+    if (input.expectedEnvironment && input.expectedEnvironment !== environment) throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     this.assertRange(input);
-    await this.assertWithinAuthorization(companyId, documentType, input);
+    await this.assertWithinAuthorization(companyId, documentType, input, environment);
     const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.ecfSequence.findFirst({ where: { companyId, documentType, active: true } });
+      await lockNumberingEnvironment(tx, companyId, environment);
+      await this.assertLegacyTestFrontier(tx, companyId, documentType, input.startNumber, environment);
+      const existing = await tx.ecfSequence.findFirst({ where: { companyId, environment, documentType, active: true } });
       if (existing) throw new ConflictException("ECF_SEQUENCE_ALREADY_EXISTS");
-      return tx.ecfSequence.create({ data: { companyId, documentType, prefix: documentType,
+      return tx.ecfSequence.create({ data: { companyId, environment, documentType, prefix: documentType,
         startNumber: input.startNumber, nextNumber: input.startNumber, endNumber: input.endNumber, validUntil } });
     });
   }
@@ -140,22 +181,26 @@ export class EcfSequenceService {
    * frontier, so numbers already handed out are structurally impossible to reuse.
    */
   async renew(user: TenantUser, input: {
-    documentType: string; startNumber: number; endNumber: number; validUntil?: Date | string | null;
+    documentType: string; startNumber: number; endNumber: number; validUntil?: Date | string | null; expectedEnvironment?: EcfEnvironment;
   }) {
     const companyId = requireTenant(user);
     const documentType = this.assertType(input.documentType);
+    const environment = await numberingEnvironment(this.prisma, companyId);
+    if (input.expectedEnvironment && input.expectedEnvironment !== environment) throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     this.assertRange(input);
-    await this.assertWithinAuthorization(companyId, documentType, input);
+    await this.assertWithinAuthorization(companyId, documentType, input, environment);
     const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM ecf_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} FOR UPDATE`;
-      const current = await tx.ecfSequence.findFirst({ where: { companyId, documentType, active: true } });
+      await lockNumberingEnvironment(tx, companyId, environment);
+      await this.assertLegacyTestFrontier(tx, companyId, documentType, input.startNumber, environment);
+      await tx.$queryRaw`SELECT id FROM ecf_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} AND environment = ${environment}::ecf_environment FOR UPDATE`;
+      const current = await tx.ecfSequence.findFirst({ where: { companyId, environment, documentType, active: true } });
       if (!current) throw new ConflictException("ECF_SEQUENCE_NOT_FOUND");
       if (input.startNumber < current.nextNumber) throw new ConflictException("ECF_SEQUENCE_REUSE_BLOCKED");
-      await tx.ecfSequence.updateMany({ where: { companyId, documentType, active: true }, data: { active: false } });
-      const created = await tx.ecfSequence.create({ data: { companyId, documentType, prefix: documentType,
+      await tx.ecfSequence.updateMany({ where: { companyId, environment, documentType, active: true }, data: { active: false } });
+      const created = await tx.ecfSequence.create({ data: { companyId, environment, documentType, prefix: documentType,
         startNumber: input.startNumber, nextNumber: input.startNumber, endNumber: input.endNumber, validUntil } });
-      await tx.ecfSequenceAuditLog.create({ data: { companyId, sequenceId: created.id, userId: user.id,
+      await tx.ecfSequenceAuditLog.create({ data: { companyId, environment, sequenceId: created.id, userId: user.id,
         encf: EcfSequenceService.encf(documentType, input.startNumber), type: documentType, action: "RENEWED" } });
       return created;
     });
@@ -168,33 +213,41 @@ export class EcfSequenceService {
    * carries a unique (company, operation_key) index, so a retry re-reads the e-NCF
    * it already consumed instead of burning a second number.
    */
-  async allocate(user: TenantUser, documentType: string, options: { documentId?: string; operationKey?: string; tx?: Tx } = {}) {
+  async allocate(user: TenantUser, documentType: string, options: { documentId?: string; operationKey?: string; tx?: Tx; environment?: EcfEnvironment } = {}) {
     const companyId = requireTenant(user);
+    if (options.environment && options.environment !== await numberingEnvironment(this.prisma, companyId)) {
+      throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
+    }
     if (options.operationKey) {
       const recorded = await this.alreadyAllocated(companyId, options.operationKey);
       if (recorded) return recorded;
     }
     const run = (tx: Tx) => this.allocateIn(tx, { companyId, userId: user.id, documentType,
-      documentId: options.documentId, operationKey: options.operationKey });
+      documentId: options.documentId, operationKey: options.operationKey, environment: options.environment });
     return options.tx ? run(options.tx) : this.prisma.$transaction(run);
   }
 
   /** Reads back an allocation already performed for the same operation key, if any. */
   async alreadyAllocated(companyId: string, operationKey: string) {
+    const environment = await numberingEnvironment(this.prisma, companyId);
     const row = await this.prisma.ecfSequenceAuditLog.findFirst({
-      where: { companyId, operationKey, action: "ALLOCATED" } });
+      where: { companyId, environment, operationKey, action: "ALLOCATED" } });
     return row ? { encf: row.encf, sequenceId: row.sequenceId, type: row.type, validUntil: null } : null;
   }
 
   /** Transaction-aware variant, for callers that must allocate inside their own unit of work. */
   async allocateIn(tx: Tx, params: { companyId: string; userId: string; documentType: string;
-    documentId?: string; operationKey?: string }) {
+    documentId?: string; operationKey?: string; environment?: EcfEnvironment }) {
     const type = this.assertType(params.documentType);
+    const environment = await numberingEnvironment(tx, params.companyId);
+    await lockNumberingEnvironment(tx, params.companyId, environment);
+    if (params.environment && params.environment !== environment) throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     const rows = await tx.$queryRaw<SequenceRow[]>`
       SELECT id, company_id, document_type, prefix, start_number, next_number, end_number, valid_until, active
       FROM ecf_sequences
       WHERE company_id = ${params.companyId}::uuid
         AND document_type = ${type}
+        AND environment = ${environment}::ecf_environment
         AND active = true
       ORDER BY created_at ASC
       FOR UPDATE
@@ -204,6 +257,7 @@ export class EcfSequenceService {
       && (!row.valid_until || row.valid_until.getTime() >= now.getTime())
       && row.next_number <= row.end_number);
     if (!sequence) throw new BadRequestException("ECF_SEQUENCE_EXHAUSTED");
+    await this.assertLegacyTestFrontier(tx, params.companyId, type, sequence.next_number, environment);
     const encf = EcfSequenceService.encf(sequence.prefix, sequence.next_number);
     if (!ENCF_PATTERN.test(encf)) throw new ConflictException("ECF_SEQUENCE_PREFIX_INVALID");
     // Blindaje de último paso: NINGÚN e-NCF sale fuera del rango que la DGII
@@ -214,15 +268,16 @@ export class EcfSequenceService {
       params.companyId,
       type,
       sequence.next_number,
+      environment,
     );
     // Consumed permanently: the increment is the only mutation, and it is inside
     // the locked transaction, so two concurrent allocations can never collide.
     const claimed = await tx.ecfSequence.updateMany({
-      where: { id: sequence.id, companyId: params.companyId },
+      where: { id: sequence.id, companyId: params.companyId, environment },
       data: { nextNumber: { increment: 1 } },
     });
     if (claimed.count !== 1) throw new ConflictException("ECF_SEQUENCE_NOT_FOUND");
-    await tx.ecfSequenceAuditLog.create({ data: { companyId: params.companyId, sequenceId: sequence.id,
+    await tx.ecfSequenceAuditLog.create({ data: { companyId: params.companyId, environment, sequenceId: sequence.id,
       documentId: params.documentId ?? null, userId: params.userId, operationKey: params.operationKey ?? null,
       encf, type, action: "ALLOCATED" } });
     return { encf, sequenceId: sequence.id, type, validUntil: sequence.valid_until };

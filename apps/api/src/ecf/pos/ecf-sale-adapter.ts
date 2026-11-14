@@ -24,6 +24,7 @@ export type EcfSaleSnapshot = {
   buyer?: { legalName?: string; taxId?: string; address?: string; phone?: string; email?: string };
   lines: EcfSaleSnapshotLine[];
   totals: EcfFiscalDocument["totals"];
+  paymentForms?: EcfFiscalDocument["paymentForms"];
 };
 
 export function mapSaleSnapshotToEcfDocument(
@@ -36,6 +37,7 @@ export function mapSaleSnapshotToEcfDocument(
     sender: sale.seller,
     buyer: sale.buyer,
     totals: sale.totals,
+    ...(sale.paymentForms ? { paymentForms: sale.paymentForms } : {}),
     lines: sale.lines.map((line, index) => ({
       lineNumber: index + 1,
       name: line.name,

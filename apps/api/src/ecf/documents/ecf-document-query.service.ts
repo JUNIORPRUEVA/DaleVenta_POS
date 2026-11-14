@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { EcfElectronicDocumentStatus, Prisma } from "@prisma/client";
-import { requireTenant, type TenantUser } from "../../auth/tenant-context";
+import { isAdminLike, requireTenant, type TenantUser } from "../../auth/tenant-context";
 import { PrismaService } from "../../prisma/prisma.service";
 import {
   contractAllowsEmission,
@@ -19,6 +19,9 @@ import { ECF_SEQUENCE_TYPES } from "./ecf-dgii-authorized-sequences.policy";
 import { ECF_WITHOUT_DOCUMENT_WARNING } from "./ecf-sales-without-document.policy";
 import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
+import { numberingEnvironment } from "./ecf-numbering-environment";
+import { ecfPrintView } from "./ecf-print-view";
+import { ecfRefundRequestId } from "./ecf-refund-identity";
 
 const LIST_SELECT = {
   id: true,
@@ -58,20 +61,117 @@ const EMISSION_AUTHORIZED_CERTIFICATION: readonly string[] = [
 export class EcfDocumentQueryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async printDocument(user: TenantUser, id: string) {
+    const companyId = requireTenant(user);
+    const config = await this.prisma.ecfCompanyConfiguration.findUnique({
+      where: { companyId }, select: { enabled: true, environment: true },
+    });
+    if (!config?.enabled) throw new NotFoundException("Comprobante no disponible para impresión");
+    const row = await this.prisma.ecfElectronicDocument.findFirst({
+      where: { id, companyId, environment: config.environment },
+      select: { id: true, documentType: true, environment: true, status: true,
+        externalDocumentNumber: true, fiscalDocument: true, payloadSummary: true, printStamp: true },
+    });
+    const document = row ? ecfPrintView(row) : null;
+    if (!document) throw new NotFoundException("Comprobante no disponible para impresión");
+    return { document };
+  }
+
   /** What this company may do right now. Drives which UI affordances exist. */
+  async printForSale(user: TenantUser, saleId: string) {
+    const companyId = requireTenant(user);
+    // Same ownership boundary as sales/listMine; a cashier may print their sale
+    // without being granted access to the company's fiscal administration.
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, companyId, ...(!isAdminLike(user) ? { userId: user.id } : {}) }, select: { id: true },
+    });
+    if (!sale) throw new NotFoundException("Venta no encontrada");
+    const config = await this.prisma.ecfCompanyConfiguration.findUnique({ where: { companyId }, select: { enabled: true, environment: true } });
+    if (!config?.enabled) return { document: null, requiresReview: false };
+    const environment = config.environment;
+    const documents = await this.prisma.ecfElectronicDocument.findMany({
+      where: { companyId, environment, sourceType: "SALE", sourceId: saleId },
+      orderBy: { createdAt: "desc" }, take: 2,
+      select: { id: true, documentType: true, environment: true, status: true,
+        externalDocumentNumber: true, fiscalDocument: true, payloadSummary: true, printStamp: true },
+    });
+    // Multiple fiscal identities must be reviewed, never choose one silently.
+    if (documents.length > 1) return { document: null, requiresReview: true };
+    return { document: documents[0] ? ecfPrintView(documents[0]) : null, requiresReview: false };
+  }
+
+  /** Bounded history projection; fiscal status is independent of tax settings. */
+  async salesFiscal(user: TenantUser, ids: string[]) {
+    const companyId = requireTenant(user);
+    const sales = await this.prisma.sale.findMany({ where: { companyId, id: { in: ids.slice(0, 50) }, kind: "invoice",
+      ...(!isAdminLike(user) ? { userId: user.id } : {}) },
+      select: { id: true, fiscalVoucherType: true, ncfExpirationDate: true,
+        refunds: { where: { companyId, kind: "refund", isDeleted: false }, select: { id: true } } } });
+    const publicSelect = { id: true, documentType: true, environment: true, status: true, externalDocumentNumber: true,
+      safeErrorCode: true, idempotencyKey: true, payloadSummary: true,
+      statusLogs: { where: { companyId, reasonCode: "DOSA_CONFIRMED_DGII_ACCEPTED" }, orderBy: { createdAt: "desc" as const }, take: 1,
+        select: { metadata: true } } } as const;
+    const originals = sales.length ? await this.prisma.ecfElectronicDocument.findMany({
+      where: { companyId, sourceType: "SALE", sourceId: { in: sales.map(sale => sale.id) }, documentType: { in: ["E31", "E32"] } },
+      orderBy: { createdAt: "desc" }, select: { ...publicSelect, sourceId: true,
+        relatedDocuments: { where: { companyId, documentType: "E34" }, orderBy: { createdAt: "asc" }, select: publicSelect } } }) : [];
+    const project = (row: typeof originals[number] | typeof originals[number]["relatedDocuments"][number]) => ({
+      documentId: row.id, documentType: row.documentType, encf: row.externalDocumentNumber ??
+        ((row.payloadSummary as { emission?: { encf?: string } } | null)?.emission?.encf ?? null),
+      environment: row.environment, status: row.status,
+      conditional: row.status === "DGII_ACCEPTED" && (row.statusLogs[0]?.metadata as Record<string, unknown> | null)?.providerOutcomeCode === "ECF_DOSA_OBSERVED_CONDITIONALLY_ACCEPTED",
+      safeCode: row.safeErrorCode,
+    });
+    return { items: sales.map(sale => {
+      const own = originals.filter(row => row.sourceId === sale.id);
+      const notes = own.flatMap(row => row.relatedDocuments);
+      const missingRefunds = own.length || ["E31", "E32"].includes(sale.fiscalVoucherType ?? "")
+        ? sale.refunds.filter(refund => !notes.some(note => note.idempotencyKey.endsWith(":REQUEST:" + ecfRefundRequestId(refund.id))))
+          .map(refund => refund.id) : [];
+      return { saleId: sale.id, intent: ["E31", "E32"].includes(sale.fiscalVoucherType ?? "") ? sale.fiscalVoucherType : null,
+        sequenceDueDate: sale.ncfExpirationDate?.toISOString().slice(0, 10) ?? null,
+        requiresReview: own.length > 1, documents: own.map(project), creditNotes: notes.map(project), pendingRefundIds: missingRefunds };
+    }) };
+  }
+
   async capabilities(user: TenantUser) {
     const companyId = requireTenant(user);
     const config = await this.prisma.ecfCompanyConfiguration.findUnique({
       where: { companyId },
     });
     const allowed = this.allowedTypes(config?.allowedTypes);
+    const now = new Date();
+    const sequences = config?.enabled
+      ? await this.prisma.ecfSequence.findMany({
+          where: {
+            companyId,
+            environment: config.environment,
+            active: true,
+            documentType: { in: allowed.filter((type) => type === "E31" || type === "E32") },
+            OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+          },
+          select: { documentType: true, nextNumber: true, endNumber: true },
+        })
+      : [];
+    const posAvailableTypes = [...new Set(sequences
+      .filter((sequence) => sequence.nextNumber <= sequence.endNumber)
+      .map((sequence) => sequence.documentType))];
+    const posReady = config?.enabled === true &&
+      EMISSION_AUTHORIZED_CERTIFICATION.includes(config.certificationStatus) &&
+      posAvailableTypes.length > 0;
     const providerEmissionEnabled =
       (process.env.DOSA_EMISSION_ENABLED ?? "").trim().toLowerCase() === "true";
     return {
       enabled: config?.enabled === true,
+      // Preparación para el POS: independiente de encender la emisión real.
+      posReady,
+      posAvailableTypes,
       environment: config?.environment ?? "SANDBOX",
       certificationStatus: config?.certificationStatus ?? "NOT_STARTED",
       productionEnabled: config?.productionEnabled === true,
+      canActivateProduction: config?.enabled === true && config.provider === "DOSA" && config.certificationStatus === "PRODUCTION_READY" &&
+        config.productionEnabled !== true && process.env.DOSA_PRODUCTION_EMISSION_ENABLED === "true" &&
+        process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED === "true",
       allowedTypes: allowed,
       // `true` significa "ESTA empresa puede emitir AHORA", no "la ruta existe".
       // La ruta de despacho existe (`POST /ecf/documents/:id/dispatch-dosa`),
@@ -116,7 +216,7 @@ export class EcfDocumentQueryService {
     const companyId = requireTenant(user);
     const take = query.take ?? 25;
     const skip = query.skip ?? 0;
-    const where: Prisma.EcfElectronicDocumentWhereInput = { companyId };
+    const where: Prisma.EcfElectronicDocumentWhereInput = { companyId, environment: await numberingEnvironment(this.prisma, companyId) };
     if (query.documentType) where.documentType = query.documentType;
     if (query.status) where.status = query.status;
     else if (query.group) where.status = { in: ECF_GROUP_STATUSES[query.group] };
@@ -145,7 +245,7 @@ export class EcfDocumentQueryService {
     const companyId = requireTenant(user);
     const rows = await this.prisma.ecfElectronicDocument.groupBy({
       by: ["status"],
-      where: { companyId },
+      where: { companyId, environment: await numberingEnvironment(this.prisma, companyId) },
       _count: { _all: true },
     });
     const byStatus: Record<string, number> = {};
@@ -253,6 +353,7 @@ export class EcfDocumentQueryService {
     const candidates = await this.prisma.ecfElectronicDocument.findMany({
       where: {
         companyId,
+        environment: await numberingEnvironment(this.prisma, companyId),
         documentType: { in: ["E31", "E32"] },
         status: EcfElectronicDocumentStatus.DGII_ACCEPTED,
       },
@@ -282,6 +383,7 @@ export class EcfDocumentQueryService {
       items: rows.map((row) => ({
         id: row.id,
         documentType: row.documentType,
+        environment: row.environment,
         prefix: row.prefix,
         startNumber: row.startNumber,
         nextNumber: row.nextNumber,
@@ -300,6 +402,7 @@ export class EcfDocumentQueryService {
       startNumber: dto.startNumber,
       endNumber: dto.endNumber,
       validUntil: dto.validUntil ?? null,
+      expectedEnvironment: dto.expectedEnvironment,
     });
     return { id: created.id, documentType: created.documentType, startNumber: created.startNumber,
       endNumber: created.endNumber, validUntil: created.validUntil, active: created.active };
@@ -311,6 +414,7 @@ export class EcfDocumentQueryService {
       startNumber: dto.startNumber,
       endNumber: dto.endNumber,
       validUntil: dto.validUntil ?? null,
+      expectedEnvironment: dto.expectedEnvironment,
     });
     return { id: renewed.id, documentType: renewed.documentType, startNumber: renewed.startNumber,
       endNumber: renewed.endNumber, validUntil: renewed.validUntil, active: renewed.active };
@@ -337,6 +441,7 @@ export class EcfDocumentQueryService {
       approvedQuantity: dto.approvedQuantity,
       expiresAt: dto.expiresAt ?? null,
       declarationAccepted: dto.declarationAccepted === true,
+      expectedEnvironment: dto.expectedEnvironment,
     });
   }
 

@@ -556,14 +556,14 @@ void main() {
       ),
     );
 
-    final taxesSwitch = _companySettingSwitch('Utilizar impuestos');
+    final taxesSwitch = _companySettingSwitch('Activar múltiples almacenes');
     await tester.ensureVisible(taxesSwitch);
     await tester.tap(taxesSwitch);
     await tester.pump();
     await tester.tap(find.text('Guardar empresa').hitTestable());
     await _settleSettingsFrame(tester);
 
-    expect(find.text('Impuestos activados'), findsOneWidget);
+    expect(find.text('Múltiples almacenes activados'), findsOneWidget);
     expect(
       find.text('La configuración se guardó correctamente.'),
       findsOneWidget,

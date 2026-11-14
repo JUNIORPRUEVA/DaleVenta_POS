@@ -80,6 +80,24 @@ class ThermalPrinterProfile {
   }
 
   final String name;
+  factory ThermalPrinterProfile.mm58() => ThermalPrinterProfile(
+    name: '58mm-384',
+    paperSize: PaperSize.mm58,
+    paperWidthDots: 384,
+    fontAChars: 32,
+    layout: const ThermalLayoutProfile(
+      physicalChars: 42,
+      contentWidth: 38,
+      leftOuterPadding: 2,
+      rightOuterPadding: 2,
+    ),
+    qtyChars: 3,
+    itemChars: 16,
+    priceChars: 8,
+    totalChars: 8,
+    totalsBlockChars: 30,
+  );
+
   final PaperSize paperSize;
   final int paperWidthDots;
   final int fontAChars;

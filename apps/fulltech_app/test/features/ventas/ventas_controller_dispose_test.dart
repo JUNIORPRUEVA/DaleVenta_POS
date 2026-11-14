@@ -87,6 +87,9 @@ class _FakeVentasRepository implements VentasRepository {
     String id, {
     String? clientRequestId,
     String? originalSaleCashSessionId,
+    bool electronic = false,
+    String? reason,
+    List<Map<String, dynamic>>? items,
   }) {
     throw UnimplementedError();
   }
@@ -162,6 +165,7 @@ class _FakeVentasRepository implements VentasRepository {
     String? priceListId,
     bool priceListManualOverride = false,
     String? fiscalVoucherType,
+    String? sequenceDueDate,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
     double? optimisticTaxableBase,

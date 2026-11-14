@@ -1,3 +1,4 @@
+import { EcfDocumentQueryService } from "../ecf/documents/ecf-document-query.service";
 import { randomUUID } from "node:crypto";
 import { isEcfLocalTarget } from "../ecf/ecf-local-target";
 import { PrismaService } from "../prisma/prisma.service";
@@ -86,6 +87,7 @@ uat("devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL",
     for (const documentType of ["E31", "E34"]) {
       await prisma.ecfDgiiAuthorizedSequence.create({
         data: {
+          environment: "SANDBOX",
           companyId,
           documentType,
           authorizationNumber: `SYNTH-${documentType}`,
@@ -196,6 +198,7 @@ uat("devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL",
       const evidenceHash = "a".repeat(64);
       const original = await prisma.ecfElectronicDocument.create({
         data: {
+          environment: "SANDBOX",
           companyId,
           documentType: originalType,
           status: "DGII_ACCEPTED",
@@ -476,4 +479,78 @@ uat("devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL",
     expect(numbers.every((encf) => /^E34\d{10}$/.test(encf))).toBe(true);
     expect(new Set(numbers).size).toBe(numbers.length);
   });
+
+  it("partial then remaining refund each prepare their own exact E34 and replay the earlier note", async () => {
+    const seeded = await seededSale(); const firstDto = returnDto(seeded, { items: [{saleItemId: seeded.itemIds[0], qty: "1"}] });
+    const first = await sales.returnSale(seeded.user, seeded.saleId, firstDto as never);
+    const remaining = await sales.returnSale(seeded.user, seeded.saleId, returnDto(seeded) as never);
+    expect((remaining as any).ecfCreditNote.reservedAmount).toBe("118");
+    const replay = await sales.returnSale(seeded.user, seeded.saleId, firstDto as never);
+    expect((replay as any).ecfCreditNote.documentId).toBe((first as any).ecfCreditNote.documentId);
+    const reservations = await prisma.ecfCreditReservation.findMany({where: {companyId: seeded.companyId}});
+    expect(reservations.map(r=>r.amount.toFixed(2)).sort()).toEqual(["118.00", "59.00"]);
+    expect(await e34Count(seeded.companyId)).toBe(2);
+  });
+  it("accepted electronic invoices cannot be cancelled through the ordinary delete route", async () => {
+    const seeded = await seededSale();
+    await expect(sales.remove(seeded.user, seeded.saleId)).rejects.toMatchObject({response: {code: "ECF_CANCELLATION_REQUIRES_CREDIT_NOTE"}});
+    const original = await prisma.sale.findFirstOrThrow({where: {companyId: seeded.companyId, id: seeded.saleId}});
+    expect(original.cancelledAt).toBeNull(); expect(original.isDeleted).toBe(false);
+    expect(await e34Count(seeded.companyId)).toBe(0);
+  });
+  it("refund idempotency rejects another original sale instead of returning its financial result", async () => {
+    const seeded = await seededSale(); const dto = returnDto(seeded);
+    await sales.returnSale(seeded.user, seeded.saleId, dto as never);
+    await expect(sales.returnSale(seeded.user, randomUUID(), dto as never)).rejects.toThrow("SALE_RETURN_IDEMPOTENCY_ORIGINAL_MISMATCH");
+    expect(await e34Count(seeded.companyId)).toBe(1);
+  });
+  it("failed E34 preparation is visible and recovers without another financial refund", async () => {
+    const seeded = await seededSale();
+    await prisma.ecfSequence.updateMany({where: {companyId: seeded.companyId, documentType: "E34"}, data: {active:false}});
+    const refund = await sales.returnSale(seeded.user, seeded.saleId, returnDto(seeded) as never);
+    expect((refund as any).ecfCreditPending.code).toBeTruthy(); expect((refund as any).ecfCreditNote).toBeUndefined();
+    await prisma.ecfSequence.updateMany({where: {companyId: seeded.companyId, documentType: "E34"}, data: {active:true}});
+    const recovered = await sales.retryRefundFiscal(seeded.user, seeded.saleId, refund.id);
+    const again = await sales.retryRefundFiscal(seeded.user, seeded.saleId, refund.id);
+    expect((recovered as any).ecfCreditNote.documentId).toBe((again as any).ecfCreditNote.documentId);
+    expect(await prisma.sale.count({where: {companyId: seeded.companyId, refundedSaleId: seeded.saleId, kind:"refund"}})).toBe(1);
+    expect(await e34Count(seeded.companyId)).toBe(1);
+    await expect(sales.retryRefundFiscal({...seeded.user, companyId: randomUUID()}, seeded.saleId, refund.id)).rejects.toThrow("Devolución no encontrada");
+  });
+  it("fiscal history projects original and notes with company and cashier boundaries", async () => {
+    const seeded = await seededSale();
+    await sales.returnSale(seeded.user, seeded.saleId, returnDto(seeded) as never);
+    const query = new EcfDocumentQueryService(prisma);
+    const summary = await query.salesFiscal(seeded.user, [seeded.saleId]);
+    expect(summary.items[0].documents[0]).toMatchObject({documentType: "E31", status:"DGII_ACCEPTED"});
+    expect(summary.items[0].creditNotes).toHaveLength(1); expect(summary.items[0].pendingRefundIds).toEqual([]);
+    expect(summary.items[0].creditNotes[0].encf).toMatch(/^E34\d{10}$/);
+    expect(JSON.stringify(summary)).not.toMatch(/payloadSummary|fiscalSnapshot|apiKey|idempotencyKey/);
+    expect((await query.salesFiscal({...seeded.user, companyId: randomUUID()},[seeded.saleId])).items).toEqual([]);
+    expect((await query.salesFiscal({...seeded.user, id: randomUUID(), role:"CASHIER" as never},[seeded.saleId])).items).toEqual([]);
+  });
+  it("a return beyond the automatic tax window remains explicit and never creates an unreviewed E34", async () => {
+    const seeded = await seededSale();
+    await prisma.ecfElectronicDocument.updateMany({where:{companyId:seeded.companyId,sourceId:seeded.saleId},
+      data:{fiscalDocument:{issueDate:"2020-01-01"}}});
+    const dto=returnDto(seeded);
+    const refund=await sales.returnSale(seeded.user,seeded.saleId,dto as never);
+    expect((refund as any).ecfCreditPending.code).toBe("ECF_CREDIT_TAX_REVIEW_REQUIRED");
+    const replay=await sales.returnSale(seeded.user,seeded.saleId,dto as never);
+    expect(replay.id).toBe(refund.id);
+    expect(await e34Count(seeded.companyId)).toBe(0);
+    expect(await prisma.sale.count({where:{companyId:seeded.companyId,refundedSaleId:seeded.saleId,kind:"refund"}})).toBe(1);
+  });
+  it("ambiguous legacy originals are displayed for review and never credited blindly", async () => {
+    const seeded=await seededSale();
+    await prisma.ecfElectronicDocument.create({data:{companyId:seeded.companyId,environment:"SANDBOX",documentType:"E32",
+      sourceType:"SALE",sourceId:seeded.saleId,status:"LOCAL_DRAFT",idempotencyKey:randomUUID(),payloadFingerprint:"c".repeat(64)}});
+    const result=await sales.returnSale(seeded.user,seeded.saleId,returnDto(seeded) as never);
+    expect((result as any).ecfCreditPending.code).toBe("ECF_CREDIT_MULTIPLE_ORIGINALS_REVIEW");
+    expect(await e34Count(seeded.companyId)).toBe(0);
+    const summary=await new EcfDocumentQueryService(prisma).salesFiscal(seeded.user,[seeded.saleId]);
+    expect(summary.items[0].requiresReview).toBe(true);
+    expect(summary.items[0].documents).toHaveLength(2);
+  });
+
 });

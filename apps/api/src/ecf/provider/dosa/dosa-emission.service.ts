@@ -18,17 +18,17 @@ import type { EcfDocumentType } from "../../fiscal-core/ecf-fiscal-document";
 /**
  * Configuración fiscal de la empresa, leída del servidor.
  *
- * El `provider` se lee como texto (`provider::text`) porque el enum `EcfProvider`
- * de la base de datos **hoy solo admite `ALANUBE`**. Añadir `DOSA` al enum es una
- * migración de tipo que necesita `ALTER TYPE ... ADD VALUE` y no se hace aquí sin
- * autorización; mientras tanto, esta lectura permite verificar la compuerta y
- * probar el recorrido completo con un doble, sin fingir que la base ya lo admite.
+ * Ambiente y autorización salen de ESA empresa, nunca del entorno global ni
+ * de un campo enviado por el navegador.
  */
 export interface DosaCompanyFiscalConfigReader {
   read(companyId: string): Promise<{
     ecfEnabled: boolean;
     /** Texto tal cual: `ALANUBE`, `DOSA` o lo que venga. */
     provider: string;
+    environment: string;
+    productionEnabled: boolean;
+    certificationStatus: string;
   } | null>;
 }
 
@@ -71,6 +71,7 @@ export type DosaDispatchAuthorization =
       ok: true;
       client: DosaEmissionClient;
       environment: DosaCredentialEnvironment;
+      credentialFingerprint: string | null;
     };
 
 /**
@@ -112,9 +113,9 @@ export class DosaEmissionService {
     },
   ) {}
 
-  /** Ambiente de emisión configurado en el servidor (`TEST` o `PRODUCTION`). */
-  get environment(): DosaCredentialEnvironment {
-    return this.deps.config.environment === "PRODUCTION" ? "production" : "test";
+  /** No fallback: una configuración ausente o ilegible no selecciona claves. */
+  async environmentFor(companyId: string): Promise<DosaCredentialEnvironment | null> {
+    return companyEnvironment((await this.deps.fiscalConfig.read(companyId))?.environment);
   }
 
   /** Decide sin efectos. Útil para mostrar al operador qué falta exactamente. */
@@ -124,15 +125,20 @@ export class DosaEmissionService {
     documentType: EcfDocumentType;
     senderTaxId: string | null;
     sequenceAvailable: boolean;
+    expectedEnvironment?: DosaCredentialEnvironment;
   }): Promise<
     DosaEmissionGateDecision & {
       credentialStatus: string | null;
       credentialFingerprint: string | null;
+      environment: DosaCredentialEnvironment | null;
     }
   > {
     const fiscal = await this.deps.fiscalConfig.read(input.companyId);
-    const environment: DosaCredentialEnvironment =
-      this.deps.config.environment === "PRODUCTION" ? "production" : "test";
+    const environment = companyEnvironment(fiscal?.environment);
+    if (!environment || (input.expectedEnvironment && input.expectedEnvironment !== environment)) {
+      return { allowed: false, blockingReasons: [!environment ? "ECF_DOSA_COMPANY_ENVIRONMENT_REQUIRED" : "ECF_DOSA_COMPANY_ENVIRONMENT_MISMATCH"],
+        credentialStatus: null, credentialFingerprint: null, environment };
+    }
     const credential = await this.deps.credentials.inspect({
       companyId: input.companyId,
       rnc: input.rnc,
@@ -152,13 +158,14 @@ export class DosaEmissionService {
       // documento ya contrasta con el emisor real del cuerpo).
       expectedTestRnc: input.rnc,
       providerEmissionEnabled: this.deps.config.enabled,
-      productionEmissionEnabled: this.deps.config.productionEnabled,
+      productionEmissionEnabled: this.deps.config.productionEnabled && fiscal?.productionEnabled === true && fiscal.certificationStatus === "PRODUCTION_READY",
       sequenceAvailable: input.sequenceAvailable,
       documentType: input.documentType,
     });
 
     return {
       ...decision,
+      environment,
       credentialStatus: credential?.status ?? null,
       credentialFingerprint: credential?.fingerprint ?? null,
     };
@@ -171,6 +178,7 @@ export class DosaEmissionService {
     senderTaxId: string | null;
     sequenceAvailable: boolean;
     body: DosaEcfRequestBody;
+    expectedEnvironment?: DosaCredentialEnvironment;
     /** Clave de idempotencia: la tentativa ya reclamada por el orquestador. */
     idempotencyKey?: string;
   }): Promise<DosaEmitResult> {
@@ -217,6 +225,7 @@ export class DosaEmissionService {
     senderTaxId: string | null;
     sequenceAvailable: boolean;
     body: DosaEcfRequestBody;
+    expectedEnvironment?: DosaCredentialEnvironment;
   }): Promise<DosaDispatchAuthorization> {
     // La barrera del documento va ANTES de la compuerta de configuración y no
     // depende de ninguna bandera: extraer el JSON de un borrador no convierte
@@ -234,7 +243,7 @@ export class DosaEmissionService {
     }
 
     const decision = await this.assess(input);
-    if (!decision.allowed) {
+    if (!decision.allowed || !decision.environment) {
       return {
         ok: false,
         code: "ECF_DOSA_GATE_BLOCKED",
@@ -242,8 +251,7 @@ export class DosaEmissionService {
       };
     }
 
-    const environment: DosaCredentialEnvironment =
-      this.deps.config.environment === "PRODUCTION" ? "production" : "test";
+    const environment = decision.environment;
 
     let bundle: { apiKeyProduccion?: string; apiKeyTest?: string };
     try {
@@ -289,7 +297,7 @@ export class DosaEmissionService {
       apiKey,
     );
 
-    return { ok: true, client, environment };
+    return { ok: true, client, environment, credentialFingerprint: decision.credentialFingerprint };
   }
 
   /**
@@ -322,12 +330,19 @@ export class DosaEmissionService {
 
     const created = new DosaEmissionClient(this.deps.transport, {
       ...this.deps.config,
+      environment: environment === "production" ? "PRODUCTION" : "TEST",
       apiKey,
       apiKeyIsProduction: environment === "production",
     });
     this.clients.set(key, created);
     return created;
   }
+}
+
+function companyEnvironment(value: string | undefined): DosaCredentialEnvironment | null {
+  if (value === "SANDBOX") return "test";
+  if (value === "PRODUCTION") return "production";
+  return null;
 }
 
 function normalizeRnc(value: string): string {

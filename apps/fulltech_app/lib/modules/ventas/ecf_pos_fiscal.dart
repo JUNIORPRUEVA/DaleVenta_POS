@@ -96,6 +96,18 @@ List<EcfPosFiscalMode> ecfPosFiscalModesFromCapabilities(
   return modes;
 }
 
+/// Opciones de cobro confirmadas por el servidor para la numeración actual.
+/// Activar el módulo no basta para ofrecer un comprobante electrónico.
+List<EcfPosFiscalMode> ecfPosCheckoutModesFromCapabilities(
+  EcfCapabilities? capabilities,
+) {
+  return ecfPosFiscalModesFromCapabilities(capabilities).where((mode) {
+    if (mode == EcfPosFiscalMode.normal) return true;
+    return capabilities?.posReady == true &&
+        capabilities!.posAvailableTypes.contains(mode.code);
+  }).toList(growable: false);
+}
+
 /// ¿Hay datos suficientes para identificar al receptor de un E31?
 ///
 /// Misma regla que aplica el servidor (`assertBuyerForDocumentType`): RNC o
@@ -112,8 +124,8 @@ bool ecfBuyerIdentityComplete(String? taxId, String? legalName) {
 /// **Decisión del propietario:** si la empresa habilitó «Permitir ventas
 /// normales sin e-CF», la opción **Normal** es la preseleccionada en cada venta
 /// nueva. Sigue sujeta a las reglas fiscales aplicables: el vendedor puede
-/// cambiarla por E31/E32, el motivo es obligatorio y el servidor vuelve a
-/// validar que la excepción esté habilitada antes de registrarla.
+/// cambiarla por E31/E32 y el servidor valida que la opción esté habilitada.
+/// Normal se conserva como venta interna: no prepara ni envía un e-CF.
 ///
 /// Con la excepción apagada, el comprobante se elige solo: con RNC/Cédula **y**
 /// nombre toca E31 (crédito fiscal); sin esos datos toca E32 (consumo). Si E31 no

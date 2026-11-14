@@ -1,3 +1,4 @@
+import { numberingEnvironment } from "./ecf-numbering-environment";
 import { Injectable } from "@nestjs/common";
 import { Prisma, type EcfCreditReservationState } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
@@ -21,7 +22,8 @@ export class EcfE34CreditService {
   }) {
     const companyId = requireTenant(user);
     if (input.document.type !== "E34") e34Conflict("E34_NOTE_TYPE_REQUIRED");
-    const original = await this.prisma.ecfElectronicDocument.findFirst({ where: { id: input.originalId, companyId } });
+    const environment = await numberingEnvironment(this.prisma, companyId);
+    const original = await this.prisma.ecfElectronicDocument.findFirst({ where: { id: input.originalId, companyId, environment } });
     if (!original) e34Conflict("E34_ORIGINAL_NOT_FOUND");
     if (original.status !== "DGII_ACCEPTED") e34Conflict("E34_ORIGINAL_NOT_FISCALLY_ACCEPTED");
     if (!["E31", "E32"].includes(original.documentType)) e34Conflict("E34_REFERENCE_TYPE_UNSUPPORTED");
@@ -38,6 +40,7 @@ export class EcfE34CreditService {
       const original = await tx.ecfElectronicDocument.findFirst({ where: { id: originalId, companyId } });
       const note = await tx.ecfElectronicDocument.findFirst({ where: { id: creditId, companyId } });
       if (!original || !note) e34Conflict("E34_ORIGINAL_NOT_FOUND");
+      if (original.environment !== note.environment) e34Conflict("E34_ENVIRONMENT_MISMATCH");
       const requestFingerprint = fingerprint({ originalId, creditId, payload: note.payloadFingerprint, summary: note.payloadSummary });
       const existing = await tx.ecfCreditReservation.findUnique({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } } });
       if (existing) {
@@ -74,31 +77,34 @@ export class EcfE34CreditService {
   }
 
   async transition(user: TenantUser, creditId: string, state: EcfCreditReservationState) {
+    return this.prisma.$transaction(tx => this.transitionInTransaction(tx, user, creditId, state));
+  }
+
+  /** Reuses the same credit guards inside an atomic fiscal-result transaction. */
+  async transitionInTransaction(tx: Prisma.TransactionClient, user: TenantUser, creditId: string, state: EcfCreditReservationState) {
     const companyId = requireTenant(user);
-    const known = await this.prisma.ecfCreditReservation.findUnique({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } } });
+    const known = await tx.ecfCreditReservation.findUnique({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } } });
     if (!known) e34Conflict("E34_RESERVATION_NOT_FOUND");
-    return this.prisma.$transaction(async (tx) => {
-      await this.lockDocuments(tx, companyId, [known.originalDocumentId, creditId]);
-      const reservation = await tx.ecfCreditReservation.findUniqueOrThrow({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } } });
-      if (reservation.state === state) return reservation;
-      if (!["RESERVED", "UNKNOWN_RESULT"].includes(reservation.state) || state === "RESERVED") e34Conflict("E34_RESERVATION_TRANSITION_INVALID");
-      const note = await tx.ecfElectronicDocument.findFirstOrThrow({ where: { id: creditId, companyId } });
-      if (state === "CANCELLED") {
-        if (reservation.state !== "RESERVED" || !["LOCAL_VALIDATED", "READY_TO_SEND", "CANCELLED"].includes(note.status)) e34Conflict("E34_UNKNOWN_OR_SUBMITTED_CANNOT_RELEASE");
-      } else if (state === "APPLIED" || state === "REJECTED") {
-        const expected = state === "APPLIED" ? "DGII_ACCEPTED" : "DGII_REJECTED";
-        if (note.status !== expected) e34Conflict("E34_OUTCOME_EVIDENCE_REQUIRED");
-        const evidence = readFiscalSnapshot(note);
-        const original = await tx.ecfElectronicDocument.findFirstOrThrow({ where: { id: known.originalDocumentId, companyId } });
-        const verified = validateE34Original(original, note);
-        if (note.originalDocumentId !== original.id || !centAmount(evidence.total).eq(reservation.amount) ||
-            !verified.amount.eq(reservation.amount) || evidence.issuerRnc !== verified.original.issuerRnc) e34Conflict("E34_OUTCOME_SNAPSHOT_MISMATCH");
-        await this.assertEvidence(tx, companyId, creditId, expected, evidence.evidenceRef, evidence.evidenceHash);
-      } else if (state !== "UNKNOWN_RESULT") e34Conflict("E34_RESERVATION_TRANSITION_INVALID");
-      await tx.$queryRaw`SELECT set_config('fullpos.ecf_actor', ${user.id}, true)`;
-      const updated = await tx.ecfCreditReservation.update({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } }, data: { state } });
-      return updated;
-    });
+    await this.lockDocuments(tx, companyId, [known.originalDocumentId, creditId]);
+    const reservation = await tx.ecfCreditReservation.findUniqueOrThrow({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } } });
+    if (reservation.state === state) return reservation;
+    if (!["RESERVED", "UNKNOWN_RESULT"].includes(reservation.state) || state === "RESERVED") e34Conflict("E34_RESERVATION_TRANSITION_INVALID");
+    const note = await tx.ecfElectronicDocument.findFirstOrThrow({ where: { id: creditId, companyId } });
+    if (state === "CANCELLED") {
+      if (reservation.state !== "RESERVED" || !["LOCAL_VALIDATED", "READY_TO_SEND", "CANCELLED"].includes(note.status)) e34Conflict("E34_UNKNOWN_OR_SUBMITTED_CANNOT_RELEASE");
+    } else if (state === "APPLIED" || state === "REJECTED") {
+      const expected = state === "APPLIED" ? "DGII_ACCEPTED" : "DGII_REJECTED";
+      if (note.status !== expected) e34Conflict("E34_OUTCOME_EVIDENCE_REQUIRED");
+      const evidence = readFiscalSnapshot(note);
+      const original = await tx.ecfElectronicDocument.findFirstOrThrow({ where: { id: known.originalDocumentId, companyId } });
+      const verified = validateE34Original(original, note);
+      if (note.originalDocumentId !== original.id || !centAmount(evidence.total).eq(reservation.amount) ||
+          !verified.amount.eq(reservation.amount) || evidence.issuerRnc !== verified.original.issuerRnc) e34Conflict("E34_OUTCOME_SNAPSHOT_MISMATCH");
+      await this.assertEvidence(tx, companyId, creditId, expected, evidence.evidenceRef, evidence.evidenceHash);
+    } else if (state !== "UNKNOWN_RESULT") e34Conflict("E34_RESERVATION_TRANSITION_INVALID");
+    await tx.$queryRaw`SELECT set_config('fullpos.ecf_actor', ${user.id}, true)`;
+    const updated = await tx.ecfCreditReservation.update({ where: { companyId_creditDocumentId: { companyId, creditDocumentId: creditId } }, data: { state } });
+    return updated;
   }
 
   private async lockDocuments(tx: Prisma.TransactionClient, companyId: string, ids: string[]) {

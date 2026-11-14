@@ -280,6 +280,9 @@ class _FakeAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) {
+    if (options.path == '/health') {
+      return Future.value(ResponseBody.fromString('{"status":"ok"}', 200, headers: {Headers.contentTypeHeader: ['application/json']}));
+    }
     return _handler(options);
   }
 

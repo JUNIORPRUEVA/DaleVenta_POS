@@ -68,6 +68,7 @@ uat("E32 consumo (venta → borrador local numerado) on PostgreSQL", () => {
     for (const documentType of ["E31", "E32", "E34"]) {
       await prisma.ecfDgiiAuthorizedSequence.create({
         data: {
+          environment: "SANDBOX",
           companyId,
           documentType,
           authorizationNumber: `SYNTH-${documentType}`,

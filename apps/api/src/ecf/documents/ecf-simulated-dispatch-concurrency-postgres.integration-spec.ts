@@ -59,6 +59,7 @@ uat("E-CF simulated dispatch — real concurrency", () => {
     await prisma.company.create({
       data: { id: companyId, name, slug: `ecf-conc-${companyId}` },
     });
+    await prisma.ecfCompanyConfiguration.create({ data: { companyId, environment: "PRODUCTION" } });
     return {
       companyId,
       user: { id: actor, role: "ADMIN", companyId } as TenantUser,

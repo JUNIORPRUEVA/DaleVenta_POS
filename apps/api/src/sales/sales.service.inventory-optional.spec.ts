@@ -140,6 +140,7 @@ function buildCreateHarness(options: {
     },
     $transaction: jest.fn((callback) =>
       callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
         terminal: {
           findFirst: jest.fn().mockResolvedValue({
             id: "terminal-1",
@@ -401,6 +402,7 @@ describe("SalesService optional inventory tracking", () => {
       },
       $transaction: jest.fn((callback) =>
         callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
           sale: {
             findFirst: jest.fn().mockResolvedValue(sale),
             updateMany,
@@ -454,6 +456,7 @@ describe("SalesService optional inventory tracking", () => {
     };
     const updateMany = jest.fn().mockResolvedValueOnce({ count: 1 });
     const tx = {
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       sale: {
         findFirst: jest.fn().mockResolvedValue(sale),
         updateMany,
@@ -607,6 +610,7 @@ describe("SalesService optional inventory tracking", () => {
       },
       $transaction: jest.fn((callback) =>
         callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
           saleItem: {
             groupBy: jest.fn().mockResolvedValue([]),
             findMany: jest.fn().mockResolvedValue([]),
@@ -710,6 +714,7 @@ describe("SalesService optional inventory tracking", () => {
   it("returns existing refund on clientRequestId retry without duplicate movement", async () => {
     const existing = {
       id: "refund-existing",
+      refundedSaleId: "sale-refund",
       kind: "refund",
       items: [],
     };

@@ -268,6 +268,7 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
     const doc = await prisma.ecfElectronicDocument.create({
       data: {
         companyId,
+        environment: "SANDBOX",
         documentType: "E31",
         status: "DGII_ACCEPTED",
         sourceType: "SALE",
@@ -334,6 +335,14 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
     expect(prepared.body.value.encf).toBe("E310000000001");
     expect(prepared.body.value.status).toBe("LOCAL_VALIDATED");
     expect(prepared.body.value.documentId).toBeTruthy();
+    const print = await http().get(`/ecf/sales/${sale.id}/print`).set("Authorization", `Bearer ${token}`).expect(200);
+    expect(print.body.document.encf).toBe("E310000000001");
+    expect(print.body.document.environment).toBe("SANDBOX");
+    expect(print.body.document.state).toBe("PENDING");
+    expect(print.body.document.qrUrl).toBeNull();
+    const stranger = await registerTenant("print-isolation");
+    const strangerToken = await login(stranger.email);
+    await http().get(`/ecf/sales/${sale.id}/print`).set("Authorization", `Bearer ${strangerToken}`).expect(404);
 
     // Bandeja por HTTP.
     const tray = await http()
@@ -503,6 +512,31 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
     // El importe reservado se compara numéricamente: el contrato no garantiza
     // ceros finales en el decimal devuelto.
     expect(Number(partial.body.value.reservedAmount)).toBe(59);
+
+    // Manual E34 has no sale source: it still prints its own frozen note,
+    // never the original invoice, with tenant and environment guards.
+    const notePrint = await http()
+      .get(`/ecf/documents/${partial.body.value.documentId}/print`)
+      .set("Authorization", `Bearer ${token}`).expect(200);
+    expect(notePrint.body.document).toMatchObject({
+      documentType: "E34", encf: "E340000000001", originalEncf: original.encf,
+      modificationText: "Corrige montos del NCF modificado", expiresAt: null,
+      modificationReason: "Devolución parcial",
+      state: "PENDING", qrUrl: null,
+    });
+    expect(Number(notePrint.body.document.total)).toBe(59);
+    expect(Number(notePrint.body.document.lines[0].quantity)).toBe(1);
+    expect(Number(notePrint.body.document.lines[0].total)).toBe(59);
+    expect(notePrint.body.document.payloadSummary).toBeUndefined();
+    const printStranger = await registerTenant("e34-print-stranger");
+    const printStrangerToken = await login(printStranger.email);
+    await enableEcf(printStrangerToken);
+    await http().get(`/ecf/documents/${partial.body.value.documentId}/print`)
+      .set("Authorization", `Bearer ${printStrangerToken}`).expect(404);
+    await prisma.ecfCompanyConfiguration.update({ where: { companyId: tenant.companyId }, data: { environment: "PRODUCTION" } });
+    await http().get(`/ecf/documents/${partial.body.value.documentId}/print`)
+      .set("Authorization", `Bearer ${token}`).expect(404);
+    await prisma.ecfCompanyConfiguration.update({ where: { companyId: tenant.companyId }, data: { environment: "SANDBOX" } });
 
     // El saldo baja tras la nota.
     const afterPartial = await http()

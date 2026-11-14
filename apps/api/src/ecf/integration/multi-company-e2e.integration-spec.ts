@@ -667,6 +667,8 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
     const { documentId } = await prepareOk(C2, sale.id);
     const { body } = await dosaBodyOf(documentId);
 
+    await prisma.ecfCompanyConfiguration.update({ where: { companyId: C2.companyId },
+      data: { environment: "PRODUCTION", productionEnabled: false, certificationStatus: "PRODUCTION_READY" } });
     captured.length = 0;
     const service = await emissionService("PRODUCTION");
     const result = await service.emit({

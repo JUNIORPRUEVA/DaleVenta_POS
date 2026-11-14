@@ -6,6 +6,7 @@ import { dec, money } from "../fiscal-core/ecf-money";
 import { fingerprint } from "../documents/ecf-document-idempotency.service";
 import { effectiveLineClassification } from "../documents/ecf-line-classification.policy";
 import type { EcfSaleSnapshot, EcfSaleSnapshotLine } from "./ecf-sale-adapter";
+import { salePaymentForms } from "./ecf-sale-payment-forms";
 import {
   assertBuyerForDocumentType,
   assertIssuerComplete,
@@ -22,6 +23,7 @@ export type EcfSaleFiscalSnapshot = {
   saleId: string;
   companyId: string;
   documentType: "E31" | "E32";
+  sequenceDueDate?: string;
   snapshot: EcfSaleSnapshot;
   /** Evidencia de la validación, para auditar qué se leyó y cuándo. */
   evidence: {
@@ -97,6 +99,12 @@ export class EcfSaleFiscalAdapter {
         "ECF_SALE_NOT_FOUND",
         "La venta no existe para esta empresa.",
       );
+    }
+    if (sale.fiscalVoucherType === "NORMAL") {
+      return fiscalFailure("ECF_NORMAL_SALE_NOT_ELECTRONIC", "Esta venta se registró como Normal, sin comprobante electrónico; no se prepara ni se envía a la DGII.");
+    }
+    if (["E31", "E32"].includes(sale.fiscalVoucherType ?? "") && sale.fiscalVoucherType !== input.documentType) {
+      return fiscalFailure("ECF_SALE_FISCAL_INTENT_MISMATCH", "El tipo de comprobante no coincide con la elección guardada en la venta.");
     }
 
     const eligible = assertSaleEligible({
@@ -224,6 +232,24 @@ export class EcfSaleFiscalAdapter {
     // Sistema de una sola moneda. `Sale` no persiste moneda y el resto del
     // esquema fija DOP (p. ej. `PurchaseInvoice.currency @default("DOP")`).
     const currency = input.currency ?? "DOP";
+    const collections = Number(sale.creditPaidAmount ?? 0) > 0
+      ? await this.prisma.saleCreditPayment.aggregate({
+          where: { companyId, saleId: sale.id },
+          _sum: { cashAmount: true, transferAmount: true },
+        })
+      : null;
+    let paymentForms: EcfSaleSnapshot["paymentForms"];
+    try {
+      paymentForms = salePaymentForms({
+        method: sale.paymentMethod, total: sale.totalSold.toString(),
+        cash: String(sale.paymentCashAmount ?? 0), transfer: String(sale.paymentTransferAmount ?? 0),
+        collectedCash: String(collections?._sum.cashAmount ?? 0),
+        collectedTransfer: String(collections?._sum.transferAmount ?? 0),
+      });
+    } catch (error) {
+      return fiscalFailure(error instanceof Error ? error.message : "ECF_PAYMENT_EVIDENCE_INVALID",
+        "No se puede reconstruir la forma de pago original de la venta.");
+    }
     const snapshot: EcfSaleSnapshot = {
       type: input.documentType,
       issueDate,
@@ -244,12 +270,14 @@ export class EcfSaleFiscalAdapter {
       },
       lines,
       totals: reconciliation.value.totals,
+      paymentForms,
     };
 
     return {
       ok: true,
       value: {
         saleId: sale.id,
+        sequenceDueDate: sale.ncfExpirationDate?.toISOString().slice(0, 10),
         companyId,
         documentType: input.documentType,
         snapshot,

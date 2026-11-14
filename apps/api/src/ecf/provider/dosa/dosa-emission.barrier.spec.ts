@@ -379,7 +379,7 @@ function buildService(transport: FakeTransport) {
     fiscalConfig: {
       async read() {
         credentialCalls.push("fiscalConfig");
-        return { ecfEnabled: true, provider: "DOSA" };
+        return { ecfEnabled: true, provider: "DOSA", environment: "SANDBOX", productionEnabled: false, certificationStatus: "AUTHORIZED_SANDBOX" };
       },
     },
     credentials,

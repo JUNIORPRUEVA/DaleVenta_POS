@@ -128,8 +128,9 @@ class MemoryCredentialStore implements DosaCredentialStore {
 /** Empresas: una con e-CF (DOSA) y otra que nunca lo pidió. */
 class FakeFiscalConfig implements DosaCompanyFiscalConfigReader {
   async read(companyId: string) {
-    if (companyId === COMPANY_ECF) return { ecfEnabled: true, provider: "DOSA" };
-    return { ecfEnabled: false, provider: "ALANUBE" };
+    const scope = { environment: "SANDBOX", productionEnabled: false, certificationStatus: "AUTHORIZED_SANDBOX" };
+    if (companyId === COMPANY_ECF) return { ...scope, ecfEnabled: true, provider: "DOSA" };
+    return { ...scope, ecfEnabled: false, provider: "ALANUBE" };
   }
 }
 

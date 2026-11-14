@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 
 import '../models/receipt_text_utils.dart';
+import '../ecf_print_footer.dart';
 import '../esc_pos/thermal_receipt_view_model.dart';
 
 class HtmlThermalReceiptPdfRenderer {
@@ -22,7 +23,11 @@ class HtmlThermalReceiptPdfRenderer {
       title: receipt.ticketNumber,
     );
     final pageWidth = paperWidthMm * PdfPageFormat.mm;
-    final pageHeight = _estimatedHeight(receipt);
+    final pageHeight =
+        _estimatedHeight(receipt) +
+        (receipt.ecf == null
+            ? 0
+            : (paperWidthMm == 58 ? 90 : 65) * PdfPageFormat.mm);
     final contentPadding = pw.EdgeInsets.only(
       left: 0.5 * PdfPageFormat.mm,
       right: 8.0 * PdfPageFormat.mm,
@@ -52,6 +57,7 @@ class HtmlThermalReceiptPdfRenderer {
               _notes(receipt),
               _warrantyPolicy(),
               _footer(),
+              ecfPrintFooter(receipt.ecf, pageLeftInsetMm: 0.5),
             ],
           ),
         ),
@@ -63,6 +69,18 @@ class HtmlThermalReceiptPdfRenderer {
   pw.Widget _header(ThermalReceiptViewModel receipt) {
     final company = receipt.company;
     final logoBytes = company.logoBytes;
+    if (receipt.ecf != null) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(company.name, style: _style(11, bold: true)),
+          pw.Text('RNC: ${company.rnc}', style: _style(8)),
+          pw.Text(company.address, style: _style(8)),
+          if (company.phone.isNotEmpty)
+            pw.Text('Tel: ${company.phone}', style: _style(8)),
+        ],
+      );
+    }
     return pw.Padding(
       padding: pw.EdgeInsets.only(bottom: 1.8 * PdfPageFormat.mm),
       child: pw.Row(
@@ -86,12 +104,7 @@ class HtmlThermalReceiptPdfRenderer {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(
-                  _clean(company.name),
-                  maxLines: 1,
-                  overflow: pw.TextOverflow.clip,
-                  style: _style(13, bold: true),
-                ),
+                pw.Text(_clean(company.name), style: _style(13, bold: true)),
                 pw.SizedBox(height: 0.6 * PdfPageFormat.mm),
                 ...[
                       company.address,
@@ -100,14 +113,7 @@ class HtmlThermalReceiptPdfRenderer {
                       if (company.rnc.trim().isNotEmpty) 'RNC: ${company.rnc}',
                     ]
                     .where((line) => _clean(line).isNotEmpty)
-                    .map(
-                      (line) => pw.Text(
-                        _clean(line),
-                        maxLines: 1,
-                        overflow: pw.TextOverflow.clip,
-                        style: _style(9),
-                      ),
-                    ),
+                    .map((line) => pw.Text(_clean(line), style: _style(9))),
               ],
             ),
           ),
@@ -130,7 +136,10 @@ class HtmlThermalReceiptPdfRenderer {
                 pw.Text(receipt.documentTitle, style: _style(10, bold: true)),
                 pw.Text('No.: ${receipt.ticketNumber}', style: _style(9)),
                 if (cashier.isNotEmpty)
-                  pw.Text('Cajero: $cashier', style: _style(9), maxLines: 1),
+                  pw.Text(
+                    'Cajero: $cashier',
+                    style: _style(paperWidthMm == 58 ? 7 : 9),
+                  ),
               ],
             ),
           ),
@@ -172,6 +181,15 @@ class HtmlThermalReceiptPdfRenderer {
   }
 
   pw.Widget _fiscal(ThermalReceiptViewModel receipt) {
+    if (receipt.ecf != null) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          for (final line in receipt.ecf!.identityLines)
+            pw.Text(line, style: _style(8)),
+        ],
+      );
+    }
     final ncf = _clean(receipt.ncf ?? '');
     final type = _clean(receipt.fiscalVoucherType ?? '');
     if (ncf.isEmpty && type.isEmpty) return pw.SizedBox();
@@ -208,6 +226,34 @@ class HtmlThermalReceiptPdfRenderer {
   }
 
   pw.Widget _items(ThermalReceiptViewModel receipt) {
+    if (receipt.ecf != null && paperWidthMm == 58) {
+      return pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          _rule(),
+          pw.Text('DETALLE', style: _style(8, bold: true)),
+          for (final item in receipt.items) ...[
+            pw.SizedBox(height: 3),
+            pw.Text(item.name, style: _style(8)),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  '${item.qtyText} x ${_money(item.unitPrice)}',
+                  style: _style(7.5),
+                ),
+                pw.Text(_money(item.total), style: _style(8, bold: true)),
+              ],
+            ),
+            pw.Text('ITBIS: ${_money(item.taxAmount)}', style: _style(7)),
+            if (item.discount > 0)
+              pw.Text('Descuento: ${_money(item.discount)}', style: _style(7)),
+          ],
+          _rule(),
+        ],
+      );
+    }
     return pw.Table(
       columnWidths: const {
         0: pw.FlexColumnWidth(13),
@@ -247,16 +293,17 @@ class HtmlThermalReceiptPdfRenderer {
                   children: [
                     pw.Text(
                       _clean(item.name).toUpperCase(),
-                      maxLines: 1,
-                      overflow: pw.TextOverflow.clip,
                       style: _style(7.8),
                     ),
                     if (item.discount > 0)
                       pw.Text(
                         'Desc. -${_money(item.discount)}',
-                        maxLines: 1,
-                        overflow: pw.TextOverflow.clip,
                         style: _style(7.5),
+                      ),
+                    if (receipt.ecf != null)
+                      pw.Text(
+                        'ITBIS: ${_money(item.taxAmount)}',
+                        style: _style(7),
                       ),
                   ],
                 ),
@@ -264,12 +311,12 @@ class HtmlThermalReceiptPdfRenderer {
               _tableCell(
                 _amount(item.unitPrice),
                 align: pw.TextAlign.right,
-                fontSize: 7.8,
+                fontSize: paperWidthMm == 58 ? 6.2 : 7.8,
               ),
               _tableCell(
                 _amount(item.total),
                 align: pw.TextAlign.right,
-                fontSize: 7.8,
+                fontSize: paperWidthMm == 58 ? 6.2 : 7.8,
               ),
             ],
           ),
@@ -342,12 +389,7 @@ class HtmlThermalReceiptPdfRenderer {
       children: [
         _rule(dashed: true),
         pw.Text('NOTA', style: _style(8, bold: true)),
-        pw.Text(
-          note,
-          maxLines: 1,
-          overflow: pw.TextOverflow.clip,
-          style: _style(8),
-        ),
+        pw.Text(note, maxLines: null, style: _style(8)),
       ],
     );
   }
@@ -404,7 +446,11 @@ class HtmlThermalReceiptPdfRenderer {
   }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 1.4),
-      child: pw.Text(text, textAlign: align, style: _style(7.0, bold: true)),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: _style(paperWidthMm == 58 ? 5.5 : 7.0, bold: true),
+      ),
     );
   }
 
@@ -415,13 +461,7 @@ class HtmlThermalReceiptPdfRenderer {
   }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 1.4),
-      child: pw.Text(
-        text,
-        textAlign: align,
-        maxLines: 1,
-        overflow: pw.TextOverflow.clip,
-        style: _style(fontSize),
-      ),
+      child: pw.Text(text, textAlign: align, style: _style(fontSize)),
     );
   }
 
@@ -447,8 +487,6 @@ class HtmlThermalReceiptPdfRenderer {
           pw.Expanded(
             child: pw.Text(
               label,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
               style: _style(grand ? 11 : 8.5, bold: strong),
             ),
           ),
@@ -465,8 +503,6 @@ class HtmlThermalReceiptPdfRenderer {
 
   pw.Widget _inlineText(String label, String value) {
     return pw.RichText(
-      maxLines: 1,
-      overflow: pw.TextOverflow.clip,
       text: pw.TextSpan(
         style: _style(9),
         children: [
@@ -505,8 +541,31 @@ class HtmlThermalReceiptPdfRenderer {
     final warrantyLines = _clean(warrantyPolicy).isEmpty
         ? 0
         : _warrantyWrapLines(_clean(warrantyPolicy)).length;
+    final creditReferenceLines = receipt.ecf?.documentType == 'E34'
+        ? [
+            if (receipt.ecf!.originalIssueDate != null)
+              'Fecha comprobante modificado: ${receipt.ecf!.originalIssueDate}',
+            if (receipt.ecf!.modificationReason != null)
+              'Motivo: ${receipt.ecf!.modificationReason}',
+          ].fold<int>(
+            0,
+            (sum, text) =>
+                sum + (text.length / (paperWidthMm == 58 ? 28 : 40)).ceil(),
+          )
+        : 0;
     final mm =
         72 +
+        creditReferenceLines * 4 +
+        (receipt.ecf == null
+            ? 0
+            : receipt.items.fold<double>(
+                0,
+                (sum, item) =>
+                    sum +
+                    4 +
+                    (item.name.length / (paperWidthMm == 58 ? 18 : 32)).ceil() *
+                        4,
+              )) +
         (receipt.items.length * 4.8) +
         (lineDiscounts * 2.8) +
         (fiscalLines * 3.5) +

@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { EcfAuditAction, Prisma } from "@prisma/client";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
+import { EcfAuditAction, Prisma, type EcfEnvironment } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
 import {
@@ -10,6 +10,8 @@ import {
   type AuthorizedRange,
   type EcfAuthorizationInput,
 } from "./ecf-dgii-authorized-sequences.policy";
+
+import { lockNumberingEnvironment, numberingEnvironment } from "./ecf-numbering-environment";
 
 /**
  * Guarda y expone la autorización de numeración que la DGII otorgó a la empresa.
@@ -27,20 +29,26 @@ export class EcfDgiiAuthorizedSequencesService {
 
   async list(user: TenantUser) {
     const companyId = requireTenant(user);
+    const environment = await numberingEnvironment(this.prisma, companyId);
     const rows = await this.prisma.ecfDgiiAuthorizedSequence.findMany({
-      where: { companyId },
+      where: { companyId, environment },
       orderBy: { documentType: "asc" },
     });
     return {
+      environment,
       items: rows.map(toView),
       supportedTypes: [...ECF_SEQUENCE_TYPES],
-      declarationVersion: ECF_DGII_DECLARATION_VERSION,
-      declarationText: ECF_DGII_DECLARATION_TEXT,
+      declarationVersion: environment === "SANDBOX" ? "test-v1" : ECF_DGII_DECLARATION_VERSION,
+      declarationText: environment === "SANDBOX"
+        ? "Declaro que el proveedor confirmó estos rangos y vencimientos para TEST de mi empresa. No copiaré una autorización de producción sin esa confirmación. Estos comprobantes no tienen validez fiscal."
+        : ECF_DGII_DECLARATION_TEXT,
     };
   }
 
-  async declare(user: TenantUser, input: EcfAuthorizationInput) {
+  async declare(user: TenantUser, input: EcfAuthorizationInput & { expectedEnvironment?: EcfEnvironment }) {
     const companyId = requireTenant(user);
+    const environment = await numberingEnvironment(this.prisma, companyId);
+    if (input.expectedEnvironment && input.expectedEnvironment !== environment) throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     const validated = validateAuthorizationDeclaration(input);
     if (!validated.ok) {
       throw new BadRequestException(`${validated.code}: ${validated.message}`);
@@ -55,18 +63,20 @@ export class EcfDgiiAuthorizedSequencesService {
       evidenceId: null,
       declaredByUserId: user.id,
       declaredAt: new Date(),
-      declarationVersion: ECF_DGII_DECLARATION_VERSION,
+      declarationVersion: environment === "SANDBOX" ? "test-v1" : ECF_DGII_DECLARATION_VERSION,
     };
 
     // Declarar y auditar en la MISMA transacción: si la auditoría falla, la
     // declaración no se guarda. Volver a declarar deja el antes y el después en
     // el historial, porque la fila solo conserva el estado vigente.
     return this.prisma.$transaction(async (tx) => {
+      await lockNumberingEnvironment(tx, companyId, environment);
       const previous = await tx.ecfDgiiAuthorizedSequence.findUnique({
         where: {
           companyId_documentType: {
             companyId,
             documentType: validated.documentType,
+            environment,
           },
         },
       });
@@ -76,9 +86,10 @@ export class EcfDgiiAuthorizedSequencesService {
           companyId_documentType: {
             companyId,
             documentType: validated.documentType,
+            environment,
           },
         },
-        create: { companyId, documentType: validated.documentType, ...data },
+        create: { companyId, environment, documentType: validated.documentType, ...data },
         update: data,
       });
 
@@ -92,7 +103,7 @@ export class EcfDgiiAuthorizedSequencesService {
           before: previous === null ? Prisma.JsonNull : toAuditSnapshot(previous),
           after: toAuditSnapshot(saved),
           metadata: {
-            declarationVersion: ECF_DGII_DECLARATION_VERSION,
+            declarationVersion: data.declarationVersion,
             declaredByUserId: user.id,
           },
         },
@@ -106,12 +117,14 @@ export class EcfDgiiAuthorizedSequencesService {
   async findFor(
     companyId: string,
     documentType: string,
+    environment?: EcfEnvironment,
   ): Promise<AuthorizedRange | null> {
     const row = await this.prisma.ecfDgiiAuthorizedSequence.findUnique({
       where: {
         companyId_documentType: {
           companyId,
           documentType: `${documentType}`.trim().toUpperCase(),
+          environment: environment ?? await numberingEnvironment(this.prisma, companyId),
         },
       },
     });
@@ -128,6 +141,7 @@ export class EcfDgiiAuthorizedSequencesService {
 
 type AuthorizedRow = {
   documentType: string;
+  environment: EcfEnvironment;
   authorizationNumber: string;
   rangeFrom: number;
   rangeTo: number;
@@ -140,6 +154,7 @@ type AuthorizedRow = {
 function toView(row: AuthorizedRow) {
   return {
     documentType: row.documentType,
+    environment: row.environment,
     authorizationNumber: row.authorizationNumber,
     rangeFrom: row.rangeFrom,
     rangeTo: row.rangeTo,
@@ -157,6 +172,7 @@ function toView(row: AuthorizedRow) {
 function toAuditSnapshot(row: AuthorizedRow & { declaredByUserId?: string | null }) {
   return {
     documentType: row.documentType,
+    environment: row.environment,
     authorizationNumber: row.authorizationNumber,
     rangeFrom: row.rangeFrom,
     rangeTo: row.rangeTo,

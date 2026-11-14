@@ -120,6 +120,8 @@ final _sampleQuotation = CotizacionModel(
 /// excepción «Normal» habilitada.
 final _capabilities = EcfCapabilities(
   enabled: true,
+  posReady: true,
+  posAvailableTypes: const ['E31', 'E32'],
   environment: 'SANDBOX',
   certificationStatus: 'PRODUCTION_READY',
   productionEnabled: false,

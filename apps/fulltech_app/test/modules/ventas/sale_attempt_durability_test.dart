@@ -3,10 +3,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/api/api_offline_cache_interceptor.dart';
 import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
+import 'package:daleventa_pos/core/offline/offline_emergency_policy.dart';
+import 'package:daleventa_pos/core/usage/client_telemetry_headers.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
+import 'package:daleventa_pos/features/ecf/data/ecf_connection_guard.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
 import 'package:daleventa_pos/modules/ventas/data/ventas_repository.dart';
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
@@ -41,6 +45,94 @@ void main() {
     clientRequestId: request, paymentMethod: 'cash', paymentCashAmount: 400, cashReceived: 400, expectedTotalSold: 400,
     items: const [SaleDraftItem(productId: 'product-a', name: 'Fixture', imageUrl: null,
       isExternal: false, qty: 4, priceSoldUnit: 100, costUnitSnapshot: 40)]);
+
+  test('explicit Normal retains ordinary offline sale behavior and never creates an electronic request', () async {
+    final headers=await ClientTelemetryHeaders.instance.headers();
+    final now=DateTime.now().toUtc();
+    await OfflineEmergencyPolicy().recordServerValidation(companyId:'company-a',userId:'user-a',
+      deviceFingerprint:headers['x-client-device-id']??'',serverUtc:now,observedAtUtc:now);
+    final paths=<String>[];
+    final dio=Dio()..httpClientAdapter=_Adapter((request) async {
+      paths.add(request.path);
+      throw DioException(requestOptions:request,type:DioExceptionType.connectionError);
+    });
+    final repo=VentasRepository(dio,queue,WarehouseRepository(dio),originCashSessionIdResolver:()async=>'turn-a',durableSaleAttemptsForTesting:false);
+    final sale=await repo.createSale(clientRequestId:'normal-offline',fiscalVoucherType:'NORMAL',paymentMethod:'cash',
+      paymentCashAmount:100,cashReceived:100,expectedTotalSold:100,
+      items:const [SaleDraftItem(productId:'product-a',name:'Fixture',imageUrl:null,isExternal:false,qty:1,priceSoldUnit:100,costUnitSnapshot:40)]);
+    expect(sale!.isExplicitNormal,isTrue);
+    expect(paths.where((path)=>path.contains('/ecf/')||path=='/health'),isEmpty);
+    final pending=await store.listPendingActions(companyId:'company-a',userId:'user-a');
+    expect(pending.single.payload['fiscalVoucherType'],'NORMAL');
+    dio.close(force:true);
+  });
+
+  test('a cached healthy response cannot authorize an offline electronic operation', () async {
+    var online=true;
+    final dio=Dio(BaseOptions(baseUrl:'http://127.0.0.1:3000'));
+    dio.interceptors.add(ApiOfflineCacheInterceptor(store:store));
+    dio.httpClientAdapter=_Adapter((request) async {
+      if(!online) throw DioException(requestOptions:request,type:DioExceptionType.connectionError);
+      return ResponseBody.fromString('{"status":"ok"}',200,headers:{Headers.contentTypeHeader:['application/json']});
+    });
+    await dio.get('/health');
+    online=false;
+    await expectLater(ensureEcfConnection(dio),throwsA(isA<EcfConnectionException>()));
+    dio.close(force:true);
+  });
+
+  test('offline electronic returns send and queue nothing; ordinary returns remain visibly pending', () async {
+    var posts = 0;
+    final dio = Dio()..httpClientAdapter = _Adapter((request) async {
+      if(request.method=='POST') posts++;
+      throw DioException(requestOptions:request,type:DioExceptionType.connectionError);
+    });
+    final repo=VentasRepository(dio,queue,WarehouseRepository(dio),originCashSessionIdResolver:()async=>'turn-a');
+    await expectLater(repo.returnSale('sale-a',originalSaleCashSessionId:'turn-a',electronic:true),throwsA(isA<EcfConnectionException>()));
+    expect(posts,0);
+    expect(await store.listPendingActions(companyId:'company-a',userId:'user-a'),isEmpty);
+    final ordinary=await repo.returnSale('ordinary-a',originalSaleCashSessionId:'turn-a');
+    expect(ordinary.pendingSync,isTrue);
+    expect(posts,1);
+    final pending=await store.listPendingActions(companyId:'company-a',userId:'user-a');
+    expect(pending.single.type,'sales.return');
+    dio.close(force:true);
+  });
+
+  for (final online in [false, true]) {
+    test('electronic sale retains its fiscal intent on an interrupted request: online=$online', () async {
+      var posts = 0;
+      final dio = Dio()..httpClientAdapter = _Adapter((request) async {
+        if (request.path == '/health' && online) {
+          return ResponseBody.fromString('{"status":"ok"}', 200, headers: {Headers.contentTypeHeader:['application/json']});
+        }
+        if (request.path == '/sales') {
+          posts++;
+          expect(request.data['fiscalVoucherType'], 'E31');
+          expect(request.data['sequenceDueDate'], '2028-12-31');
+        }
+        throw DioException(requestOptions:request, type: DioExceptionType.receiveTimeout);
+      });
+      final repo = VentasRepository(dio, queue, WarehouseRepository(dio),
+        originCashSessionIdResolver: () async=>'turn-a', durableSaleAttemptsForTesting:true);
+      Future<SaleModel?> submit(String id)=>repo.createSale(clientRequestId:id,
+        paymentMethod:'cash', paymentCashAmount:118, cashReceived:118, expectedTotalSold:118,
+        fiscalVoucherType:'E31', sequenceDueDate:'2028-12-31', fiscalCustomerTaxId:'101000001', fiscalCustomerName:'Fixture',
+        items:const [SaleDraftItem(productId:'product-a', name:'Fixture',imageUrl:null,isExternal:false,qty:1,priceSoldUnit:100,costUnitSnapshot:40)]);
+      await expectLater(submit('electronic-a'),throwsA(isA<EcfConnectionException>().having((e)=>e.uncertain,'uncertain',online)));
+      final pending=await store.listPendingActions(companyId:'company-a',userId:'user-a');
+      expect(posts,online?1:0);
+      expect(await store.listOfflineSales(companyId:'company-a',userId:'user-a'),isEmpty);
+      if(online){
+        expect(pending.single.type,'sales.attempt');
+        expect(pending.single.payload['fiscalVoucherType'],'E31');
+        expect(pending.single.payload['sequenceDueDate'],'2028-12-31');
+        await expectLater(submit('electronic-b'),throwsA(anything));
+        expect(posts,1,reason:'The uncertain financial operation blocks another charge');
+      }else{expect(pending,isEmpty);}
+      dio.close(force:true);
+    });
+  }
 
   for (final mode in ['success', 'timeout', '403', 'scope-change', 'disk-error', 'stock-conflict']) {
     test('Windows release attempt durability: $mode', () async {

@@ -5,12 +5,14 @@ import {
 import {
   DOSA_EMISSION_BLOCKED,
   DosaEmissionClient,
+  freezeDosaHttpRequest,
   emissionPathFor,
   readDosaEmissionConfig,
   redactDosaHeaders,
   type DosaEmissionConfig,
   type DosaHttpResponse,
   type DosaHttpTransport,
+  type DosaReplayInfo,
 } from "./dosa-emission.client";
 import {
   DOSA_ECF_CREDIT_NOTE_PATH,
@@ -308,7 +310,7 @@ describe("DosaEmissionClient — endpoint por tipo de comprobante", () => {
       ...BODY,
       encabezado: { ...BODY.encabezado, idDoc: { ...BODY.encabezado.idDoc, tipoeCF: "34" as const } },
     };
-    expect(emissionPathFor(e34)).toBe(DOSA_ECF_CREDIT_NOTE_PATH);
+    expect(emissionPathFor(e34)).toBe(`${DOSA_ECF_CREDIT_NOTE_PATH}?nuevoENCF=E310000000001&tipoeCF=34&fechaEmision=02-11-2026`);
     expect(DOSA_ECF_CREDIT_NOTE_PATH).toBe("/fe/api/emision/ecf/NotaDesdeFactura");
   });
 
@@ -326,7 +328,7 @@ describe("DosaEmissionClient — endpoint por tipo de comprobante", () => {
     await client.sendEcf({ body: e34, idempotencyKey: "k-e34" });
 
     expect(transport.calls[0].url).toBe(
-      `${config().baseUrl}${DOSA_ECF_CREDIT_NOTE_PATH}`,
+      `${config().baseUrl}${DOSA_ECF_CREDIT_NOTE_PATH}?nuevoENCF=E310000000001&tipoeCF=34&fechaEmision=02-11-2026`,
     );
   });
 });
@@ -527,6 +529,97 @@ describe("DosaEmissionClient — transporte", () => {
 
     clock += 60_000;
     expect(client.breakerState()).toBe("CLOSED");
+  });
+});
+
+describe("recuperación DOSA con petición congelada y auditoría", () => {
+  it.each(["NETWORK", "TIMEOUT", "HTTP_5XX"] as const)("recupera %s con los mismos bytes y destino", async failure => {
+    const body = structuredClone(BODY);
+    const settings = config({ timeoutMs: 5 });
+    const frozen = freezeDosaHttpRequest(body);
+    const calls: Array<{ url: string; body: string }> = [];
+    const delays: number[] = [];
+    const audits: DosaReplayInfo[] = [];
+    const client = new DosaEmissionClient({ async post(url, input) {
+      calls.push({ url, body: input.body });
+      if (calls.length === 1) {
+        body.encabezado.idDoc.eNCF = "E310000000999";
+        settings.baseUrl = "https://must-not-be-used.test";
+        if (failure === "HTTP_5XX") return { status: 503, body: "temporary" };
+        if (failure === "TIMEOUT") return new Promise((_resolve, reject) => input.signal.addEventListener("abort", () => reject(Error("timeout"))));
+        throw Error("connection lost");
+      }
+      return { status: 200, body: JSON.stringify({ estado: "Aceptado", codigo: "1" }) };
+    } }, settings, Date.now, async ms => { delays.push(ms); });
+    const result = await client.sendEcf({ body, idempotencyKey: "same-claim", onReplay: async event => { audits.push(event); return true; } });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toEqual(calls[1]);
+    expect(calls[0].body).toBe(frozen.bodyText);
+    expect(calls[0].url).toBe(`https://sandbox.test${frozen.path}`);
+    expect(audits[0]).toMatchObject({ ordinal: 2, reason: failure, bodyHash: frozen.bodyHash, requestHash: frozen.requestHash });
+    expect(delays).toEqual([1000]);
+  });
+
+  it("limita la operación a tres llamadas y audita antes de cada repetición", async () => {
+    const events: string[] = [];
+    const delays: number[] = [];
+    const client = new DosaEmissionClient({ async post() { events.push("post"); return { status: 503, body: "unavailable" }; } },
+      config(), Date.now, async ms => { delays.push(ms); });
+    const result = await client.sendEcf({ body: BODY, idempotencyKey: "bounded", onReplay: async event => {
+      events.push(`audit:${event.ordinal}`); expect(event.previousResponseHash).toMatch(/^[a-f0-9]{64}$/); return true;
+    } });
+    expect(result).toMatchObject({ ok: false, transportFailure: "HTTP", status: 503 });
+    expect(events).toEqual(["post", "audit:2", "post", "audit:3", "post"]);
+    expect(delays).toEqual([1000, 3000]);
+  });
+
+  it.each([
+    [200, "Aceptado"], [200, "Aceptado Condicional"], [200, "Rechazado"], [202, "Pendiente DGII"],
+    [500, "Aceptado"], [500, "Rechazado"], [400, "Sin Resolver"],
+  ])("no repite una respuesta observada %s/%s", async (status, estado) => {
+    const transport = new FakeTransport(() => ({ status: Number(status), body: JSON.stringify({ estado }) }));
+    const observer = jest.fn(async () => true);
+    await new DosaEmissionClient(transport, config(), Date.now, async () => {}).sendEcf({ body: BODY, idempotencyKey: "observed", onReplay: observer });
+    expect(transport.calls).toHaveLength(1);
+    expect(observer).not.toHaveBeenCalled();
+  });
+
+  it("sin autorización de la auditoría conserva el resultado incierto y no repite", async () => {
+    const transport = new FakeTransport(() => { throw Error("lost"); });
+    const client = new DosaEmissionClient(transport, config(), Date.now, async () => {});
+    const result = await client.sendEcf({ body: BODY, idempotencyKey: "denied", onReplay: async () => false });
+    expect(result).toMatchObject({ ok: false, transportFailure: "NETWORK" });
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it("mantiene exclusión durante la recuperación y luego bloquea otra emisión", async () => {
+    let notify!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>(resolve => { notify = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const transport = new FakeTransport(attempt => attempt === 1 ? { status: 503, body: "temporary" } : { status: 200, body: '{"estado":"Aceptado"}' });
+    const client = new DosaEmissionClient(transport, config(), Date.now, async () => {});
+    const first = client.sendEcf({ body: BODY, idempotencyKey: "exclusive", onReplay: async () => { notify(); await gate; return true; } });
+    await entered;
+    expect(await client.sendEcf({ body: BODY, idempotencyKey: "exclusive" })).toEqual({ ok: false, blockedReason: DOSA_EMISSION_BLOCKED.duplicateKey });
+    release(); expect((await first).ok).toBe(true);
+    expect(await client.sendEcf({ body: BODY, idempotencyKey: "exclusive" })).toEqual({ ok: false, blockedReason: DOSA_EMISSION_BLOCKED.alreadySent });
+    expect(transport.calls).toHaveLength(2);
+  });
+
+  it("congela también el e-NCF de la ruta E34", async () => {
+    const body = structuredClone(BODY);
+    body.encabezado.idDoc.tipoeCF = "34"; body.encabezado.idDoc.eNCF = "E340000000001";
+    const urls: string[] = [];
+    const client = new DosaEmissionClient({ async post(url) {
+      urls.push(url);
+      if (urls.length === 1) { body.encabezado.idDoc.eNCF = "E340000000099"; return { status: 503, body: "temporary" }; }
+      return { status: 200, body: '{"estado":"Aceptado"}' };
+    } }, config(), Date.now, async () => {});
+    await client.sendEcf({ body, idempotencyKey: "credit", onReplay: async () => true });
+    expect(urls).toHaveLength(2); expect(urls[0]).toBe(urls[1]);
+    expect(urls[0]).toContain("nuevoENCF=E340000000001");
   });
 });
 

@@ -1,6 +1,7 @@
 import type { EcfEmissionWire, EcfEmissionWireRequest, EcfEmissionWireResult } from "../../documents/ecf-emission.service";
+import type { DosaOutboundRequestBody } from "./dosa-request.serializer";
 import type { DosaEcfRequestBody } from "./dosa-ecf.contract";
-import type { DosaEmissionClient } from "./dosa-emission.client";
+import type { DosaEmissionClient, DosaReplayInfo } from "./dosa-emission.client";
 
 /**
  * Cable que conecta el cliente HTTP de DOSA con el orquestador de emisión real
@@ -10,22 +11,25 @@ import type { DosaEmissionClient } from "./dosa-emission.client";
  * gratis la maquinaria que ya existe y que está probada:
  *
  * * reclamación de la fila con `FOR UPDATE` **antes** de la red;
- * * una sola tentativa `SEND_TO_PROVIDER` por documento (nunca doble POST);
+ * * una sola tentativa lógica `SEND_TO_PROVIDER` por documento;
  * * registro de evidencia con huella del payload y del request;
- * * estado final `HUMAN_REVIEW_REQUIRED`, nunca aceptación fiscal automática.
+ * * recuperación idéntica sólo con autorización/auditoría del servidor;
+ * * evidencia antes de registrar cualquier resultado fiscal autorizado.
  *
  * Este cable no decide: solo traduce. Las compuertas están antes, en
  * `DosaEmissionService`.
  */
 export class DosaEmissionWire implements EcfEmissionWire {
-  constructor(private readonly client: DosaEmissionClient) {}
+  constructor(private readonly client: DosaEmissionClient, private readonly draft?: DosaEcfRequestBody,
+    private readonly onReplay?: (parentAttemptId: string, info: DosaReplayInfo) => Promise<boolean>) {}
 
   async execute(input: EcfEmissionWireRequest): Promise<EcfEmissionWireResult> {
     const result = await this.client.sendEcf({
-      body: input.body as DosaEcfRequestBody,
+      body: this.draft ?? input.body as DosaOutboundRequestBody,
       // La tentativa ya reclamada por el orquestador es la clave de
       // idempotencia: un mismo documento no puede salir dos veces.
       idempotencyKey: input.requestId,
+      ...(this.onReplay ? { onReplay: (info: DosaReplayInfo) => this.onReplay!(input.requestId, info) } : {}),
     });
 
     if (result.ok) {

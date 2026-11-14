@@ -1,5 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:daleventa_pos/core/theme/app_theme.dart';
 
 import 'package:daleventa_pos/core/auth/app_permissions.dart';
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
@@ -26,7 +29,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Prueba FUNCIONAL de la cadena:
 ///
 ///   Configuración de empresa → Activar e-CF → Guardar →
-///   El interruptor controla la emisión sin añadir accesos al Drawer.
+///   El interruptor activa el módulo y su acceso en el Drawer.
 ///
 /// Monta la pantalla REAL (`AccountCompanySettingsScreen`), el Drawer REAL
 /// (`AppDrawer`, el mismo que sirve `buildAdaptiveDrawer`), el
@@ -36,13 +39,28 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// El estado que se muestra viene SIEMPRE del backend simulado: el interruptor
 /// nunca se pinta de forma optimista.
 
+final _qaBoundaryKey = GlobalKey();
+
+class _QaBoundary extends SingleChildRenderObjectWidget {
+  const _QaBoundary({super.key, required super.child});
+
+  @override
+  RenderRepaintBoundary createRenderObject(BuildContext context) =>
+      _QaRenderBoundary();
+}
+
+class _QaRenderBoundary extends RenderRepaintBoundary {
+  Future<ui.Image> captureRegion(Rect region) =>
+      (layer! as OffsetLayer).toImage(region);
+}
+
 const _markerModule = 'marcador-modulo-ecf';
 const _markerConfig = 'marcador-config-ecf';
 const _ecfDrawerLabel = 'Facturación electrónica';
 // El interruptor de e-CF dejó de ser una sección independiente: ahora vive
 // dentro del bloque fiscal, que se llama «Impuestos y e-CF». La aserción sigue
 // verificando que esa sección está en pantalla, solo que con su nombre actual.
-const _ecfSectionTitle = 'Impuestos y e-CF';
+const _ecfSectionTitle = 'Facturación electrónica';
 const _ecfPrepareLabel = 'Preparar habilitación e-CF';
 const _ecfErrorText =
     'No se pudo guardar. Se mantiene el último estado confirmado por el servidor.';
@@ -100,11 +118,8 @@ class _EcfBackendState {
   CompanySettings settingsFor(String? companyId) {
     return CompanySettings.empty().copyWith(
       companyName: 'Empresa ${companyId ?? 'sin-empresa'}',
-      // El interruptor de facturación electrónica vive dentro del bloque
-      // fiscal y solo se muestra con impuestos activos, que es la única
-      // combinación con sentido: sin impuestos no hay nada que facturar
-      // electrónicamente. El escenario base refleja esa situación.
-      taxEnabled: true,
+      // La activación confirma también los impuestos, como hace el backend.
+      taxEnabled: enabledByCompany[companyId] ?? false,
       ecfEnabled: enabledByCompany[companyId] ?? false,
     );
   }
@@ -372,9 +387,13 @@ Future<_Harness> _pumpSettings(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(
-        theme: ThemeData(platform: TargetPlatform.android),
-        routerConfig: router,
+      child: _QaBoundary(
+        key: _qaBoundaryKey,
+        child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light.copyWith(platform: TargetPlatform.android),
+          routerConfig: router,
+        ),
       ),
     ),
   );
@@ -404,7 +423,7 @@ Future<void> _closeDrawer(WidgetTester tester) async {
 }
 
 /// El interruptor e-CF: el `Switch` de la fila compacta
-/// «Utilizar factura electrónica».
+/// «Activar módulo de facturación electrónica».
 ///
 /// Antes se localizaba por los textos «Activada/Desactivada»; al unificar el
 /// bloque fiscal, el interruptor pasó a compartir el mismo componente que
@@ -412,7 +431,7 @@ Future<void> _closeDrawer(WidgetTester tester) async {
 /// se relaja: sigue exigiendo el `Switch` de ESA fila concreta.
 Finder _ecfSwitch() {
   final label = find.byWidgetPredicate(
-    (widget) => widget is Text && widget.data == 'Utilizar factura electrónica',
+    (widget) => widget is Text && widget.data == 'Activar módulo de facturación electrónica',
   );
   final row = find.ancestor(of: label, matching: find.byType(Row));
   return find.descendant(of: row.first, matching: find.byType(Switch));
@@ -439,7 +458,6 @@ Future<void> _scrollDrawerToBottom(WidgetTester tester) async {
 /// El drawer no recupera módulos adicionales al cambiar la configuración.
 void _expectNoExtraModules() {
   expect(_drawerText('Más módulos'), findsNothing);
-  expect(_drawerText(_ecfDrawerLabel), findsNothing);
 }
 
 Future<void> _settleToggle(WidgetTester tester) async {
@@ -473,12 +491,71 @@ _EcfBackendState _backendWith({bool companyA = false}) => _EcfBackendState(
 
 /// Interruptor de la excepción fiscal, distinto del general.
 Finder _allowSwitch() {
-  final label = find.text('Ventas sin comprobante electrónico');
+  final label = find.text('Vender sin comprobante');
   final row = find.ancestor(of: label, matching: find.byType(Row));
   return find.descendant(of: row.first, matching: find.byType(Switch));
 }
 
+Future<void> _captureQa(WidgetTester tester, String name) async {
+  final output = Platform.environment['FULLPOS_QA_OUTPUT'];
+  if (output == null) return;
+  await tester.pumpAndSettle();
+  final boundary = _qaBoundaryKey.currentContext!.findRenderObject() as _QaRenderBoundary;
+  await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 1);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(output).create(recursive: true);
+    await File('$output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+    if (name.startsWith('empresa-') && !name.endsWith('confirmacion')) {
+      final panel = find.ancestor(
+        of: find.text(_ecfSectionTitle),
+        matching: find.byType(Material),
+      ).first;
+      final detail = await boundary.captureRegion(tester.getRect(panel));
+      final detailBytes = await detail.toByteData(format: ui.ImageByteFormat.png);
+      await File('$output/$name-panel.png').writeAsBytes(detailBytes!.buffer.asUint8List());
+      detail.dispose();
+    }
+  });
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    final manrope = FontLoader('Manrope');
+    for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+      manrope.addFont(rootBundle.load('assets/fonts/manrope/Manrope-$weight.ttf'));
+    }
+    await manrope.load();
+    await (FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
+  for (final size in [const Size(390, 844), const Size(834, 1112), const Size(1264, 681)]) {
+    testWidgets('configuración fiscal adaptable ${size.width}x${size.height}', (tester) async {
+      final backend = _backendWith();
+      await _pumpSettings(tester, backend: backend, viewport: size);
+      await tester.ensureVisible(find.text(_ecfSectionTitle));
+      await _captureQa(tester, 'empresa-${size.width.toInt()}-apagado');
+      await _turnEcfOn(tester);
+      await tester.ensureVisible(find.text(_ecfSectionTitle));
+      await _captureQa(tester, 'empresa-${size.width.toInt()}-activo');
+      expect(tester.takeException(), isNull);
+      await tester.tap(_allowSwitch());
+      await tester.pumpAndSettle();
+      expect(find.text(_allowWarning), findsOneWidget);
+      await _captureQa(tester, 'empresa-${size.width.toInt()}-confirmacion');
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(backend.allowPatchCalls, isEmpty);
+      await _openDrawer(tester);
+      await _scrollDrawerToBottom(tester);
+      expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
+      await _captureQa(tester, 'drawer-${size.width.toInt()}');
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   group('interruptor e-CF de la empresa — regresión del modelo', () {
     test('copyWith propaga ecfEnabled (no lo pierde)', () {
       final enabled = CompanySettings.empty().copyWith(ecfEnabled: true);
@@ -522,7 +599,7 @@ void main() {
 
     testWidgets(
       '2/3/4 — el administrador activa, el backend confirma y el Drawer '
-      'mantiene el Drawer sin módulos adicionales',
+      'muestra el módulo confirmado',
       (tester) async {
         final harness = await _pumpSettings(
           tester,
@@ -550,18 +627,18 @@ void main() {
         expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
         expect(find.text(_ecfErrorText), findsNothing);
 
-        // El estado fiscal se actualiza sin añadir módulos al drawer.
+        // La activación confirmada añade la entrada propia del módulo.
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
         _expectNoExtraModules();
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
 
         // Y sin una sola petición HTTP: el menú no consulta la red.
         expect(harness.httpCalls, isEmpty);
       },
     );
 
-    testWidgets('5 — /ecf sigue disponible fuera del Drawer', (tester) async {
+    testWidgets('5 — el Drawer abre el módulo activado', (tester) async {
       final harness = await _pumpSettings(
         tester,
         backend: _backendWith(companyA: true),
@@ -571,8 +648,7 @@ void main() {
       await _openDrawer(tester);
       await _scrollDrawerToBottom(tester);
       _expectNoExtraModules();
-      await _closeDrawer(tester);
-      harness.router.go(Routes.ecf);
+      await tester.tap(_drawerText(_ecfDrawerLabel));
       await tester.pumpAndSettle();
 
       expect(find.text(_markerModule), findsOneWidget);
@@ -592,7 +668,7 @@ void main() {
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
         _expectNoExtraModules();
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
 
         await _closeDrawer(tester);
         await _turnEcfOff(tester);
@@ -681,38 +757,15 @@ void main() {
       expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
     });
 
-    testWidgets(
-      '10b — el administrador inicia la habilitación sin encender el módulo',
-      (tester) async {
-        final harness = await _pumpSettings(
-          tester,
-          backend: _backendWith(companyA: false),
-        );
-
-        // El módulo está apagado y el Drawer no lo muestra...
-        await _openDrawer(tester);
-        await _scrollDrawerToBottom(tester);
-        _expectNoExtraModules();
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
-        await _closeDrawer(tester);
-
-        // ...pero el administrador sí tiene un camino explícito desde la
-        // configuración de la empresa, sin exponer el menú al resto.
-        final prepare = find.text(_ecfPrepareLabel);
-        expect(prepare, findsOneWidget);
-        await tester.ensureVisible(prepare);
-        await tester.pumpAndSettle();
-        await tester.tap(prepare);
-        await tester.pumpAndSettle();
-
-        // Abre el expediente y NO activa nada: sin PATCH, sin red y con el
-        // interruptor todavía apagado.
-        expect(find.text(_markerModule), findsOneWidget);
-        expect(harness.backend.patchCalls, isEmpty);
-        expect(harness.backend.enabledByCompany['company-a'], isFalse);
-        expect(harness.httpCalls, isEmpty);
-      },
-    );
+    testWidgets('el módulo apagado solo ofrece su interruptor', (tester) async {
+      await _pumpSettings(tester, backend: _backendWith());
+      expect(find.text(_ecfPrepareLabel), findsNothing);
+      expect(find.text('Utilizar impuestos'), findsNothing);
+      expect(find.text('ITBIS incluido'), findsNothing);
+      await _turnEcfOn(tester);
+      expect(find.text('ITBIS incluido'), findsOneWidget);
+      expect(find.text('Precio + ITBIS'), findsOneWidget);
+    });
 
     testWidgets(
       '11 — al cambiar de empresa NO se reutiliza la bandera anterior',
@@ -725,7 +778,7 @@ void main() {
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
         _expectNoExtraModules();
-        expect(_drawerText(_ecfDrawerLabel), findsNothing);
+        expect(_drawerText(_ecfDrawerLabel), findsOneWidget);
 
         // Misma sesión, misma pantalla montada: otra empresa con e-CF apagado.
         harness.auth.switchCompany('company-b');
@@ -767,7 +820,7 @@ void main() {
       await _pumpSettings(tester, backend: _backendWith(companyA: false));
 
       // Sin e-CF no hay nada que exceptuar: el control ni siquiera se pinta.
-      expect(find.text('Ventas sin comprobante electrónico'), findsNothing);
+      expect(find.text('Vender sin comprobante'), findsNothing);
     });
 
     testWidgets(
@@ -777,8 +830,8 @@ void main() {
         await _pumpSettings(tester, backend: _backendWith(companyA: true));
 
         // Los dos controles conviven, con etiquetas distintas.
-        expect(find.text('Utilizar factura electrónica'), findsOneWidget);
-        expect(find.text('Ventas sin comprobante electrónico'), findsOneWidget);
+        expect(find.text('Activar módulo de facturación electrónica'), findsOneWidget);
+        expect(find.text('Vender sin comprobante'), findsOneWidget);
         // El valor mostrado es el del servidor: apagado por defecto.
         expect(tester.widget<Switch>(_allowSwitch()).value, isFalse);
       },
@@ -794,7 +847,7 @@ void main() {
         );
 
         await tester.ensureVisible(
-          find.text('Ventas sin comprobante electrónico'),
+          find.text('Vender sin comprobante'),
         );
         await tester.tap(_allowSwitch());
         await tester.pumpAndSettle();

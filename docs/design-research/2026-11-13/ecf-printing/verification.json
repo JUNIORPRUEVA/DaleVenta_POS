@@ -1,0 +1,58 @@
+[
+  {
+    "file": "factura-a4.pdf",
+    "page": 1,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  },
+  {
+    "file": "factura-pendiente.pdf",
+    "page": 1,
+    "qr_decoded": false,
+    "encf_present": true,
+    "security_present": false
+  },
+  {
+    "file": "factura-varias-paginas.pdf",
+    "page": 1,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  },
+  {
+    "file": "factura-varias-paginas.pdf",
+    "page": 2,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  },
+  {
+    "file": "factura-varias-paginas.pdf",
+    "page": 3,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  },
+  {
+    "file": "factura-varias-paginas.pdf",
+    "page": 4,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  },
+  {
+    "file": "ticket-58.pdf",
+    "page": 1,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  },
+  {
+    "file": "ticket-80.pdf",
+    "page": 1,
+    "qr_decoded": true,
+    "encf_present": true,
+    "security_present": true
+  }
+]

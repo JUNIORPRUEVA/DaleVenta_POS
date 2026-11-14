@@ -104,7 +104,7 @@ void main() {
         findsNothing,
       );
       // El contenido sigue completo: título, explicación y switch.
-      expect(find.text('Ventas sin comprobante electrónico'), findsOneWidget);
+      expect(find.text('Vender sin comprobante'), findsOneWidget);
       expect(find.byType(Switch), findsOneWidget);
     },
   );
@@ -134,7 +134,7 @@ void main() {
     await _pump(tester);
 
     expect(
-      find.text('Ventas sin comprobante electrónico'),
+      find.text('Vender sin comprobante'),
       findsOneWidget,
     );
     expect(find.textContaining('Advertencia fiscal'), findsNothing);

@@ -107,6 +107,9 @@ describe("mapeador DOSA — E31, E32 y E34", () => {
     expect(body.encabezado.emisor).toEqual({
       RNCEmisor: "101000001",
       RazonSocialEmisor: "FULLPOS PRUEBAS SRL",
+      nombreComercial: "FULLPOS PRUEBAS SRL",
+      direccionEmisor: "Santo Domingo, RD",
+      fechaEmision: "14-10-2026",
     });
     expect(body.encabezado.comprador?.RNCComprador).toBe("101000002");
     expect(body.encabezado.totales.MontoTotal).toBe("118.00");

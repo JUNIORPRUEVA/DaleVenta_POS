@@ -5,6 +5,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 
 import '../models/receipt_text_utils.dart';
+import '../ecf_print_footer.dart';
 import 'esc_pos_layout.dart';
 import 'thermal_printer_profile.dart';
 import 'thermal_receipt_view_model.dart';
@@ -67,6 +68,43 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
           maxCharsPerLine: entry.width,
         ),
       );
+    }
+    final ecf = receipt.ecf;
+    if (ecf != null) {
+      for (final line in ecf.notice.isEmpty ? <String>[] : [ecf.notice]) {
+        bytes.addAll(
+          generator.text(
+            _clean(line),
+            styles: PosStyles(
+              fontType: PosFontType.fontB,
+              codeTable: codeTable,
+            ),
+          ),
+        );
+      }
+      if (ecf.hasStamp) {
+        // Raster encodes the official URL with a 3 mm quiet zone; its code
+        // starts 20 mm from the paper edge (17 mm margin + quiet zone).
+        bytes.addAll([0x1B, 0x61, 0, 0x1D, 0x4C, 136, 0]);
+        bytes.addAll(
+          generator.imageRaster(ecfQrRaster(ecf.qrUrl!), align: PosAlign.left),
+        );
+        bytes.addAll([0x1D, 0x4C, 0, 0]);
+        for (final line in [
+          'Codigo de seguridad: ${ecf.securityCode}',
+          'Fecha de firma: ${ecf.signedAt}',
+        ]) {
+          bytes.addAll(
+            generator.text(
+              line,
+              styles: PosStyles(
+                fontType: PosFontType.fontB,
+                codeTable: codeTable,
+              ),
+            ),
+          );
+        }
+      }
     }
     bytes.addAll(generator.feed(2));
     if (openCashDrawer) {
@@ -358,7 +396,20 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     addB(_itemHeader(), styles: boldB);
     addB(_rule(thermalProfile.usableChars), styles: normalB);
     for (final item in receipt.items) {
-      addB(_itemLine(item), styles: normalB);
+      if (receipt.ecf == null) {
+        addB(_itemLine(item), styles: normalB);
+      } else {
+        for (final line in ReceiptTextUtils.wrap(
+          _clean(item.name),
+          thermalProfile.usableChars,
+        )) {
+          addB(line);
+        }
+        addB(
+          '${item.qtyText} x ${_amount(item.unitPrice)} = ${_amount(item.total)}',
+        );
+        addB('ITBIS: ${_money(item.taxAmount)}');
+      }
       if (item.discount > 0) {
         addB('   Desc. -${_money(item.discount)}', styles: normalB);
       }
@@ -429,6 +480,22 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
   ) {
     final client = receipt.client;
     final name = _clean(client?.name ?? 'Consumidor Final');
+    if (receipt.ecf != null) {
+      for (final value in [
+        'CLIENTE: ${name.toUpperCase()}',
+        if ((client?.document ?? '').isNotEmpty)
+          'RNC/CEDULA: ${client!.document}',
+        if ((client?.phone ?? '').isNotEmpty) 'TEL: ${client!.phone}',
+      ]) {
+        for (final line in ReceiptTextUtils.wrap(
+          value,
+          thermalProfile.usableChars,
+        )) {
+          lines.add(_safeEscPosLine(line, styles, thermalProfile.usableChars));
+        }
+      }
+      return;
+    }
     lines.add(
       _safeEscPosLine(
         'CLIENTE: ${name.toUpperCase()}',
@@ -459,6 +526,17 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     ThermalReceiptViewModel receipt,
     PosStyles styles,
   ) {
+    if (receipt.ecf != null) {
+      for (final value in receipt.ecf!.identityLines) {
+        for (final line in ReceiptTextUtils.wrap(
+          _clean(value),
+          thermalProfile.usableChars,
+        )) {
+          lines.add(_safeEscPosLine(line, styles, thermalProfile.usableChars));
+        }
+      }
+      return;
+    }
     final ncf = _clean(receipt.ncf ?? '');
     final voucherType = _clean(receipt.fiscalVoucherType ?? '');
     if (ncf.isEmpty && voucherType.isEmpty) return;

@@ -9,6 +9,8 @@ import '../../features/settings/data/printer_settings_model.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import '../errors/user_safe_error_text.dart';
 import '../../modules/ventas/sales_models.dart';
+import '../../features/ecf/data/ecf_repository.dart';
+import '../../features/ecf/ecf_print_document.dart';
 import '../update/print_activity_tracker.dart';
 import 'esc_pos/fullpos_esc_pos_receipt_renderer.dart';
 import 'esc_pos/thermal_receipt_view_model.dart';
@@ -173,6 +175,9 @@ class UnifiedTicketPrinter {
         );
         final renderer = FullPosEscPosReceiptRenderer(
           cutPaper: settings.autoCut,
+          profile: settings.paperWidthMm == 58
+              ? ThermalPrinterProfile.mm58()
+              : null,
           warrantyPolicy: settings.warrantyPolicy,
         );
         final bytes = await renderer.render(receipt);
@@ -193,7 +198,8 @@ class UnifiedTicketPrinter {
         );
       }
       final useEscPosForData =
-          (_useEscPosReceiptRenderer || forceWindowsRaw) && escPosEligible;
+          (_useEscPosReceiptRenderer || forceWindowsRaw || data.ecf != null) &&
+          escPosEligible;
       if (platform.platform == PrintingPlatform.windows && useEscPosForData) {
         final receipt = ThermalReceiptViewModel.fromTicketData(
           data: data,
@@ -224,6 +230,9 @@ class UnifiedTicketPrinter {
           : null;
       final escPosRenderer = useEscPosForData
           ? FullPosEscPosReceiptRenderer(
+              profile: settings.paperWidthMm == 58
+                  ? ThermalPrinterProfile.mm58()
+                  : null,
               cutPaper: settings.autoCut,
               warrantyPolicy: settings.warrantyPolicy,
             )
@@ -568,8 +577,31 @@ class UnifiedTicketPrinter {
     int? copies,
     bool isCopy = false,
   }) async {
+    EcfPrintDocument? ecf;
+    try {
+      final electronic = (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType));
+      ecf = !sale.isExplicitNormal && (sale.fiscalTaxEnabled || electronic)
+          ? await _ref.read(ecfRepositoryProvider).printForSale(sale.id, requireElectronic: electronic)
+          : null;
+    } catch (error, stack) {
+      debugPrint(
+        'No se pudo consultar el comprobante para impresión: $error\n$stack',
+      );
+      return const PrintTicketResult(
+        success: false,
+        message:
+            'No se pudo verificar el comprobante electrónico. Revisa la conexión antes de reimprimir.',
+      );
+    }
+    if (ecf != null && !ecf.matchesTotal(sale.totalSold)) {
+      return const PrintTicketResult(
+        success: false,
+        message:
+            'El importe de la venta no coincide con su comprobante electrónico. Revisa el documento antes de imprimir.',
+      );
+    }
     final result = await printTicket(
-      TicketData.fromSale(sale, items: items, isCopy: isCopy),
+      TicketData.fromSale(sale, items: items, isCopy: isCopy, ecf: ecf),
       overrideCopies: copies,
     );
     // Apertura automática de caja registradora SOLO después de que la

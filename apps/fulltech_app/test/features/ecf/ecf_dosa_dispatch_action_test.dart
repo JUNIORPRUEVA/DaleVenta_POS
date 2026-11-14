@@ -19,7 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///  * no aparece en estados no despachables;
 ///  * no permite doble pulsación;
 ///  * un rechazo fiscal se muestra con su motivo, no como caída de red;
-///  * el mensaje nunca afirma aceptación de la DGII.
+///  * una observación sin confirmación fiscal conserva el aviso de revisión.
 
 class _FixedAuthController extends AuthController {
   _FixedAuthController(super.ref, AuthState fixedState) {
@@ -154,8 +154,9 @@ void main() {
     expect(repository.calls, hasLength(1));
   });
 
-  testWidgets('muestra el resultado y el e-NCF sin afirmar aceptación DGII',
-      (tester) async {
+  testWidgets('muestra el resultado y el e-NCF sin afirmar aceptación DGII', (
+    tester,
+  ) async {
     await _pump(tester);
 
     await tester.tap(find.text('Emitir comprobante'));
@@ -166,6 +167,42 @@ void main() {
     // Nunca se presenta como aceptación fiscal.
     expect(find.textContaining('ACEPTAD'), findsNothing);
   });
+
+  for (final width in <double>[320, 1280]) {
+    testWidgets('muestra el resultado registrado sin desbordar a $width px', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = await _pump(tester);
+      final conditional = width == 320;
+      repository.result = EcfDosaDispatchOutcome.fromJson(<String, dynamic>{
+        'ok': true,
+        'result': 'FISCAL_RESULT_RECORDED',
+        'encf': 'E310000000042',
+        'observation': <String, dynamic>{
+          'providerOutcome': 'ACCEPTED',
+          'safeCode': conditional
+              ? 'ECF_DOSA_OBSERVED_CONDITIONALLY_ACCEPTED'
+              : 'ECF_DOSA_OBSERVED_ACCEPTED',
+        },
+      });
+      await tester.tap(find.text('Emitir comprobante'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          conditional
+              ? 'aceptación condicional'
+              : 'DOSA confirmó la aceptación',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('revisión'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('un bloqueo fiscal se explica con su motivo', (tester) async {
     final repository = await _pump(tester);
@@ -189,12 +226,18 @@ void main() {
     expect(find.textContaining('pendientes de confirmación'), findsOneWidget);
   });
 
-  testWidgets('un 409 explica que no se reenvía para no duplicar', (tester) async {
+  testWidgets('un 409 explica que no se reenvía para no duplicar', (
+    tester,
+  ) async {
     final repository = await _pump(tester);
     repository.failure = DioException(
-      requestOptions: RequestOptions(path: '/ecf/documents/doc-1/dispatch-dosa'),
+      requestOptions: RequestOptions(
+        path: '/ecf/documents/doc-1/dispatch-dosa',
+      ),
       response: Response(
-        requestOptions: RequestOptions(path: '/ecf/documents/doc-1/dispatch-dosa'),
+        requestOptions: RequestOptions(
+          path: '/ecf/documents/doc-1/dispatch-dosa',
+        ),
         statusCode: 409,
       ),
     );

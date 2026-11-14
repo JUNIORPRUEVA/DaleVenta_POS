@@ -17,6 +17,38 @@ Do not store secrets in this document. Secret-bearing files exist locally; repor
 
 ## Local / Development
 
+ECF numbering isolation (2026-11-13): after an explicitly authorized manual
+production operation, migrations0400/0500/0600 are applied with original
+checksums. The earlier local-only restriction is superseded by the reviewed
+production evidence in ecf/ECF_PREDEPLOY_AUDIT_2026-11-13.md. No application
+deployment is implied by the database migration. Production range metadata must not be copied to TEST merely because
+both API keys exist. Any further shared rollout requires its own target review,
+backup and explicit authorization. See
+[implementation evidence](ecf/ECF_ENVIRONMENT_NUMBERING_2026-11-13.md).
+
+DOSA's company dispatch now selects TEST/PRODUCTION from the authenticated
+company's `ecf_company_configurations.environment`, using only that company's
+credential for that environment. `DOSA_EMISSION_ENVIRONMENT` remains a legacy
+setting for standalone clients/probes and startup validation; it does not route
+company dispatch or pending selection. `DOSA_EMISSION_ENABLED` remains a server
+kill switch. Production additionally requires `DOSA_PRODUCTION_EMISSION_ENABLED`,
+company `productionEnabled` and `PRODUCTION_READY`. The explicit company
+activation and commercial preparation additionally require
+`DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true`. Activation verifies the company's
+own active production credential and unresolved TEST results, and does not send
+invoices. These source changes alter none of the deployed flags or company data.
+
+Identical-request recovery uses at most three immediate HTTP calls in the original
+dispatch, with a fresh company/credential check and audit before each repetition.
+A later authorized verification after an expired persisted lease uses one call,
+the exact original identity and current company/environment authorization. No
+number is allocated by recovery; missing historical proof blocks replay. It adds
+no environment flag, credential or migration. Standalone clients/probes without
+the dispatch audit hook keep their single-call behavior. Validation uses only
+disposable local PostgreSQL and localhost HTTP providers; it performs no external
+emission or deployed configuration change. The authorized production rollout of0400/0500/0600 is complete; automatic
+migration execution remains disabled. This does not deploy the new application.
+
 Purpose:
 
 - Developer implementation and local validation.
@@ -215,6 +247,16 @@ Deployment policy:
   Never use production credentials or customer records for this validation.
 
 ## Data Safety Rules
+
+The DOSA confirmed-result recorder is OFF unless the server operator explicitly
+sets `DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true`. It does not enable emission,
+production credentials, company certification or production authorization; all
+existing gates still apply. Migration `20261113060000_ecf_public_print_stamp`
+must precede this API version. It was applied manually to the verified DaleVentas
+production database on2026-11-13, after backup restoration rehearsals. Shared
+configuration and application deployment retain their separate release gates.
+This recorder handles correlated synchronous HTTP 200 accepted results only.
+It does not resolve a timeout or promote a 202 pending response.
 
 - Always identify the active environment before database, seed, migration, purge, repair, or deployment work.
 - Treat unknown environment as production-risk until proven otherwise.

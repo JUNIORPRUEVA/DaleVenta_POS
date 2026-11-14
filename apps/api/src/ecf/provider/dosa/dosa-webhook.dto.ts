@@ -41,6 +41,8 @@
  */
 
 /** Credenciales tal como llegan. Nunca se registran ni se envían al cliente. */
+import { extractDosaNumberingMetadata, type DosaNumberingMetadata } from "./dosa-numbering-metadata";
+
 export type DosaWebhookCredentials = {
   apiKeyProduccion?: string;
   apiKeyTest?: string;
@@ -48,6 +50,8 @@ export type DosaWebhookCredentials = {
 };
 
 export type DosaWebhookPayload = {
+  /** Provider evidence, never an authorization or an automatic configuration. */
+  numberingMetadata?: DosaNumberingMetadata;
   /**
    * `null` en los eventos que preceden a la postulación (`empresa.conectada`,
    * `webhook.prueba`). Nunca se usa para correlacionar: la empresa sale del RNC.
@@ -168,6 +172,7 @@ export function parseDosaWebhookPayload(
   };
 
   const payload: DosaWebhookPayload = {
+    ...(extractDosaNumberingMetadata(body) ? { numberingMetadata: extractDosaNumberingMetadata(body) } : {}),
     postulacionId: postulacionId.value,
     rnc,
     razonSocial,
@@ -192,6 +197,7 @@ export function parseDosaWebhookPayload(
  */
 export function redactDosaWebhookEvent(payload: DosaWebhookPayload) {
   return {
+    ...(payload.numberingMetadata ? { numberingMetadata: payload.numberingMetadata } : {}),
     postulacionId: payload.postulacionId,
     rnc: payload.rnc,
     razonSocial: payload.razonSocial,

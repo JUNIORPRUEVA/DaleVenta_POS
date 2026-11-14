@@ -184,13 +184,14 @@ Future<void> _expectAllOptionsReachable(WidgetTester tester) async {
 
   await _scrollUntilFound(tester, find.text('Reportes'));
   _expectReachable(tester, 'Reportes');
+  await _scrollUntilFound(tester, find.text('Facturación electrónica'));
+  _expectReachable(tester, 'Facturación electrónica');
   expect(find.text('FullPOS').hitTestable(), findsWidgets);
   for (final label in [
     'Más módulos',
     'Depósitos',
     'Pagos',
     'Nómina',
-    'Facturación electrónica',
   ]) {
     expect(
       find.text(label),

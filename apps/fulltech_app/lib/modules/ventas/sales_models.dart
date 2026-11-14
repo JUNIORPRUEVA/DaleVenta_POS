@@ -70,10 +70,13 @@ class EcfReturnCreditNote {
 /// Resultado de una devolución: la venta de reembolso y su nota de crédito
 /// electrónica cuando corresponde.
 class SaleReturnResult {
-  const SaleReturnResult({required this.sale, this.creditNote});
+  const SaleReturnResult({required this.sale, this.creditNote, this.pendingSync = false, this.fiscalPending = false, this.fiscalPendingMessage});
 
   final SaleModel sale;
   final EcfReturnCreditNote? creditNote;
+  final bool pendingSync;
+  final bool fiscalPending;
+  final String? fiscalPendingMessage;
 
   bool get hasCreditNote => creditNote?.hasEncf == true;
 }
@@ -509,6 +512,7 @@ class SaleModel {
   }
 
   bool get isRefundDocument => kind == 'refund';
+  bool get isExplicitNormal => fiscalVoucherType?.trim().toUpperCase() == 'NORMAL';
   bool get isCancelled => returnStatus == 'CANCELLED' || isDeleted;
   bool get isReturned => returnStatus == 'RETURNED';
   bool get isPartiallyReturned => returnStatus == 'PARTIALLY_RETURNED';

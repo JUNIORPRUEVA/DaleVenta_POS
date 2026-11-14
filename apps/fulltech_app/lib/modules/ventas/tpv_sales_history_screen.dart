@@ -13,6 +13,11 @@ import '../../core/errors/api_exception.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/printing/unified_ticket_printer.dart';
+import '../../features/ecf/data/ecf_repository.dart';
+import '../../features/ecf/data/ecf_connection_guard.dart';
+import '../../features/ecf/ecf_sale_fiscal.dart';
+import '../../features/ecf/ui/ecf_sale_history_panel.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/time/business_time.dart';
@@ -52,6 +57,8 @@ class TpvSalesHistoryScreen extends ConsumerStatefulWidget {
 
 class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   static const _invoicePageSize = 50;
+  final _returningSales = <String>{};
+  String get _fiscalBatchKey => _sales.where((sale) => !sale.isRefundDocument).map((sale) => sale.id).join(',');
 
   /// Totales autoritativos del periodo (agregado del backend). Null mientras
   /// no lleguen o si el agregado fallo: en ese caso la UI rotula el valor
@@ -253,6 +260,8 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
           final haystack = [
             _invoiceNumber(sale),
+            sale.fiscalVoucherType ?? '',
+            ref.read(ecfSalesFiscalProvider(_fiscalBatchKey)).valueOrNull?[sale.id]?.original?.encf ?? '',
             sale.id,
             sale.customerName ?? '',
             sale.userName ?? '',
@@ -374,6 +383,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<void> _returnSale(SaleModel sale) async {
+    if (_returningSales.contains(sale.id)) return;
+    _returningSales.add(sale.id);
+    try {
     if (!sale.canReturn) {
       final message = salesReturnMessage(
         const ApiException.detailed(
@@ -389,6 +401,20 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
       );
       return;
     }
+    var fiscal = ref.read(ecfSalesFiscalProvider(_fiscalBatchKey)).valueOrNull?[sale.id];
+    if (fiscal == null && ref.read(companySettingsProvider).valueOrNull?.ecfEnabled == true) {
+      try {
+        fiscal = (await ref.read(ecfRepositoryProvider).salesFiscal([sale.id]))[sale.id];
+      } catch (_) {
+        if (mounted) {
+          AppFeedback.showToast(context, title: 'Sin conexión', body: 'Conéctate para verificar el comprobante.',
+            kind: AppFeedbackKind.warning, duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
+        }
+        return;
+      }
+    }
+    final electronic = fiscal?.isElectronic == true || (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType));
+    if (!mounted) return;
     final allowed = await ensureAdminAuthorization(
       context,
       ref,
@@ -400,9 +426,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Devolver venta'),
+        title: Text(electronic ? 'Devolver / anular con E34' : 'Devolver venta'),
         content: Text(
-          'Esta operación registrará la devolución de la venta y revertirá automáticamente los movimientos correspondientes.\n\nFactura ${_invoiceNumber(sale)}\nMonto disponible: ${formatRdCurrencyAccounting(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
+          '${electronic ? "Se registrará la devolución y se preparará su nota de crédito E34. El estado fiscal se confirma por separado." : "Esta acción revertirá automáticamente los movimientos correspondientes."}\n\nFactura ${_invoiceNumber(sale)}\nMonto disponible: ${formatRdCurrencyAccounting(sale.returnableAmount > 0 ? sale.returnableAmount : sale.totalSold)}',
         ),
         actions: [
           TextButton(
@@ -422,20 +448,49 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
     try {
       final result = await ref
           .read(ventasRepositoryProvider)
-          .returnSale(sale.id, originalSaleCashSessionId: sale.cashSessionId);
+          .returnSale(sale.id, originalSaleCashSessionId: sale.cashSessionId,
+            electronic: electronic,
+            clientRequestId: electronic ? 'ecf-return:${sale.id}:${sale.returnableAmount.toStringAsFixed(2)}' : null);
       if (!mounted) return;
       await _load();
+      ref.invalidate(ecfSalesFiscalProvider);
       if (!mounted) return;
       final encf = result.creditNote?.encf ?? '';
       showCashToast(
         context,
-        'Devolucion realizada',
-        detail: encf.isEmpty
-            ? 'La devolucion se realizo correctamente.'
-            : 'Devolucion realizada. Nota de credito E34: $encf',
+        result.pendingSync ? 'Devolución pendiente' : 'Devolución registrada',
+        detail: result.pendingSync ? 'Guardada en este equipo; aún no está confirmada.'
+            : result.fiscalPending ? result.fiscalPendingMessage ?? 'La nota E34 requiere seguimiento en el detalle fiscal.'
+            : encf.isEmpty ? 'La devolución se realizó correctamente.' : 'E34 preparada: $encf',
       );
+      if (!result.pendingSync && result.creditNote != null &&
+          const {'LOCAL_VALIDATED', 'READY_TO_SEND'}.contains(result.creditNote!.status) &&
+          hasUserPermission(ref.read(authStateProvider).user, AppPermission.prepareEcfDocuments)) {
+        try {
+          final caps = await ref.read(ecfCapabilitiesProvider.future);
+          if (caps.emissionPathAvailable) {
+            final outcome = await ref.read(ecfRepositoryProvider).dispatchDosa(result.creditNote!.documentId);
+            ref.invalidate(ecfSalesFiscalProvider);
+            if (mounted) {
+              AppFeedback.showToast(context, title: 'Estado de la E34', body: outcome.message,
+                kind: AppFeedbackKind.info, duration: const Duration(seconds: 4), dedupeKey: 'ecf-history');
+            }
+          }
+        } catch (_) {
+          ref.invalidate(ecfSalesFiscalProvider);
+          if (mounted) {
+            AppFeedback.showToast(context, title: 'E34 pendiente', body: 'Devolución registrada. Verifica el estado fiscal.',
+              kind: AppFeedbackKind.warning, duration: const Duration(seconds: 4), dedupeKey: 'ecf-history');
+          }
+        }
+      }
     } catch (e, stackTrace) {
       if (!mounted) return;
+      if (e is EcfConnectionException) {
+        AppFeedback.showToast(context, title: e.noticeTitle, body: e.message,
+          kind: AppFeedbackKind.warning, duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
+        return;
+      }
       final message = salesReturnMessage(e);
       recordSalesOperationError(
         error: e,
@@ -449,6 +504,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         detail: message.body,
         isError: true,
       );
+    }
+    } finally {
+      _returningSales.remove(sale.id);
     }
   }
 
@@ -475,6 +533,10 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         .getOrCreate();
     return buildSaleInvoicePdf(
       sale: sale,
+      ecf: !sale.isExplicitNormal && (sale.fiscalTaxEnabled || (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType)))
+          ? await ref.read(ecfRepositoryProvider).printForSale(sale.id,
+              requireElectronic: (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType)))
+          : null,
       company: company,
       warrantyPolicy: printerSettings.warrantyPolicy,
     );
@@ -618,6 +680,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final fiscalBySaleId = ref.watch(ecfSalesFiscalProvider(_fiscalBatchKey)).valueOrNull ?? <String, EcfSaleFiscal>{};
     final user = ref.watch(authStateProvider).user;
     final measurementUnitsEnabled =
         ref
@@ -731,6 +794,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
               child: isMobile
                   ? _InvoiceListCard(
+                      fiscalBySaleId: fiscalBySaleId,
                       loading: _loading,
                       loadingMore: _loadingMore,
                       hasMore: _hasMoreInvoices,
@@ -754,6 +818,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                         Expanded(
                           flex: 62,
                           child: _InvoiceListCard(
+                            fiscalBySaleId: fiscalBySaleId,
                             loading: _loading,
                             loadingMore: _loadingMore,
                             hasMore: _hasMoreInvoices,
@@ -1162,6 +1227,7 @@ class _InvoiceRefreshWarning extends StatelessWidget {
 
 class _InvoiceListCard extends StatelessWidget {
   const _InvoiceListCard({
+    this.fiscalBySaleId = const {},
     required this.loading,
     required this.loadingMore,
     required this.hasMore,
@@ -1180,6 +1246,7 @@ class _InvoiceListCard extends StatelessWidget {
     required this.onReturn,
   });
 
+  final Map<String, EcfSaleFiscal> fiscalBySaleId;
   final bool loading;
   final bool loadingMore;
   final bool hasMore;
@@ -1373,6 +1440,7 @@ class _InvoiceListCard extends StatelessWidget {
                               }
                               final sale = sales[index];
                               return _InvoiceRow(
+                                fiscal: fiscalBySaleId[sale.id],
                                 sale: sale,
                                 selected: sale.id == selectedId,
                                 dateFmt: dateFmt,
@@ -1870,6 +1938,7 @@ class _DateFilterButton extends StatelessWidget {
 
 class _InvoiceRow extends StatelessWidget {
   const _InvoiceRow({
+    this.fiscal,
     required this.sale,
     required this.selected,
     required this.dateFmt,
@@ -1880,6 +1949,7 @@ class _InvoiceRow extends StatelessWidget {
     required this.onReturn,
   });
 
+  final EcfSaleFiscal? fiscal;
   final SaleModel sale;
   final bool selected;
   final DateFormat dateFmt;
@@ -1894,6 +1964,7 @@ class _InvoiceRow extends StatelessWidget {
     final mobile = MediaQuery.sizeOf(context).width < 760;
     if (mobile) {
       return _MobileInvoiceCard(
+        fiscal: fiscal,
         sale: sale,
         dateFmt: dateFmt,
         invoiceNumber: invoiceNumber,
@@ -1923,6 +1994,7 @@ class _InvoiceRow extends StatelessWidget {
                     'Factura ${invoiceNumber(sale)}',
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
+                  EcfSaleHistoryBadge(fiscal: fiscal, intent: sale.fiscalVoucherType),
                   const SizedBox(height: 4),
                   Text(
                     sale.userName ?? sale.userId,
@@ -1999,6 +2071,7 @@ class _InvoiceRow extends StatelessWidget {
 
 class _MobileInvoiceCard extends StatelessWidget {
   const _MobileInvoiceCard({
+    this.fiscal,
     required this.sale,
     required this.dateFmt,
     required this.invoiceNumber,
@@ -2008,6 +2081,7 @@ class _MobileInvoiceCard extends StatelessWidget {
     required this.onReturn,
   });
 
+  final EcfSaleFiscal? fiscal;
   final SaleModel sale;
   final DateFormat dateFmt;
   final String Function(SaleModel sale) invoiceNumber;
@@ -2098,6 +2172,7 @@ class _MobileInvoiceCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    EcfSaleHistoryBadge(fiscal: fiscal, intent: sale.fiscalVoucherType),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -2383,9 +2458,10 @@ class _InvoiceDetailPanel extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              itemCount: sale.items.length,
+              itemCount: sale.items.length + 1,
               itemBuilder: (context, index) {
-                final item = sale.items[index];
+                if (index == 0) return EcfSaleHistoryPanel(key: ValueKey('ecf-history-${sale.id}'), sale: sale);
+                final item = sale.items[index - 1];
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(

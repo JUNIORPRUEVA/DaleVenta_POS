@@ -540,7 +540,11 @@ describe("SalesService tenant isolation", () => {
       kind: "invoice",
       cancelledAt: null,
       inventoryRestoredAt: null,
-      items: [],
+      items: [{id: "legacy-item", productId: null, productSource: null, productNameSnapshot: "Legacy service", qty: new Prisma.Decimal(1),
+        unitCodeSnapshot: "UNIT", unitNameSnapshot: "Unidad", unitSymbolSnapshot: "u", unitPrecisionSnapshot: 0,
+        priceSoldUnit: new Prisma.Decimal(100), subtotalSold: new Prisma.Decimal(100), subtotalCost: new Prisma.Decimal(0),
+        grossAmount: new Prisma.Decimal(100), lineDiscountAmount: new Prisma.Decimal(0), taxableBase: new Prisma.Decimal(0),
+        taxAmount: new Prisma.Decimal(0), exemptAmount: new Prisma.Decimal(100), taxRate: new Prisma.Decimal(0), inventoryTrackedSnapshot: false}],
       creditPayments: [],
       cashSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       customerId: null,
@@ -565,6 +569,8 @@ describe("SalesService tenant isolation", () => {
       customerPhoneSnapshot: null,
     };
     const tx = {
+      saleItem: {groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([])},
+      inventoryMovement: { groupBy: jest.fn().mockResolvedValue([]) },
       sale: {
         findFirst: jest.fn().mockResolvedValue(originalSale),
         create: jest.fn().mockResolvedValue(returned),
@@ -572,6 +578,7 @@ describe("SalesService tenant isolation", () => {
       },
     };
     const prisma = {
+      ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
       sale: { findFirst: jest.fn() },
       cashSession: { findFirst: jest.fn().mockResolvedValue(sessionB) },
       $transaction: jest.fn(async (callback: (t: unknown) => unknown) =>

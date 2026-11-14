@@ -12,6 +12,8 @@ import '../../../core/time/business_time.dart';
 import '../../../core/uom/uom_formatters.dart';
 import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
+import '../../../features/ecf/ecf_print_document.dart';
+import '../../../core/printing/ecf_print_footer.dart';
 
 final PdfColor _pageBackground = PdfColors.white;
 final PdfColor _borderColor = PdfColor.fromHex('#D9E2EC');
@@ -153,9 +155,21 @@ Future<void> downloadSalesSummaryPdf({
 
 Future<Uint8List> buildSaleInvoicePdf({
   required SaleModel sale,
+  EcfPrintDocument? ecf,
   CompanySettings? company,
   String? warrantyPolicy,
 }) async {
+  if (sale.isExplicitNormal && ecf != null) {
+    throw StateError('Una venta Normal no puede incorporar un comprobante electrónico.');
+  }
+  if (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType) && ecf == null) {
+    throw StateError('El comprobante electrónico aún no está disponible para generar su PDF.');
+  }
+  if (ecf != null && !ecf.matchesTotal(sale.totalSold)) {
+    throw StateError(
+      'El importe de la venta no coincide con su comprobante electrónico. Revisa el documento antes de imprimir.',
+    );
+  }
   final money = NumberFormat.currency(locale: 'en_US', symbol: 'RD\$');
   final dateFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
   final qtyFmt = NumberFormat('#,##0.##', 'es_DO');
@@ -166,11 +180,13 @@ Future<Uint8List> buildSaleInvoicePdf({
   );
   final invoiceCode = invoicePdfCode(sale.id);
   final warranty = _clean(warrantyPolicy);
+  final fiscalPageItems = <int, List<SaleItemModel>>{};
 
   final doc = pw.Document(title: 'Factura $invoiceCode', author: companyName);
 
   doc.addPage(
     pw.MultiPage(
+      maxPages: ecf == null ? 20 : 1000,
       pageTheme: pw.PageTheme(
         pageFormat: PdfPageFormat.a4,
         // Márgenes idénticos a la plantilla de COTIZACIÓN (26/24/26/22):
@@ -189,17 +205,34 @@ Future<Uint8List> buildSaleInvoicePdf({
         dateFmt: dateFmt,
         pageNumber: context.pageNumber,
         pagesCount: context.pagesCount,
+        ecf: ecf,
       ),
-      footer: (context) => _pageFooter(context.pageNumber, context.pagesCount),
+      footer: (context) => pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          if (ecf != null)
+            _fiscalPageSubtotals(
+              context.pageNumber < context.pagesCount
+                  ? fiscalPageItems[context.pageNumber] ?? const []
+                  : const [],
+              money,
+            ),
+          ecfPrintFooter(ecf, pageLeftInsetMm: 26 / PdfPageFormat.mm),
+          _pageFooter(context.pageNumber, context.pagesCount),
+        ],
+      ),
       build: (_) => [
         _invoiceDetailSection(
           sale,
           money,
           qtyFmt,
-          showMeasurementUnit: company?.measurementUnitsEnabled == true,
+          showMeasurementUnit:
+              ecf != null || company?.measurementUnitsEnabled == true,
+          electronicRepresentation: ecf != null,
+          fiscalPageItems: fiscalPageItems,
         ),
         pw.SizedBox(height: 14),
-        _invoiceBottomSection(sale, money, warrantyPolicy: warranty),
+        _invoiceBottomSection(sale, money, warrantyPolicy: warranty, ecf: ecf),
       ],
     ),
   );
@@ -208,6 +241,7 @@ Future<Uint8List> buildSaleInvoicePdf({
 }
 
 pw.Widget _invoiceHeader({
+  EcfPrintDocument? ecf,
   required CompanySettings? company,
   required pw.MemoryImage? logoImage,
   required SaleModel sale,
@@ -220,7 +254,7 @@ pw.Widget _invoiceHeader({
     sale.issuerNameSnapshot,
     fallback: _fallback(company?.companyName, fallback: 'FULLTECH'),
   );
-  if (pageNumber > 1) {
+  if (pageNumber > 1 && ecf == null) {
     return _invoiceContinuationHeader(
       companyName: companyName,
       invoiceCode: invoiceCode,
@@ -246,9 +280,16 @@ pw.Widget _invoiceHeader({
     'CANCELLED' => 'Factura cancelada',
     _ => null,
   };
-  final fiscalLabel = invoicePdfDocumentLabel(sale);
+  final fiscalLabel = ecf?.label ?? invoicePdfDocumentLabel(sale);
   final fiscal = sale.fiscalTaxEnabled;
-  final customer = _invoiceCustomerData(sale);
+  final customer = ecf == null
+      ? _invoiceCustomerData(sale)
+      : _InvoiceCustomerData(
+          name: ecf.buyerName ?? 'Consumidor final',
+          taxId: ecf.buyerRnc ?? '',
+          phone: sale.customerPhoneSnapshot ?? '',
+          address: sale.customerAddressSnapshot ?? '',
+        );
 
   return _panel(
     margin: const pw.EdgeInsets.only(bottom: 13),
@@ -270,7 +311,7 @@ pw.Widget _invoiceHeader({
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          companyName,
+                          ecf?.issuerName ?? companyName,
                           style: pw.TextStyle(
                             fontSize: 17,
                             fontWeight: pw.FontWeight.bold,
@@ -278,9 +319,11 @@ pw.Widget _invoiceHeader({
                           ),
                         ),
                         pw.SizedBox(height: 4),
-                        if (rnc.isNotEmpty) _companyLine('RNC: $rnc'),
+                        if (rnc.isNotEmpty || ecf != null)
+                          _companyLine('RNC: ${ecf?.issuerRnc ?? rnc}'),
                         if (phone.isNotEmpty) _companyLine('Tel: $phone'),
-                        if (address.isNotEmpty) _companyLine(address),
+                        if (address.isNotEmpty || ecf?.issuerAddress != null)
+                          _companyLine(ecf?.issuerAddress ?? address),
                       ],
                     ),
                   ),
@@ -293,12 +336,16 @@ pw.Widget _invoiceHeader({
               child: _documentFactsPanel(
                 documentLabel: fiscalLabel,
                 code: invoiceCode,
-                issuedText: dateFmt.format(
-                  toBusinessTime(sale.saleDate ?? DateTime.now()),
-                ),
+                issuedText:
+                    ecf?.issueDateText ??
+                    dateFmt.format(
+                      toBusinessTime(sale.saleDate ?? DateTime.now()),
+                    ),
                 statusText: statusText,
-                ncf: fiscal ? sale.ncf : null,
-                ncfExpirationDate: fiscal ? sale.ncfExpirationDate : null,
+                ncf: ecf?.encf ?? (fiscal ? sale.ncf : null),
+                ncfExpirationDate: ecf != null
+                    ? DateTime.tryParse(ecf.expiresAt ?? '')
+                    : (fiscal ? sale.ncfExpirationDate : null),
                 cashierName: sale.userName,
               ),
             ),
@@ -307,6 +354,10 @@ pw.Widget _invoiceHeader({
         pw.SizedBox(height: 12),
         pw.Container(height: 1.1, color: _softLine),
         pw.SizedBox(height: 9),
+        if (ecf?.originalEncf != null)
+          pw.Text(
+            'e-NCF modificado: ${ecf!.originalEncf} · ${ecf.modificationText ?? ''}',
+          ),
         _customerPanel(customer),
       ],
     ),
@@ -467,6 +518,8 @@ pw.Widget _invoiceDetailSection(
   NumberFormat money,
   NumberFormat qtyFmt, {
   required bool showMeasurementUnit,
+  bool electronicRepresentation = false,
+  Map<int, List<SaleItemModel>>? fiscalPageItems,
 }) {
   final fiscal = sale.fiscalTaxEnabled;
   final hasProductDiscount = sale.items.any(
@@ -521,15 +574,21 @@ pw.Widget _invoiceDetailSection(
           ),
           children: [
             _descriptionCell(
-              isExempt && fiscal ? '$description  [EXENTO]' : description,
+              isExempt && fiscal
+                  ? (electronicRepresentation
+                        ? 'E $description'
+                        : '$description  [EXENTO]')
+                  : description,
             ),
             _bodyCell(
-              formatQuantityForFeature(
-                item.qty,
-                unit: item.unitSnapshot,
-                showMeasurementUnit: showMeasurementUnit,
-                includeUnitForUnit: true,
-              ),
+              electronicRepresentation
+                  ? '${qtyFmt.format(item.qty)} ${item.unitNameSnapshot}'
+                  : formatQuantityForFeature(
+                      item.qty,
+                      unit: item.unitSnapshot,
+                      showMeasurementUnit: showMeasurementUnit,
+                      includeUnitForUnit: true,
+                    ),
               align: pw.TextAlign.center,
             ),
             _bodyCell(
@@ -560,6 +619,26 @@ pw.Widget _invoiceDetailSection(
     }
   }
 
+  final table = pw.Table(
+    border: pw.TableBorder(
+      top: pw.BorderSide(color: _panelBorder, width: 0.45),
+      bottom: pw.BorderSide(color: _panelBorder, width: 0.45),
+      left: pw.BorderSide(color: _panelBorder, width: 0.45),
+      right: pw.BorderSide(color: _panelBorder, width: 0.45),
+      horizontalInside: pw.BorderSide(color: _borderColor, width: 0.45),
+    ),
+    columnWidths: _invoiceDetailColumnWidths(hasProductDiscount, fiscal),
+    children: tableRows,
+  );
+  if (electronicRepresentation) {
+    return _FiscalPageTable(
+      children: tableRows,
+      border: table.border,
+      columnWidths: table.columnWidths,
+      items: sale.items,
+      pageItems: fiscalPageItems!,
+    );
+  }
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
@@ -572,18 +651,70 @@ pw.Widget _invoiceDetailSection(
         ),
       ),
       pw.SizedBox(height: 8),
-      pw.Table(
-        border: pw.TableBorder(
-          top: pw.BorderSide(color: _panelBorder, width: 0.45),
-          bottom: pw.BorderSide(color: _panelBorder, width: 0.45),
-          left: pw.BorderSide(color: _panelBorder, width: 0.45),
-          right: pw.BorderSide(color: _panelBorder, width: 0.45),
-          horizontalInside: pw.BorderSide(color: _borderColor, width: 0.45),
-        ),
-        columnWidths: _invoiceDetailColumnWidths(hasProductDiscount, fiscal),
-        children: tableRows,
-      ),
+      table,
     ],
+  );
+}
+
+/// The PDF table's public spanning context identifies the rows actually laid
+/// out on each page. This avoids estimating page totals from character counts.
+class _FiscalPageTable extends pw.Table {
+  _FiscalPageTable({
+    required super.children,
+    super.border,
+    super.columnWidths,
+    required this.items,
+    required this.pageItems,
+  });
+  final List<SaleItemModel> items;
+  final Map<int, List<SaleItemModel>> pageItems;
+  @override
+  void layout(
+    pw.Context context,
+    pw.BoxConstraints constraints, {
+    bool parentUsesSize = false,
+  }) {
+    super.layout(context, constraints, parentUsesSize: parentUsesSize);
+    final span = saveContext() as pw.TableContext;
+    final first = (span.firstLine - 1).clamp(0, items.length);
+    final last = (span.lastLine - 1).clamp(first, items.length);
+    pageItems[context.pageNumber] = items.sublist(first, last);
+  }
+}
+
+pw.Widget _fiscalPageSubtotals(List<SaleItemModel> items, NumberFormat money) {
+  // Reserve the same footer height during pagination and final painting.
+  return pw.SizedBox(
+    height: 42,
+    child: items.isEmpty
+        ? pw.SizedBox()
+        : pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              for (final value in [
+                (
+                  'Subtotal gravado página',
+                  items.fold<double>(0, (sum, item) => sum + item.taxableBase),
+                ),
+                (
+                  'Subtotal exento página',
+                  items.fold<double>(0, (sum, item) => sum + item.exemptAmount),
+                ),
+                (
+                  'Subtotal ITBIS página',
+                  items.fold<double>(0, (sum, item) => sum + item.taxAmount),
+                ),
+                (
+                  'Monto total página',
+                  items.fold<double>(0, (sum, item) => sum + item.subtotalSold),
+                ),
+              ])
+                pw.Text(
+                  '${value.$1}: ${money.format(_roundMoney(value.$2))}',
+                  style: const pw.TextStyle(fontSize: 7),
+                ),
+            ],
+          ),
   );
 }
 
@@ -646,6 +777,7 @@ pw.Widget _invoiceBottomSection(
   SaleModel sale,
   NumberFormat money, {
   String? warrantyPolicy,
+  EcfPrintDocument? ecf,
 }) {
   final note = invoicePdfNoteText(sale.note);
   final warranty = _clean(warrantyPolicy);
@@ -767,7 +899,10 @@ pw.Widget _invoiceBottomSection(
         ),
       ),
       pw.SizedBox(width: 14),
-      pw.SizedBox(width: 270, child: _invoiceTotalsPanel(sale, money)),
+      pw.SizedBox(
+        width: 270,
+        child: _invoiceTotalsPanel(sale, money, ecf: ecf),
+      ),
     ],
   );
 }
@@ -833,7 +968,11 @@ SalePdfViewData buildSalePdfViewData(SaleModel sale) {
   );
 }
 
-pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
+pw.Widget _invoiceTotalsPanel(
+  SaleModel sale,
+  NumberFormat money, {
+  EcfPrintDocument? ecf,
+}) {
   final totals = buildSalePdfViewData(sale);
   final fiscal = totals.fiscalEnabled;
 
@@ -853,7 +992,10 @@ pw.Widget _invoiceTotalsPanel(SaleModel sale, NumberFormat money) {
           ),
         ),
         pw.SizedBox(height: 9),
-        _pdfTotalLine('Subtotal', money.format(totals.subtotal)),
+        _pdfTotalLine(
+          'Subtotal',
+          money.format(double.tryParse(ecf?.subtotal ?? '') ?? totals.subtotal),
+        ),
         if (totals.productDiscount > 0)
           _pdfTotalLine(
             'Descuentos por productos',
@@ -1129,7 +1271,8 @@ pw.Widget _documentFactsPanel({
           ),
           pw.SizedBox(height: 4),
         ],
-        if (showFiscal && cleanNcf.isNotEmpty) _factLine('NCF', cleanNcf),
+        if (showFiscal && cleanNcf.isNotEmpty)
+          _factLine(cleanNcf.startsWith('E') ? 'e-NCF' : 'NCF', cleanNcf),
         if (showFiscal && ncfExpirationDate != null)
           _factLine(
             'Vencimiento',

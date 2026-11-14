@@ -157,6 +157,10 @@ export class CreateSaleDto {
   fiscalVoucherType?: string;
 
   @IsOptional()
+  @IsISO8601()
+  sequenceDueDate?: string;
+
+  @IsOptional()
   @IsString()
   ncf?: string;
 

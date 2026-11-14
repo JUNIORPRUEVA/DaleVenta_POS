@@ -10,6 +10,7 @@ import '../ecf_models.dart';
 import '../ecf_status_presentation.dart';
 import 'ecf_simulated_dispatch_action.dart';
 import 'ecf_dosa_dispatch_action.dart';
+import 'ecf_document_print_action.dart';
 
 /// Tamaño de página de la bandeja.
 const int kEcfTrayPageSize = 25;
@@ -949,6 +950,8 @@ class _DetailBody extends StatelessWidget {
                 '${summary.safeErrorMessage == null ? '' : ' · ${summary.safeErrorMessage}'}',
           ),
         const Divider(height: 32),
+        EcfDocumentPrintAction(documentId: summary.id),
+        const SizedBox(height: 16),
         Text('Historial de estados', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         if (detail.statusLogs.isEmpty)
