@@ -29,12 +29,18 @@ The combined image passed17 read-only routes/6 assets/PWA/portal checks.
 Astro browser QA passed8 desktop/mobile views with0 page errors. Both Linux runtime audits
 reported zero advisories. No hardware or deployed-client acceptance is claimed.
 
-Publication and production activation remain NO-GO: commit/push/integration
-need explicit authorization, both server production gates are still disabled,
-and the user retains the Deploy action. autoDeploy=false on API and PWA.
+The owner authorized commits, branch publication and a PR. Implementation commit
+50617f39a7d744d2a528c30fa51b33e8d11b131e is published in
+[PR41](https://github.com/JUNIORPRUEVA/DaleVenta_POS/pull/41), targeting
+production-main. GitHub confirmed no merge conflicts. The owner retains merge
+and Deploy; neither was executed by the agent. CI must pass before integration.
+Both server production gates remain disabled. autoDeploy=false on API and PWA.
 The public DOSA assistant key is already configured; it was not printed/changed.
 Full evidence, current file inventory and manual deployment sequence:
 [predeployment audit](ecf/ECF_PREDEPLOY_AUDIT_2026-11-13.md).
+The 246-file inventory is the implementation checkpoint at50617f39; subsequent
+publication documentation is identified separately in the
+[operator guide](ecf/ECF_RELEASE_OPERATOR_2026-11-13.md).
 
 ## Previous local closure — Normal sales and DOSA recovery (historical)
 

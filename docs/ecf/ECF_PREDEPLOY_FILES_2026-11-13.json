@@ -1955,5 +1955,7 @@
       "gitIndexObject": "a9d63528d84eae8f9c71a9698f8891bef9e27811"
     }
   ],
-  "hashBasis": "sha256 covers exact working-copy bytes, including platform line endings; gitIndexObject is the portable Git blob identity. Original snapshot hashes cover original working-copy bytes."
+  "hashBasis": "sha256 covers exact working-copy bytes, including platform line endings; gitIndexObject is the portable Git blob identity. Original snapshot hashes cover original working-copy bytes.",
+  "snapshotCommit": "50617f39a7d744d2a528c30fa51b33e8d11b131e",
+  "snapshotScope": "The 246-file implementation checkpoint; later publication documentation is recorded in ECF_RELEASE_OPERATOR_2026-11-13.md."
 }

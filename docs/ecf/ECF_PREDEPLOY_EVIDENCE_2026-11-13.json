@@ -288,5 +288,29 @@
     "Jest harness has documented open handles; HTTP uses forceExit.",
     "Existing nonfiscal schema drift was inspected read-only, not applied.",
     "Local validation images contain a synthetic assistant key and must not be deployed."
-  ]
+  ],
+  "snapshotPhase": "Implementation checkpoint before publication; candidate fields below retain their original observed state.",
+  "publication": {
+    "implementationCommit": "50617f39a7d744d2a528c30fa51b33e8d11b131e",
+    "branch": "agent/ecf-predeploy-20261113",
+    "pullRequest": 41,
+    "url": "https://github.com/JUNIORPRUEVA/DaleVenta_POS/pull/41",
+    "base": "production-main",
+    "ownerAuthorizedCommitPushAndPr": true,
+    "branchPushed": true,
+    "mergeExecuted": false,
+    "deployExecuted": false,
+    "automaticMergeEnabled": false,
+    "ciRunAtPublication": 43537273400,
+    "ciStatusAtPublication": "in_progress",
+    "readOnlyServerRecheck": {
+      "checksumsMatch": true,
+      "unclassifiedDocuments": 0,
+      "apiHealthy": true,
+      "automaticMigrationsDisabled": true,
+      "autoDeployDisabled": true,
+      "productionFlagsPrepared": false,
+      "exitCode": 2
+    }
+  }
 }

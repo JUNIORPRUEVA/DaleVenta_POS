@@ -11,8 +11,11 @@ venta nueva ni llamada fiscal externa.
 
 El código candidato incluye el trabajo fiscal previo y los cierres de auditoría,
 con la actualización adicional de Astro expresamente aprobada por el usuario.
-La publicación Git y la activación productiva siguen pendientes; este informe
-no autoriza un deploy ni declara aceptación sobre impresoras físicas.
+El propietario autorizó la publicación Git en la continuación de esta tarea:
+commit50617f39, [PR41](https://github.com/JUNIORPRUEVA/DaleVenta_POS/pull/41)
+abierto hacia production-main. La integración y activación productiva siguen
+pendientes; este informe no autoriza un deploy ni declara aceptación sobre
+impresoras físicas. Véase la [guía operativa](ECF_RELEASE_OPERATOR_2026-11-13.md).
 
 ## Alcance y criterios
 
@@ -160,9 +163,9 @@ puesta en marcha. No se afirma una prueba física nueva del contenido fiscal.
 
 ## Límites y pendientes concretos
 
-1. Publicar/integrar el candidato requiere autorización explícita de commit,
-   push e integración. AGENTS.md y RELEASE_GOVERNANCE.md lo exigen. Todavía no
-   se ejecutó ninguno. autoDeploy=false está verificado en API y PWA.
+1. La rama está publicada con el commit50617f39 y el PR41 abierto. El propietario
+   conserva la revisión y la integración; los controles de CI deben pasar antes
+   de unirlo. No se ejecutó merge. autoDeploy=false está verificado en API y PWA.
 2. En EasyPanel siguen desactivados DOSA_PRODUCTION_EMISSION_ENABLED y
    DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED. Se deben preparar bajo control del
    propietario y conservar RUN_MIGRATIONS=false. No se cambió configuración
@@ -187,12 +190,13 @@ La secuencia operativa está en [RELEASE](../RELEASE.md).
 ## Estado
 
 Migración manual: aplicada y verificada. Candidato: validaciones locales
-completadas según evidencia. Publicación/activación/deploy: NO-GO hasta cerrar
-los permisos/configuración/aceptación pendientes. Ningún despliegue ejecutado.
+completadas según evidencia y código publicado en PR41. Integración,
+activación/deploy: NO-GO hasta cerrar CI, configuración y aceptación pendientes.
+Ningún despliegue ejecutado.
 
 ## Inventario de archivos
 
-El inventario adjunto distingue trabajo recibido y cambios de esta auditoría, con
+El inventario del commit de implementación50617f39 distingue trabajo recibido y cambios de esta auditoría, con
 hashes del contenido candidato y del respaldo previo. Incluye las rutas reales
 de código, pruebas, migraciones, documentación y evidencia visual.
 [Inventario completo](ECF_PREDEPLOY_FILES_2026-11-13.json).
