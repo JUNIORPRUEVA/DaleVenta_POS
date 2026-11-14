@@ -1,4 +1,4 @@
-name: Prepare FullPOS images a1885097
+name: Prepare FullPOS TEST closure images
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
       actions: read
       packages: write
     env:
-      RELEASE_SHA: a1885097ef574d836929049252cb9117952c7d61
+      RELEASE_SHA: 3217f0cd14cecb97b5c20f146812e0cd5df7d8ec
       COMPONENT: ${{ matrix.component }}
       DOCKER_BUILDKIT: '1'
     steps:
@@ -44,7 +44,7 @@ jobs:
           const headers = {Authorization:`Bearer ${process.env.GH_RELEASE_TOKEN}`, Accept:'application/vnd.github+json'};
           let verified = false;
           for (let check = 0; check < 90; check++) {
-            const response = await fetch('https://api.github.com/repos/JUNIORPRUEVA/DaleVenta_POS/actions/runs/43605208442', {headers});
+            const response = await fetch('https://api.github.com/repos/JUNIORPRUEVA/DaleVenta_POS/actions/runs/43606789878', {headers});
             assert.equal(response.status, 200);
             const gate = await response.json();
             assert.equal(gate.head_sha, sha);
@@ -106,7 +106,34 @@ jobs:
             execFileSync('docker', ['run','--rm','--network','none','--entrypoint','sh',image,'-ec',probe], {stdio:'inherit'});
             const pdfProbe = 'test -f /usr/share/nginx/html/pdfjs/4.10.38/init.mjs && test -f /usr/share/nginx/html/pdfjs/4.10.38/pdf.min.mjs && test -f /usr/share/nginx/html/pdfjs/4.10.38/pdf.worker.min.mjs && grep -q "pdfjs/4.10.38/init.mjs" /usr/share/nginx/html/flutter_bootstrap.js';
             execFileSync('docker', ['run','--rm','--network','none','--entrypoint','sh',image,'-ec',pdfProbe], {stdio:'inherit'});
-
+            // Exercise the generated runtime proxy config, not only nginx.conf.
+            const qaName = `fullpos-pdf-module-qa-${sha.slice(0,8)}`;
+            try {
+              execFileSync('docker', ['run','-d','--name',qaName,'-p','127.0.0.1::80',
+                '-e','API_BASE_URL=/api','-e','API_UPSTREAM_URL=http://127.0.0.1:9',image], {stdio:'pipe'});
+              const runtime = JSON.parse(execFileSync('docker',['inspect',qaName],{encoding:'utf8'}))[0];
+              const origin = `http://127.0.0.1:${runtime.NetworkSettings.Ports['80/tcp'][0].HostPort}`;
+              const hashes = {'pdf.min.mjs':'27fc2a057a00f92a4334ad06e17dbd7259912954e9fb7f76400bcca5fd190a9c',
+                'pdf.worker.min.mjs':'1baa1844c89c80a5b2797c916e75ab29254be46d8e9cb53cb6364d7aad84be36'};
+              for (const name of ['init.mjs',...Object.keys(hashes)]) {
+                let response;
+                for (let attempt=0; attempt<40; attempt++) {
+                  try { response=await fetch(`${origin}/pdfjs/4.10.38/${name}`,{signal:AbortSignal.timeout(1500)}); break; }
+                  catch { await new Promise(resolve=>setTimeout(resolve,500)); }
+                }
+                assert.ok(response, 'Local runtime must start');
+                assert.equal(response.status,200);
+                assert.ok(response.headers.get('content-type')?.includes('application/javascript'));
+                assert.ok(response.headers.get('cache-control')?.includes('immutable'));
+                const body=Buffer.from(await response.arrayBuffer());
+                if (hashes[name]) assert.equal(createHash('sha256').update(body).digest('hex'),hashes[name]);
+              }
+              assert.equal((await fetch(`${origin}/pdfjs/4.10.38/missing.mjs`)).status,404);
+              execFileSync('docker',['exec',qaName,'nginx','-t'],{stdio:'inherit'});
+              console.log('PDF modules, upstream proxy, upstream hashes and real 404 verified.');
+            } finally {
+              execFileSync('docker',['rm','-f',qaName],{stdio:'pipe'});
+            }
           }
           execFileSync('docker', ['push', image], {stdio:'inherit'});
           const published = JSON.parse(execFileSync('docker', ['image','inspect',image], {encoding:'utf8'}))[0];
