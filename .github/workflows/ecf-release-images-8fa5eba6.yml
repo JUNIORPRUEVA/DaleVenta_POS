@@ -1,0 +1,109 @@
+name: Prepare FullPOS images 8fa5eba6
+
+on:
+  push:
+    branches: [agent/ecf-release-preparation-8fa5eba6]
+    paths: [.github/workflows/ecf-release-images-8fa5eba6.yml]
+
+concurrency:
+  group: fullpos-images-8fa5eba6
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and publish ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, web]
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      RELEASE_SHA: 8fa5eba6cc2f4b7a7be6f51c3ff8d576b15c937c
+      COMPONENT: ${{ matrix.component }}
+      DOCKER_BUILDKIT: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 8fa5eba6cc2f4b7a7be6f51c3ff8d576b15c937c
+          persist-credentials: false
+      - name: Verify approved source and post-merge gates
+        env:
+          GH_RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const sha = process.env.RELEASE_SHA;
+          assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim(), sha);
+          assert.equal(execFileSync('git', ['status', '--porcelain'], {encoding:'utf8'}).trim(), '');
+          const headers = {Authorization:`Bearer ${process.env.GH_RELEASE_TOKEN}`, Accept:'application/vnd.github+json'};
+          const run = await fetch('https://api.github.com/repos/JUNIORPRUEVA/DaleVenta_POS/actions/runs/43549300137', {headers});
+          assert.equal(run.status, 200);
+          const gate = await run.json();
+          assert.equal(gate.head_sha, sha); assert.equal(gate.conclusion, 'success');
+          console.log('Approved merged source and all post-merge gates verified.');
+          NODE
+      - name: Authenticate publication with the temporary workflow token
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build frozen image, inspect it and publish
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const component = process.env.COMPONENT, sha = process.env.RELEASE_SHA;
+          const repository = `ghcr.io/juniorprueva/fullpos-cloud-${component}`;
+          const image = `${repository}:sha-${sha}`;
+          const environment = {...process.env};
+          const args = ['build', '--platform', 'linux/amd64', '--build-arg', `GIT_SHA=${sha}`,
+            '--label', 'org.opencontainers.image.source=https://github.com/JUNIORPRUEVA/DaleVenta_POS', '-t', image];
+          if (component === 'web') {
+            const response = await fetch('https://fullposcloud.fulltechrd.com/ecf/certificacion/');
+            assert.equal(response.status, 200);
+            const html = await response.text();
+            const keys = [...new Set(html.match(/pk_(?:live|test)_[A-Za-z0-9_-]+/g) ?? [])];
+            assert.equal(keys.length, 1);
+            assert.ok(keys[0].startsWith('pk_live_'), 'Production assistant publishable key required');
+            assert.equal(createHash('sha256').update(keys[0]).digest('hex'),
+              'd8fed31506bd5fc57999442c39d4f5576d373abdabaf9ba7bdd7b379681f5caf');
+            const api = html.match(/var API\s*=\s*['"]([^'"]+)['"]/)?.[1];
+            assert.ok(api);
+            const target = new URL(api, 'https://fullposcloud.fulltechrd.com');
+            assert.ok(['fullposcloud.fulltechrd.com','daleventapos-backend.gcdndd.easypanel.host'].includes(target.hostname));
+            console.log(`::add-mask::${keys[0]}`);
+            environment.DOSA_ASSISTANT_PUBLISHABLE_KEY = keys[0];
+            environment.ECF_PORTAL_API_BASE = api;
+            args.push('--build-arg', 'DOSA_ASSISTANT_PUBLISHABLE_KEY', '--build-arg', 'ECF_PORTAL_API_BASE', '-f', 'Dockerfile.public-web', '.');
+          } else {
+            args.push('-f', 'apps/api/Dockerfile', 'apps/api');
+          }
+          execFileSync('docker', args, {env:environment, stdio:'inherit'});
+          const info = JSON.parse(execFileSync('docker', ['image', 'inspect', image], {encoding:'utf8'}))[0];
+          assert.equal(info.Os, 'linux'); assert.equal(info.Architecture, 'amd64');
+          assert.equal(info.Config.Labels['org.opencontainers.image.revision'], sha);
+          if (component === 'api') {
+            const probe = 'const a=require("node:assert/strict");a.equal(process.version,"v22.23.4");a.equal(require("@prisma/client/package.json").version,"5.22.0");a.ok(require("@nestjs/core/package.json").version.startsWith("11."));console.log("Node22/Nest11/Prisma5.22 verified without starting the API");';
+            execFileSync('docker', ['run','--rm','--network','none','--entrypoint','node',image,'-e',probe], {stdio:'inherit'});
+          } else {
+            const probe = 'test -f /usr/share/nginx/html/main.dart.js && test -f /usr/share/nginx/html/pos.html && test -f /usr/share/nginx/html/manifest.json && ! grep -q "__DOSA_PUBLISHABLE_KEY__\\|__API_BASE__" /usr/share/nginx/html/ecf/certificacion/index.html && grep -q "pk_live_" /usr/share/nginx/html/ecf/certificacion/index.html';
+            execFileSync('docker', ['run','--rm','--network','none','--entrypoint','sh',image,'-ec',probe], {stdio:'inherit'});
+          }
+          execFileSync('docker', ['push', image], {stdio:'inherit'});
+          const published = JSON.parse(execFileSync('docker', ['image','inspect',image], {encoding:'utf8'}))[0];
+          const digest = published.RepoDigests.find(value => value.startsWith(repository+'@sha256:'));
+          assert.ok(digest, 'Published immutable digest required');
+          const receipt = {component,sourceCommit:sha,image,digest,platform:'linux/amd64',deployed:false};
+          console.log('IMAGE_RELEASE_RECEIPT='+JSON.stringify(receipt));
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## ${component}\n\nSource: ${sha}\n\nImage: ${digest}\n\nBuilt outside production. No deploy, migration or production flag change.\n`);
+          NODE
+      - name: Remove temporary registry session
+        if: always()
+        run: docker logout ghcr.io
