@@ -1,53 +1,59 @@
 # Execution State
 
-## Current work — production permissions saved; owner backend deploy pending (2026-11-14)
+## Current work — owner deployed; FULLTECH production activation verified (2026-11-14)
 
-Owner explicitly authorized: "Sí, preparar producción y activar FULLTECH tras mi
-deploy". This supersedes the previous requirement to leave the two stored server
-production permissions off. The owner still exclusively controls Deploy; company
-activation and E31 renewal are authorized only AFTER that manual deployment.
+Owner confirmed "ya deplegue", fulfilling the condition in the explicit approval
+"Sí, preparar producción y activar FULLTECH tras mi deploy". Read-only checks
+verified backend9e0f717a3e40 started2026-11-14T18:46:21.783Z, healthy, HTTP health200,
+Node22.23.4, both production permissions loaded, migrations/seeds off. API image
+remains4e6fb33c and PWA d56a9c97/fa603ed49882 is unchanged. Complete saved panel
+configuration fingerprints still match the reviewed preparation; auto-deploy off.
 
-PR44 is open at5937fa85bccf6e8b3aebff491ffb5164c5c6829d, based on production-main.
-All4 GitHub gates pass in43626251190. Its3 new HTTP regressions prove checkout ->
-financial refund -> E34/recovery with money, stock, numbering and tenant isolation.
-Local API build/strict changed-test types pass;2882 general,48 PostgreSQL and43
-HTTP tests pass. It changes tests/documentation only: no new runtime image or
-PWA deployment is required for PR44. Merge remains with the owner.
+After a fresh read-only plan and verified root-only tenant checkpoint, invoked
+the DEPLOYED existing EcfService.enableProduction for ONLY FULLTECH
+165e3fca-6225-479b-8805-d2205f10536c. Verified its own ADMIN/active OWNER, RNC,
+production credential, certification and absence of unresolved TEST outcomes.
+Company now PRODUCTION/productionEnabled=true, PRODUCTION_READY; production
+onboarding completed and CONFIG_UPDATED audit recorded at18:52:22Z.
 
-Applied only the authorized backend environment preparation through installed
-EasyPanel2.37.0 updateAppEnv. DOSA_PRODUCTION_EMISSION_ENABLED and
-DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED are now saved enabled. Independent persisted
-readback proves every other backend field, all other environment lines, the
-complete PWA configuration, credentials and both image sources are preserved.
-Source/API remains4e6fb33c and PWA d56a9c97. Auto-deploy stays disabled.
-The first strict plan rejected the API's optional null dotenv-path projection;
-inspection of the installed handler established null/absent equivalence before
-any write. The final independent raw comparison also confirms that the stored
-null field itself was preserved. Checks of other environment values were retained.
+Then existing EcfSequenceService.renew created active PRODUCTION E31 range
+b5871096-a6fd-47c5-9a5f-0551836a54cc: start=next3, end150, validUntil
+2027-12-31T23:59:59.999Z from its OWN unchanged declared authorization. Prior E31
+row remains intact with next3 and active=false; RENEWED ledger appended. E32
+next3/end1000 and E34 next2/end50/null expiries and both TEST ranges are unchanged.
+No number was allocated; no invoice, financial operation or provider call occurred.
 
-A verified root-only checkpoint exists at
+Independent post-operation reads confirm POS ready, production emission path
+available, allowed POS types E31/E32, no blocking code and allowSalesWithoutEcf=true.
+Protected company fiscal settings hash unchanged. Full-row hashes of sales, cash
+sessions/movements, inventory movements, app/company settings, all documents,
+provider attempts and production authorizations match the pre-activation snapshot.
+TEST E31/E34 remain SANDBOX/DGII_ACCEPTED with one send/receipt each, complete
+signed stored print projection and credit118 applied once / available0.
+Current PRODUCTION print/history routes intentionally exclude those TEST IDs:
+an old SANDBOX-only audit failed at its print lookup; a dedicated independent
+post-activation check confirms the expected404, persisted proof and credit balance.
+No historical outcome was promoted and no TEST document became a real invoice.
+
+Checkpoint before company activation:
+/etc/easypanel/agent-checkpoints/fullpos-fulltech-activation-2026-11-14T18-52-21-376093Z/.
+Original sensitive panel checkpoint is retained separately at
 /etc/easypanel/agent-checkpoints/fullpos-ecf-production-2026-11-14T18-42-44-879Z/.
-It contains sensitive original panel configuration; never print or commit it.
-Safe local receipts/tools are under C:/Users/pc/.codex/backups/
-fullpos-ecf-commercial-closeout-20261114/. No checkpoint contents were exported.
+Both root-only; never export panel secrets. Safe receipts/helpers are under
+C:/Users/pc/.codex/backups/fullpos-ecf-commercial-closeout-20261114/.
 
-Runtime containers remain ca6026999fda/backend and fa603ed49882/pwa with unchanged
-start times/images. API is healthy; both production permissions remain false IN
-THE RUNNING API until the owner deploys backend. FULLTECH is still SANDBOX with
-productionEnabled=false, own ACTIVE TEST/production credentials and no unresolved
-TEST results. RUN_MIGRATIONS and seed remain off. No deploy/restart, schema/data
-mutation, company activation or fiscal send was executed during preparation.
+GitHub readback confirms owner already merged PR44 as
+cbc3eceb205e4af6e914818485a23bcbdc448055 at18:38:59Z. Its exact head5937fa85
+retains all4 green gates43626251190. Tests/docs only; no new runtime image needed.
+Previous local evidence remains2882 general,48 PostgreSQL and43 HTTP tests PASS;
+these suites were not rerun for this configuration-only operation. No app source
+was changed, and the agent did not merge, deploy/restart or run migrations/seeds.
 
-Next: tell the owner to Implementar daleventapos/backend ONLY, keeping the same
-API image. PWA does not need deployment. After the owner confirms, verify new
-healthy runtime and enabled permissions; activate ONLY FULLTECH through its
-existing company-scoped production-enable service. Then renew E31 from the actual
-current next number (checkpoint3) through150 with its existing authorization's
-2027-12-31 expiry, retaining history/counters. E32 next3/end1000 and E34 next2/end50
-and their existing null expiries stay unchanged. Re-read current values before
-any write; stop/recalculate if a counter advanced. Never emit a real test invoice.
-No further activation permission question is needed: the owner's approval covers
-these post-deploy actions. Details: docs/ecf/ECF_PRODUCTION_PERMISSION_PREPARATION_2026-11-14.md.
+Technical activation: GO. No further deploy or activation is pending. A first
+genuine production invoice is a separate owner business operation; acceptance
+by DOSA/DGII in production has NOT been claimed or tested with a real sale.
+Next user-requested phase is design review; no visual changes are included here.
+Details: docs/ecf/ECF_PRODUCTION_PERMISSION_PREPARATION_2026-11-14.md.
 
 ## Previous work — owner-deployed PR43 PWA and live E34 PDF verified (2026-11-14)
 
