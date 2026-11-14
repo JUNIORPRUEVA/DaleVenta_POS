@@ -199,6 +199,21 @@ Release is NO-GO when a critical validation fails, environment identity is uncer
 
 ## ECF manual predeployment checkpoint — 2026-11-13
 
+### TEST-only closure correction —2026-11-14
+
+The SANDBOX result/numbering and web-preview correction does not need production
+activation. Keep both production flags false, RUN_MIGRATIONS=false and seeds off.
+It introduces no schema migration. Compile images outside production, retain
+the previous approved digests, and let the owner review/merge/deploy before the
+final live-software TEST acceptance. Technical rollout readiness is separate
+from authorization to emit productively.
+
+Declare TEST numbering only from the provider's confirmed company data and
+continue above the reviewed historical frontier. Never copy production ranges,
+rewind counters or manually promote historical documents. FULLTECH's bounded
+E31/E34 acceptance uses no commercial stock/cash movements; financial checkout
+and refund regression use disposable local fixtures.
+
 HECHO: the three reviewed ECF migrations0400/0500/0600 are already applied
 on daleventapos/database. Their original SQL/checksums and all previous ledger
 rows are preserved. Do not rerun SQL manually, reset, db push, seed, rewind a

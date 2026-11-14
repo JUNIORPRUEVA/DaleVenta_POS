@@ -37,6 +37,10 @@ activation and commercial preparation additionally require
 `DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true`. Activation verifies the company's
 own active production credential and unresolved TEST results, and does not send
 invoices. These source changes alter none of the deployed flags or company data.
+The TEST closure correction allows verified DOSA outcomes for authorized SANDBOX
+dispatches while both production permissions remain false. It keeps the emission
+kill switch, company/environment checks and full receipt/QR validation. It does
+not promote existing historical reviews or change company environments.
 
 Identical-request recovery uses at most three immediate HTTP calls in the original
 dispatch, with a fresh company/credential check and audit before each repetition.

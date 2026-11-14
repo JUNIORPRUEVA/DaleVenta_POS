@@ -1,9 +1,28 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:daleventa_pos/core/widgets/pdf_preview_panel.dart';
 
 void main() {
+  testWidgets('un PDF inválido muestra un error y conserva las acciones de descarga', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: PdfPreviewStage(
+      bytes: Uint8List.fromList([1, 2, 3]),
+      actions: [TextButton(onPressed: () {}, child: const Text('Guardar PDF'))],
+    ))));
+    await tester.pumpAndSettle();
+    // The viewer schedules a 500ms layout callback even for rejected bytes.
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('No se pudo mostrar el PDF. Puedes guardarlo en descargas.'), findsOneWidget);
+    expect(find.text('Guardar PDF'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: PdfPreviewStage(bytes: null))));
+    await tester.pump();
+    expect(find.text('Preparando el documento…'), findsOneWidget);
+    expect(find.text('No se pudo mostrar el PDF. Puedes guardarlo en descargas.'), findsNothing);
+  });
+
   group('pdfPreviewPanelWidthFor', () {
     test('en escritorio ocupa la mitad del ancho', () {
       expect(pdfPreviewPanelWidthFor(const Size(1600, 900)), 800);

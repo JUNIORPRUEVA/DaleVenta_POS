@@ -1,6 +1,49 @@
 # Execution State
 
-## Current correction — PR41 critical findings (2026-11-13)
+## Current work — SANDBOX checkout and PDF closure (2026-11-14)
+
+Mode: CONTINUOUS_CONTROLLED_EXECUTION. The owner approved completing TEST
+numbering, verified DOSA outcomes, E31/E34 trials from the software where possible,
+Normal-sale regression and the blank web PDF preview. Production emission remains
+blocked; the owner retains merge and deployment. No production flag, credential,
+historical fiscal status or production range may be changed by this task.
+
+Isolated worktree C:/src/fullpos-ecf-test-close-20261114, branch
+agent/ecf-test-close-20261114, based on deployed merge8fa5eba6. Other worktrees
+contain unrelated edits and are untouched. Local synthetic PostgreSQL is
+fullpos_ecf_test_close_20261114, loopback port55503; never use a restored live DB.
+
+Audit: FULLTECH has its own active TEST credential and SANDBOX configuration,
+but no SANDBOX authorization/range. Legacy reviewed TEST numbers stay consumed
+(E31 frontier3, E34 frontier2). DOSA's accepted historical E31/E34 remain visible
+in official TEST queries; their internal review state is not rewritten. Web PDF
+download has valid fiscal fields/QR; the Syncfusion web renderer lacks PDF.js.
+
+Plan: retain all identity/receipt/fingerprint/QR checks; authorize confirmed
+outcomes only for valid SANDBOX dispatches without opening production gates;
+restore the documented web renderer; validate real local HTTP/database chains,
+tenant boundaries, connectivity, Normal intent and printing before publication.
+Shared TEST setup/issuance is restricted to FULLTECH and confirmed provider
+metadata. New code is not deployed by this checkpoint.
+
+Implementation: confirmed outcomes are now environment-gated, with all receipt
+checks retained. Completed onboarding uses real POS readiness and preserves
+numbering and the existing company activation. Range saves retain the original
+authorization and cancel the second write after an unmount/environment change.
+Local PDF.js/worker and bounded bootstrap restore the web renderer; failed
+previews retain download actions. No schema, credentials or production flags
+changed.
+
+Validation: API build/schema PASS;3328 backend tests PASS/101 gated skips,
+26 real-local-HTTP scenarios PASS,53 PostgreSQL fiscal regressions PASS,8 new
+outcome-gate tests PASS. Final Flutter analysis/web build PASS,828 broad tests
+PASS,71 final context/numbering/activation tests PASS. Local browser PDF
+engine1280/390 and Nginx config PASS. Runtime npm audit reports0;11 full-tree
+development advisories remain outside runtime. Final diff reviewed; publication,
+CI and owner-controlled deployment remain before live FULLTECH TEST acceptance.
+Evidence: docs/ecf/ECF_TEST_CLOSURE_2026-11-14.md.
+
+## Previous correction — PR41 critical findings (2026-11-13)
 
 Explicit E31/E32 checkout now shares admission with POS capabilities and commits
 sale, stock, number allocation and local fiscal preparation atomically. Ordinary

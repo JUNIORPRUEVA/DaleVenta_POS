@@ -51,6 +51,11 @@ class _SessionEcfRepository extends EcfRepository {
   int reads = 0;
 
   @override
+  Future<EcfCapabilities> capabilities() async => EcfCapabilities.fromJson({
+    'enabled': true, 'posReady': true, 'environment': 'SANDBOX',
+  });
+
+  @override
   Future<EcfDgiiHabilitationView> dgiiHabilitation() async {
     reads++;
     return _view(companyId: companyId());
@@ -81,6 +86,11 @@ EcfDosaActivationOutcome _fakeActivationOutcome() =>
 
 class _ActivationOnlyEcfRepository extends EcfRepository {
   _ActivationOnlyEcfRepository() : super(Dio());
+
+  @override
+  Future<EcfCapabilities> capabilities() async => EcfCapabilities.fromJson({
+    'enabled': true, 'posReady': true, 'environment': 'SANDBOX',
+  });
 
   @override
   Future<EcfDosaActivationOutcome> attemptDosaActivation() async =>
@@ -268,6 +278,8 @@ Widget _harness({
   bool intentHasSession = false,
   bool intentHistoricalReview = false,
   bool platformStaff = false,
+  bool posReady = true,
+  bool canActivateProduction = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -277,6 +289,11 @@ Widget _harness({
     key: UniqueKey(),
     overrides: [
       ecfRepositoryProvider.overrideWithValue(_ActivationOnlyEcfRepository()),
+      ecfCapabilitiesProvider.overrideWith((ref) async => EcfCapabilities.fromJson({
+        'enabled': true, 'posReady': posReady, 'environment': 'SANDBOX',
+        'canActivateProduction': canActivateProduction,
+        'posAvailableTypes': posReady ? ['E31'] : <String>[],
+      })),
       ecfDgiiHabilitationProvider.overrideWith((ref) async {
         onRead?.call();
         if (error != null) throw error;
@@ -809,6 +826,27 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('certificación sin disponibilidad no anuncia que ya puede emitir', (tester) async {
+    await _pumpPage(tester, _harness(user: _adminUser(), posReady: false,
+      view: _view(state: 'APPROVED', certificationStatus: 'PRODUCTION_READY',
+        authorizationSource: 'MANUAL_OPERATOR_DECLARATION', progress: _certificateResolvedProgress())),
+      step: null, technical: false);
+    expect(find.text('Revisa la facturación'), findsOneWidget);
+    expect(find.text('¡Felicidades!'), findsNothing);
+    expect(find.byKey(const ValueKey('ecf_completed_go_sales')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empresa certificada conserva la activación productiva del servidor sin exigir pruebas manuales', (tester) async {
+    await _pumpPage(tester, _harness(user: _adminUser(), posReady: false, canActivateProduction: true,
+      view: _view(state: 'APPROVED', certificationStatus: 'PRODUCTION_READY',
+        authorizationSource: 'MANUAL_OPERATOR_DECLARATION', progress: _certificateResolvedProgress())),
+      step: null, technical: false);
+    expect(find.text('Habilitar producción'), findsOneWidget);
+    expect(find.byType(EcfPreparationStep), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('trámite terminado: felicitaciones y salto a ventas', (
     tester,

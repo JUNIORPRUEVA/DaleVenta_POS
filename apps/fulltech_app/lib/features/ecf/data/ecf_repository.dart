@@ -21,9 +21,10 @@ import '../ecf_support_grant_models.dart';
 /// pantalla solo podía decir «Inténtalo de nuevo» y el cliente no sabía qué
 /// corregir.
 class EcfSequenceException implements Exception {
-  EcfSequenceException(this.message);
+  EcfSequenceException(this.message, {this.minimumStartNumber});
 
   final String message;
+  final int? minimumStartNumber;
 
   @override
   String toString() => message;
@@ -283,7 +284,16 @@ class EcfRepository {
         },
       );
     } on DioException catch (error) {
-      throw EcfSequenceException(_sequenceServerMessage(error));
+      final body = error.response?.data;
+      final minimum = body is Map ? body['minimumStartNumber'] : null;
+      final reviewedTestFrontier = expectedEnvironment == 'SANDBOX' &&
+          error.response?.statusCode == 409 && body is Map &&
+          body['code'] == 'ECF_SEQUENCE_LEGACY_TEST_REUSE_BLOCKED' &&
+          minimum is int && minimum > startNumber && minimum <= endNumber;
+      throw EcfSequenceException(
+        _sequenceServerMessage(error),
+        minimumStartNumber: reviewedTestFrontier ? minimum : null,
+      );
     }
   }
 

@@ -93,8 +93,11 @@ DOSA dispatch stores the public `printStamp` column only after a correlated resp
 and URL/identity/amount/environment validation. It is independent of the reserved
 E34 payload and immutable once present; the reader retains legacy
 `payloadSummary.printStamp` compatibility. It stores no credential material.
-The default remains human review. The opt-in
-`DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true` contract additionally records a
+Generic or incomplete observations remain in human review. Authorized DOSA
+SANDBOX dispatches record a verified result without enabling production. In
+PRODUCTION, both `DOSA_PRODUCTION_EMISSION_ENABLED=true` and
+`DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true`, together with company opt-in, are
+still required. The reviewed contract records a
 documented HTTP 200 accepted/conditionally accepted result, requiring the exact
 server response receipt, attempt/request/document fingerprints, current company
 and environment, consumed sequence, provider identity and validated stored QR.
@@ -103,8 +106,18 @@ in the status log; an E34 applies its reservation under the existing balance and
 original-document guards in that same transaction. The evidence authority is
 `DOSA_REPORTED_DGII_RESULT` / `PROVIDER_DECLARED`, not an independently verified
 DGII signature. Generic evidence quarantine and authenticity rules are unchanged.
+The emission kill switch also blocks result recording. No historical review
+state is rewritten merely by deploying this correction. The completed onboarding
+view consults backend POS readiness before announcing that emission is available;
+certified companies without usable numbering retain the existing range form.
+An explicit second save may use a reviewed TEST frontier returned by the server,
+without changing the declared authorization or retrying a write automatically.
 Flutter shares the projection between
 PDF and thermal renderers; printing and reprinting never emit or allocate numbers.
+The web preview initializes the matching local PDF.js4.10.38 library/worker
+before Flutter startup, with a bounded wait and the existing worker settings.
+It needs no rendering CDN. A viewer failure preserves download actions and shows
+a clear error instead of an empty sheet.
 
 Numbering ranges, declared authorizations, allocation audit keys and document
 external numbers are scoped by company and environment. Documents retain their

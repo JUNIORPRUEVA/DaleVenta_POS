@@ -22,6 +22,8 @@ class EcfCompletedView extends StatelessWidget {
     super.key,
     required this.onGoToSales,
     required this.onViewDocuments,
+    this.invoicingReady = true,
+    this.numbering,
   });
 
   /// Lleva al punto de venta, que es el único paso que queda.
@@ -29,6 +31,8 @@ class EcfCompletedView extends StatelessWidget {
 
   /// Alternativa secundaria para quien solo quiere revisar lo emitido.
   final VoidCallback onViewDocuments;
+  final bool invoicingReady;
+  final Widget? numbering;
 
   @override
   Widget build(BuildContext context) {
@@ -67,10 +71,12 @@ class EcfCompletedView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 26),
-                    const Text(
-                      '¡Felicidades!',
+                    Text(
+                      invoicingReady
+                          ? '¡Felicidades!'
+                          : 'Revisa la facturación',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         height: 1.15,
@@ -78,25 +84,31 @@ class EcfCompletedView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Terminaste el proceso de postulación. Tu empresa ya puede '
-                      'facturar electrónicamente con la numeración que autorizó '
-                      'la DGII.',
+                    Text(
+                      invoicingReady
+                          ? 'Terminaste el proceso de postulación. Tu empresa ya puede '
+                                'facturar electrónicamente con la numeración que autorizó '
+                                'la DGII.'
+                          : 'Tu autorización está registrada. Revisa la numeración '
+                                'y la habilitación de emisión del ambiente actual.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
                         height: 1.5,
                         color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 30),
-                    EcfPrimaryAction(
-                      label: 'Ir a ventas',
-                      icon: Icons.point_of_sale_outlined,
-                      onPressed: onGoToSales,
-                      helper: 'El comprobante electrónico se elige al cobrar.',
-                      buttonKey: const ValueKey('ecf_completed_go_sales'),
-                    ),
+                    if (!invoicingReady && numbering != null) numbering!,
+                    if (invoicingReady)
+                      EcfPrimaryAction(
+                        label: 'Ir a ventas',
+                        icon: Icons.point_of_sale_outlined,
+                        onPressed: onGoToSales,
+                        helper:
+                            'El comprobante electrónico se elige al cobrar.',
+                        buttonKey: const ValueKey('ecf_completed_go_sales'),
+                      ),
                     const SizedBox(height: 6),
                     TextButton(
                       key: const ValueKey('ecf_completed_view_documents'),

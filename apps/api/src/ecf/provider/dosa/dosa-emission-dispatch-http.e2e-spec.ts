@@ -38,8 +38,8 @@ import { validE31WithItbis } from "../../fiscal-core/ecf-fixtures";
  * Lo que esta prueba NO demuestra y no debe confundirse:
  *  - No hay llamada a DOSA: el destino es 127.0.0.1.
  *  - No hay aceptación fiscal real: las respuestas son sintéticas.
- *  - Por defecto se conserva revisión. El escenario habilitado explícitamente
- *    comprueba el registro local del resultado y sus evidencias.
+ *  - SANDBOX registra resultados correlacionados con evidencia sin habilitar
+ *    producción. Respuestas incompletas o contradictorias conservan revisión.
  */
 jest.setTimeout(600000);
 
@@ -574,7 +574,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
   function documentOf(tenant: Tenant, documentId: string) {
     return prisma.ecfElectronicDocument.findFirstOrThrow({
       where: { id: documentId, companyId: tenant.companyId },
-      select: { id: true, status: true, payloadSummary: true, printStamp: true },
+      select: { id: true, status: true, payloadSummary: true, printStamp: true, safeErrorCode: true, fiscalSnapshot: true },
     });
   }
 
@@ -718,6 +718,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     expect(print.body.document).toBeNull();
     await prisma.ecfCompanyConfiguration.update({where:{companyId:tenant.companyId},data:{allowSalesWithoutEcf:false}});
     const denied=await http().post("/sales").set("Authorization",`Bearer ${tenant.token}`).send({
+      originCashSessionId: saved.cashSessionId,
       fiscalVoucherType:"NORMAL", paymentMethod:"cash", paymentCashAmount:118,
       customerId:saved.customerId, expectedTotalSold:118,
       items:[{productId:(await prisma.saleItem.findFirstOrThrow({where:{saleId,sale:{companyId:tenant.companyId}}})).productId,
@@ -795,11 +796,12 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     expect(printed.body.document.state).toBe("SIGNED");
     expect(printed.body.document.encf).toBe(res.body.encf);
     expect(JSON.stringify(printed.body)).not.toContain(apiKey);
-    // Aceptación CONDICIONAL del proveedor: nunca aceptación fiscal automática.
-    expect(doc.status).not.toBe("DGII_ACCEPTED");
-    expect(["HUMAN_REVIEW_REQUIRED", "PROVIDER_ACCEPTED", "DGII_STATUS_PENDING"]).toContain(
-      doc.status,
-    );
+    // TEST accepts the documented, correlated result without production flags.
+    expect(process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED).toBe("false");
+    expect(process.env.DOSA_PRODUCTION_EMISSION_ENABLED).toBe("false");
+    expect(res.body.confirmedFiscalOutcome).toBe(true);
+    expect(doc.status).toBe("DGII_ACCEPTED");
+    expect(doc.safeErrorCode).toBe("DOSA_CONFIRMED_DGII_CONDITIONAL");
   });
 
   it("HTTP 201 con ok:false NO se convierte en aceptación", async () => {
@@ -978,7 +980,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
 
   it.each(["1", "0"])("documented DOSA result: real POS sale -> E31 evidence -> reserved E34 -> applied credit and QR (%s)", async scenario => {
     const oldFlag = process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED;
-    process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED = "true";
+    process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED = "false";
     try {
       // All provider traffic stays on the local HTTP fixture. No real DGII acceptance.
       const { tenant, documentId } = await readyCompany(`confirmed-chain-${scenario}`, scenario);
@@ -1042,9 +1044,9 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     }
   });
 
-  it.each(["4", "5", "6", "8"])("enabled contract does not accept mismatched, invalid QR, pending or rejected response (%s)", async scenario => {
+  it.each(["4", "5", "6", "8"])("SANDBOX does not accept mismatched, invalid QR, pending or rejected response (%s)", async scenario => {
     const oldFlag = process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED;
-    process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED = "true";
+    process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED = "false";
     try {
       const { tenant, documentId } = await readyCompany(`unconfirmed-${scenario}`, scenario);
       const result = await dispatch(tenant, documentId);
@@ -1089,6 +1091,14 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
       expect(testResult.body).toMatchObject({ ok: true, environment: "test", correlated: true });
       if (!prodResult.body.ok) throw new Error(`Synthetic production dispatch blocked: ${JSON.stringify(prodResult.body)}`);
       expect(prodResult.body).toMatchObject({ ok: true, environment: "production", correlated: true });
+      // Automatic TEST confirmation cannot open production confirmation.
+      expect(process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED).toBe("false");
+      expect(testResult.body.confirmedFiscalOutcome).toBe(true);
+      expect(prodResult.body.confirmedFiscalOutcome).toBe(false);
+      expect((await documentOf(testing.tenant, testing.documentId)).status).toBe("DGII_ACCEPTED");
+      const productionDocument = await documentOf(production, prepared.id);
+      expect(productionDocument.status).toBe("HUMAN_REVIEW_REQUIRED");
+      expect(productionDocument.fiscalSnapshot).toBeNull();
       expect(testResult.body.encf).toBe(prodResult.body.encf);
       expect(requests).toHaveLength(2);
       const keysByRnc = new Map(requests.map(sent => [JSON.parse(sent.body).encabezado.emisor.RNCEmisor, sent.headers["x-api-key"]]));
