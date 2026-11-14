@@ -1,7 +1,7 @@
 # Imágenes FullPOS preparadas para despliegue manual
 
-Estado: imágenes publicadas y validadas; cambio de fuente en EasyPanel pendiente
-de autorización expresa. No se ejecutó deploy.
+Estado: imágenes publicadas y validadas; fuentes de EasyPanel preparadas con
+autorización expresa del propietario el 14/11/2026. No se ejecutó deploy.
 
 ## Identidad y evidencia
 
@@ -47,8 +47,10 @@ Las referencias por digest conservan el contenido aunque cambie una etiqueta.
 | Portal conserva su clave pública LIVE y destino aprobado | PASS; huella comprobada sin imprimir claves |
 | `node website/tests/public-web-smoke.mjs` con imágenes publicadas | 8 grupos PASS;16 assets |
 | Sintaxis PowerShell y Python del preflight actualizado | PASS |
-| Preflight sin imágenes esperadas, fuente GitHub actual | Controles base PASS; exit2, permisos fiscales apagados |
+| Preflight sin imágenes esperadas, antes del cambio de fuente | Controles base PASS; exit2, permisos fiscales apagados |
 | Preflight con ambos digests, antes de cambiar las fuentes | Bloqueo esperado exit1; las fuentes siguen siendo GitHub |
+| Preflight final con ambos digests, después de guardar las fuentes | Controles base PASS; ambas fuentes coinciden; exit2 por permisos fiscales apagados |
+| Huellas de configuración y contenedores antes/después | Sin diferencias fuera de fuente/builder; mismos contenedores activos |
 
 La aceptación de las imágenes usó únicamente contenedores locales propios,
 PostgreSQL desechable y usuarios sintéticos. Se probó salud y proxy, registro,
@@ -61,17 +63,21 @@ vincula la API a127.0.0.1 dentro de su contenedor. El ensayo final utilizó el m
 UAT de servidor en la red Docker local, sin cambiar imágenes ni aserciones.
 Un puerto local ocupado se respetó y se usó un puerto libre asignado por Docker.
 
-## Cambio propuesto y protección de producción
+## Fuentes preparadas y protección de producción
 
-Solo después de autorización, cambiar la fuente de `daleventapos/backend` y
-`daleventapos/pwa` desde GitHub a Docker Image, con los dos digests anteriores.
-No pulsar Deploy al guardar esa preparación.
+Después de la autorización expresa, se cambió la fuente de
+`daleventapos/backend` y `daleventapos/pwa` desde GitHub a Docker Image con los
+dos digests anteriores. Se usó la API oficial `updateAppSourceImage` de la versión
+instalada 2.37.0, con un token administrativo existente que no se imprimió ni
+modificó. Esa operación guarda la fuente y deja el builder en null, sin llamar
+al despliegue. No se pulsó Deploy ni se creó una credencial nueva.
 
-Conservar el entorno completo, RUN_MIGRATIONS=false, seed deshabilitado,
+Se conservaron el entorno completo, RUN_MIGRATIONS=false, seed deshabilitado,
 permisos fiscales globales apagados, montajes, puertos, dominios y ajustes de
-despliegue. Sus huellas se registraron antes del cambio; deben coincidir después.
-Los contenedores actuales deben mantener sus IDs e imágenes hasta que el
-propietario ejecute el despliegue manual.
+despliegue. Las huellas antes/después coinciden para toda la configuración salvo
+fuente/builder. Los contenedores siguen siendo `5fe17a2dc313` y `889b4c0886ec`,
+con sus imágenes anteriores; el software nuevo solo arrancará cuando el
+propietario ejecute el despliegue manual. No se modificó la base de datos.
 
 El preflight admite ambas fuentes: sin parámetros exige GitHub/production-main;
 con `-ExpectedApiImage` y `-ExpectedPwaImage` exige coincidencia exacta de los dos
@@ -90,8 +96,8 @@ Ejecutar el verificador de esta rama con las referencias anteriores:
 
 ## Orden manual y límites
 
-1. Autorizar y guardar únicamente la preparación de fuentes.
-2. Comprobar fuentes, huellas del entorno/montajes y contenedores sin reiniciar.
+1. Preparación de fuentes autorizada y guardada: completada.
+2. Fuentes, huellas del entorno/montajes y contenedores sin reiniciar: comprobados.
 3. El propietario despliega primero backend; comprobar salud, revisión/Node22,
    sesión/contexto de empresa y funcionamiento ordinario antes de continuar.
 4. El propietario despliega PWA después de validar la API compatible.
@@ -110,3 +116,5 @@ haber generado nuevos instaladores ni repetido pruebas físicas de impresión.
 Evidencia privada local y propuesta revisable, sin valores del entorno productivo:
 `C:/Users/pc/.codex/backups/fullpos-release-8fa5eba6-20261114/`.
 Incluye recibos de publicación, prueba final y huellas de configuración protegida.
+La preparación autorizada y su preflight final están registrados en
+`authorized-source-preparation.jsonl` y `source-preparation-preflight-final.json`.

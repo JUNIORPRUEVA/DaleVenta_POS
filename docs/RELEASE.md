@@ -227,10 +227,12 @@ jobs, including the isolated PostgreSQL atomic-checkout regression.
 
 Immutable API/PWA images for the merged PR41 at8fa5eba6 were built in GitHub
 Actions and published to GHCR. Their exact digests, acceptance evidence and
-proposed manual source change are in [the image handoff](ecf/ECF_IMAGES_8fa5eba6.md).
+authorized source preparation are in [the image handoff](ecf/ECF_IMAGES_8fa5eba6.md).
 For Docker Image sources, pass both approved digests to the read-only preflight;
 it checks exact references instead of a GitHub branch. Preparing those sources
-requires owner authorization and does not itself execute a deployment.
+requires owner authorization and does not itself execute a deployment. The owner
+authorized it on 2026-11-14; both sources were saved and verified without changing
+environment/mounts or restarting the running API/PWA. Fiscal globals remain off.
 
 Manual operator order after the candidate is committed, reviewed and integrated:
 
