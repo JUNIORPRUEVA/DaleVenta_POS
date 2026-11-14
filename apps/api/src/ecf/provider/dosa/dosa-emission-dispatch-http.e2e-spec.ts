@@ -599,7 +599,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
       const pending=await new EcfEmissionService(prisma).prepare({id:tenant.userId,companyId:tenant.companyId,role:"ADMIN"},{
         document:{...validE31WithItbis,sender:{...validE31WithItbis.sender,taxId:tenant.rnc},
           paymentForms:[{code:"1",amount:String(validE31WithItbis.totals.total)}]},
-        metadata:{paymentType:1,incomeType:1,sequenceDueDate:"2028-12-31"},sourceType:"MANUAL",clientRequestId:randomUUID()});
+        metadata:{encf:"",paymentType:1,incomeType:1,sequenceDueDate:"2028-12-31"},sourceType:"MANUAL",clientRequestId:randomUUID()});
       await prisma.ecfElectronicDocument.update({where:{id:pending.id},data:{status:"HUMAN_REVIEW_REQUIRED"}});
       const unresolved=await enable().expect(409);
       expect(unresolved.body.message).toBe("ECF_PRODUCTION_PENDING_TEST_RESULTS");
@@ -1044,6 +1044,120 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     }
   });
 
+  it.each([
+    { scenario: "1", missingCreditRange: false },
+    { scenario: "0", missingCreditRange: false },
+    { scenario: "1", missingCreditRange: true },
+  ])("POS checkout -> financial return -> E34 preserves money and stock on replay (%j)", async ({ scenario, missingCreditRange }) => {
+    const tenant = await registerTenant(`refund-chain-${scenario}-${missingCreditRange}`, scenario);
+    await enableEcf(tenant);
+    await registerSequence(tenant);
+    await setCertification(tenant, "AUTHORIZED_SANDBOX");
+    await seedCredentials({ companyId: tenant.companyId, rnc: tenant.rnc,
+      apiKeyTest: `synthetic-refund-${tenant.companyId}`, status: "ACTIVE" });
+    await http().patch("/ecf/config").set("Authorization", `Bearer ${tenant.token}`)
+      .send({ allowedTypes: ["E31", "E34"] }).expect(200);
+
+    const registerCreditRange = async () => {
+      await http().post("/ecf/dgii/authorized-sequences").set("Authorization", `Bearer ${tenant.token}`)
+        .send({ documentType: "E34", authorizationNumber: "SYNTHETIC-RETURN-E34",
+          rangeFrom: 1, rangeTo: 50, approvedQuantity: 50, declarationAccepted: true }).expect(201);
+      await http().post("/ecf/sequences").set("Authorization", `Bearer ${tenant.token}`)
+        .send({ documentType: "E34", startNumber: 1, endNumber: 50 }).expect(201);
+    };
+    if (!missingCreditRange) await registerCreditRange();
+
+    const saleId = await sell(tenant, "131000001", "E31");
+    const sale = await prisma.sale.findFirstOrThrow({ where: { companyId: tenant.companyId, id: saleId }, include: { items: true } });
+    const productId = sale.items[0].productId!;
+    const stock = async () => (await prisma.product.findFirstOrThrow({ where: { companyId: tenant.companyId, id: productId } })).stock.toString();
+    expect(sale.fiscalVoucherType).toBe("E31");
+    expect(sale.items[0].inventoryTrackedSnapshot).toBe(true);
+    expect(await stock()).toBe("39");
+    const original = await prisma.ecfElectronicDocument.findFirstOrThrow({ where: {
+      companyId: tenant.companyId, sourceType: "SALE", sourceId: saleId, documentType: "E31" } });
+    const emitted = await dispatch(tenant, original.id);
+    expect(emitted.status).toBe(201);
+    expect(emitted.body.confirmedFiscalOutcome).toBe(true);
+
+    const financialState = async () => ({
+      sales: await prisma.sale.findMany({ where: { companyId: tenant.companyId }, orderBy: { id: "asc" },
+        select: { id: true, kind: true, refundedSaleId: true, totalSold: true, paymentCashAmount: true, taxAmount: true } }),
+      stock: await stock(),
+      inventory: await prisma.inventoryMovement.findMany({ where: { companyId: tenant.companyId }, orderBy: { id: "asc" } }),
+      cashMovements: await prisma.cashMovement.findMany({ where: { companyId: tenant.companyId }, orderBy: { id: "asc" } }),
+    });
+    const returnDto = { clientRequestId: randomUUID(), restoreInventory: true,
+      originalSaleCashSessionId: sale.cashSessionId, operationCashSessionId: sale.cashSessionId,
+      operationOccurredAt: new Date().toISOString(), reason: "Devolución sintética HTTP completa" };
+    const returned = await http().post(`/sales/${saleId}/return`).set("Authorization", `Bearer ${tenant.token}`)
+      .send(returnDto).expect(201);
+    const refundId = returned.body.id as string;
+    expect(refundId).toEqual(expect.any(String));
+    const afterRefund = await financialState();
+    expect(afterRefund.sales).toHaveLength(2);
+    const refund = afterRefund.sales.find(row => row.id === refundId)!;
+    expect(refund.kind).toBe("refund");
+    expect(refund.refundedSaleId).toBe(saleId);
+    expect(refund.totalSold.toFixed(2)).toBe("-118.00");
+    expect(refund.taxAmount.toFixed(2)).toBe("-18.00");
+    expect(refund.paymentCashAmount.plus(sale.paymentCashAmount).toFixed(2)).toBe("0.00");
+    expect(afterRefund.stock).toBe("40");
+    expect(afterRefund.inventory.filter(row => row.sourceType === "SALE_RETURN" && row.sourceId === refundId)).toHaveLength(1);
+
+    let credit = returned.body.ecfCreditNote;
+    if (missingCreditRange) {
+      expect(returned.body.ecfCreditPending).toBeTruthy();
+      expect(credit).toBeUndefined();
+      expect(await prisma.ecfElectronicDocument.count({ where: { companyId: tenant.companyId, documentType: "E34" } })).toBe(0);
+      await registerCreditRange();
+      const recovered = await http().post(`/sales/${saleId}/refunds/${refundId}/fiscal`)
+        .set("Authorization", `Bearer ${tenant.token}`).send({}).expect(201);
+      credit = recovered.body.ecfCreditNote;
+      expect(await financialState()).toEqual(afterRefund);
+    }
+    expect(credit).toMatchObject({ documentId: expect.any(String), encf: expect.stringMatching(/^E34\d{10}$/) });
+    const noteId = credit.documentId as string;
+    const noteResult = await dispatch(tenant, noteId);
+    expect(noteResult.status).toBe(201);
+    expect(noteResult.body.confirmedFiscalOutcome).toBe(true);
+    const reservation = await prisma.ecfCreditReservation.findUniqueOrThrow({ where: {
+      companyId_creditDocumentId: { companyId: tenant.companyId, creditDocumentId: noteId } } });
+    expect(reservation.state).toBe("APPLIED");
+    expect(reservation.amount.toFixed(2)).toBe("118.00");
+
+    // Replaying either public action cannot refund cash/stock or allocate a note twice.
+    const repeated = await http().post(`/sales/${saleId}/return`).set("Authorization", `Bearer ${tenant.token}`)
+      .send(returnDto).expect(201);
+    const fiscalRetry = await http().post(`/sales/${saleId}/refunds/${refundId}/fiscal`)
+      .set("Authorization", `Bearer ${tenant.token}`).send({}).expect(201);
+    expect(repeated.body.id).toBe(refundId);
+    expect(repeated.body.ecfCreditNote.documentId).toBe(noteId);
+    expect(fiscalRetry.body.ecfCreditNote.documentId).toBe(noteId);
+    expect(await financialState()).toEqual(afterRefund);
+    const sendAgain = await dispatch(tenant, noteId);
+    expect(sendAgain.status).toBeGreaterThanOrEqual(400);
+    const ownRequests = requests.filter(sent => JSON.parse(sent.body).encabezado.emisor.RNCEmisor === tenant.rnc);
+    expect(ownRequests).toHaveLength(scenario === "0" ? 4 : 2);
+    expect(await prisma.ecfElectronicDocumentAttempt.count({ where: {
+      companyId: tenant.companyId, operation: "SEND_TO_PROVIDER" } })).toBe(2);
+    expect(await prisma.ecfSequenceAuditLog.count({ where: { companyId: tenant.companyId, type: "E34", action: "ALLOCATED" } })).toBe(1);
+
+    const printed = await http().get(`/ecf/documents/${noteId}/print`).set("Authorization", `Bearer ${tenant.token}`).expect(200);
+    expect(printed.body.document).toMatchObject({ state: "SIGNED", environment: "SANDBOX", documentType: "E34",
+      originalEncf: emitted.body.encf, originalIssueDate: expect.any(String), modificationReason: expect.any(String) });
+    expect(Number(printed.body.document.total)).toBe(118);
+    expect(Number(printed.body.document.itbisAmount)).toBe(18);
+    expect(printed.body.document.qrUrl).toContain(credit.encf);
+
+    const foreign = await registerTenant(`refund-foreign-${scenario}-${missingCreditRange}`, "1");
+    const beforeForeign = await financialState();
+    await http().post(`/sales/${saleId}/refunds/${refundId}/fiscal`)
+      .set("Authorization", `Bearer ${foreign.token}`).send({}).expect(404);
+    await http().get(`/ecf/documents/${noteId}/print`).set("Authorization", `Bearer ${foreign.token}`).expect(404);
+    expect(await financialState()).toEqual(beforeForeign);
+  });
+
   it.each(["4", "5", "6", "8"])("SANDBOX does not accept mismatched, invalid QR, pending or rejected response (%s)", async scenario => {
     const oldFlag = process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED;
     process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED = "false";
@@ -1078,7 +1192,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     const prepareProduction = () => new EcfEmissionService(prisma).prepare({ id: production.userId, companyId: production.companyId, role: "ADMIN" }, {
       document: { ...validE31WithItbis, sender: { ...validE31WithItbis.sender, taxId: production.rnc },
         paymentForms: [{ code: "1", amount: String(validE31WithItbis.totals.total) }] },
-      metadata: { paymentType: 1, incomeType: 1, sequenceDueDate: "2028-12-31" },
+      metadata: { encf: "", paymentType: 1, incomeType: 1, sequenceDueDate: "2028-12-31" },
       sourceType: "MANUAL", clientRequestId: randomUUID(),
     });
     const prepared = await prepareProduction();
