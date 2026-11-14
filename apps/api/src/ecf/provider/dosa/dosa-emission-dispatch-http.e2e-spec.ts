@@ -727,19 +727,24 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it("sale intent is persisted before preparation, stays tenant-scoped and cannot use ordinary cancellation", async () => {
+  it("electronic sale commits its fiscal draft atomically, stays tenant-scoped and cannot use ordinary cancellation", async () => {
     const tenant = await registerTenant("intent", "1");
     await enableEcf(tenant); await registerSequence(tenant); await setCertification(tenant, "AUTHORIZED_SANDBOX");
+    await seedCredentials({companyId:tenant.companyId,rnc:tenant.rnc,apiKeyTest:"synthetic-atomic-http",status:"ACTIVE"});
+    requests.length = 0;
     const saleId = await sell(tenant, "131000001", "E31");
     const saved = await prisma.sale.findFirstOrThrow({where: {companyId: tenant.companyId, id: saleId}});
     expect(saved.fiscalVoucherType).toBe("E31"); expect(saved.ncf).toBeNull();
     expect(saved.ncfExpirationDate?.toISOString().slice(0,10)).toBe("2028-12-31");
     const pending = await http().get("/ecf/sales/fiscal").query({ids: saleId}).set("Authorization", `Bearer ${tenant.token}`).expect(200);
-    expect(pending.body.items[0]).toMatchObject({saleId, intent: "E31", documents: []});
+    expect(pending.body.items[0]).toMatchObject({saleId, intent: "E31", documents: [{documentType:"E31",status:"LOCAL_VALIDATED"}]});
+    expect(requests).toHaveLength(0);
     await http().delete(`/sales/${saleId}`).set("Authorization", `Bearer ${tenant.token}`).expect(409);
     const prepared = await http().post("/ecf/documents/prepare").set("Authorization", `Bearer ${tenant.token}`)
       .send({saleId, documentType:"E31", paymentType:1, incomeType:1, sequenceDueDate:"2029-12-31"}).expect(201);
     expect(prepared.body.ok).toBe(true);
+    expect(prepared.body.value.documentId).toBe(pending.body.items[0].documents[0].documentId);
+    expect(await prisma.ecfSequenceAuditLog.count({where:{companyId:tenant.companyId,action:"ALLOCATED"}})).toBe(1);
     const doc = await documentOf(tenant, prepared.body.value.documentId);
     expect((doc.payloadSummary as any).emission.payload.idDoc.sequenceDueDate).toBe("2028-12-31");
     const foreign = await registerTenant("intent-foreign", "1");

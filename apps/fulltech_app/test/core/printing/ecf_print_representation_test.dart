@@ -38,7 +38,7 @@ EcfPrintDocument fiscal({String state = 'SIGNED'}) => EcfPrintDocument(
   securityCode: state == 'SIGNED' || state == 'CONTINGENCY' ? 'S9Qvrj' : null,
   signedAt: state == 'SIGNED' || state == 'CONTINGENCY' ? '13-11-2026 08:45:19' : null,
 );
-SaleModel sale({String voucherType = 'E31'}) => SaleModel.fromJson({
+SaleModel sale({String? voucherType = 'E31'}) => SaleModel.fromJson({
   'id': '00000000-0000-4000-8000-000000000001',
   'userId': 'synthetic-user',
   'saleDate': '2026-11-13T12:00:00Z',
@@ -86,6 +86,22 @@ void main() {
     expect(text, isNot(contains('e-NCF')));expect(text,isNot(contains('Código de seguridad')));
     document.dispose();
     await expectLater(buildSaleInvoicePdf(sale:normal,ecf:fiscal()),throwsStateError);
+  });
+  test('legacy NULL and blank intents keep ITBIS and ordinary PDF behavior', () async {
+    for (final type in [null, '', 'NORMAL']) {
+      final ordinary = sale(voucherType: type);
+      expect(ordinary.requiresElectronicPrint, isFalse);
+      final bytes = await buildSaleInvoicePdf(sale: ordinary);
+      final pdf = pdfread.PdfDocument(inputBytes: bytes);
+      final text = pdfread.PdfTextExtractor(pdf).extractText();
+      expect(text, contains('ITBIS'));
+      expect(text, isNot(contains('e-NCF')));
+      pdf.dispose();
+    }
+    final historical = SaleModel.fromJson({'id': 'historic', 'fiscalVoucherType': null,
+      'hasElectronicFiscalDocument': true, 'totalSold': 118});
+    expect(historical.requiresElectronicPrint, isTrue);
+    await expectLater(buildSaleInvoicePdf(sale: historical), throwsStateError);
   });
   test('contingency prints the validated QR and a pending legend in ticket and PDF', () async {
     final pending=fiscal(state:'CONTINGENCY');

@@ -1,6 +1,21 @@
 # Execution State
 
-## Current checkpoint — audited manual ECF migration and release candidate (2026-11-13)
+## Current correction — PR41 critical findings (2026-11-13)
+
+Explicit E31/E32 checkout now shares admission with POS capabilities and commits
+sale, stock, number allocation and local fiscal preparation atomically. Ordinary
+ITBIS printing no longer triggers electronic queries; historical electronic
+links use an additive tenant-scoped read flag. API Docker/CI pin Node22.23.4 LTS.
+No schema, production configuration, deployment or external emission change.
+
+Local validation:3320 backend tests,1119 broad Flutter tests,13 dedicated real
+PostgreSQL regressions,63 tests inside the Node22 Linux image; API build, Prisma
+validate, Flutter analyze/web build,30 HTTP tests and runtime dependency audit
+passed. Publication and
+the final CI result must be checked on the corrected PR HEAD. Details:
+[critical findings correction](ecf/ECF_PR41_CRITICAL_FIXES_2026-11-13.md).
+
+## Previous checkpoint — audited manual ECF migration and release candidate (2026-11-13)
 
 HECHO: the explicitly authorized production migrations0400/0500/0600 were
 applied manually, rehearsed against a restored backup, and recorded with their

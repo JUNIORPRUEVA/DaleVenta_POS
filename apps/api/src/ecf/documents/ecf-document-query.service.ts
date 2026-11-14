@@ -22,6 +22,7 @@ import { EcfSequenceService } from "./ecf-sequence.service";
 import { numberingEnvironment } from "./ecf-numbering-environment";
 import { ecfPrintView } from "./ecf-print-view";
 import { ecfRefundRequestId } from "./ecf-refund-identity";
+import { ecfCheckoutAccess } from "./ecf-checkout-access";
 
 const LIST_SELECT = {
   id: true,
@@ -45,18 +46,6 @@ const LIST_SELECT = {
 // Read model for the client applications. It is a projection of the persisted
 // fiscal state: it never mutates a document, never emits and never promotes a
 // status. Every query is scoped by the authenticated company.
-/**
- * Estados de certificación que autorizan emitir.
- *
- * Es la misma condición que aplica el orquestador de despacho: la capacidad que
- * se informa a la interfaz y la compuerta que decide no pueden discrepar, o la
- * pantalla ofrecería una acción que el backend rechaza.
- */
-const EMISSION_AUTHORIZED_CERTIFICATION: readonly string[] = [
-  "AUTHORIZED_SANDBOX",
-  "PRODUCTION_READY",
-];
-
 @Injectable()
 export class EcfDocumentQueryService {
   constructor(private readonly prisma: PrismaService) {}
@@ -134,15 +123,17 @@ export class EcfDocumentQueryService {
     }) };
   }
 
-  async capabilities(user: TenantUser) {
+  async capabilities(user: TenantUser, tx?: Prisma.TransactionClient) {
+    const db = tx ?? this.prisma;
     const companyId = requireTenant(user);
-    const config = await this.prisma.ecfCompanyConfiguration.findUnique({
+    const config = await db.ecfCompanyConfiguration.findUnique({
       where: { companyId },
     });
     const allowed = this.allowedTypes(config?.allowedTypes);
+    const access = await ecfCheckoutAccess(db, user, config);
     const now = new Date();
     const sequences = config?.enabled
-      ? await this.prisma.ecfSequence.findMany({
+      ? await db.ecfSequence.findMany({
           where: {
             companyId,
             environment: config.environment,
@@ -156,16 +147,15 @@ export class EcfDocumentQueryService {
     const posAvailableTypes = [...new Set(sequences
       .filter((sequence) => sequence.nextNumber <= sequence.endNumber)
       .map((sequence) => sequence.documentType))];
-    const posReady = config?.enabled === true &&
-      EMISSION_AUTHORIZED_CERTIFICATION.includes(config.certificationStatus) &&
-      posAvailableTypes.length > 0;
+    const posReady = access.allowed && posAvailableTypes.length > 0;
     const providerEmissionEnabled =
       (process.env.DOSA_EMISSION_ENABLED ?? "").trim().toLowerCase() === "true";
     return {
       enabled: config?.enabled === true,
-      // Preparación para el POS: independiente de encender la emisión real.
+      // Admission must agree with the guards enforced before persisting a sale.
       posReady,
-      posAvailableTypes,
+      posAvailableTypes: access.allowed ? posAvailableTypes : [],
+      posBlockingCode: access.code,
       environment: config?.environment ?? "SANDBOX",
       certificationStatus: config?.certificationStatus ?? "NOT_STARTED",
       productionEnabled: config?.productionEnabled === true,
@@ -179,12 +169,7 @@ export class EcfDocumentQueryService {
       // encendida y que la certificación de la empresa lo autorice. Con las
       // banderas apagadas (valor por defecto) sigue siendo `false`, que es lo
       // que la interfaz muestra al operador.
-      emissionPathAvailable:
-        config?.provider === "DOSA" &&
-        providerEmissionEnabled &&
-        EMISSION_AUTHORIZED_CERTIFICATION.includes(
-          config?.certificationStatus ?? "NOT_STARTED",
-        ),
+      emissionPathAvailable: access.allowed,
       simulatedDispatchPathAvailable: true,
       // Bandera del SERVIDOR, no de la empresa.
       providerEmissionEnabled,

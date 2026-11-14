@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "main": "dist/main.js",
+  "engines": { "node": "^22.23.4 || ^24.0.0" },
   "scripts": {
     "prestart": "prisma migrate deploy",
     "start": "node dist/main.js",

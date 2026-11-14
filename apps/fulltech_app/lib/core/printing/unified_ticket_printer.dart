@@ -579,8 +579,8 @@ class UnifiedTicketPrinter {
   }) async {
     EcfPrintDocument? ecf;
     try {
-      final electronic = (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType));
-      ecf = !sale.isExplicitNormal && (sale.fiscalTaxEnabled || electronic)
+      final electronic = sale.requiresElectronicPrint;
+      ecf = electronic
           ? await _ref.read(ecfRepositoryProvider).printForSale(sale.id, requireElectronic: electronic)
           : null;
     } catch (error, stack) {

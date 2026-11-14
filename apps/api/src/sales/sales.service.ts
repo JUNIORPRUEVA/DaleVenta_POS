@@ -619,13 +619,14 @@ export class SalesService {
       { id: "desc" },
     ];
     try {
-      return await this.prisma.sale.findMany({
+      const rows = await this.prisma.sale.findMany({
         where,
         orderBy,
         skip,
         take,
         include,
       });
+      return this.withElectronicIdentities(where.companyId as string, rows);
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
       return this.prisma.sale.findMany({
@@ -636,6 +637,21 @@ export class SalesService {
         select: this.compatibleSaleListSelect(),
       });
     }
+  }
+
+  /** Legacy NULL intents use linked documents, never ITBIS, as fiscal identity. */
+  private async withElectronicIdentities<T extends Record<string, any>>(companyId: string, rows: T[]) {
+    const ids = rows.filter(row => row.kind === "invoice" && !row.fiscalVoucherType).map(row => row.id as string);
+    const linked = new Set<string>();
+    for (let start = 0; start < ids.length; start += 200) {
+      const documents = await this.prisma.ecfElectronicDocument.findMany({
+        where: { companyId, sourceType: "SALE", sourceId: { in: ids.slice(start, start + 200) }, documentType: { in: ["E31", "E32"] } },
+        select: { sourceId: true },
+      });
+      documents.forEach(document => { if (document.sourceId) linked.add(document.sourceId); });
+    }
+    return rows.map(row => ({ ...row, hasElectronicFiscalDocument:
+      row.fiscalVoucherType !== "NORMAL" && (["E31", "E32"].includes(row.fiscalVoucherType) || linked.has(row.id)) }));
   }
 
   private async salesListPage(
@@ -1024,7 +1040,7 @@ export class SalesService {
       include: this.saleInclude(),
       take: 200,
     });
-    return this.withReturnSummaries(rows as Array<Record<string, any>>);
+    return this.withReturnSummaries(await this.withElectronicIdentities(companyId, rows as Array<Record<string, any>>));
   }
 
   async summaryMine(
@@ -1988,6 +2004,9 @@ export class SalesService {
       }
     } else if (electronicType) {
       const fiscal = await new EcfDocumentQueryService(this.prisma).capabilities(user);
+      if (fiscal.posBlockingCode === "ECF_PREPARATION_PERMISSION_REQUIRED") {
+        throw new ForbiddenException("No tienes permiso para preparar comprobantes electrónicos.");
+      }
       if (!fiscal.posReady || !fiscal.posAvailableTypes.includes(electronicType as "E31" | "E32")) {
         throw new ConflictException({ code: "ECF_SALE_NOT_READY", message: "El comprobante electrónico no está disponible. Revisa la habilitación y la numeración antes de cobrar." });
       }
@@ -2022,6 +2041,15 @@ export class SalesService {
     perf?.mark("pre_transaction");
     try {
       const sale = await this.prisma.$transaction(async (tx) => {
+        const electronic = electronicType === "E31" || electronicType === "E32";
+        if (electronic) {
+          // Keep activation/configuration stable through local fiscal preparation.
+          await tx.$queryRaw`SELECT company_id FROM ecf_company_configurations WHERE company_id = ${companyId}::uuid FOR SHARE`;
+          const fiscal = await new EcfDocumentQueryService(this.prisma).capabilities(user, tx);
+          if (!fiscal.posReady || !fiscal.posAvailableTypes.includes(electronicType)) {
+            throw new ConflictException("ECF_SALE_NOT_READY");
+          }
+        }
         const shouldResolveOperationalContext =
           normalizedItems.some(
             (item) => item.inventoryTrackedSnapshot === true,
@@ -2217,6 +2245,18 @@ export class SalesService {
           where: { id: sale.id },
           include: this.saleInclude(),
         });
+
+        if (electronic) {
+          const preparation = new EcfPreparationService(this.prisma);
+          const input = { saleId: sale.id, paymentType: (paymentMethod === "credit" ? 2 : 1) as 1 | 2,
+            incomeType: 1 as const, sequenceDueDate: dto.sequenceDueDate };
+          const prepared = electronicType === "E31"
+            ? await preparation.prepareFromSale(user, { ...input, documentType: "E31" }, tx)
+            : await preparation.prepareConsumoFromSale(user, { ...input, documentType: "E32" }, tx);
+          if (!prepared.ok) {
+            throw new ConflictException({ code: prepared.code, message: prepared.safeMessage });
+          }
+        }
 
         if (customerId) {
           await tx.client.update({

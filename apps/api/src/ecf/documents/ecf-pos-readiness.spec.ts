@@ -2,18 +2,23 @@ import { EcfDocumentQueryService } from "./ecf-document-query.service";
 import { Role } from "@prisma/client";
 
 describe("POS e-CF readiness", () => {
+  const originalEmission = process.env.DOSA_EMISSION_ENABLED;
+  beforeAll(() => { process.env.DOSA_EMISSION_ENABLED = "true"; });
+  afterAll(() => { if (originalEmission === undefined) delete process.env.DOSA_EMISSION_ENABLED; else process.env.DOSA_EMISSION_ENABLED = originalEmission; });
   const user = { id: "operator", role: Role.ADMIN, companyId: "company-a" };
 
   function setup(certificationStatus = "AUTHORIZED_SANDBOX", enabled = true) {
     const prisma = {
       ecfCompanyConfiguration: {
         findUnique: jest.fn().mockResolvedValue({
-          enabled, certificationStatus, environment: "SANDBOX", allowedTypes: ["E31", "E32", "E34"],
+          enabled, provider: "DOSA", certificationStatus, environment: "SANDBOX", allowedTypes: ["E31", "E32", "E34"],
         }),
       },
       ecfSequence: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      appConfig: { findFirst: jest.fn().mockResolvedValue({ rnc: "101000001" }) },
+      ecfDosaCompanyCredential: { findFirst: jest.fn().mockResolvedValue({ present: { apiKeyTest: true } }) },
     };
     return { prisma, service: new EcfDocumentQueryService(prisma as any) };
   }

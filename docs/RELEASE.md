@@ -219,6 +219,12 @@ stages accept GIT_SHA for org.opencontainers.image.revision. Build outside
 production; local QA images contain a synthetic assistant key and are not release
 artifacts. Preserve the existing EasyPanel public assistant key/environment.
 
+The API builder/runner and API CI also pin Node22.23.4 LTS. PR41's admission,
+atomic fiscal preparation and ordinary-printing corrections add no schema
+change. Keep production gates disabled during review; merge readiness does not
+authorize activating them or deploying. Recheck the final PR head and all CI
+jobs, including the isolated PostgreSQL atomic-checkout regression.
+
 Manual operator order after the candidate is committed, reviewed and integrated:
 
 1. Verify the expected commit and CI result. Run

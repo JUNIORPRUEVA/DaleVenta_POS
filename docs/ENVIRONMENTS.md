@@ -248,6 +248,13 @@ Deployment policy:
 
 ## Data Safety Rules
 
+The PR41 correction pins the API Docker builder/runner and API CI to
+Node22.23.4 LTS. Local development also permits Node24 LTS via the API engine
+constraint. CI PostgreSQL uses the existing exact local e-CF allowlist target
+127.0.0.1:55500/fullpos_ecf_ephemeral_test. Its fiscal regression fixtures are
+synthetic; their in-process flags never change a shared or production setting.
+These corrections require no new migration or production configuration change.
+
 The DOSA confirmed-result recorder is OFF unless the server operator explicitly
 sets `DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=true`. It does not enable emission,
 production credentials, company certification or production authorization; all

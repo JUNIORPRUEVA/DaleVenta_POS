@@ -327,3 +327,16 @@ A new Sandbox declaration/renewal/allocation must stay above its reviewed
 frontier, including the original range counter; an unclassified TEST history
 requires review before further TEST numbering. No production authorization is
 copied to TEST and no historic counter is reset.
+
+### Admission and ordinary printing
+
+E31/E32 checkout must be authorized and locally preparable before confirming
+the financial operation. If local fiscal preparation fails, no sale, stock
+movement or committed numbering allocation remains. Provider transmission is a
+subsequent operation with persisted recovery for uncertain results.
+
+An ordinary sale can include ITBIS without being electronic. Explicit NORMAL
+and older ordinary sales without an electronic fiscal link print their existing
+taxes without requesting an e-CF projection. A linked historical electronic sale
+still requires its fiscal projection; missing fiscal data cannot silently turn
+it into an ordinary invoice.

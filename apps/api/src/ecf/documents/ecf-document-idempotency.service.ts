@@ -51,14 +51,13 @@ export class EcfDocumentIdempotencyService {
     });
   }
 
-  async prepareLocalDocument(input: PrepareEcfDocumentInput) {
+  async prepareLocalDocument(input: PrepareEcfDocumentInput, transaction?: Prisma.TransactionClient) {
     // Old internal callers remain in the production namespace. The preparation
     // orchestrator supplies SANDBOX explicitly; no legacy range is borrowed.
     input = { ...input, environment: input.environment ?? "PRODUCTION" };
     const payloadFingerprint = fingerprint(input.document);
     const idempotencyKey = this.idempotencyKey(input);
-    try {
-      return await this.prisma.$transaction(async (tx) => {
+    const prepare = async (tx: Prisma.TransactionClient) => {
       const existing = await tx.ecfElectronicDocument.findUnique({
         where: {
           companyId_idempotencyKey: {
@@ -118,7 +117,11 @@ export class EcfDocumentIdempotencyService {
         },
       });
       return created;
-      });
+    };
+    // The compound sale owns the transaction and rolls back every local write.
+    if (transaction) return prepare(transaction);
+    try {
+      return await this.prisma.$transaction(prepare);
     } catch (error) {
       // A competing transaction may have committed the same operation first.
       // Read only after our failed transaction has rolled back (PostgreSQL).

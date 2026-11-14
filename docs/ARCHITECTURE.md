@@ -399,7 +399,30 @@ The root package-lock.json remains the API dependency authority.
 scripts/release/sync_api_docker_lock.mjs projects its reachable API graph into
 a generated apps/api/package-lock.json for EasyPanel's standalone /apps/api
 context. Docker uses npm ci; CI verifies the generated lock with --check.
-The script does not resolve new versions. Linux Node20 compilation validated
-the generated graph. The static Astro7.4.12 stage pins Node22.23.4-alpine;
+The script does not resolve new versions. The API Docker builder/runner and
+backend CI now pin Node22.23.4 LTS; Nest11 and Prisma5.22 stay on their locked
+versions. The static Astro7.4.12 stage pins Node22.23.4-alpine;
 no public-page source or API/auth contract was changed by that upgrade.
 The final API/PWA stages expose the supplied GIT_SHA as their image revision.
+
+### Electronic sale admission and atomic local preparation
+
+Explicit E31/E32 checkout shares a read-only admission policy with POS
+capabilities: fiscal preparation permission, enabled DOSA company, certified
+environment, explicit company production activation when applicable, server
+gates, own issuer/ACTIVE environment credential metadata and available range.
+The sale transaction rechecks admission while holding the company configuration
+lock. Financial sale, stock mutations, sequence allocation and local fiscal
+draft commit together. A local fiscal validation/mapping failure rolls them all
+back. Standalone preparation retains its existing idempotency and committed
+numbering semantics.
+
+External dispatch remains after commit. A timeout after sending is an uncertain
+fiscal outcome, handled by the existing persisted recovery/idempotency path;
+it never justifies deleting the sale or sending a different fiscal identity.
+
+Ordinary ITBIS is not electronic identity. The sale read model adds
+hasElectronicFiscalDocument for historical NULL intents linked to E31/E32,
+scoped to the active company. New typed E31/E32 are explicit; NORMAL overrides
+any fiscal link. Ticket/PDF callers use this identity instead of taxEnabled.
+Absent additive fields remain compatible with old ordinary sale responses.

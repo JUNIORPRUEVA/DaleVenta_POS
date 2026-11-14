@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { type ProductItemType } from "@prisma/client";
+import { type Prisma, type ProductItemType } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
-import { PrismaService } from "../../prisma/prisma.service";
 import { dec, money } from "../fiscal-core/ecf-money";
 import { fingerprint } from "../documents/ecf-document-idempotency.service";
 import { effectiveLineClassification } from "../documents/ecf-line-classification.policy";
@@ -56,7 +55,7 @@ const SUPPORTED_TYPES = ["E31", "E32"] as const;
  */
 @Injectable()
 export class EcfSaleFiscalAdapter {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: Prisma.TransactionClient) {}
 
   async build(
     user: TenantUser,

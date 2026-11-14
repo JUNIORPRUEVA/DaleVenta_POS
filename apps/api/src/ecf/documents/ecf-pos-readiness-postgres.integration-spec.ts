@@ -15,6 +15,7 @@ local("company activation and POS readiness on isolated PostgreSQL", () => {
   const companyId = randomUUID();
   const otherId = randomUUID();
   const user = { id: randomUUID(), companyId, role: Role.ADMIN };
+  const previousEmissionFlag = process.env.DOSA_EMISSION_ENABLED;
 
   beforeAll(async () => {
     if (!isEcfEphemeralTestTarget() || process.env.ALANUBE_ENABLE_REAL_CALLS !== "false" ||
@@ -24,13 +25,21 @@ local("company activation and POS readiness on isolated PostgreSQL", () => {
     await prisma.company.createMany({ data: [companyId, otherId].map((id) => ({
       id, name: "Synthetic activation test", slug: `ecf-activation-${id}`,
     })) });
+    process.env.DOSA_EMISSION_ENABLED = "true";
+    await prisma.appConfig.create({ data: { id: randomUUID(), companyId, companyName: "Synthetic issuer", rnc: "101000001" } });
+    await prisma.ecfDosaCompanyCredential.create({ data: { companyId, rnc: "101000001", environment: "test", status: "ACTIVE", source: "WEBHOOK", keyVersion: 1,
+      ciphertext: "synthetic-never-opened", iv: "synthetic", authTag: "synthetic", fingerprint: "a".repeat(64), present: { apiKeyTest: true } } });
   });
 
   afterAll(async () => {
     if (!prisma) return;
     try {
       await prisma.company.deleteMany({ where: { id: { in: [companyId, otherId] }, slug: { startsWith: "ecf-activation-" } } });
-    } finally { await prisma.$disconnect(); }
+    } finally {
+      if (previousEmissionFlag === undefined) delete process.env.DOSA_EMISSION_ENABLED;
+      else process.env.DOSA_EMISSION_ENABLED = previousEmissionFlag;
+      await prisma.$disconnect();
+    }
   });
 
   it("activates taxes, waits for readiness, and never borrows another tenant's range", async () => {
@@ -48,7 +57,7 @@ local("company activation and POS readiness on isolated PostgreSQL", () => {
     expect(await prisma.tax.findFirst({ where: { id: company.defaultTaxId!, companyId, isActive: true } })).not.toBeNull();
     expect((await query.capabilities(user)).posReady).toBe(false);
     await prisma.ecfCompanyConfiguration.update({
-      where: { companyId }, data: { certificationStatus: "AUTHORIZED_SANDBOX" },
+      where: { companyId }, data: { provider: "DOSA", certificationStatus: "AUTHORIZED_SANDBOX" },
     });
     await prisma.ecfSequence.create({ data: {
       environment: "SANDBOX",

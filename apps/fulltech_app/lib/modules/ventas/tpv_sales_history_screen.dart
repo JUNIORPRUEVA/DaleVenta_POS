@@ -533,9 +533,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         .getOrCreate();
     return buildSaleInvoicePdf(
       sale: sale,
-      ecf: !sale.isExplicitNormal && (sale.fiscalTaxEnabled || (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType)))
+      ecf: sale.requiresElectronicPrint
           ? await ref.read(ecfRepositoryProvider).printForSale(sale.id,
-              requireElectronic: (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType)))
+              requireElectronic: true)
           : null,
       company: company,
       warrantyPolicy: printerSettings.warrantyPolicy,

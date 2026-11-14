@@ -162,7 +162,7 @@ Future<Uint8List> buildSaleInvoicePdf({
   if (sale.isExplicitNormal && ecf != null) {
     throw StateError('Una venta Normal no puede incorporar un comprobante electrónico.');
   }
-  if (!sale.isRefundDocument && const {'E31', 'E32'}.contains(sale.fiscalVoucherType) && ecf == null) {
+  if (sale.requiresElectronicPrint && ecf == null) {
     throw StateError('El comprobante electrónico aún no está disponible para generar su PDF.');
   }
   if (ecf != null && !ecf.matchesTotal(sale.totalSold)) {

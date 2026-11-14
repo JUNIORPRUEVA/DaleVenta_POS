@@ -129,6 +129,7 @@ export class EcfPreparationService {
   async prepareFromSale(
     user: TenantUser,
     input: EcfPreparationInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<EcfFiscalResult<EcfPreparationResult>> {
     const companyId = requireTenant(user);
 
@@ -139,11 +140,12 @@ export class EcfPreparationService {
       );
     }
 
-    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType);
+    const db = transaction ?? this.prisma;
+    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType, transaction);
     if (!enabled.ok) return enabled;
-    const environment = await numberingEnvironment(this.prisma, companyId);
+    const environment = await numberingEnvironment(db, companyId);
 
-    const built = await new EcfSaleFiscalAdapter(this.prisma).build(user, {
+    const built = await new EcfSaleFiscalAdapter(db).build(user, {
       saleId: input.saleId,
       documentType: input.documentType,
     });
@@ -153,7 +155,7 @@ export class EcfPreparationService {
     // Una venta no puede producir DOS comprobantes fiscales de tipos distintos.
     // La guarda es simétrica con la del flujo de consumo: sin ella, preparar E32
     // y después E31 dejaría dos borradores sobre la misma venta.
-    const conflicting = await this.prisma.ecfElectronicDocument.findFirst({
+    const conflicting = await db.ecfElectronicDocument.findFirst({
       where: {
         companyId,
         environment,
@@ -191,7 +193,7 @@ export class EcfPreparationService {
       // documento y, si los datos cambiaron, se bloquea por divergencia).
       sourceType: "SALE",
       sourceId: built.value.saleId,
-    });
+    }, transaction);
 
     const emission = (prepared.payloadSummary as Record<string, unknown> | null)
       ?.emission as { encf?: string } | undefined;
@@ -224,6 +226,7 @@ export class EcfPreparationService {
   async prepareConsumoFromSale(
     user: TenantUser,
     input: EcfConsumoPreparationInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<EcfFiscalResult<EcfConsumoPreparationResult>> {
     const companyId = requireTenant(user);
 
@@ -234,11 +237,12 @@ export class EcfPreparationService {
       );
     }
 
-    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType);
+    const db = transaction ?? this.prisma;
+    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType, transaction);
     if (!enabled.ok) return enabled;
-    const environment = await numberingEnvironment(this.prisma, companyId);
+    const environment = await numberingEnvironment(db, companyId);
 
-    const built = await new EcfSaleFiscalAdapter(this.prisma).build(user, {
+    const built = await new EcfSaleFiscalAdapter(db).build(user, {
       saleId: input.saleId,
       documentType: input.documentType,
     });
@@ -247,7 +251,7 @@ export class EcfPreparationService {
     // Una venta no puede producir DOS comprobantes fiscales distintos. Si ya se
     // preparó como crédito fiscal, se rechaza en vez de dejar dos borradores:
     // el usuario debe decidir cuál corresponde antes de continuar.
-    const conflicting = await this.prisma.ecfElectronicDocument.findFirst({
+    const conflicting = await db.ecfElectronicDocument.findFirst({
       where: {
         companyId,
         environment,
@@ -285,7 +289,7 @@ export class EcfPreparationService {
       metadata,
       sourceType: "SALE",
       sourceId: built.value.saleId,
-    });
+    }, transaction);
 
     const emission = (prepared.payloadSummary as Record<string, unknown> | null)
       ?.emission as { encf?: string } | undefined;
@@ -526,8 +530,9 @@ export class EcfPreparationService {
     user: TenantUser,
     companyId: string,
     documentType: string,
+    transaction?: Prisma.TransactionClient,
   ): Promise<EcfFiscalResult<true>> {
-    const config = await this.prisma.ecfCompanyConfiguration.findUnique({
+    const config = await (transaction ?? this.prisma).ecfCompanyConfiguration.findUnique({
       where: { companyId },
     });
     if (!config?.enabled) {

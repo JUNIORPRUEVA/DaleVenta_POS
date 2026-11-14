@@ -215,11 +215,11 @@ export class EcfSequenceService {
    */
   async allocate(user: TenantUser, documentType: string, options: { documentId?: string; operationKey?: string; tx?: Tx; environment?: EcfEnvironment } = {}) {
     const companyId = requireTenant(user);
-    if (options.environment && options.environment !== await numberingEnvironment(this.prisma, companyId)) {
+    if (options.environment && options.environment !== await numberingEnvironment(options.tx ?? this.prisma, companyId)) {
       throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     }
     if (options.operationKey) {
-      const recorded = await this.alreadyAllocated(companyId, options.operationKey);
+      const recorded = await this.alreadyAllocated(companyId, options.operationKey, options.tx);
       if (recorded) return recorded;
     }
     const run = (tx: Tx) => this.allocateIn(tx, { companyId, userId: user.id, documentType,
@@ -228,9 +228,10 @@ export class EcfSequenceService {
   }
 
   /** Reads back an allocation already performed for the same operation key, if any. */
-  async alreadyAllocated(companyId: string, operationKey: string) {
-    const environment = await numberingEnvironment(this.prisma, companyId);
-    const row = await this.prisma.ecfSequenceAuditLog.findFirst({
+  async alreadyAllocated(companyId: string, operationKey: string, tx?: Tx) {
+    const db = tx ?? this.prisma;
+    const environment = await numberingEnvironment(db, companyId);
+    const row = await db.ecfSequenceAuditLog.findFirst({
       where: { companyId, environment, operationKey, action: "ALLOCATED" } });
     return row ? { encf: row.encf, sequenceId: row.sequenceId, type: row.type, validUntil: null } : null;
   }

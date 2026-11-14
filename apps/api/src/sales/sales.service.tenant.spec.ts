@@ -15,6 +15,7 @@ describe("SalesService tenant isolation", () => {
   };
 
   function serviceWith(prisma: Record<string, unknown>) {
+    prisma = { ecfElectronicDocument: { findMany: jest.fn().mockResolvedValue([]) }, ...prisma };
     return new SalesService(
       prisma as never,
       { get: jest.fn().mockReturnValue("") } as never,
@@ -41,6 +42,26 @@ describe("SalesService tenant isolation", () => {
   afterEach(() => {
     jest.restoreAllMocks();
     delete process.env.FINANCIAL_LEGACY_COMPAT;
+  });
+
+  it("projects legacy electronic identity from this tenant's documents without converting ordinary ITBIS sales", async () => {
+    const prisma = {
+      sale: { findMany: jest.fn().mockResolvedValue([
+        { id: "ordinary", kind: "invoice", fiscalVoucherType: null, fiscalTaxEnabled: true, taxAmount: 18, totalSold: 118 },
+        { id: "legacy-ecf", kind: "invoice", fiscalVoucherType: null, totalSold: 118 },
+        { id: "normal", kind: "invoice", fiscalVoucherType: "NORMAL", totalSold: 118 },
+      ]) },
+      ecfElectronicDocument: { findMany: jest.fn().mockResolvedValue([{ sourceId: "legacy-ecf" }]) },
+    };
+    const rows = await serviceWith(prisma).listInvoices(user);
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "ordinary", taxAmount: 18, hasElectronicFiscalDocument: false }),
+      expect.objectContaining({ id: "legacy-ecf", hasElectronicFiscalDocument: true }),
+      expect.objectContaining({ id: "normal", hasElectronicFiscalDocument: false }),
+    ]));
+    expect(prisma.ecfElectronicDocument.findMany).toHaveBeenCalledWith({ where: {
+      companyId: user.companyId, sourceType: "SALE", sourceId: { in: ["ordinary", "legacy-ecf"] }, documentType: { in: ["E31", "E32"] },
+    }, select: { sourceId: true } });
   });
 
   it("rejects clientId from another company when creating a sale", async () => {

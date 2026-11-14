@@ -24,21 +24,21 @@ jobs:
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: fullpos_ci
+          POSTGRES_DB: fullpos_ecf_ephemeral_test
         ports:
-          - 5432:5432
+          - 55500:5432
         options: >-
-          --health-cmd "pg_isready -U ci -d fullpos_ci"
+          --health-cmd "pg_isready -U ci -d fullpos_ecf_ephemeral_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/fullpos_ci
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:55500/fullpos_ecf_ephemeral_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.23.4
           cache: npm
       - run: npm ci
       - run: node scripts/release/sync_api_docker_lock.mjs --check
@@ -59,6 +59,29 @@ jobs:
         working-directory: apps/api
       - run: npm test
         working-directory: apps/api
+      # La admisión fiscal y el rollback deben probarse con transacciones reales,
+      # sin abrir ninguna conexión a DOSA ni habilitar emisión en producción.
+      - run: npm test -- --runTestsByPath src/sales/sales-ecf-atomic-postgres.integration-spec.ts src/ecf/documents/ecf-pos-readiness-postgres.integration-spec.ts
+        working-directory: apps/api
+        env:
+          ECF_POSTGRES_UAT: "true"
+          ALANUBE_ENABLE_REAL_CALLS: "false"
+          ECF_EMISSION_ENABLED: "false"
+          DOSA_EMISSION_ENABLED: "false"
+          DOSA_PRODUCTION_EMISSION_ENABLED: "false"
+          DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED: "false"
+      - run: npm run test:e2e -- --runTestsByPath src/ecf/provider/dosa/dosa-emission-dispatch-http.e2e-spec.ts src/ecf/ecf-documents-http.e2e-spec.ts src/ecf/pos/legacy-pos-compatibility-http.e2e-spec.ts --forceExit
+        working-directory: apps/api
+        env:
+          ECF_POSTGRES_UAT: "true"
+          APP_ENV: uat
+          UAT_LOCAL_ONLY: "true"
+          FINANCIAL_LEGACY_COMPAT: "true"
+          ALANUBE_ENABLE_REAL_CALLS: "false"
+          ECF_EMISSION_ENABLED: "false"
+          DOSA_EMISSION_ENABLED: "false"
+          DOSA_PRODUCTION_EMISSION_ENABLED: "false"
+          DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED: "false"
       - run: npm run build
         working-directory: apps/api
 
