@@ -1,4 +1,4 @@
-# PR43 PWA image — verified preparation
+# PR43 PWA image — preparation and owner deployment verified
 
 HECHO: owner merged PR43 as38142fce54030bdac611bcbf3f928d9d6be0cbbf.
 Its complete tree dd011e11f072ba8056445d27774ab6a1a6eac535 matches validated
@@ -29,7 +29,7 @@ Retained API:
 ghcr.io/juniorprueva/fullpos-cloud-api@sha256:4e6fb33c823b8f93978da3b3a3e0ef17ff0a8d22e168841986295aab7c4990af
 ```
 
-Current/rollback PWA:
+Previous PWA, retained rollback artifact:
 
 ```text
 ghcr.io/juniorprueva/fullpos-cloud-web@sha256:542cc3d8f94d9c900e11a4928465e712307554efd851e508039f632a736f230b
@@ -62,7 +62,7 @@ same-origin PDF modules/worker/MIME/cache/404 through the runtime API proxy.
 Both PDF renderings were visually inspected. E31 used the actual downloaded
 accepted TEST document; E34 used its read-only persisted public projection,
 rendered with the unchanged Flutter renderer. This is not a live PWA E34 preview
-or a physical printer test; that live preview remains pending after owner deploy.
+or a physical printer test. The later live preview result is recorded below.
 
 Initial QA setup guards rejected unsuitable previous test schemas before any
 commercial operation. A fresh labelled empty database was used instead. The
@@ -105,6 +105,47 @@ with the retained API and current database; no database restore or counter rewin
 Private receipts and captures:
 C:/Users/pc/.codex/backups/fullpos-pr43-pwa-20261114/.
 
-Artifact and authorized PWA source preparation: GO. Owner deployment and live
-E34 preview remain pending. Productive fiscal emission is not authorized by
-this preparation; its permissions remain off.
+## Owner deployment and live document acceptance
+
+The owner reported deployment complete. A fresh read-only runtime check confirms
+PWA d56a9c97 running and API4e6fb33c still running/healthy on Node22.23.4.
+FULLTECH remains SANDBOX/productionEnabled=false. Global production emission,
+production confirmed outcomes, RUN_MIGRATIONS and RUN_SEED remain false.
+
+The authenticated PWA at fullposcloud.fulltechrd.com displays the accepted E34
+E340000000002 and its E31 E310000000003 reference. Its already-open old UI did
+not contain print controls; a normal reload loaded them and retained the seven
+draft tickets/current cart. Ver PDF fiscal now renders the E34 successfully.
+Compartir > Guardar en descargas saves the actual E340000000002.pdf; nothing
+was shared externally or sent to the fiscal provider by these read operations.
+
+| Actual post-deploy check | Result |
+| --- | --- |
+| verify-postdeploy-pr43.py piped through existing-key SSH to python3 - | Exact web/API digests, API health, protected flags and tenant-scoped receipts PASS |
+| FULLTECH PWA > existing accepted E34 > Ver PDF fiscal > Guardar en descargas | Preview and completed download PASS; API GET print HTTP200 |
+| python [private]/verify-acceptance-pdfs.py, without projection override | Actual deployed E31/E34 downloads, one page each, required fiscal fields, decoded QR matching stored stamp, official DGII TEST HTTP200/Aceptado PASS |
+| Rendered actual E31/E34 download pages inspected visually | Legible issuer/receiver, numbering, taxes/totals, TEST legend, QR/signing; E34 original document/date/reason PASS |
+| Post-preview preservation compared with pretrial checkpoint | Business counts/whole-row hashes, five legacy documents, production ranges/counters and authorization fingerprint PASS |
+
+Actual downloaded E31 SHA256:
+3e35364035846e21de403b1ebc5ec2d97b51ddfc42a001d8063b430338042a99.
+Actual downloaded E34 SHA256:
+edcf6935ea71abaa64cb69d7b02d9d6d5025803c1b54dd8d98534df34f365f79.
+The actual E34 contains net100.00 + ITBIS18.00 = total118.00, original E31/date,
+annulment reason, TEST legend, matching QR/security/signing fields. Both remain
+DGII_ACCEPTED with exactly one SEND_TO_PROVIDER attempt each. E34 credit118.00
+is APPLIED once; available/reserved/unknown balances are0.00.
+
+Private evidence: postdeploy-final-readonly-receipt.json and
+deployed-pwa-pdf-validation.json in the evidence directory above. Initial local
+comparison used serialized key order and rejected equivalent range objects;
+canonical recursive key comparison confirmed every original value matches.
+No application change was made to obtain these results.
+
+Owner deployment, runtime preservation and live accepted TEST PDF validation:
+GO. No further deploy is required for this correction. Physical printer output
+was not exercised again. Production fiscal emission remains NO-GO pending
+reconciliation of official FULLTECH production authorizations (stored production
+expiry values remain null) and separately authorized activation. This verification
+did not deploy/restart, migrate/seed, change configuration/permissions or issue
+another TEST/production document.

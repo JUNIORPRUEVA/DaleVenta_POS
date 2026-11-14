@@ -1,6 +1,6 @@
 # Execution State
 
-## Current work — PR43 PWA source prepared with owner authorization (2026-11-14)
+## Current work — owner-deployed PR43 PWA and live E34 PDF verified (2026-11-14)
 
 Owner merged PR43 as38142fce54030bdac611bcbf3f928d9d6be0cbbf. Its complete
 tree dd011e11f072ba8056445d27774ab6a1a6eac535 matches validated PR source
@@ -36,15 +36,35 @@ an independent persisted readback passed. Backend config is byte-equivalent;
 PWA protected settings and registry credentials keep their prior fingerprints.
 No deploy/restart/migration/seed/credential or fiscal permission change occurred.
 
-Current API4e6fb33c/PWA542cc3d8 containers ca6026999fda/276854145ee5 remain
-unchanged and running; all production/startup protections and automatic-deploy
-disablement remain. Private receipts source-authorized-before.json,
-source-authorized-after.json and source-final-readback.json are under
+The owner subsequently deployed pwa. Fresh read-only inspection confirms running
+PWA d56a9c97 and retained healthy API4e6fb33c on Node22.23.4. FULLTECH remains
+SANDBOX with company production opt-in false; global production emission and
+confirmed production outcomes, automatic migrations and seed remain false.
+
+Live E34 preview/download now passes in the authenticated FULLTECH PWA. An
+already-open tab initially lacked the print controls; a normal reload loaded
+the current UI and preserved its seven draft tickets/current cart. E340000000002
+opens as a one-page fiscal PDF with original E310000000003, reason, issuer,
+receiver, net100.00, ITBIS18.00, total118.00, TEST legend, QR and signing fields.
+The actual downloaded E31/E34 PDFs pass required-field checks, rendered QR
+decoding against persisted stamps and official DGII TEST HTTP200/Aceptado.
+Both rendered pages were visually inspected. The current E34 print request is
+GET200; each accepted document still has exactly one SEND_TO_PROVIDER attempt.
+
+Post-preview counts and whole-row fingerprints for sales, cash and inventory,
+five legacy documents, production ranges/counters and production authorization
+fingerprint match the pretrial checkpoint. E34 credit remains APPLIED118 once,
+available0/reserved0/unknown0. No commercial operation or fiscal send was made.
+Private receipts postdeploy-final-readonly-receipt.json and
+deployed-pwa-pdf-validation.json are under
 C:/Users/pc/.codex/backups/fullpos-pr43-pwa-20261114/.
 
-Source preparation is complete. Next: owner presses Implementar for pwa only;
-then verify the running d56a9c97 image, retained healthy API and deployed E34
-preview. No API deploy, fiscal activation or new TEST send is needed. Details:
+Post-deploy artifact and accepted TEST document PDF validation: GO. No further
+deploy is needed for this correction. Production fiscal issuance remains NO-GO:
+production range expiry values are still null and must be reconciled with the
+company's official authorizations before a separately authorized activation.
+No permission/configuration changes were performed during this verification.
+Physical printer validation was not repeated. Details:
 docs/ecf/ECF_PWA_PR43_IMAGE_2026-11-14.md.
 
 ## Previous work — deployed TEST acceptance and numbering access (2026-11-14)
