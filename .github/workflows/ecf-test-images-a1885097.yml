@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: a1885097ef574d836929049252cb9117952c7d61
+          ref: 3217f0cd14cecb97b5c20f146812e0cd5df7d8ec
           persist-credentials: false
       - name: Verify frozen source and PR gates
         env:
