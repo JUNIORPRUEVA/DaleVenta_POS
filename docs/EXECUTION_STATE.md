@@ -1,6 +1,59 @@
 # Execution State
 
-## Current work — deployed TEST acceptance and numbering access (2026-11-14)
+## Current work — commercial E31/refund/E34 closeout (2026-11-14)
+
+Mode: CONTINUOUS_CONTROLLED_EXECUTION. Owner asked to finish the remaining fiscal
+work before a later design phase. Existing user-controlled merge/deploy and
+separate production activation gates remain. No live commercial QA data writes.
+
+Fresh worktree C:/src/fullpos-ecf-commercial-closeout-20261114, branch
+agent/ecf-commercial-closeout-20261114, starts at merged PR43/38142fce. Other
+worktrees, the immutable PR43 source and preparation branch remain untouched.
+The owner-deployed PWA d56a9c97 and healthy API4e6fb33c were already verified;
+actual accepted TEST E31/E34 PDFs now pass preview, download, fields and QR checks.
+
+Audit found separate HTTP tests for sale/emission/manual E34 and PostgreSQL
+tests for financial refunds, but no single HTTP checkout -> financial return ->
+E34 acceptance regression. Added three synthetic end-to-end cases to the existing
+CI suite: normal response, lost provider response, and missing E34 range followed
+by fiscal-only recovery. Initial focused run:3 PASS/26 intentionally filtered.
+Each asserts one financial refund/stock return, net cash0, ITBIS18, one E34
+allocation/applied credit, unchanged financial state on replay and cross-tenant
+denial. All provider traffic is loopback; no real DOSA/DGII calls.
+
+Full API build PASS. Existing regressions PASS:3 HTTP suites/43 tests,
+5 PostgreSQL suites/48 tests,240 unit/general suites/2882 tests.52 opt-in suites
+and547 tests are intentionally skipped by the general run. An extra strict
+TypeScript check found two old fixtures missing encf; explicit empty values
+preserve server allocation and the changed suite now typechecks. Final HTTP
+revalidation after those two fixture corrections:3 suites/43 PASS. Tests ran
+on a fresh owned local postgres:16-alpine container fullpos_ecf_closeout_20261114,
+loopback55500, label fullpos.task=ecf-commercial-closeout-20261114. No restored
+customer data, shared database or external credential is used.
+
+Fresh tenant-scoped live read-only audit confirms FULLTECH has own ACTIVE keys
+for both environments, certification PRODUCTION_READY and no unresolved TEST
+results (four reviewed legacy trials remain unchanged). Stored production
+authorizations/ranges are E31=1–150/next3, E32=1–1000/next3, E34=1–50/next2.
+E31 authorization expires2027-12-31 but all operational range expiries are null;
+E32/E34 authorization expiries are null. The two persisted authenticated webhook
+summaries contain no numbering metadata. The owner confirmed he registered the
+FULLTECH database values and requested using them; preserve those declarations,
+not the generic email range. No further numbering information request is pending.
+The concrete E31 operational renewal proposal is start/next3,end150,expiry matching
+its existing2027-12-31 authorization; preserve E32/E34 and all consumed counters.
+Do not invent dates for null declarations. Production changes remain unexecuted.
+
+Local implementation and validation are complete. Publish only the new
+test/documentation branch and require green GitHub controls on its final head
+before merging; then present the concrete production operation
+in docs/ecf/ECF_COMMERCIAL_CLOSEOUT_2026-11-14.md for separate owner authorization.
+Global production flags, company production opt-in, migrations and seed stay off.
+Production activation requires the separate owner gate; no real invoice is a
+smoke test. Private tools/evidence: C:/Users/pc/.codex/backups/
+fullpos-ecf-commercial-closeout-20261114/.
+
+## Previous work — deployed TEST acceptance and numbering access (2026-11-14)
 
 The owner deployed both final PR42 images. Read-only inspection confirms API
 4e6fb33c and PWA542cc3d8, from3217f0cd; merged ac729b16 has the identical tree.
