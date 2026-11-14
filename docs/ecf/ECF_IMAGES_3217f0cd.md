@@ -2,8 +2,12 @@
 
 Estado: los cuatro controles del último commit, las dos publicaciones finales,
 la descarga real por digest y la aceptación local de ambos artefactos pasaron.
-No desplegar las imágenes del commit anterior a1885097. Ningún despliegue está
-autorizado por este documento.
+No desplegar las imágenes del commit anterior a1885097. El despliegue manual
+queda a cargo del propietario.
+
+Con autorización expresa del propietario, las dos fuentes nuevas ya quedaron
+guardadas en EasyPanel el 14/11/2026. No se pulsó Implementar ni se reinició
+ningún servicio. El propietario conserva el despliegue manual.
 
 ## Fuente y controles
 
@@ -13,6 +17,9 @@ autorizado por este documento.
 - Constructor final: https://github.com/JUNIORPRUEVA/DaleVenta_POS/actions/runs/43607017565.
 - CI final: análisis sin incidencias y 2247 pruebas Flutter PASS / 16 omisiones
   por compuertas; API/security, sitio público y actualizador Windows PASS.
+- PR #42 integrado en ac729b16de7a0656108f0e44388e57cf880abb55: árbol completo
+  idéntico al de 3217f0cd; los cuatro controles posteriores al merge pasaron en
+  https://github.com/JUNIORPRUEVA/DaleVenta_POS/actions/runs/43609170065.
 - La rama de preparación conserva su nombre inicial
   agent/ecf-test-images-a1885097; el checkout, las etiquetas y las imágenes
   toman exclusivamente la fuente 3217f0cd, no el HEAD de esa rama.
@@ -110,12 +117,28 @@ DOSA_PRODUCTION_EMISSION_ENABLED=false y
 DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=false. FULLTECH permanece SANDBOX y no se
 modifican credenciales, certificación, rangos productivos ni resultados antiguos.
 
-La fuente actual de EasyPanel sigue apuntando a los digests anteriores. Pulsar
-Implementar sin cambiar la fuente volvería a usar el software anterior. Después
-del merge/controles y de comprobar la equivalencia del código, el propietario
-debe guardar la referencia Docker Image final en backend y pwa; desplegar
-primero API, comprobar salud y después PWA. Esta preparación no guardó fuentes
-productivas, no ejecutó Deploy ni reinició servicios.
+La fuente de EasyPanel ya apunta a los dos digests finales de este documento.
+El propietario autorizó expresamente guardar sólo esas referencias y conservar
+su botón Implementar. Se usó la operación oficial updateAppSourceImage de la
+versión instalada 2.37.0, con una credencial administrativa existente que no se
+imprimió ni modificó. No se creó ninguna credencial ni se llamó a deploy.
+
+La simulación previa y la lectura independiente posterior verificaron ambos
+digests y las huellas del resto de la configuración: variables, credenciales,
+montajes, dominios, recursos y opciones permanecen intactos. El procedimiento
+normaliza también build:null a ausente, ajuste interno propio de la fuente de
+imagen; ya estaba nulo y sin uso. El despliegue automático sigue apagado.
+
+Los contenedores 57e59369cec2/a50049a489fb y sus imágenes anteriores siguen
+activos; la API está saludable. No hubo reinicios, migraciones, seed, cambios de
+permisos fiscales ni escrituras en la base del POS. FULLTECH mantiene SANDBOX,
+sus cinco documentos y los siguientes números productivos E31=3, E32=3, E34=2.
+Los recibos privados before/after y la lectura final están en la carpeta de
+evidencia citada arriba; no contienen valores secretos.
+
+La preparación de fuentes está completa. Ahora el propietario despliega primero
+API, comprueba salud y después despliega PWA. Al terminar se deben comprobar las
+imágenes realmente activas antes de continuar la aceptación TEST.
 
 Después del despliegue manual de API y PWA, verificar salud y revisiones; luego
 registrar sólo TEST 1–10000000, vencimiento 31/12/2028. Conservar las fronteras consumidas:

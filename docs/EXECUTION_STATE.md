@@ -1,6 +1,34 @@
 # Execution State
 
-## Current work — SANDBOX checkout and PDF closure (2026-11-14)
+## Current work — authorized image sources prepared (2026-11-14)
+
+The owner explicitly authorized only updating backend/PWA Docker Image sources
+to the verified PR42 artifacts and retained the Implementar/Deploy action.
+PR42 is merged as ac729b16; its complete tree matches source 3217f0cd. All four
+post-merge gates in 43609170065 passed. No further merge or deployment was run.
+
+Using EasyPanel 2.37.0's installed/documented updateAppSourceImage operation,
+both image sources are now the exact verified digests in
+docs/ecf/ECF_IMAGES_3217f0cd.md. A fresh read-only plan preceded the authorized
+application. Independent persisted readback passed: protected configuration
+fingerprints and registry credentials are unchanged; automatic deploy is off.
+The procedure only changes source and normalizes the already-null build field.
+
+The running containers remain 57e59369cec2/a50049a489fb with their previous 8fa
+images; the API is healthy. RUN_MIGRATIONS remains false, seed remains off and
+both production fiscal flags remain blocked. FULLTECH remains SANDBOX with
+productionEnabled=false, five existing documents and production sequence next
+values E31=3, E32=3, E34=2. No business database writes or new external issuance.
+
+Private receipts: source3217-authorized-before.json,
+source3217-authorized-after.json and source3217-final-readback.json under
+C:/Users/pc/.codex/backups/fullpos-ecf-test-close-20261114/.
+The owner deploys backend first, checks health, then deploys PWA. Fresh deployed
+image verification and the already-authorized TEST numbering/E31/E34 acceptance
+remain pending. Do not activate production fiscal permissions or restart on the
+owner's behalf. No application code changed in this preparation.
+
+## Previous work — SANDBOX checkout and PDF closure (2026-11-14)
 
 Mode: CONTINUOUS_CONTROLLED_EXECUTION. The owner approved completing TEST
 numbering, verified DOSA outcomes, E31/E34 trials from the software where possible,
