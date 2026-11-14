@@ -225,6 +225,13 @@ change. Keep production gates disabled during review; merge readiness does not
 authorize activating them or deploying. Recheck the final PR head and all CI
 jobs, including the isolated PostgreSQL atomic-checkout regression.
 
+Immutable API/PWA images for the merged PR41 at8fa5eba6 were built in GitHub
+Actions and published to GHCR. Their exact digests, acceptance evidence and
+proposed manual source change are in [the image handoff](ecf/ECF_IMAGES_8fa5eba6.md).
+For Docker Image sources, pass both approved digests to the read-only preflight;
+it checks exact references instead of a GitHub branch. Preparing those sources
+requires owner authorization and does not itself execute a deployment.
+
 Manual operator order after the candidate is committed, reviewed and integrated:
 
 1. Verify the expected commit and CI result. Run
