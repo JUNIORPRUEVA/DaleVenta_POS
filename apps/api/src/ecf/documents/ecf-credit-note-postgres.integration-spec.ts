@@ -63,6 +63,7 @@ uat("E34 desde una venta original (nota de crédito) on PostgreSQL", () => {
     for (const documentType of ["E31", "E34"]) {
       await prisma.ecfDgiiAuthorizedSequence.create({
         data: {
+          environment: "SANDBOX",
           companyId,
           documentType,
           authorizationNumber: `SYNTH-${documentType}`,
@@ -195,6 +196,7 @@ uat("E34 desde una venta original (nota de crédito) on PostgreSQL", () => {
     const evidenceHash = "a".repeat(64);
     const original = await prisma.ecfElectronicDocument.create({
       data: {
+          environment: "SANDBOX",
         companyId,
         documentType: "E31",
         status: "DGII_ACCEPTED",

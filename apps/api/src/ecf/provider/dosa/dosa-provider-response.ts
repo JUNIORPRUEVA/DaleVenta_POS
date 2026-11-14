@@ -94,7 +94,7 @@ export function assessDosaProviderResponse(
   const data = asRecord(envelope?.data) ?? envelope;
 
   const encf = firstString(data, ["encf", "eNCF", "e_ncf", "ncf"]);
-  const rnc = firstString(data, ["rnc", "RNC"]);
+  const rnc = firstString(data, ["rnc", "RNC", "rncEmisor", "RNCEmisor"]);
   const trackId = firstString(data, ["trackId", "track_id", "id"]);
   const secuencia = data?.secuenciaUtilizada;
   const sequenceConsumed = typeof secuencia === "boolean" ? secuencia : null;
@@ -106,7 +106,45 @@ export function assessDosaProviderResponse(
   const encfValid = encf !== null && new RegExp(`^${context.documentType}\\d{10}$`).test(encf);
   const encfMatches = encf !== null && encf === context.expectedEncf;
   const rncMatches =
-    rnc === null || normalizeRnc(rnc) === normalizeRnc(context.expectedTaxId);
+    ["rnc", "RNC", "rncEmisor", "RNCEmisor"].every(key => {
+      const value = firstString(data, [key]);
+      return value === null || normalizeRnc(value) === normalizeRnc(context.expectedTaxId);
+    });
+  // Observed DOSA RFCE response: no TrackId, but an official DGII consumer
+  // receipt URL bound to the emitter, e-NCF and amount. This exception never
+  // applies to E31/E34 or to an arbitrary URL or incomplete response.
+  let consumerReceipt = false;
+  let consumerReference: string | null = null;
+  const amount = data?.montoTotal;
+  if (context.documentType === "E32" && rnc !== null && typeof amount === "number"
+      && amount > 0 && amount < 250000 && classification?.qr?.complete
+      && ["ACCEPTED", "CONDITIONALLY_ACCEPTED"].includes(outcome)) {
+    try {
+      const url = new URL(classification.qr.consultaUrl!);
+      const params = new Map(Array.from(url.searchParams, ([key, value]) => [key.toLowerCase(), value]));
+      consumerReceipt = url.protocol === "https:" && url.hostname === "fc.dgii.gov.do"
+        && !url.port && !url.username && !url.password
+        && /^\/(?:testecf|ecf)\/consultatimbrefc\/?$/i.test(url.pathname)
+        && params.get("encf") === context.expectedEncf
+        && normalizeRnc(params.get("rncemisor") ?? "") === normalizeRnc(context.expectedTaxId)
+        && Number(params.get("montototal")) === amount;
+      if (consumerReceipt) consumerReference = `RFCE:${url.pathname.toLowerCase().includes("/testecf/") ? "SANDBOX" : "PRODUCTION"}:${normalizeRnc(context.expectedTaxId)}:${context.expectedEncf}`;
+    } catch { consumerReceipt = false; }
+  }
+
+  let pendingReference: string | null = null;
+  if (httpStatus === 202 && outcome === "IN_PROCESS" && classification?.qr?.complete && rnc !== null && sequenceConsumed === true) {
+    try {
+      const url = new URL(classification.qr.consultaUrl!);
+      const params = new Map([...url.searchParams].map(([key, value]) => [key.toLowerCase(), value]));
+      if (url.protocol === "https:" && !url.port && !url.username && !url.password &&
+          ["ecf.dgii.gov.do", "fc.dgii.gov.do"].includes(url.hostname) &&
+          /^\/(testecf|ecf)\/consultatimbre(?:fc)?$/i.test(url.pathname) &&
+          params.get("encf") === context.expectedEncf && params.get("rncemisor") === context.expectedTaxId) {
+        pendingReference = `DOSA_PENDING:${url.pathname.toLowerCase().includes("/testecf/") ? "SANDBOX" : "PRODUCTION"}:${context.expectedTaxId}:${context.expectedEncf}`;
+      }
+    } catch { pendingReference = null; }
+  }
 
   const checks = {
     HTTP_ACCEPTABLE: httpAcceptable,
@@ -114,7 +152,7 @@ export function assessDosaProviderResponse(
     ENCF_PRESENT: encfValid,
     ENCF_MATCH: encfMatches,
     RNC_MATCH: rncMatches,
-    TRACK_ID_PRESENT: trackId !== null,
+    TRACK_ID_PRESENT: trackId !== null || consumerReceipt || pendingReference !== null,
     // Un aceptado (simple o condicional) debe declarar la secuencia consumida:
     // si el proveedor acepta y dice que no gastó numeración, una de las dos
     // cosas no es cierta y no se puede correlacionar.
@@ -149,7 +187,7 @@ export function assessDosaProviderResponse(
       ? `ECF_DOSA_${reasons[0]}_FAILED`
       : `ECF_DOSA_OBSERVED_${outcome}`,
     // `trackId` es la referencia de seguimiento del proveedor para ESTA entrega.
-    remoteId: correlated ? trackId : null,
+    remoteId: correlated ? trackId ?? consumerReference ?? pendingReference : null,
     documentNumber: encfValid ? encf : null,
     providerStatus: firstString(data, ["estado"]),
     observedLegalStatus: firstString(data, ["estado"]),

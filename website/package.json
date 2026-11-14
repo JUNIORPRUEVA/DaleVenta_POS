@@ -12,7 +12,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
-    "astro": "^5.14.1"
+    "astro": "7.4.12"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",

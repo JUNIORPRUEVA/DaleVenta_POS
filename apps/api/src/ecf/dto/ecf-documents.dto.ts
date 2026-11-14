@@ -1,6 +1,8 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsArray,
+  ArrayMaxSize,
+  ArrayMinSize,
   IsIn,
   IsInt,
   IsOptional,
@@ -19,6 +21,15 @@ import {
   type AlanubeSimulationScenario,
 } from "../alanube/alanube-scenario.transport";
 import { ECF_ALLOWED_DOCUMENT_TYPES } from "../ecf.constants";
+
+export class EcfSalesFiscalQueryDto {
+  @Transform(({ value }) => typeof value === "string" ? value.split(",") : value)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsUUID("all", { each: true })
+  ids!: string[];
+}
 
 /**
  * Escenario del ALANUBE SIMULADO para el despacho de validación.
@@ -100,6 +111,9 @@ export class ListEcfDocumentsQueryDto {
 }
 
 export class RegisterEcfSequenceDto {
+  @IsOptional()
+  @IsIn(["SANDBOX", "PRODUCTION"])
+  expectedEnvironment?: "SANDBOX" | "PRODUCTION";
   // Los tres tipos consumen el rango e-CF de la empresa (ver
   // `ECF_SEQUENCE_TYPES` y `ALLOCATABLE` en el servicio). E32 (consumo) se
   // declaraba y se autorizaba, pero este DTO lo rechazaba: el rango de consumo
@@ -132,6 +146,9 @@ export class RenewEcfSequenceDto extends RegisterEcfSequenceDto {}
  * declaración es obligatoria y su versión de texto queda registrada.
  */
 export class DeclareEcfAuthorizedSequenceDto {
+  @IsOptional()
+  @IsIn(["SANDBOX", "PRODUCTION"])
+  expectedEnvironment?: "SANDBOX" | "PRODUCTION";
   @IsIn(["E31", "E32", "E34"])
   documentType!: "E31" | "E32" | "E34";
 

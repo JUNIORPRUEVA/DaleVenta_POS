@@ -6,21 +6,21 @@
   ],
   "overrides": {
     "body-parser": {
-      "qs": "6.16.0"
+      "qs": "6.17.1"
     },
     "engine.io": "6.6.11",
     "express": {
       "proxy-addr": "2.0.8",
-      "qs": "6.16.0"
+      "qs": "6.17.1"
     },
-    "multer": "2.4.0",
+    "multer": "2.5.0",
     "proxy-addr": "2.0.8",
-    "qs": "6.16.0",
+    "qs": "6.17.1",
     "socket.io": {
       "engine.io": "6.6.11"
     },
     "superagent": {
-      "qs": "6.16.0"
+      "qs": "6.17.1"
     }
   },
   "scripts": {

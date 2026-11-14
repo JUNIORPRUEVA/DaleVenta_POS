@@ -1,6 +1,6 @@
 # Tenant Data Model Inventory
 
-Generated at: 2026-11-09T03:05:42.270Z
+Generated at: 2026-11-13T23:56:42.645Z
 
 | Model | Table | Classification | Tenant Column | Nullable | FK | Index | Recommended Action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -32,6 +32,7 @@ Generated at: 2026-11-09T03:05:42.270Z
 | EcfElectronicDocumentStatusLog | ecf_electronic_document_status_logs | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | CompanyMember | company_members | Join table | company_id | false | present | present | No tenant migration required. |
 | AuthSession | auth_sessions | Session/security data | company_id | true | present | present | No tenant migration required. |
+| SessionHandoffTicket | session_handoff_tickets | Company-owned root entity | company_id | true | missing | missing | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
 | User | users | User-personal data | company_id | true | present | present | No tenant migration required. |
 | BackupRecord | backup_records | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | AppRelease | app_releases | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
@@ -55,6 +56,7 @@ Generated at: 2026-11-09T03:05:42.270Z
 | WhatsappMessage | whatsapp_messages | Audit/retention data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | WhatsappAiMediaSummary | whatsapp_ai_media_summaries | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
 | WhatsappAiAnalysisReport | whatsapp_ai_analysis_reports | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |
+| CompanyOnboardingTask | company_onboarding_tasks | Company-owned root entity | company_id | false | present | present | No tenant migration required. |
 | UserLocation | user_locations | User-personal data | - | - | not_applicable | not_applicable | No tenant migration required. |
 | AppConfig | app_config | Company-owned root entity | company_id | true | present | present | Backfill deterministically, add FK/index, then make companyId NOT NULL. |
 | ServiceExecutionReport | service_execution_reports | Company-owned child entity | - | - | not_applicable | not_applicable | Add companyId through trusted parent backfill or document inherited parent ownership. |

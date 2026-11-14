@@ -1,4 +1,5 @@
 import { assessDosaProviderResponse } from "./dosa-provider-response";
+import { classifyDosaResponse } from "./dosa-response.mapper";
 
 /**
  * Correlación de la respuesta de DOSA.
@@ -34,6 +35,53 @@ function response(overrides: Record<string, unknown> = {}) {
 }
 
 describe("assessDosaProviderResponse", () => {
+  const consumerContext = { ...CONTEXT, documentType: "E32" as const, expectedEncf: "E320000000042" };
+  function consumerResponse() {
+    return {
+      trackId: null, codigo: "1", estado: "Aceptado", secuenciaUtilizada: true,
+      eNCF: "E320000000042", rncEmisor: "131000001", montoTotal: 118,
+      codigoSeguridad: "TEST42", fechaFirma: "12-11-2026 22:33:58",
+      urlQR: "https://fc.dgii.gov.do/testecf/consultatimbrefc?RNCEmisor=131000001&ENCF=E320000000042&MontoTotal=118.00",
+    };
+  }
+
+  it("correlates the observed consumer receipt format without inventing a TrackId or fiscal acceptance", () => {
+    const result = assessDosaProviderResponse(200, consumerResponse(), consumerContext);
+    expect(result.correlated).toBe(true);
+    // This is a local receipt identity, never a fabricated DGII TrackId.
+    expect(result.remoteId).toBe("RFCE:SANDBOX:131000001:E320000000042");
+    expect(consumerResponse().trackId).toBeNull();
+    expect(result.providerOutcome).toBe("ACCEPTED");
+    expect(result.canUpdateFiscalStatus).toBe(false);
+    expect(result.canRetryPost).toBe(false);
+  });
+
+  it.each([
+    { rncEmisor: "999999999" },
+    { rnc: "999999999" },
+    { montoTotal: 250000 },
+    { montoTotal: 119 },
+    { secuenciaUtilizada: false },
+    { urlQR: "https://fc.dgii.gov.do.attacker.invalid/testecf/consultatimbrefc" },
+    { urlQR: "https://fc.dgii.gov.do/testecf/consultatimbrefc?RNCEmisor=999999999&ENCF=E320000000042&MontoTotal=118" },
+    { urlQR: null },
+  ])("rejects incomplete or conflicting RFCE evidence: %j", changes => {
+    expect(assessDosaProviderResponse(200, { ...consumerResponse(), ...changes }, consumerContext).correlated).toBe(false);
+  });
+
+  it("keeps the TrackId requirement for E31", () => {
+    expect(assessDosaProviderResponse(200, consumerResponse(), CONTEXT).correlated).toBe(false);
+  });
+
+  it("encodes a literal plus in the observed DGII QR security code without changing its value", () => {
+    const result = classifyDosaResponse({ ...consumerResponse(), codigoSeguridad: "Ab+c12",
+      urlQR: consumerResponse().urlQR + "&CodigoSeguridad=Ab+c12" });
+    const url = new URL(result.qr!.consultaUrl!);
+    expect(url.searchParams.get("CodigoSeguridad")).toBe("Ab+c12");
+    expect(url.search).toContain("Ab%2Bc12");
+    expect(result.qr?.complete).toBe(true);
+  });
+
   it("correlaciona una respuesta conforme y NO la convierte en aceptación fiscal", () => {
     const result = assessDosaProviderResponse(200, response(), CONTEXT);
 
@@ -104,4 +152,15 @@ describe("assessDosaProviderResponse", () => {
     expect(result.correlated).toBe(false);
     expect(result.reasons).toContain("SEQUENCE_CONSISTENT");
   });
+  it("RFCE E32 acceptance without trackId binds a stable receipt identity, never one for E31", () => {
+    const encf="E320000000001",rnc="101000001";
+    const body={codigo:"1",estado:"Aceptado",rnc,encf,secuenciaUtilizada:true,montoTotal:118,
+      url: `https://fc.dgii.gov.do/testecf/ConsultaTimbreFC?RncEmisor=${rnc}&ENCF=${encf}&MontoTotal=118&CodigoSeguridad=ABC123`,
+      codigoSeguridad:"ABC123",fechaFirma:"13-11-2026 12:00:00"};
+    const observation=assessDosaProviderResponse(200,body,{documentType:"E32",expectedEncf:encf,expectedTaxId:rnc});
+    expect(observation.correlated).toBe(true);
+    expect(observation.remoteId).toBe(`RFCE:SANDBOX:${rnc}:${encf}`);
+    expect(assessDosaProviderResponse(200,body,{documentType:"E31",expectedEncf:encf,expectedTaxId:rnc}).correlated).toBe(false);
+  });
+
 });

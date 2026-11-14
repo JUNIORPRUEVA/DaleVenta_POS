@@ -5,6 +5,7 @@ import {
   EcfElectronicDocumentStatus,
   EcfElectronicDocumentType,
   Prisma,
+  type EcfEnvironment,
 } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { EcfFiscalDocument } from "../fiscal-core/ecf-fiscal-document";
@@ -16,6 +17,7 @@ export type PrepareEcfDocumentInput = {
   sourceId?: string;
   clientRequestId?: string;
   document: EcfFiscalDocument;
+  environment?: EcfEnvironment;
 };
 
 @Injectable()
@@ -24,8 +26,13 @@ export class EcfDocumentIdempotencyService {
 
   // Internal recovery primitive only: no sender/worker or HTTP endpoint is enabled.
   async recordUnknownOutcome(companyId: string, documentId: string,
-    reason: "TIMEOUT" | "NETWORK_ERROR" | "PROCESS_RESTART" | "RESPONSE_PENDING_REVIEW") {
+    reason: "TIMEOUT" | "NETWORK_ERROR" | "PROCESS_RESTART" | "RESPONSE_PENDING_REVIEW",
+    guard?: (tx: Prisma.TransactionClient) => Promise<void>) {
     return this.prisma.$transaction(async (tx) => {
+      if (guard) {
+        await tx.$queryRaw`SELECT id FROM ecf_electronic_documents WHERE company_id = ${companyId}::uuid AND id = ${documentId}::uuid FOR UPDATE`;
+        await guard(tx);
+      }
       const changed = await tx.ecfElectronicDocument.updateMany({
         where: { id: documentId, companyId, status: "SEND_IN_PROGRESS" },
         data: { status: "UNKNOWN_RESULT", safeErrorCode: reason,
@@ -44,11 +51,13 @@ export class EcfDocumentIdempotencyService {
     });
   }
 
-  async prepareLocalDocument(input: PrepareEcfDocumentInput) {
+  async prepareLocalDocument(input: PrepareEcfDocumentInput, transaction?: Prisma.TransactionClient) {
+    // Old internal callers remain in the production namespace. The preparation
+    // orchestrator supplies SANDBOX explicitly; no legacy range is borrowed.
+    input = { ...input, environment: input.environment ?? "PRODUCTION" };
     const payloadFingerprint = fingerprint(input.document);
     const idempotencyKey = this.idempotencyKey(input);
-    try {
-      return await this.prisma.$transaction(async (tx) => {
+    const prepare = async (tx: Prisma.TransactionClient) => {
       const existing = await tx.ecfElectronicDocument.findUnique({
         where: {
           companyId_idempotencyKey: {
@@ -68,6 +77,7 @@ export class EcfDocumentIdempotencyService {
       const created = await tx.ecfElectronicDocument.create({
         data: {
           companyId: input.companyId,
+          environment: input.environment,
           documentType: input.document.type as EcfElectronicDocumentType,
           status: EcfElectronicDocumentStatus.LOCAL_VALIDATED,
           sourceType: input.sourceType,
@@ -107,7 +117,11 @@ export class EcfDocumentIdempotencyService {
         },
       });
       return created;
-      });
+    };
+    // The compound sale owns the transaction and rolls back every local write.
+    if (transaction) return prepare(transaction);
+    try {
+      return await this.prisma.$transaction(prepare);
     } catch (error) {
       // A competing transaction may have committed the same operation first.
       // Read only after our failed transaction has rolled back (PostgreSQL).
@@ -140,7 +154,8 @@ export class EcfDocumentIdempotencyService {
     if (!["E31", "E32", "E34"].includes(input.document.type)) {
       throw new BadRequestException("ECF_DOCUMENT_TYPE_INVALID");
     }
-    const prefix = `ecf:v2:${input.companyId.toLowerCase()}:${input.document.type}:`;
+    const domain = input.environment === "SANDBOX" ? "ecf:test:v3" : "ecf:v2";
+    const prefix = `${domain}:${input.companyId.toLowerCase()}:${input.document.type}:`;
     if (input.sourceId) {
       if (!uuid.test(input.sourceId) || !["SALE", "COTIZACION", "MANUAL"].includes(input.sourceType ?? "") || input.clientRequestId) {
         throw new BadRequestException("ECF_OPERATION_IDENTITY_INVALID");

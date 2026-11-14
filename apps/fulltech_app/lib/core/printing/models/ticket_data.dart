@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import '../../../features/ecf/ecf_print_document.dart';
 
 import '../../time/business_time.dart';
 import '../../../modules/ventas/sales_models.dart';
@@ -70,9 +71,11 @@ class TicketData {
     this.note,
     this.isCopy = false,
     this.customLines,
+    this.ecf,
   });
 
   final String ticketNumber;
+  final EcfPrintDocument? ecf;
   final DateTime dateTime;
   final List<TicketItemData> items;
   final double total;
@@ -111,14 +114,88 @@ class TicketData {
   double get resolvedSubtotal =>
       subtotal ?? items.fold(0.0, (sum, item) => sum + item.total);
 
+  /// Print the frozen fiscal document, including manual E34 notes, through
+  /// the same printer path as sales. No sale or inventory record is created.
+  factory TicketData.fromEcf(EcfPrintDocument document) {
+    if (document.lines.isEmpty ||
+        document.currency != 'DOP' ||
+        [
+          document.subtotal,
+          document.taxableBase,
+          document.exemptAmount,
+          document.itbisAmount,
+          document.discountAmount,
+        ].any((value) => value == null) ||
+        !document.matchesTotal(
+          document.lines.fold(0, (sum, line) => sum + line.total),
+        )) {
+      throw StateError(
+        'El detalle fiscal está incompleto o no coincide con el total. Revisa el comprobante.',
+      );
+    }
+    return TicketData(
+      ticketNumber: document.encf,
+      dateTime: DateTime.parse(document.issueDate),
+      ecf: document,
+      type: document.documentType == 'E34'
+          ? TicketType.credit
+          : TicketType.copy,
+      isCopy: true,
+      fiscalTaxEnabled: true,
+      taxIncluded: false,
+      ncf: document.encf,
+      fiscalVoucherType: document.documentType,
+      issuerName: document.issuerName,
+      issuerRnc: document.issuerRnc,
+      issuerAddress: document.issuerAddress,
+      client: ClientInfo(
+        name: document.buyerName ?? '',
+        document: document.buyerRnc ?? '',
+      ),
+      total: double.parse(document.total),
+      // Fiscal subtotal is net of discounts; the ticket has a separate
+      // negative discount row, so present its subtotal before that deduction.
+      subtotal:
+          double.parse(document.subtotal!) +
+          double.parse(document.discountAmount!),
+      taxableBase: double.parse(document.taxableBase!),
+      exemptAmount: double.parse(document.exemptAmount!),
+      itbis: double.parse(document.itbisAmount!),
+      discount: double.parse(document.discountAmount!),
+      productDiscount: double.parse(document.discountAmount!),
+      items: document.lines
+          .map(
+            (line) => TicketItemData(
+              name:
+                  '${line.taxExempt ? 'E ' : ''}${line.name}${line.unitOfMeasure == null ? '' : ' (UM ${line.unitOfMeasure})'}',
+              qty: line.quantity,
+              unitPrice: line.unitPrice,
+              total: line.total,
+              taxableBase: line.taxableBase,
+              exemptAmount: line.exemptAmount,
+              taxAmount: line.taxAmount,
+              discount: line.discount,
+              taxExempt: line.taxExempt,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
   factory TicketData.fromSale(
     SaleModel sale, {
     List<SaleItemModel>? items,
     bool isCopy = false,
     String? paymentMethod,
     String? cashierNameOverride,
+    EcfPrintDocument? ecf,
   }) {
     final List<SaleItemModel> saleItems = items ?? sale.items;
+    if (ecf != null && !ecf.matchesTotal(sale.totalSold)) {
+      throw StateError(
+        'El importe de la venta no coincide con su comprobante electrónico. Revisa el documento antes de imprimir.',
+      );
+    }
     final cashierName = resolveCashierDisplayName(
       cashierNameOverride: cashierNameOverride,
       saleCashierName: sale.userName,
@@ -131,13 +208,16 @@ class TicketData {
         .clamp(0, double.infinity)
         .toDouble();
     return TicketData(
+      ecf: ecf,
       ticketNumber: _invoiceNumber(sale.id),
       dateTime: toBusinessTime(sale.saleDate ?? DateTime.now()),
       items: saleItems
           .map(
             (item) => TicketItemData(
               code: item.productId,
-              name: item.productNameSnapshot,
+              name: ecf == null
+                  ? item.productNameSnapshot
+                  : '${item.taxExempt ? 'E ' : ''}${item.productNameSnapshot} (${item.unitNameSnapshot})',
               qty: item.qty,
               unitPrice: item.priceSoldUnit,
               total: item.subtotalSold,
@@ -161,18 +241,23 @@ class TicketData {
       productDiscount: productDiscount,
       generalDiscount: generalDiscount,
       taxIncluded: sale.fiscalPriceMode == 'TAX_INCLUDED',
-      ncf: sale.ncf,
-      fiscalVoucherType: sale.fiscalVoucherType,
-      ncfExpirationDate: sale.ncfExpirationDate,
-      issuerName: sale.issuerNameSnapshot,
-      issuerRnc: sale.issuerTaxIdSnapshot,
+      ncf: ecf?.encf ?? sale.ncf,
+      fiscalVoucherType: sale.isExplicitNormal ? null : ecf?.documentType ?? sale.fiscalVoucherType,
+      ncfExpirationDate: ecf != null
+          ? DateTime.tryParse(ecf.expiresAt ?? '')
+          : sale.ncfExpirationDate,
+      issuerName: ecf?.issuerName ?? sale.issuerNameSnapshot,
+      issuerRnc: ecf?.issuerRnc ?? sale.issuerTaxIdSnapshot,
       issuerPhone: sale.issuerPhoneSnapshot,
-      issuerAddress: sale.issuerAddressSnapshot,
+      issuerAddress: ecf?.issuerAddress ?? sale.issuerAddressSnapshot,
       client: ClientInfo(
         name:
-            sale.fiscalCustomerName ?? sale.customerName ?? 'Consumidor Final',
+            ecf?.buyerName ??
+            sale.fiscalCustomerName ??
+            sale.customerName ??
+            'Consumidor Final',
         phone: sale.customerPhoneSnapshot ?? sale.customerPhone ?? '',
-        document: sale.fiscalCustomerTaxId ?? '',
+        document: ecf?.buyerRnc ?? sale.fiscalCustomerTaxId ?? '',
       ),
       cashierName: cashierName,
       note: sale.note,

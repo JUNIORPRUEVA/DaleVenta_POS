@@ -1133,6 +1133,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     );
   }
 
+
   List<AppNavigationItem> pickItems(List<String> routes) {
     return [
       for (final route in routes)
@@ -1429,6 +1430,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       Routes.amonestaciones,
     ]);
 
+    addGroup('Facturación electrónica', AppIcons.receipt, [Routes.ecf]);
     return groups;
   }
 
@@ -1490,6 +1492,7 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     Routes.redTecnica,
   ]);
 
+  addGroup('Facturación electrónica', AppIcons.receipt, [Routes.ecf]);
   return groups;
 }
 

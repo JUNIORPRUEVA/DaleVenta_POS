@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import '../../../features/ecf/data/ecf_connection_guard.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -169,6 +170,8 @@ class VentasRepository {
             ?.toString(),
         operationCashSessionId: payload['operationCashSessionId']?.toString(),
         operationOccurredAt: payload['operationOccurredAt']?.toString(),
+        reason: payload['reason']?.toString(),
+        items: (payload['items'] as List?)?.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(),
       );
     });
     _syncQueue.registerHandler(_creditPaymentSyncType, (payload) async {
@@ -791,7 +794,11 @@ class VentasRepository {
     String id, {
     String? clientRequestId,
     String? originalSaleCashSessionId,
+    bool electronic = false,
+    String? reason,
+    List<Map<String, dynamic>>? items,
   }) async {
+    if (electronic) await ensureEcfConnection(_dio);
     final operationCashSessionId = await _resolveOriginCashSessionId();
     if (operationCashSessionId.isEmpty) {
       throw ApiException('Debes abrir caja antes de registrar una devolución.');
@@ -814,6 +821,8 @@ class VentasRepository {
       'operationCashSessionId': operationCashSessionId,
       'operationOccurredAt': operationOccurredAt.toIso8601String(),
       'paymentMethod': 'refund',
+      if (reason != null) 'reason': reason,
+      if (items != null) 'items': items,
     };
     try {
       return await _returnSaleRemote(
@@ -822,8 +831,11 @@ class VentasRepository {
         originalSaleCashSessionId: originalSession,
         operationCashSessionId: operationCashSessionId,
         operationOccurredAt: operationOccurredAt.toIso8601String(),
+        reason: reason,
+        items: items,
       );
     } on DioException catch (e) {
+      if (electronic && ecfCommunicationInterrupted(e)) throw EcfConnectionException(uncertain: true);
       if (_shouldQueueNetworkFailure(e)) {
         await _enqueuePendingSalesAction(
           id: '$_returnSaleSyncType:$requestId',
@@ -834,7 +846,7 @@ class VentasRepository {
           payload: payload,
           occurredAt: operationOccurredAt,
         );
-        return SaleReturnResult(sale: _minimalPendingSale('local_$requestId'));
+        return SaleReturnResult(sale: _minimalPendingSale('local_$requestId'), pendingSync: true);
       }
       throw ApiErrorMapper.fromDio(
         e,
@@ -850,10 +862,14 @@ class VentasRepository {
     String? originalSaleCashSessionId,
     String? operationCashSessionId,
     String? operationOccurredAt,
+    String? reason,
+    List<Map<String, dynamic>>? items,
   }) async {
     final res = await _dio.post(
       ApiRoutes.saleReturn(id),
       data: {
+        if (reason != null) 'reason': reason,
+        if (items != null) 'items': items,
         if ((clientRequestId ?? '').trim().isNotEmpty)
           'clientRequestId': clientRequestId!.trim(),
         if ((originalSaleCashSessionId ?? '').trim().isNotEmpty)
@@ -869,12 +885,22 @@ class VentasRepository {
       creditNote: EcfReturnCreditNote.fromJson(
         (res.data as Map)['ecfCreditNote'],
       ),
+      fiscalPending: (res.data as Map)['ecfCreditPending'] is Map,
+      fiscalPendingMessage: ((res.data as Map)['ecfCreditPending'] as Map?)?['message'] as String?,
     );
   }
 
   String _returnClientRequestId(String saleId) {
     final normalized = saleId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
     return 'return_req_${DateTime.now().microsecondsSinceEpoch}_$normalized';
+  }
+
+  Future<SaleReturnResult> retryRefundFiscal(String saleId, String refundId) async {
+    final response = await postEcf(_dio, '/sales/$saleId/refunds/$refundId/fiscal');
+    final data = (response.data as Map).cast<String, dynamic>();
+    return SaleReturnResult(sale: SaleModel.fromJson(data),
+      creditNote: EcfReturnCreditNote.fromJson(data['ecfCreditNote']), fiscalPending: data['ecfCreditPending'] is Map,
+      fiscalPendingMessage: (data['ecfCreditPending'] as Map?)?['message'] as String?);
   }
 
   Future<String> createInvoicePdfShareLink({
@@ -951,6 +977,7 @@ class VentasRepository {
     String? priceListId,
     bool priceListManualOverride = false,
     String? fiscalVoucherType,
+    String? sequenceDueDate,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
     // Valores fiscales AUTORITATIVOS del carrito, usados SOLO para el modelo
@@ -1022,12 +1049,17 @@ class VentasRepository {
         'globalDiscountAmount': globalDiscountAmount,
       if ((fiscalVoucherType ?? '').trim().isNotEmpty)
         'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
+      if (sequenceDueDate != null) 'sequenceDueDate': sequenceDueDate,
       if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)
         'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
       if ((fiscalCustomerName ?? '').trim().isNotEmpty)
         'fiscalCustomerName': fiscalCustomerName!.trim(),
       'items': capturedItems.map((item) => item.toPayload()).toList(),
     };
+
+    if (const ['E31', 'E32'].contains(fiscalVoucherType?.trim().toUpperCase())) {
+      await ensureEcfConnection(_dio);
+    }
 
     String? remoteAttemptId;
     String? remoteAttemptCompanyId;
@@ -1090,6 +1122,7 @@ class VentasRepository {
         priceListId: priceListId,
         priceListManualOverride: priceListManualOverride,
         fiscalVoucherType: fiscalVoucherType,
+        sequenceDueDate: sequenceDueDate,
         fiscalCustomerTaxId: fiscalCustomerTaxId,
         fiscalCustomerName: fiscalCustomerName,
         clientRequestId: requestId,
@@ -1106,6 +1139,9 @@ class VentasRepository {
       }
       return remoteSale;
     } on DioException catch (e) {
+      if (const ['E31', 'E32'].contains(fiscalVoucherType?.trim().toUpperCase()) && ecfCommunicationInterrupted(e)) {
+        throw EcfConnectionException(uncertain: true);
+      }
       if (!_shouldQueueNetworkFailure(e)) {
         // Only definitive validation/auth rejections release the attempt.
         // 409 and 5xx can require reconciliation with an existing remote sale.
@@ -1114,7 +1150,7 @@ class VentasRepository {
         }
         throw ApiErrorMapper.fromDio(e, fallbackMessage: 'No se pudo guardar la venta', dio: _dio);
       }
-      if ((fiscalVoucherType ?? '').trim().isNotEmpty) {
+      if ((fiscalVoucherType ?? '').trim().isNotEmpty && fiscalVoucherType?.trim().toUpperCase() != 'NORMAL') {
         throw ApiException(
           remoteAttemptId != null
               ? 'No pudimos confirmar si la factura fiscal se emitió. Revisa el historial con el encargado antes de volver a emitirla.'
@@ -1226,6 +1262,7 @@ class VentasRepository {
         optimisticExemptAmount: optimisticExemptAmount,
         optimisticDiscountAmount: optimisticDiscountAmount,
         optimisticFiscalTaxEnabled: optimisticFiscalTaxEnabled,
+        fiscalVoucherType: fiscalVoucherType,
         items: capturedItems,
         totalSold: expectedTotalSold,
       );
@@ -1247,6 +1284,7 @@ class VentasRepository {
     String? priceListId,
     bool priceListManualOverride = false,
     String? fiscalVoucherType,
+    String? sequenceDueDate,
     String? fiscalCustomerTaxId,
     String? fiscalCustomerName,
     String? clientRequestId,
@@ -1298,6 +1336,7 @@ class VentasRepository {
           'globalDiscountAmount': globalDiscountAmount,
         if ((fiscalVoucherType ?? '').trim().isNotEmpty)
           'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
+      if (sequenceDueDate != null) 'sequenceDueDate': sequenceDueDate,
         if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)
           'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
         if ((fiscalCustomerName ?? '').trim().isNotEmpty)
@@ -1443,6 +1482,7 @@ class VentasRepository {
     double? optimisticExemptAmount,
     double? optimisticDiscountAmount,
     bool? optimisticFiscalTaxEnabled,
+    String? fiscalVoucherType,
     required List<SaleDraftItem> items,
     double? totalSold,
   }) {
@@ -1505,6 +1545,7 @@ class VentasRepository {
           ? (balance > 0 ? 'open' : 'paid')
           : 'none',
       fiscalTaxEnabled: optimisticFiscalTaxEnabled ?? false,
+      fiscalVoucherType: fiscalVoucherType,
       taxableBase: optimisticTaxableBase ?? 0,
       taxAmount: optimisticTaxAmount ?? 0,
       exemptAmount: optimisticExemptAmount ?? 0,

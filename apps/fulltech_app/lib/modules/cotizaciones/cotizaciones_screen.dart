@@ -77,6 +77,7 @@ import '../../features/catalogo/data/catalog_repository.dart';
 import '../../features/catalogo/data/catalog_sync_utils.dart';
 import '../../features/catalogo/data/product_pages_loader.dart';
 import '../../features/ecf/data/ecf_repository.dart';
+import '../../features/ecf/data/ecf_connection_guard.dart';
 import '../../features/ecf/ecf_models.dart';
 import '../../features/account/apps_downloads_panel.dart';
 import '../../features/account/delete_account_dialog.dart';
@@ -2298,7 +2299,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   /// Tipos que se pueden ofrecer con la numeración autorizada de hoy.
   List<EcfPosFiscalMode> get _ecfModes =>
-      ecfPosFiscalModesFromCapabilities(_ecfCaps);
+      ecfPosCheckoutModesFromCapabilities(_ecfCaps);
 
   /// El receptor solo cuenta si hay un cliente seleccionado: el nombre fiscal
   /// puede haber quedado de un cliente anterior.
@@ -2352,6 +2353,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       _ecfModeChosenByUser = true;
       _selectedEcfMode = mode;
     });
+    _schedulePersistEditorDraft();
   }
 
   /// Comprobante propuesto para este cobro.
@@ -2546,6 +2548,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       editingCreatedAt: _editingCreatedAt,
       selectedCategories: _selectedCategories.toList(growable: false),
       searchQuery: _searchCtrl.text,
+      ecfMode: _selectedEcfMode?.code,
+      ecfModeChosenByUser: _ecfModeChosenByUser,
+      ecfSequenceDueDate: _ecfSequenceDueDate,
     );
   }
 
@@ -2572,6 +2577,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   void _replaceEditorStateFromDraft(_DesktopTicketDraft draft) {
+    _selectedEcfMode = ecfPosFiscalModeFromCode(draft.ecfMode);
+    _ecfModeChosenByUser = draft.ecfModeChosenByUser;
+    _ecfSequenceDueDate = draft.ecfSequenceDueDate;
     ++_wholesalePricingRequest;
     _wholesalePricingBusy = false;
     _manualPriceListId = draft.manualPriceListId;
@@ -7121,6 +7129,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         .getOrCreate();
     final bytes = await buildSaleInvoicePdf(
       sale: sale,
+      ecf: sale.requiresElectronicPrint
+          ? await ref.read(ecfRepositoryProvider).printForSale(sale.id,
+              requireElectronic: true) : null,
       company: company,
       warrantyPolicy: printerSettings.warrantyPolicy,
     );
@@ -7382,8 +7393,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   /// Confirma el comprobante elegido en el cobro, ya con la venta por cerrar.
   ///
-  /// El vencimiento de la secuencia (E31) y el motivo de la excepción (Normal)
-  /// se piden aquí, antes de crear la venta: si se cancelan, no se cobra.
+  /// El vencimiento E31 se confirma antes de crear la venta. Normal no pide
+  /// datos fiscales ni genera una operación e-CF.
   Future<bool> _confirmEcfModeForSale(EcfPosFiscalMode mode) async {
     if (mode.requiresBuyer &&
         !ecfBuyerIdentityComplete(_ecfBuyerTaxId, _ecfBuyerName)) {
@@ -7428,36 +7439,31 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   /// claridad y el comprobante se puede resolver desde Comprobantes
   /// electrónicos. Nunca se
   /// degrada la venta a «sin comprobante» por un error.
-  Future<String?> _applyEcfFiscalMode(
+  Future<({String title, String message})?> _applyEcfFiscalMode(
     SaleModel sale,
     EcfPosFiscalMode? mode,
+    String? sequenceDueDate,
   ) async {
-    if (mode == null) return null;
-    // Una venta local (sin conexión) todavía no tiene identidad en el servidor:
-    // su comprobante se prepara al sincronizar.
-    if (_isLocalSale(sale)) return null;
+    if (mode == null || mode == EcfPosFiscalMode.normal) return null;
+    // El modo electrónico nunca se convierte en una venta offline.
+    if (_isLocalSale(sale)) return (title: 'Comprobante pendiente', message: 'La factura electrónica requiere conexión y una venta confirmada.');
     final repository = ref.read(ecfRepositoryProvider);
     try {
-      // Venta «Normal»: es una venta interna. No produce comprobante, no se
-      // declara ante la DGII y no requiere motivo ni aviso.
-      if (mode == EcfPosFiscalMode.normal) return null;
-      // El POS cobra el total: no hay crédito, así que la forma de pago del
-      // contrato es 1 (contado) y el ingreso 1 (operaciones de venta).
+      // La forma de pago fiscal conserva si la venta fue a crédito o al contado.
       final outcome = mode == EcfPosFiscalMode.e31
           ? await repository.prepareFromSale(
               saleId: sale.id,
-              paymentType: 1,
+              paymentType: sale.paymentMethod == 'credit' ? 2 : 1,
               incomeType: 1,
-              sequenceDueDate: _ecfSequenceDueDate ?? '',
+              sequenceDueDate: sequenceDueDate ?? '',
             )
           : await repository.prepareConsumoFromSale(
               saleId: sale.id,
-              paymentType: 1,
+              paymentType: sale.paymentMethod == 'credit' ? 2 : 1,
               incomeType: 1,
             );
       if (!outcome.ok) {
-        return 'La venta se guardó, pero el comprobante ${mode.code} no se '
-            'pudo preparar: ${outcome.message}';
+        return (title: 'Comprobante pendiente', message: outcome.message);
       }
       // Emisión automática: si la empresa está autorizada a emitir, el
       // comprobante no se queda preparado. La compuerta fiscal la decide el
@@ -7466,14 +7472,22 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       if (_ecfCaps?.emissionPathAvailable == true) {
         final dispatch = await repository.dispatchDosa(outcome.documentId);
         if (!dispatch.ok) {
-          return 'El comprobante ${mode.code} quedó preparado pero no se pudo '
-              'enviar al proveedor: ${dispatch.message}';
+          return (title: 'Comprobante pendiente', message: dispatch.message);
         }
+        if (dispatch.result == 'FISCAL_RESULT_RECORDED' && dispatch.safeCode == 'ECF_DOSA_OBSERVED_CONDITIONALLY_ACCEPTED') {
+          return (title: 'Aceptación condicional', message: 'Revisa las observaciones en el historial fiscal.');
+        }
+        if (dispatch.result != 'FISCAL_RESULT_RECORDED') {
+          return (title: 'Seguimiento fiscal pendiente', message: 'Venta guardada. Verifica el resultado del comprobante en el historial.');
+        }
+      } else {
+        return (title: 'Comprobante preparado', message: 'El envío fiscal está pendiente. Puedes consultarlo en el historial.');
       }
       return null;
+    } on EcfConnectionException catch (error) {
+      return (title: error.noticeTitle, message: error.message);
     } catch (error) {
-      return 'La venta se guardó, pero el comprobante ${mode.code} no se pudo '
-          'preparar. Revisa su estado en Comprobantes electrónicos.';
+      return (title: 'Comprobante pendiente', message: 'Venta guardada. Revisa el estado fiscal en el historial.');
     }
   }
 
@@ -7520,7 +7534,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (!mounted) return;
 
     // El comprobante se confirma aquí, con la venta todavía sin crear: el
-    // vencimiento de la secuencia y el motivo de la excepción se piden antes y,
+    // vencimiento de la secuencia electrónica se pide antes y,
     // si se cancelan, no se cobra.
     if (_ecfActive) {
       final chosen = result.ecfMode ?? _ecfModeForCheckout();
@@ -7556,6 +7570,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _finalizeCotizacion({_CheckoutResult? checkout}) async {
     final trace = PerfTrace.begin('sale');
+    final fiscalMode = _ecfActive ? (checkout?.ecfMode ?? _ecfModeForCheckout()) : null;
+    final sequenceDueDate = _ecfSequenceDueDate;
     if (!_validateCheckoutReady()) {
       trace?.finish(outcome: 'validation_failed');
       return;
@@ -7644,18 +7660,21 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       // Comprobantes electrónicos.
       final ecfIssue = await _applyEcfFiscalMode(
         createdSale,
-        _ecfActive ? _selectedEcfMode : null,
+        fiscalMode,
+        sequenceDueDate,
       );
       if (!mounted) {
         trace?.finish(outcome: 'unmounted_after_ecf');
         return;
       }
       if (ecfIssue != null) {
-        _showSalesNotice(
-          title: 'Venta guardada · comprobante pendiente',
-          message: ecfIssue,
-          icon: Icons.receipt_long_outlined,
-          accent: const Color(0xFFF59E0B),
+        AppFeedback.showToast(
+          context,
+          title: ecfIssue.title,
+          body: ecfIssue.message,
+          kind: AppFeedbackKind.warning,
+          duration: const Duration(seconds: 4),
+          dedupeKey: 'ecf-pending',
         );
       }
 
@@ -7705,6 +7724,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
       trace?.finish(outcome: 'error');
       if (!mounted) return;
+      if (e is EcfConnectionException) {
+        AppFeedback.showToast(context,
+          title: e.noticeTitle,
+          body: e.message, kind: AppFeedbackKind.warning,
+          duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
+        return;
+      }
       _showSalesNotice(
         title: 'No se pudo completar',
         duration: const Duration(seconds: 15),
@@ -7790,7 +7816,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }) {
     // Tipo fiscal EFECTIVO: con impuestos/comprobantes OFF queda vacío → la
     // venta se guarda como Normal y NO se reserva ni consume NCF en el backend.
-    final voucherType = _effectiveFiscalVoucherType;
+    final mode = _ecfActive ? (checkout?.ecfMode ?? _ecfModeForCheckout()) : null;
+    final voucherType = mode?.code ?? '';
     final tax = _quoteTaxSummary;
     return ref
         .read(ventasRepositoryProvider)
@@ -7823,16 +7850,17 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           optimisticDiscountAmount: _effectiveGeneralDiscountAmount,
           optimisticFiscalTaxEnabled: tax.taxEnabled,
           fiscalVoucherType: voucherType.isEmpty ? null : voucherType,
+          sequenceDueDate: mode == EcfPosFiscalMode.e31 ? _ecfSequenceDueDate : null,
           fiscalCustomerTaxId: voucherType.isEmpty
               ? null
-              : _fiscalCustomerTaxId.trim().isEmpty
+              : (_ecfBuyerTaxId ?? '').trim().isEmpty
               ? null
-              : _fiscalCustomerTaxId.trim(),
+              : (_ecfBuyerTaxId ?? '').trim(),
           fiscalCustomerName: voucherType.isEmpty
               ? null
-              : _fiscalCustomerName.trim().isEmpty
+              : (_ecfBuyerName ?? '').trim().isEmpty
               ? null
-              : _fiscalCustomerName.trim(),
+              : (_ecfBuyerName ?? '').trim(),
           items: saleItems,
         );
   }
@@ -9244,7 +9272,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               money: _money,
                               priceListSelector:
                                   _buildWholesalePriceListSelector(),
-                              ecfSelector: _ecfActive
+                              ecfSelector: _ecfActive && _ecfCaps?.posReady == true
                                   ? _buildCartEcfSelector()
                                   : null,
                               searchClients: _searchBillingClients,
@@ -19335,6 +19363,9 @@ class _DesktopTicketDraft {
     required this.selectedClientName,
     required this.selectedClientPhone,
     this.manualPriceListId,
+    this.ecfMode,
+    this.ecfModeChosenByUser = false,
+    this.ecfSequenceDueDate,
     required this.note,
     required this.includeItbis,
     required this.fiscalVoucherType,
@@ -19406,6 +19437,9 @@ class _DesktopTicketDraft {
   final DateTime? editingCreatedAt;
   final List<String> selectedCategories;
   final String searchQuery;
+  final String? ecfMode;
+  final bool ecfModeChosenByUser;
+  final String? ecfSequenceDueDate;
 
   _DesktopTicketDraft copyWith({
     String? id,
@@ -19431,6 +19465,9 @@ class _DesktopTicketDraft {
     DateTime? editingCreatedAt,
     List<String>? selectedCategories,
     String? searchQuery,
+    String? ecfMode,
+    bool? ecfModeChosenByUser,
+    String? ecfSequenceDueDate,
   }) {
     return _DesktopTicketDraft(
       id: id ?? this.id,
@@ -19456,6 +19493,9 @@ class _DesktopTicketDraft {
       editingCreatedAt: editingCreatedAt ?? this.editingCreatedAt,
       selectedCategories: selectedCategories ?? this.selectedCategories,
       searchQuery: searchQuery ?? this.searchQuery,
+      ecfMode: ecfMode ?? this.ecfMode,
+      ecfModeChosenByUser: ecfModeChosenByUser ?? this.ecfModeChosenByUser,
+      ecfSequenceDueDate: ecfSequenceDueDate ?? this.ecfSequenceDueDate,
     );
   }
 
@@ -19492,6 +19532,9 @@ class _DesktopTicketDraft {
         : selectedCategories.first,
     'selectedCategories': selectedCategories,
     'searchQuery': searchQuery,
+    'ecfMode': ecfMode,
+    'ecfModeChosenByUser': ecfModeChosenByUser,
+    'ecfSequenceDueDate': ecfSequenceDueDate,
   };
 
   factory _DesktopTicketDraft.fromMap(Map<String, dynamic> map) {
@@ -19543,6 +19586,9 @@ class _DesktopTicketDraft {
                 selectedCategory,
             ],
       searchQuery: (map['searchQuery'] ?? '').toString(),
+      ecfMode: map['ecfMode']?.toString(),
+      ecfModeChosenByUser: map['ecfModeChosenByUser'] == true,
+      ecfSequenceDueDate: map['ecfSequenceDueDate']?.toString(),
     );
   }
 }

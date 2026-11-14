@@ -1,0 +1,140 @@
+{
+  "version": "fullpos.legacy-test-classification.v1",
+  "scope": {
+    "companyId": "165e3fca-6225-479b-8805-d2205f10536c",
+    "issuerRnc": "133080206",
+    "documentIds": [
+      "45386133-9bbf-48a1-bf0d-5943b5100b55",
+      "501d9c0b-a4fe-489a-bf7e-5185e7847daf",
+      "865834b2-9e9a-4b12-bb65-a216ec2db071",
+      "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "ee934377-c272-4489-94dc-e3bc32fe2900"
+    ]
+  },
+  "configuration": {
+    "environment": "SANDBOX",
+    "productionEnabled": false
+  },
+  "documents": [
+    {
+      "id": "45386133-9bbf-48a1-bf0d-5943b5100b55",
+      "type": "E32",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "b50d23d1d935ed1b4448e0662d0d1d0c7d3c2af6881d098bc2f6133e2b60782e",
+      "encf": "E320000000002",
+      "evidencePlan": "FULLTECH_TEST_20261112_SIX",
+      "evidenceSha256": "b153fba327d54403888bbcbba9339ed55c3320414e3359bd6efde7f9aad91834",
+      "allocationId": "47656e81-25eb-40c8-9c12-1dc6772947c8",
+      "outcome": "ACCEPTED",
+      "externalDocumentNumber": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "printStamp": null
+    },
+    {
+      "id": "501d9c0b-a4fe-489a-bf7e-5185e7847daf",
+      "type": "E34",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "cacaf43232140dd65c4a13bd5ed8018edf405a6658ec3802a4a220209a7aa7eb",
+      "encf": "E340000000001",
+      "evidencePlan": "FULLTECH_TEST_20261113_CONFIRMED",
+      "evidenceSha256": "81f4ad79db1f19817e49744a97b1d057d3bc73e2907450f720bca6a01e9c5c82",
+      "allocationId": "a14501d3-9d9d-4014-9a56-e759fe72d971",
+      "outcome": "ACCEPTED",
+      "externalDocumentNumber": null,
+      "originalDocumentId": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "printStamp": {
+        "qrUrl": "https://ecf.dgii.gov.do/testecf/consultatimbre?RNCEmisor=133080206&RncComprador=133306001&ENCF=E340000000001&FechaEmision=13-11-2026&MontoTotal=118.00&FechaFirma=13-11-2026%2008%3A46%3A17&CodigoSeguridad=a2tJ/S",
+        "securityCode": "a2tJ/S",
+        "signedAt": "13-11-2026 08:46:17"
+      }
+    },
+    {
+      "id": "865834b2-9e9a-4b12-bb65-a216ec2db071",
+      "type": "E32",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "de903bc282b5cc0358745f773c769f96fa9595f28b60dd10bc787af92ab6c4b5",
+      "encf": "E320000000001",
+      "evidencePlan": "FULLTECH_TEST_20261112_SIX",
+      "evidenceSha256": "9893d42ed355a1e24a2ab4f399b34e7ad96835701b211f5d594c3aa1ca5a3b67",
+      "allocationId": "58bc5fc9-4dc4-4c49-b7cc-7b9382944faa",
+      "outcome": "ACCEPTED",
+      "externalDocumentNumber": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "printStamp": null
+    },
+    {
+      "id": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "type": "E31",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "d8f67398b52b47ed50c60e785ece14a9cf22d61683512889338c8e65f309e2f4",
+      "encf": "E310000000002",
+      "evidencePlan": "FULLTECH_TEST_20261113_CONFIRMED",
+      "evidenceSha256": "371bedfad7c0161f06c872b3474bbf40eacf10960f4e7119c8ea7796da63af40",
+      "allocationId": "187133d6-06a6-4387-96f8-efca07afe306",
+      "outcome": "ACCEPTED",
+      "externalDocumentNumber": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "printStamp": {
+        "qrUrl": "https://ecf.dgii.gov.do/testecf/consultatimbre?RNCEmisor=133080206&RncComprador=133306001&ENCF=E310000000002&FechaEmision=13-11-2026&MontoTotal=118.00&FechaFirma=13-11-2026%2008%3A45%3A19&CodigoSeguridad=S9Qvrj",
+        "securityCode": "S9Qvrj",
+        "signedAt": "13-11-2026 08:45:19"
+      }
+    },
+    {
+      "id": "ee934377-c272-4489-94dc-e3bc32fe2900",
+      "type": "E31",
+      "status": "PROVIDER_REJECTED",
+      "fingerprint": "5140609cfb54670a6552160d1bd56f18d8ce74a8deca6efabe4f631f64942c78",
+      "encf": "E310000000001",
+      "evidencePlan": "FULLTECH_TEST_20261112_SIX",
+      "evidenceSha256": "b8a422b8b8f5293aca941077a45c2e5f2c6a2e60319e75824e41e1f6a4c52707",
+      "allocationId": "a3cbfd74-4b3c-4417-abe9-1bec73e8dc1a",
+      "outcome": "REJECTED",
+      "externalDocumentNumber": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "printStamp": null
+    }
+  ],
+  "ranges": [
+    {
+      "id": "11dd084d-bd8c-410e-b977-b1e8c193bdbb",
+      "documentType": "E34",
+      "startNumber": 1,
+      "nextNumber": 2,
+      "endNumber": 50,
+      "active": true
+    },
+    {
+      "id": "7ac6a9d6-e1b0-4f9a-a21f-908e182db1dd",
+      "documentType": "E31",
+      "startNumber": 1,
+      "nextNumber": 3,
+      "endNumber": 150,
+      "active": true
+    },
+    {
+      "id": "f9b5292d-c481-48a9-85f8-f707b00abb78",
+      "documentType": "E32",
+      "startNumber": 1,
+      "nextNumber": 3,
+      "endNumber": 1000,
+      "active": true
+    }
+  ],
+  "minimumTestNext": {
+    "E32": 3,
+    "E34": 2,
+    "E31": 3
+  },
+  "manifestHash": "f80ed9216653d714f9d79df7bc9259340a4a88e5079f009f204d5b8dab60cec9"
+}

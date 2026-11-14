@@ -54,6 +54,7 @@ uat("E-CF simulated dispatch — end to end (HTTP-reachable path)", () => {
     await prisma.company.create({
       data: { id: companyId, name, slug: `ecf-sim-${companyId}` },
     });
+    await prisma.ecfCompanyConfiguration.create({ data: { companyId, environment: "PRODUCTION" } });
     return {
       companyId,
       user: { id: actor, role: "ADMIN", companyId } as TenantUser,

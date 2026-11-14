@@ -1,3 +1,4 @@
+import { numberingEnvironment } from "./ecf-numbering-environment";
 import { Injectable } from "@nestjs/common";
 import { EcfEnvironment, Prisma } from "@prisma/client";
 import { requireTenant, type TenantUser } from "../../auth/tenant-context";
@@ -128,6 +129,7 @@ export class EcfPreparationService {
   async prepareFromSale(
     user: TenantUser,
     input: EcfPreparationInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<EcfFiscalResult<EcfPreparationResult>> {
     const companyId = requireTenant(user);
 
@@ -138,10 +140,12 @@ export class EcfPreparationService {
       );
     }
 
-    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType);
+    const db = transaction ?? this.prisma;
+    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType, transaction);
     if (!enabled.ok) return enabled;
+    const environment = await numberingEnvironment(db, companyId);
 
-    const built = await new EcfSaleFiscalAdapter(this.prisma).build(user, {
+    const built = await new EcfSaleFiscalAdapter(db).build(user, {
       saleId: input.saleId,
       documentType: input.documentType,
     });
@@ -151,9 +155,10 @@ export class EcfPreparationService {
     // Una venta no puede producir DOS comprobantes fiscales de tipos distintos.
     // La guarda es simétrica con la del flujo de consumo: sin ella, preparar E32
     // y después E31 dejaría dos borradores sobre la misma venta.
-    const conflicting = await this.prisma.ecfElectronicDocument.findFirst({
+    const conflicting = await db.ecfElectronicDocument.findFirst({
       where: {
         companyId,
+        environment,
         sourceType: "SALE",
         sourceId: built.value.saleId,
         documentType: { not: input.documentType },
@@ -170,7 +175,7 @@ export class EcfPreparationService {
     const metadata: EcfIssuanceMetadata = {
       paymentType: input.paymentType,
       ...(input.incomeType ? { incomeType: input.incomeType } : {}),
-      ...(input.sequenceDueDate ? { sequenceDueDate: input.sequenceDueDate } : {}),
+      ...(built.value.sequenceDueDate || input.sequenceDueDate ? { sequenceDueDate: built.value.sequenceDueDate ?? input.sequenceDueDate } : {}),
       ...(input.paymentDeadline ? { paymentDeadline: input.paymentDeadline } : {}),
     } as EcfIssuanceMetadata;
 
@@ -188,7 +193,7 @@ export class EcfPreparationService {
       // documento y, si los datos cambiaron, se bloquea por divergencia).
       sourceType: "SALE",
       sourceId: built.value.saleId,
-    });
+    }, transaction);
 
     const emission = (prepared.payloadSummary as Record<string, unknown> | null)
       ?.emission as { encf?: string } | undefined;
@@ -221,6 +226,7 @@ export class EcfPreparationService {
   async prepareConsumoFromSale(
     user: TenantUser,
     input: EcfConsumoPreparationInput,
+    transaction?: Prisma.TransactionClient,
   ): Promise<EcfFiscalResult<EcfConsumoPreparationResult>> {
     const companyId = requireTenant(user);
 
@@ -231,10 +237,12 @@ export class EcfPreparationService {
       );
     }
 
-    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType);
+    const db = transaction ?? this.prisma;
+    const enabled = await this.assertCompanyCanPrepare(user, companyId, input.documentType, transaction);
     if (!enabled.ok) return enabled;
+    const environment = await numberingEnvironment(db, companyId);
 
-    const built = await new EcfSaleFiscalAdapter(this.prisma).build(user, {
+    const built = await new EcfSaleFiscalAdapter(db).build(user, {
       saleId: input.saleId,
       documentType: input.documentType,
     });
@@ -243,9 +251,10 @@ export class EcfPreparationService {
     // Una venta no puede producir DOS comprobantes fiscales distintos. Si ya se
     // preparó como crédito fiscal, se rechaza en vez de dejar dos borradores:
     // el usuario debe decidir cuál corresponde antes de continuar.
-    const conflicting = await this.prisma.ecfElectronicDocument.findFirst({
+    const conflicting = await db.ecfElectronicDocument.findFirst({
       where: {
         companyId,
+        environment,
         sourceType: "SALE",
         sourceId: built.value.saleId,
         documentType: { not: "E32" },
@@ -280,7 +289,7 @@ export class EcfPreparationService {
       metadata,
       sourceType: "SALE",
       sourceId: built.value.saleId,
-    });
+    }, transaction);
 
     const emission = (prepared.payloadSummary as Record<string, unknown> | null)
       ?.emission as { encf?: string } | undefined;
@@ -333,13 +342,17 @@ export class EcfPreparationService {
         "La nota de crédito requiere un motivo de modificación.",
       );
     }
+    if (input.refundKind === "PARTIAL" && input.modificationCode === 1) {
+      return fiscalFailure("ECF_PARTIAL_CANNOT_CANCEL_FULL_INVOICE", "Una devolución parcial debe corregir montos; no puede anular todo el comprobante.");
+    }
 
     const enabled = await this.assertCompanyCanPrepare(user, companyId, "E34");
     if (!enabled.ok) return enabled;
+    const environment = await numberingEnvironment(this.prisma, companyId);
 
     // Siempre por empresa: un identificador ajeno se comporta como inexistente.
     const original = await this.prisma.ecfElectronicDocument.findFirst({
-      where: { id: input.originalDocumentId, companyId },
+      where: { id: input.originalDocumentId, companyId, environment },
     });
     if (!original || !["E31", "E32"].includes(original.documentType)) {
       return fiscalFailure(
@@ -438,6 +451,7 @@ export class EcfPreparationService {
         companyId_idempotencyKey: {
           companyId,
           idempotencyKey: idempotency.operationKeyFor({
+            environment,
             companyId,
             document,
             clientRequestId: input.clientRequestId,
@@ -516,8 +530,9 @@ export class EcfPreparationService {
     user: TenantUser,
     companyId: string,
     documentType: string,
+    transaction?: Prisma.TransactionClient,
   ): Promise<EcfFiscalResult<true>> {
-    const config = await this.prisma.ecfCompanyConfiguration.findUnique({
+    const config = await (transaction ?? this.prisma).ecfCompanyConfiguration.findUnique({
       where: { companyId },
     });
     if (!config?.enabled) {
@@ -526,13 +541,18 @@ export class EcfPreparationService {
         "La facturación electrónica está apagada para esta empresa.",
       );
     }
-    if (config.environment !== EcfEnvironment.SANDBOX) {
+    if (config.environment === EcfEnvironment.PRODUCTION) {
+      if (!config.productionEnabled || config.provider !== "DOSA" || config.certificationStatus !== "PRODUCTION_READY" ||
+          process.env.DOSA_PRODUCTION_EMISSION_ENABLED !== "true" || process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED !== "true") {
+        return fiscalFailure("ECF_PRODUCTION_BLOCKED", "La empresa todavía no está habilitada para preparar comprobantes productivos.");
+      }
+    } else if (config.environment !== EcfEnvironment.SANDBOX) {
       return fiscalFailure(
         "ECF_ENVIRONMENT_BLOCKED",
         "Solo el ambiente Sandbox está permitido.",
       );
     }
-    if (config.productionEnabled) {
+    if (config.environment === EcfEnvironment.SANDBOX && config.productionEnabled) {
       return fiscalFailure(
         "ECF_PRODUCTION_BLOCKED",
         "La empresa tiene habilitada la producción; esta operación no está autorizada.",

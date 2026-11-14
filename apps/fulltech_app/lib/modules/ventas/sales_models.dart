@@ -70,10 +70,13 @@ class EcfReturnCreditNote {
 /// Resultado de una devolución: la venta de reembolso y su nota de crédito
 /// electrónica cuando corresponde.
 class SaleReturnResult {
-  const SaleReturnResult({required this.sale, this.creditNote});
+  const SaleReturnResult({required this.sale, this.creditNote, this.pendingSync = false, this.fiscalPending = false, this.fiscalPendingMessage});
 
   final SaleModel sale;
   final EcfReturnCreditNote? creditNote;
+  final bool pendingSync;
+  final bool fiscalPending;
+  final String? fiscalPendingMessage;
 
   bool get hasCreditNote => creditNote?.hasEncf == true;
 }
@@ -335,6 +338,7 @@ class SaleModel {
   final double exemptAmount;
   final double discountAmount;
   final String? fiscalVoucherType;
+  final bool hasElectronicFiscalDocument;
   final String? ncf;
   final DateTime? ncfExpirationDate;
   final String? issuerNameSnapshot;
@@ -387,6 +391,7 @@ class SaleModel {
     this.exemptAmount = 0,
     this.discountAmount = 0,
     this.fiscalVoucherType,
+    this.hasElectronicFiscalDocument = false,
     this.ncf,
     this.ncfExpirationDate,
     this.issuerNameSnapshot,
@@ -486,6 +491,7 @@ class SaleModel {
       exemptAmount: _toDouble(json['exemptAmount']),
       discountAmount: _toDouble(json['discountAmount']),
       fiscalVoucherType: json['fiscalVoucherType']?.toString(),
+      hasElectronicFiscalDocument: json['hasElectronicFiscalDocument'] == true,
       ncf: json['ncf']?.toString(),
       ncfExpirationDate: json['ncfExpirationDate'] != null
           ? DateTime.tryParse(json['ncfExpirationDate'].toString())
@@ -509,6 +515,9 @@ class SaleModel {
   }
 
   bool get isRefundDocument => kind == 'refund';
+  bool get isExplicitNormal => fiscalVoucherType?.trim().toUpperCase() == 'NORMAL';
+  bool get requiresElectronicPrint => !isExplicitNormal && !isRefundDocument &&
+      (hasElectronicFiscalDocument || const {'E31', 'E32'}.contains(fiscalVoucherType));
   bool get isCancelled => returnStatus == 'CANCELLED' || isDeleted;
   bool get isReturned => returnStatus == 'RETURNED';
   bool get isPartiallyReturned => returnStatus == 'PARTIALLY_RETURNED';

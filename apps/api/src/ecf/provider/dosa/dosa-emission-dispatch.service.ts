@@ -4,11 +4,19 @@ import { PrismaService } from "../../../prisma/prisma.service";
 import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { fingerprint } from "../../documents/ecf-document-idempotency.service";
 import type { EcfDocumentType } from "../../fiscal-core/ecf-fiscal-document";
+import type { EcfFiscalDocument } from "../../fiscal-core/ecf-fiscal-document";
+import type { AlanubeDomPayloadDraft, EcfIssuanceMetadata } from "../../fiscal-core/alanube-dom.contract";
 import { mapEcfToDosaDraft } from "./dosa-ecf.mapper";
 import { DOSA_GATE_SUPPORTED_TYPES } from "./dosa-emission.gate";
 import { assessDosaProviderResponse } from "./dosa-provider-response";
 import { DosaEmissionService } from "./dosa-emission.service";
 import { DosaEmissionWire } from "./dosa-emission.wire";
+import { toDosaOutboundRequest } from "./dosa-request.serializer";
+import { dosaPrintStamp } from "./dosa-print-stamp";
+import { recordDosaConfirmedOutcome } from "./dosa-confirmed-outcome";
+import { freezeDosaHttpRequest } from "./dosa-emission.client";
+import { claimPersistedDosaRequest, assertDosaClaimOwner } from "./dosa-persisted-recovery";
+import { auditDosaSameRequestRecovery } from "./dosa-same-request-recovery";
 
 /**
  * ORQUESTADOR de emisión DOSA desde un comprobante electrónico de FullPOS.
@@ -25,7 +33,8 @@ import { DosaEmissionWire } from "./dosa-emission.wire";
  *  - reutiliza la autorización de `DosaEmissionService.authorizeForDispatch`
  *    (barrera del documento + compuerta fiscal + bóveda de credenciales);
  *  - reutiliza `DosaEmissionWire` + `EcfEmissionService.dispatchOnce` para
- *    reclamar la tentativa, enviar UNA sola vez y persistir evidencia y estado.
+ *    reclamar una tentativa lógica, enviar y persistir evidencia y estado;
+ *    la recuperación HTTP idéntica exige auditoría y autorización adicionales.
  *
  * Por qué el cuerpo se reconstruye aquí y no se reutiliza el preparado
  * -------------------------------------------------------------------
@@ -43,8 +52,9 @@ import { DosaEmissionWire } from "./dosa-emission.wire";
  *  - El RNC emisor es el de la empresa (el de la emisión preparada) y la
  *    barrera lo contrasta con el del cuerpo.
  *  - Sin autorización fiscal (compuerta) no se abre la bóveda ni se envía nada.
- *  - El estado final NUNCA es aceptación fiscal automática: `dispatchOnce` deja
- *    `HUMAN_REVIEW_REQUIRED` ante cualquier respuesta correlacionada.
+ *  - Por defecto conserva revisión humana. El contrato DOSA habilitado por el
+ *    operador permite registrar un resultado aceptado sólo con recibo, identidad
+ *    y sello de impresión correlacionados; no implica verificar una firma DGII.
  */
 @Injectable()
 export class DosaEmissionDispatchService {
@@ -62,7 +72,7 @@ export class DosaEmissionDispatchService {
    *   excepción para los bloqueos de negocio: se devuelve con su código para que
    *   la interfaz explique qué falta.
    */
-  async dispatch(user: TenantUser, documentId: string) {
+  async dispatch(user: TenantUser, documentId: string, recoverPersisted = false) {
     const companyId = requireTenant(user);
     if (!documentId || typeof documentId !== "string") {
       throw new ConflictException("ECF_DOSA_DISPATCH_DOCUMENT_REQUIRED");
@@ -76,7 +86,10 @@ export class DosaEmissionDispatchService {
         documentType: true,
         status: true,
         fiscalDocument: true,
+        payloadFingerprint: true,
         payloadSummary: true,
+        originalDocumentId: true,
+        environment: true,
       },
     });
     if (!document) {
@@ -84,6 +97,12 @@ export class DosaEmissionDispatchService {
     }
 
     const documentType = document.documentType as EcfDocumentType;
+    const environment = await this.dosa.environmentFor(companyId);
+    const expectedEnvironment = environment === "test" ? "SANDBOX" : environment === "production" ? "PRODUCTION" : null;
+    if (!environment || !expectedEnvironment || document.environment !== expectedEnvironment) {
+      return { ok: false as const, code: "ECF_DOSA_DISPATCH_ENVIRONMENT_MISMATCH",
+        blockingReasons: ["ECF_DOSA_DOCUMENT_ENVIRONMENT_UNCONFIRMED_OR_MISMATCHED"] };
+    }
     // Los mismos tipos que la compuerta fiscal admite: E31 (crédito fiscal),
     // E32 (consumo) y E34 (nota de crédito). La lista se reutiliza en vez de
     // repetirse para que despacho y compuerta no puedan divergir.
@@ -98,7 +117,7 @@ export class DosaEmissionDispatchService {
     const emission = (
       document.payloadSummary as Record<string, any> | null
     )?.emission as
-      | { encf?: string; senderTaxId?: string; payload?: unknown }
+      | { encf?: string; senderTaxId?: string; payload?: AlanubeDomPayloadDraft }
       | undefined;
     const encf = (emission?.encf ?? "").trim();
     const senderTaxId = (emission?.senderTaxId ?? "").trim();
@@ -112,9 +131,28 @@ export class DosaEmissionDispatchService {
 
     // El contrato del proveedor se construye desde el documento fiscal
     // persistido. Si el mapeador bloquea, no hay nada que enviar.
-    const mapped = mapEcfToDosaDraft(document.fiscalDocument as never, {
-      encf,
-    } as never);
+    const savedMetadata = emission?.payload?.idDoc;
+    if (!savedMetadata?.paymentType) {
+      return { ok: false as const, code: "ECF_DOSA_DISPATCH_METADATA_MISSING",
+        blockingReasons: ["ECF_DOSA_DISPATCH_PAYMENT_TYPE_MISSING"] };
+    }
+    const metadata: EcfIssuanceMetadata = {
+      ...savedMetadata, encf, paymentType: savedMetadata.paymentType,
+      modificationCode: emission?.payload?.informationReference?.modificationCode,
+    };
+    const fiscalDocument = document.fiscalDocument as EcfFiscalDocument;
+    if (documentType === "E34" && metadata.incomeType === undefined && document.originalDocumentId) {
+      const original = await this.prisma.ecfElectronicDocument.findFirst({
+        where: { companyId, id: document.originalDocumentId, environment: expectedEnvironment }, select: { payloadSummary: true },
+      });
+      const originalSummary = original?.payloadSummary as { emission?: { payload?: AlanubeDomPayloadDraft } } | null;
+      metadata.incomeType = originalSummary?.emission?.payload?.idDoc.incomeType;
+    }
+    if (documentType !== "E34" && !fiscalDocument.paymentForms?.length) {
+      return { ok: false as const, code: "ECF_DOSA_DISPATCH_METADATA_MISSING",
+        blockingReasons: ["ECF_DOSA_DISPATCH_PAYMENT_FORMS_MISSING"] };
+    }
+    const mapped = mapEcfToDosaDraft(fiscalDocument, metadata);
     if (!mapped.ok) {
       return {
         ok: false as const,
@@ -129,7 +167,7 @@ export class DosaEmissionDispatchService {
     // convierte a una empresa en emisora autorizada.
     const fiscal = await this.prisma.ecfCompanyConfiguration.findUnique({
       where: { companyId },
-      select: { enabled: true, provider: true, certificationStatus: true },
+      select: { enabled: true, provider: true, certificationStatus: true, environment: true },
     });
     if (!fiscal?.enabled) {
       return {
@@ -137,6 +175,10 @@ export class DosaEmissionDispatchService {
         code: "ECF_DOSA_DISPATCH_COMPANY_NOT_OPTED_IN",
         blockingReasons: ["ECF_DOSA_GATE_COMPANY_NOT_OPTED_IN"],
       };
+    }
+    if (fiscal.environment !== expectedEnvironment) {
+      return { ok: false as const, code: "ECF_DOSA_DISPATCH_ENVIRONMENT_MISMATCH",
+        blockingReasons: ["ECF_DOSA_COMPANY_ENVIRONMENT_MISMATCH"] };
     }
     if (fiscal.provider !== "DOSA") {
       return {
@@ -146,7 +188,6 @@ export class DosaEmissionDispatchService {
       };
     }
 
-    const environment = this.dosa.environment;
     // En TEST se admite la autorización de sandbox; en PRODUCCIÓN sólo la de
     // producción. Una empresa suspendida, bloqueada o sin certificar no emite.
     const authorizedStatuses: readonly string[] =
@@ -167,6 +208,7 @@ export class DosaEmissionDispatchService {
     // orden vive en `DosaEmissionService`, aquí no se duplica ni se reordena.
     const authorized = await this.dosa.authorizeForDispatch({
       companyId,
+      expectedEnvironment: environment,
       // El RNC de la empresa emisora, no una variable global ni el de FULLTECH.
       rnc: senderTaxId,
       documentType,
@@ -187,15 +229,40 @@ export class DosaEmissionDispatchService {
     // `dispatchOnce` reclama la tentativa con `FOR UPDATE`, garantiza una sola
     // tentativa `SEND_TO_PROVIDER` por documento y persiste estado, evidencia y
     // respuesta. El cable sólo traduce: no decide nada.
-    const wire = new DosaEmissionWire(authorized.client);
+    const outboundBody = toDosaOutboundRequest(body);
+    const frozen = freezeDosaHttpRequest(body);
+    const wire = new DosaEmissionWire(authorized.client, body, recoverPersisted ? undefined : (parentAttemptId, info) =>
+      auditDosaSameRequestRecovery(this.prisma, this.dosa, user, documentId, parentAttemptId, info, {
+        ...frozen, environment: authorized.environment, rnc: senderTaxId, documentType,
+        credentialFingerprint: authorized.credentialFingerprint, documentFingerprint: document.payloadFingerprint,
+        requestFingerprint: fingerprint(outboundBody),
+      }));
+    let confirmedFiscalOutcome = false;
     const outcome = await this.ecfEmission.dispatchOnce(
       user,
       documentId,
       wire,
       {
         // Huella del cuerpo REALMENTE enviado, no la del payload preparado.
-        body,
-        fingerprint: fingerprint(body),
+        body: outboundBody,
+        fingerprint: fingerprint(outboundBody),
+        recoverPersisted,
+        assertClaimOwner: (tx, attemptId) => assertDosaClaimOwner(tx, companyId, documentId, attemptId),
+        onClaim: (tx, claim) => claimPersistedDosaRequest(tx, user, documentId, claim.attemptId, claim.recovering, {
+          bodyHash: frozen.bodyHash, pathHash: frozen.pathHash, requestHash: frozen.requestHash,
+          ...{ destinationHash: authorized.client.persistedDispatchIdentity().destinationHash },
+          credentialFingerprint: authorized.credentialFingerprint, documentFingerprint: claim.documentFingerprint,
+          requestFingerprint: fingerprint(outboundBody), environment: expectedEnvironment,
+        }, authorized.client.persistedDispatchIdentity().leaseMs),
+        afterEvidence: async evidence => {
+          confirmedFiscalOutcome = await recordDosaConfirmedOutcome(this.prisma, user, documentId, evidence);
+        },
+        printStamp: (response, httpStatus) => dosaPrintStamp(response, {
+          allowContingency: httpStatus === 202,
+          encf, rnc: senderTaxId, environment: expectedEnvironment,
+          total: String(fiscalDocument.totals.total), buyerRnc: fiscalDocument.buyer?.taxId,
+          issueDate: fiscalDocument.issueDate,
+        }),
         // La respuesta de DOSA es plana (`trackId`, `encf`, `estado`,
         // `secuenciaUtilizada`) y no correlaciona con el evaluador común, que
         // está modelado sobre Alanube. Sin este evaluador, una respuesta
@@ -214,6 +281,8 @@ export class DosaEmissionDispatchService {
       environment: authorized.environment,
       encf,
       ...outcome,
+      result: confirmedFiscalOutcome ? "FISCAL_RESULT_RECORDED" as const : outcome.result,
+      confirmedFiscalOutcome,
     };
   }
 
@@ -227,6 +296,8 @@ export class DosaEmissionDispatchService {
    */
   async pending(user: TenantUser, limit = 25) {
     const companyId = requireTenant(user);
+    const environment = await this.dosa.environmentFor(companyId);
+    if (!environment) return { items: [] };
     const take = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 50) : 25;
     // Se pide de más y se filtra: el filtro «sin intento» no es una columna y
     // hacerlo con una subconsulta encarecería la lectura en el servidor de
@@ -234,6 +305,7 @@ export class DosaEmissionDispatchService {
     const candidates = await this.prisma.ecfElectronicDocument.findMany({
       where: {
         companyId,
+        environment: environment === "test" ? "SANDBOX" : "PRODUCTION",
         status: { in: ["LOCAL_VALIDATED", "READY_TO_SEND"] },
         externalProviderId: null,
       },

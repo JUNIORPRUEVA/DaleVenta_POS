@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../data/ecf_repository.dart';
 import '../../ecf_dosa_activation_models.dart';
 import 'ecf_flow_kit.dart';
+import '../ecf_production_activation_action.dart';
 
 /// Estado de la autorización de emisión, con lo que falta y un botón para
 /// reintentar.
@@ -136,14 +137,14 @@ class _EcfDosaActivationStatusState
       // El estado derivado habla de credenciales, no del ambiente en el que la
       // empresa va a facturar: con la empresa en sandbox, afirmar «en
       // producción» era una promesa falsa. Se afirma solo lo que consta.
-      return EcfInlineNote(
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [EcfInlineNote(
         tone: EcfTone.done,
         icon: Icons.verified_rounded,
         text: outcome.certificationStatus == 'PRODUCTION_READY'
             ? 'Autorizado para facturar electrónicamente.'
             : 'Autorizado para facturar electrónicamente en ambiente de '
                   'certificación.',
-      );
+      ), const EcfProductionActivationAction()]);
     }
 
     final pending = outcome.pendingMessages;

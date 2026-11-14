@@ -90,12 +90,19 @@ export type DosaEcfIdDoc = {
   fechaEmision: string;
   /** Solo E34: referencia al comprobante original. */
   tipoIngresos?: string;
-  tipoPago?: string;
+  tipoPago?: string | number;
+  indicadorMontoGravado?: number;
+  fechavencimientosecuencia?: string;
+  fechaLimitePago?: string;
+  tablaFormasPago?: { formaDePago: Array<{ formaPago: string; montoPago: string }> };
 };
 
 export type DosaEcfEmisor = {
   RNCEmisor: string;
   RazonSocialEmisor: string;
+  nombreComercial?: string;
+  direccionEmisor?: string;
+  fechaEmision?: string;
 };
 
 export type DosaEcfComprador = {

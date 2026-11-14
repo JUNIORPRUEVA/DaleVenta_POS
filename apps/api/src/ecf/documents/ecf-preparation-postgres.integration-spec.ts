@@ -63,6 +63,7 @@ uat("EcfPreparationService (venta → borrador e-CF) on PostgreSQL", () => {
       // La numeración exige autorización DGII declarada (fail-closed).
       await prisma.ecfDgiiAuthorizedSequence.create({
         data: {
+          environment: "SANDBOX",
           companyId,
           documentType: "E31",
           authorizationNumber: "SYNTH-E31",

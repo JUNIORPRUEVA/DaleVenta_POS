@@ -28,7 +28,7 @@ import {
   UpdateEcfDgiiRequirementDto,
   UploadEcfDgiiDocumentDto,
 } from "./dto/ecf-dgii.dto";
-import { UpdateEcfConfigDto, UpdateEcfOnboardingStepDto } from "./dto/ecf.dto";
+import { EnableEcfProductionDto, UpdateEcfConfigDto, UpdateEcfOnboardingStepDto } from "./dto/ecf.dto";
 import { ValidateEcfCertificateDto } from "./dto/ecf-certificate.dto";
 import { ResolveEcfAttemptDto } from "./dto/ecf-certification.dto";
 import {
@@ -78,6 +78,12 @@ export class EcfController {
     private readonly preparation: EcfPreparationMetadataService,
     private readonly certificationActivation: EcfCertificationActivationService,
   ) {}
+
+  @Post("production/enable")
+  @Permissions("manageEcfConfig")
+  enableProduction(@Req() req: Request, @Body() dto: EnableEcfProductionDto) {
+    return this.ecf.enableProduction(req.user as TenantUser, dto.expectedCompanyId);
+  }
 
   /**
    * Concesiones de asistencia que la EMPRESA otorga a FULLTECH.

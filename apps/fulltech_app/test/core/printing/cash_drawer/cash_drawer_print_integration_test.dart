@@ -13,9 +13,26 @@ import 'package:daleventa_pos/features/settings/data/printer_settings_repository
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
+import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('legacy ordinary receipt with ITBIS prints offline without reading e-CF', () async {
+    final ticketRaw = _RecordingRawTransport();
+    final container = _container(
+      settings: const PrinterSettingsModel(selectedPrinterName: 'POS-80', windowsPrinterMode: WindowsPrinterMode.escPosRaw),
+      ticketRaw: ticketRaw, drawerRaw: _RecordingRawTransport(),
+    );
+    addTearDown(container.dispose);
+    final result = await container.read(unifiedTicketPrinterProvider).printSaleTicket(
+      sale: _cashSale(taxedLegacy: true),
+    );
+    expect(result.success, isTrue);
+    expect(ticketRaw.calls, hasLength(1));
+    expect(String.fromCharCodes(ticketRaw.calls.single.bytes), contains('ITBIS'));
+  });
 
   test(
     'drawer disabled: eligible cash print does NOT trigger any drawer command',
@@ -260,8 +277,8 @@ void main() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-SaleModel _cashSale() {
-  const item = SaleItemModel(
+SaleModel _cashSale({bool taxedLegacy = false}) {
+  final item = SaleItemModel(
     id: 'item-1',
     productId: 'p-1',
     productNameSnapshot: 'CABLE USB',
@@ -269,7 +286,7 @@ SaleModel _cashSale() {
     qty: 1,
     priceSoldUnit: 100,
     costUnitSnapshot: 50,
-    subtotalSold: 100,
+    subtotalSold: taxedLegacy ? 118 : 100,
     subtotalCost: 50,
     profit: 50,
     category: null,
@@ -278,7 +295,10 @@ SaleModel _cashSale() {
     unitSymbolSnapshot: 'u',
   );
   return SaleModel(
-    id: 'sale-81472316',
+    id: taxedLegacy ? '00000000-0000-4000-8000-000000000001' : 'sale-81472316',
+    fiscalTaxEnabled: taxedLegacy,
+    taxableBase: taxedLegacy ? 100 : 0,
+    taxAmount: taxedLegacy ? 18 : 0,
     userId: 'u1',
     userName: 'Cajero Uno',
     customerId: null,
@@ -286,12 +306,12 @@ SaleModel _cashSale() {
     customerPhone: null,
     saleDate: DateTime(2026, 8, 20, 19, 30),
     note: null,
-    totalSold: 100,
+    totalSold: taxedLegacy ? 118 : 100,
     totalCost: 50,
     totalProfit: 50,
     commissionAmount: 0,
     paymentMethod: 'cash',
-    paymentCashAmount: 100,
+    paymentCashAmount: taxedLegacy ? 118 : 100,
     paymentTransferAmount: 0,
     creditAmount: 0,
     creditPaidAmount: 0,
@@ -299,7 +319,7 @@ SaleModel _cashSale() {
     creditStatus: 'none',
     isDeleted: false,
     deletedAt: null,
-    items: const [item],
+    items: [item],
   );
 }
 
@@ -310,6 +330,7 @@ ProviderContainer _container({
 }) {
   return ProviderContainer(
     overrides: [
+      ecfRepositoryProvider.overrideWith((_) => _NeverReadFiscalRepository()),
       companyInfoRepositoryProvider.overrideWith(
         _FakeCompanyInfoRepository.new,
       ),
@@ -337,6 +358,14 @@ ProviderContainer _container({
       ),
     ],
   );
+}
+
+class _NeverReadFiscalRepository extends EcfRepository {
+  _NeverReadFiscalRepository() : super(Dio());
+  @override
+  Future<Never> printForSale(String saleId, {bool requireElectronic = false}) async {
+    throw StateError('Ordinary receipt attempted an electronic network lookup.');
+  }
 }
 
 class _FakeCompanyInfoRepository extends CompanyInfoRepository {

@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import 'ecf_credit_note_action.dart';
+import 'ecf_production_activation_action.dart';
 
 /// Estado técnico del módulo e-CF.
 ///
@@ -73,6 +74,7 @@ class EcfConfigPage extends ConsumerWidget {
                     ],
                   ),
                 ),
+                const EcfProductionActivationAction(),
                 if (caps != null) ...[
                   const SizedBox(height: 10),
                   _Panel(
@@ -438,6 +440,15 @@ class _EcfSalesWithoutDocumentSectionState
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (value)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Se habilitará la opción adicional «Vender sin comprobante» '
+                    'y quedará seleccionada por defecto en las nuevas ventas. '
+                    'La empresa asume la responsabilidad de su uso.',
+                  ),
+                ),
               if (value && warning.isNotEmpty)
                 Container(
                   width: double.infinity,
@@ -512,8 +523,8 @@ class _EcfSalesWithoutDocumentSectionState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _SectionTitle('Ventas sin comprobante electrónico'),
-                    if (!showsWarning) ...[
+                    const _SectionTitle('Vender sin comprobante'),
+                    if (!widget.embedded && !showsWarning) ...[
                       const SizedBox(height: 2),
                       const _Muted(
                         'Actívala cuando necesites cerrar ventas sin '
@@ -537,7 +548,7 @@ class _EcfSalesWithoutDocumentSectionState
                 Switch(value: enabled, onChanged: canManage ? _toggle : null),
             ],
           ),
-          if (enabled && warning.isNotEmpty) ...[
+          if (!widget.embedded && enabled && warning.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
               width: double.infinity,

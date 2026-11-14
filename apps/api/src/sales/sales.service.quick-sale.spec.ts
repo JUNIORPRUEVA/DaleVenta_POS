@@ -176,6 +176,7 @@ function buildCancelHarness(sale: ReturnType<typeof quickSale>) {
     },
     $transaction: jest.fn((callback: any) =>
       callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
         sale: { findFirst: jest.fn().mockResolvedValue(sale), updateMany },
         ...emptyReturnMaps(),
       }),
@@ -231,6 +232,7 @@ function buildReturnHarness(
     cotizacion: { findFirst: jest.fn() },
     $transaction: jest.fn((callback: any) =>
       callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
         $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
         sale: {
           findFirst: jest.fn().mockResolvedValue(sale),
@@ -284,6 +286,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
       },
       $transaction: jest.fn((callback: any) =>
         callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
           sale: {
             create: jest.fn().mockResolvedValue({
               id: "sale-1",
@@ -492,6 +495,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
       },
       $transaction: jest.fn((callback: any) =>
         callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
           sale: { findFirst: jest.fn().mockResolvedValue(sale), updateMany },
           saleItem: {
             groupBy: jest.fn().mockResolvedValue([
@@ -540,6 +544,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
       },
       $transaction: jest.fn((callback: any) =>
         callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
           sale: { findFirst: jest.fn().mockResolvedValue(sale) },
           saleItem: {
             groupBy: jest.fn().mockResolvedValue([
@@ -571,7 +576,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
   });
 
   it("reuses the same refund on a repeated clientRequestId", async () => {
-    const existingRefund = { id: "refund-existing", kind: "refund", items: [] };
+    const existingRefund = { refundedSaleId: "sale-quick", id: "refund-existing", kind: "refund", items: [] };
     const { service, prisma, refundCreate } = buildReturnHarness(quickSale(), {
       existingRefund,
     });
@@ -686,6 +691,7 @@ describe("SalesService quick sale (sin inventario) cancel/return", () => {
       },
       $transaction: jest.fn((callback: any) =>
         callback({
+          ecfElectronicDocument: { findFirst: jest.fn().mockResolvedValue(null) },
           $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
           sale: { findFirst: jest.fn().mockResolvedValue(null) },
           ...emptyReturnMaps(),

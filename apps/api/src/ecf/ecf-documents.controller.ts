@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { Request } from "express";
 import { Permissions } from "../auth/roles.decorator";
@@ -6,6 +6,7 @@ import { RolesGuard } from "../auth/roles.guard";
 import type { TenantUser } from "../auth/tenant-context";
 import {
   ConfirmEcfLineClassificationDto,
+  EcfSalesFiscalQueryDto,
   DeclareEcfAuthorizedSequenceDto,
   ListEcfDocumentsQueryDto,
   PrepareEcfConsumoDto,
@@ -177,6 +178,22 @@ export class EcfDocumentsController {
     return this.dosaDispatch.dispatch(req.user as TenantUser, id);
   }
 
+  @Post("documents/:id/recover-dosa")
+  @Permissions("prepareEcfDocuments")
+  recoverDosa(@Req() req: Request, @Param("id") id: string) {
+    return this.dosaDispatch.dispatch(req.user as TenantUser, id, true);
+  }
+
+  @Get("sales/:saleId/print")
+  printForSale(@Req() req: Request, @Param("saleId", ParseUUIDPipe) saleId: string) {
+    return this.documents.printForSale(req.user as TenantUser, saleId);
+  }
+
+  @Get("sales/fiscal")
+  salesFiscal(@Req() req: Request, @Query() query: EcfSalesFiscalQueryDto) {
+    return this.documents.salesFiscal(req.user as TenantUser, query.ids);
+  }
+
   @Get("documents")
   @Permissions("viewEcfDocuments")
   list(@Req() req: Request, @Query() query: ListEcfDocumentsQueryDto) {
@@ -221,6 +238,12 @@ export class EcfDocumentsController {
   @Permissions("viewEcfDocuments")
   detail(@Req() req: Request, @Param("id") id: string) {
     return this.documents.detail(req.user as TenantUser, id);
+  }
+
+  @Get("documents/:id/print")
+  @Permissions("viewEcfDocuments")
+  printDocument(@Req() req: Request, @Param("id", ParseUUIDPipe) id: string) {
+    return this.documents.printDocument(req.user as TenantUser, id);
   }
 
   @Get("sequences")

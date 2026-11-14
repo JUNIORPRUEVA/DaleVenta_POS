@@ -16,6 +16,11 @@ import {
 } from "@prisma/client";
 import { EcfSecretReferenceService } from "./ecf-secret-reference.service";
 import { EcfService } from "./ecf.service";
+import { TaxService } from "../tax/tax.service";
+
+function taxServiceMock() {
+  return { ensureDefaultTaxIfNeeded: jest.fn().mockResolvedValue({}) } as unknown as TaxService;
+}
 
 const companyId = "00000000-0000-4000-8000-000000000001";
 const otherCompanyId = "00000000-0000-4000-8000-000000000002";
@@ -67,6 +72,7 @@ function step(overrides: Record<string, unknown> = {}) {
 function createPrismaMock() {
   const prisma = {
     company: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findUnique: jest.fn().mockResolvedValue({ id: companyId }),
     },
     ecfCompanyConfiguration: {
@@ -101,16 +107,49 @@ function createPrismaMock() {
     ecfDosaWebhookEvent: {
       count: jest.fn().mockResolvedValue(0),
     },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   return prisma;
 }
 
 describe("EcfService", () => {
+  it("cannot activate another company after the client confirmation context changed", async () => {
+    const prisma = createPrismaMock();
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
+    await expect(service.enableProduction(user, otherCompanyId)).rejects.toThrow("ECF_PRODUCTION_COMPANY_CONTEXT_CHANGED");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale SANDBOX edit after the company was activated in production", async () => {
+    const prisma = createPrismaMock();
+    prisma.ecfCompanyConfiguration.findUnique
+      .mockResolvedValueOnce(config())
+      .mockResolvedValueOnce(config({ environment: EcfEnvironment.PRODUCTION, productionEnabled: true }));
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
+    await expect(service.updateConfig(user, { environment: EcfEnvironment.SANDBOX }))
+      .rejects.toThrow("ECF_PRODUCTION_ENVIRONMENT_CHANGE_REQUIRES_REVIEW");
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.ecfCompanyConfiguration.update).not.toHaveBeenCalled();
+  });
+
+  it("enables taxes atomically for the authenticated company and preserves a configured rate", async () => {
+    const prisma = createPrismaMock();
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
+    await service.updateConfig(user, { enabled: true });
+    expect(prisma.company.updateMany.mock.calls).toEqual([
+      [{ where: { id: companyId }, data: { taxEnabled: true } }],
+    ]);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    prisma.company.updateMany.mockClear();
+    await service.updateConfig(user, { enabled: false });
+    expect(prisma.company.updateMany).not.toHaveBeenCalled();
+  });
+
   it("creates an e-CF config disabled by default without touching fiscal settings", async () => {
     const prisma = createPrismaMock();
     prisma.ecfCompanyConfiguration.findUnique.mockResolvedValueOnce(null);
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     const result = await service.getConfig(user);
 
@@ -139,7 +178,7 @@ describe("EcfService", () => {
 
   it("uses the authenticated tenant company when updating config", async () => {
     const prisma = createPrismaMock();
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await service.updateConfig({ ...user, companyId: otherCompanyId }, { enabled: true });
 
@@ -163,7 +202,7 @@ describe("EcfService", () => {
         certificateSecretRef: "uat://alanube/cert-ref",
       }),
     );
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     const result = await service.updateConfig(user, { enabled: true });
 
@@ -181,7 +220,7 @@ describe("EcfService", () => {
 
   it("rejects production activation in this phase", async () => {
     const prisma = createPrismaMock();
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(
       service.updateConfig(user, { environment: EcfEnvironment.PRODUCTION }),
@@ -190,7 +229,7 @@ describe("EcfService", () => {
 
   it("accepts DOSA as the provider and rejects the legacy provider", async () => {
     const prisma = createPrismaMock();
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await service.updateConfig(user, { provider: EcfProvider.DOSA });
     expect(prisma.ecfCompanyConfiguration.update).toHaveBeenCalledWith(
@@ -206,7 +245,7 @@ describe("EcfService", () => {
 
   it("rejects raw-looking secrets and accepts only secret references", async () => {
     const prisma = createPrismaMock();
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(
       service.updateConfig(user, {
@@ -228,7 +267,7 @@ describe("EcfService", () => {
 
   it("does not confirm a step without protected evidence", async () => {
     const prisma = createPrismaMock();
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(
       service.updateStep(user, "requirements", {
@@ -266,7 +305,7 @@ describe("EcfService", () => {
         createdAt: new Date("2026-10-14T00:00:00.000Z"),
       },
     ]);
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     const result = await service.getOnboarding(user);
 
@@ -298,7 +337,7 @@ describe("EcfService", () => {
         createdAt: new Date("2026-10-14T00:00:00.000Z"),
       },
     ]);
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     const result = await service.listAudit(user);
 
@@ -316,7 +355,7 @@ describe("EcfService", () => {
         evidenceId: "00000000-0000-4000-8000-000000000401",
       }),
     );
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(
       service.updateStep(user, "production_enablement", {
@@ -328,7 +367,7 @@ describe("EcfService", () => {
   it("rejects evidence ids from another company", async () => {
     const prisma = createPrismaMock();
     prisma.ecfEvidence.findFirst.mockResolvedValueOnce(null);
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(
       service.updateStep(user, "requirements", {
@@ -347,7 +386,7 @@ describe("EcfService", () => {
   it("fails explicitly when a concurrent request updates the same step first", async () => {
     const prisma = createPrismaMock();
     prisma.ecfOnboardingStep.updateMany.mockResolvedValueOnce({ count: 0 });
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(
       service.updateStep(user, "requirements", {
@@ -359,7 +398,7 @@ describe("EcfService", () => {
   it("returns not found when the tenant company does not exist", async () => {
     const prisma = createPrismaMock();
     prisma.company.findUnique.mockResolvedValueOnce(null);
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await expect(service.getConfig(user)).rejects.toBeInstanceOf(
       NotFoundException,
@@ -374,7 +413,7 @@ describe("EcfService", () => {
     prisma.ecfCompanyConfiguration.update.mockResolvedValueOnce(
       config({ certificateSecretRef: "uat://new/cert" }),
     );
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await service.updateConfig(user, {
       certificateSecretRef: "uat://new/cert",
@@ -399,7 +438,7 @@ describe("EcfService", () => {
 
   it("writes evidence audit snapshots without storage references", async () => {
     const prisma = createPrismaMock();
-    const service = new EcfService(prisma as any, new EcfSecretReferenceService());
+    const service = new EcfService(prisma as any, new EcfSecretReferenceService(), taxServiceMock());
 
     await service.updateStep(user, "requirements", {
       status: EcfOnboardingStepStatus.COMPLETED,

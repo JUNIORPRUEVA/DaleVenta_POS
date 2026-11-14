@@ -312,6 +312,25 @@ class TicketRenderer {
       }
     }
 
+    if (data.ecf != null) {
+      blank();
+      for (final value in data.ecf!.identityLines) {
+        for (final line in ReceiptTextUtils.wrap(value, width)) {
+          add(line);
+        }
+      }
+      if (data.ecf!.hasStamp) {
+        add('[QR DE CONSULTA DGII]');
+        for (final value in [
+          'Codigo de seguridad: ${data.ecf!.securityCode}',
+          'Fecha de firma: ${data.ecf!.signedAt}',
+        ]) {
+          for (final line in ReceiptTextUtils.wrap(value, width)) {
+            add(line);
+          }
+        }
+      }
+    }
     final bottomBlanks = compact58 ? 0 : layout.bottomMargin ~/ 4;
     for (var i = 0; i < bottomBlanks; i++) {
       blank();

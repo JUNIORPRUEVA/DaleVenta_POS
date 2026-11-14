@@ -1,0 +1,1961 @@
+{
+  "baseCommit": "cada11f8bb3bb2e749810c3d9213bb84f9471d44",
+  "branch": "agent/ecf-predeploy-20261113",
+  "counts": {
+    "total": 246,
+    "received": 218,
+    "audit": 28
+  },
+  "notes": [
+    "The received-work label is attribution, not a claim that every candidate byte was authored in this audit.",
+    "Original218 files were verified unchanged in the source checkout.",
+    "Candidate changes preserve current production-main behavior and include the audit fixes.",
+    "Secrets, database dumps, image archives, build output and dependencies are excluded."
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/multi-tenant-security.yml",
+      "origin": "predeploy_audit",
+      "bytes": 5158,
+      "sha256": "daaa57cd24e171083b85a241cdeba770e7fc7e319dc404355f90afe57af9ecfc",
+      "gitIndexObject": "713df2aa393dfd32c0d5ed7e61249b4010431d6d"
+    },
+    {
+      "path": "Dockerfile.public-web",
+      "origin": "predeploy_audit",
+      "bytes": 7787,
+      "sha256": "7fff7463c9350c2a79fda3b3090a056c17da9994fbf906c7674296b183cced19",
+      "gitIndexObject": "751df0e115f99c992addf49a996fe3d401446ac3"
+    },
+    {
+      "path": "apps/api/Dockerfile",
+      "origin": "predeploy_audit",
+      "bytes": 1406,
+      "sha256": "47363673560878ede127a994aaf5a06449a789c3a45d685abb57d5965e1544f3",
+      "gitIndexObject": "56504e9bfbed9bb712c97e56ed1bee7fa41be272"
+    },
+    {
+      "path": "apps/api/docs/ENDPOINT_TENANT_SECURITY_MATRIX.md",
+      "origin": "predeploy_audit",
+      "bytes": 108139,
+      "sha256": "85134c5fd176bba8bf742017fe91965e2615bd896da674b135e73a41cdfe1180",
+      "gitIndexObject": "60c2fd242594c9e0c4550f6f725b098d6c6d72ff"
+    },
+    {
+      "path": "apps/api/docs/TENANT_DATA_MODEL_INVENTORY.md",
+      "origin": "predeploy_audit",
+      "bytes": 28250,
+      "sha256": "d6fcea6f3ffa778ef01915b623c0348ce86ac9bf6e9574710cfd2d1a6007b77b",
+      "gitIndexObject": "31b4042d66b50c7c3e2f46a9fa226a4b500fff21"
+    },
+    {
+      "path": "apps/api/docs/UNSAFE_TENANT_QUERY_AUDIT.md",
+      "origin": "predeploy_audit",
+      "bytes": 41650,
+      "sha256": "9a1e53d84ea856fecc10514047f73ccd4ffeffc401d3d8a12eb6685930794b73",
+      "gitIndexObject": "630acd6919b740e8c80786ea47f24ba1ec38236a"
+    },
+    {
+      "path": "apps/api/docs/endpoint-tenant-security-matrix.json",
+      "origin": "predeploy_audit",
+      "bytes": 222160,
+      "sha256": "8b83479ea7e77d155a6bfd89ebd828ef61f1405f79171b2ba8b1ca656c6dcb8b",
+      "gitIndexObject": "a74ec89cc9a0bf431851b66de2a1347698f10e49"
+    },
+    {
+      "path": "apps/api/docs/tenant-data-model-inventory.json",
+      "origin": "predeploy_audit",
+      "bytes": 134181,
+      "sha256": "cc92d03adb259b5d808eb82db24e447eef9069711d28c9d7e5af4f5e1998b0e5",
+      "gitIndexObject": "d436c0b028bc7ea753c1d0c25dd74a93c8841fee"
+    },
+    {
+      "path": "apps/api/docs/unsafe-tenant-query-audit.json",
+      "origin": "predeploy_audit",
+      "bytes": 67596,
+      "sha256": "074b27046a0cf1c889aa142835cd728e348b9d315ff86f94f3a519740300c6ba",
+      "gitIndexObject": "4a128f0cab512880063741c18d6ef7467df665b9"
+    },
+    {
+      "path": "apps/api/package-lock.json",
+      "origin": "predeploy_audit",
+      "bytes": 379121,
+      "sha256": "3dbc002fc9f17c332f574f2e46bc290a53bf6c58d7ceda6742b49ef0cc115850",
+      "gitIndexObject": "7d81a451ff2b1cdf3f43f85a06817cf7e245d151"
+    },
+    {
+      "path": "apps/api/package.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6732,
+      "sha256": "52157bc32c2e3e49c69a4bb2e2845b1fec8edd987559a1cd2ba8d44f1dd43073",
+      "originalSnapshotSha256": "adab20a514f086fa2e5c8e52e5ca3db5fb671cd1e33a1d5128b17f9d954ed404",
+      "gitIndexObject": "2b03f6d23c705fd17a7c7c7461d51ccde8ffe54c"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20261113040000_ecf_numbering_environment/migration.sql",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2608,
+      "sha256": "1523a7fd7199627535a1408197e922d6f0761d86872d2acf0ec0f081811691d6",
+      "originalSnapshotSha256": "1523a7fd7199627535a1408197e922d6f0761d86872d2acf0ec0f081811691d6",
+      "gitIndexObject": "36dae596d00ec03ab3469f5155c2772cbe4befa6"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20261113050000_ecf_reviewed_legacy_test_classification/migration.sql",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1485,
+      "sha256": "649d2845b063f1e5eb5f7db669afbd73fd545d8e934060e80ff22a3be5920c4f",
+      "originalSnapshotSha256": "649d2845b063f1e5eb5f7db669afbd73fd545d8e934060e80ff22a3be5920c4f",
+      "gitIndexObject": "3551c03daa51d50f86b2b61bb386e90d1e29cd99"
+    },
+    {
+      "path": "apps/api/prisma/migrations/20261113060000_ecf_public_print_stamp/migration.sql",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 485,
+      "sha256": "76de09a3c058016f8dbaa3ccd89d712068ae0043248af9e891720e5a2624ce49",
+      "originalSnapshotSha256": "76de09a3c058016f8dbaa3ccd89d712068ae0043248af9e891720e5a2624ce49",
+      "gitIndexObject": "a2d654ae2f6f777da2bb4465dd9b7e477be34082"
+    },
+    {
+      "path": "apps/api/prisma/schema.prisma",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 279713,
+      "sha256": "07750c242090930c1776d6a5d0fe71d8b8c05f7027d200f5639076bc4254d855",
+      "originalSnapshotSha256": "07750c242090930c1776d6a5d0fe71d8b8c05f7027d200f5639076bc4254d855",
+      "gitIndexObject": "59c65ae0aaebc9c345aed29e7e62314125941f4b"
+    },
+    {
+      "path": "apps/api/scripts/ecf-legacy-test-classification.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3014,
+      "sha256": "d5973dddb1f2878423fd1411afa5e3c54a2d8bca74e80bdc5cada0e6f7f7bb4a",
+      "originalSnapshotSha256": "d5973dddb1f2878423fd1411afa5e3c54a2d8bca74e80bdc5cada0e6f7f7bb4a",
+      "gitIndexObject": "f120c11030803a9bb63fd7346ca000e2d8e7ed9f"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-credit-note-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 14892,
+      "sha256": "4e44f22e40321eb36f687f51a5d9e32386ff7db2ea5a075630c33b83849237eb",
+      "originalSnapshotSha256": "d02a21960d2731652c876032db9400df4e96e9e0a7df46d6ca888fd6482f87f1",
+      "gitIndexObject": "88be62799679866c72d0b5fc428ca3bedebffc0c"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-dgii-authorized-sequences.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6823,
+      "sha256": "b2af2dba69a9eda04497339c0dd3d08da63663450ca02ef661f0f8fccdb4ae11",
+      "originalSnapshotSha256": "8e3fb96fcceefe5cd5b404ea328d6b278f51f89c157a810911a3b0d065f95932",
+      "gitIndexObject": "acb54df90b6d4a2fdd901a0969e30f88be42e46b"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-document-idempotency.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9094,
+      "sha256": "f4ae3531e86a04498bedf2954720f53cedb8c7eb66a98a2cc3152a74848803b2",
+      "originalSnapshotSha256": "f4ae3531e86a04498bedf2954720f53cedb8c7eb66a98a2cc3152a74848803b2",
+      "gitIndexObject": "5a570b88ad04145f26697c5ae757621c55855497"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-document-query-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8994,
+      "sha256": "f883587920cfb0c27424bf006d25f21452a12bcf6eae80a62c3220edffd3ece3",
+      "originalSnapshotSha256": "dffc915a9cec3951dcce1257d3f69a0d868833dae912fd1eedf10b124102bac3",
+      "gitIndexObject": "df235c3fe18d5d824415e66f2329c3674b9538b0"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-document-query.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 23990,
+      "sha256": "d5ea4fe41b487523dcb6f23ebfb9854d8b00db991fb505b412f320f4853eb5dc",
+      "originalSnapshotSha256": "675b7728e708c7a4dc48a45c4392943d930b4f4879ae55da807c6af8f3a61c6d",
+      "gitIndexObject": "e06f0099db1b8621c92bf74baf2d684c34cbf1ca"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-e31-emission-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9306,
+      "sha256": "05bcc6e355f501ae8bce55f479c001151a2ce29ebbf1e568cee2262869e263e0",
+      "originalSnapshotSha256": "533dfd1a078d0515615ad1276c7dfc20b5876cd6e9728acfb1dbbeaae1e3fea5",
+      "gitIndexObject": "dc0683d05cf186a40268a4963c959bb408f3cc93"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-e32-consumo-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 15923,
+      "sha256": "e80e31765a42650e7c4dddcead94b8b5117a05084c904d9323c138a02b5490b5",
+      "originalSnapshotSha256": "508e8d29471a593524fe7cfef242338bafe4f4197534286d5a3b23421ff18159",
+      "gitIndexObject": "a08242c71190038d2582401a36656d7caad7cf7b"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-e34-credit.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9563,
+      "sha256": "d3e693190b2bbe3b22e27c9d4957a0cba4462f07a7a56da82a5a9357eb13666d",
+      "originalSnapshotSha256": "6196926fc70859466ec881c775c6a363a924b60b35cec18b9323ad57526be2b6",
+      "gitIndexObject": "192d4a56646cc30839d3de5ee4511c2473744941"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-e34-emission-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 15091,
+      "sha256": "886f2674f867dffdccd1ab21b1d45d55d420afd637b527f4364c6d06e9007482",
+      "originalSnapshotSha256": "a9df51cbd2f988ecb046e5c99f4cdfa7d37a74aaa5d26d3bbdca141c15d07814",
+      "gitIndexObject": "752b2f6cde489e999347f02084d72ac7e8aee723"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-e34-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 19716,
+      "sha256": "9e67b8195c95b5712f768c69c68f2624df4de955db3313b7b9365a095133c6fc",
+      "originalSnapshotSha256": "f1053137b4d1f638c6d2b3323251a8fa2f89b584d77b213876d6eae343a8d968",
+      "gitIndexObject": "f956f8e3b83011b88d981d852138ee790e499e20"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-emission.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17200,
+      "sha256": "91252c18cc7a2c9ed20894231cdbe074cb2efbd550af257d26d855c1f0169ae7",
+      "originalSnapshotSha256": "91252c18cc7a2c9ed20894231cdbe074cb2efbd550af257d26d855c1f0169ae7",
+      "gitIndexObject": "b5309a830203f0459cac2cbad283163c56712aee"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-environment-isolation-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6244,
+      "sha256": "e47e28e06c5022dfdf832ef12cdd682d7ff098606561ba33662d9a87b92e6638",
+      "originalSnapshotSha256": "e47e28e06c5022dfdf832ef12cdd682d7ff098606561ba33662d9a87b92e6638",
+      "gitIndexObject": "d4eab6222d8efe1171f38aee0e5ddf64c296cdcc"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-fiscal-document-persistence-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10134,
+      "sha256": "371e3f02890e9505984975165df68861e53eb3ce787944a4cf7772845b519a22",
+      "originalSnapshotSha256": "dc0a369f086e4378207a7dfe77291930adf483fba27718ae1e82d9346ed46119",
+      "gitIndexObject": "99633786985792dc6bd8c944d0e6d86b5938f7c8"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-legacy-test-classification-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10662,
+      "sha256": "e837f6a36e81ba7e80feb0c4be45be724c3426e03e17ec6b8bb99e8597909b9c",
+      "originalSnapshotSha256": "27ce628e83e6046644221e4fe9d1d43766f6fd0c1d40fe0c8a5276f1c9ffa5d3",
+      "gitIndexObject": "383e2fb9f0da95040ee178591d0ad629b6fdf324"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-legacy-test-classification.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10489,
+      "sha256": "1b21d82872bbb8ccdc2a829378cc3a0f074b87639d4c52697514bcb4271b4e19",
+      "originalSnapshotSha256": "1b21d82872bbb8ccdc2a829378cc3a0f074b87639d4c52697514bcb4271b4e19",
+      "gitIndexObject": "0cc92677f2525b4ad127414ae0edf276e2217e07"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-numbering-environment.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1162,
+      "sha256": "f8ba6cfd1d779d96759e4d9fae26999632292fe4083219bae117b4d7279908a4",
+      "originalSnapshotSha256": "f8ba6cfd1d779d96759e4d9fae26999632292fe4083219bae117b4d7279908a4",
+      "gitIndexObject": "f53ee874e05307ee95d0aad522fc2c761297bde2"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-pos-readiness-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 4484,
+      "sha256": "97acb0c27c664defbfa5df1a7cda94c82fb7f68de361970de57ab26be4c3b981",
+      "originalSnapshotSha256": "97acb0c27c664defbfa5df1a7cda94c82fb7f68de361970de57ab26be4c3b981",
+      "gitIndexObject": "eeade7369aa65453e09d28ced0c5a5b0c3a8025b"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-pos-readiness.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2601,
+      "sha256": "b95ae05ea3579c40470dff67e03aba82a7dbd24e2257173bad10162ddbf79893",
+      "originalSnapshotSha256": "b95ae05ea3579c40470dff67e03aba82a7dbd24e2257173bad10162ddbf79893",
+      "gitIndexObject": "58580824fbe9cc839d036b75998e4c0bfeaa5525"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-preparation-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11459,
+      "sha256": "e93059c5a906704d1ff3b8282ecd2fbc5ec2b2bed507867334a0c3e4b5a1bcbd",
+      "originalSnapshotSha256": "029b12e46996270654a64424d9da57500524e67ada702a9319472232601877e5",
+      "gitIndexObject": "489cf04a0bf599272171f3132f6ab7a8360a75d1"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-preparation.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 22817,
+      "sha256": "0675c3d9b97161e472a81cdad6bbf462271ee22ce0fed6564977cf7ea46e8233",
+      "originalSnapshotSha256": "82192543c3c31c0335d467bab7c7c4912bdd8bfe808b519d251379df7f3cce08",
+      "gitIndexObject": "6f61bd426a429fdbca3a3d3d1aa161626d75c6c8"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-print-view.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2529,
+      "sha256": "da4762acbc9821d1a1e11f35da0ac7f132d916f715f43c5a89330345df73d7cf",
+      "originalSnapshotSha256": "da4762acbc9821d1a1e11f35da0ac7f132d916f715f43c5a89330345df73d7cf",
+      "gitIndexObject": "7ec43facc10babab7d98ac72d24feabba673479f"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-print-view.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3828,
+      "sha256": "487deb51006994464327884eae83bf15a0582b32287e83774535336f14784338",
+      "originalSnapshotSha256": "487deb51006994464327884eae83bf15a0582b32287e83774535336f14784338",
+      "gitIndexObject": "372db5e03e44e7635253becb21cd828f12d122be"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-refund-identity.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 573,
+      "sha256": "c6885b0dd6cd8740435e5203846867e610bccb2359947b7015f9a115f8a1d6a1",
+      "originalSnapshotSha256": "6e0f6f4274eaeb5b3fc145e66e08244d0dc5b87a1e78fb2e4f2ba3ef12deb1ca",
+      "gitIndexObject": "aadc62151e927b00c2d5c0541fe03793947a8ccb"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-sequence-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10326,
+      "sha256": "17206b969f33d4f4654d58326e81aaff0941de5837a79c6d48e6f7f7f8370b79",
+      "originalSnapshotSha256": "17206b969f33d4f4654d58326e81aaff0941de5837a79c6d48e6f7f7f8370b79",
+      "gitIndexObject": "fcd99491a88294fa49b093ef44b9936dab75380b"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-sequence.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 16949,
+      "sha256": "a02c461b81556dffc7cb9d0d2a11ab61e9efe35e07bcec738f351279ea67a320",
+      "originalSnapshotSha256": "b737a938ce94d1369692b4daff1107165392aea11e6db99dffb3db8dcc8e3149",
+      "gitIndexObject": "979aa2ba8a67598e12d86a262cd1831fe786f7f6"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-simulated-dispatch-concurrency-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7141,
+      "sha256": "ca9eca0dd61783361e2474630033e60e715dbcc992218a230ea0dee87cb208f1",
+      "originalSnapshotSha256": "f519d10edbd55611f9a0e17c8f9f08fda7bb3107fcb7852d2f562ea89f0c0033",
+      "gitIndexObject": "2b2dec19c138ebecb46d1cf5714bde2031e88c38"
+    },
+    {
+      "path": "apps/api/src/ecf/documents/ecf-simulated-dispatch-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9859,
+      "sha256": "f203fff4ae10d0b5bc259d8e4b46281035acd66238353cda3daf9a67ddb81bff",
+      "originalSnapshotSha256": "389c3d6cab83f4205a4eae63ac998a56a4c79d55f217525393251a101b594dc0",
+      "gitIndexObject": "3b80da2cac22d1a5f1b963629bade55f55f2aa28"
+    },
+    {
+      "path": "apps/api/src/ecf/dto/ecf-documents.dto.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9129,
+      "sha256": "9813276500b3eaff76b44f9073bd911152c48650ddcef11ea443a01f6c4df36d",
+      "originalSnapshotSha256": "9813276500b3eaff76b44f9073bd911152c48650ddcef11ea443a01f6c4df36d",
+      "gitIndexObject": "80b314d67a51fb8fe76c542b78c0bdc48b1e2cac"
+    },
+    {
+      "path": "apps/api/src/ecf/dto/ecf.dto.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2878,
+      "sha256": "1d61ea1fda6fabee4ffcd49755269d50374cae935a21e3f4206541491ba10cca",
+      "originalSnapshotSha256": "1d61ea1fda6fabee4ffcd49755269d50374cae935a21e3f4206541491ba10cca",
+      "gitIndexObject": "6a73176f7fddafde865dfe14510d9a0d875c57e3"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf-documents-http.e2e-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 30876,
+      "sha256": "cb79e3118f39d1dae1bf118e6c9d1768644ead7cd54d23f424f2cea58b2706a2",
+      "originalSnapshotSha256": "cb79e3118f39d1dae1bf118e6c9d1768644ead7cd54d23f424f2cea58b2706a2",
+      "gitIndexObject": "3f90d59b8b5dd1baa02ecfbd64433ad6b296cc59"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf-documents.controller.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 12246,
+      "sha256": "8fa43dfb72671b47e088c8236498fe1f3fa5df44af3bf5286a13d9bc0f285ccb",
+      "originalSnapshotSha256": "8fa43dfb72671b47e088c8236498fe1f3fa5df44af3bf5286a13d9bc0f285ccb",
+      "gitIndexObject": "1ab67db6afe546e791debffb01f295ba2116fc06"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf-reviewed-test-readiness.spec.ts",
+      "origin": "predeploy_audit",
+      "bytes": 2198,
+      "sha256": "b9a58b197ad71bbf75189d3cb12954aa60c557cb8b223e3f367912adbaf01a59",
+      "gitIndexObject": "892ddc908c2698c69b384b1c46c50b943a8c61cc"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf-reviewed-test-readiness.ts",
+      "origin": "predeploy_audit",
+      "bytes": 1834,
+      "sha256": "3ebd603747659850552e5dd0578eedd51d787b67671bf1a4a339d9f30397ce80",
+      "gitIndexObject": "f1d4f1ab8290a8a9b42a1103b866d446423875b3"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf.controller.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 20543,
+      "sha256": "3868c5cc319eae729479a796853771c662d0da835b9307ea986e85e1778060a0",
+      "originalSnapshotSha256": "3868c5cc319eae729479a796853771c662d0da835b9307ea986e85e1778060a0",
+      "gitIndexObject": "8649fb616c219c91068fe42c2acecb42c5a4149d"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf.module.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 19371,
+      "sha256": "d83715d054ecf0d09b966a4531d6e7c9214f4326cbef89e4fffe0091a20e753d",
+      "originalSnapshotSha256": "d83715d054ecf0d09b966a4531d6e7c9214f4326cbef89e4fffe0091a20e753d",
+      "gitIndexObject": "cf33897ff537f97523e9427ab2d20297cd9b68ad"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf.service.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17434,
+      "sha256": "ed5863f662cc805b69495dd71f921645f7a369c77ffd1c21c4857779751bd756",
+      "originalSnapshotSha256": "ed5863f662cc805b69495dd71f921645f7a369c77ffd1c21c4857779751bd756",
+      "gitIndexObject": "cef84221ad39811ab20f41686f377f9e9e041cb0"
+    },
+    {
+      "path": "apps/api/src/ecf/ecf.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 30384,
+      "sha256": "c69c6e72155885ece0aed3def8985b561356e15e5568c4b82513c58b3871f673",
+      "originalSnapshotSha256": "dc809055c7fb92ff957259138a93070ff8318725868f66caafcd6aff1f2d7221",
+      "gitIndexObject": "967b2356b1e6ff5161a5a8bf2ce5291339510e8b"
+    },
+    {
+      "path": "apps/api/src/ecf/fiscal-core/ecf-fiscal-document.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2593,
+      "sha256": "02891c4cfeb6422154dc0beee17d9c3d76ae4ed3cec3219aa3442ad1ecfc5030",
+      "originalSnapshotSha256": "02891c4cfeb6422154dc0beee17d9c3d76ae4ed3cec3219aa3442ad1ecfc5030",
+      "gitIndexObject": "b7d147c7842ca04e93d4e9faed4fea144f0a9377"
+    },
+    {
+      "path": "apps/api/src/ecf/integration/multi-company-e2e.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 37053,
+      "sha256": "8556cf76d50efef9ddfcc63c2f782ff07a64c1492d18d9c0c65d5b3ed87d48ef",
+      "originalSnapshotSha256": "8556cf76d50efef9ddfcc63c2f782ff07a64c1492d18d9c0c65d5b3ed87d48ef",
+      "gitIndexObject": "796ee243bd01a5f6a7730547ccab2862ff68891c"
+    },
+    {
+      "path": "apps/api/src/ecf/pos/ecf-sale-adapter.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1967,
+      "sha256": "9deea7a5c341737dc304ef85360d736e818512a069a33b7f80afb9d22e935a41",
+      "originalSnapshotSha256": "9deea7a5c341737dc304ef85360d736e818512a069a33b7f80afb9d22e935a41",
+      "gitIndexObject": "b2d92163fe4b3b5a81e6f86b9d2370b520432f2f"
+    },
+    {
+      "path": "apps/api/src/ecf/pos/ecf-sale-fiscal.adapter.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 12422,
+      "sha256": "fcb2bcfcd92c06ae4bcaa8ca32a093aff2fa9a605ab7e524f8dc09daaae0cb71",
+      "originalSnapshotSha256": "fcb2bcfcd92c06ae4bcaa8ca32a093aff2fa9a605ab7e524f8dc09daaae0cb71",
+      "gitIndexObject": "be0e0fa2164fb080dc21b64240f90005efe78d62"
+    },
+    {
+      "path": "apps/api/src/ecf/pos/ecf-sale-payment-forms.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1273,
+      "sha256": "c6db4f5be05135ca65093efeb663721106c02d6d5d6d4a4d4dc10bab68bc547b",
+      "originalSnapshotSha256": "c6db4f5be05135ca65093efeb663721106c02d6d5d6d4a4d4dc10bab68bc547b",
+      "gitIndexObject": "c18e10dc2bb6b4cd13a2b2b1d6b025a7631e3b3d"
+    },
+    {
+      "path": "apps/api/src/ecf/pos/ecf-sale-payment-forms.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1281,
+      "sha256": "549582be07dca888d6fb56728890f745cfcd3956e2651f01a64c1adc6fe2fb0e",
+      "originalSnapshotSha256": "549582be07dca888d6fb56728890f745cfcd3956e2651f01a64c1adc6fe2fb0e",
+      "gitIndexObject": "55d01984167c15eb989136a7b9630c275dab1464"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa-fiscal.provider.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3617,
+      "sha256": "618524c0b9142c431d71530cdd2539a00fa0119e71fa0263ecdbf9db749bb653",
+      "originalSnapshotSha256": "618524c0b9142c431d71530cdd2539a00fa0119e71fa0263ecdbf9db749bb653",
+      "gitIndexObject": "4c7d39e588b3fe74625bc98b7ea909ee8925a085"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-certification-intent.controller.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 24179,
+      "sha256": "2d0728bcf8865a18e8f0712fa1582e9ce32ea5d90980549a697fde0338cbe9ee",
+      "originalSnapshotSha256": "2d0728bcf8865a18e8f0712fa1582e9ce32ea5d90980549a697fde0338cbe9ee",
+      "gitIndexObject": "c3f08b8913abc93e5fa3e3550278961941ab684a"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-company-fiscal-config.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1514,
+      "sha256": "1f51fde24793f0d477ab795156473e958f5f1e5b25775142bda3f885aa2564dd",
+      "originalSnapshotSha256": "1f51fde24793f0d477ab795156473e958f5f1e5b25775142bda3f885aa2564dd",
+      "gitIndexObject": "bcb42c239eecfd2d65f3c1cb56f89097dd0bbd75"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-confirmed-outcome.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7565,
+      "sha256": "a15358540fa9aa51cada83d028ce4f55aa3b3d9bc9b6fd14b995ddea0fdc1a11",
+      "originalSnapshotSha256": "a15358540fa9aa51cada83d028ce4f55aa3b3d9bc9b6fd14b995ddea0fdc1a11",
+      "gitIndexObject": "fe80e3ce34fdb94c84f8f74c8dbc80fe0441bfa4"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-contract-completion.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2661,
+      "sha256": "a71bfb5f1aa58a2fd75930fc6e707b7e5eb76947776926ff3a45583fbecc40cf",
+      "originalSnapshotSha256": "a71bfb5f1aa58a2fd75930fc6e707b7e5eb76947776926ff3a45583fbecc40cf",
+      "gitIndexObject": "18cd3ff5f1b11a811eaabcd613a921648eb96603"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-dispatch-pending-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8833,
+      "sha256": "23b222a1b616fec0ab4a07d479dd2b732fca1d43db4793ad555ce4ce818d639b",
+      "originalSnapshotSha256": "698e26c0981344200d96444db1ab846e7642d2f3291b2669e4bffb4428f86e74",
+      "gitIndexObject": "d5526ad511ba3131a67c89b6bf0a46ee841b6558"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-ecf.contract.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6705,
+      "sha256": "2a6a2f019f16d9af19a84829e88d4a98e2fc17a160c6a6031358d89fb87df074",
+      "originalSnapshotSha256": "2a6a2f019f16d9af19a84829e88d4a98e2fc17a160c6a6031358d89fb87df074",
+      "gitIndexObject": "7e6f18ee4a18264192fe20ffbd90a484a2fd20d5"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-ecf.mapper.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17546,
+      "sha256": "2490356547d98e3d324c199588098471c6edb038321f09643e847265faa592e8",
+      "originalSnapshotSha256": "2490356547d98e3d324c199588098471c6edb038321f09643e847265faa592e8",
+      "gitIndexObject": "5c7aa21c11def791fdff3354cb747e6066169a9c"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-ecf.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17677,
+      "sha256": "9e97f89ce6a5937d124954d73d4da60f9b2360da3b88ae89ba6135e9d578872b",
+      "originalSnapshotSha256": "9e97f89ce6a5937d124954d73d4da60f9b2360da3b88ae89ba6135e9d578872b",
+      "gitIndexObject": "7181f3fc5bf96b19c7c0435448fec209ee34562b"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission-dispatch-http.e2e-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 56002,
+      "sha256": "ab2429d5dfb7ce1894b1c88a90ef0f15024b9b63465ed7a8fafdddc7e46ef9f5",
+      "originalSnapshotSha256": "b2beb9c07a79aa3030271dcdfbf873636c56f77bb6623218b8a92c7d3a2de2c7",
+      "gitIndexObject": "9ce549300f0dd4c5963a741d9a80a3ed5766f23e"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission-dispatch.e2e-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 28564,
+      "sha256": "f9b20477d862938af74fe3985af3338bb6a5d3712a5e2d3fbb0ba9afa6fe12d8",
+      "originalSnapshotSha256": "f9b20477d862938af74fe3985af3338bb6a5d3712a5e2d3fbb0ba9afa6fe12d8",
+      "gitIndexObject": "3e0f18c2b8f9d9c021e0db1e2f26f254bdb882e9"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission-dispatch.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17537,
+      "sha256": "ffc273d98a5ab8d7d334e9759e59e5961d1930935b415e597706c41618d53d5a",
+      "originalSnapshotSha256": "b97a451cc52c2c32dfa7987379ef204f55fc1a2acb0b70b2be349d9c15eac1c9",
+      "gitIndexObject": "45ae6baad63ef18a85ba801c13836cf08d1e5f5b"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission-key-selection.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17675,
+      "sha256": "f941512c930f8ae72046ea9c4542e72b95fc3de69e8118cc621aca5c69144c74",
+      "originalSnapshotSha256": "f941512c930f8ae72046ea9c4542e72b95fc3de69e8118cc621aca5c69144c74",
+      "gitIndexObject": "fe17445989936eeaeb2204408485dc2cd1ccb12e"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission.barrier.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 16638,
+      "sha256": "f1809bb992d1c9fafa92607db03e87d6364367a68a17e7b19677f73e05c9e3c7",
+      "originalSnapshotSha256": "f1809bb992d1c9fafa92607db03e87d6364367a68a17e7b19677f73e05c9e3c7",
+      "gitIndexObject": "49ee8305302fe218ccdf6b74063e60703dc6556c"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission.client.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 16564,
+      "sha256": "d61c2608dd4beec91940fa860c144caa47689f06262461cd8dc88ff40f005131",
+      "originalSnapshotSha256": "d61c2608dd4beec91940fa860c144caa47689f06262461cd8dc88ff40f005131",
+      "gitIndexObject": "5b9f2302994dff41045e2470df22608bb7f4ab26"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission.policy.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3620,
+      "sha256": "ae575276468b240f88c8c70cbd5dfd9e5b31d6020e82e12afde54ccc6d15012e",
+      "originalSnapshotSha256": "ae575276468b240f88c8c70cbd5dfd9e5b31d6020e82e12afde54ccc6d15012e",
+      "gitIndexObject": "6a4fd5832722258de63895b16c708ee8b4ac8c5e"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 13279,
+      "sha256": "331538c42f5f52422dd65691564cd42abcd3712d2f4ebd73248c0053221f40e2",
+      "originalSnapshotSha256": "331538c42f5f52422dd65691564cd42abcd3712d2f4ebd73248c0053221f40e2",
+      "gitIndexObject": "109ea6ce0435d588545d7a329860675493270b41"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 26046,
+      "sha256": "86750614e9613479e5b5e3c8f2bc62fdb665d36f4b9b92490b9bfb30826f3073",
+      "originalSnapshotSha256": "86750614e9613479e5b5e3c8f2bc62fdb665d36f4b9b92490b9bfb30826f3073",
+      "gitIndexObject": "1e04d97a81dee9f6f948f889cab57dd15b1a701a"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission.wire.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2682,
+      "sha256": "9043b8fc0fb7ef713af37cf65ef62f4f5163e7eb4e044ec4583df4b5408804ea",
+      "originalSnapshotSha256": "9043b8fc0fb7ef713af37cf65ef62f4f5163e7eb4e044ec4583df4b5408804ea",
+      "gitIndexObject": "dbfd82bca83d6e005fcdf382ab7dc2c76f23c1e1"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-integration-journey.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 24572,
+      "sha256": "e6abb4482283add4434608ce31c5712083a54ee9e8c718dc881c66807b201a74",
+      "originalSnapshotSha256": "e6abb4482283add4434608ce31c5712083a54ee9e8c718dc881c66807b201a74",
+      "gitIndexObject": "fe7afc1b4cc91d8cb48759012f321f894d68c35c"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-numbering-metadata.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1729,
+      "sha256": "48b864d1ae69f23155543c80de4b305f2f84c617eed1d1709f165408276cfbd0",
+      "originalSnapshotSha256": "48b864d1ae69f23155543c80de4b305f2f84c617eed1d1709f165408276cfbd0",
+      "gitIndexObject": "8fcba7163b879144a73f6c59ead736b984f78b3b"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-numbering-metadata.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2482,
+      "sha256": "224c9034776c265ceec882121c0c766c71a15be264ee4604a3a4e2897843d408",
+      "originalSnapshotSha256": "224c9034776c265ceec882121c0c766c71a15be264ee4604a3a4e2897843d408",
+      "gitIndexObject": "9bf5dbb7a169dc24806ba47a296d45ec84d65a30"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-persisted-recovery.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3461,
+      "sha256": "15596e1022a9d65f414093eb271556a0761a426eab4fcc6adeb36adb442dcc9a",
+      "originalSnapshotSha256": "15596e1022a9d65f414093eb271556a0761a426eab4fcc6adeb36adb442dcc9a",
+      "gitIndexObject": "f80518f9112ea261ff0f9322fb06589faa1bf255"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-print-stamp.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5204,
+      "sha256": "88f4d62d4032173ea8ffaded06b3d130c8a84593663f83644a582d0fbb3c7dea",
+      "originalSnapshotSha256": "88f4d62d4032173ea8ffaded06b3d130c8a84593663f83644a582d0fbb3c7dea",
+      "gitIndexObject": "191be11aa65d475da6a2a59178333d8926b23cd4"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-print-stamp.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3126,
+      "sha256": "056643618dce59c7349eceb43c655de3ff58bf29e870eec18cf7cd34a9976ce8",
+      "originalSnapshotSha256": "056643618dce59c7349eceb43c655de3ff58bf29e870eec18cf7cd34a9976ce8",
+      "gitIndexObject": "26e2b124c074146aa1070d62e342d21c4b90313b"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-provider-response.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7463,
+      "sha256": "fe0e18ff42f526e0bc7f10f43729e28dc57f90379e7801a8a49a4e919b7dbde3",
+      "originalSnapshotSha256": "0a39ea3c0553702acc15b9d570c665b3aebae6e219cda26b21182da4b26535b3",
+      "gitIndexObject": "0830ed20c0c9ce498f89a75d712ac075488c7e23"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-provider-response.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9545,
+      "sha256": "44e47e2fc36526792e6c82a876a886e215e0680275d1942679e658e3c81950d8",
+      "originalSnapshotSha256": "44e47e2fc36526792e6c82a876a886e215e0680275d1942679e658e3c81950d8",
+      "gitIndexObject": "4ab3be1df49d809e1712b7573f6a443e09338856"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-request.serializer.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3672,
+      "sha256": "3450ad19a11a84170e8c9b0261e7dd26d641cd0b04971d7bab527587bd756177",
+      "originalSnapshotSha256": "3450ad19a11a84170e8c9b0261e7dd26d641cd0b04971d7bab527587bd756177",
+      "gitIndexObject": "6e67554b0fa16c592fd9e91acccf552aee37e946"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-request.serializer.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1485,
+      "sha256": "60ab9cbb525ec5af91276d8b0aa4bad739fcdb600facb4aba8e72a4834948117",
+      "originalSnapshotSha256": "60ab9cbb525ec5af91276d8b0aa4bad739fcdb600facb4aba8e72a4834948117",
+      "gitIndexObject": "f9a5c04c51d32a3334206f14842363143a04c16f"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-response.mapper.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10179,
+      "sha256": "e03692a58c1ddd70b3d9c23b2f7ba62dc733b5e54962eb77755bf006376f3078",
+      "originalSnapshotSha256": "e03692a58c1ddd70b3d9c23b2f7ba62dc733b5e54962eb77755bf006376f3078",
+      "gitIndexObject": "b554983b9308916022a318e89a2d48e856f59004"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-same-request-recovery-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10026,
+      "sha256": "ec6691f6988f396a67f5d0c215341cbc552d4ed724f7ae27527917137b80e830",
+      "originalSnapshotSha256": "ec6691f6988f396a67f5d0c215341cbc552d4ed724f7ae27527917137b80e830",
+      "gitIndexObject": "37c92f4142562be8ea73f08bbd19863196b4bed3"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-same-request-recovery.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 4699,
+      "sha256": "fde23e82865102ecf8167a34c09bfd480c6880c43ea30162e90c5417cce0f7c1",
+      "originalSnapshotSha256": "fde23e82865102ecf8167a34c09bfd480c6880c43ea30162e90c5417cce0f7c1",
+      "gitIndexObject": "c0ed4f730e62be80b53820b5f7f74f41484b32d1"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-test-emission.probe.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 13496,
+      "sha256": "f7bbfcaf4e011d8ee25c1d7a1d1440ae87800c0cc6985d3e08fa7073744b3808",
+      "originalSnapshotSha256": "f7bbfcaf4e011d8ee25c1d7a1d1440ae87800c0cc6985d3e08fa7073744b3808",
+      "gitIndexObject": "97bea7419a1ff88e1531904ee9910ec3298b9b75"
+    },
+    {
+      "path": "apps/api/src/ecf/provider/dosa/dosa-webhook.dto.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9415,
+      "sha256": "ae2c245f0c2c02886eb7fb52cdefcc4bb82dcd6869ea73c7adab99883cef3e90",
+      "originalSnapshotSha256": "ae2c245f0c2c02886eb7fb52cdefcc4bb82dcd6869ea73c7adab99883cef3e90",
+      "gitIndexObject": "a90df918cadcf06d6821e4dfef891b5e67b75683"
+    },
+    {
+      "path": "apps/api/src/sales/dto/create-sale.dto.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5775,
+      "sha256": "660f4e59ffecd50966d3bac2ef6bf153db8a8a96fe6aca1eb9c1557312553b23",
+      "originalSnapshotSha256": "660f4e59ffecd50966d3bac2ef6bf153db8a8a96fe6aca1eb9c1557312553b23",
+      "gitIndexObject": "48f1251788249da8e7c0711fef40d0bb15b1ed1a"
+    },
+    {
+      "path": "apps/api/src/sales/sales-return-ecf-credit-postgres.integration-spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 23122,
+      "sha256": "69c2a43c69ff56332d72057aac77e6ef3c57efdf4dd76e8185e38ed1735ac32f",
+      "originalSnapshotSha256": "a6e8f8df1667936e024d2ca06fd5704b9702a15dcf87965a3ccdcc47e6f62e34",
+      "gitIndexObject": "270e30f8770bdf3a5f7f0132c37060a6cb9875dd"
+    },
+    {
+      "path": "apps/api/src/sales/sales.controller.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7405,
+      "sha256": "b79ba0f6c0d6a26b16471083ea97f09d26b8eb7105a054e0dc6a80e44474c6eb",
+      "originalSnapshotSha256": "b79ba0f6c0d6a26b16471083ea97f09d26b8eb7105a054e0dc6a80e44474c6eb",
+      "gitIndexObject": "33bac0a8522177a3c5dd0b813abc4c1470fa86d5"
+    },
+    {
+      "path": "apps/api/src/sales/sales.service.inventory-optional.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 36748,
+      "sha256": "3eb4bdd5e460b9420454b68ec8dbf5be30ed0cfe15cb734a0b72eb0052cf6844",
+      "originalSnapshotSha256": "2b26cbda2ddb418ad06e4ba85721e3197db5bb9613df111badbd18cea7bdba45",
+      "gitIndexObject": "f591857f07f1902d1045dc9aa53b1b3035cf597f"
+    },
+    {
+      "path": "apps/api/src/sales/sales.service.quick-sale.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 26617,
+      "sha256": "79b617ffe5b1495377ce203dad2258f0e173c67ac318570e41aa73ab7d06814a",
+      "originalSnapshotSha256": "b15b162eebc49ba2a169e607be657ca1193db425e94d669191e900ba0422949b",
+      "gitIndexObject": "66ec7074614a095c64b76947949f69dc8f03d2ad"
+    },
+    {
+      "path": "apps/api/src/sales/sales.service.tenant.spec.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 48015,
+      "sha256": "338535cc376d955ab02e63bd55566bb186600e47ddeac372460c20b51f9d68a4",
+      "originalSnapshotSha256": "d435c7b8735b96f260cea240af99e282ebfca1673d979eb785cec23b3dc6888b",
+      "gitIndexObject": "60042d397155697a9abdb7ab0cf1137a5f18d879"
+    },
+    {
+      "path": "apps/api/src/sales/sales.service.ts",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 146095,
+      "sha256": "17f64ca028e21456267c3c2f95590f08e2cd8ba50f0962e6b4cf25e1bd93f0f7",
+      "originalSnapshotSha256": "46ad3f7689290327bf451d5a867e2ae5f158935012f60fbc5977b8564ffdd39d",
+      "gitIndexObject": "6e2807fc75f23b65be41ab4e1f07ef85c91638f0"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/ecf_document_pdf.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5510,
+      "sha256": "0cf05e6b72ae42b92405bf13adcdd947038de8aab083e9968a8e58acb675e1b0",
+      "originalSnapshotSha256": "0cf05e6b72ae42b92405bf13adcdd947038de8aab083e9968a8e58acb675e1b0",
+      "gitIndexObject": "c514809578aecc341d239d9e93b71afb84a1deee"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/ecf_print_footer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2419,
+      "sha256": "2367bdb192f05253e6a88309056671b44a9b10a9a863448b46c4214396512a87",
+      "originalSnapshotSha256": "2367bdb192f05253e6a88309056671b44a9b10a9a863448b46c4214396512a87",
+      "gitIndexObject": "fd01bc49b61d86905c3548c8353ab8d6e268e9da"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/esc_pos/fullpos_esc_pos_receipt_renderer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 22600,
+      "sha256": "e194b233faeee72abd8f003b8d512073e1cb9bb84ba2b4a62eea7eec1fe8f41c",
+      "originalSnapshotSha256": "e194b233faeee72abd8f003b8d512073e1cb9bb84ba2b4a62eea7eec1fe8f41c",
+      "gitIndexObject": "e6b0906dbc6712f65a3e13e5f5f24273d6db2434"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/esc_pos/thermal_printer_profile.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3985,
+      "sha256": "d89343399866320e19ecc0750495b714e14e1f8c5cf9c893d68a78a5d15f7c7d",
+      "originalSnapshotSha256": "d89343399866320e19ecc0750495b714e14e1f8c5cf9c893d68a78a5d15f7c7d",
+      "gitIndexObject": "00e17bf9f42352f4296f26ae9934ece277d2c8df"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/esc_pos/thermal_receipt_view_model.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5539,
+      "sha256": "5391843321401cf849fff5a5be4abdec7b831b309d4a6e3e45cbab503601e532",
+      "originalSnapshotSha256": "5391843321401cf849fff5a5be4abdec7b831b309d4a6e3e45cbab503601e532",
+      "gitIndexObject": "7dff5410966aa4f3a9f2878f9923c6296f8a8769"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/html/html_thermal_receipt_pdf_renderer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 19783,
+      "sha256": "37a42a3b32dc560894a9358c46556a608755e2a41311b4b5c0f9e1436daf4662",
+      "originalSnapshotSha256": "37a42a3b32dc560894a9358c46556a608755e2a41311b4b5c0f9e1436daf4662",
+      "gitIndexObject": "3695c8f4878f19d15dfee0c3de9fcf9d1324272f"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/html/html_thermal_receipt_renderer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 14305,
+      "sha256": "db0369262229cda0ac79bcc93858ae91920fdb1ba62efe8eccc5b34c518dc2d2",
+      "originalSnapshotSha256": "db0369262229cda0ac79bcc93858ae91920fdb1ba62efe8eccc5b34c518dc2d2",
+      "gitIndexObject": "4dcec726c94a7bd0eb06fc3cf6c36a62f5b382f7"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/models/ticket_builder.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 44019,
+      "sha256": "d9949c10b8814d02fe678e9e2a25a6dd2aa814871d4294be3e57a79044a02602",
+      "originalSnapshotSha256": "d9949c10b8814d02fe678e9e2a25a6dd2aa814871d4294be3e57a79044a02602",
+      "gitIndexObject": "636ffea5a2f820ab6fd900c51f6d6b763faa4620"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/models/ticket_data.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 12448,
+      "sha256": "ed714de463dbeb730e84761b4dc809e5f8dee7c7c197d146f1602e946e7c43bc",
+      "originalSnapshotSha256": "ed714de463dbeb730e84761b4dc809e5f8dee7c7c197d146f1602e946e7c43bc",
+      "gitIndexObject": "1fc27efdbb91c58dba137f6c527f39d9e7f77930"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/models/ticket_renderer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11151,
+      "sha256": "a22e9b94c44dc358bc223580e4151ae4f47373ade414ff3f2559dd59cb27de0c",
+      "originalSnapshotSha256": "a22e9b94c44dc358bc223580e4151ae4f47373ade414ff3f2559dd59cb27de0c",
+      "gitIndexObject": "1adb6a49276f4a0e81e87ecb4a9aa66ba757c3cd"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/printing/unified_ticket_printer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 28454,
+      "sha256": "0040b50a4ff2375e0fb8fd299b4685af96fc8c50a1ff8c6d734eed8eb721329c",
+      "originalSnapshotSha256": "0040b50a4ff2375e0fb8fd299b4685af96fc8c50a1ff8c6d734eed8eb721329c",
+      "gitIndexObject": "1a1a8b2b22462482b61f6b213b85a5accd2e24b6"
+    },
+    {
+      "path": "apps/fulltech_app/lib/core/widgets/app_drawer.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 84588,
+      "sha256": "e2b34bdf3cb53ca5be9bf2201b3c7846e940965c8045f4692938128de9232a44",
+      "originalSnapshotSha256": "e2b34bdf3cb53ca5be9bf2201b3c7846e940965c8045f4692938128de9232a44",
+      "gitIndexObject": "c4285c777a29746796dc82da1f43b2fa7cb0c4e4"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/account/account_menu_screens.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 126427,
+      "sha256": "f407a72ba91aa1c259db1abdb1998acbcd14b83698ae9478774ea7b2693f371e",
+      "originalSnapshotSha256": "62aa2d0441579bbdb5748c07e2473532a4badf15108d0dcf669d3703083c80c2",
+      "gitIndexObject": "1d3bdc2f74050a4ac9101176af40744a5c9de493"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/data/ecf_connection_guard.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2646,
+      "sha256": "dc9b12268f6e4868641ae1286914f7aba1d35ed3d3f0a900e034feb763fe7474",
+      "originalSnapshotSha256": "dc9b12268f6e4868641ae1286914f7aba1d35ed3d3f0a900e034feb763fe7474",
+      "gitIndexObject": "9390f696ad2a98e4c44dca74207d50b6ca49fe89"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/data/ecf_pending_credit_request.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1662,
+      "sha256": "6a00a1d59cc8abcb137177306d7e6cba58f077afa0d84e0bfbaa5d46cc7335bf",
+      "originalSnapshotSha256": "6a00a1d59cc8abcb137177306d7e6cba58f077afa0d84e0bfbaa5d46cc7335bf",
+      "gitIndexObject": "8953e05f17f945bb80572a426aee953d3f6bfbe7"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/data/ecf_repository.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 36467,
+      "sha256": "58bfa7782088a0f18b621edea3f7ff19d3206e9789779626d56308df4b47d14d",
+      "originalSnapshotSha256": "7761f08da9480b21b0a385db0dbd6d6595ed35e472d83423df82772e234009e7",
+      "gitIndexObject": "78f1607696b948849a84bdabdac7d194e7c67767"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ecf_authorized_sequence_models.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3579,
+      "sha256": "d29a0ca36c416262337736b3bd4d2933f6301432a1e31a8f283cea29d8dbf766",
+      "originalSnapshotSha256": "d29a0ca36c416262337736b3bd4d2933f6301432a1e31a8f283cea29d8dbf766",
+      "gitIndexObject": "a83088fdacf584ef538623313a165701f20ec2f6"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ecf_dosa_dispatch_models.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5751,
+      "sha256": "b179468581cd7dd7ca8849e508dfe11815c0be0be08238e85b0213f64de2e9df",
+      "originalSnapshotSha256": "b179468581cd7dd7ca8849e508dfe11815c0be0be08238e85b0213f64de2e9df",
+      "gitIndexObject": "893a3c419c3998e54c35984852209c06086eb226"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ecf_models.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 47704,
+      "sha256": "1dc9fde8be2bb4ef16d4a81ff2adfeb4a34d9145581ec38ce5e8003cc3720d91",
+      "originalSnapshotSha256": "1c4ba60bada306f60dff555a224e7fdc66a6b6d502a20aeadcaa8d5c2645d904",
+      "gitIndexObject": "73939f58c78a6fd6fdfd153dd843d404871deba7"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ecf_print_document.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5988,
+      "sha256": "4f27ec12afaba70a47fa65794d98abd0f9fc12efe36a32c550e01ae7b96630a3",
+      "originalSnapshotSha256": "4f27ec12afaba70a47fa65794d98abd0f9fc12efe36a32c550e01ae7b96630a3",
+      "gitIndexObject": "362d8f1822fecc0987e53cb5a35b17cbb188f165"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ecf_sale_fiscal.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2264,
+      "sha256": "e80469be1008f0874144ffdaf0d7fbeb5b5caf2102846971e75de6fe0b7bff7d",
+      "originalSnapshotSha256": "e80469be1008f0874144ffdaf0d7fbeb5b5caf2102846971e75de6fe0b7bff7d",
+      "gitIndexObject": "8bad0b85d09b8525d6ed76d22d339adf41ed1a77"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_config_page.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 21672,
+      "sha256": "dc8cd9f6e5de76d745d5ffd5fe448772d0cf9370738667ef196e8790d330e34f",
+      "originalSnapshotSha256": "f25740407bcdbf95ebc26a72dca8cc7b42a6abc25f0727c51235fd49f1cfa63e",
+      "gitIndexObject": "c542f467c23e82007d6cb14cb2972250ba62e7e3"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_credit_note_action.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 14844,
+      "sha256": "0dd755ab02882cf239fe8d7593917ac58015c4558fb71892f5805ef35303a0b6",
+      "originalSnapshotSha256": "0dd755ab02882cf239fe8d7593917ac58015c4558fb71892f5805ef35303a0b6",
+      "gitIndexObject": "a917d5d84b587967f72df542a40a784d5525b466"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_document_print_action.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3709,
+      "sha256": "b9a43fddf9bca0886f9a282122fd93cce16fd6077c155cef4150c2cbef151265",
+      "originalSnapshotSha256": "b9a43fddf9bca0886f9a282122fd93cce16fd6077c155cef4150c2cbef151265",
+      "gitIndexObject": "23584594524b1c35714b478327e43ed720e9c1d9"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_documents_page.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 38306,
+      "sha256": "40057efd4e276717762825c5a7353889d4a031d1d4ccb93228dc08739a6b3a99",
+      "originalSnapshotSha256": "40057efd4e276717762825c5a7353889d4a031d1d4ccb93228dc08739a6b3a99",
+      "gitIndexObject": "638db6f19b6d38a0133f975b9c40a8b2740e1fed"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_dosa_dispatch_action.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8571,
+      "sha256": "e0fa8bea9c28d6e66917777de4aed38d46805d49e1a43a828ec3721559aea7c4",
+      "originalSnapshotSha256": "e0fa8bea9c28d6e66917777de4aed38d46805d49e1a43a828ec3721559aea7c4",
+      "gitIndexObject": "656b9c7965abf7f9dd70006b83ce77f5c3b34acf"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_production_activation_action.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3789,
+      "sha256": "5e906241c5e493e1bfb3a9e9566af5e4e0ac89f0b304bf13669ec0c8b374efaf",
+      "originalSnapshotSha256": "5e906241c5e493e1bfb3a9e9566af5e4e0ac89f0b304bf13669ec0c8b374efaf",
+      "gitIndexObject": "840df994cbdbfd64625a4be0d86de21567f1a300"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_sale_history_panel.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10640,
+      "sha256": "1f03fcfbfb748ba851d0ac874202fa1664fd073de746d0e60887b227317496a5",
+      "originalSnapshotSha256": "1f03fcfbfb748ba851d0ac874202fa1664fd073de746d0e60887b227317496a5",
+      "gitIndexObject": "1ec8316095bc1d4b6a6214863798ebbb78473529"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_dosa_activation_status.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10808,
+      "sha256": "58c36742d71d029bb55b611159638fdd994403557983a59e711ea97a23f630c5",
+      "originalSnapshotSha256": "1162cf215f4e5f2064f599adbe3d67c7485192c3b6f258ac814c58c9b9246850",
+      "gitIndexObject": "ac8f073488e501984d8fd3056177a8b3b53259c8"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_sequence_range_section.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 28604,
+      "sha256": "d117bda539557c0a013e1aeb679f8dda98da36a615e5a36ce6ab9b165356b9b1",
+      "originalSnapshotSha256": "2cef7def3cd6ab4c0dd5fd79987d5dfd64c4b66d7df03e6e8f17a4dbfa19820c",
+      "gitIndexObject": "2c6a167f5eee2fcef6f28faa8d745995511d51b5"
+    },
+    {
+      "path": "apps/fulltech_app/lib/features/onboarding/presentation/widgets/activation_guide_column.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 35738,
+      "sha256": "8c4ed9a1d2556648ab66b60a6618ed2448e6d8f3b7642527ccb902a2f7a4c8ef",
+      "originalSnapshotSha256": "8c4ed9a1d2556648ab66b60a6618ed2448e6d8f3b7642527ccb902a2f7a4c8ef",
+      "gitIndexObject": "9baefdd5eead47eefc9c8bcd55f43df949b4188d"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_screen.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 736496,
+      "sha256": "acac82a00f6b2d0be9d47edc0e17815123bdb2d6e7d34d8dfee1ac2a2b25da91",
+      "originalSnapshotSha256": "29afe3dfd3d83ebdf353a1595bc2c644b0e4d2bf583e9ed55eba7edfda7f19ff",
+      "gitIndexObject": "f811a0a91414656780ce295c0a6ff7c0382d2dfb"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/ventas/data/ventas_repository.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 81442,
+      "sha256": "1186678976929e0a11a70e318489febaf25ff4cca357f6d623e3cf17f4ba412b",
+      "originalSnapshotSha256": "a9388874a1173ee49657524bfb80db6755c6a94797eed8443c45f39f1707990c",
+      "gitIndexObject": "5dcf8d67b1abc368b5c5e3943ac7127a17ce7d4e"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/ventas/ecf_pos_fiscal.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6687,
+      "sha256": "c5d900ae7be318e09763932dfd6710f5012733e5951eab9e02873bea692483d1",
+      "originalSnapshotSha256": "3d2919801b1f1be3f5ba53f5ade80ac1c764fc14e383f01796d84b156c6675d4",
+      "gitIndexObject": "fdf594f2c9aecd843819db2f4daac20a9e1ce624"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/ventas/preview/cotizaciones_screen_entry.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8307,
+      "sha256": "3f460470f27561e5944f6d5e95413a1e2f4ce8f1ee7a63a3007daa454bdcc9e9",
+      "originalSnapshotSha256": "3f460470f27561e5944f6d5e95413a1e2f4ce8f1ee7a63a3007daa454bdcc9e9",
+      "gitIndexObject": "be318d7fd369d6e92ff665ea8848652cc450db13"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/ventas/sales_models.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 28342,
+      "sha256": "b1bbdd6d6d21fb935eb26fc5ff6c3326fa032eb1dc7e80dc3ca07331948fea7a",
+      "originalSnapshotSha256": "b1bbdd6d6d21fb935eb26fc5ff6c3326fa032eb1dc7e80dc3ca07331948fea7a",
+      "gitIndexObject": "00e1622eeac7283437ac152eeae90f3a98d6e4b2"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/ventas/tpv_sales_history_screen.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 107688,
+      "sha256": "596a281564cd59d910b99de344090259cf8dbf59053372d7a2808148c404ff5c",
+      "originalSnapshotSha256": "5e115104ab6934ad4b50a9738f7a31f5dbb42e7d4b206461326f9404ad063d7c",
+      "gitIndexObject": "ed052464e3253c2369823fc06257172d93f2cd9a"
+    },
+    {
+      "path": "apps/fulltech_app/lib/modules/ventas/utils/sales_pdf_service.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 45943,
+      "sha256": "2577bbc7fde80da7f844e9ae79ac91466ccd14e4dc223be11ea7bc029e503b62",
+      "originalSnapshotSha256": "f82654edfd55b633ab1aca7542b5bd8054d95b7f1d627dee705e0d73d031364a",
+      "gitIndexObject": "3c0f6ea2049e9b75ff7e5c9114a2bcf8a04e0b0c"
+    },
+    {
+      "path": "apps/fulltech_app/test/core/printing/ecf_print_representation_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9909,
+      "sha256": "0a6b273b951477f1bf626635751bfce71c004f3de6e4c5677af40701f1610bf6",
+      "originalSnapshotSha256": "0a6b273b951477f1bf626635751bfce71c004f3de6e4c5677af40701f1610bf6",
+      "gitIndexObject": "30a2b3b451442d2d9a2e3d4ce4f69ecd14bf3025"
+    },
+    {
+      "path": "apps/fulltech_app/test/core/widgets/app_drawer_all_options_reachable_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7730,
+      "sha256": "23ba88f592975c24a47d1497b8b3e031c99205ac52309bd9a373309eadb5faec",
+      "originalSnapshotSha256": "23ba88f592975c24a47d1497b8b3e031c99205ac52309bd9a373309eadb5faec",
+      "gitIndexObject": "3366eb765954b6ee60e016dfaa0c88b751b961c8"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/account/account_settings_navigation_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 25952,
+      "sha256": "0a5ecb0422121068a1d020c9b73747823e6c2e3ecc57d521d722e1f5fb0bea22",
+      "originalSnapshotSha256": "d9ac545e8a00216f614b2eb7367d7c78715d82f6531e39b770b430c54bb801cb",
+      "gitIndexObject": "8a9e04524fce3bc8bd9fee38e0edeb9f453682c1"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/account/ecf_company_toggle_drawer_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 32576,
+      "sha256": "f5569c7a3c5460dbe775c9898877fa02c2864c3b7ce265e670abfb637aa27a45",
+      "originalSnapshotSha256": "f5569c7a3c5460dbe775c9898877fa02c2864c3b7ce265e670abfb637aa27a45",
+      "gitIndexObject": "b41f3c76c4c5ae2ea400c2bd2cbdee793184c32b"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_connection_guard_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3674,
+      "sha256": "278ceab5498327aa6949b2873bc00e50ad2a54e8e262de15322df54266dce692",
+      "originalSnapshotSha256": "278ceab5498327aa6949b2873bc00e50ad2a54e8e262de15322df54266dce692",
+      "gitIndexObject": "85c7b65e7247acdea092e261db6e18e26479ec36"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_credit_note_action_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8804,
+      "sha256": "45e5620ba62e37d8b1df3b6e060f95454ff6b87f6366a7940be72f346d4bee70",
+      "originalSnapshotSha256": "1b76449ffac65ca2b4eb6df38b8e0475ae89724f1639a1641f5ab85c651983c9",
+      "gitIndexObject": "21170c88745abb6e954026bf854779780033ea9d"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_document_print_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11746,
+      "sha256": "b95a97736518003108156b7a98fcfc58a754c25a3a89c81003071d4db98a030a",
+      "originalSnapshotSha256": "b95a97736518003108156b7a98fcfc58a754c25a3a89c81003071d4db98a030a",
+      "gitIndexObject": "0bb09f2f7f9cb16ac80295b77193775f36eb2139"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_dosa_dispatch_action_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8095,
+      "sha256": "e753d45f4646a242ba7d6cb61a5b309719e183f7d5dea0d5792f14e0890cc82e",
+      "originalSnapshotSha256": "e753d45f4646a242ba7d6cb61a5b309719e183f7d5dea0d5792f14e0890cc82e",
+      "gitIndexObject": "8826f3d7409269b50b74269a09b0e5ead7060839"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_pending_credit_request_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1633,
+      "sha256": "e5390931b5a9d6010d3271d4ab83151fee06c9d1153da995c8b7b493889d26fd",
+      "originalSnapshotSha256": "e5390931b5a9d6010d3271d4ab83151fee06c9d1153da995c8b7b493889d26fd",
+      "gitIndexObject": "13b3a6590753b370838bfd6c7427d4ef891166b6"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_prepare_action_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9430,
+      "sha256": "1e29d1942b141ed4b69b3a0cf4b9d3b7d3a5f60096b25fc167ceddd72bbded51",
+      "originalSnapshotSha256": "1ac6f489dbd33edc7bf15a13f520426a6f6232278bb384b9d2813401adb3bef3",
+      "gitIndexObject": "9a9b5095fc3e01e45948a3e0ed1dafe7d05c2527"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_production_activation_action_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 4239,
+      "sha256": "6dae05e3409cbd459655ec4ed39f18be566555eb397fd539b7aa062ac160b322",
+      "originalSnapshotSha256": "6dae05e3409cbd459655ec4ed39f18be566555eb397fd539b7aa062ac160b322",
+      "gitIndexObject": "e158d4673e16dfb5e6b99cbf2a181e41a8c8fb93"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_repository_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 27674,
+      "sha256": "8cb1908f4ffc80224eecca424c1447c3f5be7978dd975e77bf0654b1e2c58643",
+      "originalSnapshotSha256": "3b97e99fed00cbff01ff5c8c8c7eb4f29f0e2effdf9f39c3211e091ba9b2d1de",
+      "gitIndexObject": "db2cd4a2708d62b3e517b32f58a030313bc0c496"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_sale_history_panel_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 13426,
+      "sha256": "a50538d6bdfd5453176da07d5bcf778f6f3add5be65bd6f8f83691e58b62f930",
+      "originalSnapshotSha256": "a50538d6bdfd5453176da07d5bcf778f6f3add5be65bd6f8f83691e58b62f930",
+      "gitIndexObject": "584dd294833c27340fa2c9516461688105eb1f8c"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_sales_without_document_section_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7799,
+      "sha256": "0dc176cb66aa421f94e05683c717355d981deb7123e20c2d0cc503bef6019a43",
+      "originalSnapshotSha256": "0dc176cb66aa421f94e05683c717355d981deb7123e20c2d0cc503bef6019a43",
+      "gitIndexObject": "1aaeb58cf9064fe8aaa0c78883370ac67a272ba9"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ecf/ecf_sequence_range_section_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17011,
+      "sha256": "5a7eb7551f50d238384cc513b8890378b860a611f1674226b8c3d1c193c505b8",
+      "originalSnapshotSha256": "2d5744ba129b66c47e3f4cc13620aa3a3133162fba77f05339ccde771c57bacb",
+      "gitIndexObject": "22d6d0086fb4d6444ec263eac05b38f278b6d00e"
+    },
+    {
+      "path": "apps/fulltech_app/test/features/ventas/ventas_controller_dispose_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6049,
+      "sha256": "657e9bc2ab808006d4e1e78158a2c6a2aa2a01ce8c571d046c646e6e4dcbc89d",
+      "originalSnapshotSha256": "657e9bc2ab808006d4e1e78158a2c6a2aa2a01ce8c571d046c646e6e4dcbc89d",
+      "gitIndexObject": "c8ddb3822c23bd39b3ad9538d4b266d3ab3f9155"
+    },
+    {
+      "path": "apps/fulltech_app/test/modules/cotizaciones/billing_ecf_selector_visible_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11356,
+      "sha256": "27a9f7ca02285f603c3e2b98ba92fc760ae5cbb67a7d294f01000aed10b20058",
+      "originalSnapshotSha256": "a4868f3dc2d86e404d073a942f44e1890894d7aaf871a7d453f909729badbee5",
+      "gitIndexObject": "ff016e99723e059264ce231678f387b3694f67d4"
+    },
+    {
+      "path": "apps/fulltech_app/test/modules/ventas/ecf_pos_fiscal_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11276,
+      "sha256": "913bdca64680dfa71132d0cc7ed8ffb1753b615beab3e1a7facf0a4dccd41ad5",
+      "originalSnapshotSha256": "913bdca64680dfa71132d0cc7ed8ffb1753b615beab3e1a7facf0a4dccd41ad5",
+      "gitIndexObject": "2793567d85f6fa0f0e02c43e504c64d317e4bd5c"
+    },
+    {
+      "path": "apps/fulltech_app/test/modules/ventas/sale_attempt_durability_test.dart",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 12036,
+      "sha256": "ef41b041488504fb7ed7f7eeac6f675af493b539e9b6f8133ccb5af5090f0407",
+      "originalSnapshotSha256": "64091d64ca9e14716176ee5afbd037dc83551d178f490b13eb7fcab3822d3322",
+      "gitIndexObject": "61bcbe58b60086cbf1404230a738c64f30306ce8"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 24938,
+      "sha256": "6b1786ea8aa48be15b8006f4ce29a2873aa1e0a7441270cb2cbdc9418090ae47",
+      "originalSnapshotSha256": "2d4cce3aca25706c6e965afc80b1c735ee67052655c1c4d61aac8ff1bf1a0fff",
+      "gitIndexObject": "3e59c055d9a075d394c3f813e764078978967b71"
+    },
+    {
+      "path": "docs/ECF_DOSA_EMISSION_CONTRACT_VERIFIED.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10976,
+      "sha256": "f9acff32ccba69d71fc2c019c919e05ec07ae791180665068e4900e1248f0ba4",
+      "originalSnapshotSha256": "f9acff32ccba69d71fc2c019c919e05ec07ae791180665068e4900e1248f0ba4",
+      "gitIndexObject": "3141d8d37f95889b5c9be8714f1a7444de376b8a"
+    },
+    {
+      "path": "docs/ENVIRONMENTS.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10816,
+      "sha256": "73f8a470f314736a7ff7c15856db0e80533ae06d6feecf23d3ac51262f5f8007",
+      "originalSnapshotSha256": "d90c9556dd3cf67840aa7b13087e79adf4469c1075f23c038c25c96b0a8639f2",
+      "gitIndexObject": "a4b5df3968e6989ab962dd9167960ea376e5ed79"
+    },
+    {
+      "path": "docs/EXECUTION_STATE.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 19929,
+      "sha256": "a43bbfef0d20ed7f01b4398e3f93f72e9b98f58442e72b8467e05d9f8853bed9",
+      "originalSnapshotSha256": "5d4375183b028c403d9f966073d4d2a4ecf492e0eb8a146e0a53b2905617f74c",
+      "gitIndexObject": "6634f90b32871ebb328f92a900366cfa6d478cad"
+    },
+    {
+      "path": "docs/PRODUCT_SPEC.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 22886,
+      "sha256": "58dcd52fdae88a8d489861e04ffe3fe07f407fb018b9cdd3e0de4142da8e5b78",
+      "originalSnapshotSha256": "8ffe8c1c126871f9ef4d164df0b7bceb0d75e0feddc3820650af20615bb50264",
+      "gitIndexObject": "09ca8ae80e38b355840d7b9814b94f9c9f9cac9e"
+    },
+    {
+      "path": "docs/RELEASE.md",
+      "origin": "predeploy_audit",
+      "bytes": 14270,
+      "sha256": "db45ea818dccb0eba7d6a2279a29ae5bf39e5aff9bebe6ee644b14bff46d33d1",
+      "gitIndexObject": "775b97c07f4b59ff0bd6722b71be07d310ec5e51"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-numbering-environments/test-numbering-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 45357,
+      "sha256": "838dac036a177005a02ed44bf817a0692fc0dbaa6b0106676ea88282d94407a6",
+      "originalSnapshotSha256": "838dac036a177005a02ed44bf817a0692fc0dbaa6b0106676ea88282d94407a6",
+      "gitIndexObject": "8232fe6da8c620c5e790f90d6f8faf361161118b"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-numbering-environments/test-numbering-390.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 40087,
+      "sha256": "c0ff8a5c5de26bcbcef652ee525c5ea9022c6a982e24dc9bba506151b31d4de1",
+      "originalSnapshotSha256": "c0ff8a5c5de26bcbcef652ee525c5ea9022c6a982e24dc9bba506151b31d4de1",
+      "gitIndexObject": "cce2dbc6c6bbce37f1140ab2ae9fa5a7985e0dbe"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-numbering-environments/test-numbering-834.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 42295,
+      "sha256": "416af3a2a16a9ef8fabb69714985d6447f29222f50ce07073de79d07ce391d87",
+      "originalSnapshotSha256": "416af3a2a16a9ef8fabb69714985d6447f29222f50ce07073de79d07ce391d87",
+      "gitIndexObject": "8237a96ead6c8dcfe0a411395caf0d0bcf3207ee"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/VALIDATION.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11478,
+      "sha256": "166919ed9a332a2dc118c6e78b114c1a240fb460c31f79b56cc9a729ce29e40b",
+      "originalSnapshotSha256": "166919ed9a332a2dc118c6e78b114c1a240fb460c31f79b56cc9a729ce29e40b",
+      "gitIndexObject": "82933fbb3cfd6bc08e86407f855d02253077fe6f"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/drawer-1264.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 77712,
+      "sha256": "a638bb0b19ecf1f3621a9547d2e2f2f00ff4ee3d7f5ad866342e9f8d92de6017",
+      "originalSnapshotSha256": "a638bb0b19ecf1f3621a9547d2e2f2f00ff4ee3d7f5ad866342e9f8d92de6017",
+      "gitIndexObject": "4267128ec5e619b46773405e4da0e8efed552481"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/drawer-390.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 130122,
+      "sha256": "84b61d4775b6fc8dbb7d6027445e4c32bb1b1d32890f6f4827f8e752fad7c2a4",
+      "originalSnapshotSha256": "84b61d4775b6fc8dbb7d6027445e4c32bb1b1d32890f6f4827f8e752fad7c2a4",
+      "gitIndexObject": "399d39079ff712a078e0e5482dff5bcf78ebe2c0"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/drawer-834.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 266012,
+      "sha256": "0b7eca8efd84c80cb207c00e8917591632caf6aa7075454ae45497ed2d96e38b",
+      "originalSnapshotSha256": "0b7eca8efd84c80cb207c00e8917591632caf6aa7075454ae45497ed2d96e38b",
+      "gitIndexObject": "f74096875104e184c876b43eb8cc0ee1ab3d1d8f"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-1264-activo-panel.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 24410,
+      "sha256": "4aa6e71d6a70f5b9e428a63eb924522cd239a700031994d458cea507145847cd",
+      "originalSnapshotSha256": "4aa6e71d6a70f5b9e428a63eb924522cd239a700031994d458cea507145847cd",
+      "gitIndexObject": "658c681457f125c53e870fff1a3a895b2fde487e"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-1264-activo.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 74775,
+      "sha256": "3090090869112db621f1852ae47fea6882d5bf261709a96d15a5d2e859f8da81",
+      "originalSnapshotSha256": "3090090869112db621f1852ae47fea6882d5bf261709a96d15a5d2e859f8da81",
+      "gitIndexObject": "495000e47be107bcb9cdf4e92d454ff6c9aee056"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-1264-apagado-panel.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 14291,
+      "sha256": "346ee8a508782cdbd324c041658538c9d7635f29cbe151fd911768f7d5045349",
+      "originalSnapshotSha256": "346ee8a508782cdbd324c041658538c9d7635f29cbe151fd911768f7d5045349",
+      "gitIndexObject": "776fe9fbdb3d1a23a4f755dade645597e9d73a91"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-1264-apagado.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 67494,
+      "sha256": "419efa9d4a7f14cf3a95ff2fce18fe32fec4d15a16987d4c00c9b496c84f004d",
+      "originalSnapshotSha256": "419efa9d4a7f14cf3a95ff2fce18fe32fec4d15a16987d4c00c9b496c84f004d",
+      "gitIndexObject": "699a991f34f260d119df8c79576dde45f134f11b"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-1264-confirmacion.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 75929,
+      "sha256": "099cea81c74e0d84be0bd6ef0468dd86a96ed1f980ed92dd2830f7affe69f255",
+      "originalSnapshotSha256": "099cea81c74e0d84be0bd6ef0468dd86a96ed1f980ed92dd2830f7affe69f255",
+      "gitIndexObject": "5b9b093c219db72a11b389bf466a7c749ccc06f3"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-390-activo-panel.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 22740,
+      "sha256": "b322b49a6c6529a7d333def9029351354341a59e5f3db8c64e533e82f485f4e7",
+      "originalSnapshotSha256": "b322b49a6c6529a7d333def9029351354341a59e5f3db8c64e533e82f485f4e7",
+      "gitIndexObject": "cfe34a1953cbe8153cb76f59c22cf5b7d1e4bf69"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-390-activo.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 70492,
+      "sha256": "4303f6802ab8f9901760073d79dbb1e0867186795be1396f11a667de27ca3a52",
+      "originalSnapshotSha256": "4303f6802ab8f9901760073d79dbb1e0867186795be1396f11a667de27ca3a52",
+      "gitIndexObject": "e5476ce3bc3b2c80bab988e39b1505d978538814"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-390-apagado-panel.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 13442,
+      "sha256": "2a214b91f0da0a3babdcf2274867fb99a1c26e1b7d697b005da14dc96ba14737",
+      "originalSnapshotSha256": "2a214b91f0da0a3babdcf2274867fb99a1c26e1b7d697b005da14dc96ba14737",
+      "gitIndexObject": "327e9b73aa7951baccebde0576d9db5c32e3cae5"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-390-apagado.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 64376,
+      "sha256": "b4c8c275ca1497dd9b76b189534f8b8a7f64668a9845c2b684dbea808d7b142e",
+      "originalSnapshotSha256": "b4c8c275ca1497dd9b76b189534f8b8a7f64668a9845c2b684dbea808d7b142e",
+      "gitIndexObject": "0ab6713aff80503c4c6c71c19b365359c90e44b0"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-390-confirmacion.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 67264,
+      "sha256": "cd8c61c502dbe89df1d900f30db8894f8b2df0cbbaa525c87c544766b06b18bf",
+      "originalSnapshotSha256": "cd8c61c502dbe89df1d900f30db8894f8b2df0cbbaa525c87c544766b06b18bf",
+      "gitIndexObject": "4deed8b1b887ad738a7295fb365ae7cf3e22554e"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-834-activo-panel.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 23919,
+      "sha256": "30b4e22dab4701087fbe99e18f09473ab4357bed341f7230c4c91afe4bed9a5a",
+      "originalSnapshotSha256": "30b4e22dab4701087fbe99e18f09473ab4357bed341f7230c4c91afe4bed9a5a",
+      "gitIndexObject": "f574fc742e1b2f4a2a43fa546b876914871ee55f"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-834-activo.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 84783,
+      "sha256": "7b573dab9928d2245310a18901a842a3c1d9f09f5362b11500174fa7b0107354",
+      "originalSnapshotSha256": "7b573dab9928d2245310a18901a842a3c1d9f09f5362b11500174fa7b0107354",
+      "gitIndexObject": "d0df35bd0d36b43c7bbc2b26af40055266ecb3f7"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-834-apagado-panel.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 13992,
+      "sha256": "db33e0e01d691dc74c80cdc333bc945e2eeccfd8699e92080e5119509dcfbadc",
+      "originalSnapshotSha256": "db33e0e01d691dc74c80cdc333bc945e2eeccfd8699e92080e5119509dcfbadc",
+      "gitIndexObject": "fec5bfac322a8196ee496cf497eddf8ab735038e"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-834-apagado.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 85860,
+      "sha256": "2029b11bb2920b55bed613ec05bdb2d0bb55bcd9cad857f47685d181f7a057fe",
+      "originalSnapshotSha256": "2029b11bb2920b55bed613ec05bdb2d0bb55bcd9cad857f47685d181f7a057fe",
+      "gitIndexObject": "154a3e5847628aa916a644d5ae4928cefd27b915"
+    },
+    {
+      "path": "docs/design-research/2026-11-12/ecf-settings-restored/empresa-834-confirmacion.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 90376,
+      "sha256": "0e1ce95a92234cb184709bf10b188b67a21ce03d1552c46f9b469dfebebad389",
+      "originalSnapshotSha256": "0e1ce95a92234cb184709bf10b188b67a21ce03d1552c46f9b469dfebebad389",
+      "gitIndexObject": "cc28a552523a7fb6c4f1b22ddead9a08d1b2f79d"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-confirmed-result/result-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 25906,
+      "sha256": "720735050098ede02ae46527b5ba0053df08052bd51d70866022d26f5d0a452a",
+      "originalSnapshotSha256": "720735050098ede02ae46527b5ba0053df08052bd51d70866022d26f5d0a452a",
+      "gitIndexObject": "852cd92d71bb67097d6a5099c70578495758fafa"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-confirmed-result/result-320.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 23277,
+      "sha256": "29626bb0cae34cf5ce33bd153327e5b18b6948913f43aef6f282617c51a52e4e",
+      "originalSnapshotSha256": "29626bb0cae34cf5ce33bd153327e5b18b6948913f43aef6f282617c51a52e4e",
+      "gitIndexObject": "c7853e66f08c2a39664d4e6491c3e3e647df1285"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/acciones-fiscales-mobile.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5698,
+      "sha256": "3032ff8123443827008266c4ebfbe73488cc2f146b3c180c63030fab955cf592",
+      "originalSnapshotSha256": "3032ff8123443827008266c4ebfbe73488cc2f146b3c180c63030fab955cf592",
+      "gitIndexObject": "0a9c16f77379c99db81b9f4443a4615514169c97"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/nota-credito-58.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8605,
+      "sha256": "7367fb5c2af54be07889f49e99cffcef60f8efbef06d18776f0033ed6a4aba05",
+      "originalSnapshotSha256": "7367fb5c2af54be07889f49e99cffcef60f8efbef06d18776f0033ed6a4aba05",
+      "gitIndexObject": "e3241366db2a64002d3a7ac2bc8bbe3659740829"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/nota-credito-58.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 128626,
+      "sha256": "ce89a92c7053a45f5cbf77a9346de493c34ed77c8c9dd997bf4ecb0c9884d0c4",
+      "originalSnapshotSha256": "ce89a92c7053a45f5cbf77a9346de493c34ed77c8c9dd997bf4ecb0c9884d0c4",
+      "gitIndexObject": "59056699c2e76ae30ef1db9e43747e42b5b46761"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/nota-credito-80.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8789,
+      "sha256": "79586a58fa8d95ff5952c4b757f0c42aa29ab48d4e83d3f8aa26f37093c9b638",
+      "originalSnapshotSha256": "79586a58fa8d95ff5952c4b757f0c42aa29ab48d4e83d3f8aa26f37093c9b638",
+      "gitIndexObject": "a6ba8b8ba380ad8128cec7feb8099c33acbcd1b6"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/nota-credito-80.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 128211,
+      "sha256": "0e7422066e1ec126d06dff3124e626c6fb32b5010a43415bcb3063aa94b4dd75",
+      "originalSnapshotSha256": "0e7422066e1ec126d06dff3124e626c6fb32b5010a43415bcb3063aa94b4dd75",
+      "gitIndexObject": "5b7b3f05c89c593b64b3d31d6e268368366b4bed"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/nota-credito-a4.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8459,
+      "sha256": "80bae6b47464902f74c611731218bf35372a7bafcd97c66b54a57225f594fe6b",
+      "originalSnapshotSha256": "80bae6b47464902f74c611731218bf35372a7bafcd97c66b54a57225f594fe6b",
+      "gitIndexObject": "951b909cca8bcc85e43999c1a5a3678e94bd12ab"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/nota-credito-a4.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 154070,
+      "sha256": "d9a46d85f9a5f4264ec2d1368fc39f7dff32fcb51781fa70c3b0d2752f5ffe7c",
+      "originalSnapshotSha256": "d9a46d85f9a5f4264ec2d1368fc39f7dff32fcb51781fa70c3b0d2752f5ffe7c",
+      "gitIndexObject": "7180064018cca290bc020990e742672b2e4b55bf"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-e34-printing/verification.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1002,
+      "sha256": "5e3d46e46e1fafe5ca984aa08bc32aa7b4bd3d023c57c86ffbe757702587e704",
+      "originalSnapshotSha256": "5e3d46e46e1fafe5ca984aa08bc32aa7b4bd3d023c57c86ffbe757702587e704",
+      "gitIndexObject": "096d495d95ae98c35ced64b6338590c387894a44"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/full-history-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 90990,
+      "sha256": "c6f5d5e276d88aadbcb413331ed2e0a917fcdd9e95b211266536f514a8349006",
+      "originalSnapshotSha256": "c6f5d5e276d88aadbcb413331ed2e0a917fcdd9e95b211266536f514a8349006",
+      "gitIndexObject": "9f327b258fdfa61f93851847faf262f4c48d18bb"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/full-history-320.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 29268,
+      "sha256": "8a136fd056354dc1aea0cbc7fa8a0d99e311e850b1da81aca10598cd56edb988",
+      "originalSnapshotSha256": "8a136fd056354dc1aea0cbc7fa8a0d99e311e850b1da81aca10598cd56edb988",
+      "gitIndexObject": "2f1f779920b629ee07baca82b0cd14f9c6d72d09"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/full-history-detail-320.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 46242,
+      "sha256": "d3d5b673c58d57cf3333393835acce9c6cf2a47fd2e0e2cda48b88e3e2df05b1",
+      "originalSnapshotSha256": "d3d5b673c58d57cf3333393835acce9c6cf2a47fd2e0e2cda48b88e3e2df05b1",
+      "gitIndexObject": "25fbe21b6822a4353ea00b2eeedd74401eb4d5c2"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/history-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 18493,
+      "sha256": "eeaa882843a8884ae706442a5617df16c008e2a619c7b5502f50602573c26183",
+      "originalSnapshotSha256": "eeaa882843a8884ae706442a5617df16c008e2a619c7b5502f50602573c26183",
+      "gitIndexObject": "64a8368eff0662e455d91bfd8b5b5e4419075c4f"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/history-320.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 14493,
+      "sha256": "82df11b4c36629665c60a5444790126b53c9772a0363fd5f545af2599d2ea0e5",
+      "originalSnapshotSha256": "82df11b4c36629665c60a5444790126b53c9772a0363fd5f545af2599d2ea0e5",
+      "gitIndexObject": "3d55ffc93b552a5c197247b7f607ce063e509750"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/offline-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 21724,
+      "sha256": "772c3fca30bf88aab9f8ce115c6246214d96cd0af5bd947080f7ebd40eb612ae",
+      "originalSnapshotSha256": "772c3fca30bf88aab9f8ce115c6246214d96cd0af5bd947080f7ebd40eb612ae",
+      "gitIndexObject": "7edfa9d5bbe11d87f417c32d938a0f8332710974"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/offline-320.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 17540,
+      "sha256": "cc27a4187eb689bee60c24d28d99ad34087d00ecbdd0a3efc696a01c884e5d35",
+      "originalSnapshotSha256": "cc27a4187eb689bee60c24d28d99ad34087d00ecbdd0a3efc696a01c884e5d35",
+      "gitIndexObject": "e534b0579dd2139866d08dc5041a82e290c7d2d6"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-history-implementation/verification.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 3745,
+      "sha256": "86b1d5b62394d3ff9413e405f2d592636ab6e43256b8e9914c5ac23c26f4a81c",
+      "originalSnapshotSha256": "86b1d5b62394d3ff9413e405f2d592636ab6e43256b8e9914c5ac23c26f4a81c",
+      "gitIndexObject": "cce519a0b7856801473dad43680c763d71ab6bef"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-normal-production/normal-new-ticket-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 60513,
+      "sha256": "f9ccd8bd563a5855fe723f55bcd20b29e3da7b71c6db88c184d19355d0cc9ee1",
+      "originalSnapshotSha256": "f9ccd8bd563a5855fe723f55bcd20b29e3da7b71c6db88c184d19355d0cc9ee1",
+      "gitIndexObject": "188f7d7041f61e0bfd7130e8622a1228cb6e9829"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-normal-production/production-confirm-1280.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 24245,
+      "sha256": "606f85589284d12359d95f84ba63b4c9fae368d28ae62f5dad699fdb9bd1d8d8",
+      "originalSnapshotSha256": "606f85589284d12359d95f84ba63b4c9fae368d28ae62f5dad699fdb9bd1d8d8",
+      "gitIndexObject": "c2b2e334c55b19f926d198986be18107a28b6906"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-normal-production/production-confirm-320.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 22529,
+      "sha256": "c64d812c69f76e92920fec7419f0b4a74243aabc0489e4ac46ef3d5af16e9fc0",
+      "originalSnapshotSha256": "c64d812c69f76e92920fec7419f0b4a74243aabc0489e4ac46ef3d5af16e9fc0",
+      "gitIndexObject": "cca98d7205677da6dffa01329e6c64a02ab95e4c"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/astro7-home-1280.png",
+      "origin": "predeploy_audit",
+      "bytes": 620481,
+      "sha256": "cbc91f3354565b7d42f972f841fd2b742dfee13e4ef2a70b7c627df5532af0d8",
+      "gitIndexObject": "aa4434c002ceb326fa091463f333c5acd56020a4"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/astro7-login-1280.png",
+      "origin": "predeploy_audit",
+      "bytes": 356185,
+      "sha256": "6b3461bdc2d9545777536fb82bb3d1ee210228bd09a9eab62207390d8268e9f5",
+      "gitIndexObject": "4ca2a780f58f9796d83f9f6c001b29f0b057f1fc"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/astro7-login-390.png",
+      "origin": "predeploy_audit",
+      "bytes": 40222,
+      "sha256": "aaefdeac4e93a3ab1d0d913319c6655fe0c4d0219d79577ce12007de30779f27",
+      "gitIndexObject": "fb8bf2347c3c8ac35e0ac61c89e3f6d0ab2ed8bc"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/astro7-registration-390.png",
+      "origin": "predeploy_audit",
+      "bytes": 49909,
+      "sha256": "3628d3cde54484444e97b1a9ce328a0bbe9705af7b45a860cba8be0cdcb738db",
+      "gitIndexObject": "b2fb8de900150d981c47a8e67838212d52a3d39a"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/normal-new-ticket-1280.png",
+      "origin": "predeploy_audit",
+      "bytes": 73995,
+      "sha256": "60a7ec3354a2aa34c856f1010347945e711d9f13e642ef9d9691d9304ad2cbbd",
+      "gitIndexObject": "e55b9e7b4408deec442ccc1d0ba1906bc43c8c81"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/production-confirm-1280.png",
+      "origin": "predeploy_audit",
+      "bytes": 24245,
+      "sha256": "606f85589284d12359d95f84ba63b4c9fae368d28ae62f5dad699fdb9bd1d8d8",
+      "gitIndexObject": "c2b2e334c55b19f926d198986be18107a28b6906"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-predeploy/production-confirm-320.png",
+      "origin": "predeploy_audit",
+      "bytes": 22529,
+      "sha256": "c64d812c69f76e92920fec7419f0b4a74243aabc0489e4ac46ef3d5af16e9fc0",
+      "gitIndexObject": "cca98d7205677da6dffa01329e6c64a02ab95e4c"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/factura-a4-1.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 179181,
+      "sha256": "e8765b723131c84813aef681b8479ba6d9aca49a7d998844f8b6d8930171e42a",
+      "originalSnapshotSha256": "e8765b723131c84813aef681b8479ba6d9aca49a7d998844f8b6d8930171e42a",
+      "gitIndexObject": "643c1aed8fdeb3a42e0c84198363e5af8072fa28"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/factura-a4.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2159136,
+      "sha256": "edd4419f1cd4e1c83c46bce20add5579439ca0b1ab6e715007c6ee1b07dc2c12",
+      "originalSnapshotSha256": "edd4419f1cd4e1c83c46bce20add5579439ca0b1ab6e715007c6ee1b07dc2c12",
+      "gitIndexObject": "de5e1c7cd29311e9e21a17177ce67d1847bd2675"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/factura-varias-paginas-1.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 344935,
+      "sha256": "590c2189bab01749337d71b34de223f3722ab73d6e9fe3bf8215d36d4399bba8",
+      "originalSnapshotSha256": "590c2189bab01749337d71b34de223f3722ab73d6e9fe3bf8215d36d4399bba8",
+      "gitIndexObject": "84ed6cf3fc3961c11fce4572d2f409927dfa7201"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/factura-varias-paginas-4.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 231264,
+      "sha256": "92ff63740a40facd8800b858da298156b8a67acccb4cd9870d0ba92b91526525",
+      "originalSnapshotSha256": "92ff63740a40facd8800b858da298156b8a67acccb4cd9870d0ba92b91526525",
+      "gitIndexObject": "228e205aeaf80a193593ef70c7bc22afe1608ec7"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/factura-varias-paginas.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2179659,
+      "sha256": "481c538a1c87ea3e5b30ef49308f240fc30cba99c82262ae367883ce8e853de5",
+      "originalSnapshotSha256": "481c538a1c87ea3e5b30ef49308f240fc30cba99c82262ae367883ce8e853de5",
+      "gitIndexObject": "b04aa5e1db382766fb2cb75c8c33e951ccb23c56"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/ticket-58-1.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 115485,
+      "sha256": "208038292a27e0845cafbc260de8cbd2d9a5ccf121c4594ba4e4774970815f17",
+      "originalSnapshotSha256": "208038292a27e0845cafbc260de8cbd2d9a5ccf121c4594ba4e4774970815f17",
+      "gitIndexObject": "c7c5fcf3cb18c43d368bc57eb4938ea6bd472c4c"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/ticket-58.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8514,
+      "sha256": "5ad6d76e9868ce2141dc6ad68e1c960d570e7884674ac868d69e17ec2a4a1006",
+      "originalSnapshotSha256": "5ad6d76e9868ce2141dc6ad68e1c960d570e7884674ac868d69e17ec2a4a1006",
+      "gitIndexObject": "38bdceda7a92a356dfdcdf6022ace7bbcead0886"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/ticket-80-1.png",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 117699,
+      "sha256": "feffb76ebac62f84eff9559fb49c615afe109c9c4b3d74bec2ec32c264726c3e",
+      "originalSnapshotSha256": "feffb76ebac62f84eff9559fb49c615afe109c9c4b3d74bec2ec32c264726c3e",
+      "gitIndexObject": "21789a9a59071415af93bfd5d6da3f16dbbd8b57"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/ticket-80.pdf",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8687,
+      "sha256": "ab14a793b86042bbb40729cc916dc4dececdee530c7afc6aa1a4b6676c41471c",
+      "originalSnapshotSha256": "ab14a793b86042bbb40729cc916dc4dececdee530c7afc6aa1a4b6676c41471c",
+      "gitIndexObject": "08ef28d638586a75d87411f233cdafbc7e7052a0"
+    },
+    {
+      "path": "docs/design-research/2026-11-13/ecf-printing/verification.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 1178,
+      "sha256": "6dd990d3340a0972b7837c9750284f006a222240cab7f7399c9059cdd60c5045",
+      "originalSnapshotSha256": "6dd990d3340a0972b7837c9750284f006a222240cab7f7399c9059cdd60c5045",
+      "gitIndexObject": "07b67f8a97849eebce7584654e56b642aa736585"
+    },
+    {
+      "path": "docs/ecf/DOSA_INITIAL_TEST_ACCEPTANCE_2026-11-12.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5555,
+      "sha256": "1dc8e6254658e0030a66e1b1e15aa3bb797d1ea68f01f4bf7391e889ea221c31",
+      "originalSnapshotSha256": "1dc8e6254658e0030a66e1b1e15aa3bb797d1ea68f01f4bf7391e889ea221c31",
+      "gitIndexObject": "6ddf8dd43dbaefa2af79e91a9a2e166ae310b476"
+    },
+    {
+      "path": "docs/ecf/DOSA_TEST_PREFLIGHT_2026-11-12.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6313,
+      "sha256": "4fd40a926ba684b3ff73526f918f7bd60106de48c9033283d6cd9794050da193",
+      "originalSnapshotSha256": "4fd40a926ba684b3ff73526f918f7bd60106de48c9033283d6cd9794050da193",
+      "gitIndexObject": "32ef251d84a5a26f293ebd8f723e705566697771"
+    },
+    {
+      "path": "docs/ecf/ECF_COMPANY_ENVIRONMENT_DISPATCH_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9591,
+      "sha256": "bfda81f07b6725bc28770afff57bc7a45650e7b726ee9a3c5473a5f27b8c5910",
+      "originalSnapshotSha256": "bfda81f07b6725bc28770afff57bc7a45650e7b726ee9a3c5473a5f27b8c5910",
+      "gitIndexObject": "d2791c85434853446cb42d298a4f33dc70d31322"
+    },
+    {
+      "path": "docs/ecf/ECF_CONFIRMED_DOSA_FLOW_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9324,
+      "sha256": "2f7bb51275dcaf9e0c7eda1cb45c21bd735438d280ab024efd51b1775263792f",
+      "originalSnapshotSha256": "2f7bb51275dcaf9e0c7eda1cb45c21bd735438d280ab024efd51b1775263792f",
+      "gitIndexObject": "2b400de14a97c51b4a6edc98d0fc2daf1a5d5a4e"
+    },
+    {
+      "path": "docs/ecf/ECF_DOSA_SAME_REQUEST_RECOVERY_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 7805,
+      "sha256": "73874451c2584fb3035f10f02ba469e90532665739915b0eea8cc8c675db11cd",
+      "originalSnapshotSha256": "73874451c2584fb3035f10f02ba469e90532665739915b0eea8cc8c675db11cd",
+      "gitIndexObject": "3f61ae4afe29b239b69c59ba8fc38490989be055"
+    },
+    {
+      "path": "docs/ecf/ECF_E34_PRINT_COMPLETION_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 9603,
+      "sha256": "27790dec575dad4cacfadebc6825d69ab90e1beb496946a1dc043f23aa2a9853",
+      "originalSnapshotSha256": "27790dec575dad4cacfadebc6825d69ab90e1beb496946a1dc043f23aa2a9853",
+      "gitIndexObject": "2d9798115f1ad844ec88f1a6a6cdf7474de6a169"
+    },
+    {
+      "path": "docs/ecf/ECF_ENVIRONMENT_NUMBERING_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11927,
+      "sha256": "283d2f813d7e68ff97b17909517a2f0a9ea65812f28e7cae6ec2a8c6ab6f9a0c",
+      "originalSnapshotSha256": "283d2f813d7e68ff97b17909517a2f0a9ea65812f28e7cae6ec2a8c6ab6f9a0c",
+      "gitIndexObject": "ed0eeb79aab750e27f036f2efbac91fd9e7f053b"
+    },
+    {
+      "path": "docs/ecf/ECF_NORMAL_PRODUCTION_RECOVERY_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 13682,
+      "sha256": "c9fc60bb34e62f30fcec155a213af8ba8cda7b2d39ef0c174fddcc1266ce0152",
+      "originalSnapshotSha256": "c9fc60bb34e62f30fcec155a213af8ba8cda7b2d39ef0c174fddcc1266ce0152",
+      "gitIndexObject": "9bea2f86d011c522552b370a9d845d17e89544c5"
+    },
+    {
+      "path": "docs/ecf/ECF_OFFLINE_HISTORY_E34_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10140,
+      "sha256": "6efd091702f5efdfef8a64ead1846d92097fe01c36649b2c7b855ba16efc933a",
+      "originalSnapshotSha256": "6efd091702f5efdfef8a64ead1846d92097fe01c36649b2c7b855ba16efc933a",
+      "gitIndexObject": "99df23dd7de25f8b48174c6cca868f17a7694aae"
+    },
+    {
+      "path": "docs/ecf/ECF_PREDEPLOY_AUDIT_2026-11-13.md",
+      "origin": "predeploy_audit",
+      "bytes": 16006,
+      "sha256": "f33e4d08ac66448b975aa1f84a3965c8e583a02bdfa43a864f846532d8f664a3",
+      "gitIndexObject": "584cb266170df9ef993ed8b8003452d42924c911"
+    },
+    {
+      "path": "docs/ecf/ECF_PREDEPLOY_EVIDENCE_2026-11-13.json",
+      "origin": "predeploy_audit",
+      "bytes": 9124,
+      "sha256": "914437d8f500119055cc69d1173643e2d0aaf5f8d5759b61438860f77834020a",
+      "gitIndexObject": "7d12aa16702f9ed96d966e0f6ca6f73c363562ee"
+    },
+    {
+      "path": "docs/ecf/ECF_PREDEPLOY_FILES_2026-11-13.json",
+      "origin": "predeploy_audit",
+      "bytes": null,
+      "sha256": null,
+      "note": "Manifest self-hash omitted to avoid circular content.",
+      "gitIndexObject": null
+    },
+    {
+      "path": "docs/ecf/ECF_PRINT_REPRESENTATION_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 11574,
+      "sha256": "0e2fb64e9897d21499646f42ccfef910858fa5a30b49365dca80cf38cdc08084",
+      "originalSnapshotSha256": "0e2fb64e9897d21499646f42ccfef910858fa5a30b49365dca80cf38cdc08084",
+      "gitIndexObject": "7d177d054043d1b79cbf68e119e4d3ccf0e2a069"
+    },
+    {
+      "path": "docs/ecf/FULLTECH_LEGACY_TEST_CLASSIFICATION_2026-11-13.plan.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 5088,
+      "sha256": "f3525f077f1b03656e7c443d501329d018c1bd0d7332c150068ad70b47b26851",
+      "originalSnapshotSha256": "f3525f077f1b03656e7c443d501329d018c1bd0d7332c150068ad70b47b26851",
+      "gitIndexObject": "83810e2eda9645a27fe0f17ca44f5b0c679fbfa5"
+    },
+    {
+      "path": "docs/ecf/FULLTECH_PRODUCTION_PREFLIGHT_2026-11-13.audit.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 8615,
+      "sha256": "1d8968cc6f1544be89db0defc7303859d29f0db651a0cfc50db843fbbf0b2ebd",
+      "originalSnapshotSha256": "1d8968cc6f1544be89db0defc7303859d29f0db651a0cfc50db843fbbf0b2ebd",
+      "gitIndexObject": "6f399885c0f1828b88ecd221ebaf69b0998a23b6"
+    },
+    {
+      "path": "docs/ecf/FULLTECH_TEST_ACCEPTANCE_2026-11-13.json",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 2605,
+      "sha256": "becbb58e10daf40c60e94fef7710d9bacb804ac3e73e4a1177e13f4a7a0b6ff3",
+      "originalSnapshotSha256": "becbb58e10daf40c60e94fef7710d9bacb804ac3e73e4a1177e13f4a7a0b6ff3",
+      "gitIndexObject": "835784abcda0942a229cdd081866cc6d274bcfb3"
+    },
+    {
+      "path": "docs/ecf/FULLTECH_TEST_ACCEPTANCE_2026-11-13.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 6551,
+      "sha256": "cbf18dde8a1f63bd8660937abcb7c325f897decfb175d3a505a39c081fbf8545",
+      "originalSnapshotSha256": "cbf18dde8a1f63bd8660937abcb7c325f897decfb175d3a505a39c081fbf8545",
+      "gitIndexObject": "cd6985ac9b42440252cd6914bd49e865f03dac84"
+    },
+    {
+      "path": "docs/ecf/FULLTECH_TEST_EXECUTION_2026-11-12.md",
+      "origin": "received_work_ported_and_reviewed",
+      "bytes": 10742,
+      "sha256": "b5f254412de08f688e690e10c99f2a78ade37a9e6217e749a4263f58af861321",
+      "originalSnapshotSha256": "b5f254412de08f688e690e10c99f2a78ade37a9e6217e749a4263f58af861321",
+      "gitIndexObject": "0d796ed3ed93b5e8d73b28ac2f63088d74c6c555"
+    },
+    {
+      "path": "package-lock.json",
+      "origin": "predeploy_audit",
+      "bytes": 389907,
+      "sha256": "daa060bac5eeac3000dd2ec90475d879e64f29474144b5f0700e73aa4dad0841",
+      "gitIndexObject": "81c67a9cb363849838f8e9bfd9505c7b0288cba2"
+    },
+    {
+      "path": "scripts/release/sync_api_docker_lock.mjs",
+      "origin": "predeploy_audit",
+      "bytes": 3296,
+      "sha256": "964a5f58af50c8e0d129900955e3bab36373fe2c9778dc68b3327815dcdfaafe",
+      "gitIndexObject": "3a3d4cfa9f7937d3783cba42b60ab06f17e356d3"
+    },
+    {
+      "path": "scripts/release/verify_ecf_server_predeploy.ps1",
+      "origin": "predeploy_audit",
+      "bytes": 4707,
+      "sha256": "dc6cd1d135c1c043b12a3fbfd40cd070e7603509cb63e53656a73c658745dfb7",
+      "gitIndexObject": "cc3e6bd30e77112d5542a1b4128f60cc667138e4"
+    },
+    {
+      "path": "website/package-lock.json",
+      "origin": "predeploy_audit",
+      "bytes": 173690,
+      "sha256": "e18f66114f9b8f0d7cbca714ce7577459cd8b13edee8e7e5d7edc355f2fcfab2",
+      "gitIndexObject": "4a2be5944994b4b0e4ed3585542de2ca1ab38aba"
+    },
+    {
+      "path": "website/package.json",
+      "origin": "predeploy_audit",
+      "bytes": 543,
+      "sha256": "d447354c7cdb6013cb47684b281428fc98c2fa744fd21e4c1540156d02067dd1",
+      "gitIndexObject": "a9d63528d84eae8f9c71a9698f8891bef9e27811"
+    }
+  ],
+  "hashBasis": "sha256 covers exact working-copy bytes, including platform line endings; gitIndexObject is the portable Git blob identity. Original snapshot hashes cover original working-copy bytes.",
+  "snapshotCommit": "50617f39a7d744d2a528c30fa51b33e8d11b131e",
+  "snapshotScope": "The 246-file implementation checkpoint; later publication documentation is recorded in ECF_RELEASE_OPERATOR_2026-11-13.md."
+}

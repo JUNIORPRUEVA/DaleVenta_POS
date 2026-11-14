@@ -443,7 +443,14 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
     expect(body.encabezado.idDoc.eNCF).toBe(res.body.encf);
     expect(body.encabezado.idDoc.eNCF).toMatch(/^E31\d{10}$/);
     expect(body.encabezado.idDoc.tipoeCF).toBe("31");
-    expect(body.detallesItems.length).toBeGreaterThan(0);
+    expect(body.encabezado.idDoc.tipoPago).toBe(1);
+    expect(body.encabezado.idDoc.tipoIngresos).toBe("01");
+    expect(body.encabezado.idDoc.indicadorMontoGravado).toBe(0);
+    expect(body.encabezado.idDoc.tablaFormasPago.formaDePago).toEqual([
+      { formaPago: "1", montoPago: "118.00" },
+    ]);
+    expect(body.encabezado.emisor.fechaEmision).toMatch(/^\d{2}-\d{2}-\d{4}$/);
+    expect(body.detallesItems.items.length).toBeGreaterThan(0);
 
     // Estado y evidencia persistidos, con la huella de lo realmente enviado.
     const row = await prisma.ecfElectronicDocument.findFirstOrThrow({
@@ -495,7 +502,7 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  it("C: PRODUCCIÓN no se autoriza aunque existan ambas claves", async () => {
+  it("el ambiente global PRODUCTION no redirige una empresa TEST ni usa su clave productiva", async () => {
     const tenant = await registerTenant("c");
     await enableEcf(tenant);
     await registerSequence(tenant);
@@ -517,9 +524,9 @@ uat("Orquestador de emisión DOSA — cinco empresas por HTTP", () => {
     transport.reset();
 
     const res = await dispatch(tenant, documentId);
-    expect(res.body).toMatchObject({ ok: false, code: "ECF_DOSA_GATE_BLOCKED" });
-    expect(res.body.blockingReasons).toContain("ECF_DOSA_GATE_PRODUCTION_NOT_AUTHORIZED");
-    expect(transport.requests).toHaveLength(0);
+    expect(res.body).toMatchObject({ ok: true, environment: "test" });
+    expect(transport.requests).toHaveLength(1);
+    expect(transport.requests[0].headers["X-API-KEY"]).toBe("sk_test_DISPATCH_C");
 
     // Se vuelve al ambiente de pruebas para el resto de casos.
     await app.close();

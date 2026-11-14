@@ -29,6 +29,7 @@ uat("E31 emission orchestrator (simulated transport)", () => {
   async function tenant() {
     const companyId = randomUUID();
     await prisma.company.create({ data: { id: companyId, name: "Synthetic E31 emission", slug: `ecf-e31-${companyId}` } });
+    await prisma.ecfCompanyConfiguration.create({ data: { companyId, environment: "PRODUCTION" } });
     return { companyId, user: { id: actor, role: "ADMIN", companyId } as TenantUser };
   }
   const metadata = (encf: string) => ({ encf, sequenceDueDate: "2026-12-31", incomeType: 1, paymentType: 1 } as const);

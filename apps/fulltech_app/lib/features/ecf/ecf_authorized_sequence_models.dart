@@ -49,6 +49,7 @@ class EcfAuthorizedSequencesView {
     required this.supportedTypes,
     required this.declarationVersion,
     required this.declarationText,
+    this.environment = 'PRODUCTION',
   });
 
   factory EcfAuthorizedSequencesView.fromJson(Map<String, dynamic> json) {
@@ -56,11 +57,15 @@ class EcfAuthorizedSequencesView {
     final items = rawItems is List
         ? rawItems
               .whereType<Map>()
-              .map((row) => EcfAuthorizedSequence.fromJson(row.cast<String, dynamic>()))
+              .map(
+                (row) =>
+                    EcfAuthorizedSequence.fromJson(row.cast<String, dynamic>()),
+              )
               .toList(growable: false)
         : const <EcfAuthorizedSequence>[];
     final rawTypes = json['supportedTypes'];
     return EcfAuthorizedSequencesView(
+      environment: '${json['environment'] ?? 'PRODUCTION'}',
       items: items,
       supportedTypes: rawTypes is List
           ? rawTypes.map((value) => '$value').toList(growable: false)
@@ -78,6 +83,7 @@ class EcfAuthorizedSequencesView {
   );
 
   final List<EcfAuthorizedSequence> items;
+  final String environment;
   final List<String> supportedTypes;
   final String declarationVersion;
   final String declarationText;

@@ -212,6 +212,13 @@ export class SalesController {
     return this.sales.returnSale(user, id, dto, financialMetadataFromRequest(req));
   }
 
+  @Post(":id/refunds/:refundId/fiscal")
+  @Permissions("refundSales")
+  retryRefundFiscal(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("refundId", new ParseUUIDPipe()) refundId: string) {
+    return this.sales.retryRefundFiscal(req.user as TenantUser, id, refundId);
+  }
+
   private headerValue(req: Request, name: string) {
     const value = req.headers[name];
     const text = Array.isArray(value) ? value[0] : value;

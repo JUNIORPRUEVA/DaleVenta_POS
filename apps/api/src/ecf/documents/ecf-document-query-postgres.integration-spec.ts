@@ -25,6 +25,7 @@ uat("e-CF document query API (tenant isolation) on PostgreSQL", () => {
   async function tenant(name = "Query synthetic") {
     const companyId = randomUUID();
     await prisma.company.create({ data: { id: companyId, name, slug: `ecf-q-${companyId}` } });
+    await prisma.ecfCompanyConfiguration.create({ data: { companyId, environment: "PRODUCTION" } });
     // La numeración exige autorización DGII declarada (fail-closed).
     for (const documentType of ["E31", "E34"]) {
       await prisma.ecfDgiiAuthorizedSequence.create({
@@ -45,7 +46,7 @@ uat("e-CF document query API (tenant isolation) on PostgreSQL", () => {
   async function acceptedOriginal(companyId: string, total = "100.00") {
     const encf = `E31000000${String(Math.floor(1000 + Math.random() * 9000))}`;
     const evidenceRef = `uat://synthetic-not-dgii/${randomUUID()}`, evidenceHash = "a".repeat(64);
-    return prisma.ecfElectronicDocument.create({ data: { companyId, documentType: "E31", status: "DGII_ACCEPTED",
+    return prisma.ecfElectronicDocument.create({ data: { companyId, environment: "PRODUCTION", documentType: "E31", status: "DGII_ACCEPTED",
       externalDocumentNumber: encf, externalProviderId: `synthetic-${randomUUID()}`,
       idempotencyKey: `synthetic-original-${randomUUID()}`, payloadFingerprint: "b".repeat(64),
       fiscalSnapshot: { total, currency: "DOP", issueDate: "2026-10-14", issuerRnc: "101000001", encf, evidenceRef, evidenceHash } } })
@@ -55,7 +56,7 @@ uat("e-CF document query API (tenant isolation) on PostgreSQL", () => {
   }
   async function localDoc(companyId: string, documentType: "E31" | "E34" = "E31", status = "HUMAN_REVIEW_REQUIRED") {
     const encf = `${documentType}${String(Math.floor(Math.random() * 1e10)).padStart(10, "0")}`;
-    return prisma.ecfElectronicDocument.create({ data: { companyId, documentType, status,
+    return prisma.ecfElectronicDocument.create({ data: { companyId, environment: "PRODUCTION", documentType, status,
       externalDocumentNumber: encf, idempotencyKey: `synthetic-doc-${randomUUID()}`,
       payloadFingerprint: "c".repeat(64) } });
   }

@@ -4,6 +4,7 @@ import { PrismaService } from "../../../prisma/prisma.service";
 import type { TenantUser } from "../../../auth/tenant-context";
 import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { DosaEmissionService } from "./dosa-emission.service";
+import { PrismaDosaCompanyFiscalConfigReader } from "./dosa-company-fiscal-config";
 import { DosaEmissionDispatchService } from "./dosa-emission-dispatch.service";
 import { validE32Simple, validE34Partial } from "../../fiscal-core/ecf-fixtures";
 
@@ -25,7 +26,12 @@ uat("recuperación de despachos pendientes (sin duplicados) on PostgreSQL", () =
     await prisma.$connect();
     service = new DosaEmissionDispatchService(
       prisma,
-      new DosaEmissionService(prisma),
+      new DosaEmissionService({
+        config: { environment: "TEST" } as never,
+        fiscalConfig: new PrismaDosaCompanyFiscalConfigReader(prisma),
+        credentials: { inspect: async () => null } as never,
+        transport: { post: async () => { throw Error("NETWORK_FORBIDDEN"); } },
+      }),
       new EcfEmissionService(prisma),
     );
     userId = randomUUID();
@@ -52,6 +58,7 @@ uat("recuperación de despachos pendientes (sin duplicados) on PostgreSQL", () =
     await prisma.company.create({
       data: { id: companyId, name: "Synthetic pending", slug: `ecf-pending-${companyId}` },
     });
+    await prisma.ecfCompanyConfiguration.create({ data: { companyId, environment: "SANDBOX" } });
     return { companyId, user: { id: userId, role: "ADMIN", companyId } as TenantUser };
   }
 
@@ -67,7 +74,7 @@ uat("recuperación de despachos pendientes (sin duplicados) on PostgreSQL", () =
     const documentType = options.documentType ?? "E32";
     const encf = `${documentType}${String(Math.floor(Math.random() * 1e10)).padStart(10, "0")}`;
     const document = await prisma.ecfElectronicDocument.create({
-      data: {
+      data: { environment: "SANDBOX",
         companyId,
         documentType,
         status: options.status ?? "LOCAL_VALIDATED",

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-09T03:05:42.269Z",
+  "generatedAt": "2026-11-13T23:56:42.643Z",
   "models": [
     {
       "modelName": "EcfSupportGrant",
@@ -417,7 +417,7 @@
       "parentOwnershipRelationship": "originalDocument, relatedDocuments, reservedCredits, creditReservation",
       "uniqueConstraints": [
         "@@unique([companyId, id])",
-        "@@unique([companyId, externalDocumentNumber], map: \"ecf_electronic_documents_company_id_external_document_number_ke\")",
+        "@@unique([companyId, environment, externalDocumentNumber], map: \"ecf_electronic_documents_company_env_external_number_key\")",
         "@@unique([companyId, idempotencyKey])"
       ],
       "indexes": [
@@ -641,6 +641,27 @@
       "storageDependencies": [],
       "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Session/security data"
+    },
+    {
+      "modelName": "SessionHandoffTicket",
+      "tableName": "session_handoff_tickets",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": true,
+      "tenantForeignKey": "missing",
+      "tenantIndex": "missing",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "ticketHash String    @unique @map(\"ticket_hash\")"
+      ],
+      "indexes": [
+        "@@index([expiresAt])",
+        "@@index([userId, usedAt])"
+      ],
+      "deleteBehavior": [],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Backfill deterministically, add FK/index, then make companyId NOT NULL.",
+      "classification": "Company-owned root entity"
     },
     {
       "modelName": "User",
@@ -1202,6 +1223,28 @@
       "storageDependencies": [],
       "recommendedMigrationAction": "Add companyId through trusted parent backfill or document inherited parent ownership.",
       "classification": "Company-owned child entity"
+    },
+    {
+      "modelName": "CompanyOnboardingTask",
+      "tableName": "company_onboarding_tasks",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "@@unique([companyId, taskKey])"
+      ],
+      "indexes": [
+        "@@index([companyId])"
+      ],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Company-owned root entity"
     },
     {
       "modelName": "UserLocation",
@@ -2476,7 +2519,7 @@
       "tenantIndex": "present",
       "parentOwnershipRelationship": null,
       "uniqueConstraints": [
-        "@@unique([companyId, documentType])"
+        "@@unique([companyId, documentType, environment], name: \"companyId_documentType\", map: \"ecf_dgii_authorized_sequences_company_env_type_key\")"
       ],
       "indexes": [
         "@@index([companyId])"
@@ -2520,7 +2563,7 @@
       "tenantIndex": "present",
       "parentOwnershipRelationship": "sequence",
       "uniqueConstraints": [
-        "@@unique([companyId, operationKey])"
+        "@@unique([companyId, environment, operationKey], map: \"ecf_sequence_audit_logs_company_env_operation_key\")"
       ],
       "indexes": [
         "@@index([companyId, encf])",

@@ -1,0 +1,316 @@
+{
+  "checkedAt": "2026-11-14T00:37:34.255Z",
+  "candidate": {
+    "branch": "agent/ecf-predeploy-20261113",
+    "baseCommit": "cada11f8bb3bb2e749810c3d9213bb84f9471d44",
+    "originalWorkingFilesVerified": 218,
+    "originalWorkingFilesChanged": 0,
+    "commitPushMergeExecuted": false
+  },
+  "production": {
+    "migrationResult": {
+      "phase": "VERIFIED",
+      "startedAt": "2026-11-13T23:44:34.420427+00:00",
+      "backupSha256": "f4ed7420d873004dfe787f4e468058eddc6bd5f8da7239aa5df6e3783ca8d0f3",
+      "backupFile": "database-immediately-before.dump",
+      "apiImage": "sha256:5b6cffc9d31f0cfc30856070091245cdb162f58c555e8a66d9879d923ca9d0f0",
+      "apiContainer": "5fe17a2dc313",
+      "migrations": [
+        {
+          "name": "20261113040000_ecf_numbering_environment",
+          "sha256": "1523a7fd7199627535a1408197e922d6f0761d86872d2acf0ec0f081811691d6"
+        },
+        {
+          "name": "20261113050000_ecf_reviewed_legacy_test_classification",
+          "sha256": "649d2845b063f1e5eb5f7db669afbd73fd545d8e934060e80ff22a3be5920c4f"
+        },
+        {
+          "name": "20261113060000_ecf_public_print_stamp",
+          "sha256": "76de09a3c058016f8dbaa3ccd89d712068ae0043248af9e891720e5a2624ce49"
+        }
+      ],
+      "recorded": [
+        "20261113040000_ecf_numbering_environment",
+        "20261113050000_ecf_reviewed_legacy_test_classification",
+        "20261113060000_ecf_public_print_stamp"
+      ],
+      "oldMigrationHistoryPreserved": true,
+      "existingFiscalRowsPreserved": true,
+      "apiHealthy": true,
+      "apiContainerUnchanged": true,
+      "automaticMigrationsStillDisabled": true,
+      "totalMigrationRows": 226,
+      "finishedAt": "2026-11-13T23:44:37.952351+00:00"
+    },
+    "fiscalCounts": {
+      "totalFiscalDocuments": 5,
+      "reviewedFulltechDocuments": 5,
+      "unclassifiedFiscalDocuments": 0
+    },
+    "legacyReviewManifestSha256": "c92f82949290be18dd9f2584019eec95315e0ba2a3baab224f9ee97c5031823c",
+    "companyConfigurationChanged": false,
+    "externalFiscalCalls": 0,
+    "applicationDeployExecuted": false,
+    "serviceRestartExecuted": false,
+    "autoDeployDisabled": {
+      "backend": true,
+      "pwa": true
+    },
+    "productionEmissionGatePrepared": false,
+    "confirmedDgiiOutcomeGatePrepared": false,
+    "assistantPublishableKeyPresent": true
+  },
+  "backups": [
+    {
+      "file": "database-before.dump",
+      "sha256": "73fd39b44b79f5d2a7e7027562957d19c345cba45fc48a04ee8fe1765e002868",
+      "localHashMatches": true
+    },
+    {
+      "file": "database-immediately-before.dump",
+      "sha256": "f4ed7420d873004dfe787f4e468058eddc6bd5f8da7239aa5df6e3783ca8d0f3",
+      "localHashMatches": true
+    },
+    {
+      "file": "running-api-and-pwa-images.tar.gz",
+      "sha256": "d78a8f4ac071e910b9bd9d1c3366bdd37256014c1198bde6412026fc0b0df095",
+      "localHashMatches": true
+    }
+  ],
+  "validation": {
+    "apiBuild": "PASS",
+    "prismaValidate": "PASS with owned local DB environment",
+    "apiGeneral": {
+      "command": "npm --workspace apps/api test",
+      "passed": 3300,
+      "skipped": 101,
+      "suitesPassed": 276
+    },
+    "http": {
+      "command": "npm --workspace apps/api run test:e2e -- --runTestsByPath src/ecf/provider/dosa/dosa-emission-dispatch-http.e2e-spec.ts src/ecf/ecf-documents-http.e2e-spec.ts --forceExit",
+      "passed": 30
+    },
+    "postgres": {
+      "command": "npm --workspace apps/api run test:integration -- --runTestsByPath src/ecf/documents/ecf-legacy-test-classification-postgres.integration-spec.ts src/ecf/documents/ecf-environment-isolation-postgres.integration-spec.ts src/ecf/documents/ecf-sequence-postgres.integration-spec.ts src/ecf/provider/dosa/dosa-same-request-recovery-postgres.integration-spec.ts src/sales/sales-return-ecf-credit-postgres.integration-spec.ts",
+      "passed": 48,
+      "suitesPassed": 5
+    },
+    "flutterAnalyze": "PASS no issues",
+    "flutterBroadPassed": 1117,
+    "flutterVisualWidgetPassed": 14,
+    "flutterWebValidationBuild": "PASS local-only fixture",
+    "apiDockerLinuxBuild": "PASS Node20.20.2 Prisma5.22",
+    "astroDockerLinuxBuild": "PASS Astro7.4.12 Node22.23.4",
+    "astroTypeCheck": {
+      "errors": 0,
+      "warnings": 0,
+      "hints": 1
+    },
+    "astroPagesBuilt": 14,
+    "astroLinuxTestsPassed": 11,
+    "apiLinuxRuntimeAuditFindings": 0,
+    "astroLinuxAuditFindings": 0,
+    "apiDockerLockPackagesVerified": 756,
+    "tenantInventoryModels": 168,
+    "endpointMatrixRows": 431,
+    "unsafeQueryHeuristicWarnings": 296,
+    "unsafeQueryErrors": 0,
+    "readOnlyServerGateExitCode": 2,
+    "hardwareValidationClaimed": false,
+    "astroBrowser": {
+      "tool": "Playwright library1.65.1, isolated headless Chrome",
+      "network": "localhost only; external requests blocked",
+      "views": [
+        {
+          "path": "/",
+          "viewport": 1280,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 0
+        },
+        {
+          "path": "/login/",
+          "viewport": 1280,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 1
+        },
+        {
+          "path": "/registro/negocio/",
+          "viewport": 1280,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 1
+        },
+        {
+          "path": "/preparando/",
+          "viewport": 1280,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 0
+        },
+        {
+          "path": "/",
+          "viewport": 390,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 0
+        },
+        {
+          "path": "/login/",
+          "viewport": 390,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 1
+        },
+        {
+          "path": "/registro/negocio/",
+          "viewport": 390,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 1
+        },
+        {
+          "path": "/preparando/",
+          "viewport": 390,
+          "status": 200,
+          "horizontalOverflow": false,
+          "forms": 0
+        }
+      ],
+      "registrationLink": "PASS",
+      "pageErrors": [],
+      "desktopAndMobileScreenshotsInspected": true
+    },
+    "combinedDockerBuild": "PASS Linux Flutter+Astro+Nginx, synthetic key only",
+    "combinedStaticSmoke": {
+      "routes": [
+        {
+          "path": "/",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/login",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/registro",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/registro/negocio",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/preparando",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/recuperar",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/bienvenida",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/precios",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/funciones",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/descargas",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/soporte",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/terminos",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/privacidad",
+          "status": 200,
+          "kind": "ASTRO"
+        },
+        {
+          "path": "/home",
+          "status": 200,
+          "kind": "FLUTTER"
+        },
+        {
+          "path": "/cotizaciones",
+          "status": 200,
+          "kind": "FLUTTER"
+        },
+        {
+          "path": "/ecf",
+          "status": 200,
+          "kind": "FLUTTER"
+        },
+        {
+          "path": "/reset-password",
+          "status": 200,
+          "kind": "FLUTTER"
+        }
+      ],
+      "publicAssets": 6,
+      "pwaEntryPreserved": true,
+      "assistantTemplateFilledWithSyntheticKey": true,
+      "noApiOrFiscalRequests": true
+    },
+    "gitDiffWhitespaceCheck": "PASS after removing one new-file EOF blank line; no behavior change",
+    "stagedSqlChecksumsMatchApplied": true,
+    "localCleanup": "Four identity-checked task-owned containers stopped; volumes and backups retained."
+  },
+  "limitations": [
+    "Production emission flags not prepared; company activation unchanged.",
+    "Commit/push/integration and deployment not executed.",
+    "101 API opt-in tests skipped in general suite; dedicated HTTP/PostgreSQL suites executed separately.",
+    "11 API dev-only advisories remain (1 low,10 moderate).",
+    "Jest harness has documented open handles; HTTP uses forceExit.",
+    "Existing nonfiscal schema drift was inspected read-only, not applied.",
+    "Local validation images contain a synthetic assistant key and must not be deployed."
+  ],
+  "snapshotPhase": "Implementation checkpoint before publication; candidate fields below retain their original observed state.",
+  "publication": {
+    "implementationCommit": "50617f39a7d744d2a528c30fa51b33e8d11b131e",
+    "branch": "agent/ecf-predeploy-20261113",
+    "pullRequest": 41,
+    "url": "https://github.com/JUNIORPRUEVA/DaleVenta_POS/pull/41",
+    "base": "production-main",
+    "ownerAuthorizedCommitPushAndPr": true,
+    "branchPushed": true,
+    "mergeExecuted": false,
+    "deployExecuted": false,
+    "automaticMergeEnabled": false,
+    "ciRunAtPublication": 43537273400,
+    "ciStatusAtPublication": "in_progress",
+    "readOnlyServerRecheck": {
+      "checksumsMatch": true,
+      "unclassifiedDocuments": 0,
+      "apiHealthy": true,
+      "automaticMigrationsDisabled": true,
+      "autoDeployDisabled": true,
+      "productionFlagsPrepared": false,
+      "exitCode": 2
+    }
+  }
+}

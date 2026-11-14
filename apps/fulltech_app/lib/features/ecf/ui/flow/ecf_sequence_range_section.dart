@@ -130,7 +130,8 @@ class _EcfSequenceRangeSectionState
     if (authorization == null) return;
     final current = _activeSequenceFor(type);
     final renew = current != null;
-    final start = current == null || current.nextNumber <= authorization.rangeFrom
+    final start =
+        current == null || current.nextNumber <= authorization.rangeFrom
         ? authorization.rangeFrom
         : current.nextNumber;
     if (start > authorization.rangeTo) {
@@ -154,12 +155,14 @@ class _EcfSequenceRangeSectionState
       final repository = ref.read(ecfRepositoryProvider);
       if (renew) {
         await repository.renewSequence(
+          expectedEnvironment: _authorized.environment,
           documentType: type,
           startNumber: start,
           endNumber: authorization.rangeTo,
         );
       } else {
         await repository.registerSequence(
+          expectedEnvironment: _authorized.environment,
           documentType: type,
           startNumber: start,
           endNumber: authorization.rangeTo,
@@ -254,6 +257,7 @@ class _EcfSequenceRangeSectionState
       final repository = ref.read(ecfRepositoryProvider);
       // 1) La autorización primero: es la fuente de verdad del rango.
       await repository.declareAuthorizedSequence(
+        expectedEnvironment: _authorized.environment,
         documentType: _selectedType!,
         authorizationNumber: authorizationNumber,
         rangeFrom: from,
@@ -268,12 +272,14 @@ class _EcfSequenceRangeSectionState
       // `register` rechazaría el tipo con `ECF_SEQUENCE_ALREADY_EXISTS`.
       if (_activeSequenceFor(_selectedType!) != null) {
         await repository.renewSequence(
+          expectedEnvironment: _authorized.environment,
           documentType: _selectedType!,
           startNumber: from,
           endNumber: to,
         );
       } else {
         await repository.registerSequence(
+          expectedEnvironment: _authorized.environment,
           documentType: _selectedType!,
           startNumber: from,
           endNumber: to,
@@ -353,7 +359,8 @@ class _EcfSequenceRangeSectionState
     // El repositorio ya entrega el motivo del servidor sin envoltorio técnico;
     // mostrarlo evita el «Inténtalo de nuevo» que no dice nada.
     final trimmed = text.trim();
-    final isTechnical = trimmed.isEmpty ||
+    final isTechnical =
+        trimmed.isEmpty ||
         trimmed.startsWith('DioException') ||
         trimmed.startsWith('Exception') ||
         trimmed.startsWith('SocketException');
@@ -370,6 +377,13 @@ class _EcfSequenceRangeSectionState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(ecfCapabilitiesProvider.select((state) => state.valueOrNull?.environment), (previous, next) {
+      if (previous != null && next != null && previous != next && widget.canManage && mounted) {
+        _authorization.clear(); _from.clear(); _to.clear(); _approved.clear(); _expires.clear();
+        _selectedType = null; _declarationAccepted = false; _showAnotherType = false;
+        _load();
+      }
+    });
     if (!widget.canManage || _loading) return const SizedBox.shrink();
     if (_authorized.supportedTypes.isEmpty) return const SizedBox.shrink();
 
@@ -380,8 +394,11 @@ class _EcfSequenceRangeSectionState
     // tipo que quizá no use. Declarar otro tipo es una acción explícita.
     if (declared.isNotEmpty && !_showAnotherType) {
       return EcfSection(
-        title: 'Numeración autorizada por la DGII',
-        subtitle: 'Ya está declarada. Declara otro tipo si la DGII te autorizó '
+        title: _authorized.environment == 'SANDBOX'
+            ? 'Numeración de pruebas (TEST)'
+            : 'Numeración autorizada por la DGII',
+        subtitle:
+            'Ya está declarada. Declara otro tipo si la DGII te autorizó '
             'más de uno.',
         icon: Icons.verified_outlined,
         child: Column(
@@ -420,9 +437,14 @@ class _EcfSequenceRangeSectionState
     }
 
     return EcfSection(
-      title: 'Numeración autorizada por la DGII',
-      subtitle: 'Transcribe los datos tal como aparecen en la Oficina Virtual '
-          'de la DGII. Sin esta información no se puede emitir.',
+      title: _authorized.environment == 'SANDBOX'
+          ? 'Numeración de pruebas (TEST)'
+          : 'Numeración autorizada por la DGII',
+      subtitle: _authorized.environment == 'SANDBOX'
+          ? 'Registra solo rangos y vencimientos confirmados para TEST. '
+                'No se comparten con producción.'
+          : 'Transcribe los datos tal como aparecen en la Oficina Virtual '
+                'de la DGII. Sin esta información no se puede emitir.',
       icon: Icons.verified_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -434,12 +456,20 @@ class _EcfSequenceRangeSectionState
               _typeSelector(),
               const SizedBox(height: 10),
             ],
-            _label('N.º de autorización'),
+            _label(
+              _authorized.environment == 'SANDBOX'
+                  ? 'Referencia de autorización TEST'
+                  : 'N.º de autorización',
+            ),
             TextField(
               key: const ValueKey('ecf_dgii_authorization_number'),
               controller: _authorization,
               textCapitalization: TextCapitalization.characters,
-              decoration: _decoration('Como aparece en la DGII'),
+              decoration: _decoration(
+                _authorized.environment == 'SANDBOX'
+                    ? 'Referencia confirmada por el proveedor'
+                    : 'Como aparece en la DGII',
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -471,10 +501,14 @@ class _EcfSequenceRangeSectionState
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Escribe solo los números: el prefijo lo agrega el sistema. Si la '
-              'DGII muestra «N/A», deja «Vence» vacío.',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            Text(
+              _authorized.environment == 'SANDBOX'
+                  ? 'Escribe solo los números: el prefijo lo agrega el sistema. Usa el vencimiento confirmado para TEST; si no aplica, deja «Vence» vacío.'
+                  : 'Escribe solo los números: el prefijo lo agrega el sistema. Si la DGII muestra «N/A», deja «Vence» vacío.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
             ),
             const SizedBox(height: 14),
             _declaration(),
@@ -506,13 +540,21 @@ class _EcfSequenceRangeSectionState
       children: [
         _label('Tipo de comprobante'),
         DropdownButtonFormField<String>(
+          isExpanded: true,
           key: const ValueKey('ecf_dgii_type'),
           initialValue: _selectedType,
           isDense: true,
           decoration: _decoration(null),
           items: [
             for (final type in _authorized.supportedTypes)
-              DropdownMenuItem(value: type, child: Text(_typeLabel(type))),
+              DropdownMenuItem(
+                value: type,
+                child: Text(
+                  _typeLabel(type),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
           ],
           onChanged: _saving
               ? null
@@ -583,9 +625,7 @@ class _EcfSequenceRangeSectionState
     return EcfSummaryRow(
       label: _typeLabel(item.documentType),
       value: '$range · $expiry · aut. ${item.authorizationNumber}',
-      tone: _hasUsableRange(item.documentType)
-          ? EcfTone.done
-          : EcfTone.pending,
+      tone: _hasUsableRange(item.documentType) ? EcfTone.done : EcfTone.pending,
     );
   }
 

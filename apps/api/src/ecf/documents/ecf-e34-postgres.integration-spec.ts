@@ -30,7 +30,7 @@ uat("E34 real PostgreSQL synthetic integrity (not DGII acceptance)", () => {
   async function original(options: { companyId?: string; status?: EcfElectronicDocumentStatus; evidence?: boolean; snapshot?: boolean; type?: "E31" | "E32" | "E34" } = {}) {
     const companyId = options.companyId ?? companyIds[0], type = options.type ?? "E31", number = encf(type);
     const evidenceRef = `uat://synthetic-not-dgii/${randomUUID()}`, evidenceHash = "a".repeat(64);
-    const document = await prisma.ecfElectronicDocument.create({ data: {
+    const document = await prisma.ecfElectronicDocument.create({ data: { environment: "PRODUCTION",
       companyId, documentType: type, status: options.status ?? "DGII_ACCEPTED",
       externalDocumentNumber: number, externalProviderId: `synthetic-${randomUUID()}`,
       idempotencyKey: `synthetic-original-${randomUUID()}`, payloadFingerprint: "b".repeat(64),
@@ -217,7 +217,7 @@ uat("E34 real PostgreSQL synthetic integrity (not DGII acceptance)", () => {
   it("24 fiscal snapshots and per-tenant fiscal reference identity are immutable/unique", async () => {
     const o = await original();
     await expect(prisma.ecfElectronicDocument.updateMany({ where: { companyId: o.companyId, id: o.id }, data: { fiscalSnapshot: { total: "1000.00" } } })).rejects.toThrow("E34_FISCAL_SNAPSHOT_IMMUTABLE");
-    await expect(prisma.ecfElectronicDocument.create({ data: { companyId: o.companyId, documentType: "E31", externalDocumentNumber: o.externalDocumentNumber,
+    await expect(prisma.ecfElectronicDocument.create({ data: { environment: "PRODUCTION", companyId: o.companyId, documentType: "E31", externalDocumentNumber: o.externalDocumentNumber,
       idempotencyKey: randomUUID(), payloadFingerprint: "f".repeat(64) } })).rejects.toMatchObject({ code: "P2002" });
   });
   it("25 E32 originals are supported; E34 originals fail the conservative reference policy", async () => {

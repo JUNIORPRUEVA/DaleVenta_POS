@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/utils/app_feedback.dart';
 import '../data/ecf_repository.dart';
+import '../data/ecf_connection_guard.dart';
 import '../ecf_dosa_dispatch_models.dart';
 import '../ecf_models.dart';
 
@@ -48,13 +50,14 @@ class _EcfDosaDispatchActionState
   static const _dispatchable = {'LOCAL_VALIDATED', 'READY_TO_SEND'};
 
   bool _running = false;
+  bool _uncertain = false;
   EcfDosaDispatchOutcome? _outcome;
   String? _error;
 
   Future<void> _run() async {
     // Protección explícita contra doble pulsación: aunque el backend ya impide
     // el segundo envío, no queremos ni una petición de más desde la interfaz.
-    if (_running) return;
+    if (_running || _uncertain) return;
     setState(() {
       _running = true;
       _outcome = null;
@@ -74,6 +77,12 @@ class _EcfDosaDispatchActionState
       ref.invalidate(ecfDocumentDetailProvider(widget.documentId));
       ref.invalidate(ecfDocumentsProvider);
       ref.invalidate(ecfCountersProvider);
+    } on EcfConnectionException catch (error) {
+      if (!mounted) return;
+      setState(() { _running = false; _uncertain = error.uncertain; });
+      ref.invalidate(ecfDocumentDetailProvider(widget.documentId));
+      AppFeedback.showToast(context, title: error.noticeTitle, body: error.message,
+        kind: AppFeedbackKind.warning, duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
     } on DioException catch (error) {
       if (!mounted) return;
       final status = error.response?.statusCode;
@@ -163,7 +172,17 @@ class _EcfDosaDispatchActionState
           ),
           const SizedBox(height: 10),
           FilledButton.icon(
-            onPressed: _running ? null : _run,
+            onPressed: _running ? null : _uncertain ? () async {
+              try {
+                final updated = await ref.refresh(ecfDocumentDetailProvider(widget.documentId).future);
+                if (mounted && updated.summary.id == widget.documentId) setState(() => _uncertain = false);
+              } catch (_) {
+                if (context.mounted) {
+                  AppFeedback.showToast(context, title: 'Sin conexión', body: 'No se pudo actualizar el estado.',
+                    duration: const Duration(seconds: 4), dedupeKey: 'ecf-connection');
+                }
+              }
+            } : _run,
             icon: _running
                 ? const SizedBox(
                     width: 16,
@@ -171,7 +190,7 @@ class _EcfDosaDispatchActionState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.send_rounded, size: 18),
-            label: Text(_running ? 'Emitiendo…' : 'Emitir comprobante'),
+            label: Text(_running ? 'Emitiendo…' : _uncertain ? 'Actualizar estado' : 'Emitir comprobante'),
           ),
           if (outcome != null) ...[
             const SizedBox(height: 10),

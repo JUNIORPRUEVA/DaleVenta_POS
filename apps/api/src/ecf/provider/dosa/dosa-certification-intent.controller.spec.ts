@@ -119,7 +119,7 @@ function fiscalConfig(
     async read() {
       // `null` = la empresa todavía no tiene fila en `ecf_company_configurations`.
       if (enabled === null) return null;
-      return { ecfEnabled: enabled, provider };
+      return { ecfEnabled: enabled, provider, environment: "SANDBOX", productionEnabled: false, certificationStatus: "NOT_STARTED" };
     },
   };
 }

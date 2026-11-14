@@ -1,9 +1,9 @@
-FROM node:20-bookworm-slim AS builder
+FROM node:22.23.4-bookworm-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=development
 COPY package*.json ./
-RUN npm install --include=dev --no-audit --no-fund
+RUN npm ci --include=dev --no-audit --no-fund
 COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig*.json ./
@@ -11,7 +11,9 @@ COPY src ./src
 COPY scripts ./scripts
 RUN npm run build
 
-FROM node:20-bookworm-slim AS runner
+FROM node:22.23.4-bookworm-slim AS runner
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production

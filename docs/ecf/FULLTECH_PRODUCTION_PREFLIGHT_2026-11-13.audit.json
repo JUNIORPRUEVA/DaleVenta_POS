@@ -1,0 +1,311 @@
+{
+  "company": {
+    "id": "165e3fca-6225-479b-8805-d2205f10536c",
+    "name": "FULLTECH, SRL"
+  },
+  "config": {
+    "enabled": true,
+    "environment": "SANDBOX",
+    "productionEnabled": false,
+    "certificationStatus": "PRODUCTION_READY",
+    "provider": "DOSA"
+  },
+  "schema": [
+    {
+      "classified_schema": false
+    }
+  ],
+  "sequences": [
+    {
+      "id": "7ac6a9d6-e1b0-4f9a-a21f-908e182db1dd",
+      "documentType": "E31",
+      "prefix": "E31",
+      "startNumber": 1,
+      "nextNumber": 3,
+      "endNumber": 150,
+      "active": true,
+      "validUntil": null
+    },
+    {
+      "id": "11dd084d-bd8c-410e-b977-b1e8c193bdbb",
+      "documentType": "E34",
+      "prefix": "E34",
+      "startNumber": 1,
+      "nextNumber": 2,
+      "endNumber": 50,
+      "active": true,
+      "validUntil": null
+    },
+    {
+      "id": "f9b5292d-c481-48a9-85f8-f707b00abb78",
+      "documentType": "E32",
+      "prefix": "E32",
+      "startNumber": 1,
+      "nextNumber": 3,
+      "endNumber": 1000,
+      "active": true,
+      "validUntil": null
+    }
+  ],
+  "authorizations": [
+    {
+      "id": "b3e5af79-e944-4fd4-942c-8613235b7998",
+      "documentType": "E32",
+      "rangeFrom": 1,
+      "rangeTo": 1000,
+      "approvedQuantity": 1000,
+      "expiresAt": null
+    },
+    {
+      "id": "292586c5-986a-4cae-af7b-0aab7b031c36",
+      "documentType": "E31",
+      "rangeFrom": 1,
+      "rangeTo": 150,
+      "approvedQuantity": 150,
+      "expiresAt": "2027-12-31T23:59:59.999Z"
+    },
+    {
+      "id": "5e52d0a6-9f0c-44d2-8244-09393afff1a2",
+      "documentType": "E34",
+      "rangeFrom": 1,
+      "rangeTo": 50,
+      "approvedQuantity": 50,
+      "expiresAt": null
+    }
+  ],
+  "allocations": [
+    {
+      "id": "58bc5fc9-4dc4-4c49-b7cc-7b9382944faa",
+      "sequenceId": "f9b5292d-c481-48a9-85f8-f707b00abb78",
+      "documentId": "865834b2-9e9a-4b12-bb65-a216ec2db071",
+      "type": "E32",
+      "action": "ALLOCATED",
+      "encf": "E320000000001",
+      "operationKey": "CONTROLLED_TEST:FULLTECH_TEST_20261112_SIX:E32:1"
+    },
+    {
+      "id": "47656e81-25eb-40c8-9c12-1dc6772947c8",
+      "sequenceId": "f9b5292d-c481-48a9-85f8-f707b00abb78",
+      "documentId": "45386133-9bbf-48a1-bf0d-5943b5100b55",
+      "type": "E32",
+      "action": "ALLOCATED",
+      "encf": "E320000000002",
+      "operationKey": "CONTROLLED_TEST:FULLTECH_TEST_20261112_SIX:E32:2"
+    },
+    {
+      "id": "a3cbfd74-4b3c-4417-abe9-1bec73e8dc1a",
+      "sequenceId": "7ac6a9d6-e1b0-4f9a-a21f-908e182db1dd",
+      "documentId": "ee934377-c272-4489-94dc-e3bc32fe2900",
+      "type": "E31",
+      "action": "ALLOCATED",
+      "encf": "E310000000001",
+      "operationKey": "CONTROLLED_TEST:FULLTECH_TEST_20261112_SIX:E31:1"
+    },
+    {
+      "id": "187133d6-06a6-4387-96f8-efca07afe306",
+      "sequenceId": "7ac6a9d6-e1b0-4f9a-a21f-908e182db1dd",
+      "documentId": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "type": "E31",
+      "action": "ALLOCATED",
+      "encf": "E310000000002",
+      "operationKey": "CONTROLLED_TEST:FULLTECH_TEST_20261113_CONFIRMED:E31:1"
+    },
+    {
+      "id": "a14501d3-9d9d-4014-9a56-e759fe72d971",
+      "sequenceId": "11dd084d-bd8c-410e-b977-b1e8c193bdbb",
+      "documentId": "501d9c0b-a4fe-489a-bf7e-5185e7847daf",
+      "type": "E34",
+      "action": "ALLOCATED",
+      "encf": "E340000000001",
+      "operationKey": "CONTROLLED_TEST:FULLTECH_TEST_20261113_CONFIRMED:E34:1"
+    }
+  ],
+  "documents": [
+    {
+      "id": "865834b2-9e9a-4b12-bb65-a216ec2db071",
+      "type": "E32",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "de903bc282b5cc0358745f773c769f96fa9595f28b60dd10bc787af92ab6c4b5",
+      "encf": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "fiscalType": "E32",
+      "issuerRnc": "133080206",
+      "total": "118.00",
+      "controlledTest": {
+        "environment": "TEST",
+        "plan": "FULLTECH_TEST_20261112_SIX",
+        "outcome": "ACCEPTED",
+        "correlated": true,
+        "responseSha256": "9893d42ed355a1e24a2ab4f399b34e7ad96835701b211f5d594c3aa1ca5a3b67"
+      },
+      "hasPrintStamp": false,
+      "controlledTestKeys": [
+        "plan",
+        "stop",
+        "ordinal",
+        "outcome",
+        "purpose",
+        "correlated",
+        "httpStatus",
+        "reviewCode",
+        "environment",
+        "safeResponse",
+        "responseSha256"
+      ],
+      "summaryKeys": [
+        "emission",
+        "controlledTest"
+      ]
+    },
+    {
+      "id": "45386133-9bbf-48a1-bf0d-5943b5100b55",
+      "type": "E32",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "b50d23d1d935ed1b4448e0662d0d1d0c7d3c2af6881d098bc2f6133e2b60782e",
+      "encf": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "fiscalType": "E32",
+      "issuerRnc": "133080206",
+      "total": "118.00",
+      "controlledTest": {
+        "environment": "TEST",
+        "plan": "FULLTECH_TEST_20261112_SIX",
+        "outcome": "ACCEPTED",
+        "correlated": true,
+        "responseSha256": "b153fba327d54403888bbcbba9339ed55c3320414e3359bd6efde7f9aad91834"
+      },
+      "hasPrintStamp": false,
+      "controlledTestKeys": [
+        "plan",
+        "stop",
+        "ordinal",
+        "outcome",
+        "purpose",
+        "correlated",
+        "httpStatus",
+        "environment",
+        "safeResponse",
+        "responseSha256"
+      ],
+      "summaryKeys": [
+        "emission",
+        "controlledTest"
+      ]
+    },
+    {
+      "id": "ee934377-c272-4489-94dc-e3bc32fe2900",
+      "type": "E31",
+      "status": "PROVIDER_REJECTED",
+      "fingerprint": "5140609cfb54670a6552160d1bd56f18d8ce74a8deca6efabe4f631f64942c78",
+      "encf": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "fiscalType": "E31",
+      "issuerRnc": "133080206",
+      "total": "118.00",
+      "controlledTest": {
+        "environment": "TEST",
+        "plan": "FULLTECH_TEST_20261112_SIX",
+        "outcome": "REJECTED",
+        "correlated": true,
+        "responseSha256": "b8a422b8b8f5293aca941077a45c2e5f2c6a2e60319e75824e41e1f6a4c52707"
+      },
+      "hasPrintStamp": false,
+      "controlledTestKeys": [
+        "plan",
+        "stop",
+        "ordinal",
+        "outcome",
+        "purpose",
+        "correlated",
+        "httpStatus",
+        "environment",
+        "safeResponse",
+        "responseSha256"
+      ],
+      "summaryKeys": [
+        "emission",
+        "controlledTest"
+      ]
+    },
+    {
+      "id": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "type": "E31",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "d8f67398b52b47ed50c60e785ece14a9cf22d61683512889338c8e65f309e2f4",
+      "encf": null,
+      "originalDocumentId": null,
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "fiscalType": "E31",
+      "issuerRnc": "133080206",
+      "total": "118.00",
+      "controlledTest": {
+        "environment": "TEST",
+        "plan": "FULLTECH_TEST_20261113_CONFIRMED",
+        "outcome": "ACCEPTED",
+        "correlated": true,
+        "responseSha256": "371bedfad7c0161f06c872b3474bbf40eacf10960f4e7119c8ea7796da63af40"
+      },
+      "hasPrintStamp": false,
+      "controlledTestKeys": [
+        "plan",
+        "stop",
+        "ordinal",
+        "outcome",
+        "purpose",
+        "correlated",
+        "httpStatus",
+        "environment",
+        "safeResponse",
+        "responseSha256"
+      ],
+      "summaryKeys": [
+        "emission",
+        "controlledTest"
+      ]
+    },
+    {
+      "id": "501d9c0b-a4fe-489a-bf7e-5185e7847daf",
+      "type": "E34",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "fingerprint": "cacaf43232140dd65c4a13bd5ed8018edf405a6658ec3802a4a220209a7aa7eb",
+      "encf": null,
+      "originalDocumentId": "ae731f98-d425-4a9e-8358-14b8be7904cd",
+      "sourceType": "MANUAL",
+      "sourceId": null,
+      "fiscalType": "E34",
+      "issuerRnc": "133080206",
+      "total": "118.00",
+      "controlledTest": {
+        "environment": "TEST",
+        "plan": "FULLTECH_TEST_20261113_CONFIRMED",
+        "outcome": "ACCEPTED",
+        "correlated": true,
+        "responseSha256": "81f4ad79db1f19817e49744a97b1d057d3bc73e2907450f720bca6a01e9c5c82"
+      },
+      "hasPrintStamp": false,
+      "controlledTestKeys": [
+        "plan",
+        "stop",
+        "ordinal",
+        "outcome",
+        "purpose",
+        "correlated",
+        "httpStatus",
+        "environment",
+        "safeResponse",
+        "responseSha256"
+      ],
+      "summaryKeys": [
+        "emission",
+        "controlledTest"
+      ]
+    }
+  ]
+}
