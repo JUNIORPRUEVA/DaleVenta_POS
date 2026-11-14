@@ -5,7 +5,7 @@
 Owner merged PR43 as38142fce54030bdac611bcbf3f928d9d6be0cbbf. Its complete
 tree dd011e11f072ba8056445d27774ab6a1a6eac535 matches validated PR source
 076db49462df5489b8eb6b46f16149d1344f2427. All four PR gates43616522615 passed;
-post-merge gates43617862689 are still running. No API build input changed from
+post-merge gates43617862689 all pass. No API build input changed from
 the deployed3217 source, so retain API digest4e6fb33c.
 
 Preparation is isolated at C:/src/fullpos-ecf-pr43-image on
@@ -21,12 +21,21 @@ pass with the already-installed Playwright YAML parser. Initial Python parsing
 was blocked by missing PyYAML; its private install also failed. The existing
 parser resolved that tooling blocker without a product dependency change.
 
-Next: publish the workflow, inspect immutable image receipt/revision, pull and
-validate that exact PWA locally with synthetic data, verify post-merge gates,
-then present the concrete image/source preparation to the owner. Owner retains
-Deploy. Do not activate production fiscal permissions or repeat accepted TEST
-emissions. The deployed E34 preview remains pending; A4/58/80 projection and
-both real TEST E31/E34 dispatches already passed in the previous checkpoint.
+PWA build43618174331 passes. Published digest d56a9c9700f6e4c0273ef0700d9c8dd372ff328305f0f7f42ce8a0bb0bc40387
+was pulled and verified locally, linux/amd64, exact076db494 OCI revision.
+The exact image without substitute mounts passes9 public-web/API smoke groups,
+Nginx validation, and E31/E34 PDF engine rendering at1280/390 with local worker
+and0 page errors. A new labelled empty local QA DB was used; prior incomplete
+test schemas were rejected. Initial QA binding was corrected in the fixture,
+not product code. No production data or configuration was changed.
+
+Read-only EasyPanel proposal passes. Current API4e6fb33c/PWA542cc3d8 remain
+running; all production/startup protections and automatic-deploy disablement
+remain. Proposed change is only PWA source to d56a9c97. The earlier source
+authorization named PR42; the exact new proposal awaits specific authorization.
+Owner retains Deploy. No API deploy, fiscal activation or new TEST send is needed.
+Live deployed E34 preview remains pending. Details:
+docs/ecf/ECF_PWA_PR43_IMAGE_2026-11-14.md.
 
 ## Previous work — deployed TEST acceptance and numbering access (2026-11-14)
 
