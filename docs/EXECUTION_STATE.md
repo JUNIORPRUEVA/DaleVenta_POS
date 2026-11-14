@@ -1,6 +1,54 @@
 # Execution State
 
-## Current work — SANDBOX checkout and PDF closure (2026-11-14)
+## Current work — deployed TEST acceptance and numbering access (2026-11-14)
+
+The owner deployed both final PR42 images. Read-only inspection confirms API
+4e6fb33c and PWA542cc3d8, from3217f0cd; merged ac729b16 has the identical tree.
+API is healthy on Node22.23.4. Production fiscal flags, company production
+activation, automatic migrations and seed remain off. Owner retains merge/deploy.
+
+Authorized FULLTECH SANDBOX acceptance is successful: E310000000003 and its
+total E34 E340000000002 were each dispatched once from the actual PWA and are
+DGII_ACCEPTED. Each has a bound HTTP200 receipt, immutable fiscal snapshot and
+official TEST QR query showing Aceptado. E34 credit118.00 is APPLIED once.
+Drafts use existing services, the real verified operator and MANUAL source,
+without a commercial sale. Confirmed TEST authorizations are1–10000000, expiry
+2028-12-31; operational starts preserve historical frontiers E31=3/E34=2.
+
+Whole-row fingerprints/counts for FULLTECH sales, cash sessions/movements and
+inventory movements match the pretrial checkpoint. Five legacy document row
+fingerprints, production ranges/counters and production authorization
+fingerprint also match. No historical promotion, production issuance, new
+migration, restart or deployment was performed by the agent.
+
+New live finding: completed onboarding hides its numbering form as soon as E31
+makes POS ready; configuration had only a read-only range overview. Minimal
+fix reuses EcfSequenceRangeSection in configuration for enabled companies with
+manageEcfSequences, keyed by company/user/environment to cancel stale forms.
+Fresh isolated branch agent/ecf-numbering-access-20261114 at
+C:/src/fullpos-ecf-numbering-access-20261114 is based on merged ac729b16.
+The merged PR42/release preparation branches and unrelated worktrees are intact.
+
+Six new widget regressions pass; full Flutter analysis passes;661 tests pass
+in e-CF/printing plus a temporary read-only print projection probe (removed).
+390/1280 widget screenshots inspected. Web release compilation passes;
+publication/CI is pending. No backend/schema/dependency change.
+
+E31 PDF opens/downloads from the deployed PWA. Both actual TEST backend print
+projections generate valid A4 and58/80mm representations with matching decoded
+QR and fiscal fields. Physical hardware was not exercised. E34 deployed preview
+could not be completed because the browser moved to the public site on two
+attempts; cause unconfirmed. User asked to leave the PWA on fiscal documents.
+Do not claim that preview passed or repeat an accepted fiscal send.
+
+Private receipts/helpers/rendered evidence are under
+C:/Users/pc/.codex/backups/fullpos-ecf-test-close-20261114/.
+See docs/ecf/ECF_LIVE_TEST_ACCEPTANCE_2026-11-14.md. Next:
+review/publish the small UI fix, verify CI and close deployed E34 preview if the
+user leaves the PWA available. Production emission remains NO-GO pending the
+separate operator readiness/activation gate; do not change global permissions.
+
+## Previous work — SANDBOX checkout and PDF closure (2026-11-14)
 
 Mode: CONTINUOUS_CONTROLLED_EXECUTION. The owner approved completing TEST
 numbering, verified DOSA outcomes, E31/E34 trials from the software where possible,
