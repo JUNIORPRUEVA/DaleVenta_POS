@@ -8,13 +8,13 @@ import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import 'ecf_credit_note_action.dart';
 import 'ecf_production_activation_action.dart';
+import 'flow/ecf_sequence_range_section.dart';
 
-/// Estado técnico del módulo e-CF.
+/// Estado y numeración del módulo e-CF.
 ///
-/// Es una pantalla de DIAGNÓSTICO, no un paso de configuración: qué tipos de
-/// comprobante admite la empresa, qué rangos tiene registrados y qué facturas
-/// puede acreditar. Para una empresa que todavía está en habilitación todo esto
-/// está vacío, así que las secciones sin contenido no se pintan.
+/// Conserva la gestión de rangos después de completar la habilitación, además
+/// del diagnóstico de tipos admitidos, numeración y facturas para acreditar.
+/// Las secciones sin contenido se omiten.
 ///
 /// No incluye acceso a la habilitación DGII: esa acción vive en la barra del
 /// módulo y repetirla aquí solo añadía un paso intermedio.
@@ -32,6 +32,7 @@ class EcfConfigPage extends ConsumerWidget {
     final originalItems =
         originals.valueOrNull ?? const <EcfEligibleOriginal>[];
     final caps = capabilities.valueOrNull;
+    final user = ref.watch(authStateProvider).user;
 
     return Scaffold(
       // Sin barra propia: el shell ya muestra el título y el botón de volver.
@@ -75,6 +76,17 @@ class EcfConfigPage extends ConsumerWidget {
                   ),
                 ),
                 const EcfProductionActivationAction(),
+                if (caps != null &&
+                    caps.enabled &&
+                    hasUserPermission(user, AppPermission.manageEcfSequences)) ...[
+                  const SizedBox(height: 10),
+                  EcfSequenceRangeSection(
+                    key: ValueKey(
+                      'ecf-config-numbering-${user?.companyId}-${user?.id}-${caps.environment}',
+                    ),
+                    canManage: true,
+                  ),
+                ],
                 if (caps != null) ...[
                   const SizedBox(height: 10),
                   _Panel(
