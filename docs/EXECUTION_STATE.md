@@ -1,6 +1,55 @@
 # Execution State
 
-## Current work — owner-deployed PR43 PWA and live E34 PDF verified (2026-11-14)
+## Current work — production permissions saved; owner backend deploy pending (2026-11-14)
+
+Owner explicitly authorized: "Sí, preparar producción y activar FULLTECH tras mi
+deploy". This supersedes the previous requirement to leave the two stored server
+production permissions off. The owner still exclusively controls Deploy; company
+activation and E31 renewal are authorized only AFTER that manual deployment.
+
+PR44 is open at5937fa85bccf6e8b3aebff491ffb5164c5c6829d, based on production-main.
+All4 GitHub gates pass in43626251190. Its3 new HTTP regressions prove checkout ->
+financial refund -> E34/recovery with money, stock, numbering and tenant isolation.
+Local API build/strict changed-test types pass;2882 general,48 PostgreSQL and43
+HTTP tests pass. It changes tests/documentation only: no new runtime image or
+PWA deployment is required for PR44. Merge remains with the owner.
+
+Applied only the authorized backend environment preparation through installed
+EasyPanel2.37.0 updateAppEnv. DOSA_PRODUCTION_EMISSION_ENABLED and
+DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED are now saved enabled. Independent persisted
+readback proves every other backend field, all other environment lines, the
+complete PWA configuration, credentials and both image sources are preserved.
+Source/API remains4e6fb33c and PWA d56a9c97. Auto-deploy stays disabled.
+The first strict plan rejected the API's optional null dotenv-path projection;
+inspection of the installed handler established null/absent equivalence before
+any write. The final independent raw comparison also confirms that the stored
+null field itself was preserved. Checks of other environment values were retained.
+
+A verified root-only checkpoint exists at
+/etc/easypanel/agent-checkpoints/fullpos-ecf-production-2026-11-14T18-42-44-879Z/.
+It contains sensitive original panel configuration; never print or commit it.
+Safe local receipts/tools are under C:/Users/pc/.codex/backups/
+fullpos-ecf-commercial-closeout-20261114/. No checkpoint contents were exported.
+
+Runtime containers remain ca6026999fda/backend and fa603ed49882/pwa with unchanged
+start times/images. API is healthy; both production permissions remain false IN
+THE RUNNING API until the owner deploys backend. FULLTECH is still SANDBOX with
+productionEnabled=false, own ACTIVE TEST/production credentials and no unresolved
+TEST results. RUN_MIGRATIONS and seed remain off. No deploy/restart, schema/data
+mutation, company activation or fiscal send was executed during preparation.
+
+Next: tell the owner to Implementar daleventapos/backend ONLY, keeping the same
+API image. PWA does not need deployment. After the owner confirms, verify new
+healthy runtime and enabled permissions; activate ONLY FULLTECH through its
+existing company-scoped production-enable service. Then renew E31 from the actual
+current next number (checkpoint3) through150 with its existing authorization's
+2027-12-31 expiry, retaining history/counters. E32 next3/end1000 and E34 next2/end50
+and their existing null expiries stay unchanged. Re-read current values before
+any write; stop/recalculate if a counter advanced. Never emit a real test invoice.
+No further activation permission question is needed: the owner's approval covers
+these post-deploy actions. Details: docs/ecf/ECF_PRODUCTION_PERMISSION_PREPARATION_2026-11-14.md.
+
+## Previous work — owner-deployed PR43 PWA and live E34 PDF verified (2026-11-14)
 
 Owner merged PR43 as38142fce54030bdac611bcbf3f928d9d6be0cbbf. Its complete
 tree dd011e11f072ba8056445d27774ab6a1a6eac535 matches validated PR source
