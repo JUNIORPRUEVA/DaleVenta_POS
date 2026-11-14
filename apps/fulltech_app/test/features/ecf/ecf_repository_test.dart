@@ -28,6 +28,32 @@ void main() {
     );
   }
 
+  test('la frontera TEST del servidor se informa sin reintentar ni cambiar la declaración', () async {
+    var calls = 0;
+    final repo = repositoryWith((request) async {
+      calls++;
+      expect(request.data['startNumber'], 1);
+      return json({'code': 'ECF_SEQUENCE_LEGACY_TEST_REUSE_BLOCKED',
+        'minimumStartNumber': 3, 'message': 'Inicia en 3 o posterior.'}, 409);
+    });
+    await expectLater(repo.registerSequence(documentType: 'E31', expectedEnvironment: 'SANDBOX',
+      startNumber: 1, endNumber: 100), throwsA(isA<EcfSequenceException>()
+        .having((error) => error.minimumStartNumber, 'minimumStartNumber', 3)));
+    expect(calls, 1);
+  });
+
+  for (final environment in ['PRODUCTION', 'SANDBOX']) {
+    test('no propone fronteras ajenas o fuera del rango ($environment)', () async {
+      final repo = repositoryWith((request) async => json({
+        'code': 'ECF_SEQUENCE_LEGACY_TEST_REUSE_BLOCKED',
+        'minimumStartNumber': environment == 'SANDBOX' ? 101 : 3,
+        'message': 'Revisión requerida.'}, 409));
+      await expectLater(repo.registerSequence(documentType: 'E31', expectedEnvironment: environment,
+        startNumber: 1, endNumber: 100), throwsA(isA<EcfSequenceException>()
+          .having((error) => error.minimumStartNumber, 'minimumStartNumber', isNull)));
+    });
+  }
+
   test('capabilities reports e-CF disabled with no emission path', () async {
     final repo = repositoryWith(
       (_) async => json({

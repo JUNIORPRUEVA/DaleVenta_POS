@@ -235,7 +235,7 @@ class PdfPanelActionButton extends StatelessWidget {
 
 /// Área del documento: la hoja se ajusta al espacio disponible, **sin scroll**,
 /// y las acciones flotan encima en la esquina superior derecha.
-class PdfPreviewStage extends StatelessWidget {
+class PdfPreviewStage extends StatefulWidget {
   const PdfPreviewStage({
     super.key,
     required this.bytes,
@@ -253,22 +253,35 @@ class PdfPreviewStage extends StatelessWidget {
   final String? errorMessage;
 
   @override
+  State<PdfPreviewStage> createState() => _PdfPreviewStageState();
+}
+
+class _PdfPreviewStageState extends State<PdfPreviewStage> {
+  String? _renderError;
+
+  @override
+  void didUpdateWidget(covariant PdfPreviewStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.bytes, widget.bytes)) _renderError = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: const Color(0xFFE8EEF5),
       child: Stack(
         children: [
           Positioned.fill(child: _body()),
-          if (actions.isNotEmpty)
+          if (widget.actions.isNotEmpty)
             Positioned(
               top: 10,
               right: 10,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (var i = 0; i < actions.length; i++) ...[
+                  for (var i = 0; i < widget.actions.length; i++) ...[
                     if (i > 0) const SizedBox(width: 8),
-                    actions[i],
+                    widget.actions[i],
                   ],
                 ],
               ),
@@ -279,13 +292,14 @@ class PdfPreviewStage extends StatelessWidget {
   }
 
   Widget _body() {
-    final documentBytes = bytes;
+    final documentBytes = widget.bytes;
+    final errorMessage = widget.errorMessage ?? _renderError;
     if (errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            errorMessage!,
+            errorMessage,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13,
@@ -323,7 +337,7 @@ class PdfPreviewStage extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
         child: AspectRatio(
-          aspectRatio: aspectRatio,
+          aspectRatio: widget.aspectRatio,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -342,6 +356,13 @@ class PdfPreviewStage extends StatelessWidget {
               canShowPaginationDialog: false,
               enableTextSelection: false,
               pageLayoutMode: PdfPageLayoutMode.single,
+              onDocumentLoadFailed: (details) {
+                debugPrintStack(label: 'PDF_PREVIEW_LOAD_FAILED: ${details.error}');
+                if (mounted) {
+                  setState(() => _renderError =
+                      'No se pudo mostrar el PDF. Puedes guardarlo en descargas.');
+                }
+              },
             ),
           ),
         ),

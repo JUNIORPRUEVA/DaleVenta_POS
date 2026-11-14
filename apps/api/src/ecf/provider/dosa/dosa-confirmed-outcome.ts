@@ -15,11 +15,12 @@ export const DOSA_CONFIRMED_OUTCOME_CONTRACT = "DOSA_EMISSION_2026_11";
 /** Internal server-response decision, not a client evidence-import endpoint.
  * Records DOSA's documented DGII result. It does not assert independent DGII
  * signature verification or change the generic evidence quarantine's trust.
- * Disabled until the operator opts into this reviewed provider contract.
+ * Authorized SANDBOX dispatches use the reviewed contract without enabling
+ * production. Production still requires both explicit server permissions.
  */
 export async function recordDosaConfirmedOutcome(db: PrismaService, user: TenantUser, documentId: string,
   input: { receiptId: string; attemptId: string; httpStatus: number; body: unknown }): Promise<boolean> {
-  if (process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED !== "true" || input.httpStatus !== 200) return false;
+  if (input.httpStatus !== 200 || process.env.DOSA_EMISSION_ENABLED !== "true") return false;
   const companyId = requireTenant(user);
   const rawHash = createHash("sha256").update(JSON.stringify(input.body)).digest("hex");
   return db.$transaction(async tx => {
@@ -34,6 +35,10 @@ export async function recordDosaConfirmedOutcome(db: PrismaService, user: Tenant
     if (!config?.enabled || config.provider !== "DOSA" || config.environment !== document.environment ||
         !authorizedStatuses.includes(config.certificationStatus) ||
         (document.environment === "PRODUCTION" && !config.productionEnabled)) return false;
+    if (document.environment === "PRODUCTION") {
+      if (process.env.DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED !== "true" ||
+          process.env.DOSA_PRODUCTION_EMISSION_ENABLED !== "true") return false;
+    } else if (document.environment !== "SANDBOX" || config.productionEnabled) return false;
     const receipt = await tx.ecfEvidenceReceipt.findFirst({ where: { companyId, documentId, id: input.receiptId,
       attemptId: input.attemptId, source: "PROVIDER_RESPONSE", eventKey: `emission:${input.attemptId}`, rawSha256: rawHash, httpStatus: 200 } });
     const attempt = await tx.ecfElectronicDocumentAttempt.findFirst({ where: { companyId, documentId, id: input.attemptId, operation: { in: ["SEND_TO_PROVIDER", "QUERY_PROVIDER"] } } });

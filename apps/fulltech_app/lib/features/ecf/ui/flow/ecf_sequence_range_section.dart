@@ -56,6 +56,29 @@ class _EcfSequenceRangeSectionState
   bool _saving = false;
   String? _error;
   String? _success;
+  // A server-reported frontier is a form hint, never an authorization. A
+  // second explicit save is revalidated by the backend; nothing retries itself.
+  final Map<String, int> _testFrontiers = {};
+
+  int _rangeStart(String type, int requested) {
+    final minimum = _authorized.environment == 'SANDBOX'
+        ? _testFrontiers[type]
+        : null;
+    return minimum != null && minimum > requested ? minimum : requested;
+  }
+
+  void _rememberFrontier(String type, Object error) {
+    if (_authorized.environment == 'SANDBOX' &&
+        error is EcfSequenceException &&
+        error.minimumStartNumber != null) {
+      _testFrontiers[type] = error.minimumStartNumber!;
+    }
+  }
+
+  void _numberingChanged() {
+    ref.invalidate(ecfCapabilitiesProvider);
+    ref.invalidate(ecfSequencesProvider);
+  }
 
   @override
   void initState() {
@@ -130,10 +153,12 @@ class _EcfSequenceRangeSectionState
     if (authorization == null) return;
     final current = _activeSequenceFor(type);
     final renew = current != null;
-    final start =
-        current == null || current.nextNumber <= authorization.rangeFrom
-        ? authorization.rangeFrom
-        : current.nextNumber;
+    final start = _rangeStart(
+      type,
+      current == null || current.nextNumber <= authorization.rangeFrom
+          ? authorization.rangeFrom
+          : current.nextNumber,
+    );
     if (start > authorization.rangeTo) {
       setState(() {
         _error =
@@ -169,6 +194,7 @@ class _EcfSequenceRangeSectionState
         );
       }
       if (!mounted) return;
+      _numberingChanged();
       setState(() {
         _success = renew
             ? 'Numeración renovada para ${_typeLabel(type)}.'
@@ -177,6 +203,7 @@ class _EcfSequenceRangeSectionState
       await _load();
     } catch (error) {
       if (!mounted) return;
+      _rememberFrontier(type, error);
       setState(() => _error = _describeError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -216,7 +243,9 @@ class _EcfSequenceRangeSectionState
   }
 
   Future<void> _save() async {
-    if (_saving || _selectedType == null) return;
+    final type = _selectedType;
+    if (_saving || type == null) return;
+    final environment = _authorized.environment;
 
     final authorizationNumber = _authorization.text.trim();
     final from = int.tryParse(_from.text.trim());
@@ -257,8 +286,8 @@ class _EcfSequenceRangeSectionState
       final repository = ref.read(ecfRepositoryProvider);
       // 1) La autorización primero: es la fuente de verdad del rango.
       await repository.declareAuthorizedSequence(
-        expectedEnvironment: _authorized.environment,
-        documentType: _selectedType!,
+        expectedEnvironment: environment,
+        documentType: type,
         authorizationNumber: authorizationNumber,
         rangeFrom: from,
         rangeTo: to,
@@ -266,26 +295,28 @@ class _EcfSequenceRangeSectionState
         expiresAt: _normalizeExpiry(_expires.text),
         declarationAccepted: true,
       );
+      if (!mounted || _authorized.environment != environment) return;
       // 2) El rango de numeración, que el backend valida contra lo declarado.
       // Si el tipo ya tenía rango activo, este es un cambio de autorización
       // (la DGII dio otro cupo): se renueva en lugar de registrar, porque
       // `register` rechazaría el tipo con `ECF_SEQUENCE_ALREADY_EXISTS`.
-      if (_activeSequenceFor(_selectedType!) != null) {
+      if (_activeSequenceFor(type) != null) {
         await repository.renewSequence(
-          expectedEnvironment: _authorized.environment,
-          documentType: _selectedType!,
+          expectedEnvironment: environment,
+          documentType: type,
           startNumber: from,
           endNumber: to,
         );
       } else {
         await repository.registerSequence(
-          expectedEnvironment: _authorized.environment,
-          documentType: _selectedType!,
-          startNumber: from,
+          expectedEnvironment: environment,
+          documentType: type,
+          startNumber: _rangeStart(type, from),
           endNumber: to,
         );
       }
-      if (!mounted) return;
+      if (!mounted || _authorized.environment != environment) return;
+      _numberingChanged();
       _authorization.clear();
       _from.clear();
       _to.clear();
@@ -298,7 +329,8 @@ class _EcfSequenceRangeSectionState
       });
       await _load();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || _authorized.environment != environment) return;
+      _rememberFrontier(type, error);
       setState(() => _error = _describeError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -379,6 +411,7 @@ class _EcfSequenceRangeSectionState
   Widget build(BuildContext context) {
     ref.listen(ecfCapabilitiesProvider.select((state) => state.valueOrNull?.environment), (previous, next) {
       if (previous != null && next != null && previous != next && widget.canManage && mounted) {
+        _testFrontiers.clear();
         _authorization.clear(); _from.clear(); _to.clear(); _approved.clear(); _expires.clear();
         _selectedType = null; _declarationAccepted = false; _showAnotherType = false;
         _load();

@@ -181,6 +181,14 @@ server {
     try_files $uri =404;
   }
 
+  # Keep the local PDF renderer identical to the non-proxy configuration.
+  # Module workers require a JavaScript MIME and must never receive SPA HTML.
+  location ^~ /pdfjs/ {
+    types { application/javascript mjs; }
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    try_files $uri =404;
+  }
+
   location = /robots.txt {
     default_type text/plain;
     add_header Cache-Control "public, max-age=3600";

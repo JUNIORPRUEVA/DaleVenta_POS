@@ -5,3 +5,4 @@
 # nadie escribió a mano. Marcarlos como generados los colapsa en la revisión de
 # GitHub sin dejar de versionarlos.
 apps/api/docs/** linguist-generated=true
+apps/fulltech_app/web/pdfjs/4.10.38/** text eol=lf linguist-vendored=true

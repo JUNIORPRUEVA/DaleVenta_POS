@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 import 'package:daleventa_pos/features/ecf/ecf_authorized_sequence_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
@@ -27,6 +29,7 @@ class _FakeRepository extends EcfRepository {
   List<EcfAuthorizedSequence> declared = const [];
   Object? declarationFailure;
   Object? sequenceFailure;
+  Completer<void>? declarationGate;
   int declarations = 0;
   int saves = 0;
   int renews = 0;
@@ -64,6 +67,7 @@ class _FakeRepository extends EcfRepository {
     required bool declarationAccepted,
   }) async {
     declarations++;
+    await declarationGate?.future;
     lastDocumentType = documentType;
     lastAuthorizationNumber = authorizationNumber;
     lastApproved = approvedQuantity;
@@ -241,6 +245,62 @@ void main() {
       'MaterialIcons',
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
+  testWidgets(
+    'una segunda acción explícita usa la frontera TEST sin cambiar el rango autorizado',
+    (tester) async {
+      final repository = await _pump(
+        tester,
+        environment: 'SANDBOX',
+        sequenceFailure: EcfSequenceException(
+          'Inicia en 3 o posterior.',
+          minimumStartNumber: 3,
+        ),
+      );
+      await _fill(
+        tester,
+        authorization: 'TEST-CONFIRMED',
+        from: '1',
+        to: '150',
+        approved: '150',
+      );
+      final save = find.byKey(const ValueKey('ecf_dgii_declaration_save'));
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(repository.saves, 1);
+      expect(repository.lastFrom, 1);
+      expect(find.textContaining('Inicia en 3'), findsOneWidget);
+      repository.sequenceFailure = null;
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(repository.saves, 2);
+      expect(repository.lastFrom, 3);
+      expect(repository.lastTo, 150);
+      expect(repository.lastApproved, 150);
+      expect(repository.lastAuthorizationNumber, 'TEST-CONFIRMED');
+      expect(repository.renews, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets('salir durante la declaración no registra un rango con otra sesión', (tester) async {
+    final repository = await _pump(tester, environment: 'SANDBOX');
+    final gate = Completer<void>();
+    repository.declarationGate = gate;
+    await _fill(tester);
+    final save = find.byKey(const ValueKey('ecf_dgii_declaration_save'));
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pump();
+    expect(repository.declarations, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(repository.saves, 0);
+    expect(repository.renews, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [390.0, 834.0, 1280.0]) {
     testWidgets('TEST numbering stays readable at width $width', (
       tester,

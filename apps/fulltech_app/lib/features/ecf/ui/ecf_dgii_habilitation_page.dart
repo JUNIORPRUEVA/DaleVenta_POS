@@ -28,6 +28,7 @@ import 'ecf_certificate_card.dart';
 import 'ecf_dgii_application_wizard.dart';
 import 'ecf_fiscal_data_page.dart';
 import 'ecf_postulation_xml_card.dart';
+import 'ecf_production_activation_action.dart';
 import 'ecf_support_grant_card.dart';
 import 'debug/ecf_debug_screen_selector.dart';
 import 'flow/ecf_authorization_step.dart';
@@ -547,6 +548,7 @@ class _EcfDgiiHabilitationPageState
     final isPlatformStaff =
         ref.watch(ecfPlatformStaffProvider).valueOrNull == true;
     final habilitation = ref.watch(ecfDgiiHabilitationProvider);
+    final capabilities = ref.watch(ecfCapabilitiesProvider);
     // El certificado lo gestiona DOSA cuando DOSA gobierna la certificación de
     // la empresa. Dos fuentes, ambas del backend, y basta con una:
     //
@@ -635,6 +637,17 @@ class _EcfDgiiHabilitationPageState
                       // módulo abre en el cierre y desde ahí se va a facturar.
                       if (_invoicingReady(view)) {
                         return EcfCompletedView(
+                          invoicingReady: capabilities.valueOrNull?.posReady == true,
+                          numbering: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const EcfProductionActivationAction(),
+                              EcfSequenceRangeSection(
+                                key: ValueKey('ecf-completed-numbering-${user?.companyId}'),
+                                canManage: canManageSequences,
+                              ),
+                            ],
+                          ),
                           onGoToSales: _goToSales,
                           onViewDocuments: () =>
                               context.go(Routes.ecfDocuments),

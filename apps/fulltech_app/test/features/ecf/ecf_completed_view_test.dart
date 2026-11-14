@@ -8,18 +8,52 @@ import 'package:flutter_test/flutter_test.dart';
 /// donde se factura: si el cliente no encuentra el camino, toda la postulación
 /// se queda sin uso.
 
-Widget _harness({VoidCallback? onGoToSales, VoidCallback? onViewDocuments}) {
+Widget _harness({
+  VoidCallback? onGoToSales,
+  VoidCallback? onViewDocuments,
+  bool invoicingReady = true,
+  Widget? numbering,
+}) {
   return MaterialApp(
     home: Scaffold(
       body: EcfCompletedView(
         onGoToSales: onGoToSales ?? () {},
         onViewDocuments: onViewDocuments ?? () {},
+        invoicingReady: invoicingReady,
+        numbering: numbering,
       ),
     ),
   );
 }
 
 void main() {
+  testWidgets(
+    'sin disponibilidad real conserva acceso a numeración y no anuncia emisión lista',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _harness(
+          invoicingReady: false,
+          numbering: const Text('Formulario de numeración del backend'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('¡Felicidades!'), findsNothing);
+      expect(
+        find.textContaining('ya puede facturar electrónicamente'),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('ecf_completed_go_sales')),
+        findsNothing,
+      );
+      expect(find.text('Formulario de numeración del backend'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('confirma el final y ofrece ir a facturar', (tester) async {
     await tester.pumpWidget(_harness());
     await tester.pumpAndSettle();
@@ -39,10 +73,7 @@ void main() {
     var sales = 0;
     var documents = 0;
     await tester.pumpWidget(
-      _harness(
-        onGoToSales: () => sales++,
-        onViewDocuments: () => documents++,
-      ),
+      _harness(onGoToSales: () => sales++, onViewDocuments: () => documents++),
     );
     await tester.pumpAndSettle();
 

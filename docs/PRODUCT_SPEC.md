@@ -144,12 +144,19 @@ production numbering must then be registered separately for that company.
 - DOSA consumer receipts below RD$250,000 may omit TrackId. Correlation then
   requires the official DGII consumer receipt URL, matching issuer/e-NCF/amount,
   a complete QR and a consumed sequence. Correlation alone does not grant fiscal
-  acceptance. An explicitly enabled server DOSA contract can record its documented
+  acceptance. An authorized DOSA SANDBOX dispatch, or an explicitly enabled
+  production contract, can record its documented
   HTTP 200 accepted/conditionally accepted result only with a matching persisted
   response receipt, fiscal identity, fingerprints and valid QR. The audit identifies
   DOSA as the authority reporting the DGII result. Pending, rejected, mismatched or
   incomplete responses never qualify. E34 application remains subject to the
   original accepted document, evidence and available fiscal balance.
+  TEST confirmation never grants production permission. A certified company
+  without backend-confirmed POS readiness keeps access to the existing numbering
+  form; certification alone must not announce that the company can already emit.
+  Reviewed historical TEST numbers remain consumed. The next explicit range save
+  may follow the backend's minimum, preserving the original declared range and
+  requiring full server validation again.
   An RFCE with no TrackId uses a clearly identified local receipt reference
   bound to environment/RNC/e-NCF; this is not a fabricated DGII TrackId.
 - During the original DOSA dispatch, a timeout, network error or HTTP 5xx may

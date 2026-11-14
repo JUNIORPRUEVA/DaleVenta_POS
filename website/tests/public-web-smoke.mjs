@@ -108,6 +108,21 @@ for (const path of ['/webhook/dosa', '/uploads/astro-qa-missing-file']) {
 results.push('Astro public routes, Brotli negotiation, Flutter routes and PWA entry');
 results.push(`${assets.size} public assets and retained certification/webhook/uploads routing`);
 
+for (const module of ['init.mjs', 'pdf.min.mjs', 'pdf.worker.min.mjs']) {
+  const r = await fetch(`${base}/pdfjs/4.10.38/${module}`, {
+    headers: { 'Accept-Encoding': 'br' },
+  });
+  assert.equal(r.status, 200, module);
+  assert.ok(r.headers.get('content-type')?.includes('application/javascript'),
+    `${module} must retain module MIME when the runtime API proxy is enabled`);
+  assert.ok(r.headers.get('cache-control')?.includes('immutable'), module);
+  assert.ok(!(await r.text()).includes('<!DOCTYPE html>'), module);
+}
+assert.equal((await fetch(`${base}/pdfjs/4.10.38/missing.mjs`)).status, 404);
+const bootstrap = await (await fetch(base + '/flutter_bootstrap.js')).text();
+assert.ok(bootstrap.includes('pdfjs/4.10.38/init.mjs'));
+results.push('same-origin PDF renderer and worker preserve module MIME, cache and real 404 behind the API proxy');
+
 const marker = 'astro-qa-log-check-' + randomBytes(8).toString('hex');
 for (const path of ['/home?handoff=' + marker, '/reset-password?token=' + marker]) {
   const r = await fetch(base + path);
