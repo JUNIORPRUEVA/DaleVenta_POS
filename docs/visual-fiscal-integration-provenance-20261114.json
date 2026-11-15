@@ -2665,7 +2665,7 @@
       "source": "fiscal",
       "path": "docs/EXECUTION_STATE.md",
       "sourceSha256": "241b89541dd08dd18f853cc2c113e4d65007114236c2a9d2631f307ba6ba69e9",
-      "candidateSha256": "9a6e83942de933b67e545013c4592f86649e529d9df5903a7b85f5b822f8ece0",
+      "candidateSha256": "c28966a7699a3f1746cff770d417ab394b6c54319c1bdabdf22090dbf87b9fd8",
       "status": "merged-or-validated-generated"
     },
     {
