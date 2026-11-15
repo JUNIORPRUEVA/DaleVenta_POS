@@ -19,6 +19,19 @@ jobs:
     # rama). Se levanta un PostgreSQL efímero del runner y se aplican las
     # migraciones del repositorio: si alguna no aplica en limpio, el gate falla.
     services:
+      crm-postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: crm_license_fixture
+        ports:
+          - 55519:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d crm_license_fixture"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         image: postgres:16-alpine
         env:
@@ -51,6 +64,12 @@ jobs:
         working-directory: apps/api
       - run: npx prisma validate
         working-directory: apps/api
+      # Las pruebas CRM eliminan únicamente sus fixtures. Nunca compartir su DB
+      # con las suites fiscales ni con las cuentas de aceptación del producto.
+      - run: npx prisma migrate deploy
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:55519/crm_license_fixture
       - run: npm run audit:tenant-inventory
         working-directory: apps/api
       - run: npm run audit:endpoints
@@ -58,6 +77,10 @@ jobs:
       - run: npm run audit:unsafe-tenant-queries:warn
         working-directory: apps/api
       - run: npm test
+        working-directory: apps/api
+        env:
+          CRM_LICENSE_FIXTURE_URL: postgresql://ci:ci@127.0.0.1:55519/crm_license_fixture
+      - run: npm run test:e2e -- --runTestsByPath src/license/crm-license-http.e2e-spec.ts --forceExit
         working-directory: apps/api
       # La admisión fiscal y el rollback deben probarse con transacciones reales,
       # sin abrir ninguna conexión a DOSA ni habilitar emisión en producción.
