@@ -6,8 +6,9 @@ Inventario generado para la revisión final local. Incluye código, pruebas,
 referencias visuales, documentación y evidencias originales conservadas.
 Los archivos de fallos temporales se preservan privadamente y se excluyen.
 
-Total: **472 rutas**.
+Total: **476 rutas**.
 
+- `.github/workflows/multi-tenant-security.yml`
 - `apps/api/src/ecf/documents/ecf-credit-note-postgres.integration-spec.ts`
 - `apps/api/src/ecf/documents/ecf-dgii-authorized-sequences.policy.spec.ts`
 - `apps/api/src/ecf/documents/ecf-dgii-authorized-sequences.policy.ts`
@@ -93,6 +94,7 @@ Total: **472 rutas**.
 - `apps/fulltech_app/lib/features/reports/ui/reports_interactive_chart.dart`
 - `apps/fulltech_app/lib/features/reports/ui/reports_page.dart`
 - `apps/fulltech_app/lib/features/reports/utils/sales_report_pdf_service.dart`
+- `apps/fulltech_app/lib/features/settings/data/printer_settings_repository.dart`
 - `apps/fulltech_app/lib/main.dart`
 - `apps/fulltech_app/lib/modules/clientes/clientes_screen.dart`
 - `apps/fulltech_app/lib/modules/compras/compras_screen.dart`
@@ -240,6 +242,7 @@ Total: **472 rutas**.
 - `apps/fulltech_app/test/features/reports/goldens/reports_range_1024.png`
 - `apps/fulltech_app/test/features/reports/reports_design_test.dart`
 - `apps/fulltech_app/test/features/reports/sales_report_pdf_service_test.dart`
+- `apps/fulltech_app/test/features/settings/printer_settings_web_test.dart`
 - `apps/fulltech_app/test/modules/cash/turn_current_no_session_test.dart`
 - `apps/fulltech_app/test/modules/clientes/clientes_screen_compact_panel_test.dart`
 - `apps/fulltech_app/test/modules/clientes/goldens/clients_1024.png`
@@ -408,6 +411,7 @@ Total: **472 rutas**.
 - `docs/PRODUCT_SPEC.md`
 - `docs/VISUAL_FISCAL_INTEGRATION_20261114.md`
 - `docs/VISUAL_FISCAL_INTEGRATION_FILES_20261114.md`
+- `docs/VISUAL_FISCAL_UAT_20261114.md`
 - `docs/ecf/ECF_SELF_SERVICE_HARDENING_2026-11-14.md`
 - `docs/ecf/FISCAL_DESIGN_REVIEW_2026-11-14.md`
 - `docs/ecf/compact-fiscal-design-2026-11-14/galeria-15-1280.png`

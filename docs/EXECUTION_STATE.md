@@ -1,5 +1,28 @@
 # Execution State
 
+## Current acceptance — PR45 (2026-11-14)
+
+Owned worktree/branch below; PR45 targets production-main and remains owner-controlled.
+Initial commits5bbc36b7/385df9f7 preserved. Four CI jobs passed at385df9f7.
+Isolated real API/PWA acceptance found normal-sale Web PDF blocked by native
+SQLite printer settings. Minimal fix returns browser defaults in getOrCreate,
+preserving native storage and avoiding legacy cross-company receipt identity.
+Browser regression and Chrome CI step added; no dependency/schema/runtime change.
+Post-fix analysis PASS135.7s; settings/printing/PDF regression228 PASS,1 explicit
+browser-only skip. Windows Chrome test harness blocked by SDK CanvasKit404;
+new Linux CI Chrome test must be verified, not inferred from earlier CI success.
+API17 checks, print projections5, returns6 PASS with fictional Alfa/Beta and
+zero external emission attempts. Real E34 export/QR decode and transient offline
+notice verified in isolated browser. Fiscal accepted statuses are synthetic.
+Rebuilt combined UAT PWA PASS; actual history NORMAL PDF download PASS with
+ITBIS18/total118 and zero fiscal print reads. E31 PDF download PASS with one
+fiscal print read, fixture expiry and decoded QR. NORMAL/E31/E34 PDF rendering
+and extraction PASS; both fiscal QR decode PASS. Offline recheck:0 fiscal POST.
+Web filter segment text and fixture em-dash PDF glyph remain visual observations;
+no cold deep-link, physical printer/device or service-worker acceptance claimed.
+See docs/VISUAL_FISCAL_UAT_20261114.md for evidence, limitations and final gates.
+No source worktree or production data/config changed; no merge/deploy authorized.
+
 ## Current work — integración visual/fiscal segura (2026-11-14)
 
 Own worktree C:/src/fullpos-integration-20261114,
@@ -31,7 +54,8 @@ Integration test helper added at test/support/feedback_finders.dart. Preserve
 semantic X close affordance; no tooltip reintroduced into approved design.
 Generated notification screenshots copied privately and restored narrowly to HEAD;
 Windows failure evidence moved safely into the task backup, excluded from Git.
-App .env is synthetic/ignored. No schema/migration/lockfile/Docker/workflow diffs.
+App .env is synthetic/ignored. No schema/migration/lockfile/Docker diffs.
+The later acceptance above adds a Chrome CI regression step.
 Remote re-fetch confirms cbc3eceb; branch upstream removed to avoid an accidental
 default push to production-main. Original worktrees remain untouched.
 Owner subsequently authorized commit/push/PR of this exact integration candidate.

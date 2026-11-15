@@ -121,8 +121,9 @@ a autorizar emisiones productivas. No se cambian banderas globales de emisión.
 - Completar el vencimiento sintético E31 de una fixture PostgreSQL de devoluciones;
   el control productivo permanece intacto.
 - Actualizar solo referencias visuales inspeccionadas; no cambiar comparadores.
-- No hay cambios de esquema, migraciones, restricciones de dependencias,
-  Dockerfiles ni workflows de publicación respecto a la base remota.
+- No hay cambios de esquema, migraciones, restricciones de dependencias ni
+  Dockerfiles respecto a la base remota. La aceptación posterior añade una
+  regresión Chrome al workflow CI; no cambia el proceso de publicación.
 
 ## Procedencia y límites
 
@@ -132,15 +133,17 @@ Los archivos combinados deliberadamente no tienen por qué coincidir byte a byte
 el manifiesto los distingue. Las copias originales se verifican contra snapshots.
 Resultado final:434 registros byte-idénticos,15 combinados o referencias
 revisadas,0 faltantes y0 cambios en los originales desde la copia congelada.
-Inventario del candidato:472 rutas en `VISUAL_FISCAL_INTEGRATION_FILES_20261114.md`.
+Inventario completo del candidato en `VISUAL_FISCAL_INTEGRATION_FILES_20261114.md`.
 El escaneo de patrones de secretos de alta confianza no encontró candidatos;
 no sustituye una revisión manual ni un análisis exhaustivo de secretos.
 Los tres generados normalizados se conservan en backup privado; no representan
 cambios lógicos que deban introducirse en Git.
 
 No se afirma una nueva certificación externa ni una emisión real ante DGII/DOSA.
-No hay UAT de navegador/dispositivo ni impresión física en esta integración.
-Las pruebas widget/HTTP y las capturas no sustituyen esa aceptación. El build
+La aceptación posterior de navegador/API está documentada en
+`VISUAL_FISCAL_UAT_20261114.md`, con escenarios reales locales y fixtures fiscales
+simuladas claramente separados. No hay aceptación de dispositivo ni impresión
+física. Las pruebas widget/HTTP no sustituyen esas comprobaciones. El build
 Flutter lleva perfil UAT; no es una imagen productiva para desplegar.
 Las omisiones de pruebas se informan y no se contabilizan como PASS.
 
@@ -186,9 +189,11 @@ Los logs completos se conservan en el backup privado indicado al inicio.
 1. Autorización recibida del propietario para commit/push/PR únicamente de
    `agent/integrate-visual-fiscal-20261114` hacia `production-main`.
    Las ramas y copias originales no se alteran; no se utiliza force-push.
-2. Ejecutar los controles GitHub Actions sobre el commit publicado y realizar
-   aceptación del conjunto integrado en entorno aislado: acceso/registro,
-   venta normal con ITBIS, impresión/PDF, fiscal y devoluciones E34 simuladas.
+2. Los cuatro controles del candidato inicial385df9f7 pasaron en GitHub Actions.
+   La aceptación aislada encontró un bloqueo Web de SQLite al exportar PDF normal;
+   su corrección mínima, prueba Chrome y nueva aceptación deben validarse en el
+   head posterior. Consultar `VISUAL_FISCAL_UAT_20261114.md` y los checks actuales
+   de PR45; un resultado del head anterior no aprueba automáticamente el nuevo.
 3. El propietario decide el merge; no se hace automáticamente.
 4. Preparar imágenes por el procedimiento vigente y registrar versiones actuales
    para rollback antes de un deploy expresamente autorizado. No restaurar la
