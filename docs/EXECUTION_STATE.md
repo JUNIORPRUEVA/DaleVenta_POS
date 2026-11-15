@@ -33,6 +33,20 @@ writer changed two uncommitted activity files during this task; original HEAD
 remains87316912 and no edits from this consolidation target that worktree.
 Do not claim the original worktree is frozen. Deploy remains NO-GO.
 
+First consolidation commit643dffe9 preserves parents221d530c/87316912 and is
+published in draft PR46. CI43736648017:API/site/Windows PASS; Flutter failed7
+reports goldens that use the real date (reference14 Nov, execution15 Nov).
+No reports code differed from PR45 at that commit. Minimal follow-up provides
+an optional reference date, defaulting to the system date, and fixes only the
+golden fixture date. Existing PNGs/tolerances remain unchanged. Initial reports
+regression18 PASS on Windows and Linux; explicit system-date regression added.
+Final follow-up19 reports tests PASS on Windows and19 PASS on Linux, without
+updating golden references. Full Flutter analysis PASS61.5s and Linux scoped
+analysis PASS24.3s. New CI remains a gate. Do not publish the API candidate
+from643dffe9 on the strength of the failed first run; prepare images tied to
+the final reviewed head. The old UI-byte-identical claim applies only to the
+initial consolidation; this follow-up changes the optional report date seam.
+
 ## Current acceptance — PR45 (2026-11-14)
 
 Owned worktree/branch below; PR45 targets production-main and remains owner-controlled.

@@ -17,6 +17,8 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../support/platform_goldens.dart';
 
+final _referenceDate = DateTime(2026, 11, 14, 12);
+
 class _ReportsRepository extends VentasRepository {
   _ReportsRepository({this.empty = false})
     : super(
@@ -123,8 +125,10 @@ class _ReportsRepository extends VentasRepository {
 Future<void> _pump(
   WidgetTester tester,
   Size size,
-  _ReportsRepository repo,
-) async {
+  _ReportsRepository repo, {
+  bool useSystemDate = false,
+}) async {
+  final reference = useSystemDate ? DateTime.now() : _referenceDate;
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -141,11 +145,16 @@ Future<void> _pump(
           ),
           child: child!,
         ),
-        home: const ReportsPage(),
+        home: ReportsPage(currentDate: useSystemDate ? null : _referenceDate),
       ),
     ),
   );
   await tester.pumpAndSettle();
+  expect(
+    repo.requests.first.from,
+    DateTime(reference.year, reference.month, reference.day),
+  );
+  expect(repo.requests.first.to.day, reference.day);
   await tester.runAsync(() async {
     final context = tester.element(find.byType(ReportsPage));
     for (final action in ProvidedAction.values) {
@@ -168,6 +177,18 @@ void main() {
     await (FontLoader(
       'MaterialIcons',
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
+  testWidgets('sin fecha inyectada conserva el día real de la aplicación', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const Size(1024, 640),
+      _ReportsRepository(),
+      useSystemDate: true,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
   for (final size in [
     const Size(390, 844),
@@ -267,7 +288,7 @@ void main() {
     );
     await tester.tap(edit);
     await tester.pumpAndSettle();
-    final now = DateTime.now();
+    final now = _referenceDate;
     final start = DateTime(now.year, now.month, 1);
     final fields = find.byType(TextField);
     expect(fields, findsNWidgets(2));

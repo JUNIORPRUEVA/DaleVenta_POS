@@ -57,8 +57,41 @@ puente privado autenticado, nunca del contexto JWT de un cliente.
 - Prueba cruzada PostgreSQL: las cuatro acciones CRM conservan íntegros los
   rangos E31, su siguiente número, vencimiento y autorización SANDBOX de dos
   empresas ficticias; el cambio de nombre no altera el RNC ni la segunda empresa.
-- Se actualiza este informe y el estado de ejecución. Ningún cambio Flutter,
-  sitio público, esquema, migración, lockfile ni Dockerfile.
+- Se actualiza este informe y el estado de ejecución. Ningún cambio al sitio
+  público, esquema, migración, lockfile ni Dockerfile. La corrección mínima de
+  fecha de pruebas Flutter detectada posteriormente se detalla a continuación.
+
+## Hallazgo en el primer CI de la consolidación
+
+El run43736648017 aprobó backend, sitio público y Windows, pero la suite Flutter
+terminó con2412 PASS,7 fallos y17 omisiones. Los siete fallos pertenecen a los
+goldens de reports_design_test.dart. Ese archivo y su pantalla eran byte-idénticos
+al PR45: no se originan en una combinación de archivos de licencias.
+
+Las referencias visuales contienen14/11/2026; el test usabaDateTime.now y al
+ejecutarse el15/11 cambió el texto del período y el día marcado en el calendario.
+Se inspeccionó la referencia Linux1024 y se verificó la causa ejecutando las
+pruebas con una fecha de referencia fija:los18 tests de reportes pasaron tanto en
+Windows como en Linux sin cambiar ningún PNG ni comparador.
+
+Corrección:ReportsPage y su drawer aceptan una fecha de referencia opcional,
+reutilizada por los períodos, comparaciones y calendario. Los callers existentes
+siguen usandoDateTime.now porque no suministran ese argumento. No cambian estilos,
+datos fiscales, cálculos de impuestos, endpoints ni filtros elegidos por defecto.
+La fecha fija14/11 se encuentra únicamente en la fixture de prueba. Se comprueba
+que el repositorio recibe esa fecha, y se añade una prueba de la ruta por defecto
+sin fecha inyectada para asegurar que conserva el día real.
+
+Las referencias visuales aprobadas no se regeneran y no se relajan tolerancias.
+La nueva ejecución de CI debe validar el head posterior; no se cuenta el primer
+run fallido como aprobado. El artefacto API de643dffe9 es un candidato previo,
+validado pero no publicado, y no se utiliza para saltar ese control.
+
+Verificación final del ajuste:19 pruebas de reportes PASS en Windows y19 PASS
+en Linux, sin modo de actualización de goldens. Incluyen el nuevo control del
+día real por defecto y las fechas fijas de las capturas. Análisis completo
+Flutter PASS61.5s; análisis Linux enfocado PASS24.3s. Ninguna referencia PNG fue
+modificada. No se altera la fecha usada por los callers productivos existentes.
 
 ## Validación local
 
