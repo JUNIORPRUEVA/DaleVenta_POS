@@ -14,6 +14,24 @@ void main() {
   test(
     'Web generates an ordinary taxed PDF without native printer storage',
     () async {
+      // Keep this storage regression independent of the browser test server's
+      // asset transport while still constructing the real PDF with a PNG logo.
+      final messenger = TestDefaultBinaryMessengerBinding
+          .instance.defaultBinaryMessenger;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        if (message == null ||
+            utf8.decode(message.buffer.asUint8List(
+                  message.offsetInBytes,
+                  message.lengthInBytes,
+                )) !=
+                'assets/image/logo.png') {
+          return null;
+        }
+        return ByteData.sublistView(base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        ));
+      });
+      addTearDown(() => messenger.setMockMessageHandler('flutter/assets', null));
       SharedPreferences.setMockInitialValues({
         'fulltech_printer_settings_v1': jsonEncode({
           'headerBusinessName': 'Other legacy company',

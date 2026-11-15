@@ -61,6 +61,14 @@ bloqueada por el servidor CanvasKit del SDK Windows3.41.6 (404 de archivos
 existentes por separadores de ruta); no se cambió el SDK ni se cuenta como PASS.
 La prueba Chrome debe comprobarse en el runner Linux del nuevo commit del PR.
 
+El run257 del commitbb1494c1 aprobó API, sitio y Windows, pero la nueva prueba
+Chrome agotó30s; la suite Flutter posterior no llegó a ejecutarse. No se considera
+un resultado satisfactorio. Se aisló el transporte de assets del servidor de
+pruebas mediante un PNG válido en el canal `flutter/assets`, conservando la
+construcción real del PDF y todas las aserciones. No se amplía el timeout ni se
+modifica nuevamente el código de aplicación. El nuevo head necesita otra ejecución
+Chrome y la suite completa antes de aprobarse.
+
 La imagen combinada UAT se reconstruyó correctamente con la corrección. Se
 reemplazó únicamente el contenedor Web desechable identificado por la etiqueta
 de esta tarea, conservando el anterior detenido. No es un despliegue productivo.
