@@ -1262,11 +1262,12 @@ class _CotizacionesHistorialScreenState
         visualDensity: VisualDensity.standard,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
         textStyle: WidgetStatePropertyAll(theme.textTheme.labelMedium),
       );
       return HistoryToolbar(
+        maxSearchWidth: 560,
         search: TextField(
           controller: _searchCtrl,
           decoration: historySearchDecoration(

@@ -68,6 +68,13 @@ Fiscal configuration19 also uses6px rectangular buttons and compact panels,
 with a two-column desktop layout and a single mobile column. Numbering summaries
 wrap metadata without ellipsis in this view; global summary defaults are unchanged.
 
+History refinement requested on2026-11-15: sales, quotation and credit history
+search remains36px tall and is limited to560px on desktop. Filter controls use
+6px corners; side panels are capped at380px, with compact headers and40px footer
+actions. Other modules keep their existing toolbar defaults. Public marketing
+adds a separate e-CF/RD announcement above its navigation; auth on mobile uses
+document scrolling so browser chrome can respond naturally to user gestures.
+
 ## Tables, Lists, Menus
 
 - `DataTableTheme` uses muted heading row and medium body weight.

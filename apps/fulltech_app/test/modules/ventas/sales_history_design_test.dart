@@ -221,6 +221,10 @@ void main() {
       expect(find.text('Historial de ventas'), findsOneWidget);
       expect(find.textContaining('INV001'), findsWidgets);
       if (width >= 760) {
+        expect(
+          tester.getSize(find.byType(TextField).first).width,
+          lessThanOrEqualTo(560),
+        );
         // Keep the original layout: metrics in the AppBar and one toolbar row.
         expect(
           tester.getRect(find.text('FACTURAS DEL PERÍODO')).bottom,

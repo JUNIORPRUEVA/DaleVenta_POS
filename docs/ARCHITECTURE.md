@@ -16,6 +16,10 @@ FullPOS Cloud contains the operational apps and a public static website:
   tenant store is introduced. Registration creates account and company together
   only after step two. The form creates the handoff directly; `/preparando`
   remains for compatibility. Flutter opens the activation welcome and panel;
+  the small HTML bootstrap cover is removed on `flutter-first-frame`, so the
+  existing Flutter SplashScreen owns company/session loading and its recovery
+  actions. Astro login keeps its busy submit button without a second full-screen
+  handoff cover; ticket creation and consumption are unchanged.
   company/fiscal setup remains available through its real configuration routes.
   The old questionnaire is retired from routing (`/onboarding` redirects to
   `/home`). Legacy status fields remain for old clients; the new progress is

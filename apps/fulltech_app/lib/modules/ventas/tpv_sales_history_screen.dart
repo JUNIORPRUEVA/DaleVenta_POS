@@ -1105,17 +1105,22 @@ class _Toolbar extends StatelessWidget {
             )
           : Row(
               children: [
-                Expanded(child: searchField),
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: searchField,
+                  ),
+                ),
                 const SizedBox(width: 10),
                 InkWell(
                   onTap: onOpenFilters,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                   child: Container(
-                    height: 34,
+                    height: 36,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
                       color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
                       children: [
@@ -1627,17 +1632,17 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
   ButtonStyle _segmentedButtonStyle() {
     return SegmentedButton.styleFrom(
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
     );
   }
 
   Widget _segLabel(String text) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
-    );
+    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 
   void _apply() {
@@ -1657,7 +1662,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.sizeOf(context);
-    final width = (media.width * 0.6).clamp(300.0, 430.0);
+    final width = (media.width * 0.6).clamp(300.0, 380.0);
     final dateFmt = DateFormat('dd/MM/yyyy', 'es_DO');
 
     return Dismissible(
@@ -1678,15 +1683,15 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
                   child: Row(
                     children: [
                       Container(
-                        width: 42,
-                        height: 42,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           color: const Color(0xFFEAF1FF),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Icon(
                           Icons.filter_alt_rounded,
@@ -1702,7 +1707,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                               'Filtros de ventas',
                               style: TextStyle(
                                 color: AppColors.textPrimary,
-                                fontSize: 20,
+                                fontSize: 17,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -1850,7 +1855,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                 ),
 
                 Container(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                   decoration: const BoxDecoration(
                     color: AppColors.surfaceAlt,
                     border: Border(top: BorderSide(color: AppColors.border)),
@@ -1861,7 +1866,10 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pop(),
                           style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(46),
+                            minimumSize: const Size.fromHeight(40),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(6)),
+                            ),
                           ),
                           child: const Text('Cancelar'),
                         ),
@@ -1875,7 +1883,10 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.secondary,
                             foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(46),
+                            minimumSize: const Size.fromHeight(40),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(Radius.circular(6)),
+                            ),
                           ),
                         ),
                       ),

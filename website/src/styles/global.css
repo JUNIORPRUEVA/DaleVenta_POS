@@ -146,6 +146,29 @@ body {
   overflow-x: hidden;
 }
 
+.fiscal-announcement {
+  color: var(--blue-700);
+  background: var(--blue-soft);
+  border-bottom: 1px solid var(--blue-line);
+  font-size: 13px;
+}
+.fiscal-announcement-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding-block: 10px;
+  text-align: center;
+}
+.fiscal-announcement svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.fiscal-announcement span { color: var(--ink-2); }
+@media (max-width: 600px) {
+  .fiscal-announcement-content { column-gap: 8px; padding-block: 8px; }
+  .fiscal-announcement span { flex-basis: 100%; font-size: 12px; }
+}
+
 /* `clip` no crea contenedor de scroll: deja que el navegador movil oculte
    sus barras al desplazar. `hidden` queda como respaldo. */
 @supports (overflow: clip) {

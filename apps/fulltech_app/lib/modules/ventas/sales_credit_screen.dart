@@ -210,9 +210,17 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
             ? Column(
                 children: [
                   HistoryToolbar(
+                    maxSearchWidth: 560,
                     actions: [
                       FilledButton.icon(
                         onPressed: _openCreditFilters,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(6)),
+                          ),
+                        ),
                         icon: const Icon(Icons.filter_alt_outlined, size: 18),
                         label: const Text('Filtro'),
                       ),
